@@ -150,6 +150,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
   withRenderCache: async (options: { read: () => unknown }) => options.read(),
 }))
 
+import { COLLECTION_SOURCE_MAX } from '@aglyn/aglyn/server'
 import { getCollectionContent } from './get-collection-content'
 
 const HOST = 'host-1'
@@ -452,5 +453,87 @@ describe('the plan gate on entry scheduling (AGL-471)', () => {
     const content = await listing()
     expect(content.entries.map((entry) => entry.$id)).toEqual(['entry-1'])
     expect(flips['entry-2']).toBeUndefined()
+  })
+})
+
+/**
+ * The gate above THINS the read, and the search index downstream has to know
+ * that (AGL-1516).
+ *
+ * `listLiveEntries` asks Firestore for `status in ['published', 'scheduled']`
+ * bounded by `COLLECTION_SOURCE_MAX`, and then everything in this file
+ * happens: a future `publishAt` is withheld, and since AGL-471 so is a due
+ * schedule on a plan that does not carry `scheduledPublishing`. So the array
+ * that comes out is SHORTER than the read that produced it, and its length
+ * stops being an answer to "did this read stop at its limit?".
+ *
+ * That question is not academic. `collectionSourceIsBounded` is what makes a
+ * collection search say it looked through a ceiling rather than through a
+ * collection, and the branch a `false` selects is the flat "No matches." — the
+ * one wording that claims to have searched everything. Under-report it on a
+ * blog holding four posts back, and a reader is told their post does not exist
+ * because four OTHER posts are scheduled for next week.
+ */
+describe('a bounded read declares itself past the liveness gate (AGL-1516)', () => {
+  /** Published docs, `count` of them — the part of a read that survives. */
+  const publishedDocs = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      $id: `pub-${i}`,
+      title: `Post ${i}`,
+      slug: `post-${i}`,
+      status: 'published',
+    }))
+
+  it('reports the bound when the gate thinned the read below it', async () => {
+    // The load-bearing case: the query came back FULL, four of its documents
+    // were not live yet, and the 96 survivors look nothing like a ceiling.
+    entryDocs = [
+      ...publishedDocs(COLLECTION_SOURCE_MAX - 4),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        $id: `sched-${i}`,
+        title: `Later ${i}`,
+        slug: `later-${i}`,
+        status: 'scheduled',
+        publishAt: IN_AN_HOUR(),
+      })),
+    ]
+    const content = await listing()
+    expect(content.entries).toHaveLength(COLLECTION_SOURCE_MAX - 4)
+    expect(content.entriesReachedBound).toBe(true)
+  })
+
+  it('reports the bound when the PLAN withheld the difference', async () => {
+    // Same shape, AGL-471's refusal instead of a future date — a Free org
+    // whose scheduled posts are permanently withheld would otherwise make a
+    // capped collection look complete forever.
+    orgForHost = { orgId: 'org-1', org: { plan: 'free' } }
+    entryDocs = [
+      ...publishedDocs(COLLECTION_SOURCE_MAX - 1),
+      scheduledEntry({ publishAt: AN_HOUR_AGO() }),
+    ]
+    const content = await listing()
+    expect(content.entries).toHaveLength(COLLECTION_SOURCE_MAX - 1)
+    expect(content.entriesReachedBound).toBe(true)
+  })
+
+  it('leaves it FALSE on a read that came back short', async () => {
+    // The other direction, and what keeps the flag worth reading: a
+    // three-post collection must not describe itself as truncated, or the
+    // cautious wording appears on every small blog and stops meaning anything.
+    entryDocs = publishedDocs(3)
+    const content = await listing()
+    expect(content.entriesReachedBound).toBe(false)
+  })
+
+  it('does not claim a bound on an ENTRY route', async () => {
+    // An entry page reads one document by slug; nothing there is bounded. A
+    // stray `true` would have an article page's blocks describe a complete
+    // collection as truncated.
+    entryDocs = [
+      { $id: 'entry-1', title: 'Live', slug: SLUG, status: 'published' },
+    ]
+    const content = await entryPage()
+    expect(content.entry?.slug).toBe(SLUG)
+    expect(content.entriesReachedBound).toBeUndefined()
   })
 })

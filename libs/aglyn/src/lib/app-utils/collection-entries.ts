@@ -111,6 +111,36 @@ export function collectionSourceReachedBound(
   return (entries?.length ?? 0) >= COLLECTION_SOURCE_MAX
 }
 
+/**
+ * Whether the read behind a collection source was a bounded one (AGL-1516),
+ * asking the READER first and only then falling back to counting.
+ *
+ * The count is a proxy, and it under-reports in two ways that both landed
+ * after `collectionSourceReachedBound` was written:
+ *
+ * 1. The query takes `status in ['published', 'scheduled']` and the loader
+ *    then drops what is not live yet — a future `publishAt`, or since AGL-471
+ *    a due schedule the plan does not carry. A read that came back holding
+ *    its full 100 docs can therefore hand over 96 entries, and 96 does not
+ *    look like a ceiling. A blog with a scheduling queue is exactly the site
+ *    that hits this.
+ * 2. A category route filters `entries` before compose ever sees them, so the
+ *    "raw set" the entries block is careful to measure is already narrowed.
+ *
+ * Both make the flag read FALSE on a read that really did stop at its bound,
+ * and false is the direction that produces the confident "nothing matched"
+ * this signal exists to prevent. So `reachedBound` is threaded down from the
+ * query that owns the fact, and the count survives only as the fallback for a
+ * source that predates it — a payload cached before this shipped, or a caller
+ * that assembles a source by hand.
+ */
+export function collectionSourceIsBounded(
+  source: Pick<CollectionEntriesSource, 'entries' | 'reachedBound'> | undefined,
+): boolean {
+  if (source?.reachedBound) return true
+  return collectionSourceReachedBound(source?.entries)
+}
+
 /** Default entries per page for a paginated collection list (AGL-620). */
 export const COLLECTION_LIST_PAGE_SIZE = 10
 
@@ -250,6 +280,14 @@ export interface CollectionEntriesSource {
   entries: CollectionEntryRecord[]
   /** The collection's category taxonomy (AGL-582), for name resolution. */
   categories?: CollectionCategory[]
+  /**
+   * Whether the READ that produced `entries` came back holding its own
+   * `.limit()` (AGL-1516) — a fact recorded where the query ran, because by
+   * the time `entries` gets here it has been through a liveness filter and
+   * possibly a route's category filter, and its length no longer answers the
+   * question. See {@link collectionSourceIsBounded}.
+   */
+  reachedBound?: boolean
   /**
    * The page the ROUTE asked for (AGL-1321), set only for the collection the
    * URL resolved. Fills in a block that declares `perPage` but no `page` —
@@ -1005,10 +1043,12 @@ export function expandCollectionEntries<
           )
         : source.entries
     // Whether the READ behind `source.entries` reached its own bound
-    // (AGL-1516). Taken off the raw set, never off `filtered`: a category
-    // filter legitimately narrows a complete read, and a narrowed set is not
-    // a bounded one.
-    const sourceCapped = collectionSourceReachedBound(source.entries)
+    // (AGL-1516). Taken off the raw set, never off `filtered`: a block-level
+    // category filter legitimately narrows a complete read, and a narrowed
+    // set is not a bounded one. The source's own `reachedBound` wins over
+    // counting it, because the count cannot see a read that came back full
+    // and was then thinned by the liveness gate.
+    const sourceCapped = collectionSourceIsBounded(source)
 
     const windowed = suppressedBeyondFirstPage
       ? []
@@ -1224,9 +1264,7 @@ export function expandCollectionSearch<
           source.categories,
         ),
         searchTotal: source.entries.length,
-        ...(collectionSourceReachedBound(source.entries)
-          ? { searchCapped: true }
-          : {}),
+        ...(collectionSourceIsBounded(source) ? { searchCapped: true } : {}),
       },
     }
   }

@@ -51,6 +51,18 @@ If that invite is your only workspace, the page also offers **Create my own site
 instead** — accepting isn't your only option. If you already belong to other
 workspaces, the invite banner appears above your usual workspace picker.
 
+### An invitation never changes who owns the workspace
+
+Accepting an invite normally sets your role to whatever the invite offered. The one
+role it cannot touch is the **owner's**. If an invitation is sent to the address that
+owns the workspace, accepting it is refused rather than applied — otherwise the owner
+would be quietly stepped down to a viewer or an admin, and only the owner can transfer
+ownership back, so nobody left in the workspace could undo it.
+
+Ownership moves one way only: **Settings → Transfer ownership**, by the current owner,
+to somebody already on the team. The previous owner becomes an admin. Nothing else in
+the product creates or moves an owner — an invitation cannot grant the role either.
+
 ## How team members act
 
 Team members act **in the owner's organization**, not their own — so their changes apply to your

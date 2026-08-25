@@ -55,6 +55,13 @@ export interface ComposeCollectionContext {
    * pill in a Category Pills block. `entries` arrives already filtered.
    */
   categorySlug?: string
+  /**
+   * Whether the read behind `entries` stopped at its `.limit()` (AGL-1516).
+   * Travels with the entries because the search boxes downstream have to say
+   * what they actually searched, and — with the liveness gate and the route's
+   * category filter both in between — `entries.length` no longer tells them.
+   */
+  entriesReachedBound?: boolean
 }
 
 /**
@@ -124,6 +131,9 @@ async function expandCollectionEntryBlocks(
           // Only the ROUTED collection carries the URL's page (AGL-1321) — a
           // block bound to another collection must not inherit it.
           ...(collection.page ? { page: collection.page } : {}),
+          // ...nor its bound (AGL-1516): this is a fact about the read the
+          // route already performed, and it describes only that collection.
+          ...(collection.entriesReachedBound ? { reachedBound: true } : {}),
         }
         return
       }
@@ -138,6 +148,7 @@ async function expandCollectionEntryBlocks(
           slug === collection?.slug && collection.categories
             ? collection.categories
             : fetched.categories,
+        ...(fetched.reachedBound ? { reachedBound: true } : {}),
       }
     }),
   )

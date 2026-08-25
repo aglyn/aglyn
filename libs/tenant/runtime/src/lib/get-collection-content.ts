@@ -388,6 +388,12 @@ export interface CollectionContent {
   } | null
   entries: CollectionEntrySummary[]
   entry: CollectionEntrySummary | null
+  /**
+   * Whether the read that produced `entries` stopped at
+   * {@link COLLECTION_SOURCE_MAX} (AGL-1516). Set on LIST routes only —
+   * an entry route reads one document by slug and bounds nothing.
+   */
+  entriesReachedBound?: boolean
   /** List pagination (AGL-620); null for entry pages or unpaginated lists. */
   pagination?: CollectionPagination | null
   /**
@@ -423,13 +429,30 @@ export interface CollectionPagination {
 }
 
 /**
+ * A bounded read of a collection's live entries (AGL-1516).
+ *
+ * `reachedBound` is a fact about the QUERY, not about `entries`, and the two
+ * genuinely differ: the query asks for `status in ['published', 'scheduled']`
+ * and the filter below then drops everything not live yet, so a read that came
+ * back holding all {@link COLLECTION_SOURCE_MAX} docs can hand back fewer.
+ * Counting the survivors — which is all a downstream consumer can do — reads
+ * that as a complete collection, and the one thing a truncated read must never
+ * be allowed to claim is completeness.
+ */
+interface LiveEntriesRead {
+  entries: CollectionEntrySummary[]
+  /** The query came back holding its own `.limit()`. */
+  reachedBound: boolean
+}
+
+/**
  * Fetches a collection's live entries (newest first), shared by the route
  * loader and the compose-time Collection entries block (AGL-551).
  */
 async function listLiveEntries(
   entriesRef: FirebaseFirestore.CollectionReference,
   hostId: string,
-): Promise<CollectionEntrySummary[]> {
+): Promise<LiveEntriesRead> {
   // No orderBy: entries missing publishedAt would be dropped by Firestore;
   // sort client-side like the version lists.
   const entriesQuery = await entriesRef
@@ -461,7 +484,12 @@ async function listLiveEntries(
     }
   }
 
-  return entriesQuery.docs
+  // Measured on the RAW docs, before the liveness filter (AGL-1516). This is
+  // the only place that can still see how many documents the query returned;
+  // one line down that number is gone for good.
+  const reachedBound = entriesQuery.docs.length >= COLLECTION_SOURCE_MAX
+
+  const entries = entriesQuery.docs
     .filter((entryDoc) => isLive(entryDoc.data(), permission))
     .map((entryDoc) => {
       const value = entryDoc.data()
@@ -481,6 +509,22 @@ async function listLiveEntries(
     .sort(
       (a, b) => (b.publishedAt?.seconds ?? 0) - (a.publishedAt?.seconds ?? 0),
     )
+
+  return { entries, reachedBound }
+}
+
+/** Compose-time view of a collection: its live entries and its taxonomy. */
+export interface PublishedCollectionSource {
+  entries: CollectionEntrySummary[]
+  categories: CollectionCategory[]
+  /**
+   * Whether the entries read stopped at {@link COLLECTION_SOURCE_MAX}
+   * (AGL-1516) — carried out of the loader because `entries.length` cannot
+   * answer it once the liveness filter has run. Fail-open paths report
+   * `false`: an empty result is not a bounded read, and describing it as one
+   * would tell a reader their search covered less than it did.
+   */
+  reachedBound: boolean
 }
 
 /**
@@ -492,10 +536,7 @@ async function listLiveEntries(
 export async function getPublishedCollectionSource(options: {
   hostId: string
   collectionSlug: string
-}): Promise<{
-  entries: CollectionEntrySummary[]
-  categories: CollectionCategory[]
-}> {
+}): Promise<PublishedCollectionSource> {
   try {
     return await withRenderCache({
       key: [
@@ -513,20 +554,21 @@ export async function getPublishedCollectionSource(options: {
   }
 }
 
-async function readPublishedCollectionSource(options: {
-  hostId: string
-  collectionSlug: string
-}): Promise<{
-  entries: CollectionEntrySummary[]
-  categories: CollectionCategory[]
-}> {
+async function readPublishedCollectionSource(
+  options: {
+    hostId: string
+    collectionSlug: string
+  },
+): Promise<PublishedCollectionSource> {
   try {
     const collectionDoc = await findContentCollection(
       options.hostId,
       options.collectionSlug,
     )
-    if (!collectionDoc) return { entries: [], categories: [] }
-    const entries = await listLiveEntries(
+    if (!collectionDoc) {
+      return { entries: [], categories: [], reachedBound: false }
+    }
+    const { entries, reachedBound } = await listLiveEntries(
       collectionDoc.ref.collection('entries'),
       options.hostId,
     )
@@ -539,10 +581,11 @@ async function readPublishedCollectionSource(options: {
     return {
       entries,
       categories: mapCollectionCategories(collectionDoc.get('categories')),
+      reachedBound,
     }
   } catch (error) {
     console.error(error)
-    return { entries: [], categories: [] }
+    return { entries: [], categories: [], reachedBound: false }
   }
 }
 
@@ -640,7 +683,13 @@ export async function getCollectionContent(options: {
       return data
     }
 
-    data.entries = await listLiveEntries(entriesRef, hostId)
+    const read = await listLiveEntries(entriesRef, hostId)
+    data.entries = read.entries
+    // Recorded BEFORE the category filter below (AGL-1516). A category route
+    // hands its already-narrowed `entries` to compose, so the entries block's
+    // "measure the raw set, not the filtered one" rule has nothing raw left to
+    // measure — this flag is what survives that narrowing.
+    data.entriesReachedBound = read.reachedBound
     await attachEntryAuthors(hostId, data.entries)
 
     // Category filter (AGL-1321). Applied HERE, before pagination, because

@@ -276,6 +276,42 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
     expect(composeArgs.tokens['collection.categorySlug']).toBe('open-source')
   })
 
+  it('carries the read’s BOUND alongside the filtered entries (AGL-1516)', async () => {
+    // The reason this has to travel rather than be counted downstream. On a
+    // category route `content.entries` arrives already narrowed to the
+    // category, so the entries block's careful "measure the raw set, never
+    // the filtered one" rule has nothing raw left to measure — one entry here
+    // is the whole listing, and it is a slice of a read that stopped at 100.
+    const data = content({
+      entriesReachedBound: true,
+      category: { slug: 'guides', id: 'guides', name: 'Guides', known: true },
+    })
+    data.collection!.listScreenId = 'list-screen'
+    await composeCollectionTemplatePage({ hostId: 'host-1', content: data })
+    const composeArgs = composeScreenNodesMock.mock.calls[0][0]
+    expect(composeArgs.collection.entriesReachedBound).toBe(true)
+  })
+
+  it('says nothing about a bound the read did not reach (AGL-1516)', async () => {
+    // Absent, not `false`, so a complete read's context stays exactly the
+    // shape every other case in this file asserts.
+    const data = content()
+    data.collection!.listScreenId = 'list-screen'
+    await composeCollectionTemplatePage({ hostId: 'host-1', content: data })
+    const composeArgs = composeScreenNodesMock.mock.calls[0][0]
+    expect('entriesReachedBound' in composeArgs.collection).toBe(false)
+  })
+
+  it('never claims a bound on an ENTRY route (AGL-1516)', async () => {
+    // An entry template gets one entry and no list; a bound would describe a
+    // read this route never performed.
+    const data = content({ entry, entriesReachedBound: true })
+    data.collection!.entryScreenId = 'entry-screen'
+    await composeCollectionTemplatePage({ hostId: 'host-1', content: data })
+    const composeArgs = composeScreenNodesMock.mock.calls[0][0]
+    expect('entriesReachedBound' in composeArgs.collection).toBe(false)
+  })
+
   describe('{{pagination.*}} on a list template (AGL-1386)', () => {
     // One static list screen serves EIGHT routes. A hand-built pager on it
     // renders identically on all of them, so the tokens have to carry the
@@ -437,6 +473,19 @@ describe('composeCollectionFallbackPage (AGL-551)', () => {
     )
     expect(componentIds).toContain(Aglyn.COLLECTION_ENTRIES_COMPONENT_ID)
     expect(result?.nodes).toEqual({ root: {} })
+  })
+
+  it('carries the read’s bound into the built-in list too (AGL-1516)', async () => {
+    // The fallback path is the one a site gets before anybody designs a list
+    // screen, so a fix that only threaded the template path would leave the
+    // default blog describing a truncated read as a complete one.
+    await composeCollectionFallbackPage({
+      hostId: 'host-1',
+      host,
+      content: content({ entriesReachedBound: true }),
+    })
+    const chromeArgs = composeNodesWithChromeMock.mock.calls[0][0]
+    expect(chromeArgs.collection.entriesReachedBound).toBe(true)
   })
 
   it('gives the built-in list a pill row when the collection has categories (AGL-1321)', async () => {

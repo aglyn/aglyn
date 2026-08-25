@@ -161,6 +161,13 @@ export async function composeCollectionTemplatePage(options: {
             ? { page: content.pagination.page }
             : {}),
           ...(content.category ? { categorySlug: content.category.slug } : {}),
+          // The read's own bound (AGL-1516), which has to travel WITH the
+          // filtered entries above: once `content.entries` has been narrowed
+          // to a category, nothing downstream can tell a complete read from a
+          // truncated one by counting it.
+          ...(content.entriesReachedBound
+            ? { entriesReachedBound: true }
+            : {}),
         },
   })
   if (!nodes) return null
@@ -270,6 +277,10 @@ export async function composeCollectionFallbackPage(options: {
               : {}),
             ...(content.category
               ? { categorySlug: content.category.slug }
+              : {}),
+            // Same fact, same reason as the template path above (AGL-1516).
+            ...(content.entriesReachedBound
+              ? { entriesReachedBound: true }
               : {}),
           },
     })

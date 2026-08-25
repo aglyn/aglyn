@@ -47,6 +47,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import CardColumns from '../../../../../components/card-columns.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
@@ -314,384 +315,413 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
             spacing={3}
             items={[
               {
-                size: { xs: 12, md: 6 },
+                /*
+                 * Balanced columns, not three rigid rows of two (AGL-2486).
+                 * Five cards all declaring `md: 6` are five HALF-WIDTH items
+                 * in a flex grid, and every item in a wrapped row is drawn as
+                 * tall as the tallest one in it — so `Organizations`, a table
+                 * that grows with the account's memberships, stretched
+                 * `Password` beside it into a mostly-empty card, and the
+                 * bottom row left a half-width hole where the fifth card had
+                 * no partner. The same shape, and the same fix, as the staff
+                 * org page and the billing page's narrow run.
+                 *
+                 * NOT `GridItems masonry`, which is the tempting fix and the
+                 * wrong one: within a band it buckets items by their `size`,
+                 * so five cards sharing one width share ONE column and leave
+                 * the other half of the page empty.
+                 *
+                 * The two wide cards below stay outside — an audit table and
+                 * a sign-in history earn the full width.
+                 */
+                size: { xs: 12 },
                 children: (
-                  <CardDisplay
-                    header="Identity"
-                    help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        "The account's auth state and staff role, with audited identity edits. Impersonation replaces your session with this account.",
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <Stack spacing={1}>
-                      <Typography variant="body2">
-                        {detail.user.displayName ?? '—'}
-                      </Typography>
-                      <Typography variant="body2">
-                        {detail.user.email ?? 'no email'}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {`uid ${detail.user.uid}`}
-                      </Typography>
-                      <Stack direction="row" spacing={1}>
-                        {detail.user.disabled ? (
-                          <Chip size="small" color="error" label="Disabled" />
-                        ) : (
-                          <Chip size="small" color="success" label="Active" />
-                        )}
-                        {detail.user.staff ? (
-                          <Chip
-                            size="small"
-                            color="primary"
-                            /*
-                              `?? 'support'`, not `?? 'super'` (AGL-2024).
-                              AGL-2131 brought the last two fail-OPEN defaults
-                              down to `support` — /api/admin/org-override and
-                              the Firestore rules — but this label was not a
-                              gate, so the sweep did not reach it. It is the
-                              one surface that TELLS a staff member what a
-                              claim-less account can do, and it said `super`
-                              while every gate in the product resolved that
-                              same token to `support`. Read literally, it
-                              invited exactly the wrong triage: someone
-                              investigating a 403 would see "Staff: super" and
-                              go looking for the bug somewhere other than the
-                              missing claim.
-                            */
-                            label={`Staff: ${detail.user.staffRole ?? 'support'}`}
-                          />
-                        ) : (
-                          <Chip size="small" label="Customer account" />
-                        )}
-                      </Stack>
-                      {/* Assignment summary (AGL-378): staff role +
-                          org roles at a glance. */}
-                      <Typography variant="caption" color="text.secondary">
-                        {[
-                          detail.user.staff
-                            ? // Same default as the chip above (AGL-2024).
-                              `Staff (${detail.user.staffRole ?? 'support'})`
-                            : 'Not staff',
-                          detail.memberships.length
-                            ? detail.memberships
-                                .map(
-                                  (m) =>
-                                    `${m.role ?? 'member'} in ${
-                                      m.orgName ?? m.orgId
-                                    }`,
-                                )
-                                .join(' · ')
-                            : 'no organizations',
-                        ].join(' · ')}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {`Providers: ${detail.user.providers.join(', ') || '—'}`}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {`Created ${detail.user.createdAt ?? '—'} · last sign-in ${
-                          detail.user.lastSignInAt ?? '—'
-                        }`}
-                      </Typography>
-                      {/* Phone + do-not-contact (AGL-1569). The number is
-                          collected under Privacy Policy v4 §11 for upsell and
-                          dunning outreach, so it never appears without the
-                          answer to "may we contact them?" — a dialable number
-                          shown next to nothing is how a suppressed person gets
-                          called. Read-only: recording or clearing an opt-out
-                          is the audited /admin/contact-suppressions form. */}
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-                      >
-                        <Typography variant="caption" color="text.secondary">
-                          {`Phone: ${
-                            detail.user.phoneNumber ??
-                            (detail.user.phoneNumberErasedAt
-                              ? `— erased at their request (${detail.user.phoneNumberErasedAt})`
-                              : '—')
-                          }`}
-                        </Typography>
-                        {detail.user.phoneContact?.lookupFailed ? (
-                          <Chip
-                            size="small"
-                            color="warning"
-                            label="Do-not-contact list unreadable — treat as opted out"
-                          />
-                        ) : detail.user.phoneContact?.suppressed ? (
-                          <Chip
-                            size="small"
-                            color="error"
-                            label={`Do not contact: ${
-                              detail.user.phoneContact.channels.join(', ') ||
-                              'calls, texts'
-                            }`}
-                          />
-                        ) : detail.user.phoneContact ? (
-                          <Chip size="small" label="No opt-out recorded" />
-                        ) : null}
-                      </Stack>
-                      {detail.user.phoneContact &&
-                      !detail.user.phoneContact.suppressed ? (
-                        // No opt-out is not consent. TCPA needs prior express
-                        // written consent before a marketing call or text, and
-                        // nothing in the product captures it yet (AGL-1564), so
-                        // an empty suppression record must not read as a green
-                        // light.
-                        <Typography variant="caption" color="text.secondary">
-                          {
-                            'No recorded opt-out is not consent to market — check before calling or texting.'
-                          }
-                        </Typography>
-                      ) : null}
-                      {!detail.user.staff ? (
-                        <Button
-                          size="small"
-                          color="warning"
-                          variant="outlined"
-                          sx={{ alignSelf: 'flex-start' }}
-                          onClick={() =>
-                            impersonation.request(
-                              uid ?? '',
-                              detail?.user.email ?? undefined,
-                            )
-                          }
-                        >
-                          {'Impersonate (replaces your session)'}
-                        </Button>
-                      ) : null}
-                      {/* Identity editing (AGL-361). */}
-                      <Stack spacing={1} sx={{ pt: 1 }}>
-                        <TextField
-                          size="small"
-                          label="Display name"
-                          value={edit.displayName}
-                          onChange={(event) =>
-                            setEdit((prev) => ({
-                              ...prev,
-                              displayName: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Email"
-                          helperText="Changing the email marks it unverified"
-                          value={edit.email}
-                          onChange={(event) =>
-                            setEdit((prev) => ({
-                              ...prev,
-                              email: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Photo URL"
-                          placeholder="https://…"
-                          value={edit.photoUrl}
-                          onChange={(event) =>
-                            setEdit((prev) => ({
-                              ...prev,
-                              photoUrl: event.target.value,
-                            }))
-                          }
-                        />
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={editBusy}
-                          sx={{ alignSelf: 'flex-start' }}
-                          onClick={() => void handleIdentitySave()}
-                        >
-                          {editBusy ? 'Saving…' : 'Save identity'}
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 6 },
-                children: (
-                  <CardDisplay
-                    header="Organizations"
-                    help={docsHelp('architectureMultiTenancy', {
-                      anchor: '#membership-lifecycle',
-                      excerpt:
-                        'Every organization this account belongs to, with its role and per-site access.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    {detail.memberships.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {'Not a member of any organization.'}
-                      </Typography>
-                    ) : (
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>{'Organization'}</TableCell>
-                            {/* AGL-1114: which seat this membership consumes.
-                                Per-membership, not per-account — the same
-                                person is routinely a manager in one org and a
-                                collaborator in another, so there is no single
-                                type for a user. */}
-                            <TableCell>{'Type'}</TableCell>
-                            <TableCell>{'Role'}</TableCell>
-                            <TableCell>{'Sites'}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {detail.memberships.map((membership) => (
-                            <TableRow key={membership.orgId}>
-                              <TableCell>
-                                <AppLink
-                                  href={buildRoute(Route.ADMIN_ORG_DETAIL, {
-                                    orgId: membership.orgId,
-                                  })}
-                                  color="primary"
-                                  underline="hover"
-                                >
-                                  {membership.orgName ?? membership.orgId}
-                                </AppLink>
-                              </TableCell>
-                              <TableCell>
-                                <Chip
-                                  size="small"
-                                  variant="outlined"
-                                  color={
-                                    consoleUserType(membership as never) ===
-                                    'manager'
-                                      ? 'secondary'
-                                      : 'default'
+                  <CardColumns
+                    spacing={3}
+                    items={[
+                      {
+                        key: 'identity',
+                        children: (
+                          <CardDisplay
+                            header="Identity"
+                            help={docsHelp('staffConsole', {
+                              anchor: '#whats-there',
+                              excerpt:
+                                "The account's auth state and staff role, with audited identity edits. Impersonation replaces your session with this account.",
+                            })}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            <Stack spacing={1}>
+                              <Typography variant="body2">
+                                {detail.user.displayName ?? '—'}
+                              </Typography>
+                              <Typography variant="body2">
+                                {detail.user.email ?? 'no email'}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {`uid ${detail.user.uid}`}
+                              </Typography>
+                              <Stack direction="row" spacing={1}>
+                                {detail.user.disabled ? (
+                                  <Chip size="small" color="error" label="Disabled" />
+                                ) : (
+                                  <Chip size="small" color="success" label="Active" />
+                                )}
+                                {detail.user.staff ? (
+                                  <Chip
+                                    size="small"
+                                    color="primary"
+                                    /*
+                                      `?? 'support'`, not `?? 'super'` (AGL-2024).
+                                      AGL-2131 brought the last two fail-OPEN defaults
+                                      down to `support` — /api/admin/org-override and
+                                      the Firestore rules — but this label was not a
+                                      gate, so the sweep did not reach it. It is the
+                                      one surface that TELLS a staff member what a
+                                      claim-less account can do, and it said `super`
+                                      while every gate in the product resolved that
+                                      same token to `support`. Read literally, it
+                                      invited exactly the wrong triage: someone
+                                      investigating a 403 would see "Staff: super" and
+                                      go looking for the bug somewhere other than the
+                                      missing claim.
+                                    */
+                                    label={`Staff: ${detail.user.staffRole ?? 'support'}`}
+                                  />
+                                ) : (
+                                  <Chip size="small" label="Customer account" />
+                                )}
+                              </Stack>
+                              {/* Assignment summary (AGL-378): staff role +
+                                  org roles at a glance. */}
+                              <Typography variant="caption" color="text.secondary">
+                                {[
+                                  detail.user.staff
+                                    ? // Same default as the chip above (AGL-2024).
+                                      `Staff (${detail.user.staffRole ?? 'support'})`
+                                    : 'Not staff',
+                                  detail.memberships.length
+                                    ? detail.memberships
+                                        .map(
+                                          (m) =>
+                                            `${m.role ?? 'member'} in ${
+                                              m.orgName ?? m.orgId
+                                            }`,
+                                        )
+                                        .join(' · ')
+                                    : 'no organizations',
+                                ].join(' · ')}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {`Providers: ${detail.user.providers.join(', ') || '—'}`}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {`Created ${detail.user.createdAt ?? '—'} · last sign-in ${
+                                  detail.user.lastSignInAt ?? '—'
+                                }`}
+                              </Typography>
+                              {/* Phone + do-not-contact (AGL-1569). The number is
+                                  collected under Privacy Policy v4 §11 for upsell and
+                                  dunning outreach, so it never appears without the
+                                  answer to "may we contact them?" — a dialable number
+                                  shown next to nothing is how a suppressed person gets
+                                  called. Read-only: recording or clearing an opt-out
+                                  is the audited /admin/contact-suppressions form. */}
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                              >
+                                <Typography variant="caption" color="text.secondary">
+                                  {`Phone: ${
+                                    detail.user.phoneNumber ??
+                                    (detail.user.phoneNumberErasedAt
+                                      ? `— erased at their request (${detail.user.phoneNumberErasedAt})`
+                                      : '—')
+                                  }`}
+                                </Typography>
+                                {detail.user.phoneContact?.lookupFailed ? (
+                                  <Chip
+                                    size="small"
+                                    color="warning"
+                                    label="Do-not-contact list unreadable — treat as opted out"
+                                  />
+                                ) : detail.user.phoneContact?.suppressed ? (
+                                  <Chip
+                                    size="small"
+                                    color="error"
+                                    label={`Do not contact: ${
+                                      detail.user.phoneContact.channels.join(', ') ||
+                                      'calls, texts'
+                                    }`}
+                                  />
+                                ) : detail.user.phoneContact ? (
+                                  <Chip size="small" label="No opt-out recorded" />
+                                ) : null}
+                              </Stack>
+                              {detail.user.phoneContact &&
+                              !detail.user.phoneContact.suppressed ? (
+                                // No opt-out is not consent. TCPA needs prior express
+                                // written consent before a marketing call or text, and
+                                // nothing in the product captures it yet (AGL-1564), so
+                                // an empty suppression record must not read as a green
+                                // light.
+                                <Typography variant="caption" color="text.secondary">
+                                  {
+                                    'No recorded opt-out is not consent to market — check before calling or texting.'
                                   }
-                                  label={
-                                    CONSOLE_USER_TYPE_LABELS[
-                                      consoleUserType(membership as never)
-                                    ]
+                                </Typography>
+                              ) : null}
+                              {!detail.user.staff ? (
+                                <Button
+                                  size="small"
+                                  color="warning"
+                                  variant="outlined"
+                                  sx={{ alignSelf: 'flex-start' }}
+                                  onClick={() =>
+                                    impersonation.request(
+                                      uid ?? '',
+                                      detail?.user.email ?? undefined,
+                                    )
+                                  }
+                                >
+                                  {'Impersonate (replaces your session)'}
+                                </Button>
+                              ) : null}
+                              {/* Identity editing (AGL-361). */}
+                              <Stack spacing={1} sx={{ pt: 1 }}>
+                                <TextField
+                                  size="small"
+                                  label="Display name"
+                                  value={edit.displayName}
+                                  onChange={(event) =>
+                                    setEdit((prev) => ({
+                                      ...prev,
+                                      displayName: event.target.value,
+                                    }))
                                   }
                                 />
-                              </TableCell>
-                              <TableCell>
-                                {membership.role ?? '—'}
-                                {membership.roleId ? ' (custom)' : ''}
-                              </TableCell>
-                              <TableCell>
-                                {/* Per-host access roles (AGL-378):
-                                    show which sites and at what role,
-                                    not just a count. */}
-                                {membership.allHosts ? (
-                                  <Chip size="small" label="All sites" />
-                                ) : Object.keys(membership.hostAccess)
-                                    .length === 0 ? (
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {'—'}
-                                  </Typography>
-                                ) : (
-                                  <Stack
-                                    direction="row"
-                                    spacing={0.5}
-                                    sx={{ flexWrap: 'wrap', gap: 0.5 }}
-                                  >
-                                    {Object.entries(
-                                      membership.hostAccess,
-                                    ).map(([hostId, role]) => (
-                                      <Chip
-                                        key={hostId}
-                                        size="small"
-                                        variant="outlined"
-                                        label={`${hostId}: ${role}`}
-                                      />
-                                    ))}
-                                  </Stack>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 6 },
-                children: (
-                  <CardDisplay
-                    header="Password"
-                    help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Email this account a reset link, or set a password directly when they cannot receive mail. Both are audited.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <PasswordAdminControls
-                      email={detail.user.email}
-                      subjectLabel={detail.user.email ?? detail.user.uid}
-                      description={
-                        'For an account that has locked itself out. ' +
-                        'Setting a password revokes this account’s ' +
-                        'refresh tokens, so every device signs out.'
-                      }
-                      onSendReset={async () => {
-                        await callManage({ action: 'sendPasswordReset' })
-                      }}
-                      onSetPassword={async (password) => {
-                        await callManage({ action: 'setPassword', password })
-                      }}
-                    />
-                  </CardDisplay>
-                ),
-              },
-              {
-                size: { xs: 12, md: 6 },
-                children: (
-                  /*
-                   * AGL-1513 part 2. The registry has recorded every sign-in
-                   * since AGL-665 and AGL-1959 gave the OWNER a list and a
-                   * sign-out; staff had neither, so "someone stole my laptop"
-                   * was answered by disabling the whole account. This is the
-                   * same write behind the same audit trail as every other
-                   * action on this page.
-                   */
-                  <StaffUserDeviceSessionsCard
-                    subjectLabel={detail.user.email ?? detail.user.uid}
-                    rows={detail.devices?.rows ?? []}
-                    // A missing `devices` key is a read that did not happen,
-                    // which is the same thing to a reader as a read that
-                    // failed — and the opposite of "no other devices".
-                    lookupFailed={detail.devices?.lookupFailed ?? true}
-                    onSignOut={async (deviceId) =>
-                      callManage({ action: 'signOutDevice', deviceId })
-                    }
-                  />
-                ),
-              },
-              {
-                size: { xs: 12, md: 6 },
-                children: (
-                  // AGL-1977. `eraseUser` has existed since AGL-1140 and
-                  // nothing in the console called it; a staff member honouring
-                  // an erasure request had to hand-craft an authenticated POST.
-                  // The card gates itself on `staffRole === 'super'`, which is
-                  // what the route demands.
-                  <StaffUserEraseCard
-                    uid={detail.user.uid}
-                    subjectLabel={detail.user.email ?? detail.user.uid}
-                    isSelf={(user as any)?.uid === detail.user.uid}
-                    onErase={async (reason) => {
-                      await callManage({ action: 'erase', reason })
-                    }}
+                                <TextField
+                                  size="small"
+                                  label="Email"
+                                  helperText="Changing the email marks it unverified"
+                                  value={edit.email}
+                                  onChange={(event) =>
+                                    setEdit((prev) => ({
+                                      ...prev,
+                                      email: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <TextField
+                                  size="small"
+                                  label="Photo URL"
+                                  placeholder="https://…"
+                                  value={edit.photoUrl}
+                                  onChange={(event) =>
+                                    setEdit((prev) => ({
+                                      ...prev,
+                                      photoUrl: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  disabled={editBusy}
+                                  sx={{ alignSelf: 'flex-start' }}
+                                  onClick={() => void handleIdentitySave()}
+                                >
+                                  {editBusy ? 'Saving…' : 'Save identity'}
+                                </Button>
+                              </Stack>
+                            </Stack>
+                          </CardDisplay>
+                        ),
+                      },
+                      {
+                        key: 'organizations',
+                        children: (
+                          <CardDisplay
+                            header="Organizations"
+                            help={docsHelp('architectureMultiTenancy', {
+                              anchor: '#membership-lifecycle',
+                              excerpt:
+                                'Every organization this account belongs to, with its role and per-site access.',
+                            })}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            {detail.memberships.length === 0 ? (
+                              <Typography variant="body2" color="text.secondary">
+                                {'Not a member of any organization.'}
+                              </Typography>
+                            ) : (
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>{'Organization'}</TableCell>
+                                    {/* AGL-1114: which seat this membership consumes.
+                                        Per-membership, not per-account — the same
+                                        person is routinely a manager in one org and a
+                                        collaborator in another, so there is no single
+                                        type for a user. */}
+                                    <TableCell>{'Type'}</TableCell>
+                                    <TableCell>{'Role'}</TableCell>
+                                    <TableCell>{'Sites'}</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {detail.memberships.map((membership) => (
+                                    <TableRow key={membership.orgId}>
+                                      <TableCell>
+                                        <AppLink
+                                          href={buildRoute(Route.ADMIN_ORG_DETAIL, {
+                                            orgId: membership.orgId,
+                                          })}
+                                          color="primary"
+                                          underline="hover"
+                                        >
+                                          {membership.orgName ?? membership.orgId}
+                                        </AppLink>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Chip
+                                          size="small"
+                                          variant="outlined"
+                                          color={
+                                            consoleUserType(membership as never) ===
+                                            'manager'
+                                              ? 'secondary'
+                                              : 'default'
+                                          }
+                                          label={
+                                            CONSOLE_USER_TYPE_LABELS[
+                                              consoleUserType(membership as never)
+                                            ]
+                                          }
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        {membership.role ?? '—'}
+                                        {membership.roleId ? ' (custom)' : ''}
+                                      </TableCell>
+                                      <TableCell>
+                                        {/* Per-host access roles (AGL-378):
+                                            show which sites and at what role,
+                                            not just a count. */}
+                                        {membership.allHosts ? (
+                                          <Chip size="small" label="All sites" />
+                                        ) : Object.keys(membership.hostAccess)
+                                            .length === 0 ? (
+                                          <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                          >
+                                            {'—'}
+                                          </Typography>
+                                        ) : (
+                                          <Stack
+                                            direction="row"
+                                            spacing={0.5}
+                                            sx={{ flexWrap: 'wrap', gap: 0.5 }}
+                                          >
+                                            {Object.entries(
+                                              membership.hostAccess,
+                                            ).map(([hostId, role]) => (
+                                              <Chip
+                                                key={hostId}
+                                                size="small"
+                                                variant="outlined"
+                                                label={`${hostId}: ${role}`}
+                                              />
+                                            ))}
+                                          </Stack>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            )}
+                          </CardDisplay>
+                        ),
+                      },
+                      {
+                        key: 'password',
+                        children: (
+                          <CardDisplay
+                            header="Password"
+                            help={docsHelp('staffConsole', {
+                              anchor: '#whats-there',
+                              excerpt:
+                                'Email this account a reset link, or set a password directly when they cannot receive mail. Both are audited.',
+                            })}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            <PasswordAdminControls
+                              email={detail.user.email}
+                              subjectLabel={detail.user.email ?? detail.user.uid}
+                              description={
+                                'For an account that has locked itself out. ' +
+                                'Setting a password revokes this account’s ' +
+                                'refresh tokens, so every device signs out.'
+                              }
+                              onSendReset={async () => {
+                                await callManage({ action: 'sendPasswordReset' })
+                              }}
+                              onSetPassword={async (password) => {
+                                await callManage({ action: 'setPassword', password })
+                              }}
+                            />
+                          </CardDisplay>
+                        ),
+                      },
+                      {
+                        key: 'device-sessions',
+                        children: (
+                          /*
+                           * AGL-1513 part 2. The registry has recorded every sign-in
+                           * since AGL-665 and AGL-1959 gave the OWNER a list and a
+                           * sign-out; staff had neither, so "someone stole my laptop"
+                           * was answered by disabling the whole account. This is the
+                           * same write behind the same audit trail as every other
+                           * action on this page.
+                           */
+                          <StaffUserDeviceSessionsCard
+                            subjectLabel={detail.user.email ?? detail.user.uid}
+                            rows={detail.devices?.rows ?? []}
+                            // A missing `devices` key is a read that did not happen,
+                            // which is the same thing to a reader as a read that
+                            // failed — and the opposite of "no other devices".
+                            lookupFailed={detail.devices?.lookupFailed ?? true}
+                            onSignOut={async (deviceId) =>
+                              callManage({ action: 'signOutDevice', deviceId })
+                            }
+                          />
+                        ),
+                      },
+                      {
+                        key: 'erase',
+                        children: (
+                          // AGL-1977. `eraseUser` has existed since AGL-1140 and
+                          // nothing in the console called it; a staff member honouring
+                          // an erasure request had to hand-craft an authenticated POST.
+                          // The card gates itself on `staffRole === 'super'`, which is
+                          // what the route demands.
+                          <StaffUserEraseCard
+                            uid={detail.user.uid}
+                            subjectLabel={detail.user.email ?? detail.user.uid}
+                            isSelf={(user as any)?.uid === detail.user.uid}
+                            onErase={async (reason) => {
+                              await callManage({ action: 'erase', reason })
+                            }}
+                          />
+                        ),
+                      },
+                    ]}
                   />
                 ),
               },
