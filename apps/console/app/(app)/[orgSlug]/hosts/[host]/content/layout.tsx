@@ -16,18 +16,26 @@
  */
 
 import type { Metadata } from 'next'
+import { segmentTitle } from '../../../../../page-title'
 import type { ReactNode } from 'react'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout. The suffix comes from the root title template.
+// nearest server layout.
+//
+// `segmentTitle`, not a bare string, since AGL-2498 put titled routes BELOW
+// this one (`content/{collectionId}` and its entry). A segment that sets a
+// plain string carries no template of its own, so it CONSUMES the root
+// template and everything beneath renders unbranded — "dR3GYhkZS1 · Entry ·
+// aglyn-marketing" with no "· Aglyn" on the end. The bare path keeps this
+// exact default; only the object around it is new.
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Content · ${host}` }
+  return { title: segmentTitle(`Content · ${host}`) }
 }
 
 export default function HostContentTitleLayout({

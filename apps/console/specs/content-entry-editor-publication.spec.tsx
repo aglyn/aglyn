@@ -174,6 +174,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       ))}
     </div>
   ),
+  // The entry detail header's "View on site" control (AGL-2498). An anchor,
+  // so the suites can still find every BUTTON by role without it.
+  AppLink: ({ children, href }: { children?: unknown; href?: string }) => (
+    <a href={href}>{children as never}</a>
+  ),
   HelpTip: () => null,
   MdiIcon: () => null,
   useConfirmationContext: () => ({
@@ -206,6 +211,18 @@ jest.mock('../components/layouts/authenticated.layout', () => passthrough)
 jest.mock('../components/layouts/main.layout', () => passthrough)
 jest.mock('../components/host-display-name.component', () => nullCard)
 jest.mock('../components/media/media-picker-dialog.component', () => nullCard)
+/*
+  The two panels AGL-2498 added to the entry detail page. Both read live data
+  of their own — the traffic card walks day-counter documents, the activity
+  slot resolves the workspace's plugins — and neither is what any of these
+  suites is about. Stubbed to nothing so a change to either cannot redden a
+  spec about publication dates.
+*/
+jest.mock(
+  '../components/analytics/entry-analytics-card.component',
+  () => nullCard,
+)
+jest.mock('../components/plugin-widget-slot.component', () => nullCard)
 jest.mock('@aglyn/aglyn-markdown-editor', () => ({
   __esModule: true,
   MarkdownEditorToolbar: () => null,
@@ -269,9 +286,22 @@ jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
   // `push` as well as `replace` since AGL-2498: the entry editor is a
-  // routed detail page, so every door into it mirrors `?entry=` into the
-  // address. A router without `push` throws inside the click handler.
+  // routed detail page, so every door into it navigates. A router without
+  // `push` throws inside the click handler; without `replace` the address
+  // rewrite that puts a bare `/content` onto `/content/{collectionId}`
+  // throws on mount.
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
+  /**
+   * Bare `/content` — no collection segment, no entry segment.
+   *
+   * AGL-2498 moved BOTH out of the query string and into the path, so this is
+   * the hook the page now reads its address from. A constant empty object is
+   * exactly right for these suites: they open an entry by clicking its row,
+   * and the URL sync claims the segment it pushed, so the editor stays open
+   * while `useParams` still reports the list. See the detail-page suite for
+   * the addressing itself.
+   */
+  useParams: () => ({}),
   usePathname: () => '/org/hosts/site/content',
 }))
 

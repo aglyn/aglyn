@@ -33,8 +33,12 @@
  *
  * 1. **It is a page.** The editor is not inside a `role="dialog"`, and the
  *    list is not behind it — the two are alternatives.
- * 2. **It has an address.** Opening pushes `?entry=<id>`, a pasted link
- *    opens straight into the entry, and Back means back.
+ * 2. **It has an address.** Opening pushes
+ *    `…/content/{collectionId}/entries/{entryId}`, a pasted link opens
+ *    straight into the entry, and Back means back. Both halves are PATH
+ *    SEGMENTS since the second pass — an entry is addressed
+ *    `collection + entry`, and while one half lived in the query there was no
+ *    single string that named an entry.
  * 3. **Leaving is guarded.** The dialog's `onClose` was a bare
  *    `setEditor(null)` — no dirty tracking, no confirmation. On a routed page
  *    that omission gets WORSE rather than staying neutral, because Back is
@@ -62,20 +66,34 @@ const PUBLISHED_AT_SECONDS = 1_600_000_000
 /**
  * The address bar, as the component sees it.
  *
- * `search` is what `useSearchParams` answers with, and `push` rewrites it —
- * which is what makes a click and a browser Back distinguishable here: a
- * click goes through the component (which claims the parameter it wrote), a
- * Back is this object being changed underneath it and the tree re-rendered.
+ * Since AGL-2498's second pass BOTH halves of an entry's address are path
+ * segments — `…/content/{collectionId}/entries/{entryId}` — so `params` is
+ * what `useParams` answers with and `search` is what is left in the query.
+ * `push`/`replace` record without applying, which is what makes a click and a
+ * browser Back distinguishable here: a click goes through the component
+ * (which claims the segment it wrote), a Back is this object being changed
+ * underneath it and the tree re-rendered.
  */
 const mockNav = {
+  params: {} as { collectionId?: string; entryId?: string },
   search: '',
   pushed: [] as string[],
+  replaced: [] as string[],
 }
 
 const mockOrg = {
   org: undefined as Record<string, unknown> | undefined,
   ready: false,
 }
+
+/**
+ * The site's content collections.
+ *
+ * A mutable module value rather than a literal inside the hook mock, because
+ * AGL-2498 made the collection an ADDRESS: a test that navigates between two
+ * of them needs there to be two.
+ */
+const mockCollections: Array<Record<string, unknown>> = []
 
 const mockEntries = {
   data: [
@@ -173,6 +191,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       ))}
     </div>
   ),
+  // The entry detail header's "View on site" control (AGL-2498). An anchor,
+  // so the suites can still find every BUTTON by role without it.
+  AppLink: ({ children, href }: { children?: unknown; href?: string }) => (
+    <a href={href}>{children as never}</a>
+  ),
   HelpTip: () => null,
   MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm: mockConfirm }),
@@ -208,6 +231,18 @@ jest.mock('../components/layouts/authenticated.layout', () => passthrough)
 jest.mock('../components/layouts/main.layout', () => passthrough)
 jest.mock('../components/host-display-name.component', () => nullCard)
 jest.mock('../components/media/media-picker-dialog.component', () => nullCard)
+/*
+  The two panels AGL-2498 added to the entry detail page. Both read live data
+  of their own — the traffic card walks day-counter documents, the activity
+  slot resolves the workspace's plugins — and neither is what any of these
+  suites is about. Stubbed to nothing so a change to either cannot redden a
+  spec about publication dates.
+*/
+jest.mock(
+  '../components/analytics/entry-analytics-card.component',
+  () => nullCard,
+)
+jest.mock('../components/plugin-widget-slot.component', () => nullCard)
 jest.mock('@aglyn/aglyn-markdown-editor', () => ({
   __esModule: true,
   MarkdownEditorToolbar: () => null,
@@ -252,13 +287,7 @@ jest.mock('../hooks/use-firestore-collection', () => ({
       }
     }
     if (name === 'collections') {
-      return {
-        data: [
-          { $id: 'col-1', displayName: 'Blog', slug: 'blog', kind: 'content' },
-        ],
-        status: 'success',
-        fromCache: false,
-      }
+      return { data: mockCollections, status: 'success', fromCache: false }
     }
     return { data: [], status: 'success', fromCache: false }
   },
@@ -271,35 +300,40 @@ jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 /**
  * A LIVE address, not a constant.
  *
- * `useSearchParams` reads `mockNav.search` on every render and `push`
- * rewrites it, so the two ways into the editor stay distinguishable: a click
- * goes through the component, while a Back is `mockNav.search` being changed
- * and the tree re-rendered. A frozen `new URLSearchParams()` — what the older
- * content specs use — cannot tell those apart, and would pass whether or not
- * the URL was wired to anything.
+ * `useParams` reads `mockNav.params` on every render and `push` rewrites it,
+ * so the two ways into the editor stay distinguishable: a click goes through
+ * the component, while a Back is `mockNav.params` being changed and the tree
+ * re-rendered. A frozen `{}` — what the older content specs use — cannot tell
+ * those apart, and would pass whether or not the URL was wired to anything.
+ *
+ * `usePathname` is still mocked because a stray call must not throw; the page
+ * itself stopped reading it when the address moved into the path (AGL-2498).
  */
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(mockNav.search),
+  /**
+   * A NEW object per call, like the real hook — which is what makes the URL
+   * sync's dependency list load-bearing rather than cosmetic. `useRouter` and
+   * `useConfirmationContext` do the same.
+   */
+  useParams: () => ({ ...mockNav.params }),
   useRouter: () => ({
-    replace: jest.fn(),
     /**
-     * ⚠️ `push` records the address but does NOT apply it, because the real
-     * one does not either: App Router starts a transition and
-     * `useSearchParams` reports the new value on a LATER render. The window
-     * in between — editor open, address not yet caught up — is exactly where
-     * the URL sync can be made to close the editor it just opened, so a mock
-     * that applied the push synchronously would paper over that whole class
-     * of bug. `settleNavigation` below is what ends the transition.
+     * ⚠️ Neither `push` nor `replace` APPLIES the address, because the real
+     * ones do not either: App Router starts a transition and `useParams`
+     * reports the new value on a LATER render. The window in between — editor
+     * open, address not yet caught up — is exactly where the URL sync can be
+     * made to close the editor it just opened, so a mock that applied the
+     * push synchronously would paper over that whole class of bug.
+     * `settleNavigation` below is what ends the transition.
      */
     push: (url: string) => {
       mockNav.pushed.push(url)
     },
+    replace: (url: string) => {
+      mockNav.replaced.push(url)
+    },
   }),
-  /**
-   * A NEW object per call, like the real hook. `useRouter` and
-   * `useConfirmationContext` do the same, and it is what makes the URL sync's
-   * dependency list load-bearing rather than cosmetic.
-   */
   usePathname: () => '/acme/hosts/shop/content',
 }))
 
@@ -332,8 +366,20 @@ beforeEach(() => {
       status: 'draft',
     },
   ]
+  // Every test starts ON the collection, which is where the rewrite puts a
+  // reader who arrives at bare `/content`. The rewrite itself has its own
+  // tests below, and those start with an empty `params`.
+  mockCollections.length = 0
+  mockCollections.push({
+    $id: 'col-1',
+    displayName: 'Blog',
+    slug: 'blog',
+    kind: 'content',
+  })
+  mockNav.params = { collectionId: 'col-1' }
   mockNav.search = ''
   mockNav.pushed = []
+  mockNav.replaced = []
   // Business + ready is the ordinary case; the gate cases below set their own.
   mockOrg.org = { plan: 'business' }
   mockOrg.ready = true
@@ -347,16 +393,37 @@ const openByRow = (title: string) =>
   fireEvent.click(screen.getByText(title))
 
 /**
+ * A URL string → the two route params and the query the component reads.
+ *
+ * The regex mirrors the two real routes:
+ * `…/content/{collectionId}` and
+ * `…/content/{collectionId}/entries/{entryId}`.
+ */
+const addressOf = (url: string) => {
+  const [path, query = ''] = url.split('?')
+  const match = /\/content(?:\/([^/]+))?(?:\/entries\/([^/]+))?\/?$/.exec(path)
+  return {
+    params: {
+      ...(match?.[1] ? { collectionId: match[1] } : {}),
+      ...(match?.[2] ? { entryId: match[2] } : {}),
+    },
+    search: query,
+  }
+}
+
+/**
  * A browser Back / Forward / pasted link: the address changes underneath the
  * component, which then has to notice. `render` is called again on the SAME
  * container so the tree is re-rendered rather than remounted.
  */
-const navigateTo = (search: string, rerender: (ui: JSX.Element) => void) => {
-  mockNav.search = search
+const navigateTo = (url: string, rerender: (ui: JSX.Element) => void) => {
+  const next = addressOf(url)
+  mockNav.params = next.params
+  mockNav.search = next.search
   rerender(<HostContent />)
 }
 
-/** The address the component last asked for, query string only. */
+/** The address the component last asked for. */
 const lastPushed = () => mockNav.pushed[mockNav.pushed.length - 1]
 
 /**
@@ -364,9 +431,7 @@ const lastPushed = () => mockNav.pushed[mockNav.pushed.length - 1]
  * asked for becomes the address it reads back.
  */
 const settleNavigation = (rerender: (ui: JSX.Element) => void) => {
-  const url = lastPushed() ?? ''
-  const index = url.indexOf('?')
-  navigateTo(index === -1 ? '' : url.slice(index), rerender)
+  navigateTo(lastPushed() ?? '/acme/hosts/shop/content/col-1', rerender)
 }
 
 /** The `datetime-local` value shape, in LOCAL time like the input's own. */
@@ -399,31 +464,107 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
     expect(screen.queryByText('Never published')).toBeNull()
   })
 
-  it('gives the entry an ADDRESS that can be linked, bookmarked or sent', () => {
+  it('gives the entry an ADDRESS that names BOTH halves of it', () => {
+    // The collection AND the entry, both as path segments. Before AGL-2498's
+    // second pass this was `/content?entry=entry-1`, which says which entry
+    // but not which collection — the collection rode along in a SECOND query
+    // parameter that any link rebuild could drop, and dropping it landed the
+    // reader on whichever collection sorted first.
     render(<HostContent />)
 
     openByRow('Hello world')
 
-    expect(mockNav.pushed).toEqual(['/acme/hosts/shop/content?entry=entry-1'])
+    expect(mockNav.pushed).toEqual([
+      '/acme/hosts/shop/content/col-1/entries/entry-1',
+    ])
   })
 
-  it('keeps the ?collection= deep link alive across a trip into an entry', () => {
-    // AGL-845: the DAM's "Used on" list links straight to a collection. That
-    // parameter has to survive the entry, or coming back out lands on the
-    // wrong collection.
+  it('rewrites a legacy ?collection= deep link onto the routed address', () => {
+    // AGL-845: the DAM's "Used on" list linked straight to a collection with
+    // `?collection=`, and those links are in the wild. They keep working —
+    // by being REWRITTEN onto the path, so the address the reader ends up
+    // with is one they can send on.
+    mockNav.params = {}
     mockNav.search = '?collection=col-1'
+
     render(<HostContent />)
 
-    openByRow('Hello world')
+    expect(mockNav.replaced).toEqual(['/acme/hosts/shop/content/col-1'])
+  })
 
-    expect(mockNav.pushed[0]).toContain('collection=col-1')
-    expect(mockNav.pushed[0]).toContain('entry=entry-1')
+  it('rewrites a legacy ?entry= link straight into the entry', () => {
+    // Both legacy parameters at once — the shape a bookmark of the old editor
+    // has. The rewrite must carry the entry as well, or a saved link to a
+    // post silently degrades into a link to its list.
+    mockNav.params = {}
+    mockNav.search = '?collection=col-1&entry=entry-1'
+
+    render(<HostContent />)
+
+    expect(mockNav.replaced).toEqual([
+      '/acme/hosts/shop/content/col-1/entries/entry-1',
+    ])
+  })
+
+  it('carries ?tab= through the rewrite but never the legacy pair', () => {
+    // `?tab=` is HubTabs' own mirroring and has to survive. `?collection=`
+    // and `?entry=` must NOT: they are the address that just moved into the
+    // path, and carrying them forward would leave two answers to "which
+    // collection is open" in one URL with nothing to say which wins.
+    mockNav.params = {}
+    mockNav.search = '?tab=authors&collection=col-1'
+
+    render(<HostContent />)
+
+    expect(mockNav.replaced).toEqual(['/acme/hosts/shop/content/col-1?tab=authors'])
+  })
+
+  it('rewrites an address naming a collection that no longer exists', () => {
+    // A deleted collection, a stale bookmark, a typo. Left alone, `selected`
+    // falls back to the first collection and the address then NAMES one
+    // collection while the page SHOWS another — and the next save writes to
+    // the one on screen.
+    mockNav.params = { collectionId: 'col-gone' }
+
+    render(<HostContent />)
+
+    expect(mockNav.replaced).toEqual(['/acme/hosts/shop/content/col-1'])
+  })
+
+  it('leaves a settled address alone', () => {
+    // The guard against the opposite failure: a rewrite that fires on an
+    // address already in the routed form is a `replace` per render, at the
+    // exact moment the router is mid-navigation.
+    render(<HostContent />)
+
+    expect(mockNav.replaced).toEqual([])
+  })
+
+  it('navigates when the collection Select is changed', () => {
+    // Which collection is open is the page's ADDRESS since AGL-2498, not a
+    // piece of component state — so choosing one goes through the router and
+    // can be linked, bookmarked, reloaded and gone Back out of.
+    mockCollections.push({
+      $id: 'col-2',
+      displayName: 'Changelog',
+      slug: 'changelog',
+      kind: 'content',
+    })
+    render(<HostContent />)
+
+    // MUI's `TextField select` is a listbox behind a combobox, not a native
+    // `<select>`, so it is DRIVEN rather than assigned to — `fireEvent.change`
+    // on it throws "does not have a value setter".
+    fireEvent.mouseDown(screen.getByLabelText('Collection'))
+    fireEvent.click(screen.getByRole('option', { name: /Changelog/ }))
+
+    expect(lastPushed()).toBe('/acme/hosts/shop/content/col-2')
   })
 
   it('opens straight into the entry when the address already names one', () => {
     // The pasted-link case, and the reason the conversion is worth doing at
     // all: no click, just the URL.
-    mockNav.search = '?entry=entry-1'
+    mockNav.params = { collectionId: 'col-1', entryId: 'entry-1' }
     render(<HostContent />)
 
     expect((titleField() as HTMLInputElement).value).toBe('Hello world')
@@ -434,11 +575,11 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
 
   it('waits for the entry rather than opening a BLANK editor over it', () => {
     // The listener has not answered yet. Seeding an empty buffer here and
-    // calling the parameter handled is how a pasted link opens an editor
+    // calling the segment handled is how a pasted link opens an editor
     // that never fills — and an empty buffer over a real entry is one Save
     // away from blanking the post.
     mockEntries.data = []
-    mockNav.search = '?entry=entry-1'
+    mockNav.params = { collectionId: 'col-1', entryId: 'entry-1' }
     const { rerender } = render(<HostContent />)
 
     expect(titleField()).toBeNull()
@@ -452,17 +593,20 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
   })
 
   it('stays open while the pushed address is still in flight', () => {
-    // The transition window. `router.push` does not update `useSearchParams`
+    // The transition window. `router.push` does not update `useParams`
     // synchronously, so for at least one render the editor is open while the
-    // address still says "list". The URL sync must recognise the parameter it
+    // address still says "list". The URL sync must recognise the segment it
     // asked for as its own — otherwise every re-render in that window closes
     // the editor the click just opened, and the row appears not to work at
     // all. Broken once, in this shape, by listing `router`/`entryHref` in the
     // sync's dependencies: both are fresh objects per render, so the effect
     // ran every render instead of only when the address changed.
+    //
+    // The hazard SURVIVED the move from `?entry=` to a path segment — a
+    // transition is a transition — which is why this test did not go with it.
     const { rerender } = render(<HostContent />)
     openByRow('Hello world')
-    expect(mockNav.search).toBe('')
+    expect(mockNav.params.entryId).toBeUndefined()
 
     rerender(<HostContent />)
 
@@ -475,7 +619,7 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
     settleNavigation(rerender)
     expect(titleField()).toBeTruthy()
 
-    navigateTo('', rerender)
+    navigateTo('/acme/hosts/shop/content/col-1', rerender)
 
     expect(titleField()).toBeNull()
     expect(screen.getByText('Never published')).toBeTruthy()
@@ -489,7 +633,7 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
 
     await waitFor(() => expect(titleField()).toBeNull())
     expect(mockConfirm).not.toHaveBeenCalled()
-    expect(lastPushed()).toBe('/acme/hosts/shop/content')
+    expect(lastPushed()).toBe('/acme/hosts/shop/content/col-1')
   })
 
   it('asks before dropping unsaved edits, and NO keeps them', async () => {
@@ -522,7 +666,7 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
       target: { value: 'Hello world, rewritten' },
     })
 
-    navigateTo('', rerender)
+    navigateTo('/acme/hosts/shop/content/col-1', rerender)
 
     await waitFor(() => expect(mockConfirm).toHaveBeenCalledTimes(1))
     expect((titleField() as HTMLInputElement).value).toBe(
@@ -530,7 +674,9 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
     )
     // The address is put back, so the page the question is about is the page
     // on screen — not a list the editor is invisibly floating over.
-    expect(lastPushed()).toBe('/acme/hosts/shop/content?entry=entry-1')
+    expect(lastPushed()).toBe(
+      '/acme/hosts/shop/content/col-1/entries/entry-1',
+    )
   })
 
   it('lets the browser Back through once the discard is confirmed', async () => {
@@ -542,7 +688,7 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
       target: { value: 'Hello world, rewritten' },
     })
 
-    navigateTo('', rerender)
+    navigateTo('/acme/hosts/shop/content/col-1', rerender)
 
     await waitFor(() => expect(titleField()).toBeNull())
   })
@@ -562,10 +708,12 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
     // worse, `beforeunload` would go on blocking the tab over them.
     await waitFor(() => expect(titleField()).toBeNull())
     expect(mockConfirm).not.toHaveBeenCalled()
-    // And it returns to the LIST address rather than leaving `?entry=` on a
-    // page that no longer shows an entry — a link somebody then sends that
-    // reopens the editor they had just finished with.
-    expect(lastPushed()).toBe('/acme/hosts/shop/content')
+    // And it returns to the COLLECTION address rather than leaving the entry
+    // segment on a page that no longer shows an entry — a link somebody then
+    // sends that reopens the editor they had just finished with. To the
+    // collection and not to bare `/content`: leaving an entry must not also
+    // change which collection you are looking at.
+    expect(lastPushed()).toBe('/acme/hosts/shop/content/col-1')
   })
 
   it('schedules from the detail page, still writing publishAt', async () => {

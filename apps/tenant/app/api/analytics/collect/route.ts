@@ -30,10 +30,14 @@ import { FieldValue } from 'firebase-admin/firestore'
 
 export const dynamic = 'force-dynamic'
 
-/** Firestore map keys can't be parsed as field paths on read anyway, but
- * keep them tame: strip characters that complicate querying/exporting. */
-const pathKey = (path: string) =>
-  (path || '/').slice(0, 200).replace(/[.$#[\]]/g, '_')
+/**
+ * The map key a path is counted under. MOVED to `@aglyn/aglyn` (AGL-2498) —
+ * the console's per-entry traffic card has to build the same key to look one
+ * path up, and a hand-copied character class that drifts by one character
+ * reports a real page as zero views. This alias keeps the call sites below
+ * reading the way they always have.
+ */
+const pathKey = Aglyn.analyticsPathKey
 
 const noContent = () => new Response(null, { status: 204 })
 

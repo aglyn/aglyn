@@ -17,28 +17,39 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-metadata'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import {
+  mdiAccountOutline,
   mdiArrowLeft,
   mdiCalendarClock,
   mdiCalendarEdit,
   mdiChevronDown,
+  mdiChevronUp,
+  mdiClockOutline,
   mdiCogOutline,
   mdiDeleteOutline,
   mdiFileDocumentMultipleOutline,
+  mdiLinkVariant,
   mdiOpenInNew,
   mdiPencilOutline,
   mdiPublish,
   mdiPublishOff,
+  mdiTagOutline,
 } from '@aglyn/shared-data-mdi'
 import {
+  AppLink,
   CardDisplay,
   Container,
+  GridItems,
   HelpTip,
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import {
+  ICON_VARIANT_DATE_TIME,
+  ICON_VARIANT_PRIMARY_KEY,
+  ICON_VARIANT_TEXT,
+} from '@aglyn/shared-data-enums'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -50,11 +61,17 @@ import {
   Avatar,
   Button,
   Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
   MenuItem,
   Stack,
   Table,
@@ -77,7 +94,7 @@ import {
 } from 'firebase/firestore'
 import { Box } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   useFirestore,
   useHostResourceApi,
@@ -103,6 +120,10 @@ import useFirestoreCollection from '../../../../../../hooks/use-firestore-collec
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
 import HubTabs from '../../../../../../components/hub-tabs.component'
+import { useDeclareDocumentSubject } from '../../../../../../components/document-subject'
+import EntryAnalyticsCard from '../../../../../../components/analytics/entry-analytics-card.component'
+import EntryCoverImageField from '../../../../../../components/content/entry-cover-image-field.component'
+import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import MediaPickerDialog from '../../../../../../components/media/media-picker-dialog.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
@@ -167,6 +188,37 @@ const CUSTOM_BYLINE_VALUE = '__custom__'
  * the row cannot drift apart again without someone editing one number.
  */
 const TOOLBAR_CONTROL_HEIGHT = 40
+
+/**
+ * The two card widths on the ENTRY DETAIL page, as `GridItems masonry` reads
+ * them (AGL-2498). The same two values the screen detail page uses, so the
+ * two pages read as one console rather than as two designs.
+ *
+ * `masonry` buckets items by their `size`, so these values ARE the
+ * arrangement: every `CARD_WIDE` card stacks in one column two thirds across,
+ * every `CARD_NARROW` card in the other. Each column is a flex stack at
+ * natural heights, which is what stops a short card being stretched to a tall
+ * neighbour.
+ *
+ * ## Which side the WRITING goes on, and why it is the opposite of the screen
+ *
+ * On the screen detail page `SEO` is wide and `Basic Details` narrow, because
+ * that page is a page ABOUT a document. This page IS the document: the entry
+ * is written here, and the body editor is the reason anybody opens it. So
+ * `Entry`, `Body` and `SEO` take the wide column and the metadata — `Details`,
+ * `Publication`, `Cover image` — takes the narrow one.
+ *
+ * That also puts the cover preview at a width where its 1200×630 frame is
+ * about 350px across: large enough to see the crop, small enough that it does
+ * not push the fields it belongs to below the fold.
+ *
+ * ORDER inside a bucket is source order, so the authored order of the wide
+ * items IS the rendered column order. The widths collapse with the viewport —
+ * two equal columns at `md`, one at `xs` — so nothing ever spans more columns
+ * than exist.
+ */
+const CARD_WIDE = { xs: 12, md: 6, lg: 8 } as const
+const CARD_NARROW = { xs: 12, md: 6, lg: 4 } as const
 
 /**
  * A row timestamp short enough to hold one line (AGL-2486).
@@ -468,57 +520,217 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         ),
     [collectionDocs],
   )
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  // Deep-link preselect (AGL-845): a `?collection=` param (e.g. from the DAM
-  // "Used on" list) opens the content manager on that collection. Applied once,
-  // only while nothing has been picked yet, so it never fights a later click.
-  const searchParams = useSearchParams()
-  const deepLinkCollection = searchParams?.get('collection') ?? null
-  const router = useRouter()
-  const pathname = usePathname()
   /**
-   * The entry the URL is open on (AGL-2498).
+   * WHICH COLLECTION AND WHICH ENTRY ARE PATH SEGMENTS (AGL-2498).
    *
-   * The editor used to be a dialog, so it had no address at all: it could
-   * not be linked, bookmarked or sent to a colleague, Back closed it and
-   * lost the context, and — the reason the issue exists — a dialog has
-   * nowhere to put a publication panel, which is why scheduling ended up
-   * exiled to the list row's overflow menu.
+   * Both used to be query parameters — `?collection=` for the collection
+   * (AGL-845) and `?entry=` for the entry — and the collection was not even
+   * that: it was `useState`, with the query parameter only ever seeding it
+   * once. Three things were wrong with that and the third is the one that
+   * forced this change.
    *
-   * `?entry=<id>`, or `?entry=new` for a draft that has no document yet.
+   * * **The collection is the page's identity, not a filter on it.** A Select
+   *   that owns which collection is open means the address does not, so a
+   *   reload landed on whichever collection sorted first, and a link to "the
+   *   blog" was a link to "content".
+   * * **A query parameter is droppable.** Any link that rebuilt the query —
+   *   the tab strip's own `?tab=` mirroring included — could lose it, and
+   *   losing it silently changed which collection an entry would be saved
+   *   into.
+   * * **An entry needs BOTH halves.** An entry is addressed
+   *   `collection + entry`. With one half in the path and the other in the
+   *   query there is no single string that names an entry, which is exactly
+   *   what "send a colleague the post I'm asking about" requires.
    *
-   * A query parameter and not a sibling route segment, deliberately: the
-   * detail is rendered by THIS component, which already resolves the
-   * collection doc, the entries listener, the categories, the authors and
-   * the screens from `selectedId`. A separate route would have to re-resolve
-   * every one of them, and a second copy of that resolution is a second
-   * place for the two to disagree about which entry is on screen. The
-   * address is what the issue asks for; a duplicate data layer is not.
+   * So `…/content/{collectionId}` and
+   * `…/content/{collectionId}/entries/{entryId}` are real routes now, served
+   * by THIS component (see the two alias `page.tsx` files). The data layer is
+   * not duplicated — that was the correct half of the original argument, and
+   * it is preserved by mounting the same component rather than by keeping the
+   * address impoverished.
+   *
+   * `entryId` also carries the sentinel `new`: a draft with no document yet.
+   *
+   * The old parameters still work: the address-rewrite effect below turns
+   * them into the routed form, because AGL-845's DAM deep links are in the
+   * wild.
    */
-  const entryParam = searchParams?.get('entry') ?? null
+  const routeParams = useParams<{
+    collectionId?: string
+    entryId?: string
+  }>()
+  const routeCollectionId = (routeParams?.collectionId as string) || null
+  const entryParam = (routeParams?.entryId as string) || null
+  const searchParams = useSearchParams()
+  const router = useRouter()
   /**
-   * `?collection=` (AGL-845) and `?tab=` (HubTabs) both have to survive a
-   * trip into an entry and back out, so the entry parameter is set ON the
-   * current query rather than replacing it.
+   * PRIMITIVES, not the `searchParams` object.
+   *
+   * `useSearchParams()` hands back a fresh object on every render, so an
+   * effect or a `useCallback` that depends on it is depending on "every
+   * render". These three are strings: they change when the address changes
+   * and not otherwise, which is what makes the rewrite below run once
+   * instead of on every keystroke in the editor.
+   */
+  const legacyCollection = searchParams?.get('collection') ?? null
+  const legacyEntry = searchParams?.get('entry') ?? null
+  const queryString = searchParams?.toString() ?? ''
+
+  /**
+   * `useRouter()` is also a fresh object per render. Held in a ref so the
+   * rewrite effect can navigate without listing it as a dependency — the same
+   * reason `navigationRef` exists further down for the entry sync.
+   */
+  const routerRef = useRef(router)
+  routerRef.current = router
+  /** The address the rewrite below has already asked for; see it. */
+  const rewrittenToRef = useRef<string | null>(null)
+  /**
+   * A collection id this component itself navigated to, which the rewrite
+   * below must not second-guess.
+   *
+   * ⚠️ Without it, CREATING a collection bounces you off it. The route
+   * confirms the write and hands back an id, and the address is pushed
+   * immediately — but the collections LISTENER has not delivered the new
+   * document yet, so for the few hundred milliseconds in between the id in
+   * the path names a collection this component cannot see. That is
+   * indistinguishable from a deleted collection or a stale bookmark, which is
+   * exactly what case 2 rewrites away: the reader would be dropped back onto
+   * whichever collection sorts first, moments after asking for a new one.
+   */
+  const navigatedToRef = useRef<string | null>(null)
+
+  const contentHref = buildRoute(Route.HOST_CONTENT, { orgSlug, host })
+  const collectionPath = useCallback(
+    (collectionId: string) =>
+      buildRoute(Route.HOST_CONTENT_COLLECTION, {
+        orgSlug,
+        host,
+        collectionId,
+      }),
+    [orgSlug, host],
+  )
+  const entryPath = useCallback(
+    (collectionId: string, entryId: string) =>
+      buildRoute(Route.CONTENT_ENTRY_DETAILS, {
+        orgSlug,
+        host,
+        collectionId,
+        entryId,
+      }),
+    [orgSlug, host],
+  )
+  /**
+   * Everything in the query EXCEPT the two legacy parameters.
+   *
+   * `?tab=` (HubTabs) has to survive a collection switch; `?collection=` and
+   * `?entry=` must NOT, because they are the address this page has just moved
+   * into the path — carrying them forward would leave two answers to "which
+   * collection is open" in one URL, and nothing to say which wins.
+   */
+  const survivingQuery = useMemo(() => {
+    const query = new URLSearchParams(queryString)
+    query.delete('collection')
+    query.delete('entry')
+    const rest = query.toString()
+    return rest ? `?${rest}` : ''
+  }, [queryString])
+  const collectionHref = useCallback(
+    (collectionId: string) => `${collectionPath(collectionId)}${survivingQuery}`,
+    [collectionPath, survivingQuery],
+  )
+
+  const selected =
+    collections.find((item) => item.$id === routeCollectionId) ??
+    collections[0]
+
+  /**
+   * The address is put into the routed form, and only when it is not already
+   * in it.
+   *
+   * Three cases, in order:
+   *
+   * 1. **No collection in the path.** Either a bare `/content` or a legacy
+   *    `?collection=`/`?entry=` link. The legacy pair wins when it names a
+   *    collection that exists; otherwise the first collection does, so the
+   *    page still opens on something rather than on a Select nobody touched.
+   * 2. **A collection in the path that no longer exists** — a deleted
+   *    collection, a stale bookmark, a typo. Left alone, `selected` falls
+   *    back to `collections[0]` and the address then NAMES one collection
+   *    while the page SHOWS another; the next save writes to the one on
+   *    screen and the URL says otherwise. Rewritten instead.
+   * 3. Anything else: nothing to do.
+   *
+   * `replace`, never `push`: the legacy address is not a place a reader chose
+   * to be, and Back must not return them to a URL that immediately forwards
+   * again.
+   *
+   * Guarded on the listener having ANSWERED (`collectionDocs`) rather than on
+   * `collections.length`. An empty array means "no collections" and "not
+   * loaded yet" alike, and rewriting on the second would fight the listener.
+   */
+  useEffect(() => {
+    if (!collectionDocs || collections.length === 0) return
+    const known =
+      collections.some((item) => item.$id === routeCollectionId) ||
+      // Confirmed by the server a moment ago; the listener is just behind.
+      routeCollectionId === navigatedToRef.current
+    if (routeCollectionId && known) {
+      /*
+        Settled. The claim is CLEARED here rather than left standing, so a
+        later trip back to a bare or legacy address — Back, a second pasted
+        DAM link, a typed `/content` — is rewritten again instead of being
+        mistaken for the one still in flight.
+      */
+      rewrittenToRef.current = null
+      return
+    }
+    const target =
+      !routeCollectionId &&
+      collections.some((item) => item.$id === legacyCollection)
+        ? (legacyCollection as string)
+        : collections[0].$id
+    const href =
+      !routeCollectionId && legacyEntry
+        ? entryPath(target, legacyEntry)
+        : `${collectionPath(target)}${survivingQuery}`
+    /*
+      Asked for ONCE. `router.replace` starts a transition, so `useParams()`
+      keeps reporting the old address for at least one render afterwards and
+      this effect can run again inside that window — and it will, on any
+      render where `collections` changes identity. Without the claim that is a
+      `replace` per render at the exact moment the router is mid-navigation.
+    */
+    if (rewrittenToRef.current === href) return
+    rewrittenToRef.current = href
+    routerRef.current.replace(href)
+  }, [
+    collectionDocs,
+    collections,
+    routeCollectionId,
+    legacyCollection,
+    legacyEntry,
+    survivingQuery,
+    collectionPath,
+    entryPath,
+  ])
+
+  /**
+   * The address of one entry, or of the list it belongs to.
+   *
+   * `null` means "back to the entries" and resolves to the COLLECTION route,
+   * not to bare `/content` — leaving an entry must not also change which
+   * collection you are looking at.
    */
   const entryHref = useCallback(
     (entryId: string | null) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? '')
-      if (entryId) params.set('entry', entryId)
-      else params.delete('entry')
-      const queryString = params.toString()
-      return `${pathname ?? ''}${queryString ? `?${queryString}` : ''}`
+      if (!selected) return contentHref
+      return entryId
+        ? entryPath(selected.$id, entryId)
+        : collectionHref(selected.$id)
     },
-    [pathname, searchParams],
+    [selected, contentHref, entryPath, collectionHref],
   )
-  useEffect(() => {
-    if (selectedId || !deepLinkCollection) return
-    if (collections.some((item) => item.$id === deepLinkCollection)) {
-      setSelectedId(deepLinkCollection)
-    }
-  }, [selectedId, deepLinkCollection, collections])
-  const selected =
-    collections.find((item) => item.$id === selectedId) ?? collections[0]
 
   const {
     data: entryDocs,
@@ -688,7 +900,15 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     }
     setNewCollectionOpen(false)
     setCollectionName('')
-    setSelectedId(id)
+    // The new collection IS the page now, so the address says so (AGL-2498).
+    // `push`, not `replace`: creating one is a place a reader chose to go, so
+    // Back should return them to the collection they came from.
+    //
+    // Claimed FIRST. The listener has not delivered the new document yet, and
+    // the rewrite effect treats a collection it cannot see as one that no
+    // longer exists — see `navigatedToRef`.
+    navigatedToRef.current = id
+    router.push(collectionHref(id))
     enqueueSnackbar(`Collection "${displayName}" created`, {
       variant: 'success',
       persist: false,
@@ -705,6 +925,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     hostId,
     enqueueSnackbar,
     logActivity,
+    router,
+    collectionHref,
   ])
 
   // Entry editor buffer; see `EntryEditorState`. Null = the list is showing.
@@ -732,6 +954,198 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
    */
   const editorDirtyRef = useRef(false)
   editorDirtyRef.current = editorDirty
+
+  /**
+   * Letting go of the buffer because the entry it held is now STORED or GONE
+   * — never because somebody navigated.
+   *
+   * The three lines matter as a SET. Clearing the pristine snapshot and the
+   * claimed address before `setEditor(null)` is what stops the unsaved-change
+   * guard asking "discard unsaved changes?" about a write that just succeeded
+   * — and, worse, stops `beforeunload` blocking the tab over edits already on
+   * the server. Four callers need exactly this (save, delete, the explicit
+   * Back, and the URL sync's confirmed back-out), which is three too many to
+   * keep hand-copying.
+   */
+  const releaseEditor = useCallback(() => {
+    pristineRef.current = null
+    appliedEntryRef.current = null
+    setEditor(null)
+  }, [])
+
+  /**
+   * The STORED entry the open editor answers to, or `null`.
+   *
+   * Read from the entries listener rather than from the buffer, deliberately:
+   * the buffer holds what is being TYPED, and every panel that reads this one
+   * — `Details`, `Publication`, `Raw JSON`, the View link, the traffic card —
+   * is about what is actually stored and published. A draft that has not been
+   * created yet has no document, so this is `null` and those panels say so
+   * instead of describing a row that does not exist.
+   */
+  const currentEntry = useMemo(
+    () =>
+      editor?.id
+        ? ((entries.find(
+            (item: any) => String(item.$id) === editor.id,
+          ) as any) ?? null)
+        : null,
+    [editor?.id, entries],
+  )
+  const entryIsPublished = currentEntry?.status === 'published'
+  const entryIsScheduled =
+    currentEntry?.status === 'scheduled' && Boolean(currentEntry?.publishAt)
+  /**
+   * The entry's address on the published site, e.g. `/blog/hello-world`.
+   *
+   * Built from the STORED slug, not from `slugify(editor.title)`. They differ
+   * exactly when somebody has retitled the entry without saving — and in that
+   * window the typed one names a page that does not exist, which would send
+   * the traffic card looking up a path nobody has ever visited and report a
+   * read post as zero views.
+   */
+  const entryPublicPath =
+    selected && currentEntry?.slug
+      ? `/${selected.slug}/${currentEntry.slug}`
+      : null
+  /** The absolute link, and only while the entry is actually reachable. */
+  const entryLiveUrl =
+    siteBase && entryPublicPath && entryIsPublished
+      ? `${siteBase}${entryPublicPath}`
+      : null
+  /** `Raw JSON` is closed until asked for — see the card. */
+  const [rawJsonOpen, setRawJsonOpen] = useState(false)
+
+  /**
+   * WHICH thing this tab is about (AGL-2486, reached by AGL-2498's routing).
+   *
+   * The two new route segments each render a server title built from the ID —
+   * `dR3GYhkZS1 · Entry · aglyn-marketing` — because `generateMetadata` runs
+   * where the console has no authorization to spend, and a server-rendered
+   * entry title would be readable by anyone who can guess a URL. This is the
+   * client half: it swaps the id for the loaded name in place, once the
+   * listener has one.
+   *
+   * An entry when one is open, the collection otherwise — which is exactly
+   * what the deepest resolved title is on each route, so the subject the
+   * client renames is always the subject the server wrote. Getting that pair
+   * out of step means the rename matches nothing and the tab silently keeps
+   * the id.
+   *
+   * The buffer's title, not the stored one: a retitle should reach the tab as
+   * it is typed, the same way it reaches the header and the breadcrumb.
+   * `useDeclareDocumentSubject` tolerates a name that is not there yet and
+   * leaves the id title alone until one is.
+   */
+  useDeclareDocumentSubject(
+    editor ? (entryParam ?? undefined) : (selected?.$id ?? undefined),
+    editor
+      ? editor.title.trim() || (editor.id ? undefined : 'New entry')
+      : selected?.displayName,
+  )
+
+  /**
+   * Everything recorded ABOUT the entry, in one list (AGL-2498).
+   *
+   * Zach: *"created at dates, published at dates, scheduled dates, etc."* All
+   * four timestamps were already stored and none of them were readable on the
+   * page that writes them — an author could set a published date in a dialog
+   * and then had nowhere to read it back.
+   *
+   * `publishAt` appears only while the entry is SCHEDULED. Showing it always
+   * would put a stale future instant beside a published post, one letter away
+   * from the date it actually claims — which is the confusion AGL-2497 exists
+   * to prevent, reproduced in a read-only list.
+   */
+  const entryDetails = useMemo(
+    () => [
+      {
+        key: 'id',
+        primary: 'Entry ID:',
+        secondary: currentEntry?.$id ?? 'Not created yet',
+        icon: ICON_VARIANT_PRIMARY_KEY.path,
+      },
+      {
+        key: 'address',
+        primary: 'Address:',
+        secondary: entryPublicPath ?? 'Save the entry to give it one',
+        icon: mdiLinkVariant.path,
+      },
+      {
+        key: 'collection',
+        primary: 'Collection:',
+        secondary: selected
+          ? `${selected.displayName} (/${selected.slug})`
+          : '',
+        icon: mdiFileDocumentMultipleOutline.path,
+      },
+      {
+        key: 'byline',
+        primary: 'Byline:',
+        secondary:
+          authors.find((author) => author.$id === editor?.authorId)?.name ||
+          editor?.authorName ||
+          'The site (publisher entity)',
+        icon: mdiAccountOutline.path,
+      },
+      {
+        key: 'taxonomy',
+        primary: 'Category and tags:',
+        secondary:
+          [
+            categories.find((category) => category.id === editor?.categoryId)
+              ?.name ||
+              editor?.legacyCategory ||
+              '',
+            editor?.tags?.trim() ?? '',
+          ]
+            .filter(Boolean)
+            .join(' · ') || 'None',
+        icon: mdiTagOutline.path,
+      },
+      {
+        key: 'created',
+        primary: 'Date created:',
+        secondary: formatStampFull(currentEntry?.createdAt),
+        icon: ICON_VARIANT_DATE_TIME.path,
+      },
+      {
+        key: 'updated',
+        primary: 'Last updated:',
+        secondary: formatStampFull(currentEntry?.updatedAt),
+        icon: ICON_VARIANT_TEXT.path,
+      },
+      {
+        key: 'published',
+        primary: 'Date published:',
+        secondary: formatStampFull(currentEntry?.publishedAt),
+        icon: ICON_VARIANT_DATE_TIME.path,
+      },
+      ...(entryIsScheduled
+        ? [
+            {
+              key: 'scheduled',
+              primary: 'Scheduled for:',
+              secondary: formatStampFull(currentEntry?.publishAt),
+              icon: mdiClockOutline.path,
+            },
+          ]
+        : []),
+    ],
+    [
+      currentEntry,
+      entryPublicPath,
+      entryIsScheduled,
+      selected,
+      authors,
+      categories,
+      editor?.authorId,
+      editor?.authorName,
+      editor?.categoryId,
+      editor?.legacyCategory,
+      editor?.tags,
+    ],
+  )
   // Media picker target: entry cover image or an inline body image.
   const [pickerTarget, setPickerTarget] = useState<
     'cover' | 'body' | 'authorImage' | null
@@ -1028,9 +1442,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
      * unsaved changes?" about the write that just succeeded — and, worse,
      * stops `beforeunload` blocking the tab over changes already stored.
      */
-    pristineRef.current = null
-    appliedEntryRef.current = null
-    setEditor(null)
+    releaseEditor()
     router.push(entryHref(null))
     enqueueSnackbar(editor.id ? 'Entry saved' : 'Draft created', {
       variant: 'success',
@@ -1053,6 +1465,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     logActivity,
     router,
     entryHref,
+    releaseEditor,
   ])
 
   const handleTogglePublish = useCallback(
@@ -1258,9 +1671,20 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     setPublishDate(null)
   }, [publishDate, selected, firestore, hostId, enqueueSnackbar, logActivity])
 
+  /**
+   * Deleting one entry, from the list row's overflow menu OR from the detail
+   * page's header.
+   *
+   * REPORTS whether it deleted (AGL-2498). The row menu never had to know —
+   * the row simply vanishes with the listener. The detail page does: it is
+   * still holding an editor buffer for a document that no longer exists, and
+   * it must leave only when the delete actually happened. A cancelled confirm
+   * that closed the editor anyway would look exactly like a successful
+   * delete.
+   */
   const handleDeleteEntry = useCallback(
-    (entry: any) => async () => {
-      if (!selected) return
+    (entry: any) => async (): Promise<boolean> => {
+      if (!selected) return false
       const confirmed = await confirm({
         title: 'Delete this entry?',
         description: `"${entry.title}" will be permanently deleted.`,
@@ -1269,7 +1693,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       })
         .then(() => true)
         .catch(() => false)
-      if (!confirmed) return
+      if (!confirmed) return false
       await deleteDoc(
         doc(
           firestore,
@@ -1287,6 +1711,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         id: entry.$id,
         name: entry.title,
       })
+      return true
     },
     [selected, confirm, firestore, hostId, enqueueSnackbar, logActivity],
   )
@@ -1372,8 +1797,13 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     setDeleteBusy(false)
     setDeleteOpen(false)
     setDeleteConfirm('')
-    // Fall back to whatever the listener leaves behind, or the empty state.
-    setSelectedId(null)
+    /*
+      Back to the bare `/content`, which the rewrite effect then resolves to
+      whatever collection is left — or leaves alone, on a site whose last
+      collection this was, so the zero state can show. `replace` because the
+      address just deleted must not be reachable with Back.
+    */
+    router.replace(contentHref)
     enqueueSnackbar(`Collection "${name}" deleted`, {
       variant: 'success',
       persist: false,
@@ -1383,7 +1813,16 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       id: deletedId,
       name,
     })
-  }, [selected, deleteBusy, user, hostId, enqueueSnackbar, logActivity])
+  }, [
+    selected,
+    deleteBusy,
+    user,
+    hostId,
+    enqueueSnackbar,
+    logActivity,
+    router,
+    contentHref,
+  ])
 
   /* ── Authors (AGL-2486) ───────────────────────────────────────────────── */
 
@@ -1606,37 +2045,76 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       })
       if (!ok) return
     }
-    pristineRef.current = null
-    appliedEntryRef.current = null
-    setEditor(null)
+    releaseEditor()
     router.push(entryHref(null))
-  }, [confirm, router, entryHref])
+  }, [confirm, router, entryHref, releaseEditor])
+
+  /**
+   * Deleting the entry from the DETAIL page's header (AGL-2498).
+   *
+   * The list row's Delete and this one run the same `handleDeleteEntry` —
+   * shared rather than copied, so there is one confirmation, one write and
+   * one activity record. What is different here is what happens AFTER: this
+   * page is displaying the document that just stopped existing, so it has to
+   * leave.
+   *
+   * `releaseEditor()` and not `closeEditor()`, and the distinction is the
+   * whole reason this exists. `closeEditor` asks "discard unsaved changes?"
+   * when the buffer is dirty — a reasonable question about leaving, and an
+   * absurd one about a post that has just been permanently deleted. Worse,
+   * answering "no" would strand the editor on a dead id, one Save away from
+   * re-creating the entry somebody meant to remove.
+   */
+  const handleDeleteFromDetail = useCallback(async () => {
+    if (!currentEntry) return
+    const deleted = await handleDeleteEntry(currentEntry)()
+    if (!deleted) return
+    releaseEditor()
+    router.push(entryHref(null))
+  }, [
+    currentEntry,
+    handleDeleteEntry,
+    releaseEditor,
+    router,
+    entryHref,
+  ])
 
   /**
    * The navigation helpers the URL sync reaches for, held in a ref.
    *
    * ⚠️ This is not a style choice. `useRouter()` and `useConfirmationContext()`
-   * hand back a FRESH object on every call, and `entryHref` closes over
-   * `searchParams`, so listing any of them in the effect below makes it run on
-   * every single render. Its job is "react to an address this component did
+   * hand back a FRESH object on every call, and `entryHref` closes over the
+   * surviving query string, so listing any of them in the effect below makes
+   * it run on every single render. Its job is "react to an address this component did
    * not write" — run unconditionally, that becomes "close the editor on every
    * render", and a row click opened an editor that vanished the same tick.
    * The effect therefore depends only on values that change when the thing it
    * watches changes.
    */
-  const navigationRef = useRef({ confirm, router, entryHref })
-  navigationRef.current = { confirm, router, entryHref }
+  const navigationRef = useRef({ confirm, router, entryHref, releaseEditor })
+  navigationRef.current = { confirm, router, entryHref, releaseEditor }
 
   /**
    * The URL is the authority on WHICH entry is open (AGL-2498).
    *
-   * Openers claim the parameter they push, so this only ever reacts to an
+   * Openers claim the segment they push, so this only ever reacts to an
    * address the component did not write: Back, Forward, or a link somebody
    * was sent. That is the whole point of the conversion — an editor you can
    * send to a colleague, and a Back button that means "back".
+   *
+   * The claim mechanism survived the move from `?entry=` to a path segment
+   * unchanged, and it has to: `router.push` starts a TRANSITION either way,
+   * so `useParams()` still reports the old value for at least one render
+   * after a row click. Without the claim, that window is a sync that closes
+   * the editor the click just opened.
    */
   useEffect(() => {
-    const { confirm: ask, router: nav, entryHref: href } = navigationRef.current
+    const {
+      confirm: ask,
+      router: nav,
+      entryHref: href,
+      releaseEditor: release,
+    } = navigationRef.current
     if (entryParam === appliedEntryRef.current) return
     if (!entryParam) {
       const openKey = appliedEntryRef.current
@@ -1656,16 +2134,12 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             'now discards them.',
         }).then((ok) => {
           if (!ok) return
-          pristineRef.current = null
-          appliedEntryRef.current = null
-          setEditor(null)
+          release()
           nav.push(href(null))
         })
         return
       }
-      appliedEntryRef.current = null
-      pristineRef.current = null
-      setEditor(null)
+      release()
       return
     }
     if (entryParam === 'new') {
@@ -1834,8 +2308,13 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                               size="small"
                               label="Collection"
                               value={selected?.$id ?? ''}
+                              // A NAVIGATION control since AGL-2498, not a
+                              // piece of component state: which collection is
+                              // open is the page's address, so choosing one
+                              // goes through the router and can be linked,
+                              // bookmarked, reloaded and gone Back out of.
                               onChange={(event) =>
-                                setSelectedId(event.target.value)
+                                router.push(collectionHref(event.target.value))
                               }
                               sx={{
                                 minWidth: 200,
@@ -2766,11 +3245,38 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           controls were exiled to the list row's overflow menu in the first
           place. Scheduling now has a home on the page that writes the entry.
 
-        The surface is the same JSX the dialog held; only the CONTAINER
-        changed, so no field, no guard and no writer moved. The two things
-        the container brought with it are new and had to be written, not
-        preserved: an address (`?entry=`) and the unsaved-change guard in
-        `closeEditor`.
+        ## The second pass: it is a DETAIL PAGE now, not a form on a route
+
+        The first pass moved the container and kept the shape — one card, one
+        column, thirteen stacked fields, ending in Save. Zach: "we need to
+        make the content collection detail view more polishing and make the
+        image previewable just like we have on the screen detail pages,
+        honestly probably every part of the screen details page needs to be on
+        the content collections screen as well."
+
+        He is right, and the missing parts were not decoration:
+
+        * the cover image was an opaque `media:…` reference in a text box, on
+          the one surface a customer shares most deliberately — the only way
+          to find out you had picked the wrong asset was to publish and look;
+        * `createdAt`, `updatedAt`, `publishedAt` and `publishAt` were all
+          stored and NONE of them were readable here, so the page that writes
+          the dates could not show them;
+        * there was no traffic panel, so "did anyone read it" had no answer;
+        * and there was no activity feed, so "who changed this, and when" had
+          no answer either — on the one document type in the console that
+          several people edit in turn.
+
+        So this is now the same arrangement the screen detail page uses: a
+        `GridItems masonry` band of cards at two widths, with the full-width
+        panels below it. See CARD_WIDE / CARD_NARROW for what goes where and
+        why the writing surface — not the metadata — takes the wide column.
+
+        Every field, guard and writer is the SAME one; only the container
+        around them changed. The Save control moved to the header, and that is
+        the one behavioural change: a form spread over several cards has no
+        single "foot" to sit at, and a second button called Save would be an
+        ambiguity for a screen reader and for anything driving the page.
       */}
       {editor ? (
         <DashboardLayout
@@ -2781,8 +3287,19 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             },
             {
               children: 'Content',
-              href: buildRoute(Route.HOST_CONTENT, { orgSlug, host }),
+              href: contentHref,
             },
+            // The COLLECTION is a crumb of its own since AGL-2498 gave it an
+            // address. It could not be one while it lived in a query
+            // parameter — a crumb that cannot be clicked is a label.
+            ...(selected
+              ? [
+                  {
+                    children: selected.displayName ?? selected.$id,
+                    href: collectionHref(selected.$id),
+                  },
+                ]
+              : []),
             {
               // The trail is what tells a reader which entry they are in —
               // the thing a dialog over a list could never say.
@@ -2794,7 +3311,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           ]}
           help="content"
           header={{
-            children: editor.id ? 'Edit entry' : 'New entry',
+            children: editor.id
+              ? editor.title.trim() || 'Untitled entry'
+              : 'New entry',
             icon: { path: mdiFileDocumentMultipleOutline.path },
           }}
           headerRight={
@@ -2807,14 +3326,35 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               {editorDirty ? (
                 <Chip size="small" color="warning" label="Unsaved changes" />
               ) : null}
-              {/*
-                The ONE way out, and it is not a second Save.
-
-                The save control stays at the foot of the form where the
-                dialog's was, so it keeps its single accessible name — two
-                buttons called "Save" on one page is an ambiguity for a
-                screen reader and for anything driving the page.
-              */}
+              {/* Only for an entry that is actually reachable. A draft has no
+                  live address, and an outlined button pointing at a 404 is
+                  worse than an absent one. */}
+              {entryLiveUrl ? (
+                <AppLink
+                  componentVariant="button"
+                  size="small"
+                  variant="outlined"
+                  href={entryLiveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  startIcon={<MdiIcon path={mdiOpenInNew.path} size={0.8} />}
+                >
+                  {'View'}
+                </AppLink>
+              ) : null}
+              {currentEntry ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  startIcon={
+                    <MdiIcon path={mdiDeleteOutline.path} size={0.8} />
+                  }
+                  onClick={() => void handleDeleteFromDetail()}
+                >
+                  {'Delete'}
+                </Button>
+              ) : null}
               <Button
                 size="small"
                 startIcon={<MdiIcon path={mdiArrowLeft.path} size={0.8} />}
@@ -2822,510 +3362,785 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               >
                 {'Back to entries'}
               </Button>
+              {/*
+                The ONE save control on the page (AGL-2498).
+
+                It used to sit at the foot of the single card that held every
+                field. There is no single foot any more — the fields are
+                spread across `Entry`, `Body`, `SEO` and `Cover image` — so a
+                footer button would belong to whichever card happened to be
+                last in the masonry, which is a different card at every
+                breakpoint. In the header it is in the same place at every
+                width, visible without scrolling past a body editor that can
+                be thousands of words long, and there is still exactly one
+                control with the accessible name "Save".
+              */}
+              <Button
+                variant="contained"
+                size="small"
+                color="primary"
+                disabled={!editor.title.trim()}
+                onClick={handleSaveEntry}
+              >
+                {editor.id ? 'Save' : 'Create draft'}
+              </Button>
             </Stack>
           }
         >
           <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-            <CardDisplay
-              header={'Entry'}
-              help={docsHelp('buildABlog')}
-              contentGutterX
-              contentGutterY
-              contentBordered="all"
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 2,
-                  pt: 1,
-                }}
-              >
-          <TextField
-            label="Title"
-            value={editor?.title ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, title: event.target.value } : prev,
-              )
-            }
-            size="small"
-            autoFocus
-            sx={{ mt: 1 }}
-            helperText={
-              editor?.title.trim()
-                ? `/${selected?.slug}/${slugify(editor.title)}`
-                : undefined
-            }
-          />
-          <TextField
-            label="Excerpt"
-            value={editor?.excerpt ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, excerpt: event.target.value } : prev,
-              )
-            }
-            size="small"
-            multiline
-            minRows={2}
-          />
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TextField
-              label="Cover image URL"
-              value={editor?.coverImage ?? ''}
-              onChange={(event) =>
-                setEditor((prev) =>
-                  prev ? { ...prev, coverImage: event.target.value } : prev,
-                )
-              }
-              size="small"
-              sx={{ flexGrow: 1 }}
-            />
-            <Button size="small" onClick={() => setPickerTarget('cover')}>
-              {'Choose'}
-            </Button>
-          </Stack>
-          {/*
-            `og:image:alt` (AGL-2417). Shown only beside a cover, because a
-            description with nothing to describe is a field nobody can
-            answer. Pre-filled from the chosen asset's own alt and editable —
-            this is the surface a customer shares most deliberately.
-          */}
-          {editor?.coverImage?.trim() ? (
-            <TextField
-              label="Cover image description"
-              placeholder="What the picture shows"
-              value={editor?.coverImageAlt ?? ''}
-              onChange={(event) =>
-                setEditor((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        coverImageAlt: event.target.value.slice(
-                          0,
-                          MEDIA_ALT_MAX_LENGTH,
-                        ),
-                      }
-                    : prev,
-                )
-              }
-              size="small"
-              helperText={
-                'Read aloud by screen readers when this entry is shared.'
-              }
-            />
-          ) : null}
-          <Stack direction="row" spacing={1}>
-            {/* Category is a LOOKUP (AGL-582): entries store the stable
-                categoryId, names resolve at render — renames never touch
-                posts. The legacy free-typed value shows until migrated. */}
-            <TextField
-              select
-              label="Category"
-              value={editor?.categoryId ?? ''}
-              onChange={(event) => {
-                const value = event.target.value
-                if (value === MANAGE_CATEGORIES_VALUE) {
-                  return void setCategoriesOpen(true)
-                }
-                setEditor((prev) =>
-                  prev ? { ...prev, categoryId: value } : prev,
-                )
-              }}
-              size="small"
-              sx={{ flexGrow: 1 }}
-              helperText={
-                editor?.legacyCategory && !editor.categoryId
-                  ? `Typed category "${editor.legacyCategory}" — pick one ` +
-                    'to migrate this entry'
-                  : 'Pick from this collection’s categories'
-              }
-            >
-              <MenuItem value="">{'None'}</MenuItem>
-              {categories.map((category) => (
-                <MenuItem key={category.id} value={category.id}>
-                  {category.name}
-                </MenuItem>
-              ))}
-              {editor?.categoryId &&
-              !categories.some(
-                (category) => category.id === editor.categoryId,
-              ) ? (
-                // The referenced category was deleted: keep the Select
-                // valid and let the author see (and move off) the id.
-                <MenuItem value={editor.categoryId}>
-                  {`${editor.categoryId} (deleted)`}
-                </MenuItem>
-              ) : null}
-              <MenuItem value={MANAGE_CATEGORIES_VALUE}>
-                {'Manage categories…'}
-              </MenuItem>
-            </TextField>
-            <TextField
-              label="Tags"
-              value={editor?.tags ?? ''}
-              onChange={(event) =>
-                setEditor((prev) =>
-                  prev ? { ...prev, tags: event.target.value } : prev,
-                )
-              }
-              size="small"
-              sx={{ flexGrow: 2 }}
-              helperText="Comma-separated, e.g. nextjs, seo"
-            />
-          </Stack>
-          {/* Byline (AGL-2486). A record, a one-off string, or the site —
-              and the Select has to be able to say all three, because an
-              entry written before this feature is in the middle state and
-              opening its editor must not re-attribute it. */}
-          <TextField
-            select
-            label="Author"
-            value={
-              editor?.authorId
-                ? editor.authorId
-                : editor?.authorName
-                  ? CUSTOM_BYLINE_VALUE
-                  : ''
-            }
-            onChange={(event) => {
-              const value = event.target.value
-              setEditor((prev) => {
-                if (!prev) return prev
-                if (value === CUSTOM_BYLINE_VALUE) {
-                  // Keep whatever was typed; only drop the record reference.
-                  return { ...prev, authorId: '' }
-                }
-                if (!value) return { ...prev, authorId: '', authorName: '' }
-                return {
-                  ...prev,
-                  authorId: value,
-                  // The resolved name travels with the id — see the save.
-                  authorName:
-                    authors.find((author) => author.$id === value)?.name ??
-                    prev.authorName,
-                }
-              })
-            }}
-            size="small"
-            helperText="Byline for this entry — falls back to the site entity"
-          >
-            <MenuItem value="">{'The site (publisher entity)'}</MenuItem>
-            {authors.map((author) => (
-              <MenuItem key={author.$id} value={author.$id}>
-                {`${author.name} · ${Aglyn.contentAuthorSchemaType(author.type)}`}
-              </MenuItem>
-            ))}
-            {editor?.authorId &&
-            !authors.some((author) => author.$id === editor.authorId) ? (
-              // The referenced author was deleted. Keep the Select valid and
-              // show the id, exactly as the category Select does — the post
-              // still renders (the stored name is the fallback), and the
-              // editor can see what to move it off.
-              <MenuItem value={editor.authorId}>
-                {`${editor.authorId} (deleted)`}
-              </MenuItem>
-            ) : null}
-            <MenuItem value={CUSTOM_BYLINE_VALUE}>
-              {'Custom byline…'}
-            </MenuItem>
-          </TextField>
-          {!editor?.authorId ? (
-            <TextField
-              label="Custom byline"
-              value={editor?.authorName ?? ''}
-              onChange={(event) =>
-                setEditor((prev) =>
-                  prev ? { ...prev, authorName: event.target.value } : prev,
-                )
-              }
-              size="small"
-              helperText={
-                'A one-off name for this entry — published as a Person. ' +
-                'Leave blank to attribute the piece to the site.'
-              }
-            />
-          ) : null}
-          <TextField
-            label="SEO title"
-            value={editor?.seoTitle ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, seoTitle: event.target.value } : prev,
-              )
-            }
-            size="small"
-            helperText="Search/social title — falls back to the title"
-          />
-          <TextField
-            label="SEO description"
-            value={editor?.seoDescription ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, seoDescription: event.target.value } : prev,
-              )
-            }
-            size="small"
-            multiline
-            minRows={2}
-            helperText="Meta description — falls back to the excerpt"
-          />
-          {/* One toolbar for both surfaces (AGL-984), including the
-              Visual / Markdown switch. */}
-          <MarkdownEditorToolbar
-            onCommand={handleToolbar}
-            context={bodyTab === 'visual' ? bodyContext : null}
-            mode={bodyTab}
-            onModeChange={setBodyTab}
-          >
-            <Button
-              size="small"
-              color="primary"
-              onClick={() => {
-                // The handler half of AGL-1380: `org` is undefined both in
-                // flight and on a failed read, and `hasEntitlement` on an
-                // undefined org answers NO — so clicking inside the loading
-                // window told a Pro org the feature it pays for is not on
-                // its plan. Pending declines and says so; only a loaded plan
-                // may make the claim.
-                if (!orgReady) {
-                  return void enqueueSnackbar(
-                    'Checking your plan — try again in a moment',
-                    { variant: 'info', persist: false },
-                  )
-                }
-                if (!hasEntitlement('aiAssist', org)) {
-                  return void enqueueSnackbar(
-                    'AI assist requires a Pro plan — see Billing to upgrade',
-                    { variant: 'warning', persist: false },
-                  )
-                }
-                setAiInstruction('')
-              }}
-            >
-              {editor?.body?.trim() ? 'Improve with AI' : 'Write with AI'}
-            </Button>
-          </MarkdownEditorToolbar>
-          <Box>
-            {bodyTab === 'visual' ? (
-              // WYSIWYG surface (AGL-582): the editor IS the preview — it
-              // round-trips through the same markdown-lite parser/serializer
-              // the tenant renders with. Raw markdown is an advanced escape
-              // hatch behind the "Edit markdown" button, not a co-equal tab.
-              <Box>
-                <MarkdownVisualEditor
-                  ref={visualEditorRef}
-                  value={editor?.body ?? ''}
-                  onChange={(body) =>
-                    setEditor((prev) => (prev ? { ...prev, body } : prev))
-                  }
-                  // The editor's Insert image dialog hands off to the same
-                  // media picker the "Insert image" button uses (AGL-596).
-                  onPickImageFromMedia={() => setPickerTarget('body')}
-                  onContextChange={setBodyContext}
-                />
-                <Stack
-                  direction="row"
-                  sx={{
-                    mt: 0.5,
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 2,
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    component="div"
-                  >
-                    {'Cmd/Ctrl+B bold · Cmd/Ctrl+I italic · Cmd/Ctrl+Z undo · ' +
-                      'type "## ", "### " or "- " at a line start to convert'}
-                  </Typography>
-                </Stack>
-              </Box>
-            ) : (
-              <Box>
-                <TextField
-                  label="Markdown source"
-                  value={editor?.body ?? ''}
-                  onChange={(event) =>
-                    setEditor((prev) =>
-                      prev ? { ...prev, body: event.target.value } : prev,
-                    )
-                  }
-                  size="small"
-                  multiline
-                  minRows={14}
-                  fullWidth
-                  inputRef={bodyInputRef}
-                  helperText={MARKDOWN_SOURCE_HINT}
-                />
-              </Box>
-            )}
-          </Box>
-          {/*
-            Publication controls, where the writing happens (AGL-2498).
-
-            Zach: "We are also missing the ability schedule publishing on the
-            content collections, only via the expanded menu on the list." All
-            three controls existed and all three lived on the LIST row, so
-            deciding when a post went live meant closing the editor, finding
-            the row and opening a different menu.
-
-            They are the SAME actions the row menu runs — `handleTogglePublish`,
-            `openScheduler`, `openPublishDate`, shared rather than copied — so
-            there is one behaviour with two doors, not two implementations to
-            drift apart. They are deliberately NOT folded into the draft save
-            below: publishing is an explicit act, and a Save button that also
-            published would make every typo fix a publication event.
-
-            Shown only for an entry that EXISTS. There is nothing to publish,
-            schedule or date until the draft has been created, and offering it
-            would write to an id no document answers to.
-
-            ## The one-letter hazard, in the one place both dates are visible
-
-            `publishedAt` (when it WENT live) and `publishAt` (when it is DUE
-            to) differ by a single letter, and this is the first surface that
-            shows both at once. So each row states its own tense — "Published"
-            against a past instant, "Scheduled for" against a future one — and
-            the two buttons are worded apart ("Edit published date" vs
-            "Schedule"). They remain separate fields, separate dialogs and
-            separate guards; only the doorway is shared.
-          */}
-          {editor?.id
-            ? (() => {
-                const current = entries.find(
-                  (item: any) => item.$id === editor.id,
-                )
-                if (!current) return null
-                const isPublished = current.status === 'published'
-                const isScheduled =
-                  current.status === 'scheduled' && current.publishAt
-                return (
-                  <>
-                    <Divider sx={{ mt: 1 }} />
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 1,
-                      }}
+            <GridItems
+              spacing={3}
+              masonry
+              items={[
+                {
+                  size: CARD_WIDE,
+                  children: (
+                    <CardDisplay
+                      header={'Entry'}
+                      help={docsHelp('buildABlog')}
+                      contentGutterX
+                      contentGutterY
+                      contentBordered="all"
                     >
-                      <Typography variant="subtitle2">
-                        {'Publication'}
-                      </Typography>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                      >
-                        <Chip
-                          size="small"
-                          label={
-                            isPublished
-                              ? 'Published'
-                              : isScheduled
-                                ? 'Scheduled'
-                                : 'Draft'
+                      <Stack spacing={2}>
+                        <TextField
+                          label="Title"
+                          value={editor?.title ?? ''}
+                          onChange={(event) =>
+                            setEditor((prev) =>
+                              prev
+                                ? { ...prev, title: event.target.value }
+                                : prev,
+                            )
                           }
-                          color={
-                            isPublished
-                              ? 'success'
-                              : isScheduled
-                                ? 'info'
-                                : 'default'
+                          size="small"
+                          autoFocus
+                          helperText={
+                            editor?.title.trim()
+                              ? `/${selected?.slug}/${slugify(editor.title)}`
+                              : undefined
                           }
                         />
-                        <Typography variant="body2" color="text.secondary">
-                          {isPublished
-                            ? // PAST tense against `publishedAt` — the date
-                              // the article claims, and what
-                              // `Article.datePublished` carries (AGL-2497).
-                              `Published ${formatStampFull(current.publishedAt) ?? '—'}`
-                            : isScheduled
-                              ? // FUTURE tense against `publishAt`. Naming
-                                // the field's tense in the sentence is what
-                                // keeps the two apart on screen.
-                                `Scheduled for ${formatStampFull(current.publishAt) ?? '—'}`
-                              : 'Not published yet'}
-                        </Typography>
-                      </Stack>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        useFlexGap
-                        sx={{ flexWrap: 'wrap' }}
-                      >
-                        <Button
+                        <TextField
+                          label="Excerpt"
+                          value={editor?.excerpt ?? ''}
+                          onChange={(event) =>
+                            setEditor((prev) =>
+                              prev
+                                ? { ...prev, excerpt: event.target.value }
+                                : prev,
+                            )
+                          }
                           size="small"
-                          variant="outlined"
-                          startIcon={
+                          multiline
+                          minRows={2}
+                        />
+                        <Stack direction="row" spacing={1}>
+                          {/* Category is a LOOKUP (AGL-582): entries store the
+                              stable categoryId, names resolve at render —
+                              renames never touch posts. The legacy free-typed
+                              value shows until migrated. */}
+                          <TextField
+                            select
+                            label="Category"
+                            value={editor?.categoryId ?? ''}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              if (value === MANAGE_CATEGORIES_VALUE) {
+                                return void setCategoriesOpen(true)
+                              }
+                              setEditor((prev) =>
+                                prev ? { ...prev, categoryId: value } : prev,
+                              )
+                            }}
+                            size="small"
+                            sx={{ flexGrow: 1 }}
+                            helperText={
+                              editor?.legacyCategory && !editor.categoryId
+                                ? `Typed category "${editor.legacyCategory}" — pick one ` +
+                                  'to migrate this entry'
+                                : 'Pick from this collection’s categories'
+                            }
+                          >
+                            <MenuItem value="">{'None'}</MenuItem>
+                            {categories.map((category) => (
+                              <MenuItem key={category.id} value={category.id}>
+                                {category.name}
+                              </MenuItem>
+                            ))}
+                            {editor?.categoryId &&
+                            !categories.some(
+                              (category) => category.id === editor.categoryId,
+                            ) ? (
+                              // The referenced category was deleted: keep the
+                              // Select valid and let the author see (and move
+                              // off) the id.
+                              <MenuItem value={editor.categoryId}>
+                                {`${editor.categoryId} (deleted)`}
+                              </MenuItem>
+                            ) : null}
+                            <MenuItem value={MANAGE_CATEGORIES_VALUE}>
+                              {'Manage categories…'}
+                            </MenuItem>
+                          </TextField>
+                          <TextField
+                            label="Tags"
+                            value={editor?.tags ?? ''}
+                            onChange={(event) =>
+                              setEditor((prev) =>
+                                prev
+                                  ? { ...prev, tags: event.target.value }
+                                  : prev,
+                              )
+                            }
+                            size="small"
+                            sx={{ flexGrow: 2 }}
+                            helperText="Comma-separated, e.g. nextjs, seo"
+                          />
+                        </Stack>
+                        {/* Byline (AGL-2486). A record, a one-off string, or
+                            the site — and the Select has to be able to say all
+                            three, because an entry written before this feature
+                            is in the middle state and opening its editor must
+                            not re-attribute it. */}
+                        <TextField
+                          select
+                          label="Author"
+                          value={
+                            editor?.authorId
+                              ? editor.authorId
+                              : editor?.authorName
+                                ? CUSTOM_BYLINE_VALUE
+                                : ''
+                          }
+                          onChange={(event) => {
+                            const value = event.target.value
+                            setEditor((prev) => {
+                              if (!prev) return prev
+                              if (value === CUSTOM_BYLINE_VALUE) {
+                                // Keep whatever was typed; only drop the
+                                // record reference.
+                                return { ...prev, authorId: '' }
+                              }
+                              if (!value) {
+                                return { ...prev, authorId: '', authorName: '' }
+                              }
+                              return {
+                                ...prev,
+                                authorId: value,
+                                // The resolved name travels with the id — see
+                                // the save.
+                                authorName:
+                                  authors.find(
+                                    (author) => author.$id === value,
+                                  )?.name ?? prev.authorName,
+                              }
+                            })
+                          }}
+                          size="small"
+                          helperText="Byline for this entry — falls back to the site entity"
+                        >
+                          <MenuItem value="">
+                            {'The site (publisher entity)'}
+                          </MenuItem>
+                          {authors.map((author) => (
+                            <MenuItem key={author.$id} value={author.$id}>
+                              {`${author.name} · ${Aglyn.contentAuthorSchemaType(author.type)}`}
+                            </MenuItem>
+                          ))}
+                          {editor?.authorId &&
+                          !authors.some(
+                            (author) => author.$id === editor.authorId,
+                          ) ? (
+                            // The referenced author was deleted. Keep the
+                            // Select valid and show the id, exactly as the
+                            // category Select does — the post still renders
+                            // (the stored name is the fallback), and the editor
+                            // can see what to move it off.
+                            <MenuItem value={editor.authorId}>
+                              {`${editor.authorId} (deleted)`}
+                            </MenuItem>
+                          ) : null}
+                          <MenuItem value={CUSTOM_BYLINE_VALUE}>
+                            {'Custom byline…'}
+                          </MenuItem>
+                        </TextField>
+                        {!editor?.authorId ? (
+                          <TextField
+                            label="Custom byline"
+                            value={editor?.authorName ?? ''}
+                            onChange={(event) =>
+                              setEditor((prev) =>
+                                prev
+                                  ? { ...prev, authorName: event.target.value }
+                                  : prev,
+                              )
+                            }
+                            size="small"
+                            helperText={
+                              'A one-off name for this entry — published as a ' +
+                              'Person. Leave blank to attribute the piece to ' +
+                              'the site.'
+                            }
+                          />
+                        ) : null}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: CARD_NARROW,
+                  children: (
+                    <CardDisplay
+                      header={'Details'}
+                      help={docsHelp('buildABlog', {
+                        excerpt:
+                          'What this entry is, where it publishes, and every ' +
+                          'date recorded against it.',
+                      })}
+                      contentGutterY
+                      contentBordered="all"
+                    >
+                      <List dense disablePadding>
+                        {entryDetails.map(({ key: itemKey, primary, secondary, icon }) => (
+                          <ListItem key={itemKey} alignItems="flex-start" dense>
+                            <ListItemIcon
+                              sx={{
+                                border: `1px solid`,
+                                borderColor: 'divider',
+                                padding: 1,
+                                borderRadius: 1,
+                                minWidth: 'unset',
+                                marginRight: 2,
+                                color: 'secondary.main',
+                              }}
+                            >
+                              <MdiIcon path={icon} />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={primary}
+                              secondary={secondary || '—'}
+                              // An entry id and a `/collection/entry` path
+                              // are long unbroken tokens; the default break
+                              // rules cut them mid-word instead of wrapping
+                              // them, which in a one-third column is most of
+                              // the value gone.
+                              slotProps={{
+                                secondary: {
+                                  sx: { overflowWrap: 'anywhere' },
+                                },
+                              }}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: CARD_NARROW,
+                  children: (
+                    <CardDisplay
+                      header={'Publication'}
+                      help={docsHelp('buildABlog', {
+                        anchor: '#scheduling',
+                        excerpt:
+                          'Publish this entry now, schedule it for a future ' +
+                          'time, or correct the date it says it went out.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                      contentBordered="all"
+                    >
+                      {/*
+                        Publication controls, where the writing happens
+                        (AGL-2498).
+
+                        Zach: "We are also missing the ability schedule
+                        publishing on the content collections, only via the
+                        expanded menu on the list." All three controls existed
+                        and all three lived on the LIST row, so deciding when a
+                        post went live meant closing the editor, finding the
+                        row and opening a different menu.
+
+                        They are the SAME actions the row menu runs —
+                        `handleTogglePublish`, `openScheduler`,
+                        `openPublishDate`, shared rather than copied — so there
+                        is one behaviour with two doors. They are deliberately
+                        NOT folded into Save: publishing is an explicit act,
+                        and a Save that also published would make every typo
+                        fix a publication event.
+
+                        ## The one-letter hazard, in the one place both dates
+                        are visible
+
+                        `publishedAt` (when it WENT live) and `publishAt` (when
+                        it is DUE to) differ by a single letter. So each line
+                        states its own tense — "Published" against a past
+                        instant, "Scheduled for" against a future one — and the
+                        two buttons are worded apart. They remain separate
+                        fields, separate dialogs and separate guards; only the
+                        doorway is shared.
+                      */}
+                      {currentEntry ? (
+                        <Stack spacing={1.5}>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            useFlexGap
+                            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                          >
+                            <Chip
+                              size="small"
+                              label={
+                                entryIsPublished
+                                  ? 'Published'
+                                  : entryIsScheduled
+                                    ? 'Scheduled'
+                                    : 'Draft'
+                              }
+                              color={
+                                entryIsPublished
+                                  ? 'success'
+                                  : entryIsScheduled
+                                    ? 'info'
+                                    : 'default'
+                              }
+                            />
+                            <Typography variant="body2" color="text.secondary">
+                              {entryIsPublished
+                                ? // PAST tense against `publishedAt` — the
+                                  // date the article claims, and what
+                                  // `Article.datePublished` carries
+                                  // (AGL-2497).
+                                  `Published ${formatStampFull(currentEntry.publishedAt) ?? '—'}`
+                                : entryIsScheduled
+                                  ? // FUTURE tense against `publishAt`.
+                                    // Naming the field's tense in the sentence
+                                    // is what keeps the two apart on screen.
+                                    `Scheduled for ${formatStampFull(currentEntry.publishAt) ?? '—'}`
+                                  : 'Not published yet'}
+                            </Typography>
+                          </Stack>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            useFlexGap
+                            sx={{ flexWrap: 'wrap' }}
+                          >
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={
+                                <MdiIcon
+                                  path={
+                                    entryIsPublished
+                                      ? mdiPublishOff.path
+                                      : mdiPublish.path
+                                  }
+                                  size={0.8}
+                                />
+                              }
+                              onClick={() =>
+                                void handleTogglePublish(currentEntry)()
+                              }
+                            >
+                              {entryIsPublished ? 'Unpublish' : 'Publish'}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={
+                                <MdiIcon
+                                  path={mdiCalendarEdit.path}
+                                  size={0.8}
+                                />
+                              }
+                              onClick={() => openPublishDate(currentEntry)}
+                            >
+                              {'Edit published date…'}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={
+                                <MdiIcon
+                                  path={mdiCalendarClock.path}
+                                  size={0.8}
+                                />
+                              }
+                              onClick={() => openScheduler(currentEntry)}
+                            >
+                              {'Schedule…'}
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      ) : (
+                        /*
+                          Shown, not hidden, for a draft that has no document
+                          yet. There is nothing to publish, schedule or date
+                          until the draft has been created — offering the
+                          controls would write to an id no document answers to
+                          — but an ABSENT card reads as a missing feature, and
+                          this is the card whose absence started the issue.
+                        */
+                        <Typography variant="body2" color="text.secondary">
+                          {'Create the draft first — publishing, scheduling ' +
+                            'and the published date all act on a stored ' +
+                            'entry.'}
+                        </Typography>
+                      )}
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: CARD_WIDE,
+                  children: (
+                    <CardDisplay
+                      header={'Body'}
+                      help={docsHelp('buildABlog', {
+                        anchor: '#visual-editor',
+                        excerpt:
+                          'The entry itself. The visual surface and the ' +
+                          'markdown source edit the same document.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                      contentBordered="all"
+                    >
+                      <Stack spacing={1}>
+                        {/* One toolbar for both surfaces (AGL-984),
+                            including the Visual / Markdown switch. */}
+                        <MarkdownEditorToolbar
+                          onCommand={handleToolbar}
+                          context={bodyTab === 'visual' ? bodyContext : null}
+                          mode={bodyTab}
+                          onModeChange={setBodyTab}
+                        >
+                          <Button
+                            size="small"
+                            color="primary"
+                            onClick={() => {
+                              // The handler half of AGL-1380: `org` is
+                              // undefined both in flight and on a failed read,
+                              // and `hasEntitlement` on an undefined org
+                              // answers NO — so clicking inside the loading
+                              // window told a Pro org the feature it pays for
+                              // is not on its plan. Pending declines and says
+                              // so; only a loaded plan may make the claim.
+                              if (!orgReady) {
+                                return void enqueueSnackbar(
+                                  'Checking your plan — try again in a moment',
+                                  { variant: 'info', persist: false },
+                                )
+                              }
+                              if (!hasEntitlement('aiAssist', org)) {
+                                return void enqueueSnackbar(
+                                  'AI assist requires a Pro plan — see Billing to upgrade',
+                                  { variant: 'warning', persist: false },
+                                )
+                              }
+                              setAiInstruction('')
+                            }}
+                          >
+                            {editor?.body?.trim()
+                              ? 'Improve with AI'
+                              : 'Write with AI'}
+                          </Button>
+                        </MarkdownEditorToolbar>
+                        {bodyTab === 'visual' ? (
+                          // WYSIWYG surface (AGL-582): the editor IS the
+                          // preview — it round-trips through the same
+                          // markdown-lite parser/serializer the tenant renders
+                          // with. Raw markdown is an advanced escape hatch
+                          // behind the "Edit markdown" button, not a co-equal
+                          // tab.
+                          <Box>
+                            <MarkdownVisualEditor
+                              ref={visualEditorRef}
+                              value={editor?.body ?? ''}
+                              onChange={(body) =>
+                                setEditor((prev) =>
+                                  prev ? { ...prev, body } : prev,
+                                )
+                              }
+                              // The editor's Insert image dialog hands off to
+                              // the same media picker the "Insert image"
+                              // button uses (AGL-596).
+                              onPickImageFromMedia={() =>
+                                setPickerTarget('body')
+                              }
+                              onContextChange={setBodyContext}
+                            />
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              component="div"
+                              sx={{ mt: 0.5 }}
+                            >
+                              {'Cmd/Ctrl+B bold · Cmd/Ctrl+I italic · ' +
+                                'Cmd/Ctrl+Z undo · type "## ", "### " or ' +
+                                '"- " at a line start to convert'}
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <TextField
+                            label="Markdown source"
+                            value={editor?.body ?? ''}
+                            onChange={(event) =>
+                              setEditor((prev) =>
+                                prev
+                                  ? { ...prev, body: event.target.value }
+                                  : prev,
+                              )
+                            }
+                            size="small"
+                            multiline
+                            minRows={14}
+                            fullWidth
+                            inputRef={bodyInputRef}
+                            helperText={MARKDOWN_SOURCE_HINT}
+                          />
+                        )}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: CARD_NARROW,
+                  children: (
+                    <CardDisplay
+                      header={'Cover image'}
+                      help={docsHelp('seo', {
+                        anchor: '#per-screen-seo',
+                        excerpt:
+                          'The picture shown at the top of the entry and on ' +
+                          'its share card, with the description screen ' +
+                          'readers announce.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                      contentBordered="all"
+                    >
+                      {/* The field PREVIEWS what it points at (AGL-2498) —
+                          see the component for why the URL input stays and
+                          why the picker dialog is still the page's. */}
+                      <EntryCoverImageField
+                        hostId={hostId}
+                        value={editor?.coverImage ?? ''}
+                        alt={editor?.coverImageAlt ?? ''}
+                        onValueChange={(value) =>
+                          setEditor((prev) =>
+                            prev ? { ...prev, coverImage: value } : prev,
+                          )
+                        }
+                        onAltChange={(alt) =>
+                          setEditor((prev) =>
+                            prev ? { ...prev, coverImageAlt: alt } : prev,
+                          )
+                        }
+                        onChoose={() => setPickerTarget('cover')}
+                      />
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: CARD_WIDE,
+                  children: (
+                    <CardDisplay
+                      header={'SEO'}
+                      help={docsHelp('seo', {
+                        anchor: '#per-screen-seo',
+                        excerpt:
+                          'Search and social title and description for this ' +
+                          'entry — both fall back to the entry itself.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                      contentBordered="all"
+                    >
+                      <Stack spacing={1.5}>
+                        <TextField
+                          label="SEO title"
+                          value={editor?.seoTitle ?? ''}
+                          onChange={(event) =>
+                            setEditor((prev) =>
+                              prev
+                                ? { ...prev, seoTitle: event.target.value }
+                                : prev,
+                            )
+                          }
+                          size="small"
+                          // The same counters the screen SEO card carries
+                          // (AGL-1368). A title is published VERBATIM, so the
+                          // number is the one thing that tells an author it
+                          // will be cut.
+                          helperText={`${(editor?.seoTitle ?? '').length}/60 — falls back to the title`}
+                          error={(editor?.seoTitle ?? '').length > 60}
+                        />
+                        <TextField
+                          label="SEO description"
+                          value={editor?.seoDescription ?? ''}
+                          onChange={(event) =>
+                            setEditor((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    seoDescription: event.target.value,
+                                  }
+                                : prev,
+                            )
+                          }
+                          size="small"
+                          multiline
+                          minRows={2}
+                          helperText={`${(editor?.seoDescription ?? '').length}/155 — falls back to the excerpt`}
+                          error={(editor?.seoDescription ?? '').length > 155}
+                        />
+                        {/*
+                          What a search result would read, from the values
+                          above and their fallbacks. Not a mock of Google's
+                          chrome — a plain rendering of the three strings the
+                          head will actually emit, which is the part an author
+                          cannot otherwise see until the page is live.
+                        */}
+                        <Stack
+                          spacing={0.25}
+                          sx={{
+                            border: 1,
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            p: 1.5,
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ overflowWrap: 'anywhere' }}
+                          >
+                            {entryPublicPath
+                              ? `${siteBase ?? ''}${entryPublicPath}`
+                              : 'Save the entry to give it an address'}
+                          </Typography>
+                          <Typography
+                            variant="subtitle1"
+                            color="primary"
+                            sx={{ overflowWrap: 'anywhere' }}
+                          >
+                            {editor?.seoTitle?.trim() ||
+                              editor?.title?.trim() ||
+                              'Untitled entry'}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ overflowWrap: 'anywhere' }}
+                          >
+                            {editor?.seoDescription?.trim() ||
+                              editor?.excerpt?.trim() ||
+                              'No description — search engines will pick their own.'}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  // Per-entry traffic (AGL-2498), the counterpart of the
+                  // screen detail page's `Screen traffic`. Full width: it is a
+                  // chart, and it earns the row.
+                  size: { xs: 12 },
+                  children: (
+                    <EntryAnalyticsCard
+                      hostId={hostId}
+                      path={entryPublicPath}
+                    />
+                  ),
+                },
+                {
+                  // FULL WIDTH, in a band of its own — matching the screen
+                  // detail page's `Page Activity`.
+                  //
+                  // The slot renders an empty fragment when no activity plugin
+                  // is entitled, and `GridItems masonry` drops the item
+                  // wrapper via `:empty` — otherwise an absent widget would
+                  // leave a band-sized gap here.
+                  //
+                  // `targetId` is the ENTRY id, which is what every
+                  // `logActivity` call on this page already writes as
+                  // `target.id` — "Created entry draft", "Updated entry",
+                  // "Published entry", "Scheduled entry", "Edited entry
+                  // published date". So the feed on this page is this entry's
+                  // audit trail rather than the site's.
+                  size: { xs: 12 },
+                  children: currentEntry ? (
+                    <PluginWidgetSlot
+                      slot="hostActivity"
+                      hostId={hostId}
+                      targetId={String(currentEntry.$id)}
+                      header={'Entry activity'}
+                    />
+                  ) : null,
+                },
+                {
+                  // LAST card on the page, and CLOSED by default — the same
+                  // arrangement, and the same `unmountOnExit` reasoning, as
+                  // the screen detail page's `Raw JSON`: the `<pre>` is not in
+                  // the DOM at all while closed, so a long entry body costs
+                  // nothing to render, and the closed card measures as a plain
+                  // header rather than reporting a placeholder height.
+                  size: { xs: 12 },
+                  children: currentEntry ? (
+                    <CardDisplay
+                      header={'Raw JSON'}
+                      help={docsHelp('buildABlog', {
+                        excerpt:
+                          'The entry document as stored — a read-only ' +
+                          'developer view of its structure.',
+                      })}
+                      // Gutters and the content border belong to the CONTENT,
+                      // so they come off with it. Left on, a closed card draws
+                      // an empty bordered strip under its header.
+                      contentGutterX={rawJsonOpen}
+                      contentGutterY={rawJsonOpen}
+                      contentBordered={rawJsonOpen ? 'all' : undefined}
+                      HeaderProps={{
+                        action: (
+                          <IconButton
+                            size="small"
+                            onClick={() => setRawJsonOpen((prior) => !prior)}
+                            aria-expanded={rawJsonOpen}
+                            aria-label={
+                              rawJsonOpen ? 'Hide raw JSON' : 'Show raw JSON'
+                            }
+                          >
                             <MdiIcon
                               path={
-                                isPublished
-                                  ? mdiPublishOff.path
-                                  : mdiPublish.path
+                                rawJsonOpen
+                                  ? mdiChevronUp.path
+                                  : mdiChevronDown.path
                               }
-                              size={0.8}
                             />
-                          }
-                          onClick={() => void handleTogglePublish(current)()}
+                          </IconButton>
+                        ),
+                      }}
+                    >
+                      <Collapse in={rawJsonOpen} unmountOnExit>
+                        <pre
+                          style={{
+                            margin: 0,
+                            maxHeight: 360,
+                            overflow: 'auto',
+                          }}
                         >
-                          {isPublished ? 'Unpublish' : 'Publish'}
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={
-                            <MdiIcon path={mdiCalendarEdit.path} size={0.8} />
-                          }
-                          onClick={() => openPublishDate(current)}
-                        >
-                          {'Edit published date…'}
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={
-                            <MdiIcon path={mdiCalendarClock.path} size={0.8} />
-                          }
-                          onClick={() => openScheduler(current)}
-                        >
-                          {'Schedule…'}
-                        </Button>
-                      </Stack>
-                    </Box>
-                  </>
-                )
-              })()
-            : null}
-                {/*
-                  The save control keeps the dialog footer's position and
-                  its wording (AGL-2498) — "Save" for an entry that exists,
-                  "Create draft" for one that does not, and disabled until
-                  there is a title. Only the container around it changed.
-                */}
-                <Divider sx={{ mt: 1 }} />
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  useFlexGap
-                  sx={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}
-                >
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    disabled={!editor.title.trim()}
-                    onClick={handleSaveEntry}
-                  >
-                    {editor.id ? 'Save' : 'Create draft'}
-                  </Button>
-                </Stack>
-              </Box>
-            </CardDisplay>
+                          {JSON.stringify(currentEntry, null, 2)}
+                        </pre>
+                      </Collapse>
+                    </CardDisplay>
+                  ) : null,
+                },
+              ]}
+            />
           </Container>
         </DashboardLayout>
       ) : null}

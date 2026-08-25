@@ -91,6 +91,37 @@ describe('buildRoute', () => {
     ).toBe('/acme/hosts/shop/screens/screen-1/versions/v2/besigner')
   })
 
+  it('addresses a content collection and one of its entries by path', () => {
+    // AGL-2498: both used to be query parameters on `/content`, which is why
+    // an entry could not be linked without carrying the collection beside it
+    // in a second parameter that any link rebuild could drop.
+    expect(
+      buildRoute(Route.HOST_CONTENT_COLLECTION, {
+        orgSlug: 'acme',
+        host: 'shop',
+        collectionId: 'col-1',
+      }),
+    ).toBe('/acme/hosts/shop/content/col-1')
+    expect(
+      buildRoute(Route.CONTENT_ENTRY_DETAILS, {
+        orgSlug: 'acme',
+        host: 'shop',
+        collectionId: 'col-1',
+        entryId: 'entry-9',
+      }),
+    ).toBe('/acme/hosts/shop/content/col-1/entries/entry-9')
+    // The draft sentinel rides the same segment — a `new` entry has no
+    // document yet, and the address has to be able to say so.
+    expect(
+      buildRoute(Route.CONTENT_ENTRY_DETAILS, {
+        orgSlug: 'acme',
+        host: 'shop',
+        collectionId: 'col-1',
+        entryId: 'new',
+      }),
+    ).toBe('/acme/hosts/shop/content/col-1/entries/new')
+  })
+
   it('leaves param-less routes alone', () => {
     expect(buildRoute(Route.AUTH_SIGN_IN)).toBe('/signin')
     expect(buildRoute(Route.ADMIN_ORGS)).toBe('/admin/orgs')
