@@ -220,6 +220,43 @@ describe('preset choices (AGL-2486)', () => {
     ).toMatchObject({ gap: '20px' })
   })
 
+  it('offers a host’s own type rungs, not just MUI’s variants', () => {
+    // Aglyn's theme carries lede/bodyCompact/micro for the 17/13/11px steps
+    // MUI has no name for. Before they could be OFFERED, a page wanting 11px
+    // had no choice but to write the pixels — /press carried 165 of them.
+    const branded = createTheme({
+      typography: {
+        lede: { fontSize: '1.0625rem', fontWeight: 400 },
+        bodyCompact: { fontSize: '0.8125rem', fontWeight: 400 },
+        micro: { fontSize: '0.6875rem', fontWeight: 400 },
+      } as any,
+    })
+    const sizes = buildFontSizeScaleOptions(branded as any)
+    const values = sizes.map((o) => o.value)
+    expect(values).toContain('micro.fontSize')
+    expect(values).toContain('bodyCompact.fontSize')
+    expect(values).toContain('lede.fontSize')
+    // Named for a human, and the STORED token path resolves through the theme.
+    expect(sizes.find((o) => o.value === 'micro.fontSize')?.label).toBe('Micro')
+    expect(sizes.find((o) => o.value === 'bodyCompact.fontSize')?.label).toBe(
+      'Body compact',
+    )
+    expect(
+      styleFunctionSx({
+        theme: branded,
+        sx: { fontSize: 'micro.fontSize' },
+      } as any),
+    ).toMatchObject({ fontSize: '0.6875rem' })
+    // MUI's own variants keep their curated order ahead of the extras.
+    expect(values[0]).toBe('h1.fontSize')
+    // And they show up as whole Text Styles too, not only as sizes.
+    const styles = buildTypographyVariantChoices(branded as any).map(
+      (o) => o.value,
+    )
+    expect(styles).toContain('micro')
+    expect(styles).toContain('lede')
+  })
+
   it('discovers a host’s own weight tokens instead of MUI’s four', () => {
     const branded = createTheme({
       typography: {

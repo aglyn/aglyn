@@ -415,6 +415,35 @@ const baseOptions: ThemeOptions = {
       lineHeight: 1.15,
       letterSpacing: '-0.02em',
     },
+    // The three text rungs the brand uses that MUI's scale has no name for
+    // (Zach 2026-08-25). MUI runs 16 / 14 / 12 (`body1` / `body2` /
+    // `caption`); the built pages kept reaching for 17, 13 and 11 and, with
+    // nothing to ask for, wrote the pixels. /press alone carried 286 such
+    // literals — 165 of them the same 11px metadata line — each one pinned to
+    // a size instead of to the scale.
+    //
+    // Full variant objects rather than bare sizes, so one pick brings the
+    // line height with it: `variant="micro"` or, where the element's own
+    // variant must stay, `fontSize: 'micro.fontSize'` — the token path the
+    // Font Size picker already offers for `h4.fontSize`.
+    //
+    // Named for the job, not the number, so the name survives a retune: a
+    // lede stays the lede if the brand moves it to 18px.
+    lede: {
+      fontSize: '1.0625rem',
+      fontWeight: 400,
+      lineHeight: 1.6,
+    },
+    bodyCompact: {
+      fontSize: '0.8125rem',
+      fontWeight: 400,
+      lineHeight: 1.5,
+    },
+    micro: {
+      fontSize: '0.6875rem',
+      fontWeight: 400,
+      lineHeight: 1.6,
+    },
   },
   zIndex: {
     max: 2147483647,

@@ -89,6 +89,40 @@ const FONT_SIZE_VARIANTS: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'overline', label: 'Overline' },
 ]
 
+/**
+ * Every variant the theme defines, not just the ones MUI ships (Zach
+ * 2026-08-25).
+ *
+ * The list above names MUI's own variants in reading order; a host that adds
+ * rungs of its own — Aglyn's theme carries `lede`, `bodyCompact` and `micro`
+ * for the 17/13/11px steps MUI has no name for — had no way to offer them,
+ * so pages reached for the pixels instead. Discovering the extras keeps the
+ * curated order for the familiar ones and appends whatever else the host
+ * defined, sorted small to large so the ramp still reads.
+ *
+ * A variant is anything under `theme.typography` that is an OBJECT carrying a
+ * `fontSize`; that skips `fontFamily`, the `fontWeight*` scalars and
+ * `pxToRem` without naming them.
+ */
+function themeTypographyVariants(
+  typography: Record<string, unknown> | undefined,
+): Array<{ key: string; label: string }> {
+  if (!typography) return []
+  const known = new Set(FONT_SIZE_VARIANTS.map((entry) => entry.key))
+  const extra: Array<{ key: string; label: string; size: number }> = []
+  for (const key of Object.keys(typography)) {
+    if (known.has(key)) continue
+    const value = typography[key]
+    if (!value || typeof value !== 'object') continue
+    const size = (value as Record<string, unknown>).fontSize
+    const parsed = Number.parseFloat(String(size ?? ''))
+    if (!Number.isFinite(parsed)) continue
+    extra.push({ key, label: humanizeKey(key), size: parsed })
+  }
+  extra.sort((a, b) => a.size - b.size)
+  return [...FONT_SIZE_VARIANTS, ...extra.map(({ key, label }) => ({ key, label }))]
+}
+
 /** Font sizes from `theme.typography`, e.g. `h4.fontSize` → `2.125rem`. */
 export function buildFontSizeScaleOptions(
   theme: ThemeScaleSource | undefined,
@@ -96,7 +130,7 @@ export function buildFontSizeScaleOptions(
   const typography = theme?.typography
   if (!typography) return []
   const options: ThemeScaleOption[] = []
-  for (const { key, label } of FONT_SIZE_VARIANTS) {
+  for (const { key, label } of themeTypographyVariants(typography)) {
     const variant = typography[key]
     if (!variant || typeof variant !== 'object') continue
     const fontSize = (variant as Record<string, unknown>)['fontSize']
@@ -590,7 +624,7 @@ export function buildTypographyVariantChoices(
   const typography = theme?.typography
   if (!typography) return []
   const options: PresetChoiceOption[] = []
-  for (const { key, label } of FONT_SIZE_VARIANTS) {
+  for (const { key, label } of themeTypographyVariants(typography)) {
     const variant = typography[key]
     if (!variant || typeof variant !== 'object') continue
     const { fontSize, fontWeight } = variant as Record<string, unknown>
