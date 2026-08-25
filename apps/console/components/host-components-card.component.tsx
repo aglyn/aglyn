@@ -72,6 +72,9 @@ import ArtifactTable, {
   ArtifactRowActions,
   artifactActionsColumn,
 } from './artifacts/artifact-table.component'
+import ArtifactDeleteConfirmDescription, {
+  fetchArtifactUsage,
+} from './artifacts/artifact-delete-confirm.component'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
@@ -327,12 +330,28 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
 
   const handleDelete = useCallback(
     (definition: any) => async () => {
+      /*
+        The scan STARTS here and the dialog opens in the same tick (AGL-703).
+        Awaiting it first would hold a destructive dialog closed for the length
+        of a multi-collection read, which reads as a dead button — the failure
+        AGL-1461 fixed on the media side.
+      */
+      const scan = (async () =>
+        fetchArtifactUsage({
+          hostId,
+          kind: 'component',
+          id: definition.$id,
+          idToken: await (user as any)?.getIdToken?.(),
+        }))()
       const confirmed = await confirm({
         title: 'Delete this component?',
-        description:
-          `"${definition.displayName ?? definition.$id}" disappears from ` +
-          'Your components; existing instances on screens render as empty ' +
-          'placeholders after the next publish.',
+        description: (
+          <ArtifactDeleteConfirmDescription
+            kind="component"
+            name={definition.displayName ?? definition.$id}
+            scan={scan}
+          />
+        ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -348,7 +367,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [confirm, firestore, hostId, enqueueSnackbar, user],
   )
 
   // Same column/action shape the layouts and screens lists use (AGL-693),

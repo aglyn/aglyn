@@ -47,6 +47,9 @@ import ArtifactTable, {
   ArtifactRowActions,
   artifactActionsColumn,
 } from '../../../../../../components/artifacts/artifact-table.component'
+import ArtifactDeleteConfirmDescription, {
+  fetchArtifactUsage,
+} from '../../../../../../components/artifacts/artifact-delete-confirm.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
@@ -69,6 +72,7 @@ import {
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
@@ -121,6 +125,8 @@ function Layouts(props) {
   }, [])
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
+  // The where-used scan is an authenticated POST (host admin only).
+  const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
   // Save as template (AGL-668). A layout's nodes live on its published
@@ -266,10 +272,34 @@ function Layouts(props) {
   const handleDeleteLayout = useCallback(
     (id: string) => async () => {
       let dequeueLoading
+      /*
+        The scan STARTS here and the dialog opens in the same tick (AGL-703) —
+        see `ArtifactDeleteConfirmDescription` for why it is not awaited.
+
+        The old sentence named the CONSEQUENCE and not the dependents: "screens
+        bound to it will render without shared chrome" is true and unanswerable
+        — which screens? The answer was one request away and already rendered
+        on the layout's own detail page.
+      */
+      const scan = (async () =>
+        fetchArtifactUsage({
+          hostId,
+          kind: 'layout',
+          id,
+          idToken: await (user as any)?.getIdToken?.(),
+        }))()
       await confirm({
-        title: 'Are you sure?',
-        description:
-          "You are about to delete a layout. Screens bound to it will render without shared chrome until they are rebound. Press 'Delete' to confirm or 'Cancel' to keep the layout.",
+        title: 'Delete this layout?',
+        description: (
+          <ArtifactDeleteConfirmDescription
+            kind="layout"
+            name={
+              layouts.find((layout: any) => layout.$id === id)?.displayName ??
+              id
+            }
+            scan={scan}
+          />
+        ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
