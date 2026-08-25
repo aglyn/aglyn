@@ -27,7 +27,7 @@
 // worse than an inconvenience: the owner's only credential lives inside the
 // GCIP pool that stops answering (AGL-1888).
 //
-// AGL-1887 gave the attestation a representation the publish path recognises:
+// AGL-1887 gave the attestation a representation the publish path recognizes:
 // `attestedBy` on `orgs/{orgId}/ssoDomains/{domain}`. This script is what
 // creates it for the orgs that predate the mechanism. Deploying the code alone
 // unstrands nobody — there is nothing on those orgs saying anyone ever checked,
@@ -39,25 +39,46 @@
 // doc routes every sign-in for that domain to the named org's IdP. Attesting a
 // domain the org does not own hands them another company's sign-ins. Check the
 // ownership yourself — the same check the pre-self-serve onboarding did — and
-// put the evidence in --note. Your uid goes on the record.
+// put the evidence in --note. Your uid goes on the record, in `adminAudit`.
 //
 // The safe alternative, whenever it is available, is to have the customer
 // publish the DNS TXT challenge and use the normal Verify button. That proves
 // ownership rather than asserting it, and it needs no staff at all.
 //
-// Dry-run by default: it prints exactly what it would write and touches
-// nothing. Pass --commit to apply. Idempotent — re-attesting the same domain
-// rewrites the same marker, and the write MERGES, so a claim already midway
-// through DNS verification keeps its token and its `verified` state.
+// HOW IT IS GATED (the house backfill posture — see
+// `backfill-media-content-sha256.mjs`, whose locks these mirror):
+//
+//   * Dry run by default. It prints exactly what it would write and touches
+//     nothing. Nothing opts INTO safety; `--apply` opts out of it.
+//   * `--apply` is not enough on its own — it must be accompanied by
+//     `--confirm=<projectId>`, typed out, so a command rehearsed against a
+//     staging project cannot be pasted at production.
+//   * One org and one domain per run. There is deliberately no mode that
+//     sweeps every stranded org: each attestation is a separate human
+//     assertion about a separate company's domain.
+//   * Additive and idempotent. The write MERGES and never carries `verified`,
+//     so a claim midway through DNS proof keeps its token and its verified
+//     state, and re-running after a half-failed run is the recovery path
+//     rather than a second effect.
 //
 //   FIREBASE_PROJECT_ID=… FIREBASE_CLIENT_EMAIL=… FIREBASE_PRIVATE_KEY=… \
 //     node tools/scripts/attest-sso-domain.mjs \
-//       --org aglyn-org --domain aglyn.com --by <staff-uid> \
-//       --note 'Onboarded by hand 2026-07; ownership confirmed via …' [--commit]
+//       --org=aglyn-org --domain=aglyn.com --by=<staff-uid> \
+//       --note='Onboarded by hand 2026-07; ownership confirmed via …' \
+//       [--apply --confirm=aglyn-main]
+//
+// The decision half is pure and unit-tested in
+// `tools/scripts/lib/sso-domain-attestation.{mjs,test.mjs}`; this file is the
+// Firestore half only.
 
 import { existsSync, readFileSync } from 'node:fs'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+
+import {
+  parseAttestArgs,
+  planAttestation,
+} from './lib/sso-domain-attestation.mjs'
 
 // Load admin creds from the repo's local env files so this script is
 // self-contained. Already-set process.env wins.
@@ -98,52 +119,22 @@ function loadLocalEnv() {
 }
 loadLocalEnv()
 
-const args = process.argv.slice(2)
-const flag = (name) => args.includes(name)
-const opt = (name, fallback = '') => {
-  const i = args.indexOf(name)
-  return i !== -1 ? String(args[i + 1] ?? '') : fallback
-}
-
-const COMMIT = flag('--commit')
-const ORG_ID = opt('--org').trim()
-const RAW_DOMAIN = opt('--domain').trim()
-const BY = opt('--by').trim()
-const NOTE = opt('--note').trim()
-
-// MUST match `normalizeSsoDomain` in sso-provisioning.ts. The claim document is
-// keyed by the domain, so a different spelling here writes a marker at a path
-// the publish path will never read — which presents as "I attested it and it
-// still will not turn on".
-const normalizeSsoDomain = (input) => {
-  const raw = String(input ?? '')
-    .trim()
-    .toLowerCase()
-  const at = raw.lastIndexOf('@')
-  return (at >= 0 ? raw.slice(at + 1) : raw).replace(/^@+/, '').replace(/\.$/, '')
-}
-const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/
-
 const die = (message) => {
   console.error(`!! ${message}`)
   process.exit(1)
 }
 
-const domain = normalizeSsoDomain(RAW_DOMAIN)
-if (!ORG_ID) die('Missing --org <orgId>')
-if (!domain || !DOMAIN_PATTERN.test(domain)) die('Missing or invalid --domain')
-// Required, and it is the whole point of the record: an attestation that does
-// not say who made it is not attributable to anybody.
-if (!BY) die('Missing --by <staff-uid> — an attestation records who made it')
-if (!NOTE) {
-  die(
-    'Missing --note — say how ownership was confirmed. This is the only ' +
-      'record of why a domain was published without DNS proof.',
-  )
-}
-
 const projectId = process.env.FIREBASE_PROJECT_ID
 if (!projectId) die('Missing FIREBASE_PROJECT_ID env var')
+
+// Parsed BEFORE any Firebase connection: a refused command line must not have
+// authenticated against production to find that out.
+const parsed = parseAttestArgs(process.argv.slice(2), { projectId })
+if (!parsed.ok) {
+  console.error(`REFUSED: ${parsed.error}`)
+  process.exit(2)
+}
+
 if (!getApps().length) {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
@@ -154,34 +145,40 @@ if (!getApps().length) {
 }
 const firestore = getFirestore(process.env.FIRESTORE_DATABASE_ID)
 
+const { orgId, domain, by, note, apply } = parsed
+
 console.log(
-  `\nAttest SSO domain — project=${projectId} org=${ORG_ID} ` +
-    `domain=${domain} by=${BY} mode=${COMMIT ? 'COMMIT' : 'dry-run'}\n`,
+  parsed.apply
+    ? `\nAPPLYING to ${projectId} — this asserts that "${orgId}" owns ` +
+        `${domain}, and makes SSO routing for it publishable.\n`
+    : `\nDRY RUN against ${projectId}. Nothing will be written. Pass ` +
+        `--apply --confirm=${projectId} to write.\n`,
 )
 
-const orgSnapshot = await firestore.collection('orgs').doc(ORG_ID).get()
-if (!orgSnapshot.exists) die(`No such organization: ${ORG_ID}`)
-
-// The same uniqueness rule `issueDomainClaim` and `attestSsoDomain` enforce.
-// An attestation must not be a way around "one domain, one org" — a conflict
-// is for a human to resolve before anything is written, not for whoever
-// attests last to win.
+const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
 const routing = await firestore.collection('ssoDomains').doc(domain).get()
-if (routing.exists && routing.get('orgId') !== ORG_ID) {
-  die(
-    `${domain} is already routed to org "${routing.get('orgId')}". ` +
-      'Resolve that before attesting.',
-  )
-}
-
 const claimRef = firestore
   .collection('orgs')
-  .doc(ORG_ID)
+  .doc(orgId)
   .collection('ssoDomains')
   .doc(domain)
 const claim = await claimRef.get()
 
-console.log(`  org name      : ${orgSnapshot.get('name') ?? '(unnamed)'}`)
+const plan = planAttestation(
+  {
+    orgExists: orgSnapshot.exists,
+    orgName: orgSnapshot.get('name') ?? null,
+    governedDomains: Array.isArray(orgSnapshot.get('sso')?.domains)
+      ? orgSnapshot.get('sso').domains
+      : [],
+    routingOrgId: routing.exists ? (routing.get('orgId') ?? null) : null,
+    claim: claim.exists ? claim.data() : null,
+  },
+  parsed,
+)
+
+console.log(`  org           : ${orgId} (${plan.orgName ?? orgSnapshot.get('name') ?? '(unnamed)'})`)
+console.log(`  domain        : ${domain}`)
 console.log(`  claim exists  : ${claim.exists}`)
 console.log(`  verified      : ${claim.exists ? claim.get('verified') : '(none)'}`)
 console.log(
@@ -189,42 +186,31 @@ console.log(
 )
 console.log(`  routing doc   : ${routing.exists ? routing.get('active') : '(none)'}`)
 
-// The attestation is only HALF of what `activate` consults. The route reads
-// the org's `sso.domains` array and hands THAT list to `publishSsoDomains`, so
-// a domain the array does not name is never offered to the gate at all and the
-// marker sits there doing nothing. Every pre-self-serve org is already in the
-// array — that is how they are live — so this is a warning rather than a
-// refusal, but it is the difference between "attested and it worked" and
-// "attested and Turn on still says no".
-const governed = Array.isArray(orgSnapshot.get('sso')?.domains)
-  ? orgSnapshot.get('sso').domains
-  : []
-const isGoverned = governed.includes(domain)
-console.log(`  in sso.domains: ${isGoverned}`)
-if (!isGoverned) {
-  console.log(
-    `\n  ⚠️  ${domain} is NOT in this org's sso.domains ${JSON.stringify(governed)}.\n` +
-      '     `activate` publishes only what that array names, so this\n' +
-      '     attestation alone will not make Turn on work. Add the domain\n' +
-      '     through the console (Set up DNS proof → verify), or confirm with\n' +
-      '     whoever owns this org why it is missing, before relying on this.',
-  )
+if (plan.action === 'refuse') {
+  die(`${plan.message} [${plan.reason}]`)
 }
 
-console.log(`\n  would write   : attestedBy=${BY}, attestedAt=<server>, note=${NOTE}`)
+for (const warning of plan.warnings) console.log(`\n  ⚠️  ${warning}`)
 
-if (!COMMIT) {
-  console.log('\nDry run — nothing written. Re-run with --commit to apply.\n')
+if (plan.alreadyAttested) {
+  console.log(`\n  (already attested by ${plan.previousAttestedBy} — re-running is a no-op)`)
+} else if (plan.previousAttestedBy) {
+  console.log(`\n  ⚠️  replacing an existing attestation by ${plan.previousAttestedBy}`)
+}
+
+console.log(
+  `\n  would write   : ${JSON.stringify(plan.write)} (merge, plus attestedAt=<server>)`,
+)
+
+if (!apply) {
+  console.log(
+    `\nDry run — nothing written. Re-run with --apply --confirm=${projectId}.\n`,
+  )
   process.exit(0)
 }
 
 await claimRef.set(
-  {
-    domain,
-    attestedBy: BY,
-    attestedAt: FieldValue.serverTimestamp(),
-    attestationNote: NOTE,
-  },
+  { ...plan.write, attestedAt: FieldValue.serverTimestamp() },
   // MERGE: never resets a token or a `verified` state this did not create.
   { merge: true },
 )
@@ -233,19 +219,19 @@ await claimRef.set(
 // asked about months later, so it lands in the same audit collection as
 // impersonation and the lockdown levers rather than only in this terminal.
 await firestore.collection('adminAudit').add({
-  actorUid: BY,
+  actorUid: by,
   action: 'org.sso.attestDomain',
-  target: `orgs/${ORG_ID}/ssoDomains/${domain}`,
-  reason: NOTE,
+  target: `orgs/${orgId}/ssoDomains/${domain}`,
+  reason: note,
   before: {
-    claimExisted: claim.exists,
-    attestedBy: claim.exists ? (claim.get('attestedBy') ?? null) : null,
+    claimExisted: plan.claimExisted,
+    attestedBy: plan.previousAttestedBy,
   },
-  after: { orgId: ORG_ID, domain, attestedBy: BY },
+  after: { orgId, domain, attestedBy: by },
   at: FieldValue.serverTimestamp(),
 })
 
 console.log(
-  `\n✓ Attested ${domain} for ${ORG_ID}. ` +
-    'Turn SSO on from the org\'s settings to publish routing again.\n',
+  `\n✓ Attested ${domain} for ${orgId}. ` +
+    "Turn SSO on from the org's settings to publish routing again.\n",
 )

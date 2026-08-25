@@ -860,6 +860,22 @@ service cloud.firestore {
       // Writes are API-only for the stronger reason: `verified` is the whole
       // security property, and a client that can set it has defeated domain
       // verification entirely.
+      //
+      // AGL-1887 added a SECOND way to satisfy that gate, which makes this
+      // block load-bearing in a new way. `publishSsoDomains` now publishes on
+      // `verified == true` OR a non-empty string `attestedBy` — a named staff
+      // member vouching for an org onboarded by hand before self-serve, whose
+      // domain has no DNS proof behind it and never will. `attestedBy` skips
+      // the proof, so a client able to write it could publish routing for a
+      // domain it does not own, which is the same takeover the `verified`
+      // check exists to stop. Deny-all is what keeps the marker meaningful.
+      //
+      // STAFF ARE DENIED HERE TOO, and that is not an oversight: the only
+      // writer is `attestSsoDomain` (and tools/scripts/attest-sso-domain.mjs)
+      // through the Admin SDK, which bypasses rules. A staff browser session
+      // has no reason to hold a write that lands beside an `adminAudit` row.
+      // `cloud/rules-tests/firestore-rules.test.mjs` is what goes red if any
+      // of this is loosened.
       match /ssoDomains/{domain} {
         allow read, write: if false;
       }
