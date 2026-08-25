@@ -251,10 +251,35 @@ export interface AglynHost extends AglynDocument {
    * everyone). Absent `mode` behaves as `'geo'`. Absent-means-active is the
    * only safe default for the tool itself: a schema slip must fail toward
    * asking, never toward silently tracking. See `visitor-consent.ts`.
+   *
+   * `advertising` (AGL-1649) is the host's opt-in to ASKING a second
+   * question. It was persisted by the console and read by the tenant for four
+   * days without being declared here — the same undeclared-field shape the
+   * `analytics` comment above says was fixed for AGL-1498, on the very key
+   * this issue exists to deliver. The cost is not typos: `consent` is an
+   * inline object type, so a whole-object write built against a type missing
+   * the key drops a host's advertising opt-in and TypeScript agrees with the
+   * drop. `consent-host-schema-coverage.spec.ts` now fails the build on any
+   * `consent.*` key that is written or read but not declared.
    */
   consent?: {
     disabled?: boolean
     mode?: 'geo' | 'strict'
+    /**
+     * Host opt-in to asking visitors about advertising storage (AGL-1649).
+     * PERSISTED NAME; absent or `false` — the state of every site that
+     * exists — means the visitor is asked about analytics only and
+     * `ad_storage`, `ad_user_data` and `ad_personalization` stay denied
+     * where AGL-1622 put them.
+     *
+     * `true` GRANTS NOTHING. It adds a second, separate question to the
+     * banner and the privacy-choices panel so a visitor has somewhere to say
+     * yes; advertising storage needs that explicit yes, in every posture and
+     * every region. Read only through `hostAsksAboutAdvertising`, which also
+     * requires a configured measurement id and tests `=== true`, so a truthy
+     * string out of a hand-edited document cannot turn a consent category on.
+     */
+    advertising?: boolean
   }
   screens?: Record<ScreenUid, ScreenSlug>
   /** Screen rendered (noindex) for unmatched paths (AGL-87). */
