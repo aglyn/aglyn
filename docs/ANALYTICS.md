@@ -807,20 +807,31 @@ switched the category back off, decays to denied), and advertising is clamped
 to analytics — `ad_storage: 'granted'` alongside `analytics_storage: 'denied'`
 is not a state this tool can reach.
 
-**The rule was wider for three days, 2026-08-21 to 2026-08-24.** AGL-2402
-(`a410d8785`) made the opt-out posture's `implied` default carry advertising,
-arguing it was safe by geography — an `implied` record can only ever be
-written outside the prior-consent regions, which is true and is still asserted
-in `visitor-consent-advertising.spec.ts`. What did not hold was the disclosure
-half of the argument. That commit stated the published Cookie Policy had been
-updated first; read against the live page, the policy says two different
-things — its "Marketing / advertising" paragraph does describe the opt-out
-posture, but the per-cookie table says `_gac`, `_gcl_au`, `_fbp` and `_fbc` are
-"set only where you have allowed advertising cookies", and "Your choices"
-repeats it. The behaviour was narrowed back to agree with the strictest
-published statement. Revisiting opt-out advertising means republishing the
-policy FIRST, and `consent-advertising-copy-drift.spec.ts` is the lock that
-makes the copy move with the rule in either direction.
+**The status set has moved three times, and the ORDER is the lesson.** AGL-2402
+(`a410d8785`, 2026-08-21) made the opt-out posture's `implied` default carry
+advertising, arguing it was safe by geography — an `implied` record can only
+ever be written outside the prior-consent regions, which is true and is still
+asserted in `visitor-consent-advertising.spec.ts`. What did not hold was the
+disclosure half. That commit stated the published Cookie Policy had been updated
+first; read against the live page it said two different things — its "Marketing
+/ advertising" paragraph described the opt-out posture, but the per-cookie table
+said `_gac`, `_gcl_au`, `_fbp` and `_fbc` are "set only where you have allowed
+advertising cookies", and "Your choices" repeated it. So on **2026-08-24** the
+behaviour was narrowed back to agree with the strictest published statement.
+
+On **2026-08-25** it was widened again, and this time in the right order: those
+five opt-in-only sentences were rewritten in the **Cookie Policy master first**,
+and only then did `advertisingGrantedByStatus` follow. The Privacy Policy needed
+no change and never did — it already said *"With your consent, we do 'share' …
+for cross-context behavioral advertising"*, named Google and Meta, and described
+the EU/UK-ask-first vs. elsewhere-from-first-visit split.
+
+⛔ **This document previously paraphrased that policy as a flat "we do not sell
+or share" denial, and reasoning from that paraphrase is what treated retargeting
+as legally blocked when it was not.** Read the master, never a doc's summary of
+it. Re-narrowing is a policy act: move the published masters first and let the
+code follow. `consent-advertising-copy-drift.spec.ts` is the lock that makes the
+copy move with the rule in either direction — it has now gone red in both.
 
 **Two payload builders, and the split is deliberate.** Both live in
 `libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are

@@ -272,12 +272,22 @@ export interface AglynHost extends AglynDocument {
      * `ad_storage`, `ad_user_data` and `ad_personalization` stay denied
      * where AGL-1622 put them.
      *
-     * `true` GRANTS NOTHING. It adds a second, separate question to the
-     * banner and the privacy-choices panel so a visitor has somewhere to say
-     * yes; advertising storage needs that explicit yes, in every posture and
-     * every region. Read only through `hostAsksAboutAdvertising`, which also
-     * requires a configured measurement id and tests `=== true`, so a truthy
-     * string out of a hand-edited document cannot turn a consent category on.
+     * `true` does not grant anything by itself — it makes the category
+     * REACHABLE. It adds a second, separate question to the banner and the
+     * privacy-choices panel, and where advertising then starts follows the
+     * visitor's region: asked-first in the prior-consent set (the EU 27, the
+     * EEA/EFTA three, the UK, Gibraltar, the outermost regions, and any
+     * visitor whose region cannot be determined), running from the first
+     * visit everywhere else on the same implied basis analytics uses. A
+     * refusal — declined, opted out, or GPC — denies it everywhere.
+     *
+     * See `advertisingGrantedByStatus`; this sentence and that function are
+     * locked together by `consent-advertising-copy-drift.spec.ts`, and the
+     * published Cookie Policy moves before either of them.
+     *
+     * Read only through `hostAsksAboutAdvertising`, which also requires a
+     * configured measurement id and tests `=== true`, so a truthy string out
+     * of a hand-edited document cannot turn a consent category on.
      */
     advertising?: boolean
   }

@@ -36,20 +36,27 @@
  *   visitor who has not granted. It is already default-on outside the
  *   prior-consent regions. **This module does not touch it and must not.**
  *
- *   ✅ Its AD signals match this module's again. There was a three-day window
- *   where they did not: AGL-2402 (2026-08-21) let the implied default carry
- *   advertising, the marketing host had opted into asking, and a US visitor
- *   was measured on 2026-08-23 with the record
+ *   ⚠️ Its AD signals DIVERGE from this module's, and that is expected rather
+ *   than a defect — the two domains answer to different rules and always have.
+ *   The history is worth carrying because the divergence has flipped twice:
+ *   AGL-2402 (2026-08-21) let the implied default carry advertising, the
+ *   marketing host had opted into asking, and a US visitor was measured on
+ *   2026-08-23 with the record
  *   `{"status":"implied","analytics":true,"advertising":true,"country":"US"}`
- *   and a collect hit carrying `gcs=G111` — ad storage GRANTED.
+ *   and a collect hit carrying `gcs=G111` — ad storage GRANTED. That was
+ *   narrowed back on 2026-08-24 and widened again on 2026-08-25 once the
+ *   Cookie Policy master was rewritten to match the Privacy Policy's opt-out
+ *   description, so the 2026-08-23 measurement is once more the shape the
+ *   current rule produces.
  *
- *   That was narrowed back on 2026-08-24 (only an explicit accept grants
- *   advertising), so an implied US visitor on `aglyn.com` is once again
- *   `advertising:false` with all three ad signals denied, exactly as this
- *   module declares them. A host that asks can still OBTAIN the grant — it
- *   just takes a visitor saying yes in "Your Privacy Choices" now, so it is
- *   no longer the default state of an unmeasured visitor. Re-measure before
- *   relying on the comparison below if the rule moves again.
+ *   This module keeps declaring all three ad signals DENIED, and must. It
+ *   speaks for `app.aglyn.com` and `docs.aglyn.com`, where no per-visitor
+ *   record exists, nobody can be asked and no opt-out surface is reachable —
+ *   the conditions the opt-out posture rests on are simply absent. An implied
+ *   grant needs a visitor who COULD have said no.
+ *
+ *   ⛔ Re-measure `aglyn.com` before relying on any comparison here; the
+ *   numbers above are a record of what was seen, not a claim about today.
  * - **`app.aglyn.com` and `docs.aglyn.com`** — GA loads unconditionally on
  *   both (no gate can run here), and BEFORE this module they carried no
  *   consent declaration of any kind. That was not "default on where lawful";

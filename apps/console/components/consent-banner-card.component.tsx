@@ -107,17 +107,20 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
   /**
    * The advertising question (AGL-1649).
    *
-   * Turning it ON grants NOTHING. It adds a second question to the banner and
-   * the privacy-choices panel, so a visitor has somewhere to say yes; until
-   * one does, `ad_storage` and its two siblings stay denied exactly as they
-   * are today. That holds in BOTH postures, which is why this copy is not
-   * mode-dependent.
+   * Turning it ON grants nothing on its own — a host that never asks gets
+   * nothing regardless of posture. What it does is make the category
+   * REACHABLE, and where it then starts depends on the visitor's region:
+   * asked-first in the prior-consent set, running from the first visit
+   * everywhere else. So this copy IS region-dependent, and saying so is the
+   * whole job of the Alert below.
    *
-   * It was mode-dependent for one day. AGL-2402 widened the rule so the
-   * opt-out posture's implied default carried advertising, and this card was
-   * rewritten to disclose it. The behaviour was narrowed back on 2026-08-24
-   * to agree with the published Cookie Policy, so the original sentence — the
-   * true one again — is restored here.
+   * ⚠️ This sentence has moved three times — AGL-2402 widened it, 2026-08-24
+   * narrowed it back because the published Cookie Policy still said
+   * advertising cookies were set only where a visitor had consented, and
+   * 2026-08-25 widened it again once that policy was rewritten to match the
+   * Privacy Policy's opt-out description. `consent-advertising-copy-drift.spec.ts`
+   * is the lock: change the rule and it goes red naming this file. Move the
+   * published masters FIRST; the copy and the code both follow the gdoc.
    *
    * Off is written as a field DELETE rather than `false`, matching
    * `consent.disabled`, so an untouched host document carries no consent keys
@@ -130,7 +133,7 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
       })
       enqueueSnackbar(
         active
-          ? 'Visitors will be asked about advertising — nothing is granted until one says yes'
+          ? 'Advertising is on — EU/UK visitors are asked first, everyone else runs from their first visit'
           : 'Advertising storage stays denied for every visitor',
         { variant: 'success', persist: false },
       )
@@ -287,15 +290,16 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
         ) : null}
         {asksAds && machineryLive ? (
           <Alert severity="info">
-            {'Advertising is a second, separate question, and it always ' +
-              'needs an explicit yes — in both consent modes, everywhere in ' +
-              'the world. Visitors who allow only analytics keep ' +
-              'advertising storage denied, and a visitor tracked under the ' +
-              'implied default is never treated as having allowed ' +
-              'advertising. Advertising never outlives analytics either: ' +
-              'every refusal — Decline, an opt-out, or a Global Privacy ' +
-              'Control signal — withdraws both. Visitors change their mind ' +
-              'either way through "Your Privacy Choices".'}
+            {'Advertising is a second, separate question, and where it ' +
+              'starts depends on the visitor’s region — the same split ' +
+              'analytics uses. EU/UK visitors, and any visitor whose region ' +
+              'cannot be determined, are asked first and get no advertising ' +
+              'storage until they tick that box. Everywhere else it runs ' +
+              'from their first visit alongside analytics, and "Your ' +
+              'Privacy Choices" is where they turn it off. A refusal always ' +
+              'wins: Decline, an opt-out or a Global Privacy Control signal ' +
+              'withdraws advertising anywhere in the world, and advertising ' +
+              'never outlives analytics — every refusal withdraws both.'}
           </Alert>
         ) : null}
         {!hasGa && !disabled ? (

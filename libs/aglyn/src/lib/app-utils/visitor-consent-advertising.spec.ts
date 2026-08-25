@@ -27,19 +27,21 @@
  * had ONE workaround — switch the whole consent tool off and run their own
  * CMP — which is a far bigger hammer than the problem.
  *
- * Every test below exists to hold one line: a grant requires a visitor's
- * explicit yes to THIS category, on a site whose host turned the question on.
- * Nothing else — not an implied default, not a legacy record, not a
- * hand-edited localStorage entry, and never a refusal status — may produce
- * one.
+ * Every test below exists to hold one line: a grant needs a site whose host
+ * turned the question on, AND a visitor state that is not a refusal. A legacy
+ * record, a hand-edited localStorage entry, and every refusal status —
+ * declined, opted out, GPC — may never produce one, anywhere in the world.
  *
- * AGL-2402 (`a410d8785`) briefly widened the status set to include `implied`,
- * on a geographic-safety argument that is sound as far as it goes and is
- * still pinned below. It was narrowed back on 2026-08-24 because the second
- * half of that argument did not hold: the published Cookie Policy tells
- * visitors, in its per-cookie table and again under "Your choices", that
- * advertising cookies are set only where they have allowed them. The
- * behaviour agrees with the strictest published statement, not the loosest.
+ * ⚑ The STATUS set has moved three times and the tests that pin it are marked.
+ * AGL-2402 (`a410d8785`) widened it to include `implied` on a geographic-safety
+ * argument — an `implied` record can only be written in the opt-out posture, so
+ * a prior-consent visitor can never reach it. That half was always sound and is
+ * pinned below. It was narrowed back on 2026-08-24 because the second half did
+ * not hold: the published Cookie Policy still told visitors, in its per-cookie
+ * table and again under "Your choices", that advertising cookies are set only
+ * where they have allowed them. On 2026-08-25 those five sentences were
+ * rewritten in the master and the code followed — in that order, which is the
+ * only order this may ever move in.
  */
 
 import type { VisitorConsentStatus } from './visitor-consent'
@@ -96,7 +98,7 @@ describe('the host has to turn the question on (AGL-1649)', () => {
   })
 })
 
-describe('only an explicit yes to THIS category grants it', () => {
+describe('a host that asked, and a visitor who did not refuse', () => {
   it('records an advertising grant from an explicit accept', () => {
     const record = storeVisitorConsent('h1', {
       status: 'accepted',
