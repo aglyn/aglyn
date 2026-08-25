@@ -634,6 +634,20 @@ function styleFieldGroups(
       $id: 'typography',
       label: 'Typography',
       fields: [
+        // Text Style leads the group because it is the one pick that can be
+        // RIGHT on its own (Zach 2026-08-25). Every field under it sets a
+        // single property, so matching the theme by hand meant five correct
+        // picks in a row; `typography: 'h2'` applies the face, size, weight,
+        // line height, letter spacing and casing the host defined, and keeps
+        // following them when the host retunes its scale. The fields below
+        // still work — they now read as adjustments ON a text style rather
+        // than as the only way to describe one.
+        presetField(
+          'typography',
+          'Text Style',
+          'A complete text style from the theme — sets face, size, weight and spacing together. Adjust individual properties below.',
+          options?.themeScales?.typographyVariant ?? [],
+        ),
         // The face comes FIRST, and it is a picker (AGL-2486, Zach
         // 2026-08-23: *"font family should be a selection and then option
         // for custom"*). It was a free-text box carrying the advice

@@ -280,6 +280,8 @@ export interface StyleThemeScales {
   shadow: PresetChoiceOption[]
   /** The theme's own faces, then web-safe stacks (AGL-2486). */
   fontFamily: PresetChoiceOption[]
+  /** Whole typography variants — `typography: 'h2'` (Zach 2026-08-25). */
+  typographyVariant: PresetChoiceOption[]
 }
 
 export function buildStyleThemeScales(
@@ -291,8 +293,9 @@ export function buildStyleThemeScales(
     zIndex: buildZIndexScaleOptions(theme),
     spacing: buildSpacingScaleOptions(theme),
     cornerRadius: buildCornerRadiusChoices(theme),
-    shadow: buildShadowChoices(),
+    shadow: buildShadowChoices(theme),
     fontFamily: buildFontFamilyChoices(theme),
+    typographyVariant: buildTypographyVariantChoices(theme),
   }
 }
 
@@ -381,35 +384,72 @@ export function buildCornerRadiusChoices(
  * real value it is (a component or the theme may be drawing one), and the
  * escape hatch is a `Custom…` entry in this very control.
  *
- * The values are literal CSS rather than `theme.shadows` indices for one
- * reason: MUI's `boxShadow` sx key IS declared with `themeKey: 'shadows'`,
- * so a bare number resolves against the elevation ladder — but that ladder
- * is 25 near-identical Material elevations, which is a worse menu for an
- * author than four shadows that visibly differ. A host's own ladder is
- * still reachable through Custom…, and any number already stored keeps
- * resolving exactly as before because this control does not rewrite values
- * it did not touch.
+ * The menu is SHORT but the values are theme ELEVATIONS (Zach 2026-08-25).
+ *
+ * An earlier pass wrote literal CSS here on the reasoning that MUI's ladder
+ * is "25 near-identical Material elevations, a worse menu than four shadows
+ * that visibly differ". The menu half of that is right and is kept — nobody
+ * should scroll 25 rows. The value half was not: a literal shadow is a
+ * bespoke value that ignores `theme.shadows`, so a host that retunes its
+ * elevations leaves every stored shadow behind, and the four we shipped
+ * matched no token in any theme.
+ *
+ * Both hold at once by curating INDICES: six rungs off the host's own
+ * ladder, each stored as the number `boxShadow` already resolves through
+ * (`themeKey: 'shadows'`), and each previewing the CSS that number renders
+ * so the row still shows what it looks like. Same trick as Corner Radius —
+ * store the theme multiple, preview the resolved value.
+ *
+ * `none` stays a string because it is the real value it is: a component or
+ * the theme may be drawing a shadow this element wants gone.
  */
-export function buildShadowChoices(): PresetChoiceOption[] {
-  return [
-    { value: 'none', label: 'No shadow' },
-    {
-      value: '0 1px 3px rgba(0,0,0,0.2)',
-      label: 'Soft — sits on the page',
-    },
-    {
-      value: '0 4px 12px rgba(0,0,0,0.15)',
-      label: 'Lifted — floats a little',
-    },
-    {
-      value: '0 12px 32px rgba(0,0,0,0.25)',
-      label: 'Raised — floats well above',
-    },
-    {
-      value: 'inset 0 2px 6px rgba(0,0,0,0.2)',
-      label: 'Inset — pressed into the page',
-    },
-  ]
+const SHADOW_STEPS: ReadonlyArray<{ elevation: number; label: string }> = [
+  { elevation: 1, label: 'Barely there — a hairline lift' },
+  { elevation: 3, label: 'Soft — sits on the page' },
+  { elevation: 6, label: 'Lifted — floats a little' },
+  { elevation: 12, label: 'Raised — floats well above' },
+  { elevation: 24, label: 'Highest — dialog level' },
+]
+
+/**
+ * The literal presets shipped before the ladder existed. Only reached when a
+ * theme carries no usable `shadows` array, so the control never degrades to
+ * an empty menu on a host with an unusual theme.
+ */
+const FALLBACK_SHADOWS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '0 1px 3px rgba(0,0,0,0.2)', label: 'Soft — sits on the page' },
+  { value: '0 4px 12px rgba(0,0,0,0.15)', label: 'Lifted — floats a little' },
+  { value: '0 12px 32px rgba(0,0,0,0.25)', label: 'Raised — floats well above' },
+  {
+    value: 'inset 0 2px 6px rgba(0,0,0,0.2)',
+    label: 'Inset — pressed into the page',
+  },
+]
+
+export function buildShadowChoices(
+  theme?: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const shadows = theme?.shadows
+  const options: PresetChoiceOption[] = [{ value: 'none', label: 'No shadow' }]
+  if (!Array.isArray(shadows) || shadows.length === 0) {
+    for (const entry of FALLBACK_SHADOWS) {
+      options.push({ value: entry.value, label: entry.label, preview: entry.value })
+    }
+    return options
+  }
+  for (const { elevation, label } of SHADOW_STEPS) {
+    const resolved = shadows[elevation]
+    // A host with a shorter ladder simply offers fewer rungs rather than
+    // storing an index that resolves to nothing.
+    if (typeof resolved !== 'string' || !resolved || resolved === 'none') continue
+    options.push({
+      value: elevation,
+      label,
+      hint: `Elevation ${elevation}`,
+      preview: resolved,
+    })
+  }
+  return options
 }
 
 /* ── Font family ──────────────────────────────────────────────────────── */
@@ -494,5 +534,43 @@ export function buildFontFamilyChoices(
     }
   }
   for (const font of WEB_SAFE_FONTS) push(font.value, font.label)
+  return options
+}
+
+/* ── Typography variant ───────────────────────────────────────────────── */
+
+/**
+ * Whole text styles from `theme.typography` (Zach 2026-08-25).
+ *
+ * Every other control in this group sets ONE property, which means matching
+ * a heading to the theme took five correct picks in a row — face, size,
+ * weight, line height, letter spacing — and getting any of them wrong left
+ * text that looked almost right. `typography: 'h2'` is a single sx key that
+ * applies all of them at once, and it is the key MUI itself reaches for.
+ *
+ * This is the control whose absence let the press page ship eleven headings
+ * at the MUI default `h2` — Light 300 at 60px — while every panel in the
+ * besigner reported nothing wrong: there was no field that said "this is a
+ * Heading 2", only fields that said "this is 60px" once someone typed it.
+ *
+ * The hint names what the variant resolves to in THIS theme rather than in
+ * the abstract, because "Heading 2" means nothing until you know the host
+ * made it 40px semibold.
+ */
+export function buildTypographyVariantChoices(
+  theme: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const typography = theme?.typography
+  if (!typography) return []
+  const options: PresetChoiceOption[] = []
+  for (const { key, label } of FONT_SIZE_VARIANTS) {
+    const variant = typography[key]
+    if (!variant || typeof variant !== 'object') continue
+    const { fontSize, fontWeight } = variant as Record<string, unknown>
+    const parts = [hintOf(fontSize), hintOf(fontWeight) && `weight ${hintOf(fontWeight)}`]
+      .filter(Boolean)
+      .join(' · ')
+    options.push({ value: key, label, hint: parts || undefined })
+  }
   return options
 }

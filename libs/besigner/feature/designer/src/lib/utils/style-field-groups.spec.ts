@@ -157,6 +157,20 @@ describe('style field groups (AGL-540/587)', () => {
     ])
   })
 
+  it('leads Typography with a whole-text-style pick (Zach 2026-08-25)', () => {
+    const typography = groups.find((group) => group.$id === 'typography')
+    expect(typography).toBeDefined()
+    const names = styleGroupFieldNames(typography!)
+    // FIRST, because it is the only field in the group that can be right on
+    // its own — the rest set one property each and have to agree to match a
+    // theme variant by hand.
+    expect(names[0]).toBe('typography')
+    const field = typography!.fields.find((f: any) => f.name === 'typography')
+    expect((field as any).component).toBe(FieldComponentType.PRESET_CHOICE)
+    // It must stay a real menu rather than another free-text box.
+    expect(Array.isArray((field as any).choices)).toBe(true)
+  })
+
   it('keeps field names unique across groups and off panel-owned keys', () => {
     const names = [
       ...groups.flatMap(styleGroupFieldNames),

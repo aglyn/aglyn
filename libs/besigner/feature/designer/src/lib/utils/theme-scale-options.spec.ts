@@ -26,6 +26,7 @@ import {
   buildFontWeightScaleOptions,
   buildShadowChoices,
   buildStyleThemeScales,
+  buildTypographyVariantChoices,
   buildZIndexScaleOptions,
 } from './theme-scale-options'
 
@@ -198,6 +199,61 @@ describe('preset choices (AGL-2486)', () => {
       value: 'none',
       label: 'No shadow',
     })
+  })
+
+  it('stores shadows as theme ELEVATIONS, not bespoke CSS', () => {
+    const choices = buildShadowChoices(theme as any)
+    const elevations = choices.filter((c) => typeof c.value === 'number')
+    expect(elevations.length).toBeGreaterThan(0)
+    // The load-bearing claim: what is stored resolves through the host's own
+    // ladder, so retuning `theme.shadows` moves every element that used it.
+    for (const choice of elevations) {
+      expect(resolve({ boxShadow: choice.value }).boxShadow).toBe(
+        theme.shadows[choice.value as number],
+      )
+    }
+    // The row still SHOWS the shadow it will draw, or the menu is unreadable.
+    for (const choice of elevations) {
+      expect(choice.preview).toBe(theme.shadows[choice.value as number])
+    }
+  })
+
+  it('keeps the shadow menu short enough to read', () => {
+    // The whole reason this control did not use `theme.shadows` before was
+    // that 25 near-identical elevations is a worse menu than four that
+    // visibly differ. Curating indices keeps the menu AND the token.
+    expect(buildShadowChoices(theme as any).length).toBeLessThan(9)
+    expect(theme.shadows.length).toBe(25)
+  })
+
+  it('falls back to literal shadows when a theme has no ladder', () => {
+    const choices = buildShadowChoices({ typography: {} } as any)
+    expect(choices[0]).toEqual({ value: 'none', label: 'No shadow' })
+    expect(choices.length).toBeGreaterThan(1)
+    for (const choice of choices.slice(1)) {
+      expect(typeof choice.value).toBe('string')
+    }
+  })
+
+  it('offers whole text styles that resolve to the theme variant', () => {
+    const choices = buildTypographyVariantChoices(theme as any)
+    const h2 = choices.find((c) => c.value === 'h2')
+    expect(h2).toBeDefined()
+    expect(h2?.label).toBe('Heading 2')
+    // One pick has to bring the whole variant — size AND weight — or it is
+    // just another single-property field wearing a better name.
+    const applied = resolve({ typography: 'h2' })
+    expect(applied.fontSize).toBe(theme.typography.h2.fontSize)
+    expect(applied.fontWeight).toBe(theme.typography.h2.fontWeight)
+  })
+
+  it('names what a text style resolves to in THIS theme', () => {
+    const branded = createTheme({ typography: { h2: { fontSize: '40px', fontWeight: 800 } } })
+    const h2 = buildTypographyVariantChoices(branded as any).find(
+      (c) => c.value === 'h2',
+    )
+    expect(h2?.hint).toContain('40px')
+    expect(h2?.hint).toContain('800')
   })
 
   it('leads the font list with the SITE theme’s own faces', () => {
