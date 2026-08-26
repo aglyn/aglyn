@@ -642,12 +642,110 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * measurement because neither can leave the machine, so neither can carry a
  * visitor's IP anywhere. They cover inline icons and canvas exports.
  */
-function tenantImgSrcDirective(isProduction) {
+/**
+ * How many hosts one site may approve (AGL-1152).
+ *
+ * A bound, not a quota: the header goes on every response of every page, and
+ * an unbounded owner-editable list is an unbounded header. Well above any real
+ * site — the widest thing observed is a handful of image CDNs — and small
+ * enough that a pasted-in dump cannot make the policy the largest thing on the
+ * wire.
+ */
+const APPROVED_IMAGE_HOSTS_MAX = 50
+
+/**
+ * A hostname a site owner may add, or null (AGL-1152).
+ *
+ * ⛔ THIS IS AN ALLOWLIST BUILT FROM CUSTOMER-EDITABLE DATA, so it is parsed
+ * rather than trusted. The failure mode is not a broken header — it is a
+ * header that silently permits more than the owner asked for. Anything with a
+ * scheme, a path, a port, whitespace, a comma or a semicolon is REFUSED
+ * outright rather than sanitised: `evil.com; script-src *` cannot be repaired
+ * into something safe, and a value that has to be repaired is a value nobody
+ * should be shipping into a policy.
+ *
+ * A single leading `*.` is allowed — CSP understands it and image CDNs are
+ * routinely per-account subdomains — but a bare `*` is not, because that is
+ * the whole internet wearing an allowlist's clothes.
+ */
+function normalizeApprovedImageHost(value) {
+  if (typeof value !== 'string') return null
+  const host = value.trim().toLowerCase()
+  if (!host || host.length > 253) return null
+  // No scheme, no path, no port, no separators. `img-src` sources are
+  // space-delimited, so a space is an injection point, not a typo.
+  if (/[\s;,/\\?#@:]/.test(host)) return null
+  const bare = host.startsWith('*.') ? host.slice(2) : host
+  if (!bare || bare === '*') return null
+  // A conservative hostname: labels of alphanumerics and hyphens, at least one
+  // dot, no leading/trailing hyphen. Deliberately refuses IP literals — an
+  // owner approving a raw address is far more likely a mistake than a CDN.
+  if (!/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(bare)) {
+    return null
+  }
+  return `https://${host}`
+}
+
+/**
+ * The hosts a site has approved, cleaned and bounded (AGL-1152).
+ *
+ * Exported so the console's editor warning and the middleware agree on what
+ * counts as approved — a second implementation of this parse is how the editor
+ * comes to promise something the header does not deliver.
+ */
+function approvedImageHostSources(approved) {
+  if (!Array.isArray(approved)) return []
+  const seen = new Set()
+  const out = []
+  for (const entry of approved) {
+    const source = normalizeApprovedImageHost(entry)
+    if (!source || seen.has(source)) continue
+    seen.add(source)
+    out.push(source)
+    if (out.length >= APPROVED_IMAGE_HOSTS_MAX) break
+  }
+  return out
+}
+
+/**
+ * PER-SITE since AGL-1152, and that is what makes the enforcing flip reachable.
+ *
+ * AGL-1726 read the evidence and refused to enforce this directive, for two
+ * reasons that both dissolve once the list belongs to the site owner:
+ *
+ *   - Condition 2, the one that actually decided it: hotlinking an external
+ *     image is an ADVERTISED authoring feature, so a first-party-only enforced
+ *     `img-src` would silently revoke a documented capability from every
+ *     published site at once. An owner-approved list revokes nothing — it
+ *     enforces what that owner chose, and the editor warns at authoring time
+ *     so a refusal is never the first anyone hears of it.
+ *   - Condition 6, which it said should stop the flip on its own: "a rollback
+ *     that does not need a deploy... the directive is a build-time constant in
+ *     `security-origins.js`". It is not a constant any more. The list is host
+ *     data, so widening or emptying it is a Firestore write that propagates
+ *     within the verdict TTL, with no Vercel build in the path.
+ *
+ * ⚠️ STILL ISR-SAFE, and for the same reason the shipped version was. AGL-1228
+ * removed a report-only `script-src` because a per-REQUEST nonce cannot match
+ * cached bytes. This is per-HOST, not per-request: every response for one site
+ * carries the identical string, and the policy lives in a header rather than
+ * in the cached body, so there is nothing for the two to disagree about. Do
+ * not read "it varies" as "it is per-request" — that is the distinction the
+ * whole directive turns on.
+ *
+ * `firebasestorage.googleapis.com` is PINNED via `TENANT_IMAGE_ORIGINS` and is
+ * deliberately not owner-removable (AGL-1726 condition 5): orgs without the
+ * paid `mediaCdn` entitlement store absolute download URLs rather than `media:`
+ * references, so an owner who deleted it would blank their own free-tier
+ * images while paying customers' sites kept working.
+ */
+function tenantImgSrcDirective(isProduction, approvedImageHosts) {
   const development = isProduction
     ? []
     : ['http://localhost:*', 'http://127.0.0.1:*']
   const sources = ["'self'", 'data:', 'blob:']
     .concat(TENANT_IMAGE_ORIGINS)
+    .concat(approvedImageHostSources(approvedImageHosts))
     .concat(development)
   return `img-src ${sources.join(' ')}`
 }
@@ -762,4 +860,7 @@ module.exports = {
   reportingEndpointsHeader,
   scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
+  approvedImageHostSources,
+  normalizeApprovedImageHost,
+  APPROVED_IMAGE_HOSTS_MAX,
 }

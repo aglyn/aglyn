@@ -94,7 +94,11 @@ export const dynamic = 'force-dynamic'
  */
 function lockedVerdict(
   state: LockdownState,
-  facts: { attribution: boolean; overQuota: boolean },
+  facts: {
+    attribution: boolean
+    overQuota: boolean
+    approvedImageHosts?: string[]
+  },
 ): Response {
   const notice = lockdownNotice(state)
   const retryAfter = lockdownRetryAfterSeconds(state, Date.now())
@@ -103,6 +107,7 @@ function lockedVerdict(
       locked: true,
       attribution: facts.attribution,
       overQuota: facts.overQuota,
+      approvedImageHosts: facts.approvedImageHosts ?? [],
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -153,11 +158,20 @@ export async function GET(request: Request): Promise<Response> {
       // fingerprint.
       if (!domain || !isLockdownActive(domain, Date.now())) {
         return Response.json(
-          { locked: false, attribution: false, overQuota: false },
+          {
+            locked: false,
+            attribution: false,
+            overQuota: false,
+            approvedImageHosts: [],
+          },
           { status: 200 },
         )
       }
-      return lockedVerdict(domain, { attribution: false, overQuota: false })
+      return lockedVerdict(domain, {
+        attribution: false,
+        overQuota: false,
+        approvedImageHosts: [],
+      })
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
     const attribution = showsPlatformAttribution(orgRes.org)
@@ -173,6 +187,27 @@ export async function GET(request: Request): Promise<Response> {
     // nothing here that is not already implied by the notice the visitor is
     // about to read.
     const overQuota = bandwidthCapEngaged(orgRes.org)
+    /**
+     * The site's owner-approved image hosts (AGL-1152) — a FOURTH answer on
+     * this verdict, riding here for the reason the other three do: the route
+     * already holds the host doc, so the middleware pays no extra edge round
+     * trip, and only the middleware runs ahead of the ISR cache where the
+     * header has to be set.
+     *
+     * Sent RAW, exactly as stored. The parse that decides what is admissible
+     * lives in `security-origins.js` and runs in the middleware, so there is
+     * one implementation of it rather than one here and one there — and an
+     * entry this route silently dropped would be an entry the console's
+     * editor warning still believed in.
+     *
+     * Disclosure posture matches the other three: this is a list the site
+     * owner typed, describing hosts their own public pages already load. It
+     * says nothing a visitor could not learn by viewing source.
+     */
+    const stored = hostRes.host.approvedImageHosts
+    const approvedImageHosts = Array.isArray(stored)
+      ? stored.filter((entry): entry is string => typeof entry === 'string')
+      : []
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -184,11 +219,11 @@ export async function GET(request: Request): Promise<Response> {
     )
     if (!state) {
       return Response.json(
-        { locked: false, attribution, overQuota },
+        { locked: false, attribution, overQuota, approvedImageHosts },
         { status: 200 },
       )
     }
-    return lockedVerdict(state, { attribution, overQuota })
+    return lockedVerdict(state, { attribution, overQuota, approvedImageHosts })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)
     // Fail open on the LOCK: the middleware treats any non-locked answer as
@@ -202,7 +237,16 @@ export async function GET(request: Request): Promise<Response> {
     // party. A month of missed enforcement costs Aglyn egress; an hour of
     // wrongly enforced cap costs a customer their site.
     return Response.json(
-      { locked: false, attribution: false, overQuota: false },
+      {
+        locked: false,
+        attribution: false,
+        overQuota: false,
+        // ABSENT, not empty: the middleware distinguishes "this site approved
+        // nothing" from "we could not ask", and retains its last known good
+        // list for the second. An empty list here would blank every approved
+        // host's images across the platform during a verdict outage.
+        approvedImageHosts: null,
+      },
       { status: 200 },
     )
   }

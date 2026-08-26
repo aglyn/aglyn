@@ -353,6 +353,38 @@ export interface AglynHost extends AglynDocument {
    * widen a site past its org. Writable by site ADMINS only (rules).
    */
   enabledPlugins?: string[]
+  /**
+   * External image hosts this site's owner has approved (AGL-1152).
+   *
+   * The tenant's `img-src` is built from this list, per site, in the
+   * middleware — which is the only layer that runs ahead of the ISR cache, and
+   * therefore the only place a per-site policy can be set at all.
+   *
+   * ## Why the list exists rather than a platform-wide allowlist
+   *
+   * AGL-1726 refused to enforce `img-src` because hotlinking an external image
+   * is an ADVERTISED authoring feature (`image.tsx` tells authors to paste a
+   * URL), so a first-party-only policy would silently revoke a documented
+   * capability from every published site at once. Enforcement against a list
+   * the OWNER chose revokes nothing, and the console warns at authoring time
+   * so a refusal is never the first anyone hears of it.
+   *
+   * It is also what gives that issue's condition 6 — "a rollback that does not
+   * need a deploy" — an answer: this is host data, so widening or emptying it
+   * propagates within the verdict TTL with no Vercel build in the path.
+   *
+   * ⛔ NOT a place to put `firebasestorage.googleapis.com`. That host is PINNED
+   * in `security-origins.js` and deliberately not owner-removable: orgs without
+   * the paid `mediaCdn` entitlement store absolute download URLs, so an owner
+   * who deleted it would blank their own images (AGL-1726 condition 5).
+   *
+   * Stored as bare hostnames (`cdn.example.com`, or one leading `*.` label).
+   * Anything with a scheme, port, path or separator is REFUSED at the parse
+   * rather than repaired — `img-src` sources are space-delimited and
+   * directives `;`-delimited, so both are injection points. Writable by site
+   * ADMINS only (rules).
+   */
+  approvedImageHosts?: string[]
   /** Site languages (AGL-164), e.g. ['en', 'es']; first is the default
    * unless `defaultLocale` says otherwise. */
   locales?: string[]

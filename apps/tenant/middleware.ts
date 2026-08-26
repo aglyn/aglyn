@@ -190,7 +190,13 @@ const PLATFORM_GENERATOR_NAME =
 const LOCKDOWN_VERDICT_TTL_MS = 30_000
 const lockdownVerdicts = new Map<
   string,
-  { at: number; blocked: boolean; attribution: boolean; overQuota: boolean }
+  {
+    at: number
+    blocked: boolean
+    attribution: boolean
+    overQuota: boolean
+    approvedImageHosts: string[]
+  }
 >()
 
 /**
@@ -210,13 +216,19 @@ const lockdownVerdicts = new Map<
 async function hostVerdict(
   origin: string,
   tenantHost: string,
-): Promise<{ blocked: boolean; attribution: boolean; overQuota: boolean }> {
+): Promise<{
+  blocked: boolean
+  attribution: boolean
+  overQuota: boolean
+  approvedImageHosts: string[]
+}> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
     return {
       blocked: cached.blocked,
       attribution: cached.attribution,
       overQuota: cached.overQuota,
+      approvedImageHosts: cached.approvedImageHosts,
     }
   }
   let blocked = false
@@ -246,6 +258,26 @@ async function hostVerdict(
   // viral free site keep serving its hot pages indefinitely while the cap
   // "engaged" against pages nobody was requesting.
   let overQuota = false
+  /**
+   * ⚠️ THIS ONE FAILS BY GOING STALE, not by emptying (AGL-1152).
+   *
+   * The three flags above each fail toward a safe CONSTANT. This cannot: an
+   * empty list is not a neutral default, it is the strictest possible policy,
+   * and once `img-src` is enforcing it would blank every approved host's
+   * images on every site that uses one — turning a verdict outage into a
+   * platform-wide visual outage on customers' businesses.
+   *
+   * So the initialiser is the LAST KNOWN GOOD list rather than `[]`, read from
+   * the memo even when that entry has aged out. A site that has been served
+   * once keeps its policy through an outage; a cold instance that has never
+   * reached the verdict route gets `[]`, which is the shipped baseline and
+   * still serves first-party and Storage images.
+   *
+   * The route answers `approvedImageHosts: null` from its own catch for the
+   * same reason — "we could not ask" and "this owner approved nothing" are
+   * different facts and must not share an encoding.
+   */
+  let approvedImageHosts: string[] = cached?.approvedImageHosts ?? []
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -257,10 +289,20 @@ async function hostVerdict(
         mode?: string
         attribution?: boolean
         overQuota?: boolean
+        approvedImageHosts?: unknown
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
       overQuota = data?.overQuota === true
+      // Only an ARRAY replaces what we hold. `null` is the route saying it
+      // could not read the host doc, and an older deployment that predates
+      // this field sends nothing at all — both must keep the last known good
+      // list rather than silently narrowing the policy.
+      if (Array.isArray(data?.approvedImageHosts)) {
+        approvedImageHosts = data.approvedImageHosts.filter(
+          (entry): entry is string => typeof entry === 'string',
+        )
+      }
     }
   } catch {
     // Fail open on the lock and the cap, closed on the attribution.
@@ -270,8 +312,9 @@ async function hostVerdict(
     blocked,
     attribution,
     overQuota,
+    approvedImageHosts,
   })
-  return { blocked, attribution, overQuota }
+  return { blocked, attribution, overQuota, approvedImageHosts }
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
@@ -645,7 +688,10 @@ export const middleware: NextMiddleware = async (req, event) => {
   if (endpoints) response.headers.set('Reporting-Endpoints', endpoints)
   response.headers.set(
     'Content-Security-Policy-Report-Only',
-    `${tenantImgSrcDirective(process.env.NODE_ENV === 'production')}; ` +
+    `${tenantImgSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedImageHosts,
+    )}; ` +
       reportingDirectives(secureTransport),
   )
   // The deliberate, versionless platform fingerprint (AGL-2088), replacing the
