@@ -24,17 +24,130 @@ import {
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_APP_SETTINGS,
+  ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_NEW_TAB,
   ICON_VARIANT_PAGES,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Button, type ButtonProps, Divider, Stack, Tooltip } from '@mui/material'
-import { forwardRef } from 'react'
+import {
+  Button,
+  ButtonGroup,
+  type ButtonProps,
+  Divider,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Stack,
+  Tooltip,
+} from '@mui/material'
+import { forwardRef, useState } from 'react'
 import SecondaryAppBarComponent, {
   type SecondaryAppBarProps,
 } from './secondary-app-bar.component'
+
+/**
+ * Save, with the live outcome one click away (AGL-1152).
+ *
+ * A split button: the main half saves a draft — the default, and what an
+ * author does dozens of times an hour — while the chevron offers `Save &
+ * publish` for the moment they actually mean it. The alternative shapes were
+ * both worse: one button that always publishes takes away the ability to save
+ * work in progress, and a separate Publish item elsewhere in the UI is the
+ * thing that made "I saved and nothing happened" possible.
+ *
+ * Falls back to a PLAIN button when no publish handler is given, so an editor
+ * with no publish concept is unchanged rather than growing a dead chevron.
+ */
+function SaveControl(props: {
+  onSave: ButtonProps['onClick']
+  onSaveAndPublish?: () => void
+  publishBlockedReason?: string
+  saveAvailable?: boolean
+}) {
+  const { onSave, onSaveAndPublish, publishBlockedReason, saveAvailable } = props
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  // NEVER DISABLED, however up to date the editor believes it is (AGL-1262).
+  // A disabled Save is a dead control: the one time it matters — the editor's
+  // idea of "saved" has drifted from the document — the author clicks it,
+  // nothing happens, nothing is said, and they close the tab believing the
+  // work landed. Clicking always produces an answer, and `handleSave` checks
+  // the stored document before agreeing there is nothing to write.
+  const label = saveAvailable ? 'Save draft' : 'Up to date'
+  const icon = (
+    <MdiIcon
+      path={
+        saveAvailable
+          ? ICON_VARIANT_MODIFY_SAVE.path
+          : ICON_VARIANT_SYMBOL_CONFIRMED.path
+      }
+    />
+  )
+  if (!onSaveAndPublish) {
+    return (
+      <Button
+        onClick={onSave}
+        size="small"
+        endIcon={icon}
+        sx={(theme) => ({ mr: `${theme.spacing(-1)} !important` })}
+      >
+        {label}
+      </Button>
+    )
+  }
+  return (
+    <>
+      <ButtonGroup
+        size="small"
+        variant="text"
+        sx={(theme) => ({ mr: `${theme.spacing(-1)} !important` })}
+      >
+        <Button onClick={onSave} endIcon={icon}>
+          {label}
+        </Button>
+        <Button
+          aria-label="Save options"
+          aria-haspopup="menu"
+          onClick={(event) => setMenuAnchor(event.currentTarget)}
+          sx={{ px: 0.5, minWidth: 0 }}
+        >
+          <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />
+        </Button>
+      </ButtonGroup>
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+      >
+        <MenuItem
+          onClick={(event) => {
+            setMenuAnchor(null)
+            onSave?.(event as never)
+          }}
+        >
+          <ListItemText
+            primary="Save draft"
+            secondary="Keeps your work; the live site is unchanged"
+          />
+        </MenuItem>
+        <MenuItem
+          disabled={Boolean(publishBlockedReason)}
+          onClick={() => {
+            setMenuAnchor(null)
+            onSaveAndPublish()
+          }}
+        >
+          <ListItemText
+            primary="Save & publish"
+            secondary={publishBlockedReason ?? 'Saves, then updates the live site'}
+          />
+        </MenuItem>
+      </Menu>
+    </>
+  )
+}
+SaveControl.displayName = 'SaveControl'
 
 export interface BesignerAppBarProps extends SecondaryAppBarProps {
   detailsUrl: string
@@ -42,6 +155,26 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
   /** Why there is no live URL (AGL-1271) — shown instead of a bare disabled button. */
   liveUnavailableReason?: string
   onSave: ButtonProps['onClick']
+  /**
+   * Save AND make it live, as one action (AGL-1152).
+   *
+   * The editor's Save writes a DRAFT — for a component that is the version
+   * document, which the tenant does not read — so an author who saved and
+   * watched their site not change had done nothing wrong. The old answer was a
+   * separate `Publish again` buried in the File menu, which is a second action
+   * for what reads as one intent.
+   *
+   * Draft saving stays for everyone: it is what co-editing and crash recovery
+   * are built on, and a version is still the way to work on something without
+   * touching the live site. This is only about making the LIVE outcome
+   * reachable from the control the author is already using.
+   *
+   * Omitted where an editor has no publish concept, and the button then
+   * renders exactly as it did before — no chevron, no menu.
+   */
+  onSaveAndPublish?: () => void
+  /** Why publishing is unavailable, shown on the disabled menu item. */
+  publishBlockedReason?: string
   onPreview?: ButtonProps['onClick']
   onPropertiesEdit?: ButtonProps['onClick']
   saveAvailable?: boolean
@@ -67,6 +200,8 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       onPreview,
       onPropertiesEdit,
       onSave,
+      onSaveAndPublish,
+      publishBlockedReason,
       saveAvailable,
     } = props
 
@@ -163,22 +298,12 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
               said, and they close the tab believing the work landed. Clicking
               always produces an answer now, and `handleSave` checks the
               stored document before agreeing there is nothing to write. */}
-          <Button
-            onClick={onSave}
-            size="small"
-            endIcon={
-              <MdiIcon
-                path={
-                  saveAvailable
-                    ? ICON_VARIANT_MODIFY_SAVE.path
-                    : ICON_VARIANT_SYMBOL_CONFIRMED.path
-                }
-              />
-            }
-            sx={(theme) => ({ mr: `${theme.spacing(-1)} !important` })}
-          >
-            {saveAvailable ? 'Save' : 'Up to date'}
-          </Button>
+          <SaveControl
+            onSave={onSave}
+            onSaveAndPublish={onSaveAndPublish}
+            publishBlockedReason={publishBlockedReason}
+            saveAvailable={saveAvailable}
+          />
         </Stack>
       </SecondaryAppBarComponent>
     );

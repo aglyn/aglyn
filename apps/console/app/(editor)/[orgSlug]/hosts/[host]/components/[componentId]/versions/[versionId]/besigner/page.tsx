@@ -149,6 +149,17 @@ function ComponentBesignerPage(props) {
   useDeclareDocumentSubject(componentId, componentResult?.data?.displayName)
   const { data: user } = useUser()
   const publishedVersionId = componentResult?.data?.versionId
+  /**
+   * Did the last save actually LAND? (AGL-1152)
+   *
+   * `handleSave` resolves `void` whether it wrote or refused — a size guard, a
+   * concurrent edit, or nothing-to-save all return early — and `saveAvailable`
+   * is React state that is still stale in the same tick. `onSaved` fires only
+   * on a real write, so this is the one signal `Save & publish` can trust
+   * before promoting. Promoting after a refused save would push the canvas
+   * live without it having been stored.
+   */
+  const savedLandedRef = useRef(false)
   // Id-based screen links: a component can contain a link, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
@@ -305,7 +316,13 @@ function ComponentBesignerPage(props) {
     // honest answer is the one action that makes it appear. Unconditional
     // because it is true of every component save, on the published version
     // or a draft one.
-    savedMessage: 'Component saved. Publish to update the live pages.',
+    // Suppressed on the live version: `handleSaveToSites` owns the message
+    // there, and it can only be written once the promote has resolved —
+    // "saved" followed by "published" is two toasts for one action.
+    savedMessage:
+      publishedVersionId === versionId
+        ? undefined
+        : 'Component saved to this version. Publish it to update the live pages.',
     queueLoading,
     // A definition's root is the promoted node, not the canvas root, so it
     // has to be wrapped or the canvas has no root and renders nothing
@@ -316,6 +333,13 @@ function ComponentBesignerPage(props) {
         nodes: storedNodes as Record<string, unknown>,
       }) as Aglyn.ProcessableNodes,
     onSaved: () => {
+      // Records that the write LANDED (AGL-1152). `handleSave` resolves
+      // `void` whether it wrote or refused — a size guard, a concurrent edit,
+      // or nothing to save all return early — and `saveAvailable` is React
+      // state that is still stale in the same tick. Promoting after a refused
+      // save would push the canvas live without it having been stored, which
+      // is the one outcome worse than not promoting at all.
+      savedLandedRef.current = true
       // A save makes Firestore authoritative again, so the live mirror of
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document (AGL-677).
@@ -338,7 +362,7 @@ function ComponentBesignerPage(props) {
       // (up to `SCAN_LIMIT` screens + layouts + components, WITH version
       // bodies) plus a cache drop per dependent path, on every save of a live
       // component — the most frequent event in the editor. The fan-out now
-      // rides `handlePublish` instead: once per deliberate publish, on the
+      // rides `handleSaveAndPublish` instead: once per deliberate publish, on the
       // one write that actually moves the bytes.
       return logActivity('Saved the component', {
         type: 'component',
@@ -394,14 +418,16 @@ function ComponentBesignerPage(props) {
     },
     [updateComponentVersion, markOwnWrite, enqueueSnackbar],
   )
-  const handlePublish = useCallback(async () => {
-    if (publishing) return
-    if (saveAvailable) {
-      return enqueueSnackbar('Save your changes before publishing', {
-        variant: 'warning',
-        persist: false,
-      })
-    }
+  /**
+   * Promote the canvas onto the parent document — the thing the tenant renders.
+   *
+   * SPLIT FROM ITS GUARD (AGL-1152) so a save can reuse it. The guard below
+   * refuses while `saveAvailable`, which is right for a deliberate Publish and
+   * wrong for the save that has just finished: `saveAvailable` is React state
+   * and is still true in the same tick, so a save chaining into the guarded
+   * function would always refuse itself.
+   */
+  const promoteToSites = useCallback(async () => {
     setPublishing(true)
     try {
       // Unwrap the synthetic canvas root: the tenant runtime grafts from
@@ -474,8 +500,6 @@ function ComponentBesignerPage(props) {
       setPublishing(false)
     }
   }, [
-    publishing,
-    saveAvailable,
     firestore,
     hostId,
     componentId,
@@ -487,6 +511,31 @@ function ComponentBesignerPage(props) {
     // signed-in user is a real input to publishing now (AGL-2486).
     user,
   ])
+
+  /**
+   * SAVE, THEN MAKE IT LIVE — one action (AGL-1152).
+   *
+   * The editor's Save writes the VERSION document, and the tenant renders the
+   * PARENT: `getComponents` reads every component's tree in one query rather
+   * than a version subdoc per component, which is what keeps composing a page
+   * to a single read. So a component save has never changed the live site, and
+   * an author who saved and watched nothing happen had done nothing wrong.
+   *
+   * That asymmetry is real and worth keeping — it is a read optimisation on
+   * the hottest path — so the fix is to maintain the parent copy from the
+   * WRITE side rather than to make every render pay for it.
+   *
+   * Promotes ONLY if the save actually landed. `handleSave` resolves `void`
+   * either way, so `savedLandedRef` is the signal; pushing the canvas live
+   * after a refused save is the one outcome worse than not pushing at all.
+   */
+  const handleSaveAndPublish = useCallback(async () => {
+    if (publishing) return
+    savedLandedRef.current = false
+    await handleSave()
+    if (!savedLandedRef.current) return
+    await promoteToSites()
+  }, [publishing, handleSave, promoteToSites])
 
   // The site's theme with this site's overrides resolved over it
   // (AGL-1021). The editor must render exactly what the tenant will.
@@ -583,24 +632,28 @@ function ComponentBesignerPage(props) {
                 icon: saveAvailable
                   ? { path: ICON_VARIANT_MODIFY_SAVE.path }
                   : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
-                children: saveAvailable ? 'Save' : 'Up to Date',
+                children: saveAvailable ? 'Save draft' : 'Up to Date',
                 onClick: handleSave,
               },
               {
-                // Saving records history; publishing is what live sites
-                // actually render (AGL-679).
-                id: 'center-nav-file-publish',
-                disabled: publishing || saveAvailable || !canPublish,
-                children:
-                  publishedVersionId === versionId
-                    ? 'Publish again'
-                    : 'Publish to sites',
+                /*
+                  `Publish again` IS GONE (AGL-1152). It was the second half of
+                  an action that reads as one, it sat in a menu an author had to
+                  go looking for, and on the live version its name described
+                  doing something twice for a change that had never gone out
+                  once. `Save & publish` replaces it AND `Publish to sites`:
+                  saving a draft version and promoting it are the same two
+                  writes in the same order, whichever version you are on.
+                */
+                id: 'center-nav-file-save-publish',
+                disabled: publishing || !canPublish,
+                children: 'Save & publish',
                 // A disabled menu item with no reason reads as a bug. The
-                // secondary line says which of the three reasons it is.
+                // secondary line says which of the reasons it is.
                 ...(canPublish
                   ? {}
                   : { ListItemTextProps: { secondary: publishBlock } }),
-                onClick: handlePublish,
+                onClick: handleSaveAndPublish,
               },
               {
                 // Declared props (AGL-1247): what this component lets each
@@ -693,6 +746,8 @@ function ComponentBesignerPage(props) {
               detailsUrl={listUrl}
               presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
+              onSaveAndPublish={handleSaveAndPublish}
+              publishBlockedReason={canPublish ? undefined : publishBlock}
               saveAvailable={saveAvailable}
             />
             <BesignerDraftAlertComponent
