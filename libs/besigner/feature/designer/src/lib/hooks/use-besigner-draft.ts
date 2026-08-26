@@ -197,13 +197,11 @@ export interface UseBesignerDraftOptions {
  * They are not merged and this one is not made shareable — the mirror
  * already is that, per node, without a merge of two whole maps.
  *
- * What changed in AGL-2486 is that the private snapshot is not OFFERED at
- * all while the room is shared. An earlier pass withheld only Restore and
- * re-worded the banner; Zach, looking at the result, asked the sharper
- * question — why is there a prompt here at all, when a Discard is the one
- * button left and it stands over work several people are still doing? The
- * answer is that there is not. Recovery is a crash story, a crash means
- * nothing else survived, and a live room is proof that something did. See
+ * The private snapshot is not OFFERED at all while the room is shared
+ * (AGL-2486). Withholding only Restore is not enough: that leaves a prompt
+ * whose one remaining button is Discard, standing over work several people
+ * are still doing. Recovery is a crash story, a crash means nothing else
+ * survived, and a live room is proof that something did. See
  * `roomIsShared` in the body for the two signals that decide it, and
  * {@link BesignerDraftState.restoreBlockedBy} for the narrower verdicts that
  * still apply when this editor is alone.
@@ -374,14 +372,11 @@ export function useBesignerDraft(
    * Whether this room is somebody else's too, i.e. whether the mirror
    * already has the work this prompt is about (AGL-2486).
    *
-   * Zach, opening a third tab on a document two other tabs were editing
-   * unsaved: *"should we even show them that alert, that could remove the
-   * work numerous people are currently working on, it would make sense if
-   * there were no presence sessions and we just lost connection or browser
-   * quit etc."* That names the rule exactly. The recovery prompt exists for
-   * a CRASH, and a crash is the case where nothing else survived — so when
-   * something else demonstrably did, there is no recovery to offer and both
-   * buttons can only do harm.
+   * The recovery prompt exists for a CRASH, and a crash is the case where
+   * nothing else survived. When something else demonstrably did — a third tab
+   * opening onto a document two other tabs are editing unsaved — there is no
+   * recovery to offer, and both buttons can only do harm to work that is
+   * still in progress.
    *
    * TWO signals, OR'd, because they cover different halves of "the mirror
    * already has this" and neither implies the other:
@@ -396,8 +391,8 @@ export function useBesignerDraft(
    *   This is the half that catches the room whose other sessions have since
    *   closed: their work came back on join, and it is on screen now.
    *
-   * Presence alone would miss the second; `hasRemoteEdits` alone would miss
-   * the first, which is precisely the tab Zach opened before anyone typed
+   * Presence alone misses the second; `hasRemoteEdits` alone misses the
+   * first, which is any tab that joins a live room before anyone in it types
    * again. Unknown (null) counts as shared until presence says otherwise —
    * the cost of waiting a second is a delayed offer, the cost of guessing
    * wrong is a Discard button over other people's work.

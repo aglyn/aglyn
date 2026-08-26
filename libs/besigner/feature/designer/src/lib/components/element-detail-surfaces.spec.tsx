@@ -285,8 +285,9 @@ describe('element detail in both picker surfaces (AGL-2486)', () => {
   /**
    * jsdom has no layout, so none of this can be measured here — the column
    * count and the wrapping were measured in a real browser. What these guard
-   * is the input to that layout: the rules the browser is handed. Each one
-   * fails against the code as it stood when Zach reported the dialog.
+   * is the input to that layout: the rules the browser is handed. Each
+   * assertion below names a rule the dialog needs in order to give the grid
+   * its width back, so removing any one of them reddens this file.
    */
   describe('the dialog gives the grid room instead of taking it (AGL-2486)', () => {
     /**

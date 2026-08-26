@@ -235,7 +235,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     })
   })
 
-  describe('the interaction defects Zach reported (2026-08-23)', () => {
+  describe('the box styler’s interaction rules (AGL-2486)', () => {
     it('marks the selected side with a fill, and only one at a time', async () => {
       await renderPanel({})
       const top = screen.getByLabelText('Space inside — top')
@@ -354,7 +354,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     })
   })
 
-  describe('the BORDER label chip (Zach, 2026-08-23)', () => {
+  describe('the BORDER label chip (AGL-2486)', () => {
     /**
      * The CSS emotion actually emitted for one selector, whitespace
      * removed.
@@ -613,7 +613,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     })
   })
 
-  describe('auto is on the list, for margins only (Zach, 2026-08-23)', () => {
+  describe('auto is on the list, for margins only (AGL-2486)', () => {
     /** Open one side's select and read the options it offers. */
     const optionsFor = async (side: string) => {
       act(() => {

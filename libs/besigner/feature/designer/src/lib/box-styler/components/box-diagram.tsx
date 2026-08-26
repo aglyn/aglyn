@@ -41,39 +41,33 @@ export type { Measurements }
  *
  * The geometry is the original's — wedge-shaped bands framing the content,
  * because that shape is what says these are frames AROUND something rather
- * than four unrelated numbers, and it is the shape the eye had learned.
- * Two attempts to improve on it were both wrong: one repainted it in
- * saturated colour, the other removed the wedges along with the paint.
+ * than four unrelated numbers.
  *
- * What is different here is the third position Zach actually described:
- * "the orange definitely stood out too much and I like you switched it to
- * grey, but you made everything else really boring". So the texture is
- * back — stripes, cross-hatch, a wash, a dotted grid — carried by
- * `text.primary` and low-alpha hues rather than by saturation, and defined
- * once in `region-fills.ts` so the legend swatches are painted with the
- * same declarations as the regions they name.
+ * The regions are told apart by TEXTURE — stripes, cross-hatch, a wash, a
+ * dotted grid — carried by `text.primary` and low-alpha hues rather than by
+ * saturation. Saturated paint makes one band shout over its neighbours;
+ * removing the texture along with the paint leaves four flat greys that no
+ * legend can distinguish. The declarations live once in `region-fills.ts`, so
+ * the legend swatches are painted from the same source as the regions they
+ * name.
  *
- * Three proportion changes come from the same round of feedback:
+ * The proportions follow from the same reading:
  *
- * - The BORDER band is 26px rather than 20 and carries the densest
- *   texture — it was "the thinnest region and the one carrying a chip",
- *   reading as a gap between two better-resolved neighbours.
- * - `Contents` is 48% of the padding box rather than 33%, so it reads as
- *   the thing everything else surrounds instead of a label in a gap.
- * - The BORDER chip sits TOP-LEFT, on the same opaque chip MARGIN and
- *   PADDING use. It spent one round at the bottom right, overlapping its
- *   neighbours, because that was the only way it read while the palette
- *   was still unsettled; with the materials resolved all three chips take
- *   the same corner of their own band, so they step inward along the left
- *   edge as the regions nest. See `.label.border` below for why the
- *   ground and the placement are one change rather than two.
+ * - The BORDER band is 26px, not 20, and carries the densest texture. Any
+ *   thinner and the region carrying a chip reads as a gap between two
+ *   better-resolved neighbours.
+ * - `Contents` is 48% of the padding box, not 33%, so it reads as the thing
+ *   everything else surrounds rather than as a label in a gap.
+ * - All three chips — MARGIN, PADDING, BORDER — sit TOP-LEFT of their own
+ *   band on the same opaque ground, so they step inward along the left edge
+ *   as the regions nest. See `.label.border` below for why the ground and
+ *   the placement are one decision rather than two.
  *
  * Every colour is a palette token or a channel form of one. Nothing is a
  * literal, so the console's class-based colour-scheme variables re-resolve
- * the whole diagram when the theme flips — which is what fixes "we are
- * missing a dark mode version of colors, this is too bright on dark mode"
- * without a second mechanism, and what keeps this file at zero entries in
- * the hardcoded-colour ratchet.
+ * the whole diagram when the theme flips. That is what gives the dark scheme
+ * its own values without a second mechanism, and what keeps this file at zero
+ * entries in the hardcoded-colour ratchet.
  */
 
 const GAP = 2
@@ -86,8 +80,7 @@ const RING = 26
 const HEIGHT = 244
 
 /**
- * The narrowest diagram that can carry the PADDING chip (AGL-2486, Zach
- * 2026-08-23).
+ * The narrowest diagram that can carry the PADDING chip (AGL-2486).
  *
  * A chip sits at the top-left of its region and a side's value is centred
  * in its wedge. Measured across panel widths, exactly ONE pair ever meets:
@@ -643,9 +636,9 @@ export const BoxDiagram = forwardRef<any, BoxDiagramProps>((props, ref) => {
 
       <div className="borderRing">
         {/* The border tooltip hangs off the LABEL, not off the ring.
-            Wrapping the ring wrapped every padding button inside it, so
-            hovering padding opened the border tooltip too — that was one
-            of the several tooltips Zach was seeing at once. */}
+            Wrapping the ring would wrap every padding button nested inside
+            it, so hovering a padding side would open the border tooltip on
+            top of its own — two tooltips at once, over one pointer. */}
         <Tooltip
           open={hovered === 'border'}
           placement="left"

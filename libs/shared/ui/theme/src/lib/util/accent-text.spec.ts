@@ -19,24 +19,22 @@
  * AGL-1293 — the MEASUREMENT, and the guarantee that measuring changes
  * nothing.
  *
- * `c03a2d754` did not stop at measuring. It routed `MuiButton`'s
- * `--variant-textColor` / `--variant-outlinedColor`, `MuiLink`'s `color` and
- * `MuiTab`'s selected label through `accentTextColor`, and raised
- * `contrastThreshold` to 4.5, so the brand blue stopped rendering as itself:
- * links and text/outlined button labels went `#00b0ff` → `#0077ad` in light
- * and → `rgb(76, 199, 255)` in dark. decided:
+ * Wiring an audit into the theme is not a measurement, it is a repaint.
+ * Routing `MuiButton`'s `--variant-textColor` / `--variant-outlinedColor`,
+ * `MuiLink`'s `color` and `MuiTab`'s selected label through `accentTextColor`,
+ * with `contrastThreshold` at 4.5, stops the brand blue rendering as itself:
+ * links and text/outlined button labels move `#00b0ff` → `#0077ad` in light
+ * and → `rgb(76, 199, 255)` in dark. The palette is not the audit's to change.
  *
- *   "You changed my theme colors, I told you deliberately not to do that."
+ * So this suite has two jobs and only two:
  *
- * All of it is reverted. This suite now has two jobs and only two:
- *
- * 1. **Pin that nothing is wired.** The console's component overrides must be
- *    the plain static objects they were before `c03a2d754` — no function that
- *    could resolve a colour, no `MuiTab` entry at all. `#00b0ff` renders
- *    everywhere it rendered before, asserted against real emitted CSS.
- * 2. **Record the findings**, so the numbers survive for a decision Zach
- *    owns. `auditPaletteContrast` measures; it does not repair, and nothing
- *    reads it at runtime.
+ * 1. **Pin that nothing is wired.** The console's component overrides stay
+ *    plain static objects — no function that could resolve a colour, no
+ *    `MuiTab` entry at all — and `#00b0ff` renders everywhere it is authored,
+ *    asserted against real emitted CSS.
+ * 2. **Record the findings**, so the numbers survive for a decision the
+ *    account owner makes. `auditPaletteContrast` measures; it does not repair,
+ *    and nothing reads it at runtime.
  */
 import MuiButton from '@mui/material/Button'
 import MuiLink from '@mui/material/Link'
@@ -153,9 +151,9 @@ describe('the brand blue renders as itself — nothing repaints it', () => {
   })
 
   it('a FILLED button is the brand blue with WHITE text — decided', () => {
-    // "don't change the current blue and leave it as white text". The one
-    // token `c03a2d754` computed to dark ink; restored, and the fill is
-    // untouched.
+    // The decided pairing: the brand blue as authored, carrying white text.
+    // This is the one token a contrast pass resolves to dark ink, and the
+    // fill must stay untouched in both schemes.
     for (const theme of [consoleThemeLight, consoleThemeDark]) {
       const css = renderCss(theme, MuiButton, {
         variant: 'contained',
@@ -310,7 +308,7 @@ describe('FINDINGS for a decision the account owner owns — measured, never app
       expect(measured.against).toBe(BRAND_BLUE)
       expect(Number(measured.ratio.toFixed(2))).toBe(2.43)
       expect(measured.exemption).toContain(
-        "don't change the current blue and leave it as white text",
+        'the brand blue stays as authored, with white text',
       )
       expect(formatPaletteContrastViolation(measured)).toContain(
         'KNOWN EXCEPTION',
@@ -361,9 +359,9 @@ describe('FINDINGS for a decision the account owner owns — measured, never app
   })
 
   it('FINDING: getContrastTextColor is handed the TONAL OFFSET, not a threshold', () => {
-    // A real bug, recorded rather than fixed: fixing it changes rendered
-    // colours, and Zach has not asked for that. `addShade` passes
-    // `tonalOffsetDark` (0.3) where a contrast threshold belongs, and every
+    // A real bug, recorded rather than fixed: repairing it repaints shipped
+    // colours, which is a palette decision and not this file's. `addShade`
+    // passes `tonalOffsetDark` (0.3) where a contrast threshold belongs, and every
     // colour on earth clears 0.3:1 — so the branch cannot fail and always
     // picks WHITE, for `tertiary` and `surface`, the two keys it serves.
     //

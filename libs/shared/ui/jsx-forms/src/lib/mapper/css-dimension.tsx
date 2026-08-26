@@ -384,14 +384,13 @@ export const CssDimensionField = (props: CssDimensionProps) => {
             ),
           },
           /**
-           * The VALUE is never the control that gets squeezed
-           * (AGL-2486, Zach 2026-08-23).
+           * The VALUE is never the control that gets squeezed (AGL-2486).
            *
            * The number box is the only part of this row with no width of
            * its own — the two pickers are `endAdornment` siblings with
            * fixed widths, so the input is whatever is left, and in a
-           * narrow docked panel that was a couple of characters: Font
-           * Size read `2.:`. A floor here makes the PICKERS give way
+           * narrow docked panel that is a couple of characters: Font
+           * Size renders as `2.:`. A floor here makes the PICKERS give way
            * instead, which is the right order — a clipped unit label is
            * a nuisance, a clipped value is unreadable.
            */

@@ -26,11 +26,10 @@ export interface BesignerDraftAlertProps {
    * Someone else saved this document since it loaded, i.e. what
    * `BesignerConflictAlertComponent` says on its own (AGL-2486).
    *
-   * Passed in so ONE banner covers the condition. Zach, 2026-08-22, looking
-   * at both of them stacked over the canvas: they described a single event —
-   * a colleague's save — in two voices, and reassured in opposite
-   * directions. An editor that renders this alert must render the conflict
-   * alert only while this one is absent.
+   * Passed in so ONE banner covers the condition. Stacked, the two describe a
+   * single event — a colleague's save — in two voices, and reassure in
+   * opposite directions. An editor that renders this alert must render the
+   * conflict alert only while this one is absent.
    */
   remoteChanged?: boolean
 }

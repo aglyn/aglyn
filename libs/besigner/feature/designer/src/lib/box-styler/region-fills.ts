@@ -30,13 +30,12 @@
  * scheme flips. That is also what keeps this file at zero entries in the
  * hardcoded-colour ratchet, whose baseline may not rise.
  *
- * The texture is deliberate and so is its weight. Zach on the first pass:
- * "what happened to the styles ... with the orange and the stripes etc. The
- * orange definitely stood out too much and I like you switched it to grey,
- * but you made everything else really boring." So the stripes come back —
- * carried by `text.primary` at a low alpha rather than by a hue, which is
- * what makes them read as material instead of as decoration, and what makes
- * them survive both schemes: `text.primary` is near-black on light and
+ * The texture is deliberate and so is its weight. Stripes and hatching are
+ * what tell one region from another; a saturated hue does the same job but
+ * shouts over its neighbours, and flat greys leave the regions
+ * indistinguishable. So the pattern is carried by `text.primary` at a low
+ * alpha rather than by a hue, which reads as material instead of decoration
+ * and survives both schemes: `text.primary` is near-black on light and
  * near-white on dark, so the tint always contrasts gently with its ground.
  */
 

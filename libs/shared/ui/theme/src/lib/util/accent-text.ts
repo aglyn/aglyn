@@ -132,22 +132,21 @@ export const DOCUMENTED_CONTRAST_EXCEPTIONS: ReadonlyArray<{
   reason: string
 }> = [
   {
-    // AGL-1293. `c03a2d754` computed this slot to dark ink (8.65:1) and that
-    // shipped, turning every filled primary button dark-on-blue. Shown the
-    // tradeoff — darken the brand, or keep it and accept sub-AA white — Zach
-    // chose, verbatim, 2026-08-18: "don't change the current blue and leave
-    // it as white text". White on `#00b0ff` is 2.43:1, below the 4.5:1 AA
-    // text bar and below the 3:1 non-text bar. Accepted knowingly.
+    // AGL-1293. Computing this slot for contrast resolves it to dark ink
+    // (8.65:1), which turns every filled primary button dark-on-blue. The
+    // tradeoff is to darken the brand or to keep it and accept sub-AA white,
+    // and the brand blue is fixed: white on `#00b0ff` is 2.43:1, below the
+    // 4.5:1 AA text bar and below the 3:1 non-text bar. Accepted knowingly.
     //
     // This is the ONE decided pairing. Everything else the audit reports —
     // the five other authored sub-AA `contrastText` literals, and `#00b0ff`
-    // as text — is a finding awaiting Zach, not a waiver.
+    // as text — is a finding, not a waiver, and stays undecided here.
     color: 'primary',
     role: 'contrastText',
     value: '#FFFFFF',
     against: '#00b0ff',
     reason:
-      'AGL-1293 — don\'t change the current blue and leave it as white text (white on #00b0ff = 2.43:1, knowingly below AA)',
+      'AGL-1293 — the brand blue stays as authored, with white text (white on #00b0ff = 2.43:1, knowingly below AA)',
   },
 ]
 

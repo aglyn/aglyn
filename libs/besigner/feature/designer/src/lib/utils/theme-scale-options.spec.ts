@@ -118,7 +118,8 @@ describe('theme scales for the styles panel (AGL-2486)', () => {
   })
 
   it('reaches the panel fields, not just the builder', () => {
-    // Where this actually has to land: the three fields Zach named.
+    // Where this actually has to land: the three panel fields, not just the
+    // builder that feeds them.
     const fields = buildStyleFieldGroups(['#123456']).flatMap(
       (group) => group.fields,
     )
@@ -141,8 +142,8 @@ describe('theme scales for the styles panel (AGL-2486)', () => {
 })
 
 /**
- * The preset lists behind the three fields that stopped being raw CSS
- * (AGL-2486, Zach 2026-08-22).
+ * The preset lists behind the three fields that are pickers rather than raw
+ * CSS boxes (AGL-2486).
  *
  * Same standard as the scales above: the claim is not "a list appears", it
  * is that the value STORED keeps following the theme. Corner radius is

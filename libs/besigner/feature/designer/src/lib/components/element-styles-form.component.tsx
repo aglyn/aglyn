@@ -700,8 +700,7 @@ const ElementStylesForm = observer(
     )
     // Every typed layout field, rendered under the alignment toggles in
     // the single Flexbox & Grid section (AGL-2486).
-    // Gaps are theme-spacing pickers now, so this group needs the scales too
-    // (Zach 2026-08-25).
+    // Gaps are theme-spacing pickers, so this group needs the scales too.
     const flexGridGroup = useMemo(
       () => buildFlexGridGroup({ themeScales }),
       [themeScales],
@@ -1176,8 +1175,7 @@ const ElementStylesForm = observer(
               width — but the panel is resizable, and at ~260px nothing fits at
               any size consistent with the rest of the panel. `nowrap` plus
               `overflow-x` makes the failure mode a few pixels of scroll rather
-              than an orphaned chip on a second line, which is what this row
-              shipped as and what Zach reported. */}
+              than an orphaned chip stranded on a second line. */}
           <Box
             sx={{
               display: 'flex',

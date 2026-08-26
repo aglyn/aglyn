@@ -102,8 +102,7 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
     const [editing, setEditing] = useState<keyof Measurements | null>(null)
 
     /**
-     * The side the collapsing panel keeps showing on the way OUT
-     * (AGL-2486, Zach 2026-08-23).
+     * The side the collapsing panel keeps showing on the way OUT (AGL-2486).
      *
      * `<Collapse in={...}>{editing ? <Editor/> : null}</Collapse>` opens
      * with an animation and closes with none: the moment `editing` goes
@@ -214,11 +213,10 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
           ) : null}
         </Collapse>
 
-        {/* The legend stays. Removing it was part of a redraw Zach did not
-            ask for — he liked this control as it was, and the key belongs
-            to the treatment he liked. It gains the border swatch, because
-            the diagram now has a border region for the BORDER label to
-            sit on. */}
+        {/* The legend is the key to the diagram's textures, and it carries a
+            swatch for every region the diagram paints — the border ring
+            included, since that is where the BORDER label sits. Drop a row
+            and the matching texture becomes unexplained. */}
         <Legend
           direction="row"
           spacing={1}

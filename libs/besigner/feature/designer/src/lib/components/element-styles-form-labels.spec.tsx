@@ -97,16 +97,15 @@ describe('styles panel field labels (AGL-2486)', () => {
     // empty text box keeps its label centred — shrinking every label in
     // the panel would be a different change, not this fix.
     //
-    // Retargeted from Border (AGL-2486, Zach 2026-08-22): Border is a
-    // thickness box plus a line-style picker now, and its label is pinned
-    // ON PURPOSE — see the test below. Line Height is a plain text box and
-    // is what this control was always checking.
+    // Line Height rather than Border (AGL-2486): Border is a thickness box
+    // plus a line-style picker, and its label is pinned ON PURPOSE — see the
+    // test below. Line Height is the plain text box this control needs.
     await renderGroup('typography')
     expect(label('Line Height').getAttribute('data-shrink')).toBe('false')
   })
 
   it('pins a composed editor’s label above its adornments', async () => {
-    // The other half of the same overlap (Zach 2026-08-22). `Border
+    // The other half of the same overlap (AGL-2486). `Border
     // Bottom` is thirteen characters in a half-width column with a
     // line-style picker parked in the box's right-hand end, so a floating
     // label has nowhere to go and prints straight over the picker. The

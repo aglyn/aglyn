@@ -270,7 +270,7 @@ describe('styles panel numeric values (AGL-2486)', () => {
     })
 
     it('does the same for the gap controls', async () => {
-      // Gap is a spacing picker now (Zach 2026-08-25), so the ladder stores
+      // Gap is a spacing picker (AGL-2486), so the ladder stores
       // the multiple directly — and Custom… still has to normalise a typed
       // number the same way, or `gap: '2'` reaches CSS as an invalid length.
       await renderPanel({}, 'Flexbox & Grid')

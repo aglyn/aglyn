@@ -171,20 +171,19 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
               // as "close but wrong".
               '& .MuiDataGrid-columnSeparator': { display: 'none' },
               /*
-                NO border-bottom here, and that is the fix (AGL-693).
+                NO border-bottom here, and that is the point (AGL-693).
 
-                It used to add `1px solid divider` to the header CONTAINER —
-                and the grid already draws that line one level down: every
+                A `1px solid divider` on the header CONTAINER duplicates a line
+                the grid already draws one level down: every
                 `.MuiDataGrid-columnHeader` cell carries a bottom border in
                 `--DataGrid-rowBorderColor`, and `.MuiDataGrid-filler` carries
                 it across whatever width the columns leave over. Measured on
-                the layouts list, the cells' line ended at y=364.43 and the
-                container's at y=365.68 — two 1.25px rules a fifth of a pixel
-                apart, which is the "double border below the table header"
-                Zach spotted on every grid list and never on the screens
-                table, which is a plain MUI `<Table>` with one.
+                the layouts list, the cells' line ends at y=364.43 and a
+                container line at y=365.68 — two 1.25px rules a fifth of a
+                pixel apart, which paints as a doubled border under the header
+                on every grid list.
 
-                The colours were already identical: `divider` is
+                The colours are identical anyway: `divider` is
                 rgba(0,0,0,0.12), and the row border resolves to rgb(224,224,224)
                 — the same line MuiTableCell head draws. So the one to keep is
                 the grid's own, which spans the full width without help.

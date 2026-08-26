@@ -379,11 +379,10 @@ export function useBesignerDocument<TData = unknown>(
    * The second half is the damage. With the baseline advanced, the next
    * Save passes the client guard AND the AGL-1301 transaction — the stamp
    * and content it presents are the ones actually stored — so their work is
-   * overwritten with no warning at either layer. That is exactly the "the
-   * second save silently replaces the first, and it will not warn you"
-   * Zach hits with four tabs open, and nothing about it needs the two
-   * writers to be different people: it needs them to be different SESSIONS,
-   * which two tabs of one account are.
+   * overwritten with no warning at either layer: the second save silently
+   * replaces the first. Nothing about that needs the two writers to be
+   * different people — it needs them to be different SESSIONS, which two tabs
+   * of one account are.
    *
    * Comparing the content closes it without a schema change. A snapshot is
    * our echo only if it carries what we wrote; anything else is somebody

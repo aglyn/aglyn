@@ -190,16 +190,17 @@ const textField = (
 })
 
 /**
- * ROW RHYTHM (AGL-2486, Zach 2026-08-22).
+ * ROW RHYTHM (AGL-2486).
  *
- * panels, and neither was wrong on its own — the difference was two things
- * this file controls and nothing else does.
+ * Two groups built from the same primitives can read as different panels
+ * entirely — one airy, one dense — without either being wrong field by field.
+ * The difference is two things this file controls and nothing else does.
  *
- * **1. Orphaned half-width fields.** `Z-Index` and `Opacity` each sat alone
- * in the left column with the entire right half of the row empty, because
- * they were declared `half` next to a full-width neighbour. A half-width
- * field is a promise that something shares its row; when nothing does, the
- * group gains a row of dead space for no information. So the rule is now:
+ * **1. Orphaned half-width fields.** A field declared `half` next to a
+ * full-width neighbour sits alone in the left column with the entire right
+ * half of the row empty. A half-width field is a promise that something
+ * shares its row; when nothing does, the group gains a row of dead space for
+ * no information. So the rule is:
  * **every run of consecutive half-width fields has EVEN length.** It is
  * enforced by a spec over the built groups rather than by review, because
  * the failure is invisible in the source — you have to look at the
@@ -299,14 +300,14 @@ const dimensionField = (
 ) => {
   /**
    * A field carrying a theme scale AS WELL AS a unit takes the whole row
-   * (AGL-2486, Zach 2026-08-23).
+   * (AGL-2486).
    *
-   * Font Size showed `2.:` — the value truncated to nothing. The row holds
-   * three controls: the number, the theme-scale picker and the unit
-   * picker. The two pickers claim ~140px of fixed width between them, and
-   * `half` gives the whole field about 156px inside a 375px docked panel,
-   * so the number box — the only one with no width of its own — was left
-   * with single digits.
+   * Such a row holds three controls: the number, the theme-scale picker and
+   * the unit picker. The two pickers claim ~140px of fixed width between them,
+   * and `half` gives the whole field about 156px inside a 375px docked panel,
+   * so the number box — the only one with no width of its own — is left with
+   * single digits, and Font Size renders as `2.:` with the value truncated to
+   * nothing.
    *
    * The half-width itself is the trap. `half` is `{ xs: 12, sm: 6 }`, and
    * `sm` is a VIEWPORT breakpoint: on any desktop it is permanently active
@@ -633,26 +634,25 @@ function styleFieldGroups(
       label: 'Typography',
       fields: [
         // Text Style leads the group because it is the one pick that can be
-        // RIGHT on its own (Zach 2026-08-25). Every field under it sets a
-        // single property, so matching the theme by hand meant five correct
-        // picks in a row; `typography: 'h2'` applies the face, size, weight,
-        // line height, letter spacing and casing the host defined, and keeps
-        // following them when the host retunes its scale. The fields below
-        // still work — they now read as adjustments ON a text style rather
-        // than as the only way to describe one.
+        // RIGHT on its own (AGL-2486). Every field under it sets a single
+        // property, so matching the theme by hand takes five correct picks in
+        // a row; `typography: 'h2'` applies the face, size, weight, line
+        // height, letter spacing and casing the host defined, and keeps
+        // following them when the host retunes its scale. The fields below it
+        // read as adjustments ON a text style rather than as the only way to
+        // describe one.
         presetField(
           'typography',
           'Text Style',
           'A complete text style from the theme — sets face, size, weight and spacing together. Adjust individual properties below.',
           options?.themeScales?.typographyVariant ?? [],
         ),
-        // The face comes FIRST, and it is a picker (AGL-2486, Zach
-        // 2026-08-23: *"font family should be a selection and then option
-        // for custom"*). It was a free-text box carrying the advice
-        // "Prefer theme typography when possible" — advice with no way to
-        // act on it. The site theme's own faces lead the list, each row
-        // renders its own name in its own face, and a hand-typed stack
-        // still opens the control in its custom state holding that value.
+        // The face comes FIRST, and it is a picker with a custom escape
+        // hatch (AGL-2486). A free-text box can only advise "prefer theme
+        // typography", which is advice with no way to act on it. The site
+        // theme's own faces lead the list, each row renders its own name in
+        // its own face, and a hand-typed stack still opens the control in its
+        // custom state holding that value.
         presetField(
           'fontFamily',
           'Font Family',
@@ -709,12 +709,10 @@ function styleFieldGroups(
           ['none', 'underline', 'overline', 'line-through'],
           half,
         ),
-        // Italic for a whole ELEMENT (Zach 2026-08-25). It existed only in
-        // the inline text editor, which styles a selection inside a run — so
-        // there was no way to italicise a caption, a label or a quote block
-        // as a whole without hand-writing sx. `fontStyle` is one of MUI's
-        // theme-backed typography keys and was the last one this group did
-        // not offer.
+        // Italic for a whole ELEMENT (AGL-2486). The inline text editor
+        // styles a selection inside a run, which cannot italicize a caption,
+        // a label or a quote block as a whole — that needs `fontStyle` on the
+        // element, one of MUI's theme-backed typography keys.
         selectField(
           'fontStyle',
           'Font Style',
@@ -823,10 +821,10 @@ function styleFieldGroups(
           half,
         ),
         dimensionField('left', 'Left', 'Distance from the left edge.', half),
-        // Z-Index and Opacity were the two fields Zach pointed at: each sat
-        // alone in the left column with the whole right half of its row
-        // empty. They are a PAIR now, and the long explanation of what a
-        // stacking layer is moved to the docs where there is room for it.
+        // Z-Index and Opacity are a PAIR, so neither sits alone in the left
+        // column with the whole right half of its row empty — see ROW RHYTHM
+        // above. The long explanation of what a stacking layer is belongs in
+        // the docs, where there is room for it, not in this helper text.
         themeScaleField(
           'zIndex',
           'Z-Index',
@@ -889,11 +887,11 @@ export function buildFlexGridGroup(
       label: 'Flexbox & Grid',
       fields: [
         // Container: the gutters between children, on the SPACING ladder
-        // (Zach 2026-08-25). These were free-text boxes, which reads as a CSS
-        // length question and gets answered with one — but MUI runs all three
-        // through the same `createUnaryUnit(theme, 'spacing')` as margin and
-        // padding, so `2` follows the host's unit and `'16px'` does not. Same
-        // rungs the box styler already offers, so the two controls agree.
+        // (AGL-2486). A free-text box reads as a CSS length question and gets
+        // answered with one — but MUI runs all three gap keys through the
+        // same `createUnaryUnit(theme, 'spacing')` as margin and padding, so
+        // `2` follows the host's unit and `'16px'` does not. Same rungs the
+        // box styler offers, so the two controls agree.
         presetField(
           'gap',
           'Gap',

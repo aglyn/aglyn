@@ -24,7 +24,7 @@ import CssBorderField, {
 } from './css-border'
 
 /**
- * AGL-2486 (Zach 2026-08-22): the thickness + line-style pair is an INPUT
+ * AGL-2486: the thickness + line-style pair is an INPUT
  * affordance only — the value on the node is still one CSS shorthand
  * string, so every shape already sitting in a published document has to
  * survive a round trip through the control untouched.
@@ -188,20 +188,20 @@ describe('CssBorderField (AGL-2486)', () => {
   })
 
   it('never asks the author to type shorthand grammar', () => {
-    // The whole complaint: the field used to be a text box you typed
-    // `1px solid` into. The thickness box is a NUMBER input and the style
-    // is a menu — neither can accept a shorthand.
+    // The affordance itself: the thickness box is a NUMBER input and the
+    // style is a menu, so neither can accept a shorthand like `1px solid`
+    // and neither asks the author to know one.
     renderField('1px solid')
     expect(widthInput().type).toBe('number')
     expect(screen.getByLabelText('Line style')).toBeTruthy()
   })
 
   it('keeps the empty picker one em-dash wide, off the field label', () => {
-    // The label/adornment collision (AGL-2486 item 8, and Zach saw it again
-    // on the new control): this picker is an endAdornment inside a
-    // half-width field, so anything wide in its EMPTY state is subtracted
-    // from the room the field's own label has and the two print on top of
-    // each other. "line style" collided with `Border Bottom`; "—" does not.
+    // The label/adornment collision (AGL-2486 item 8): this picker is an
+    // endAdornment inside a half-width field, so anything wide in its EMPTY
+    // state is subtracted from the room the field's own label has, and the
+    // two print on top of each other. A "line style" placeholder collides
+    // with `Border Bottom`; an em-dash does not.
     renderField('')
     expect(styleButton().textContent).toBe('—')
     // …and the unit is not stated until there is a number to state it for,
