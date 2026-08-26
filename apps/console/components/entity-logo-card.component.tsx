@@ -20,9 +20,17 @@ import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost } from '@aglyn/tenant-feature-instance'
-import { Alert, Box, Button, Stack, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { ENTITY_LOGO_HINT } from '../constants/media-size-hints'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface EntityLogoCardProps {
@@ -75,6 +83,8 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
     setDoc,
   } = useHost({ hostId })
   const [pickerOpen, setPickerOpen] = useState(false)
+  /** Draft for the URL box below; `null` means "show the stored value". */
+  const [urlDraft, setUrlDraft] = useState<string | null>(null)
   const logo = data?.seo?.entity?.logo
   const entityName = data?.seo?.entity?.name
   /**
@@ -102,8 +112,8 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
         excerpt:
           'The logo of the organization or person publishing this site, ' +
           'emitted as JSON-LD so search engines can show it beside a rich ' +
-          'result. Pick it from your media library or paste an external URL ' +
-          'in the SEO form above.',
+          'result. Pick it from your media library, or paste an external ' +
+          'URL below.',
       })}
       contentGutterX
       contentGutterY
@@ -148,6 +158,34 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
             </Button>
           ) : null}
         </Stack>
+        {/* Said BEFORE the upload, not about the file already chosen. */}
+        <Typography variant="caption" color="text.secondary" component="div">
+          {ENTITY_LOGO_HINT}
+        </Typography>
+        {/*
+          The URL box this card absorbed from the SEO form (AGL-2486).
+
+          `seo.entity.logo` had two editors on one tab, and the other one's
+          own helper text told the reader to come here — while being the only
+          one of the two with no picker. An externally hosted logo is
+          legitimate schema.org output, so the capability moved rather than
+          disappearing.
+        */}
+        <TextField
+          size="small"
+          fullWidth
+          label="Or paste a logo URL"
+          value={urlDraft ?? (typeof logo === 'string' ? logo : '')}
+          onChange={(event) => setUrlDraft(event.target.value)}
+          onBlur={() => {
+            if (urlDraft === null) return
+            const next = urlDraft.trim()
+            setUrlDraft(null)
+            if (next === (logo ?? '')) return
+            void save(next, 'Entity logo updated')
+          }}
+          helperText="An external logo is a legitimate answer — most sites pick from the library above."
+        />
         {logo && !entityName ? (
           // Google reads the logo off the `publisher` node, and the tenant
           // only emits that node when the entity has a NAME — so a logo with

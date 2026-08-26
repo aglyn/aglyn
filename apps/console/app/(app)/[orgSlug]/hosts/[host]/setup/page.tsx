@@ -282,12 +282,16 @@ const seoSchema: FormSchema = {
         },
       ],
     },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.favicon',
-      label: 'Favicon',
-      type: 'text',
-    },
+    /*
+      NO raw favicon box here (AGL-2486). `seo.favicon` had two editors on
+      this one tab — this text field and the Favicon card below — and the
+      text one showed the stored value as what it literally is, a
+      `media:org:…` reference, which is not something anybody can read or
+      type. Zach: *"we also have two separate favicon fields."*
+
+      The card is the editor now, and it grew the URL box this field was
+      carrying, so an externally hosted icon is still reachable.
+    */
     {
       component: FieldComponentType.SUB_FORM,
       name: 'seo.entity',
@@ -317,20 +321,13 @@ const seoSchema: FormSchema = {
           name: 'seo.entity.name',
           label: 'Name',
         },
-        {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.logo',
-          label: 'Logo',
-          type: 'text',
-          // The field stays a URL box on purpose (AGL-2486): an externally
-          // hosted logo is legitimate schema.org output. What it lacked was
-          // any way to reach the library the image is usually already in —
-          // that is the Entity logo card below, exactly as the favicon has
-          // had one since AGL-134.
-          helperText:
-            'A full URL to the publisher’s logo — or pick one from your ' +
-            'media library in the Entity logo card below',
-        },
+        /*
+          Same as the favicon above (AGL-2486). This was a URL box whose own
+          helper text told the reader to go and use a different card — two
+          controls for `seo.entity.logo`, and the one in front of them had no
+          picker. The Entity logo card is the editor, and it takes a URL too,
+          so nothing an author could do here is gone.
+        */
       ],
     },
   ],

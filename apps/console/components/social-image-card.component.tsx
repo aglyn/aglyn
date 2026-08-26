@@ -27,6 +27,7 @@ import {
 } from '@aglyn/aglyn/app-utils/media-metadata'
 import { useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { SOCIAL_IMAGE_HINT } from '../constants/media-size-hints'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface SocialImageCardProps {
@@ -141,6 +142,16 @@ export function SocialImageCard(props: SocialImageCardProps) {
               : ' — 1200×630 is the size every network crops well'}
           </Typography>
         ) : null}
+        {/*
+          The dimensions above describe the picture ALREADY chosen; this says
+          what to bring (AGL-2486). Two different sentences, and only the first
+          one existed — and it only appeared once there was already an image,
+          which is exactly when the advice is too late. Outside the ternary
+          for that reason.
+        */}
+        <Typography variant="caption" color="text.secondary" component="div">
+          {SOCIAL_IMAGE_HINT}
+        </Typography>
         {image ? (
           <TextField
             label="Image description"
