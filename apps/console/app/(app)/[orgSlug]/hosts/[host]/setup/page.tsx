@@ -40,11 +40,15 @@ import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Stack, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
 import HostActivityTable from '../../../../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import CardDisplayFormTemplate from '../../../../../../components/card-display-form-template'
+import CardDisplayFormTemplate, {
+  FormCardWrapper,
+} from '../../../../../../components/card-display-form-template'
+import { useFormApi } from '@aglyn/shared-ui-jsx-forms'
+import { Grid } from '@mui/material'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
@@ -332,6 +336,40 @@ const seoSchema: FormSchema = {
     },
   ],
 }
+
+/**
+ * The SEO card's contents: the form's fields, then the media controls it owns.
+ *
+ * A separate component because it needs `useFormApi` — the `<form>` element's
+ * submit handler comes from the form context, and a template that rendered the
+ * fields without it would have a card whose Update button did nothing.
+ */
+function SeoFormBody(props: {
+  hostId: string
+  formFields: ReactNode
+  formProps: Record<string, unknown>
+}) {
+  const { hostId, formFields, formProps } = props
+  const { handleSubmit } = useFormApi()
+  return (
+    <>
+      <form onSubmit={handleSubmit} noValidate {...formProps}>
+        <Grid spacing={2} container>
+          {formFields}
+        </Grid>
+      </form>
+      {/*
+        Entity logo FIRST: the form ends with the Entity's Type and Name, and
+        the logo belongs with them. The favicon sitting between them is what
+        made the entity read as separated (AGL-2486).
+      */}
+      <EntityLogoCard hostId={hostId} embedded />
+      <FaviconCard hostId={hostId} embedded />
+      <SocialImageCard hostId={hostId} embedded />
+    </>
+  )
+}
+SeoFormBody.displayName = 'SeoFormBody'
 
 /** Theme tab id (AGL-114); `/setup?tab=theme` deep links land here. */
 const THEME_TAB_ID = 'theme'
@@ -715,6 +753,42 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
     [forms, analytics, router, pathname, searchParams],
   )
 
+  /**
+   * The SEO card's own form template (AGL-2486).
+   *
+   * Same card the shared template draws — `FormCardWrapper` is what carries
+   * the Update button and the pristine/invalid states — with the three media
+   * controls rendered inside it, after the fields.
+   *
+   * ORDER IS THE POINT. Entity logo comes FIRST of the three, because the
+   * form's last fields are the Entity's Type and Name and the logo belongs
+   * with them; putting the favicon between them is what made the entity
+   * "look separated" in the first place.
+   *
+   * Memoised on `hostId`: a FormTemplate identity that changes every render
+   * remounts the whole form, which would blow away half-typed input on every
+   * keystroke.
+   */
+  const SeoFormTemplate = useMemo(
+    () =>
+      function SeoFormTemplateRender(templateProps: any) {
+        // `schema` is dropped rather than forwarded: `FormCardWrapper` reads
+        // it off the form context itself, and passing it as a prop would
+        // spread an unknown attribute onto the Card.
+        const { formFields, schema: _schema, ...rest } = templateProps
+        return (
+          <FormCardWrapper>
+            <SeoFormBody
+              hostId={hostId}
+              formFields={formFields}
+              formProps={rest}
+            />
+          </FormCardWrapper>
+        )
+      },
+    [hostId],
+  )
+
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -793,7 +867,28 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         sx={{ padding: 'unset' }}
                       >
                         <FormRenderer
-                          FormTemplate={CardDisplayFormTemplate}
+                          /*
+                            The SEO tab renders its media controls INSIDE its
+                            own card (AGL-2486). Zach: *"You removed the field
+                            from entity you need to move the other fields too
+                            otherwise it looks separated"* and *"Social image
+                            could be moved up into the SEO part and not its
+                            own card."*
+
+                            They are `seo.*` fields and always were; they are
+                            separate components only because a media pick needs
+                            a picker dialog and because a CLEARED value has to
+                            reach Firestore as `''` rather than being dropped
+                            by the form stack (AGL-1191) — implementation
+                            reasons that had been showing through as
+                            free-floating cards between the fields they belong
+                            to.
+                          */
+                          FormTemplate={
+                            schema.id === 'hostSeo'
+                              ? SeoFormTemplate
+                              : CardDisplayFormTemplate
+                          }
                           componentMapper={simpleComponentMapper}
                           onSubmit={onSubmit}
                           schema={schema}
@@ -838,34 +933,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         ) : null}
                         {schema.id === 'hostSeo' ? (
                           <>
-                            <div style={{ marginTop: 24 }}>
-                              <FaviconCard hostId={hostId} />
-                            </div>
-                            {/* The publisher's logo for JSON-LD (AGL-2486).
-                                A card for the same reason the favicon is
-                                one — it is a media pick, and a cleared
-                                value has to reach Firestore as `''` rather
-                                than being dropped by the form stack
-                                (AGL-1191). Beside the Entity fields it
-                                belongs to. */}
-                            <div style={{ marginTop: 24 }}>
-                              <EntityLogoCard hostId={hostId} />
-                            </div>
-                            {/* Site-wide default social card (AGL-1337). A
-                                card for the same reason the favicon is one:
-                                it is a media pick, and a cleared value has to
-                                reach Firestore as `''` rather than being
-                                dropped by the form stack (AGL-1191). */}
-                            <div style={{ marginTop: 24 }}>
-                              <SocialImageCard hostId={hostId} />
-                            </div>
-                            {/* Site-wide search indexing (AGL-1263). Its own
-                                card rather than a field in the SEO form
-                                above: the form saves on submit and refuses to
-                                until title and description validate, so a
-                                switch inside it could not be turned back OFF
-                                by someone whose SEO copy is mid-edit — the
-                                one direction that must never be blocked. */}
                             <div style={{ marginTop: 24 }}>
                               <SearchIndexingCard hostId={hostId} />
                             </div>

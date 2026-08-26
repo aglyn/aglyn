@@ -26,7 +26,7 @@ import {
   normalizeContentAuthor,
   resolveEntryAuthor,
   resolveEntryAuthorName,
-} from './content-authors'
+  hostSeoEntityImageJsonLd,} from './content-authors'
 
 const ORIGIN = 'https://example.com'
 
@@ -326,5 +326,70 @@ describe('an author name cannot break out of the JSON-LD script element', () => 
     const name = 'Ada "Ada" \\ Lovelace'
     const out = safeJsonLd({ author: contentAuthorJsonLd({ name }) })
     expect(JSON.parse(out).author.name).toBe(name)
+  })
+})
+
+/**
+ * A publisher's picture goes under the property its TYPE has (AGL-2486).
+ *
+ * `schema.org` gives `logo` to an Organization and `image` to a Person, and
+ * the tenant emitted `logo` for both — so a site declaring itself a Person
+ * published a property its own `@type` does not define. Ignored by every
+ * consumer, which is the worst kind of wrong: the field is set, the console
+ * said it was published, and nothing rendered it.
+ */
+describe('hostSeoEntityImageJsonLd (AGL-2486)', () => {
+  const CONTEXT = { origin: 'https://acme.example', hostId: 'h1' }
+
+  it('gives an Organization a logo', () => {
+    expect(
+      hostSeoEntityImageJsonLd(
+        { type: 1, name: 'Acme', logo: 'https://x/l.png' },
+        CONTEXT,
+      ),
+    ).toEqual({ logo: 'https://x/l.png' })
+  })
+
+  it('gives a Person an IMAGE, which is the property Person has', () => {
+    expect(
+      hostSeoEntityImageJsonLd(
+        { type: 2, name: 'Ada', logo: 'https://x/p.jpg' },
+        CONTEXT,
+      ),
+    ).toEqual({ image: 'https://x/p.jpg' })
+  })
+
+  it('reads a STRING type, which is what the console persists', () => {
+    // The Select's options are template literals, so the stored value is
+    // `"2"`. A strict comparison with the numeric enum is always false —
+    // the bug that kept every site on `Organization` no matter what it chose.
+    expect(
+      hostSeoEntityImageJsonLd({ type: '2', logo: 'https://x/p.jpg' }, CONTEXT),
+    ).toEqual({ image: 'https://x/p.jpg' })
+  })
+
+  it('RESOLVES a site-relative CDN path against the site origin', () => {
+    // The value has three generations, and the entity path used to emit
+    // whichever it found — so a `media:` reference reached a crawler as the
+    // literal string `media:{scope}/{id}`, which does not fetch.
+    const resolved = hostSeoEntityImageJsonLd(
+      { type: 1, logo: '/api/media/cdn/h1/abc.png' },
+      CONTEXT,
+    )
+    expect(resolved.logo).toBe('https://acme.example/api/media/cdn/h1/abc.png')
+  })
+
+  it('emits NO key rather than a broken one', () => {
+    // An unresolvable value, and an absent one, answer alike: spreadable by
+    // design, so an absent property costs an empty spread rather than a
+    // ternary at every call site.
+    expect(hostSeoEntityImageJsonLd({ type: 2, name: 'Ada' }, CONTEXT)).toEqual({})
+    expect(hostSeoEntityImageJsonLd({ logo: '   ' }, CONTEXT)).toEqual({})
+    expect(hostSeoEntityImageJsonLd(undefined, CONTEXT)).toEqual({})
+    // No origin to resolve against: a site-relative path cannot become
+    // absolute, so nothing is published.
+    expect(
+      hostSeoEntityImageJsonLd({ logo: '/api/media/cdn/h1/abc.png' }, {}),
+    ).toEqual({})
   })
 })

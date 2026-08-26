@@ -30,11 +30,17 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { ENTITY_LOGO_HINT } from '../constants/media-size-hints'
+import {
+  ENTITY_LOGO_HINT,
+  PERSON_IMAGE_HINT,
+} from '../constants/media-size-hints'
+import MediaFieldSection from './media-field-section.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface EntityLogoCardProps {
   hostId: string
+  /** Draw as a section inside the SEO card rather than a card of its own. */
+  embedded?: boolean
 }
 
 /**
@@ -76,7 +82,7 @@ export interface EntityLogoCardProps {
  * emit a URL that is well-formed but wrong (AGL-1160).
  */
 export function EntityLogoCard(props: EntityLogoCardProps) {
-  const { hostId } = props
+  const { hostId, embedded } = props
   const { enqueueSnackbar } = useSnackbar()
   const {
     doc: { data },
@@ -87,6 +93,61 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
   const [urlDraft, setUrlDraft] = useState<string | null>(null)
   const logo = data?.seo?.entity?.logo
   const entityName = data?.seo?.entity?.name
+  /**
+   * A PERSON does not have a logo (AGL-2486).
+   *
+   * Zach: *"it also doesn't reflect copy when the entity is a person."* Every
+   * word here said logo, publisher's mark, the organization publishing this
+   * site — while the Type select one field up may say Person, and a site run
+   * by one человек is the common case for a portfolio or a consultancy.
+   *
+   * It is not only wording. `schema.org` gives `logo` to an Organization and
+   * `image` to a Person, and the tenant emitted `logo` for both until this
+   * issue — so for a Person the value was published under a property its own
+   * `@type` does not define. `hostSeoEntityImageJsonLd` now picks the right
+   * one, and this copy describes what actually gets published.
+   */
+  const isPerson =
+    Aglyn.contentAuthorSchemaType(data?.seo?.entity?.type) === 'Person'
+  const entityCopy = isPerson
+    ? {
+        header: 'Entity photo',
+        noun: 'photo',
+        description:
+          'Shown by search engines beside results for this site, as the ' +
+          'picture of the person who publishes it. This is the publisher’s ' +
+          'own photo — the site’s logo is set under Details.',
+        empty: 'No entity photo set',
+        choose: 'Choose photo from media',
+        replace: 'Replace photo from media',
+        alt: 'Entity photo',
+        urlLabel: 'Or paste a photo URL',
+        urlHelper:
+          'An external photo is a legitimate answer — most sites pick from ' +
+          'the library above.',
+        hint: PERSON_IMAGE_HINT,
+        removed: 'Entity photo removed',
+        updated: 'Entity photo updated',
+      }
+    : {
+        header: 'Entity logo',
+        noun: 'logo',
+        description:
+          'Shown by search engines beside results for this site, as the ' +
+          'logo of whoever publishes it. This is the publisher’s mark — the ' +
+          'site’s own logo is set under Details.',
+        empty: 'No entity logo set',
+        choose: 'Choose from media',
+        replace: 'Replace from media',
+        alt: 'Entity logo',
+        urlLabel: 'Or paste a logo URL',
+        urlHelper:
+          'An external logo is a legitimate answer — most sites pick from ' +
+          'the library above.',
+        hint: ENTITY_LOGO_HINT,
+        removed: 'Entity logo removed',
+        updated: 'Entity logo updated',
+      }
   /**
    * Resolve before showing. The stored value is an absolute URL for anything
    * picked here, but a value typed into the SEO form — or written before
@@ -105,36 +166,33 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
       )
 
   return (
-    <CardDisplay
-      header={'Entity logo'}
+    <MediaFieldSection
+      embedded={embedded}
+      header={entityCopy.header}
       help={docsHelp('seo', {
         anchor: '#structured-data',
         excerpt:
-          'The logo of the organization or person publishing this site, ' +
-          'emitted as JSON-LD so search engines can show it beside a rich ' +
-          'result. Pick it from your media library, or paste an external ' +
-          'URL below.',
+          `The ${entityCopy.noun} of the organization or person publishing ` +
+          'this site, emitted as JSON-LD so search engines can show it ' +
+          'beside a rich result. Pick it from your media library, or paste ' +
+          'an external URL below.',
       })}
-      contentGutterX
-      contentGutterY
     >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
-          {'Shown by search engines beside results for this site, as the ' +
-            'logo of whoever publishes it. This is the publisher’s mark — ' +
-            'the site’s own logo is set under Details.'}
+          {entityCopy.description}
         </Typography>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           {preview ? (
             <Box
               component="img"
               src={preview}
-              alt="Entity logo"
+              alt={entityCopy.alt}
               sx={{ maxHeight: 48, maxWidth: 160, objectFit: 'contain' }}
             />
           ) : (
             <Typography variant="body2" color="text.secondary">
-              {'No entity logo set'}
+              {entityCopy.empty}
             </Typography>
           )}
           <Button
@@ -142,7 +200,7 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
             color="primary"
             onClick={() => setPickerOpen(true)}
           >
-            {logo ? 'Replace from media' : 'Choose from media'}
+            {logo ? entityCopy.replace : entityCopy.choose}
           </Button>
           {logo ? (
             <Button
@@ -152,7 +210,7 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
               // SEO form above cannot work: two layers of that form stack map
               // an empty string to `undefined` (AGL-1191), so a cleared field
               // is dropped from the patch and the OLD logo simply stays.
-              onClick={() => void save('', 'Entity logo removed')}
+              onClick={() => void save('', entityCopy.removed)}
             >
               {'Remove'}
             </Button>
@@ -160,7 +218,7 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
         </Stack>
         {/* Said BEFORE the upload, not about the file already chosen. */}
         <Typography variant="caption" color="text.secondary" component="div">
-          {ENTITY_LOGO_HINT}
+          {entityCopy.hint}
         </Typography>
         {/*
           The URL box this card absorbed from the SEO form (AGL-2486).
@@ -174,7 +232,7 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
         <TextField
           size="small"
           fullWidth
-          label="Or paste a logo URL"
+          label={entityCopy.urlLabel}
           value={urlDraft ?? (typeof logo === 'string' ? logo : '')}
           onChange={(event) => setUrlDraft(event.target.value)}
           onBlur={() => {
@@ -182,9 +240,9 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
             const next = urlDraft.trim()
             setUrlDraft(null)
             if (next === (logo ?? '')) return
-            void save(next, 'Entity logo updated')
+            void save(next, entityCopy.updated)
           }}
-          helperText="An external logo is a legitimate answer — most sites pick from the library above."
+          helperText={entityCopy.urlHelper}
         />
         {logo && !entityName ? (
           // Google reads the logo off the `publisher` node, and the tenant
@@ -216,7 +274,7 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
           void save(src, 'Entity logo saved')
         }}
       />
-    </CardDisplay>
+    </MediaFieldSection>
   )
 }
 EntityLogoCard.displayName = 'EntityLogoCard'

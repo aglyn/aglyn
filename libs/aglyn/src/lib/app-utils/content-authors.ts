@@ -300,6 +300,61 @@ export function hostSeoEntityJsonLd(
   }
 }
 
+/**
+ * The publisher's picture, under the property its TYPE actually has
+ * (AGL-2486).
+ *
+ * `schema.org` gives `logo` to an Organization and not to a Person; a Person
+ * carries `image`. The tenant emitted `logo` for both, so a site that declared
+ * itself a Person published a property its own `@type` does not define —
+ * ignored by every consumer, which is the worst kind of wrong: the field is
+ * set, the console says it is published, and nothing renders it.
+ *
+ * That is the same shape as the bug one function up, where a string `"2"` was
+ * compared with a numeric enum and no site could ever publish `Person` at all.
+ * Both resolve here so the type is decided in exactly one place.
+ *
+ * Returns a spreadable object so callers stay a spread rather than a ternary:
+ * `{...hostSeoEntityImageJsonLd(entity)}` adds nothing when there is no
+ * picture, which is what an absent property should cost.
+ */
+export function hostSeoEntityImageJsonLd(
+  entity: HostSeoEntity | null | undefined,
+  context?: ContentAuthorImageContext,
+): Record<string, string> {
+  /*
+    Through `absoluteMediaSrc`, exactly as an author's portrait goes
+    (AGL-1343/1407). The stored value has three generations — a raw storage
+    URL, a site-relative CDN path, and a `media:` reference — and the site
+    entity's was the one path still emitting whichever it found. A `media:`
+    reference reaches Google as the literal string `media:{scope}/{id}`,
+    which does not fetch; a site-relative path with no origin does not either.
+
+    An unresolvable value emits NO key rather than a broken one — the same
+    rule the author serializer states, and the reason both return a spreadable
+    object instead of a URL.
+  */
+  /*
+    TRIMMED first. `absoluteMediaSrc` does not trim, and a whitespace-only
+    value — what a field cleared by typing spaces leaves behind — is not
+    empty to it: it reads as a relative path and comes back joined to the
+    origin, so the site would publish `https://example.com/   ` as its
+    publisher logo. Trimmed here rather than in the resolver, which og:image
+    and every author portrait also go through.
+  */
+  const stored = typeof entity?.logo === 'string' ? entity.logo.trim() : ''
+  const image = stored
+    ? absoluteMediaSrc(stored, {
+        hostId: context?.hostId,
+        origin: context?.origin,
+      })
+    : ''
+  if (!image) return {}
+  return contentAuthorSchemaType(entity?.type) === 'Person'
+    ? { image }
+    : { logo: image }
+}
+
 /** An entry, as far as author resolution is concerned. */
 export interface AuthorBearingEntry {
   /** Reference into `hosts/{hostId}/authors` (AGL-2486). */

@@ -182,3 +182,79 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
     expect(screen.queryByText(/needs an entity NAME/i)).toBeNull()
   })
 })
+
+/**
+ * A PERSON does not have a logo (AGL-2486).
+ *
+ * Zach: *"it also doesn't reflect copy when the entity is a person."* Every
+ * word on this card said logo — publisher's mark, the organization publishing
+ * this site — while the Type select one field up may say Person, which is the
+ * common case for a portfolio or a one-person consultancy.
+ *
+ * It is not only wording, which is why this is asserted rather than eyeballed:
+ * `schema.org` gives `logo` to an Organization and `image` to a Person, and
+ * the tenant emitted `logo` for both until this issue — so a Person's picture
+ * was published under a property its own `@type` does not define, and every
+ * consumer ignored it. `hostSeoEntityImageJsonLd` fixes the output; this
+ * fixes what the console claims about it.
+ *
+ * The type is read from the SAVED document, not the form's live selection —
+ * the card describes what is published, and nothing is published until Update.
+ */
+describe('the copy follows the entity TYPE', () => {
+  beforeEach(() => {
+    mockSetDoc.mockClear()
+    mockPicked = null
+  })
+
+  it('says logo for an Organization', () => {
+    mockHostDoc.data = {
+      $id: 'h1',
+      subdomain: 'acme',
+      // The Select persists its option value as a STRING (its options are
+      // template literals) — the shape that made an earlier `=== enum`
+      // comparison always false, so a site could never publish `Person`.
+      seo: { entity: { type: '1', name: 'Acme' } },
+    }
+    render(<EntityLogoCard hostId="h1" />)
+    // Exact, because `/Entity logo/i` also matches "No entity logo set".
+    expect(screen.getByText('Entity logo')).toBeTruthy()
+    expect(screen.getByText(/No entity logo set/i)).toBeTruthy()
+    expect(screen.queryByText(/Entity photo/i)).toBeNull()
+  })
+
+  it('says PHOTO for a Person, in every place logo appeared', () => {
+    mockHostDoc.data = {
+      $id: 'h1',
+      subdomain: 'acme',
+      seo: { entity: { type: '2', name: 'Ada Lovelace' } },
+    }
+    render(<EntityLogoCard hostId="h1" />)
+    // Exact, because `/Entity photo/i` also matches "No entity photo set".
+    expect(screen.getByText('Entity photo')).toBeTruthy()
+    expect(screen.getByText(/No entity photo set/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Choose photo from media/i })).toBeTruthy()
+    // The description, and the size advice, both change — a person's picture
+    // is a photograph, not a mark, so the publisher-logo floor is the wrong
+    // number to recommend for it.
+    expect(screen.getByText(/picture of the person who publishes it/i)).toBeTruthy()
+    expect(screen.getByText(/shown as a picture of a person rather than a mark/i)).toBeTruthy()
+    expect(screen.queryByText(/publisher’s mark/i)).toBeNull()
+  })
+
+  it('reads the SAVED type, whatever shape it was stored in', () => {
+    // A numeric enum and its string spelling must answer alike; the console
+    // has written both, and an earlier `=== enum` comparison across the two
+    // was always false — which is how no site could publish `Person` at all.
+    for (const type of [2, '2'] as const) {
+      mockHostDoc.data = {
+        $id: 'h1',
+        subdomain: 'acme',
+        seo: { entity: { type, name: 'Ada' } },
+      }
+      const view = render(<EntityLogoCard hostId="h1" />)
+      expect(screen.getByText('Entity photo')).toBeTruthy()
+      view.unmount()
+    }
+  })
+})

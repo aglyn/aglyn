@@ -23,12 +23,15 @@ import { useHost, useUser } from '@aglyn/tenant-feature-instance'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import MediaFieldSection from './media-field-section.component'
 import { FAVICON_HINT } from '../constants/media-size-hints'
 import { resyncHostMemberships } from '../utils/resync-host-memberships'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface FaviconCardProps {
   hostId: string
+  /** Draw as a section inside the SEO card rather than a card of its own. */
+  embedded?: boolean
 }
 
 /**
@@ -38,7 +41,7 @@ export interface FaviconCardProps {
  * icons; this card just makes the common path one click.
  */
 export function FaviconCard(props: FaviconCardProps) {
-  const { hostId } = props
+  const { hostId, embedded } = props
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
   const {
@@ -73,15 +76,14 @@ export function FaviconCard(props: FaviconCardProps) {
   const preview = Aglyn.resolveMediaSrc(favicon, { hostId })
 
   return (
-    <CardDisplay
+    <MediaFieldSection
+      embedded={embedded}
       header={'Favicon'}
       help={docsHelp('media', {
         excerpt:
           'The small icon browsers show in tabs and bookmarks — pick an ' +
           '.ico or .png from your media library, or paste a URL below.',
       })}
-      contentGutterX
-      contentGutterY
     >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
         {preview ? (
@@ -195,7 +197,7 @@ export function FaviconCard(props: FaviconCardProps) {
             )
         }}
       />
-    </CardDisplay>
+    </MediaFieldSection>
   )
 }
 FaviconCard.displayName = 'FaviconCard'

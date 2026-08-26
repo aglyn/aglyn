@@ -103,3 +103,16 @@ export const EMAIL_LOGO_HINT =
 export const LISTING_LOGO_HINT =
   'Recommended: a square PNG or SVG, at least 256×256 — listings are shown ' +
   'as square tiles.'
+
+/**
+ * A PERSON's picture, which is not a logo and does not take a logo's advice.
+ *
+ * `schema.org` gives `logo` to an Organization and `image` to a Person, and
+ * Google's guidance for the two is different in kind: a publisher logo has a
+ * small floor because it is drawn as a mark, and a person's image is a
+ * photograph shown at whatever size the result gives it. Recommending
+ * 112×112 for a face would be recommending a thumbnail.
+ */
+export const PERSON_IMAGE_HINT =
+  'Recommended: a square photo, at least 800×800 — it is shown as a picture ' +
+  'of a person rather than a mark, so it wants the resolution.'

@@ -27,11 +27,14 @@ import {
 } from '@aglyn/aglyn/app-utils/media-metadata'
 import { useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import MediaFieldSection from './media-field-section.component'
 import { SOCIAL_IMAGE_HINT } from '../constants/media-size-hints'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface SocialImageCardProps {
   hostId: string
+  /** Draw as a section inside the SEO card rather than a card of its own. */
+  embedded?: boolean
 }
 
 /**
@@ -57,7 +60,7 @@ export interface SocialImageCardProps {
  * card announced itself to a screen reader as an undescribed image.
  */
 export function SocialImageCard(props: SocialImageCardProps) {
-  const { hostId } = props
+  const { hostId, embedded } = props
   const { enqueueSnackbar } = useSnackbar()
   const {
     doc: { data },
@@ -100,7 +103,8 @@ export function SocialImageCard(props: SocialImageCardProps) {
       )
 
   return (
-    <CardDisplay
+    <MediaFieldSection
+      embedded={embedded}
       header={'Social image'}
       help={docsHelp('seo', {
         anchor: '#social-cards',
@@ -109,8 +113,6 @@ export function SocialImageCard(props: SocialImageCardProps) {
           'social media or chat. Screens can override it in their own SEO ' +
           'panel. 1200×630 is the size every network crops well.',
       })}
-      contentGutterX
-      contentGutterY
     >
       <Stack spacing={2}>
         {preview ? (
@@ -234,7 +236,7 @@ export function SocialImageCard(props: SocialImageCardProps) {
           )
         }}
       />
-    </CardDisplay>
+    </MediaFieldSection>
   )
 }
 SocialImageCard.displayName = 'SocialImageCard'
