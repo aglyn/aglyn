@@ -9,6 +9,60 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.20 — 2026-08-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/6d13021c3...v1.0.0-beta.20)
+
+### Added
+
+- **console,tenant,aglyn:** a Tracking tab, and Tag Manager under the same gate ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** a new collection is defined when it is created ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498), [AGL-105](https://linear.app/aglyn/issue/AGL-105))
+- **console:** the theme preview shows the whole type ramp ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console,aglyn:** a screen says what it is holding up, when asked ([AGL-703](https://linear.app/aglyn/issue/AGL-703), [AGL-845](https://linear.app/aglyn/issue/AGL-845), [AGL-1335](https://linear.app/aglyn/issue/AGL-1335), [AGL-1893](https://linear.app/aglyn/issue/AGL-1893), [AGL-405](https://linear.app/aglyn/issue/AGL-405), [AGL-693](https://linear.app/aglyn/issue/AGL-693))
+
+### Fixed
+
+- **console:** a ?tab= link opens the tab it names ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console,aglyn,tenant:** the SEO fields are one card, and a person has a photo ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1191](https://linear.app/aglyn/issue/AGL-1191))
+- **console:** the upload areas the first pass missed ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** an address field is called Slug, everywhere ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498))
+- **console,theme:** the screens tree opens closed, and the ramp guard matches it ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** every upload area says what size to bring ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** one favicon, one entity logo, and a size said before the upload ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **theme,console:** a Heading 3 was bigger than a Heading 2 ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **besigner:** the picker-demand spec names a field type that exists ([AGL-703](https://linear.app/aglyn/issue/AGL-703))
+- **theme,console:** a dialog leaves room for its first field's label ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** every paginated list starts on its smallest page ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **jsx:** the empty-state artwork reads its greys off the theme ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **tools:** the gate dies on macOS before it runs a single phase ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **console,jsx:** one table footer, and an empty library that invites ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+
+### Performance
+
+- **plugins:** a plugin's revocation read stops costing a second round trip ([AGL-1302](https://linear.app/aglyn/issue/AGL-1302), [AGL-2307](https://linear.app/aglyn/issue/AGL-2307))
+- **tenant,plugins:** the render caches stop expiring on the request rate ([AGL-1302](https://linear.app/aglyn/issue/AGL-1302), [AGL-2010](https://linear.app/aglyn/issue/AGL-2010))
+- **console,aglyn:** a publish reads the lookups its page actually needs ([AGL-703](https://linear.app/aglyn/issue/AGL-703), [AGL-188](https://linear.app/aglyn/issue/AGL-188), [AGL-1397](https://linear.app/aglyn/issue/AGL-1397))
+- **console,besigner,aglyn:** stop paying for lists nobody is looking at ([AGL-703](https://linear.app/aglyn/issue/AGL-703), [AGL-1440](https://linear.app/aglyn/issue/AGL-1440))
+
+### Changed
+
+- **console:** creating a collection is a drawer, like every other artifact ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498), [AGL-699](https://linear.app/aglyn/issue/AGL-699))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **jsx-forms,console:** the setup page's inline validation does work ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+</details>
+
+## v1.0.0-beta.19 — 2026-08-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/0162186e5...v1.0.0-beta.19)
+
+### Fixed
+
+- **besigner:** the styles-panel test fixture names every scale it must ([AGL-1308](https://linear.app/aglyn/issue/AGL-1308))
+
 ## v1.0.0-beta.18 — 2026-08-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.17...v1.0.0-beta.18)

@@ -20,14 +20,18 @@ import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost, useUser } from '@aglyn/tenant-feature-instance'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import MediaFieldSection from './media-field-section.component'
+import { FAVICON_HINT } from '../constants/media-size-hints'
 import { resyncHostMemberships } from '../utils/resync-host-memberships'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface FaviconCardProps {
   hostId: string
+  /** Draw as a section inside the SEO card rather than a card of its own. */
+  embedded?: boolean
 }
 
 /**
@@ -37,7 +41,7 @@ export interface FaviconCardProps {
  * icons; this card just makes the common path one click.
  */
 export function FaviconCard(props: FaviconCardProps) {
-  const { hostId } = props
+  const { hostId, embedded } = props
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
   const {
@@ -46,6 +50,21 @@ export function FaviconCard(props: FaviconCardProps) {
   } = useHost({ hostId })
   const [pickerOpen, setPickerOpen] = useState(false)
   const favicon = data?.seo?.favicon
+  /**
+   * The URL escape hatch this card absorbed from the SEO form (AGL-2486).
+   *
+   * `seo.favicon` used to have two editors on one tab, and the other one was
+   * a bare text box showing `media:org:…` — the stored reference, which is
+   * not something anybody can read or type. That box is gone; an externally
+   * hosted icon is still legitimate, so the capability lives here instead,
+   * below the picker rather than beside it: the library is the common answer
+   * and a URL is the exception.
+   *
+   * Seeded from the stored value only while editing, so it never fights the
+   * picker: choosing from the library writes the field and this box reopens
+   * from whatever that wrote.
+   */
+  const [urlDraft, setUrlDraft] = useState<string | null>(null)
   /**
    * Resolve before showing (AGL-1407). The stored value has three generations
    * — a raw storage URL, an AGL-175 CDN path, and a `media:` reference — and
@@ -57,16 +76,14 @@ export function FaviconCard(props: FaviconCardProps) {
   const preview = Aglyn.resolveMediaSrc(favicon, { hostId })
 
   return (
-    <CardDisplay
+    <MediaFieldSection
+      embedded={embedded}
       header={'Favicon'}
       help={docsHelp('media', {
         excerpt:
           'The small icon browsers show in tabs and bookmarks — pick an ' +
-          '.ico or .png from your media library, or paste a URL in the ' +
-          'SEO form.',
+          '.ico or .png from your media library, or paste a URL below.',
       })}
-      contentGutterX
-      contentGutterY
     >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
         {preview ? (
@@ -114,6 +131,44 @@ export function FaviconCard(props: FaviconCardProps) {
           </Button>
         ) : null}
       </Stack>
+      {/* Said BEFORE the upload, not about the file already chosen. */}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="div"
+        sx={{ mt: 1 }}
+      >
+        {FAVICON_HINT}
+      </Typography>
+      <TextField
+        size="small"
+        fullWidth
+        label="Or paste an icon URL"
+        value={urlDraft ?? (typeof favicon === 'string' ? favicon : '')}
+        onChange={(event) => setUrlDraft(event.target.value)}
+        onBlur={() => {
+          if (urlDraft === null) return
+          const next = urlDraft.trim()
+          setUrlDraft(null)
+          if (next === (favicon ?? '')) return
+          // `''` and not a missing key: a cleared media value has to REACH
+          // Firestore as an empty string or the form stack drops it and the
+          // old icon survives the clear (AGL-1191).
+          void setDoc({ seo: { favicon: next } }, { merge: true })
+            .then(() => {
+              resyncHostMemberships(hostId, user as never)
+              enqueueSnackbar('Favicon updated', {
+                variant: 'success',
+                persist: false,
+              })
+            })
+            .catch(() =>
+              enqueueSnackbar('An error has occurred', { variant: 'error' }),
+            )
+        }}
+        helperText="An external icon is a legitimate answer — most sites pick from the library above."
+        sx={{ mt: 1.5 }}
+      />
       <MediaPickerDialog
         hostId={hostId}
         open={pickerOpen}
@@ -142,7 +197,7 @@ export function FaviconCard(props: FaviconCardProps) {
             )
         }}
       />
-    </CardDisplay>
+    </MediaFieldSection>
   )
 }
 FaviconCard.displayName = 'FaviconCard'

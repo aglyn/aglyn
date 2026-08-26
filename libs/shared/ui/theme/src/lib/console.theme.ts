@@ -253,6 +253,35 @@ const baseOptions: ThemeOptions = {
         },
       },
     },
+    /**
+     * Room for a floated label at the top of a dialog (AGL-703).
+     *
+     * MUI zeroes a DialogContent's top padding when it follows a DialogTitle
+     * — `.MuiDialogTitle-root + .MuiDialogContent-root` — and the content box
+     * scrolls (`overflow-y: auto`). So the first field's shrunk outlined
+     * label, which sits ABOVE its own border, is clipped by the scroll
+     * container. It shows on any dialog whose first control has a value on
+     * open: the New author dialog's `Type` select had its label shaved in
+     * half.
+     *
+     * Twenty-seven dialogs tried to fix this themselves with
+     * `sx={{ pt: 1 }}`, and NONE of them worked: MUI's rule is two classes
+     * and `sx` is one, so the adjacent-sibling selector wins on specificity
+     * every time. Matching that selector here is what makes the fix apply —
+     * which is why it belongs in the theme rather than at any call site.
+     *
+     * 12px: the shrunk label rises ~9px above the input's top edge, plus a
+     * little air so it does not sit ON the dialog title.
+     */
+    MuiDialogContent: {
+      styleOverrides: {
+        root: ({ theme }: any) => ({
+          '.MuiDialogTitle-root + &': {
+            paddingTop: theme.spacing(1.5),
+          },
+        }),
+      },
+    },
     MuiFab: {
       defaultProps: {
         color: 'primary',
@@ -414,6 +443,18 @@ const baseOptions: ThemeOptions = {
       fontWeight: 800,
       lineHeight: 1.15,
       letterSpacing: '-0.02em',
+    },
+    // h3 has to come DOWN with them, or the ramp inverts. Retuning h1/h2 to
+    // the brand (56/40px) while h3 kept MUI's 48px left a Heading 3 LARGER
+    // than a Heading 2 — visible the moment the theme preview listed the
+    // variants in size order. h3 carries zero `variant="h3"` usages, the same
+    // as h1 and h2, so this restyles no product surface; h4-h6 keep MUI's
+    // scale because 95 usages ride on them.
+    h3: {
+      fontSize: '2.25rem',
+      fontWeight: 700,
+      lineHeight: 1.2,
+      letterSpacing: '-0.015em',
     },
     // The three text rungs the brand uses that MUI's scale has no name for
     // (Zach 2026-08-25). MUI runs 16 / 14 / 12 (`body1` / `body2` /

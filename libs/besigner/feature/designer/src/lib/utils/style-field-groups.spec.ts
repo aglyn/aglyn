@@ -633,6 +633,8 @@ describe('style field groups (AGL-540/587)', () => {
           cornerRadius: [{ value: 2, label: 'Rounded', hint: '8px' }],
           shadow: [{ value: 'none', label: 'No shadow' }],
           fontFamily: [{ value: 'Georgia, serif', label: 'Theme body font' }],
+          typographyVariant: [{ value: 'h2', label: 'Heading 2', hint: '2.5rem' }],
+          gap: [{ value: 2, label: 'Small', hint: '16px' }],
         },
       })
       const field = (name: string) =>

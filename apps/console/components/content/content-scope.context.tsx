@@ -933,7 +933,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
           {`Categories${selected ? ` — ${selected.displayName}` : ''}`}
         </DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <Typography variant="body2" color="text.secondary">
             {'Entries reference categories by a stable id, so renaming one ' +

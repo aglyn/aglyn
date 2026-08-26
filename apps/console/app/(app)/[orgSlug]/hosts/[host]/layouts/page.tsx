@@ -93,6 +93,7 @@ import { useHostId, useHostSubdomain } from '../../../../../../components/host-i
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import {
   CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
   TABLE_ROW_HEIGHT,
 } from '../../../../../../constants/shared'
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
@@ -126,7 +127,10 @@ function Layouts(props) {
   const handleFormClose = useCallback(() => {
     setQuickDrawerOpen(false)
   }, [])
-  const [pageSize, setPageSize] = useState<number>(5)
+  // The console's shared default (AGL-693). Load-bearing here beyond the
+  // footer: it bounds the listener below, so the page size and the number of
+  // documents read are the same number.
+  const [pageSize, setPageSize] = useState<number>(TABLE_PAGE_SIZE_DEFAULT)
   const firestore = useFirestore()
   const { org, ready: orgReady } = useCurrentOrg()
   // The where-used scan is an authenticated POST (host admin only).

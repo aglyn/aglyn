@@ -96,6 +96,12 @@ export async function readUsageCandidates(
         ...(docSnapshot.get('layoutId')
           ? { layoutId: String(docSnapshot.get('layoutId')) }
           : {}),
+        // Screens only, and only the screen scan reads it: a child screen is
+        // a dependent of its parent, because its PATH is built from it
+        // (AGL-703).
+        ...(docSnapshot.get('parentId')
+          ? { parentId: String(docSnapshot.get('parentId')) }
+          : {}),
       } satisfies UsageCandidate
     }),
   )

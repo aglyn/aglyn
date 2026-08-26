@@ -26,6 +26,10 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
+import {
+  readAnalyticsDays,
+  recentDayIds,
+} from '../../utils/analytics-day-cache'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
@@ -68,14 +72,46 @@ export function ScreenAnalyticsCard(props: {
   useEffect(() => {
     if (!orgReady || !entitled) return
     let active = true
-    const ids = Array.from({ length: DAYS }, (_, index) => {
-      const date = new Date()
-      date.setDate(date.getDate() - (DAYS - 1 - index))
-      return date.toISOString().slice(0, 10)
-    })
-    void Promise.all(
-      ids.map((id) =>
-        getDoc(
+    /*
+      Through the day cache, like every other analytics panel (AGL-1440 /
+      AGL-703). This card walked the window with 14 raw `getDoc`s on EVERY
+      mount, so clicking through twenty screens cost 280 reads for data that
+      cannot change: thirteen of those fourteen days are closed, and a closed
+      counter is written by the day it names and never again.
+
+      It is the one analytics surface the AGL-1440 sweep missed — the media
+      drawer, the host traffic panel and the entry panel all read through
+      here already, and the fix is the same shape Zach asked for on "Used by":
+      stop paying for the same documents over and over.
+
+      `field` NAMES THE SCREEN, and that is load-bearing. These day-docs are
+      per-screen (`screenAnalytics/{screenId}:{day}`), unlike the host-level
+      `analytics/{day}` documents the other panels read — a key that ignored
+      the screen would hand one screen's traffic to the next screen opened.
+
+      `recentDayIds` rather than a local-calendar walk: it counts back in
+      whole UTC days from now, which is the day the counters are written
+      under. Walking `setDate` on a local clock is how a window silently
+      skips a day across a DST boundary.
+    */
+    const newestFirst = recentDayIds(Date.now(), DAYS)
+    const ids = [...newestFirst].reverse()
+    void readAnalyticsDays<DayStat>({
+      scopeKey: `hosts/${hostId}`,
+      field: `screen:${screenId}`,
+      dayIds: ids,
+      liveDay: newestFirst[0],
+      now: Date.now(),
+      fallback: {
+        day: '',
+        total: 0,
+        referrers: {},
+        devices: {},
+        dwellMs: 0,
+        dwellSamples: 0,
+      },
+      read: async (id) => {
+        const snapshot = await getDoc(
           doc(
             firestore,
             'hosts',
@@ -84,27 +120,21 @@ export function ScreenAnalyticsCard(props: {
             `${screenId}:${id}`,
           ),
         )
-          .then((snapshot) => ({
-            day: id,
-            total: Number(snapshot.get('total') ?? 0),
-            referrers: (snapshot.get('referrers') ?? {}) as Record<
-              string,
-              number
-            >,
-            devices: (snapshot.get('devices') ?? {}) as Record<string, number>,
-            dwellMs: Number(snapshot.get('dwellMs') ?? 0),
-            dwellSamples: Number(snapshot.get('dwellSamples') ?? 0),
-          }))
-          .catch(() => ({
-            day: id,
-            total: 0,
-            referrers: {},
-            devices: {},
-            dwellMs: 0,
-            dwellSamples: 0,
-          })),
-      ),
-    ).then((stats) => {
+        return {
+          day: id,
+          total: Number(snapshot.get('total') ?? 0),
+          referrers: (snapshot.get('referrers') ?? {}) as Record<
+            string,
+            number
+          >,
+          devices: (snapshot.get('devices') ?? {}) as Record<string, number>,
+          dwellMs: Number(snapshot.get('dwellMs') ?? 0),
+          dwellSamples: Number(snapshot.get('dwellSamples') ?? 0),
+        }
+      },
+      // A read that throws resolves to `fallback` and is NOT cached — a
+      // denial or a blip must not pin an empty day for the life of the tab.
+    }).then((stats) => {
       if (active) setDays(stats)
     })
     return () => {

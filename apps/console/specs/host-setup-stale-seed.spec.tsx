@@ -81,6 +81,18 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 jest.mock('@aglyn/aglyn', () => ({
   HostEntityType: { ORGANIZATION: 'Organization', PERSON: 'Person' },
+  /*
+    The REAL patterns, not stand-ins (AGL-2486). The Tracking tab's schema
+    reads `.source` off both at module scope, so a mock missing them throws
+    before a single case runs — which is this mock earning its keep rather
+    than a nuisance. Copying the expressions instead of importing them would
+    put a second spelling of "what a GA id looks like" in the repo, and the
+    whole point of the shared constant is that there is one.
+  */
+  GA_MEASUREMENT_ID_PATTERN:
+    jest.requireActual('@aglyn/aglyn').GA_MEASUREMENT_ID_PATTERN,
+  GTM_CONTAINER_ID_PATTERN:
+    jest.requireActual('@aglyn/aglyn').GTM_CONTAINER_ID_PATTERN,
 }))
 jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
   resolveSiteTheme: (host: { theme?: unknown }) => host?.theme ?? {},

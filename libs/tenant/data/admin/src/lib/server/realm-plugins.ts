@@ -107,14 +107,27 @@ export async function resolveMarketplacePluginVersion(
   trust?: string
   hostAbi?: number
 } | null> {
-  const listingRef = firebaseAdmin
-    .app()
-    .firestore()
-    .collection('marketplaceListings')
-    .doc(listingId)
-  const [listing, snapshot] = await Promise.all([
+  const firestore = firebaseAdmin.app().firestore()
+  const listingRef = firestore.collection('marketplaceListings').doc(listingId)
+  // THE REVOCATION READ IS IN THIS `Promise.all`, NOT AFTER IT (2026-08-26).
+  //
+  // It is keyed on `listingId` alone, so it never depended on the two reads
+  // above — awaiting it below them cost a SECOND sequential Firestore round
+  // trip on every resolution, and `resolveRealmPluginInstalls` calls this
+  // once per pinned install. That is the shape that grows with the number of
+  // plugins an org has installed: `/api/orgs/realm-plugins` is deliberately
+  // uncached (see the TTL note below), and at a P75 of 907ms it was already
+  // the slowest org-scoped console route before anyone uploaded in volume.
+  //
+  // The trade is one extra read on the paths that exit early (a hidden
+  // listing, a missing version doc) in exchange for halving the round trips
+  // on the path that actually happens. The kill switch is UNCHANGED: the
+  // check below still runs before any value is returned, and it still reads
+  // live — this moves when the read is issued, never whether it is honored.
+  const [listing, snapshot, revocationSnapshot] = await Promise.all([
     listingRef.get(),
     listingRef.collection('pluginVersions').doc(version).get(),
+    firestore.collection('revocations').doc(listingId).get(),
   ])
   // A missing listing doc is NOT a blocker: Firestore does not cascade to
   // subcollections, so a hard-deleted listing leaves working installs
@@ -137,14 +150,7 @@ export async function resolveMarketplacePluginVersion(
   // the reason this file's own comment gives about `hiddenAt`: this is the
   // one function every realm consumer funnels through, and a control that has
   // to be remembered per consumer is one that will be missed by the next one.
-  const revocation = (
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('revocations')
-      .doc(listingId)
-      .get()
-  ).data() as PluginRevocation | undefined
+  const revocation = revocationSnapshot.data() as PluginRevocation | undefined
   if (isPluginRevoked(revocation, version)) return null
   const hostAbi = Number(data.manifest?.hostAbi)
   return {

@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { compileClientAutomations, type RawHostAction } from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -38,7 +39,7 @@ import {
  * just-upgraded one the trimmed payload, until the tag was busted. The
  * documents are the same for every visitor and every plan; the trim is not.
  */
-const HOST_ACTIONS_TTL_SECONDS = 60
+const HOST_ACTIONS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * A site-event automation prepared for the page runtime (AGL-256): the

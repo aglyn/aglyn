@@ -88,6 +88,7 @@ import {
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../../../components/auth-form-template.component'
@@ -97,6 +98,9 @@ import AuthenticatedLayout from '../../../../../../components/layouts/authentica
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import { ArtifactRowActions } from '../../../../../../components/artifacts/artifact-table.component'
+import ArtifactDeleteConfirmDescription, {
+  fetchArtifactUsage,
+} from '../../../../../../components/artifacts/artifact-delete-confirm.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
@@ -152,6 +156,9 @@ function Screens(props) {
     setQuickDrawerOpen(false)
   }, [])
   const firestore = useFirestore()
+  // The where-used scan is an authenticated POST; the delete confirmation
+  // needs the caller's id token to start it (AGL-703).
+  const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
   // The hierarchy table renders the whole tree, so no page-sized query: a
@@ -385,10 +392,33 @@ function Screens(props) {
   const handleDeleteScreen = useCallback(
     (id: string, versionId: string) => async () => {
       let dequeueLoading
+      /*
+        The scan starts here and the dialog opens in the same tick (AGL-703).
+
+        The old description was pure ceremony — "please confirm the desired
+        option" — about the one artifact whose dependents are hardest to
+        recall: the nav links pointing at it live on other screens, and a
+        collection rendering its pages through it is not a link at all.
+      */
+      const scan = (async () =>
+        fetchArtifactUsage({
+          hostId,
+          kind: 'screen',
+          id,
+          idToken: await (user as any)?.getIdToken?.(),
+        }))()
       await confirm({
-        title: 'Are you sure?',
-        description:
-          "You are about to delete a screen from the application, please confirm the desired option. Press 'Delete' to confirm and delete the item. Press 'Cancel' to void the operation and close this dialog.",
+        title: 'Delete this screen?',
+        description: (
+          <ArtifactDeleteConfirmDescription
+            kind="screen"
+            name={
+              screens.find((screen: any) => screen.$id === id)?.displayName ??
+              id
+            }
+            scan={scan}
+          />
+        ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -411,7 +441,7 @@ function Screens(props) {
           dequeueLoading && dequeueLoading()
         })
     },
-    [confirm, firestore, hostId, queueLoading, logActivity],
+    [confirm, firestore, hostId, queueLoading, logActivity, screens, user],
   )
 
   // Drop handler for the hierarchy table: re-parents/reorders the screen,
@@ -639,6 +669,30 @@ function Screens(props) {
       )
     },
     [router, orgSlug, host],
+  )
+
+  /**
+   * The name column's link target (AGL-693).
+   *
+   * The same route `handleRowOpen` pushes, as an href — so the name is a real
+   * link like it is on every other artifact list: middle-clickable, copyable,
+   * and reachable from the keyboard without the whole row being a button.
+   *
+   * A screen with no published version has no `SCREEN_DETAILS` address to
+   * build (the route carries a `versionId`), so those stay plain text rather
+   * than linking somewhere that 404s.
+   */
+  const rowHref = useCallback(
+    (row: ScreenHierarchyRow) =>
+      row.versionId
+        ? buildRoute(Route.SCREEN_DETAILS, {
+            orgSlug,
+            host,
+            screenId: row.$id,
+            versionId: row.versionId,
+          })
+        : null,
+    [orgSlug, host],
   )
 
   const renderRowActions = useCallback(
@@ -872,6 +926,7 @@ function Screens(props) {
             <ScreensHierarchyTableComponent
                     renderRowPresence={renderRowPresence}
               onRowOpen={handleRowOpen}
+              rowHref={rowHref}
               screens={screens}
               routingMap={routingMap}
               collectionTemplates={collectionTemplates}
@@ -922,7 +977,7 @@ function Screens(props) {
       >
         <DialogTitle>{'Screen translations'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <TextField
             select

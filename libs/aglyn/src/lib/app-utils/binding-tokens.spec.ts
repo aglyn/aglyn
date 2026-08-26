@@ -25,7 +25,7 @@ import {
   normalizeBindingTokens,
   rewriteBindingTokensDeep,
   textReferencesBinding,
-} from './binding-tokens'
+  bindingTokenNeedsDeep,} from './binding-tokens'
 import { resolveBindings, type HostVariable } from './variables'
 
 const docs: Array<HostVariable & { id: string }> = [
@@ -236,5 +236,80 @@ describe('where-used matchers (AGL-187)', () => {
     expect(
       nodesReferenceBinding({ a: { props: { children: 'nope' } } }, ref),
     ).toEqual([])
+  })
+})
+
+/**
+ * Which lookups a value's tokens would need, WITHOUT reading them (AGL-703).
+ *
+ * The read-only twin of `rewriteBindingTokensDeep`, and it exists for cost:
+ * publish-time normalization fetched every variable and every function on the
+ * site before checking whether the version held a single token to rewrite.
+ *
+ * The `lastIndex` trap is the one worth a test of its own. The exported
+ * patterns carry the `g` flag, and a global regex's `.test()` ADVANCES its own
+ * `lastIndex` — so a walk that reused one shared object would match the first
+ * string and miss the second, in an order-dependent way that would look like
+ * a flake rather than a bug.
+ */
+describe('bindingTokenNeedsDeep (AGL-703)', () => {
+  it('needs nothing for text with no tokens', () => {
+    expect(bindingTokenNeedsDeep({ a: 'plain words' })).toEqual({
+      variables: false,
+      functions: false,
+    })
+  })
+
+  it('needs nothing for a token already in ID form', () => {
+    // `{{var:abc}}` is the rename-safe form nothing rewrites, and it cannot
+    // match NAME_TOKEN_PATTERN because a name may not contain `:`.
+    expect(bindingTokenNeedsDeep('Hi {{var:abc123}}')).toEqual({
+      variables: false,
+      functions: false,
+    })
+  })
+
+  it('separates the two lookups, because the two rewrites are separate', () => {
+    expect(bindingTokenNeedsDeep('{{customerName}}')).toEqual({
+      variables: true,
+      functions: false,
+    })
+    expect(bindingTokenNeedsDeep('{{fn:formatDate(now)}}')).toEqual({
+      variables: false,
+      functions: true,
+    })
+    expect(bindingTokenNeedsDeep('{{a}} and {{fn:b(c)}}')).toEqual({
+      variables: true,
+      functions: true,
+    })
+  })
+
+  it('walks arrays and nested objects', () => {
+    expect(
+      bindingTokenNeedsDeep({
+        nav: { items: [{ label: 'x' }, { label: '{{customerName}}' }] },
+      }),
+    ).toEqual({ variables: true, functions: false })
+  })
+
+  it('THE lastIndex GUARD: finds a token in the SECOND string too', () => {
+    // A shared global regex would consume its lastIndex on the first string
+    // and answer `false` for the second — the kind of miss that only shows up
+    // once a page grows a second token.
+    expect(
+      bindingTokenNeedsDeep(['{{alpha}}', '{{beta}}']),
+    ).toEqual({ variables: true, functions: false })
+    expect(
+      bindingTokenNeedsDeep(['{{fn:a(1)}}', '{{fn:b(2)}}']),
+    ).toEqual({ variables: false, functions: true })
+  })
+
+  it('is safe on values that are not walkable', () => {
+    for (const value of [undefined, null, 42, true]) {
+      expect(bindingTokenNeedsDeep(value)).toEqual({
+        variables: false,
+        functions: false,
+      })
+    }
   })
 })

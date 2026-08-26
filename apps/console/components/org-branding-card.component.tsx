@@ -25,6 +25,11 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material'
+import {
+  EMAIL_LOGO_HINT,
+  FAVICON_HINT,
+  SITE_LOGO_HINT,
+} from '../constants/media-size-hints'
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
@@ -230,21 +235,21 @@ export function OrgBrandingCard() {
             <>
               <MediaUrlField
                 label="Logo URL"
-                helperText="Console chrome + site badge. Browse the org media library or paste an https URL."
+                helperText={`Console chrome + site badge. Browse the org media library or paste an https URL. ${SITE_LOGO_HINT}`}
                 orgId={orgId}
                 value={draft.logoUrl}
                 onChange={set('logoUrl')}
               />
               <MediaUrlField
                 label="Favicon URL"
-                helperText="Browser tab icon for branded console surfaces."
+                helperText={`Browser tab icon for branded console surfaces. ${FAVICON_HINT}`}
                 orgId={orgId}
                 value={draft.faviconUrl}
                 onChange={set('faviconUrl')}
               />
               <MediaUrlField
                 label="Email logo URL"
-                helperText="Logo shown in transactional email headers (a hosted PNG works best)."
+                helperText={`Logo shown in transactional email headers. ${EMAIL_LOGO_HINT}`}
                 orgId={orgId}
                 value={draft.emailLogoUrl}
                 onChange={set('emailLogoUrl')}

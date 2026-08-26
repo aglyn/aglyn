@@ -40,11 +40,16 @@ import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Stack, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
 import HostActivityTable from '../../../../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import CardDisplayFormTemplate from '../../../../../../components/card-display-form-template'
+import CardDisplayFormTemplate, {
+  FormCardWrapper,
+} from '../../../../../../components/card-display-form-template'
+import { useFormApi } from '@aglyn/shared-ui-jsx-forms'
+import useTabParam from '../../../../../../hooks/use-tab-param'
+import { Grid } from '@mui/material'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
@@ -138,6 +143,101 @@ const basicSchema: FormSchema = {
   ],
 }
 
+/**
+ * Tracking (AGL-2486) — its own tab, and not part of SEO.
+ *
+ * Zach: *"GTAG code can be in its own card, it is not SEO it is tracking"*,
+ * then *"We also need the support for Google tag manager there too not just
+ * google analytics, maybe move GA and GTM to its own tracking tab."*
+ *
+ * He is right about the category. A measurement id is not a search-engine
+ * setting; it shares a tab with titles and structured data only because it was
+ * the first `analytics.*` field anyone added and the SEO form was the nearest
+ * form. Moving it changes no stored data — both fields are still `analytics.*`
+ * on the host document, and this tab saves through the same handler.
+ *
+ * BOTH IDS ARE FORMAT-VALIDATED HERE, not merely hinted. They land inside an
+ * inline script on the published site, so the tenant refuses anything that is
+ * not the exact shape (`GA_MEASUREMENT_ID_PATTERN`,
+ * `GTM_CONTAINER_ID_PATTERN`) — which without this would read as "I saved it
+ * and nothing happened". The console rejects it at the field instead, with the
+ * same two patterns rather than a second guess at them.
+ */
+const trackingSchema: FormSchema = {
+  id: 'hostTracking',
+  title: 'Tracking',
+  CardDisplayProps: {
+    /*
+      The consent statement belongs to the CARD, not to a field — it is true
+      of both ids and of anything either of them loads. As a `subheader`
+      rather than a `plain-text` field because `simpleComponentMapper` has no
+      such component; a schema is not the place to discover that.
+    */
+    subheader:
+      'Both of these load ONLY after a visitor’s consent state allows ' +
+      'analytics — set the posture under SEO → Cookie consent. Advertising ' +
+      'stays denied unless the visitor grants it, wherever they are.',
+    help: docsHelp('analytics', {
+      anchor: '#google-analytics',
+      excerpt:
+        'Send your site’s traffic to Google Analytics or a Tag Manager ' +
+        'container. Visitors are asked for consent first.',
+    }),
+  },
+  fields: [
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.gaMeasurementId',
+      label: 'Google Analytics measurement ID',
+      helperText:
+        'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site. Visitors ' +
+        'are asked for consent first.',
+      help: docsHelp('analytics', {
+        anchor: '#google-analytics',
+        excerpt:
+          'Track your site in Google Analytics alongside the built-in ' +
+          'pageview analytics.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          // `.source`, not the RegExp: the form stack's pattern validator
+          // takes the expression as a STRING and silently validates nothing
+          // when handed the object.
+          pattern: Aglyn.GA_MEASUREMENT_ID_PATTERN.source,
+          message: 'Looks like G-XXXXXXXXXX — that is the shape GA uses',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.gtmContainerId',
+      label: 'Google Tag Manager container ID',
+      helperText:
+        'Optional — e.g. GTM-XXXXXXX. A container is a LOADER: whatever ' +
+        'tags it carries load with it, so it waits for the same consent, and ' +
+        'advertising tags stay denied unless the visitor grants advertising.',
+      help: docsHelp('analytics', {
+        anchor: '#google-analytics',
+        excerpt:
+          'Load a Google Tag Manager container on your site. Consent Mode ' +
+          'signals are set before the container loads.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.GTM_CONTAINER_ID_PATTERN.source,
+          message: 'Looks like GTM-XXXXXXX — that is the shape GTM uses',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+  ],
+}
+
 const seoSchema: FormSchema = {
   id: 'hostSeo',
   title: 'SEO',
@@ -149,27 +249,6 @@ const seoSchema: FormSchema = {
     }),
   },
   fields: [
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'analytics.gaMeasurementId',
-      label: 'Google Analytics measurement ID',
-      helperText:
-        'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site. Visitors ' +
-        'are asked for consent first (see the Cookie consent card below).',
-      help: docsHelp('analytics', {
-        anchor: '#google-analytics',
-        excerpt:
-          'Track your site in Google Analytics alongside the built-in ' +
-          'pageview analytics.',
-      }),
-      type: 'text',
-      FormFieldGridProps: {
-        size: {
-          xs: 12,
-          sm: 6,
-        },
-      },
-    },
     {
       component: FieldComponentType.TEXT_FIELD,
       name: 'seo.title',
@@ -282,12 +361,16 @@ const seoSchema: FormSchema = {
         },
       ],
     },
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'seo.favicon',
-      label: 'Favicon',
-      type: 'text',
-    },
+    /*
+      NO raw favicon box here (AGL-2486). `seo.favicon` had two editors on
+      this one tab — this text field and the Favicon card below — and the
+      text one showed the stored value as what it literally is, a
+      `media:org:…` reference, which is not something anybody can read or
+      type. Zach: *"we also have two separate favicon fields."*
+
+      The card is the editor now, and it grew the URL box this field was
+      carrying, so an externally hosted icon is still reachable.
+    */
     {
       component: FieldComponentType.SUB_FORM,
       name: 'seo.entity',
@@ -317,24 +400,51 @@ const seoSchema: FormSchema = {
           name: 'seo.entity.name',
           label: 'Name',
         },
-        {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.logo',
-          label: 'Logo',
-          type: 'text',
-          // The field stays a URL box on purpose (AGL-2486): an externally
-          // hosted logo is legitimate schema.org output. What it lacked was
-          // any way to reach the library the image is usually already in —
-          // that is the Entity logo card below, exactly as the favicon has
-          // had one since AGL-134.
-          helperText:
-            'A full URL to the publisher’s logo — or pick one from your ' +
-            'media library in the Entity logo card below',
-        },
+        /*
+          Same as the favicon above (AGL-2486). This was a URL box whose own
+          helper text told the reader to go and use a different card — two
+          controls for `seo.entity.logo`, and the one in front of them had no
+          picker. The Entity logo card is the editor, and it takes a URL too,
+          so nothing an author could do here is gone.
+        */
       ],
     },
   ],
 }
+
+/**
+ * The SEO card's contents: the form's fields, then the media controls it owns.
+ *
+ * A separate component because it needs `useFormApi` — the `<form>` element's
+ * submit handler comes from the form context, and a template that rendered the
+ * fields without it would have a card whose Update button did nothing.
+ */
+function SeoFormBody(props: {
+  hostId: string
+  formFields: ReactNode
+  formProps: Record<string, unknown>
+}) {
+  const { hostId, formFields, formProps } = props
+  const { handleSubmit } = useFormApi()
+  return (
+    <>
+      <form onSubmit={handleSubmit} noValidate {...formProps}>
+        <Grid spacing={2} container>
+          {formFields}
+        </Grid>
+      </form>
+      {/*
+        Entity logo FIRST: the form ends with the Entity's Type and Name, and
+        the logo belongs with them. The favicon sitting between them is what
+        made the entity read as separated (AGL-2486).
+      */}
+      <EntityLogoCard hostId={hostId} embedded />
+      <FaviconCard hostId={hostId} embedded />
+      <SocialImageCard hostId={hostId} embedded />
+    </>
+  )
+}
+SeoFormBody.displayName = 'SeoFormBody'
 
 /** Theme tab id (AGL-114); `/setup?tab=theme` deep links land here. */
 const THEME_TAB_ID = 'theme'
@@ -345,21 +455,66 @@ const ACTIVITY_TAB_ID = 'activity'
 /** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
 const EMAILS_TAB_ID = 'emails'
 
+/**
+ * Every tab id this page renders, in nav order (AGL-2486).
+ *
+ * Built from the SAME values the tabs are rendered with — the schema ids and
+ * the four constants above — so there is no second spelling to fall out of
+ * date. The deep-link resolver reads this list and nothing else.
+ *
+ * It replaces a hand-maintained condition that was already wrong: the
+ * Tracking tab was added minutes before Zach followed
+ * `/setup?tab=hostTracking` and landed on Basic details, because the new id
+ * was not in it. `setup-tab-deep-links.spec.ts` derives the rendered tabs
+ * from this file and fails if the two disagree, so the next tab is either on
+ * this list or red — never silently unreachable.
+ */
+export const SETUP_TAB_IDS = [
+  basicSchema.id,
+  seoSchema.id,
+  trackingSchema.id,
+  THEME_TAB_ID,
+  DOMAIN_TAB_ID,
+  EMAILS_TAB_ID,
+  ACTIVITY_TAB_ID,
+] as const
+
 const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
 
   const searchParams = useSearchParams()
-  const requestedTab = searchParams?.get('tab')
-  const [tab, setTab] = useState(
-    requestedTab === THEME_TAB_ID ||
-      requestedTab === DOMAIN_TAB_ID ||
-      requestedTab === ACTIVITY_TAB_ID ||
-      requestedTab === EMAILS_TAB_ID ||
-      requestedTab === seoSchema.id
-      ? requestedTab
-      : basicSchema.id,
-  )
+  /*
+    Every tab this page has, DERIVED (AGL-2486).
+
+    This was a hand-maintained list of ids, and it was already wrong: the
+    Tracking tab was added minutes before Zach followed
+    `/setup?tab=hostTracking` and landed on Basic details, because the new id
+    was not on it. A list that has to be edited in a second place every time a
+    tab is added is a list that will be wrong again.
+
+    `SETUP_TAB_IDS` is module scope and `setup-tab-deep-links.spec.ts` derives
+    the rendered tabs from this file's source and fails if the two disagree —
+    so the next tab is either on the list or red, never silently unreachable.
+  */
+  const { tab, onTabChange } = useTabParam({
+    ids: SETUP_TAB_IDS,
+    fallback: basicSchema.id,
+    onChange: (value) => {
+      const form = forms.find(({ schema }) => schema.id === value)
+      // `analytics` is undefined whenever Firebase Analytics failed to
+      // initialize (ad blocker, blocked storage, missing measurement id) —
+      // `useAnalytics()` is typed as if it never is, and strictNullChecks is
+      // off. Unguarded this throws out of a tab-change handler on every
+      // switch, for a pageview.
+      if (analytics) {
+        logEvent(analytics, 'screen_view', {
+          firebase_screen: (form?.schema.title as string) ?? 'Theme',
+          firebase_screen_class: HostSetup.displayName,
+        })
+      }
+    },
+  })
   const analytics = useAnalytics()
   const { data: user } = useUser()
   const hostId = useHostId()
@@ -692,30 +847,47 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       initialValues: data,
       onSubmit: handleBasicSave,
     },
+    {
+      schema: trackingSchema,
+      initialValues: data,
+      onSubmit: handleBasicSave,
+    },
   ]
 
-  const onTabChange = useCallback(
-    async (e, value) => {
-      setTab(value)
-      // Mirror the active tab into `?tab=` (shallow replace, no scroll) so the
-      // section deep-links and survives back/forward — matching HubTabs.
-      const nextParams = new URLSearchParams(searchParams?.toString())
-      nextParams.set('tab', value)
-      router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false })
-      const form = forms.find(({ schema }) => schema.id === value)
-      // `analytics` is undefined whenever Firebase Analytics failed to
-      // initialize (ad blocker, blocked storage, missing measurement id) —
-      // `useAnalytics()` is typed as if it never is, and strictNullChecks is
-      // off. Unguarded this throws out of a tab-change handler on every
-      // switch, for a pageview.
-      if (analytics) {
-        logEvent(analytics, 'screen_view', {
-          firebase_screen: (form?.schema.title as string) ?? 'Theme',
-          firebase_screen_class: HostSetup.displayName,
-        })
-      }
-    },
-    [forms, analytics, router, pathname, searchParams],
+  /**
+   * The SEO card's own form template (AGL-2486).
+   *
+   * Same card the shared template draws — `FormCardWrapper` is what carries
+   * the Update button and the pristine/invalid states — with the three media
+   * controls rendered inside it, after the fields.
+   *
+   * ORDER IS THE POINT. Entity logo comes FIRST of the three, because the
+   * form's last fields are the Entity's Type and Name and the logo belongs
+   * with them; putting the favicon between them is what made the entity
+   * "look separated" in the first place.
+   *
+   * Memoised on `hostId`: a FormTemplate identity that changes every render
+   * remounts the whole form, which would blow away half-typed input on every
+   * keystroke.
+   */
+  const SeoFormTemplate = useMemo(
+    () =>
+      function SeoFormTemplateRender(templateProps: any) {
+        // `schema` is dropped rather than forwarded: `FormCardWrapper` reads
+        // it off the form context itself, and passing it as a prop would
+        // spread an unknown attribute onto the Card.
+        const { formFields, schema: _schema, ...rest } = templateProps
+        return (
+          <FormCardWrapper>
+            <SeoFormBody
+              hostId={hostId}
+              formFields={formFields}
+              formProps={rest}
+            />
+          </FormCardWrapper>
+        )
+      },
+    [hostId],
   )
 
   return (
@@ -796,7 +968,28 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         sx={{ padding: 'unset' }}
                       >
                         <FormRenderer
-                          FormTemplate={CardDisplayFormTemplate}
+                          /*
+                            The SEO tab renders its media controls INSIDE its
+                            own card (AGL-2486). Zach: *"You removed the field
+                            from entity you need to move the other fields too
+                            otherwise it looks separated"* and *"Social image
+                            could be moved up into the SEO part and not its
+                            own card."*
+
+                            They are `seo.*` fields and always were; they are
+                            separate components only because a media pick needs
+                            a picker dialog and because a CLEARED value has to
+                            reach Firestore as `''` rather than being dropped
+                            by the form stack (AGL-1191) — implementation
+                            reasons that had been showing through as
+                            free-floating cards between the fields they belong
+                            to.
+                          */
+                          FormTemplate={
+                            schema.id === 'hostSeo'
+                              ? SeoFormTemplate
+                              : CardDisplayFormTemplate
+                          }
                           componentMapper={simpleComponentMapper}
                           onSubmit={onSubmit}
                           schema={schema}
@@ -841,34 +1034,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         ) : null}
                         {schema.id === 'hostSeo' ? (
                           <>
-                            <div style={{ marginTop: 24 }}>
-                              <FaviconCard hostId={hostId} />
-                            </div>
-                            {/* The publisher's logo for JSON-LD (AGL-2486).
-                                A card for the same reason the favicon is
-                                one — it is a media pick, and a cleared
-                                value has to reach Firestore as `''` rather
-                                than being dropped by the form stack
-                                (AGL-1191). Beside the Entity fields it
-                                belongs to. */}
-                            <div style={{ marginTop: 24 }}>
-                              <EntityLogoCard hostId={hostId} />
-                            </div>
-                            {/* Site-wide default social card (AGL-1337). A
-                                card for the same reason the favicon is one:
-                                it is a media pick, and a cleared value has to
-                                reach Firestore as `''` rather than being
-                                dropped by the form stack (AGL-1191). */}
-                            <div style={{ marginTop: 24 }}>
-                              <SocialImageCard hostId={hostId} />
-                            </div>
-                            {/* Site-wide search indexing (AGL-1263). Its own
-                                card rather than a field in the SEO form
-                                above: the form saves on submit and refuses to
-                                until title and description validate, so a
-                                switch inside it could not be turned back OFF
-                                by someone whose SEO copy is mid-edit — the
-                                one direction that must never be blocked. */}
                             <div style={{ marginTop: 24 }}>
                               <SearchIndexingCard hostId={hostId} />
                             </div>

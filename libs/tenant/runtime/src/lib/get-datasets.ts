@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { orgDataQueryForHost } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -27,9 +28,9 @@ import {
  * datasets query PLUS a records subquery per dataset, on every render of
  * every path. Records are already mapped to plain values before return, so
  * the cached shape is byte-identical to what repeatable expansion consumed
- * before. 60s backstop; the publish path busts the tag.
+ * before. Backstop only; the publish path busts the tag — see PUBLISHED_SITE_DATA_TTL_SECONDS.
  */
-const DATASETS_TTL_SECONDS = 60
+const DATASETS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Fetches the host's datasets with their records for repeatable expansion

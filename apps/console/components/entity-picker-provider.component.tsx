@@ -19,11 +19,12 @@
 import {
   EntityPickerContext,
   type EntityOption,
+  type EntityPickerKind,
   effectiveDatasetModel,
   isHostCollectionKind,
 } from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
@@ -52,6 +53,35 @@ const toOptions = (
 export function EntityPickerProvider(props: EntityPickerProviderProps) {
   const { hostId, children } = props
   const firestore = useFirestore()
+  /**
+   * WHICH lists something on screen has actually asked for (AGL-703).
+   *
+   * All four listeners used to open the moment the besigner mounted — up to
+   * 300 products, 200 catalog collections, 200 categories and 200 datasets,
+   * every time, on a site with a real catalog. The attributes panel reads
+   * them, and only for a node whose schema declares that kind of picker, so
+   * the overwhelming majority of editing sessions paid for four collections
+   * they never looked at and held four listeners open on them.
+   *
+   * Same shape as the "Used by" scan (AGL-703): the surface that would show
+   * the answer is the ask. A picker appearing IS a user action — it takes
+   * selecting a node that has one — so nothing here waits for a click.
+   *
+   * A `Set` in state, added to idempotently: `request` is called from a
+   * render-driven effect, and re-setting state for a kind already present
+   * would loop.
+   */
+  const [requested, setRequested] = useState<ReadonlySet<EntityPickerKind>>(
+    () => new Set(),
+  )
+  const request = useCallback((kind: EntityPickerKind) => {
+    setRequested((previous) => {
+      if (previous.has(kind)) return previous
+      const next = new Set(previous)
+      next.add(kind)
+      return next
+    })
+  }, [])
   // Datasets are org-scoped (AGL-240). `dataScope` is null until the org
   // lookup settles (AGL-1061) and for any host without one, so the picker
   // shows an empty dataset list for a beat rather than listing a host path
@@ -59,34 +89,44 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
   // entire cost.
   const { scope: dataScope } = useOrgDataScope({ hostId })
   const { data: productDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'products'), limit(300)),
-    [firestore, hostId],
+    () =>
+      requested.has('products')
+        ? query(collection(firestore, 'hosts', hostId, 'products'), limit(300))
+        : null,
+    [firestore, hostId, requested],
     { idField: '$id' },
   )
   const { data: collectionDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'collections'), limit(200)),
-    [firestore, hostId],
+      requested.has('collections')
+        ? query(
+            collection(firestore, 'hosts', hostId, 'collections'),
+            limit(200),
+          )
+        : null,
+    [firestore, hostId, requested],
     { idField: '$id' },
   )
   const { data: categoryDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'productCategories'),
-        limit(200),
-      ),
-    [firestore, hostId],
+      requested.has('categories')
+        ? query(
+            collection(firestore, 'hosts', hostId, 'productCategories'),
+            limit(200),
+          )
+        : null,
+    [firestore, hostId, requested],
     { idField: '$id' },
   )
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
-      dataScope
+      dataScope && requested.has('datasets')
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
             limit(200),
           )
         : null,
-    [firestore, dataScope],
+    [firestore, dataScope, requested],
     { idField: '$id' },
   )
 
@@ -121,8 +161,9 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
             ]
           }),
       ),
+      request,
     }),
-    [productDocs, collectionDocs, categoryDocs, datasetDocs],
+    [productDocs, collectionDocs, categoryDocs, datasetDocs, request],
   )
 
   return (

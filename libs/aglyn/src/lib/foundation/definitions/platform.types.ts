@@ -238,6 +238,21 @@ export interface AglynHost extends AglynDocument {
    */
   analytics?: {
     gaMeasurementId?: string
+    /**
+     * Google Tag Manager container (AGL-2486), `GTM-XXXXXXX`.
+     *
+     * Declared here for the reason the `consent` comment below spells out at
+     * length: a field the console persists and the tenant reads, but that no
+     * type knows about, is how a whole-object write silently drops a sibling.
+     *
+     * Format-checked by `GTM_CONTAINER_ID_PATTERN` before it reaches an
+     * inline script, and consent-gated exactly as `gaMeasurementId` is — a
+     * container counts as a gated feature in `consentGatedCategories`, so a
+     * site running only a container still gets the banner. It has to: a
+     * container is the likeliest thing on a page to carry advertising tags,
+     * and advertising is opt-in worldwide.
+     */
+    gtmContainerId?: string
   }
   /**
    * Visitor consent tool (AGL-1498). The tool is ACTIVE when this is absent

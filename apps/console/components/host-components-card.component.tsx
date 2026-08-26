@@ -78,7 +78,7 @@ import ArtifactDeleteConfirmDescription, {
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useHostVersionApi,
@@ -88,13 +88,28 @@ import {
 import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
+import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from './templates/save-as-template-dialog.component'
 
+/** The count and cap a components readout renders (AGL-693). */
+export interface ComponentQuotaReadout {
+  ready: boolean
+  used: number
+  limit: number
+}
+
 export interface HostComponentsCardProps {
   hostId: string
+  /**
+   * Publishes the component count and cap so the PAGE can render the readout
+   * beside its create button — the same wire the templates card uses, and for
+   * the same reason: the card owns the listener the count comes from, so a
+   * page that counted separately would be a second source for one fact.
+   */
+  onQuota?: (readout: ComponentQuotaReadout) => void
 }
 
 /**
@@ -106,11 +121,12 @@ export interface HostComponentsCardProps {
  * with the marketplace component editor.
  */
 export function HostComponentsCard(props: HostComponentsCardProps) {
-  const { hostId } = props
+  const { hostId, onQuota } = props
   const firestore = useFirestore()
   const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const { org, ready: orgReady } = useCurrentOrg()
   const {
     data: componentDocs,
     status: componentsStatus,
@@ -136,6 +152,33 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     .sort((a: any, b: any) =>
       String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
     )
+
+  /**
+   * The readout the page header renders (AGL-693).
+   *
+   * Zach: *"Reusable components is also missing the usage cap notice in the
+   * header."* It was left out on the argument that `reusableComponents` is a
+   * BOOLEAN entitlement, so there is no denominator to print — which was the
+   * wrong conclusion from a true premise. The denominator is exactly what a
+   * boolean says: a plan that grants it caps nothing (`∞`, which is what
+   * layouts and screens already print on this plan), and a plan that does not
+   * grant it allows none.
+   *
+   * So `0/0 components on your plan` on Free is not a missing number, it is
+   * the number — and it is the one an operator on Starter needs to see BEFORE
+   * clicking a create button the resources route will refuse (AGL-473).
+   * `QuotaReadoutComponent` holds the `ready` rule that keeps a paying org
+   * from being shown a free tier's cap while the org doc is still loading.
+   */
+  const componentsEntitled =
+    orgReady && Aglyn.checkEntitlement(org as never, 'reusableComponents')
+  useEffect(() => {
+    onQuota?.({
+      ready: orgReady,
+      used: components.length,
+      limit: componentsEntitled ? Aglyn.UNLIMITED : 0,
+    })
+  }, [onQuota, orgReady, components.length, componentsEntitled])
 
   const [editor, setEditor] = useState<{
     id: string
@@ -569,7 +612,12 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
             }),
           )
         }
-        initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+        // Screens, layouts and templates all hand the table their load state;
+        // this one did not, so the four lists that render the SAME table
+        // disagreed about whether a fetch is worth mentioning — components
+        // showed an empty table until the rows arrived, which reads as "you
+        // have none" rather than "these are on their way" (AGL-693).
+        loading={componentsStatus === 'loading'}
       />
       <Dialog
         open={Boolean(editor)}
@@ -579,7 +627,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       >
         <DialogTitle>{'Edit component'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
           <TextField
             label="Name"
@@ -633,7 +681,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       >
         <DialogTitle>{'Publish to marketplace'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
           <Typography variant="body2" color="text.secondary">
             {'Publishes a snapshot as a public listing under your ' +

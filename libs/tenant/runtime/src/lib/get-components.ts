@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -26,9 +27,9 @@ import {
  * Part of the per-host compose bundle every page render pays (AGL-1302):
  * up to 200 docs per render before caching. Component publishes announce
  * themselves through the console revalidate route, which busts
- * `tenant-data:{hostId}`; 60s is the backstop for direct writes.
+ * `tenant-data:{hostId}`; The TTL is only the backstop for writes that never announce themselves — see PUBLISHED_SITE_DATA_TTL_SECONDS.
  */
-const COMPONENTS_TTL_SECONDS = 60
+const COMPONENTS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Fetches the host's reusable component definitions keyed by id, in the

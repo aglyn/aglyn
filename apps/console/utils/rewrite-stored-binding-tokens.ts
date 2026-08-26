@@ -64,4 +64,33 @@ export function rewriteStoredBindingTokens(
   }
 }
 
+/**
+ * Which binding lookups a version's stored `nodes` would actually need
+ * (AGL-703).
+ *
+ * The gate in front of {@link rewriteStoredBindingTokens}, and it exists for
+ * cost: publish-time normalization fetched EVERY variable and EVERY function
+ * on the site — two `limit(1000)` gets — before looking at whether the
+ * version being published contained a single token to rewrite. Almost none
+ * do. AGL-188 migrated the corpus and the picker has written id-form tokens
+ * ever since, so the common publish paid two collection reads to learn there
+ * was nothing to do.
+ *
+ * Storage-form aware for the same reason its sibling is (AGL-1397): a
+ * besigner-saved version's `nodes` is a `Bytes`, and a walk that did not
+ * decode would find no `{{` anywhere and report "nothing needed" for every
+ * screen and layout on the site — turning a cost fix into a silent
+ * regression of the normalization itself.
+ *
+ * Returns both flags false when there is nothing to decode, which is the
+ * same answer for the same reason: nothing to rewrite, so nothing to read.
+ */
+export function storedBindingTokenNeeds(
+  raw: unknown,
+): Aglyn.BindingTokenNeeds {
+  const nodes = Aglyn.decodeStoredNodes(raw)
+  if (!nodes) return { variables: false, functions: false }
+  return Aglyn.bindingTokenNeedsDeep(nodes)
+}
+
 export default rewriteStoredBindingTokens

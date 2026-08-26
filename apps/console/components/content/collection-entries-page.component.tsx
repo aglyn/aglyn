@@ -57,13 +57,14 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material'
 import { deleteDoc, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useHostResourceApi,
@@ -80,7 +81,19 @@ import RowActionsMenu, {
 } from '../row-actions-menu.component'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
-import { CONTENT_MAX_WIDTH, TABLE_HEAD_HEIGHT } from '../../constants/shared'
+import CreateArtifactDrawer from '../create-artifact-drawer.component'
+import { AVATAR_HINT } from '../../constants/media-size-hints'
+import {
+  collectionCreateBody,
+  collectionTemplateBodies,
+} from './collection-create-requests'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_HEAD_HEIGHT,
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_PAGE_SIZE_OPTIONS,
+  TABLE_ROWS_PER_PAGE_LABEL,
+} from '../../constants/shared'
 import useBranding from '../../hooks/use-branding'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import {
@@ -226,17 +239,108 @@ export function CollectionEntriesPage() {
   /* ── create / delete a collection ──────────────────────────────────── */
 
   const [newCollectionOpen, setNewCollectionOpen] = useState(false)
-  const [collectionName, setCollectionName] = useState('')
-  // The slug is the collection's public address and nothing enforced
-  // uniqueness (AGL-957): a second /blog made the first unreachable, silently.
-  const collectionSlugOwner = Aglyn.findCollectionSlugOwner(
-    slugify(collectionName),
-    'content',
-    collections,
+  /**
+   * Creating a collection is a DRAWER, like every other artifact (AGL-2498).
+   *
+   * Zach: *"The create content collection should be using the drawer approach
+   * just like the screens, layouts, components etc."* — and the rule the
+   * drawer itself states is older than that: *"creating is a drawer, picking
+   * is a dialog"* (AGL-699). This was the one create still in a modal.
+   *
+   * So the fields live in the drawer's schema and this component keeps only
+   * what the drawer cannot: the error to show, because uniqueness is a
+   * question about the OTHER collections and the server settles it in a
+   * transaction (AGL-978).
+   */
+  const [createError, setCreateError] = useState<unknown>(null)
+
+  /**
+   * The rest of what a collection IS, as drawer fields (AGL-2498).
+   *
+   * A collection is defined by four things — its name, the ADDRESS it serves,
+   * and the two screens that render its list and its entries. Three of them
+   * were settings-only, so every new collection was created and then
+   * immediately reopened to finish defining it.
+   *
+   * The address is the one that mattered: it is a live URL, it was silently
+   * derived from the name with no way to say otherwise, and changing it later
+   * moves every entry beneath it. Left blank it still derives from the name,
+   * so the common case is still one field.
+   *
+   * The template screens are OFFERED, not required. Both fall back to a
+   * built-in themed page, which is what lets a collection render on the day it
+   * is made, and the docs teach that order: create, write entries, then design
+   * the pages. An empty pair is the expected answer here, not a gap.
+   */
+  const collectionCreateFields = useMemo(
+    () => [
+      {
+        component: 'text-field',
+        name: 'slug',
+        // SLUG, the word every other address field in the console uses —
+        // screens create, screen detail, the besigner, entry detail, and this
+        // collection's own settings editor. It was the only "Address" among
+        // them, which makes the same concept read as two.
+        label: 'Slug',
+        type: 'text',
+        helperText:
+          'The path entries publish under, e.g. blog → /blog/{entry}. ' +
+          'Leave blank to use the name.',
+      },
+      {
+        component: 'select',
+        name: 'listScreenId',
+        label: 'List screen',
+        helperText: 'Lists every entry. Leave on the built-in themed list.',
+        options: [
+          { label: 'Built-in themed list', value: '' },
+          ...screenOptions.map((screen: any) => ({
+            label: String(screen.displayName ?? screen.$id),
+            value: String(screen.$id),
+          })),
+        ],
+      },
+      {
+        component: 'select',
+        name: 'entryScreenId',
+        label: 'Entry screen',
+        helperText:
+          'Renders one entry. Leave on the built-in themed article.',
+        options: [
+          { label: 'Built-in themed article', value: '' },
+          ...screenOptions.map((screen: any) => ({
+            label: String(screen.displayName ?? screen.$id),
+            value: String(screen.$id),
+          })),
+        ],
+      },
+    ],
+    [screenOptions],
   )
-  const handleCreateCollection = useCallback(async () => {
-    const displayName = collectionName.trim()
-    if (!displayName || collectionSlugOwner !== null) return
+
+  const handleCreateCollection = useCallback(
+    async (values: Record<string, any>) => {
+    const displayName = String(values?.displayName ?? '').trim()
+    /*
+      A blank address means "use the name", which is what it has always
+      silently done — said out loud now, and overridable, because the slug is
+      a LIVE URL and moving it later moves every entry beneath it.
+    */
+    const slug = slugify(String(values?.slug ?? '').trim() || displayName)
+    const listScreenId = String(values?.listScreenId ?? '')
+    const entryScreenId = String(values?.entryScreenId ?? '')
+    if (!displayName || !slug) return
+    setCreateError(null)
+    /*
+      The fast check, in front of the server's. Uniqueness is claimed in a
+      transaction server-side because two people can create /blog at the same
+      moment; this is only so the common mistake answers instantly.
+    */
+    if (Aglyn.findCollectionSlugOwner(slug, 'content', collections) !== null) {
+      return void setCreateError(
+        new Error(`Another collection already serves /${slug}`),
+      )
+    }
     // The slug is the collection's public address, so uniqueness is claimed in
     // a transaction server-side (AGL-978) — the check above is only the fast
     // feedback in this dialog. Rules deny a client create.
@@ -249,12 +353,9 @@ export function CollectionEntriesPage() {
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify({
-          hostId,
-          action: 'create',
-          kind: 'content',
-          data: { displayName, slug: slugify(displayName) },
-        }),
+        body: JSON.stringify(
+          collectionCreateBody({ hostId, displayName, slug }),
+        ),
       })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -262,18 +363,60 @@ export function CollectionEntriesPage() {
       }
       id = String(result.id)
     } catch (error: any) {
-      return void enqueueSnackbar(error?.message ?? 'Collection create failed', {
-        variant: 'error',
-      })
+      // Into the drawer, not a snackbar: the drawer is still open with the
+      // author's typing in it, and that is where the answer belongs.
+      return void setCreateError(error)
+    }
+    /*
+      The template pointers are a SECOND request, and deliberately so: the
+      route's `create` allowlist is `displayName` + `slug`, and the pointers
+      are written by its `templates` action, which exists because assigning a
+      screen to a collection is a different permission question from naming
+      one. Skipped entirely when both are the built-in default, which is the
+      common case.
+
+      After the create, never before: there is no document to point at yet.
+      Best-effort — a failed pointer leaves a collection that renders on the
+      built-in pages, which is a working collection, so it must not undo a
+      create that succeeded.
+    */
+    const templateBodies = collectionTemplateBodies({
+      hostId,
+      id,
+      displayName,
+      slug,
+      listScreenId,
+      entryScreenId,
+    })
+    if (templateBodies.length) {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        await Promise.all(
+          templateBodies.map((body) =>
+            fetch('/api/hosts/collections', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+              },
+              body: JSON.stringify(body),
+            }),
+          ),
+        )
+      } catch {
+        enqueueSnackbar(
+          'Collection created, but its template screens were not saved — set them in Collection settings.',
+          { variant: 'warning' },
+        )
+      }
     }
     setNewCollectionOpen(false)
-    setCollectionName('')
     // The new collection IS the page now, so the address says so (AGL-2498).
     //
     // Claimed FIRST: the listener has not delivered the new document yet, and
     // the scope's address rewrite treats a collection it cannot see as one that
     // no longer exists — without the claim this bounces straight back off.
-    const key = slugify(displayName)
+    const key = slug
     claimNavigation(key)
     router.push(collectionHref(key))
     enqueueSnackbar(`Collection "${displayName}" created`, {
@@ -285,9 +428,9 @@ export function CollectionEntriesPage() {
       id,
       name: displayName,
     })
-  }, [
-    collectionName,
-    collectionSlugOwner,
+    },
+  [
+    collections,
     user,
     hostId,
     enqueueSnackbar,
@@ -409,6 +552,44 @@ export function CollectionEntriesPage() {
    * Admin-only like the site delete — removing a collection removes the
    * /{slug} routes the site publishes, which is not a content edit.
    */
+  /**
+   * Entry pagination (AGL-693).
+   *
+   * The listener already caps at 200 entries — this is about the READING, not
+   * the query: a collection with a hundred posts rendered as one uninterrupted
+   * table, so the collection settings above it and the Authors tab beside it
+   * were a scroll away from anything. Every other artifact list pages, and
+   * this is the list with the most rows on it.
+   *
+   * Starts at `TABLE_PAGE_SIZE_DEFAULT` — the smallest option the console
+   * offers, by the rule that every paginated list defaults to its minimum.
+   */
+  const [entryPage, setEntryPage] = useState(0)
+  const [entriesPerPage, setEntriesPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const pagedEntries = useMemo(
+    () =>
+      entries.slice(
+        entryPage * entriesPerPage,
+        entryPage * entriesPerPage + entriesPerPage,
+      ),
+    [entries, entryPage, entriesPerPage],
+  )
+  /*
+    Deleting the last entry on the last page, or switching to a shorter
+    collection, would otherwise strand the reader past the end — an empty
+    table with no control that says so. Clamp rather than reset: staying on
+    page 3 of 4 is right; jumping home on every delete is not.
+  */
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(entries.length / entriesPerPage) - 1)
+    if (entryPage > lastPage) setEntryPage(lastPage)
+  }, [entryPage, entries.length, entriesPerPage])
+  // A different collection is a different list; page 3 of the last one means
+  // nothing here.
+  useEffect(() => {
+    setEntryPage(0)
+  }, [selected?.$id])
+
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -1242,7 +1423,7 @@ export function CollectionEntriesPage() {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {entries.map((entry) => {
+                              {pagedEntries.map((entry) => {
                                 const published = entry.status === 'published'
                                 /*
                                   Five equal text links (EDIT · UNPUBLISH ·
@@ -1454,6 +1635,25 @@ export function CollectionEntriesPage() {
                             </TableBody>
                           </Table>
                         )}
+                        {entries.length > 0 ? (
+                          <TablePagination
+                            component="div"
+                            count={entries.length}
+                            page={entryPage}
+                            onPageChange={(_event, next) =>
+                              setEntryPage(next)
+                            }
+                            rowsPerPage={entriesPerPage}
+                            onRowsPerPageChange={(event) => {
+                              setEntriesPerPage(
+                                parseInt(event.target.value, 10),
+                              )
+                              setEntryPage(0)
+                            }}
+                            rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
+                            labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
+                          />
+                        ) : null}
                       </Stack>
                     )}
                   </CardDisplay>
@@ -1633,44 +1833,27 @@ export function CollectionEntriesPage() {
           />
         </Container>
       </DashboardLayout>
-      <Dialog
+      {/*
+        CREATING IS A DRAWER (AGL-699/AGL-2498). Screens, layouts, components
+        and templates all create through `CreateArtifactDrawer`; this was the
+        last modal, and it asked for a name where the others ask for a name and
+        the things that define the artifact.
+
+        No Description: the collections route's content allowlist is
+        `displayName` + `slug`, so one typed here would be dropped in silence.
+      */}
+      <CreateArtifactDrawer
         open={newCollectionOpen}
-        onClose={() => setNewCollectionOpen(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{'New collection'}</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Name"
-            value={collectionName}
-            onChange={(event) => setCollectionName(event.target.value)}
-            size="small"
-            fullWidth
-            autoFocus
-            error={collectionSlugOwner !== null}
-            helperText={
-              collectionSlugOwner !== null
-                ? `Another collection already serves /${slugify(collectionName)}`
-                : collectionName.trim()
-                  ? `Served at /${slugify(collectionName)}`
-                  : 'e.g. Blog, News, Projects'
-            }
-            sx={{ mt: 1 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewCollectionOpen(false)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!collectionName.trim() || collectionSlugOwner !== null}
-            onClick={handleCreateCollection}
-          >
-            {'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onClose={() => {
+          setNewCollectionOpen(false)
+          setCreateError(null)
+        }}
+        title="New collection"
+        onSubmit={handleCreateCollection}
+        error={createError}
+        includeDescription={false}
+        extraFields={collectionCreateFields}
+      />
       {/* Delete collection (AGL-1324). Type-the-name confirmation, matching the
           site delete. Refuses while a template screen still renders it or
           entries still live under it — naming which — because deleting a
@@ -1734,7 +1917,7 @@ export function CollectionEntriesPage() {
           {authorEditor?.id ? 'Edit author' : 'New author'}
         </DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
           <TextField
             select
@@ -1800,7 +1983,7 @@ export function CollectionEntriesPage() {
               }
               helperText={
                 'Pick from the media library, or paste a URL — an external ' +
-                'avatar is a legitimate answer.'
+                `avatar is a legitimate answer. ${AVATAR_HINT}`
               }
             />
             <Button

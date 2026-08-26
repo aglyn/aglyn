@@ -23,6 +23,9 @@ import {
 } from '@aglyn/aglyn'
 import { hostDisplayDomain } from '../../constants/tenant-links'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+// Subpath, not the barrel: the empty state is console-only and the barrel
+// rule in `shared-ui-jsx/src/index.ts` is enforced in CI.
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useDebounce } from '@aglyn/shared-util-vendor'
 import AddIcon from '@mui/icons-material/Add'
@@ -588,6 +591,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const [typeFilter, setTypeFilter] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [sizeFilter, setSizeFilter] = useState('')
+
+  /**
+   * Whether a FILTER is hiding things, as opposed to the library being empty
+   * (AGL-693).
+   *
+   * `currentFolder` is deliberately not one. Opening an empty folder is not a
+   * filter that matched nothing — it is a folder with nothing in it, and the
+   * right answer there is the upload button, not "clear your filters".
+   */
+  const filtersActive = Boolean(
+    search || tagFilter || typeFilter || dateFilter || sizeFilter,
+  )
+  const clearFilters = useCallback(() => {
+    setSearch('')
+    setTagFilter('')
+    setTypeFilter('')
+    setDateFilter('')
+    setSizeFilter('')
+  }, [])
 
   // Query construction (AGL-174). Query-side: folder scoping, single-tag
   // array-contains, type facet, date range, and sort. Two deliberate
@@ -3527,11 +3549,58 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             : 'Your media could not be loaded. Nothing has been deleted — try again in a moment.'}
         </Alert>
       ) : visibleFolders.length === 0 && visibleItems.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          {loadingMedia
-            ? 'Loading media…'
-            : 'No media here — upload images, video, PDFs and documents to use on your site.'}
-        </Typography>
+        /*
+          The same empty state every other list in the console draws (AGL-693).
+
+          This was one line of grey body text where screens, layouts,
+          components and templates all show an illustration, a sentence and
+          the button that fills the space. Zach: *"We also need a better empty
+          view on the DAM like we have everywhere else."*
+
+          Three DIFFERENT empty states, kept apart, because "nothing here"
+          means three different things and only one of them is worth an
+          upload button:
+
+          - still loading — nothing is known yet, so nothing is claimed;
+          - a filter matched nothing — the library is not empty, the QUERY is,
+            and offering "upload" answers a question nobody asked;
+          - genuinely empty — the onboarding moment.
+        */
+        <EmptyStateComponent
+          label={
+            loadingMedia
+              ? 'Loading media…'
+              : filtersActive
+                ? 'No media matches these filters'
+                : 'No media here yet'
+          }
+          description={
+            loadingMedia
+              ? undefined
+              : filtersActive
+                ? 'Try a different search, folder, or type — or clear the ' +
+                  'filters to see everything in this library.'
+                : 'Upload images, video, PDFs and documents to use on your ' +
+                  'site. Drop them here or use Upload media above.'
+          }
+          // Nothing is offered while the read is still in flight: an upload
+          // button under "Loading media…" invites a second library.
+          action={
+            loadingMedia ? null : filtersActive ? (
+              <Button size="small" onClick={clearFilters}>
+                {'Clear filters'}
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => inputRef.current?.click()}
+              >
+                {'Upload media'}
+              </Button>
+            )
+          }
+        />
       ) : (
         /**
          * An INTRINSIC grid, not a twelve-column split (AGL-2486).

@@ -43,7 +43,9 @@
 
 import { Bytes } from 'firebase/firestore'
 import { compress, decompress } from '@aglyn/aglyn'
-import rewriteStoredBindingTokens from '../utils/rewrite-stored-binding-tokens'
+import rewriteStoredBindingTokens, {
+  storedBindingTokenNeeds,
+} from '../utils/rewrite-stored-binding-tokens'
 
 /** A legacy-token page, exactly as the besigner would have authored it. */
 const NODES = {
@@ -136,5 +138,101 @@ describe('publish-time token normalization over stored nodes', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+/**
+ * What the publish is allowed to READ before it knows there is anything to
+ * rewrite (AGL-703).
+ *
+ * Zach: *"Do another sweep for things like the 53 reads."* This block fetched
+ * EVERY variable and EVERY function on the site — two `limit(1000)` gets —
+ * and only then looked at the version. Almost no version needs either: AGL-188
+ * migrated the corpus and the picker has written id-form tokens ever since, so
+ * the common publish paid up to 2000 document reads to learn there was nothing
+ * to do.
+ *
+ * The storage-form trap is the same one the block above exists for, and it is
+ * sharper here: a needs-check that did not decode would find no `{{` in a
+ * `Bytes` and answer "nothing needed" for every besigner-saved screen and
+ * layout on the site — turning a cost fix into a silent regression of the
+ * normalization itself.
+ */
+describe('what a publish reads before it rewrites (AGL-703)', () => {
+  it('needs NOTHING for a page with no tokens', () => {
+    expect(
+      storedBindingTokenNeeds({
+        n1: { props: { children: 'Plain words' } },
+      }),
+    ).toEqual({ variables: false, functions: false })
+  })
+
+  it('needs nothing when every token is ALREADY the id form', () => {
+    // What anything authored through the picker looks like — and the case
+    // that makes this worth doing, because it is the common one.
+    expect(
+      storedBindingTokenNeeds({
+        n1: { props: { children: 'Hi {{var:abc123}}' } },
+      }),
+    ).toEqual({ variables: false, functions: false })
+  })
+
+  it('needs VARIABLES only, for a legacy name token', () => {
+    // `normalizeBindingTokens` resolves `{{name}}` against variables and
+    // nothing else, so the functions collection is not worth a read.
+    expect(
+      storedBindingTokenNeeds({
+        n1: { props: { children: 'Welcome back, {{customerName}}' } },
+      }),
+    ).toEqual({ variables: true, functions: false })
+  })
+
+  it('needs FUNCTIONS only, for a function token', () => {
+    expect(
+      storedBindingTokenNeeds({
+        n1: { props: { children: '{{fn:formatDate(now)}}' } },
+      }),
+    ).toEqual({ variables: false, functions: true })
+  })
+
+  it('DECODES first — a Bytes page still reports what it needs', () => {
+    // The whole normalization is worthless if this answers "nothing" for the
+    // storage form the besigner actually writes.
+    const stored = Bytes.fromUint8Array(compress(NODES))
+    expect(storedBindingTokenNeeds(stored)).toEqual({
+      variables: true,
+      functions: false,
+    })
+  })
+
+  it('finds a token nested in an item ARRAY, not just at a prop root', () => {
+    expect(
+      storedBindingTokenNeeds({
+        nav: { props: { items: [{ label: 'Hi {{customerName}}' }] } },
+      }),
+    ).toEqual({ variables: true, functions: false })
+  })
+
+  it('needs nothing it cannot decode, and nothing that is absent', () => {
+    // Same answer as "no tokens", and for the same reason: there is nothing
+    // to rewrite, so there is nothing worth reading. The rewrite itself
+    // already refuses to write back over an undecodable blob.
+    expect(storedBindingTokenNeeds(undefined)).toEqual({
+      variables: false,
+      functions: false,
+    })
+    expect(storedBindingTokenNeeds(Bytes.fromUint8Array(new Uint8Array([1, 2, 3])))).toEqual({
+      variables: false,
+      functions: false,
+    })
+  })
+
+  it('THE CONTROL: a page that needs a lookup still rewrites with it', () => {
+    // Guard the guard. If the needs-check went permanently false, every
+    // assertion above would pass while normalization never ran again.
+    const needs = storedBindingTokenNeeds(NODES)
+    expect(needs.variables).toBe(true)
+    const rewrite = rewriteStoredBindingTokens(NODES, VARIABLES, {})
+    expect(rewrite?.changed).toBe(true)
   })
 })

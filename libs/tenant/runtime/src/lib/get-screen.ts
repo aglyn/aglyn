@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, screenConverter } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -28,7 +29,7 @@ import {
  * tenant `/api/revalidate` route, so publishes stay as instant as AGL-1150
  * made them. 60s matches the page's own ISR window for everything else.
  */
-const SCREEN_DOC_TTL_SECONDS = 60
+const SCREEN_DOC_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 async function readScreenDoc(
   hostId: string,

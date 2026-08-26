@@ -333,7 +333,7 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
       {docsAnswer ? (
         <>
           <DialogContent
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             <Typography variant="body2" color="text.secondary">
               {'Straight from the documentation — we have not filed anything ' +
@@ -382,7 +382,7 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
       ) : (
         <>
           <DialogContent
-            sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             <Alert severity="info" sx={{ '& .MuiAlert-message': { width: '100%' } }}>
               <AlertTitle sx={{ fontWeight: 600 }}>

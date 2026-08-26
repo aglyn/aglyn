@@ -559,7 +559,14 @@ function buildJsonLd(props: Props): string[] {
         ...(publisher && {
           publisher: {
             ...publisher,
-            ...(host?.seo?.entity?.logo && { logo: host.seo.entity.logo }),
+            // `logo` for an Organization, `image` for a Person — schema.org
+            // gives `logo` only to the first (AGL-2486). This spread wrote
+            // `logo` either way, so a Person publisher emitted a property its
+            // own `@type` does not define and every consumer ignored it.
+            ...Aglyn.hostSeoEntityImageJsonLd(host?.seo?.entity, {
+              origin: canonicalBase,
+              hostId: host?.$id,
+            }),
           },
         }),
         // Google wants an article to say which page it IS — without these it
@@ -692,7 +699,10 @@ function buildJsonLd(props: Props): string[] {
         ...(host?.seo?.entity?.name && {
           publisher: {
             ...publisher,
-            ...(host.seo.entity.logo && { logo: host.seo.entity.logo }),
+            ...Aglyn.hostSeoEntityImageJsonLd(host.seo.entity, {
+              origin: canonicalBase,
+              hostId: host?.$id,
+            }),
           },
         }),
       }),

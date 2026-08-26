@@ -27,7 +27,7 @@ import {
   ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_MODIFY_DRAG,
 } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   DndContext,
   DragOverlay,
@@ -63,7 +63,12 @@ import { Fragment, useCallback, useMemo, useState, type ReactNode,
 } from 'react'
 import { collectionTemplateRoutesSummary } from '../constants/collection-templates'
 import type { UseCollectionTemplatesResult } from '../hooks/use-collection-templates'
-import { TABLE_HEAD_HEIGHT } from '../constants/shared'
+import {
+  TABLE_HEAD_HEIGHT,
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_PAGE_SIZE_OPTIONS,
+  TABLE_ROWS_PER_PAGE_LABEL,
+} from '../constants/shared'
 
 export interface ScreenHierarchyRow {
   $id: ScreenUid
@@ -109,6 +114,18 @@ export interface ScreensHierarchyTableProps {
   renderRowPresence?: (row: ScreenHierarchyRow) => ReactNode
   /** Row click target — the whole row opens the screen's detail page. */
   onRowOpen?: (row: ScreenHierarchyRow) => void
+  /**
+   * The detail-page address for a row, so the NAME is a real link (AGL-693).
+   *
+   * The row already opens on click, and that is not the same affordance: a
+   * link is what you can middle-click into a new tab, copy the address of,
+   * or reach with a keyboard on its own. Every other artifact list has had
+   * one on its name column since AGL-695 and this table was the exception.
+   *
+   * Returning `null` renders plain text — an unpublished screen has no
+   * version to deep-link to, and a link that goes nowhere is worse than none.
+   */
+  rowHref?: (row: ScreenHierarchyRow) => string | null
   /** Onboarding CTA rendered inside the empty state (AGL-125). */
   emptyAction?: ReactNode
   /**
@@ -228,6 +245,7 @@ function ScreenTableRow(props: {
   renderRowActions: ScreensHierarchyTableProps['renderRowActions']
   renderRowLeadingActions: ScreensHierarchyTableProps['renderRowLeadingActions']
   renderRowPresence: ScreensHierarchyTableProps['renderRowPresence']
+  rowHref: ScreensHierarchyTableProps['rowHref']
   anyExpandable: boolean
   onRowOpen: ScreensHierarchyTableProps['onRowOpen']
   routingMap?: Record<ScreenUid, string>
@@ -241,12 +259,14 @@ function ScreenTableRow(props: {
     renderRowActions,
     renderRowLeadingActions,
     renderRowPresence,
+    rowHref,
     onRowOpen,
     anyExpandable,
     routingMap,
     collectionTemplates,
   } = props
   const { row, depth, hasChildren } = entry
+  const href = rowHref?.(row) ?? null
   const { isOver, setNodeRef: setDropRef } = useDroppable({
     id: `drop:nest:${row.$id}`,
     disabled: nestDisabled,
@@ -339,7 +359,15 @@ function ScreenTableRow(props: {
       </TableCell>
       <TableCell>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
-          <Typography variant="body2">{row.displayName || '--'}</Typography>
+          {href ? (
+            // The row's own click handler would fire too and push the same
+            // route twice — one history entry per back press.
+            <AppLink href={href} onClick={(event) => event.stopPropagation()}>
+              {row.displayName || row.$id}
+            </AppLink>
+          ) : (
+            <Typography variant="body2">{row.displayName || '--'}</Typography>
+          )}
           {renderRowPresence?.(row)}
         </Stack>
       </TableCell>
@@ -400,11 +428,27 @@ export function ScreensHierarchyTableComponent(
     renderRowActions,
     renderRowLeadingActions,
     renderRowPresence,
+    rowHref,
     onRowOpen,
     emptyAction,
     collectionTemplates,
   } = props
-  const [collapsedIds, setCollapsedIds] = useState<Set<ScreenUid>>(new Set())
+  /**
+   * EXPANDED ids, not collapsed ones — the set starts empty, so every parent
+   * starts closed (Zach 2026-08-25).
+   *
+   * Tracking the collapsed set meant "empty" was "everything open", so a site
+   * whose screens nest deeply rendered its whole tree on arrival and the
+   * footer's "1-10 of 22 top-level" described a fraction of what was on
+   * screen. Inverting it makes the default the cheap one and makes the count
+   * honest: ten roots on the page is ten rows until a reader asks for more.
+   *
+   * NOTE this bounds what is RENDERED, not what is read. The page still
+   * fetches the whole collection in one query (`limit(200)` in screens/page),
+   * so the children were already on the client either way — closing them by
+   * default costs no extra fetch when a reader opens one.
+   */
+  const [expandedIds, setExpandedIds] = useState<Set<ScreenUid>>(new Set())
   const [activeId, setActiveId] = useState<ScreenUid | undefined>(undefined)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -446,14 +490,14 @@ export function ScreensHierarchyTableComponent(
       for (const child of children) {
         const hasChildren = Boolean(childrenByParent.get(child.$id)?.length)
         rows.push({ row: child, depth, hasChildren })
-        if (hasChildren && !collapsedIds.has(child.$id)) {
+        if (hasChildren && expandedIds.has(child.$id)) {
           walk(child.$id, depth + 1)
         }
       }
     }
     walk(undefined, 0)
     return rows
-  }, [screens, screensById, collapsedIds])
+  }, [screens, screensById, expandedIds])
 
   /**
    * Pagination that pages ROOTS, never rows (AGL-693).
@@ -470,12 +514,17 @@ export function ScreensHierarchyTableComponent(
    * something on this page anyway: "25 sections", not "25 rows of tree".
    *
    * ⚠️ Drag-to-reorder cannot cross a page boundary — dnd-kit only knows about
-   * mounted rows. That is a real limit and the reason the default is generous
-   * (25) rather than the grid's 5: on a host whose whole tree fits on one page
-   * nothing changes at all, which is the common case.
+   * mounted rows, so a screen cannot be dragged onto a page it is not on.
+   *
+   * The default used to be 25 to keep that limit out of reach on a typical
+   * site. It is `TABLE_PAGE_SIZE_DEFAULT` now, which is the smallest option
+   * the console offers — every list defaults to its minimum, by Zach's rule —
+   * so a site with more than ten top-level screens meets the limit sooner.
+   * Reordering across pages means raising rows-per-page first, or moving the
+   * screen by re-parenting it rather than dragging.
    */
   const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(25)
+  const [rowsPerPage, setRowsPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const rootCount = useMemo(
     () => visibleRows.filter((entry) => entry.depth === 0).length,
     [visibleRows],
@@ -510,7 +559,7 @@ export function ScreensHierarchyTableComponent(
   }, [page, rootCount, rowsPerPage])
 
   const handleToggleCollapse = useCallback((id: ScreenUid) => {
-    setCollapsedIds((previous) => {
+    setExpandedIds((previous) => {
       const next = new Set(previous)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -638,12 +687,13 @@ export function ScreensHierarchyTableComponent(
                   />
                   <ScreenTableRow
                     entry={entry}
-                    collapsed={collapsedIds.has(row.$id)}
+                    collapsed={!expandedIds.has(row.$id)}
                     nestDisabled={nestDisabled}
                     onToggleCollapse={handleToggleCollapse}
                     renderRowActions={renderRowActions}
                     renderRowLeadingActions={renderRowLeadingActions}
                     renderRowPresence={renderRowPresence}
+                    rowHref={rowHref}
                     onRowOpen={onRowOpen}
                     anyExpandable={anyExpandable}
                     routingMap={routingMap}
@@ -656,8 +706,14 @@ export function ScreensHierarchyTableComponent(
           </TableBody>
         </Table>
       </TableContainer>
-      {/* Counted in TOP-LEVEL screens, and labelled so — the number would be a
-          lie about rows, which is not what a page holds here. */}
+      {/*
+        The console's shared footer, with the tree's one honest difference in
+        the COUNT rather than the label (AGL-693): a page holds top-level
+        screens and each one's subtree travels with it, so "22 of 22" is
+        counted in top-level screens and says so. Labelling the size menu
+        differently from every other list made the same control read as a
+        different one.
+      */}
       <TablePagination
         component="div"
         count={rootCount}
@@ -668,8 +724,11 @@ export function ScreensHierarchyTableComponent(
           setRowsPerPage(Number(event.target.value))
           setPage(0)
         }}
-        rowsPerPageOptions={[10, 25, 50]}
-        labelRowsPerPage="Top-level screens per page:"
+        rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
+        labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
+        labelDisplayedRows={({ from, to, count }) =>
+          `${from}–${to} of ${count} top-level`
+        }
       />
       <DragOverlay dropAnimation={null}>
         {activeRow && (

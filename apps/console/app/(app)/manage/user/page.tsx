@@ -71,6 +71,8 @@ import {
 } from 'firebase/auth'
 import { deleteField, doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import useTabParam from '../../../../hooks/use-tab-param'
+import { AVATAR_HINT } from '../../../../constants/media-size-hints'
 import {
   useAnalytics,
   useAuth,
@@ -184,7 +186,6 @@ function GoogleGlyph({ size = 18 }: { size?: number }) {
 }
 
 const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
-  const [tab, setTab] = useState('account')
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { currentOrg } = useOrgScope()
@@ -808,7 +809,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         ) : null}
         <MediaUrlField
           label="Image URL"
-          helperText="Browse the org media library to upload or pick an image, or paste an https URL"
+          helperText={`Browse the org media library to upload or pick an image, or paste an https URL. ${AVATAR_HINT}`}
           orgId={currentOrg?.$id ?? null}
           value={photoUrl}
           onChange={setPhotoUrl}
@@ -941,17 +942,21 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
    * is deliberately not a dependency — this applies the link once, and must
    * not fight the user's own clicks afterwards.
    */
-  useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get('tab')
-    if (requested && sections.some((section) => section.id === requested)) {
-      setTab(requested)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const onTabChange = useCallback(
-    async (_event: unknown, value: string) => {
-      setTab(value)
+  /**
+   * `?tab=` ↔ the selected section, through the shared resolver (AGL-2486).
+   *
+   * Declared HERE, below `sections`, so it validates against the tabs this
+   * account actually HAS: Security is absent for an SSO-governed account with
+   * no password, and selecting a panel that is not rendered leaves an empty
+   * page with no tab highlighted. The hook falls back rather than doing that.
+   *
+   * It also writes the param on a click now, which it did not before — so a
+   * section deep-links and survives back/forward, the way Setup and Admin
+   * already did.
+   */
+  const { tab, onTabChange } = useTabParam({
+    ids: sections.map((section) => section.id),
+    onChange: (value) => {
       const section = sections.find((entry) => entry.id === value)
       // Undefined whenever Firebase Analytics failed to initialize — see the
       // matching guard in the host setup page. A pageview must never throw
@@ -963,8 +968,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         })
       }
     },
-    [sections, analytics],
-  )
+  })
 
   return (
     <DashboardLayout

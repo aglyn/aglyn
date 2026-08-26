@@ -264,7 +264,7 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
       >
         <DialogTitle>{'New support ticket'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <TextField
             label="Subject"
@@ -325,7 +325,7 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
       >
         <DialogTitle>{thread?.ticket?.subject}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           {/*
             A ticket is a two-party conversation, so naming yourself on your

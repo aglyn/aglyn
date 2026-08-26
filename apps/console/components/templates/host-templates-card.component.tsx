@@ -803,7 +803,6 @@ export function HostTemplatesCard({
           )
         }
         loading={status === 'loading'}
-        initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
       />
       <UseTemplateDialog
         hostId={hostId}

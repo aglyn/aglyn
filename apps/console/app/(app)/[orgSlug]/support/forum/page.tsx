@@ -231,7 +231,7 @@ const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
       >
         <DialogTitle>{'Start a thread'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <TextField
             label="Title"
@@ -309,7 +309,7 @@ const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
       >
         <DialogTitle>{thread?.thread?.title}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           {/*
             The opening post and its replies are the same object, so they

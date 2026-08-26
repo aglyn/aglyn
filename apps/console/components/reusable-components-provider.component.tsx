@@ -349,7 +349,7 @@ export function ReusableComponentsProvider(
       >
         <DialogTitle>{'Save as reusable component'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
           <TextField
             label="Name"

@@ -73,7 +73,6 @@
   "libs/plugins/mui/src/lib/components/video.tsx": 2,
   "libs/shared/ui/color-picker/src/lib/color-swatch.tsx": 1,
   "libs/shared/ui/jsx-forms/src/lib/mapper/css-gradient.tsx": 1,
-  "libs/shared/ui/jsx/src/lib/components/data-table.component.tsx": 10,
   "libs/shared/ui/jsx/src/lib/components/status-screen-plain.component.tsx": 6,
   "libs/shared/ui/snackstack/src/lib/SnackbarItem/SnackbarItem.tsx": 8,
   "libs/shared/util/email/src/lib/email-render.ts": 6,

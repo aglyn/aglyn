@@ -54,6 +54,7 @@ import {
   reason these two were left out of the AGL-2319 sweep instead of swept wrong.
 */
 import { PLATFORM_BRAND_LEGAL_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { LISTING_LOGO_HINT } from '../constants/media-size-hints'
 import { useRouter } from 'next/navigation'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
@@ -543,6 +544,10 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           />
           {/* Logo (AGL-1009): picked from the media library like every
               other image the console chooses — never a pasted URL. */}
+          {/* What to bring, said before the upload (AGL-2486). */}
+          <Typography variant="caption" color="text.secondary" component="div">
+            {LISTING_LOGO_HINT}
+          </Typography>
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
             <Avatar
               src={avatarUrl || undefined}

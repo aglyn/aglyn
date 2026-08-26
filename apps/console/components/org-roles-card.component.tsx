@@ -185,7 +185,7 @@ export function OrgRolesCard() {
       >
         <DialogTitle>{editor?.$id ? 'Edit role' : 'New role'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <TextField
             size="small"

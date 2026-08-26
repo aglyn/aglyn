@@ -57,6 +57,11 @@ import {
   Typography,
   TablePagination,
 } from '@mui/material'
+import {
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_PAGE_SIZE_OPTIONS,
+  TABLE_ROWS_PER_PAGE_LABEL,
+} from '../constants/shared'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
@@ -160,7 +165,7 @@ export function OrgMembersCard() {
    * questions on one card.
    */
   const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [rowsPerPage, setRowsPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const pagedMembers = useMemo(
     () =>
       members.length <= rowsPerPage
@@ -719,7 +724,8 @@ export function OrgMembersCard() {
             setRowsPerPage(Number(event.target.value))
             setPage(0)
           }}
-          rowsPerPageOptions={[10, 25, 50]}
+          rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
+          labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
         />
         {canManage && invites.length > 0 ? (
           <Stack spacing={1}>
@@ -807,7 +813,7 @@ export function OrgMembersCard() {
       >
         <DialogTitle>{`Site access — ${accessDraft?.label ?? ''}`}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
         >
           <FormControlLabel
             control={

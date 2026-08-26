@@ -345,7 +345,7 @@ export function OrgApiKeysCard() {
       {/* Create dialog */}
       <Dialog open={Boolean(draft)} onClose={() => setDraft(null)} maxWidth="sm" fullWidth>
         <DialogTitle>{'Create API key'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <TextField
             size="small"
             label="Name"
@@ -394,7 +394,7 @@ export function OrgApiKeysCard() {
       {/* Reveal-once dialog */}
       <Dialog open={Boolean(revealed)} onClose={() => setRevealed(null)} maxWidth="sm" fullWidth>
         <DialogTitle>{'Copy your API key'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <Alert severity="warning">
             {'This is the only time the key is shown. Copy it now and store it securely — you can’t retrieve it later.'}
           </Alert>

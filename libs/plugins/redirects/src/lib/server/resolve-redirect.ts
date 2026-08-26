@@ -23,6 +23,7 @@ import {
   getOrgForHost,
 } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -42,7 +43,7 @@ import { FieldValue } from 'firebase-admin/firestore'
  * start (or stop) firing than the ≤30s this file already documents. The paid
  * gate and the hit counters stay OUTSIDE the cache — see below.
  */
-const REDIRECT_RULES_TTL_SECONDS = 60
+const REDIRECT_RULES_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /** One enabled rule, flattened to the plain data the matcher reads. */
 type StoredRedirect = HostRedirect & { $id: string }

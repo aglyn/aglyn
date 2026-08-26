@@ -61,6 +61,7 @@ import {
   Toolbar,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material'
 import { useMemo } from 'react'
 
@@ -73,6 +74,85 @@ export interface ThemePreviewProps {
  * Sample kit of MUI components rendered under the draft theme so every
  * control change is visible immediately without saving.
  */
+
+/**
+ * Every typography variant the theme defines, largest first.
+ *
+ * `theme.typography` holds scalars (`fontFamily`, the `fontWeight*` tokens,
+ * `pxToRem`) alongside the variants; a variant is the entries that are OBJECTS
+ * carrying a `fontSize`. Sorting by resolved size makes it read as a ramp
+ * rather than as whatever order the theme object happened to be written in.
+ */
+function TypeRamp() {
+  const theme = useTheme()
+  const variants = useMemo(() => {
+    const t = theme.typography as unknown as Record<string, any>
+    // Rank by the size the variant reaches at its WIDEST breakpoint, not by
+    // its base. `responsiveFontSizes` scales a variant down from the desktop
+    // figure, and it scales the big ones hardest — so h2 (2.5rem desktop)
+    // carries a SMALLER base than h3 (2rem, barely scaled) and a base-order
+    // sort prints h1, h3, h2. Reading the ceiling puts the ramp back in the
+    // order the ramp actually is.
+    const ceiling = (v: Record<string, any>) => {
+      const sizes = [v.fontSize, ...Object.keys(v)
+        .filter((k) => k.startsWith('@media'))
+        .map((k) => v[k]?.fontSize)]
+      return Math.max(
+        ...sizes.map((x) => Number.parseFloat(String(x ?? '')) || 0),
+      )
+    }
+    return Object.keys(t)
+      .filter((key) => {
+        const v = t[key]
+        // `inherit` names no size of its own — listing it prints
+        // "inherit · inherit", which tells an author nothing.
+        return (
+          v &&
+          typeof v === 'object' &&
+          v.fontSize &&
+          Number.isFinite(Number.parseFloat(String(v.fontSize)))
+        )
+      })
+      .map((key) => ({
+        key,
+        size: ceiling(t[key]),
+        weight: t[key].fontWeight,
+        raw: String(t[key].fontSize),
+      }))
+      .sort((a, b) => b.size - a.size)
+  }, [theme])
+  return (
+    <Stack spacing={1}>
+      {variants.map(({ key, weight, raw }) => (
+        <Stack
+          key={key}
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}
+        >
+          <Typography variant={key as any} sx={{ minWidth: 0 }} noWrap>
+            {key}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ flexShrink: 0 }}
+          >
+            {`${raw} · ${weight ?? ''}`}
+          </Typography>
+        </Stack>
+      ))}
+      <Typography variant="body1">
+        {'Body copy shows the font family, size, and text colors. '}
+        <Link href="#" onClick={(e) => e.preventDefault()}>
+          {'A link'}
+        </Link>
+        {' sits inline with the text.'}
+      </Typography>
+    </Stack>
+  )
+}
+
 export function ThemePreview(props: ThemePreviewProps) {
   const { theme, scheme } = props
 
@@ -111,23 +191,20 @@ export function ThemePreview(props: ThemePreviewProps) {
           </Toolbar>
         </AppBar>
         <Stack spacing={2} sx={{ p: 2 }}>
-          {/* The type ramp, not one sample: heading sizes and weights are
-              the first thing a font change alters. */}
-          <Typography variant="h4">{'Heading four'}</Typography>
-          <Typography variant="h6">{'Heading six'}</Typography>
-          <Typography variant="subtitle2" color="text.secondary">
-            {'Subtitle two — secondary text'}
-          </Typography>
-          <Typography variant="body1">
-            {'Body copy shows the font family, size, and text colors. '}
-            <Link href="#" onClick={(e) => e.preventDefault()}>
-              {'A link'}
-            </Link>
-            {' sits inline with the text.'}
-          </Typography>
-          <Typography variant="caption" color="text.disabled">
-            {'Caption — disabled text, the smallest size in the ramp.'}
-          </Typography>
+          {/* The WHOLE type ramp, read off the theme (Zach 2026-08-25).
+              This was five hand-picked samples — h4, h6, subtitle2, body1,
+              caption — so the variants an author is most likely to retune
+              were the ones they could not see: every heading above h4, both
+              body sizes side by side, button and overline casing, and any
+              rung the host added itself (Aglyn's own theme carries `lede`,
+              `bodyCompact` and `micro`). A ramp you cannot see is a ramp you
+              tune by reloading the site.
+
+              Discovered rather than listed, for the same reason the besigner's
+              pickers discover theirs: a host that adds a step gets it here
+              with no edit. Each row names the variant and shows what it
+              resolves to, so the preview doubles as the legend. */}
+          <TypeRamp />
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {/* Every colour is named EXPLICITLY: this kit DEMOS the palette,
                 so each control must show the slot it is labelled with. It is
@@ -216,6 +293,11 @@ export function ThemePreview(props: ThemePreviewProps) {
               (AGL-1244): the pairing is the whole point of the token, so the
               preview renders each wash under the accent that belongs on it
               rather than as three bare swatches. */}
+          <Typography variant="body2" color="text.secondary">
+            {'Tints are the pale washes a tile or panel is filled with — each '}
+            {'one named after the accent whose icon sits on it. They are not '}
+            {'the light shades of those accents.'}
+          </Typography>
           <Stack direction="row" spacing={1}>
             {(
               [
@@ -235,7 +317,9 @@ export function ThemePreview(props: ThemePreviewProps) {
                 }}
               >
                 <Typography variant="subtitle2">{label}</Typography>
-                <Typography variant="caption">{'tint'}</Typography>
+                <Typography variant="caption" sx={{ display: 'block' }}>
+                  {`tint.${label.toLowerCase()}`}
+                </Typography>
               </Box>
             ))}
           </Stack>

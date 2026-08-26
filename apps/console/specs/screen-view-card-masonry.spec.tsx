@@ -62,7 +62,8 @@ const MASONRY = /<GridItems\s+spacing=\{3\}\s+masonry\s+items=\{\[/
  * borrow the next item's name.
  */
 const SPAN_LINE = /^ *size: (CARD_WIDE|CARD_NARROW|\{ xs: 12 \}),$/gm
-const CARD_NAME = /header=\{'([^']+)'\}|<(ScreenAnalyticsCard)\b/
+const CARD_NAME =
+  /header=\{'([^']+)'\}|<(ScreenAnalyticsCard)\b|<(UsedByCard)\b/
 
 const assignment = (text: string): Array<[string, string]> => {
   const marks = [...text.matchAll(SPAN_LINE)]
@@ -70,7 +71,14 @@ const assignment = (text: string): Array<[string, string]> => {
     const next = marks[index + 1]
     const slice = text.slice(mark.index, next ? next.index : undefined)
     const found = slice.match(CARD_NAME)
-    return [found ? found[1] ?? 'Screen traffic' : '?', mark[1]]
+    // Two cards render their own header rather than taking a `header` prop,
+    // so they are matched by COMPONENT and named here (AGL-703).
+    const named = found
+      ? (found[1] ??
+        (found[2] ? 'Screen traffic' : undefined) ??
+        (found[3] ? 'Used by' : undefined))
+      : undefined
+    return [named ?? '?', mark[1]]
   })
 }
 
@@ -85,6 +93,10 @@ const EXPECTED: Array<[string, string]> = [
   ['Basic Details', 'CARD_NARROW'],
   ['Publishing', 'CARD_NARROW'],
   ['Page Access', 'CARD_NARROW'],
+  // Appended to the narrow column rather than inserted into it (AGL-703):
+  // the three cards above are a positional instruction and a new card must
+  // not push its way between them.
+  ['Used by', 'CARD_NARROW'],
   ['SEO', 'CARD_WIDE'],
   ['Versions', 'CARD_WIDE'],
   ['Page Activity', '{ xs: 12 }'],
@@ -144,7 +156,7 @@ describe('the screen version view card layout (AGL-2486)', () => {
       assignment(source)
         .filter(([, span]) => span === 'CARD_NARROW')
         .map(([card]) => card),
-    ).toEqual(['Basic Details', 'Publishing', 'Page Access'])
+    ).toEqual(['Basic Details', 'Publishing', 'Page Access', 'Used by'])
   })
 
   it('THE CONTROLS: the assignment checks actually discriminate', () => {

@@ -31,19 +31,23 @@ import {
 import {
   scanComponentUsage,
   scanLayoutUsage,
+  scanScreenUsage,
+  type CollectionCandidate,
   type UsageCandidate,
 } from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
 
 export interface WhereUsedDependent {
   /** Resource collection the dependent lives in. */
-  type: 'screen' | 'layout' | 'workflow' | 'variable' | 'component'
+  type: 'screen' | 'layout' | 'workflow' | 'variable' | 'component' | 'collection'
   id: string
   name: string
   /** 'id' = rename-safe reference; 'name' = legacy token, breaks on rename. */
   via: BindingRefVia[]
   /** Published version scanned (screens/layouts) — deep-link target. */
   versionId?: string
+  /** Screens only: link, child, or collection-template binding (AGL-703). */
+  relation?: 'link' | 'child' | 'template'
 }
 
 /** Every `kind` this endpoint knows how to scan for. */
@@ -53,6 +57,7 @@ const SCANNABLE_KINDS = [
   'workflow',
   'component',
   'layout',
+  'screen',
 ] as const
 
 /**
@@ -215,7 +220,7 @@ async function handler(request: Request): Promise<Response> {
      */
     let truncated = false
 
-    if (kind === 'component' || kind === 'layout') {
+    if (kind === 'component' || kind === 'layout' || kind === 'screen') {
       /**
        * Documents plus, for screens/layouts, their published nodes.
        *
@@ -247,7 +252,48 @@ async function handler(request: Request): Promise<Response> {
         return read.candidates
       }
 
-      if (kind === 'layout') {
+      /**
+       * A collection's template pointers (AGL-703) — the one screen dependent
+       * that takes a live route DOWN rather than degrading it.
+       *
+       * Same limit+1 idiom as `readUsageCandidates`, and it feeds the same
+       * `truncated` flag: a host with more collections than one pass reads
+       * must not answer "nothing binds this screen" on the strength of a
+       * prefix.
+       */
+      const readCollections = async (): Promise<CollectionCandidate[]> => {
+        const docs = await hostRef.collection('collections').limit(201).get()
+        if (docs.size > 200) truncated = true
+        return docs.docs.slice(0, 200).map((docSnapshot) => ({
+          id: docSnapshot.id,
+          displayName: docSnapshot.get('displayName'),
+          slug: docSnapshot.get('slug'),
+          deletedAt: docSnapshot.get('deletedAt'),
+          listScreenId: docSnapshot.get('listScreenId'),
+          entryScreenId: docSnapshot.get('entryScreenId'),
+          templateScreenId: docSnapshot.get('templateScreenId'),
+        }))
+      }
+
+      if (kind === 'screen') {
+        // Every corpus a screen id can hide in: link props on published
+        // screens and layouts, on component definitions, and the collection
+        // pointers that are not node data at all.
+        const [screens, layouts, components, collections] = await Promise.all([
+          readCandidates('screens', true),
+          readCandidates('layouts', true),
+          readCandidates('components', true),
+          readCollections(),
+        ])
+        dependents.push(
+          ...scanScreenUsage(refId, {
+            screens,
+            layouts,
+            components,
+            collections,
+          }),
+        )
+      } else if (kind === 'layout') {
         // No node search needed: the reference is a `layoutId` field, on
         // screens and — since AGL-703 — on nested layouts too.
         const [screens, layouts] = await Promise.all([
