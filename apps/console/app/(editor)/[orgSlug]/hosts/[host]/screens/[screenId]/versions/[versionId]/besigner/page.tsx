@@ -388,6 +388,13 @@ function BesignerPage(props) {
         : undefined,
     queueLoading,
     onSaved: () => {
+      // Records that the write LANDED (AGL-1152), for `Save & publish`.
+      // `handleSave` resolves `void` whether it wrote or refused — a size
+      // guard, a concurrent edit, or nothing-to-save all return early — and
+      // `saveAvailable` is React state that is still stale in the same tick.
+      // Making a version live after a refused save would publish bytes that
+      // were never stored.
+      savedLandedRef.current = true
       // A save makes Firestore authoritative again, so the live mirror of
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document. Via a ref because the
@@ -660,6 +667,51 @@ function BesignerPage(props) {
       Aglyn.buildScreenRouteEntries(screenId, byId, routingMap),
     [screenId, routingMap],
   )
+
+  /** Did the last save actually land? See `onSaved`. */
+  const savedLandedRef = useRef(false)
+
+  /**
+   * SAVE, THEN MAKE THIS VERSION THE LIVE ONE (AGL-1152).
+   *
+   * A screen's tree lives on its VERSION document and the tenant reads
+   * `screens/{id}/versions/{versionId}`, so saving the version an author is on
+   * is only live if that version is the one `screens/{id}.versionId` points
+   * at. Saving a draft version changes nothing a visitor can see — which is
+   * the whole point of a draft, and also why an author working in one needs a
+   * way to say "this one, now" without leaving the editor.
+   *
+   * Already on the published version, this is a save plus a cache drop, which
+   * `onSaved` was already doing — so the action is the same shape either way
+   * and the author does not have to know which case they are in.
+   */
+  const handleSaveAndPublish = useCallback(async () => {
+    savedLandedRef.current = false
+    await handleSave()
+    if (!savedLandedRef.current) return
+    const livePointer = screenResult?.data?.versionId
+    if (livePointer !== versionId) {
+      await updateScreenDoc({ versionId } as any)
+    }
+    // Not awaited: the writes above have already succeeded, and a cache hint
+    // that fails must never make a completed publish look failed.
+    void revalidateLivePages({ user, hostId, screenId })
+    enqueueSnackbar(
+      livePointer === versionId
+        ? 'Saved and published — the live pages are refreshing now.'
+        : 'Published this version — it is now what the live site serves.',
+      { variant: 'success', persist: false },
+    )
+  }, [
+    handleSave,
+    screenResult?.data?.versionId,
+    versionId,
+    updateScreenDoc,
+    user,
+    hostId,
+    screenId,
+    enqueueSnackbar,
+  ])
 
   const handlePublish = useCallback(async () => {
     if (slugConflict || unpublishedAncestor || reservedSegment) return
@@ -1234,6 +1286,9 @@ function BesignerPage(props) {
               detailsUrl={detailUrl}
               presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
+              onSaveAndPublish={handleSaveAndPublish}
+              // Live only when the parent's pointer names THIS version.
+              livePublished={screenResult?.data?.versionId === versionId}
               onPreview={handlePreview}
               liveUrl={liveUrl}
               liveUnavailableReason={liveUnavailableReason}

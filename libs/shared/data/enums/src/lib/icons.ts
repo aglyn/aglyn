@@ -143,6 +143,10 @@ export const ICON_VARIANT_DOCK_LEFT_TOGGLE = mdiDockLeft
 export const ICON_VARIANT_DOCK_RIGHT_TOGGLE = mdiDockRight
 export const ICON_VARIANT_FILTER = mdiFilter
 export const ICON_VARIANT_LEFT = mdiArrowLeft
+// A true chevron, not `mdiMenuDown`'s small filled triangle. A split-button
+// affordance needs a mark that reads at 16-18px beside a text label, and the
+// triangle disappears there (AGL-1152).
+export const ICON_VARIANT_CHEVRON_DOWN = mdiChevronDown
 export const ICON_VARIANT_MENU_DOWN = mdiMenuDown
 export const ICON_VARIANT_MODIFY_ADD = mdiPlus
 export const ICON_VARIANT_MODIFY_COPY = mdiContentCopy

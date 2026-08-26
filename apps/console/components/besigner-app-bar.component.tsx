@@ -24,7 +24,7 @@ import {
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_APP_SETTINGS,
-  ICON_VARIANT_MENU_DOWN,
+  ICON_VARIANT_CHEVRON_DOWN,
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_NEW_TAB,
   ICON_VARIANT_PAGES,
@@ -65,8 +65,15 @@ function SaveControl(props: {
   onSaveAndPublish?: () => void
   publishBlockedReason?: string
   saveAvailable?: boolean
+  livePublished?: boolean
 }) {
-  const { onSave, onSaveAndPublish, publishBlockedReason, saveAvailable } = props
+  const {
+    onSave,
+    onSaveAndPublish,
+    publishBlockedReason,
+    saveAvailable,
+    livePublished,
+  } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   // NEVER DISABLED, however up to date the editor believes it is (AGL-1262).
   // A disabled Save is a dead control: the one time it matters — the editor's
@@ -74,20 +81,56 @@ function SaveControl(props: {
   // nothing happens, nothing is said, and they close the tab believing the
   // work landed. Clicking always produces an answer, and `handleSave` checks
   // the stored document before agreeing there is nothing to write.
-  const label = saveAvailable ? 'Save draft' : 'Up to date'
+  /*
+   * THREE STATES, because two of them were being told the same lie
+   * (AGL-1152). "Up to date" described the DRAFT, and an author who had saved
+   * a version that was not the live one read it as "everything is current" —
+   * which is exactly the belief that made "I saved and my site did not change"
+   * possible in the first place.
+   *
+   * So the button names the next useful action instead of the last completed
+   * one:
+   *   unsaved work            -> Save draft
+   *   saved, but not live     -> Publish        (the thing left to do)
+   *   saved and live          -> Up to date     (genuinely nothing left)
+   *
+   * `livePublished` undefined means the editor has no publish concept at all,
+   * and the control collapses to its original two states.
+   */
+  const publishPending =
+    !saveAvailable && livePublished === false && Boolean(onSaveAndPublish)
+  /*
+   * "Save draft" ONLY where a draft is a real state. Templates have no
+   * versions at all — the document IS the template — so calling their save a
+   * draft would invent a distinction the editor does not have, and imply a
+   * publish step that does not exist. Those editors keep the plain "Save" they
+   * always had.
+   */
+  const label = saveAvailable
+    ? onSaveAndPublish
+      ? 'Save draft'
+      : 'Save'
+    : publishPending
+      ? 'Publish'
+      : 'Up to date'
   const icon = (
     <MdiIcon
       path={
-        saveAvailable
+        saveAvailable || publishPending
           ? ICON_VARIANT_MODIFY_SAVE.path
           : ICON_VARIANT_SYMBOL_CONFIRMED.path
       }
     />
   )
+  // The primary click follows the label. A button that says Publish and saves
+  // a draft is the same misdirection one layer down.
+  const primaryClick: ButtonProps['onClick'] = publishPending
+    ? () => onSaveAndPublish?.()
+    : onSave
   if (!onSaveAndPublish) {
     return (
       <Button
-        onClick={onSave}
+        onClick={primaryClick}
         size="small"
         endIcon={icon}
         sx={(theme) => ({ mr: `${theme.spacing(-1)} !important` })}
@@ -100,19 +143,30 @@ function SaveControl(props: {
     <>
       <ButtonGroup
         size="small"
-        variant="text"
-        sx={(theme) => ({ mr: `${theme.spacing(-1)} !important` })}
+        variant="outlined"
+        sx={(theme) => ({
+          mr: `${theme.spacing(-1)} !important`,
+          // The group sat as wide as two separate buttons. `ButtonGroup`
+          // inserts a divider border between children and each child keeps its
+          // own horizontal padding, so the chevron read as a second control
+          // with a gap rather than the tail of this one.
+          '& .MuiButtonGroup-grouped': { minWidth: 0 },
+          // The divider between halves STAYS now that the group is outlined:
+          // it is what makes a split button read as one control with two hit
+          // targets rather than a button with a stray glyph after it.
+        })}
       >
-        <Button onClick={onSave} endIcon={icon}>
+        <Button onClick={primaryClick} endIcon={icon} sx={{ pr: 0.75 }}>
           {label}
         </Button>
         <Button
           aria-label="Save options"
           aria-haspopup="menu"
           onClick={(event) => setMenuAnchor(event.currentTarget)}
-          sx={{ px: 0.5, minWidth: 0 }}
+          // Tight to the label: just the glyph's own width plus a hair.
+          sx={{ px: 0, minWidth: 24, '& svg': { fontSize: 20 } }}
         >
-          <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />
+          <MdiIcon path={ICON_VARIANT_CHEVRON_DOWN.path} />
         </Button>
       </ButtonGroup>
       <Menu
@@ -175,6 +229,15 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
   onSaveAndPublish?: () => void
   /** Why publishing is unavailable, shown on the disabled menu item. */
   publishBlockedReason?: string
+  /**
+   * Does the LIVE site already serve this version? (AGL-1152)
+   *
+   * `false` turns the idle button into `Publish` rather than `Up to date` —
+   * saving a draft leaves the live site untouched, and calling that state "up
+   * to date" is what let an author believe their change had gone out.
+   * `undefined` for editors with no publish concept.
+   */
+  livePublished?: boolean
   onPreview?: ButtonProps['onClick']
   onPropertiesEdit?: ButtonProps['onClick']
   saveAvailable?: boolean
@@ -203,6 +266,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       onSaveAndPublish,
       publishBlockedReason,
       saveAvailable,
+      livePublished,
     } = props
 
     return (
@@ -303,6 +367,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             onSaveAndPublish={onSaveAndPublish}
             publishBlockedReason={publishBlockedReason}
             saveAvailable={saveAvailable}
+            livePublished={livePublished}
           />
         </Stack>
       </SecondaryAppBarComponent>

@@ -130,7 +130,12 @@ function LayoutBesignerPage(props) {
   const handleAddElementClick = useAddElementDrawerCallback()
   const listUrl = buildRoute(Route.HOST_LAYOUTS, { orgSlug,  host })
   const { doc: hostResult } = useHost({ hostId })
-  const { doc: layoutResult } = useLayout({ hostId, layoutId })
+  /** Did the last save actually land? See `onSaved`. */
+  const savedLandedRef = useRef(false)
+  const { doc: layoutResult, setDoc: updateLayoutDoc } = useLayout({
+    hostId,
+    layoutId,
+  })
   // The browser tab names THIS document, not just its site (AGL-2486).
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(layoutId, layoutResult?.data?.displayName)
@@ -276,6 +281,11 @@ function LayoutBesignerPage(props) {
     // Attribution (AGL-676): `updatedAt` carries no actor, so without this
     // "someone changed this" could never become "Sam changed this".
     onSaved: () => {
+      // Records that the write LANDED, for `Save & publish` (AGL-1152).
+      // `handleSave` resolves `void` whether it wrote or refused, and
+      // `saveAvailable` is stale in the same tick — making a version live
+      // after a refused save would publish bytes that were never stored.
+      savedLandedRef.current = true
       // A save makes Firestore authoritative again, so the live mirror of
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document (AGL-677).
@@ -326,6 +336,38 @@ function LayoutBesignerPage(props) {
   // Draft preview (AGL-1203). A layout previews as itself — its Layout Slot
   // stays empty because there is no screen to fill it, which is the honest
   // picture of the chrome being authored.
+  /**
+   * SAVE, THEN MAKE THIS VERSION THE LIVE ONE (AGL-1152).
+   *
+   * A layout's tree lives on its VERSION document and the tenant walks
+   * `layouts/{id}` to find which one, so saving the version an author is on is
+   * only live if the parent points at it. Saving a draft changes nothing a
+   * visitor sees — the point of a draft, and the reason an author in one needs
+   * a way to say "this one, now" without leaving the editor.
+   *
+   * A layout is chrome, so promoting one changes EVERY screen rendered inside
+   * it; `revalidateLivePages` walks that fan-out rather than dropping one page.
+   */
+  const handleSaveAndPublish = useCallback(async () => {
+    savedLandedRef.current = false
+    await handleSave()
+    if (!savedLandedRef.current) return
+    if (layoutPublishedVersionId !== versionId) {
+      await updateLayoutDoc({ versionId } as never)
+    }
+    // Not awaited: the writes have succeeded, and a cache hint that fails must
+    // never make a completed publish look failed.
+    void revalidateLivePages({ user, hostId, layoutId })
+  }, [
+    handleSave,
+    layoutPublishedVersionId,
+    versionId,
+    updateLayoutDoc,
+    user,
+    hostId,
+    layoutId,
+  ])
+
   const handlePreview = useOpenPreview({
     ids: hostId
       ? { hostId, kind: 'layout', docId: layoutId, versionId }
@@ -498,6 +540,9 @@ function LayoutBesignerPage(props) {
               detailsUrl={listUrl}
               presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
+              onSaveAndPublish={handleSaveAndPublish}
+              // Live only when the parent's pointer names THIS version.
+              livePublished={layoutPublishedVersionId === versionId}
               saveAvailable={saveAvailable}
             />
             <BesignerDraftAlertComponent

@@ -160,6 +160,20 @@ function ComponentBesignerPage(props) {
    * live without it having been stored.
    */
   const savedLandedRef = useRef(false)
+
+  /**
+   * Has this version been SAVED since it was last promoted? (AGL-1152)
+   *
+   * `publishedVersionId === versionId` only says the parent was promoted from
+   * this version at some point — a later save writes the VERSION document and
+   * leaves the PARENT, which is what the tenant actually renders, behind. So
+   * the pointer alone cannot answer "is the live site current". This can, for
+   * the session that did the saving, which is the author who needs the answer.
+   *
+   * Starts false: on arrival the parent holds whatever the last publish left,
+   * and nothing in this session has moved past it.
+   */
+  const [savedSincePublish, setSavedSincePublish] = useState(false)
   // Id-based screen links: a component can contain a link, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
@@ -340,6 +354,9 @@ function ComponentBesignerPage(props) {
       // save would push the canvas live without it having been stored, which
       // is the one outcome worse than not promoting at all.
       savedLandedRef.current = true
+      // The version moved; the parent did not. Until a publish the live site
+      // is behind, and the button should say so rather than "Up to date".
+      setSavedSincePublish(true)
       // A save makes Firestore authoritative again, so the live mirror of
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document (AGL-677).
@@ -458,6 +475,7 @@ function ComponentBesignerPage(props) {
         versionId,
         updatedAt: Timestamp.now(),
       })
+      setSavedSincePublish(false)
       enqueueSnackbar(
         'Published. Every screen using this component is refreshing now — ' +
           'you do not need to republish them.',
@@ -747,6 +765,12 @@ function ComponentBesignerPage(props) {
               presence={<PresenceAvatars presence={presence} />}
               onSave={handleSave}
               onSaveAndPublish={handleSaveAndPublish}
+              // A component is live only once its tree has been promoted onto
+              // the PARENT document — the pointer alone is not enough, which
+              // is the asymmetry with screens this whole change is about.
+              livePublished={
+                publishedVersionId === versionId && !savedSincePublish
+              }
               publishBlockedReason={canPublish ? undefined : publishBlock}
               saveAvailable={saveAvailable}
             />
