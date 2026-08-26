@@ -133,3 +133,23 @@ export function nodePropsWithHiddenOnSite(
   else delete props['className']
   return props
 }
+
+/**
+ * Whether an ANCESTOR already hides this node, so the published site never
+ * renders it whatever its own class list says.
+ *
+ * The hierarchy dims a hidden layer and everything under it — a container
+ * that does not ship takes its contents with it, and a full-strength child
+ * row inside a dimmed parent reads as "this one still ships", which is the
+ * opposite of true. Only the OUTERMOST hidden ancestor draws the dim: CSS
+ * opacity multiplies through nesting, so letting each hidden level apply its
+ * own would fade a panel inside a hidden drawer to near-invisible.
+ */
+export function isAncestorHiddenOnSite(node: RevealNode): boolean {
+  let current = node?.parent
+  while (current) {
+    if (isNodeHiddenOnSite(current)) return true
+    current = current.parent
+  }
+  return false
+}

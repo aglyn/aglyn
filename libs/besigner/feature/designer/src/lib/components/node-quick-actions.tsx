@@ -206,15 +206,26 @@ export const NodeQuickActions = observer(
                     disablePortal: false,
                     // Below dialogs/drawers the menu actions open.
                     sx: { zIndex: (theme) => theme.zIndex.modal - 1 },
+                    /**
+                     * Kept inside the WINDOW, not the document (AGL-1405).
+                     * `rootBoundary: 'document'` let the menu be placed
+                     * below the fold — the document is as tall as whatever
+                     * you put in it, so nothing ever "overflowed" it — and
+                     * the page grew a scrollbar around the menu, which moves
+                     * the editor's own chrome under the reader. The Paper
+                     * caps its height and scrolls, so a menu taller than the
+                     * window is still fully reachable.
+                     *
+                     * The 100px padding went with it: it was reserving a
+                     * margin against a boundary that was never binding, and
+                     * against the real one it would refuse placements that
+                     * fit perfectly well.
+                     */
                     modifiers: [
                       {
                         name: 'flip',
                         enabled: true,
-                        options: {
-                          altBoundary: true,
-                          rootBoundary: 'document',
-                          padding: 100,
-                        },
+                        options: { altBoundary: true, padding: 8 },
                       },
                       {
                         name: 'preventOverflow',
@@ -222,9 +233,8 @@ export const NodeQuickActions = observer(
                         options: {
                           altAxis: true,
                           altBoundary: true,
-                          tether: true,
-                          rootBoundary: 'document',
-                          padding: 100,
+                          tether: false,
+                          padding: 8,
                         },
                       },
                       {

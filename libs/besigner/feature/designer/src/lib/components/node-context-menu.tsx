@@ -216,8 +216,7 @@ export const NodeContextMenu = observer(
      * interaction builder's show/hide steps and the canvas reveal all key off
      * it. This writes it, which is the part that was missing.
      */
-    const [revealedNodeIds, setRevealedNodeIds] =
-      useAglynBesignerFlag('revealedNodeIds')
+    const [, setRevealedNodeIds] = useAglynBesignerFlag('revealedNodeIds')
     const hiddenOnSite = isNodeHiddenOnSite(node as never)
     const handleToggleHiddenClick = useCallback(() => {
       if (isRootNode) return
@@ -233,15 +232,16 @@ export const NodeContextMenu = observer(
           changed.push(target.$id)
         }
       })()
-      // Hiding something makes it vanish from the canvas, which is a poor
-      // answer to "I just asked to work on this". Reveal what was hidden so
-      // it stays on screen — canvas-only, exactly what the row's eye does,
-      // and the row now shows an eye to turn it back off.
-      if (!hiddenOnSite && changed.length) {
-        setRevealedNodeIds((current) => [
-          ...(current ?? []).filter((id) => !changed.includes(id)),
-          ...changed,
-        ])
+      // Showing an element again retires its canvas reveal with it. The flag
+      // is only meaningful for something the site hides, so leaving an entry
+      // behind means the next hide silently starts revealed. Hiding sets
+      // nothing: hidden is hidden, and selecting the element — which
+      // whichever surface opened this menu has already done — is what shows
+      // it while it is being designed.
+      if (hiddenOnSite && changed.length) {
+        setRevealedNodeIds((current) =>
+          (current ?? []).filter((id) => !changed.includes(id)),
+        )
       }
     }, [node, isRootNode, multi, hiddenOnSite, onAction, setRevealedNodeIds])
 
@@ -262,7 +262,22 @@ export const NodeContextMenu = observer(
     ])
 
     return (
-      <Paper ref={ref} sx={{ width: 240, overflow: 'hidden' }} {...rest}>
+      <Paper
+        ref={ref}
+        sx={{
+          width: 240,
+          // Caps itself rather than growing past the window (AGL-1405). The
+          // Popper can only slide a menu back inside the viewport if it FITS
+          // in one; a taller menu was laid out past the bottom of the
+          // document and the page grew a scrollbar around it. `dvh` so a
+          // mobile browser's retracting toolbar does not leave the last item
+          // under it.
+          maxHeight: 'min(560px, calc(100dvh - 24px))',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
+        {...rest}
+      >
         <MenuList dense>
           <Typography
             variant="caption"
@@ -369,7 +384,7 @@ export const NodeContextMenu = observer(
               secondary={
                 hiddenOnSite
                   ? 'Visitors see it from the first paint'
-                  : 'An interaction can reveal it — you keep designing it here'
+                  : 'The eye on its Hierarchy row does the same'
               }
               slotProps={{ secondary: { sx: { whiteSpace: 'normal' } } }}
             >
