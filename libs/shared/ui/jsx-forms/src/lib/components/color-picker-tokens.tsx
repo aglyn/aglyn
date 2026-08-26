@@ -16,7 +16,14 @@
  */
 
 import { styled, useTheme } from '@aglyn/shared-ui-theme'
-import { Box, Button, ButtonBase, Paper, Slider, Typography } from '@mui/material'
+import {
+  Box,
+  Button,
+  ButtonBase,
+  Paper,
+  Slider,
+  Typography,
+} from '@mui/material'
 import { alpha as muiAlpha } from '@mui/material/styles'
 import { createContext, useContext, useMemo } from 'react'
 
@@ -197,7 +204,10 @@ export function useColorPickerTokenOptions(): ColorPickerTokenOption[] {
  */
 const SWATCH_CHECKER =
   'repeating-conic-gradient(rgba(128, 128, 128, 0.45) 0% 25%, ' +
-  'transparent 0% 50%) 0 0 / 8px 8px'
+  'transparent 0% 50%)'
+
+/** Edge length of one chequerboard square, in px. */
+const SWATCH_CHECKER_TILE = 8
 
 /** The colour a swatch paints, alpha applied when the author chose one. */
 function swatchPaint(color: string, opacity: number): string {
@@ -227,29 +237,50 @@ export const TokenSwatch = styled('span', {
     propName !== 'dark' &&
     propName !== 'size' &&
     propName !== 'alpha',
-})<{ light?: string; dark?: string; size?: number; alpha?: number }>(
-  ({ theme, light, dark, size = 22, alpha: opacity }) => {
-    // `0` is a legitimate opacity and `strictNullChecks` is off repo-wide, so
-    // the default is spelled out rather than left to `??` on a falsy number.
-    const amount =
-      typeof opacity === 'number' && Number.isFinite(opacity) ? opacity : 1
-    const lightColor = swatchPaint(light ?? dark ?? 'transparent', amount)
-    const darkColor = swatchPaint(dark ?? light ?? 'transparent', amount)
-    const paint =
-      lightColor === darkColor
-        ? `linear-gradient(${lightColor}, ${lightColor})`
-        : `linear-gradient(105deg, ${lightColor} 0%, ${lightColor} 49.9%, ${darkColor} 50.1%, ${darkColor} 100%)`
-    return {
-      width: size,
-      height: size,
-      flexShrink: 0,
-      display: 'inline-flex',
-      borderRadius: '50%',
-      border: `1px solid ${theme.palette.divider}`,
-      background: amount >= 1 ? paint : `${paint}, ${SWATCH_CHECKER}`,
-    }
-  },
-)
+})<{ light?: string; dark?: string; size?: number; alpha?: number }>(({
+  theme,
+  light,
+  dark,
+  size = 22,
+  alpha: opacity,
+}) => {
+  // `0` is a legitimate opacity and `strictNullChecks` is off repo-wide, so
+  // the default is spelled out rather than left to `??` on a falsy number.
+  const amount =
+    typeof opacity === 'number' && Number.isFinite(opacity) ? opacity : 1
+  const lightColor = swatchPaint(light ?? dark ?? 'transparent', amount)
+  const darkColor = swatchPaint(dark ?? light ?? 'transparent', amount)
+  // Two stops on the SAME position, so the two halves meet exactly on the
+  // diameter instead of blending across a band the eye reads as a smudge
+  // at this size.
+  const paint =
+    lightColor === darkColor
+      ? `linear-gradient(${lightColor}, ${lightColor})`
+      : `linear-gradient(105deg, ${lightColor} 0 50%, ${darkColor} 50% 100%)`
+  const opaque = amount >= 1
+  return {
+    width: size,
+    height: size,
+    flexShrink: 0,
+    display: 'inline-flex',
+    borderRadius: '50%',
+    border: `1px solid ${theme.palette.divider}`,
+    background: opaque ? paint : `${paint}, ${SWATCH_CHECKER}`,
+    // The ring is drawn INSIDE the box (border-box sizing), so a background
+    // left on its default `padding-box` origin is positioned in an area two
+    // pixels smaller than the one it paints. `repeat` fills the leftover
+    // edge bands from the neighbouring tile, where the diagonal split sits
+    // several pixels across — a wedge bitten out of a 22px circle. Anchoring
+    // the layers on the border box makes one tile cover the whole swatch;
+    // the chequerboard keeps tiling because it is sized in px, not to the
+    // element.
+    backgroundOrigin: 'border-box',
+    backgroundRepeat: opaque ? 'no-repeat' : 'no-repeat, repeat',
+    backgroundSize: opaque
+      ? '100% 100%'
+      : `100% 100%, ${SWATCH_CHECKER_TILE}px ${SWATCH_CHECKER_TILE}px`,
+  }
+})
 TokenSwatch.displayName = 'AglynColorTokenSwatch'
 
 /** The `{ r, g, b, a }` shape react-color hands back on every change. */
