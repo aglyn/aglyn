@@ -25,8 +25,7 @@ export {}
 /**
  * THE FREE TIER'S CAP, DRIVEN THROUGH THE ROUTE THAT CHARGES (AGL-2135).
  *
- * ZACH, 2026-08-18, verbatim: **"We also need to make sure the free/hobby tier
- * does hard cap so it always actually stays free"**.
+ * The free/hobby tier hard-caps, so that it always actually stays free.
  *
  * ## Why this exists next to `free-tier-never-billed.spec.ts`
  *

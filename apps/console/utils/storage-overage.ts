@@ -31,35 +31,32 @@ import {
  * Metered storage: what bills, what warns, and what a customer may cap
  * (AGL-1886, corrected 2026-08-18).
  *
- * ## ZACH'S CORRECTION, 2026-08-18, verbatim
+ * ## THE TWO RULES THIS MODEL SERVES
  *
- *   "**don't let it make us lose revenue or cost us money, it should be a
- *   control by the end user, to prevent overage or usage alerts rather, we
- *   just want to minimize churn**"
+ * On a metered plan, storage past the included band **bills** rather than
+ * being refused: refusing it loses revenue and stops a customer's product
+ * working to save them from a bill they agreed to pay. The ceiling that stops
+ * the bill is the END USER's control, set by whoever wants one.
  *
- * and, on the same day, on the bottom of the range:
+ * On free, the opposite: it **hard-caps**, so that it always actually stays
+ * free.
  *
- *   "**We also need to make sure the free/hobby tier does hard cap so it
- *   always actually stays free**"
+ * Neither is in tension with the condition metered billing shipped under:
+ * overage protection and usage alerts, so that customers do not get a surprise
+ * bill. That protection is **being told**, not being stopped.
  *
- * These supersede the shape this file shipped with. His earlier condition
- * still stands and is not in tension with them — 2026-08-17, verbatim:
- * "*also give overage protection and usage alerts, so customers don't get a
- * surprise bill*". The protection he means is **being told**, not being
- * stopped.
+ * ## WHY NOT AN ACKNOWLEDGEMENT GATE
  *
- * ## WHAT WAS WRONG
- *
- * This file used to require an **acknowledgement before a metered org could
- * store a byte past its band** — a soft cap whose opt-in was a gate. The
+ * Requiring an **acknowledgement before a metered org may store a byte past
+ * its band** is a soft cap whose opt-in is a gate, and it fails closed: the
  * route that writes that acknowledgement had no caller at all until AGL-1957,
- * so the gate failed closed on every org that had ever existed: no opt-in, no
- * storage, and therefore no revenue for capacity we would happily sell. It
- * satisfied "no surprise bill" by satisfying "no bill".
+ * so no org could opt in, no org could store, and there was no revenue for
+ * capacity Aglyn would happily sell. It satisfies "no surprise bill" by
+ * satisfying "no bill".
  *
- * That is a churn event of its own. Bill shock churns; so does a product that
- * silently stops accepting uploads. The old design traded one for the other
- * and called the trade protection.
+ * It is also a churn event of its own. Bill shock churns; so does a product
+ * that silently stops accepting uploads. That design trades one for the other
+ * and calls the trade protection.
  *
  * ## THE MODEL, corrected
  *

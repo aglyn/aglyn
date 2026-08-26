@@ -24,8 +24,7 @@
  * `membersPerHost` must be a HARD CAP on every door that admits a site
  * collaborator, and under concurrency (AGL-2068).
  *
- * ZACH, 2026-08-18, verbatim: **"We need to make sure the free/hobby tier does
- * hard cap so it always actually stays free."**
+ * The free/hobby tier hard-caps, so that it always actually stays free.
  *
  * ## What was broken
  *

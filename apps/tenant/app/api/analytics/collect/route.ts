@@ -517,9 +517,9 @@ async function engageFreePlanBandwidthCap(options: {
  * no `plan`. So the cap had never engaged for a single never-subscribed org:
  * the entire organic free tier.
  *
- * ZACH's fix, and the reason it is here rather than in the sweep's skip
- * condition: **a cap that lives only in a scheduled sweep stops existing the
- * moment the sweep does not run, is skipped, or errors.** Every other free
+ * The reason the fix is here rather than in the sweep's skip condition:
+ * **a cap that lives only in a scheduled sweep stops existing the moment the
+ * sweep does not run, is skipped, or errors.** Every other free
  * dimension — media ingress, form submissions, contacts, datasets, API
  * requests — refuses at the point of use. Bandwidth now does too. The sweep
  * keeps its writer; this is a second, independent one that needs no cron, no

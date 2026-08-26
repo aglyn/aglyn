@@ -488,12 +488,12 @@ describe('useBesignerDocument', () => {
    * Two people building a page together must both be able to save
    * (AGL-2486).
    *
-   *
-   * The guard used to ask "did the stored document move", which is the wrong
-   * question once the co-edit mirror has already delivered their work to
-   * this canvas: this session's write is then a superset of what they
-   * stored, and refusing it protects nothing. It now asks whether this
-   * document INCORPORATES what is stored — and these cases are written in
+   * A guard that asks "did the stored document move" refuses the second saver
+   * in every collaborating pair, and offers them a Save button that cannot
+   * succeed. It is the wrong question once the co-edit mirror has already
+   * delivered the other session's work to this canvas: this session's write is
+   * then a superset of what they stored, and refusing it protects nothing. The
+   * guard asks instead whether this document INCORPORATES what is stored — and these cases are written in
    * pairs so the relaxation cannot quietly become "always allow": every
    * permissive case has a stale or conflicting twin that must still refuse.
    */

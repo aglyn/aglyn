@@ -16,8 +16,8 @@
  */
 
 /**
- * The AGL-2486 disable-cascade model.
- *
+ * The AGL-2486 disable-cascade model: disabling a plugin another plugin
+ * depends on disables that one too, and the reader is told before it happens.
  *
  * These tests pin the DECLARED model — not an inferred one. A warning derived
  * from guesswork is worse than no warning, because it claims a completeness it

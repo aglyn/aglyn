@@ -18,12 +18,10 @@
 /**
  * A collection entry opens a DETAIL PAGE, not a dialog (AGL-2498).
  *
- *
- * The friendliness is not cosmetic. A dialog has no address, so it could not
- * be linked, bookmarked or sent to a colleague; Back closed it and lost the
- * context; and it constrained the layout, which is why the publication
- * controls were exiled to the list row's overflow menu in the first place —
- * the complaint the issue opens with.
+ * The difference is not cosmetic. A dialog has no address, so it cannot be
+ * linked, bookmarked or sent to a colleague; Back closes it and loses the
+ * context; and it constrains the layout, which is what exiles the publication
+ * controls to the list row's overflow menu.
  *
  * ## What these assert, and why each one is here
  *
@@ -470,13 +468,13 @@ const localValue = (date: Date) => {
 
 describe('the entry detail is its OWN route (AGL-2498)', () => {
   /**
-   * The defect this split exists to remove, asserted directly.
+   * The defect this split exists to remove, asserted directly: the collection
+   * page flashing before the entry page appears.
    *
-   *
-   * While the two screens were one component, the detail could not render
-   * until its buffer was seeded from the entries listener — so on a cold load
-   * the component rendered the only thing it could render meanwhile, which was
-   * the list. `mockEntries.data = []` is exactly that moment.
+   * With the two screens in one component, the detail cannot render until its
+   * buffer is seeded from the entries listener — so on a cold load the
+   * component renders the only thing it can render meanwhile, which is the
+   * list. `mockEntries.data = []` is exactly that moment.
    */
   it('shows its OWN loading state, never the list, before the entry arrives', () => {
     // The listener has not ANSWERED — which is a different state from having
@@ -658,10 +656,9 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
 /**
  * The entry's address segment is AUTHORED (AGL-2498).
  *
- *
- * Two wrongs in one: there was no way to choose an address, and
- * `slug: slugify(title)` on every save silently MOVED a published post
- * whenever its headline was edited — 404-ing every inbound link with nothing
+ * A derived slug is two wrongs in one: there is no way to choose an address,
+ * and `slug: slugify(title)` on every save silently MOVES a published post
+ * whenever its headline is edited — 404-ing every inbound link with nothing
  * in the console to say so.
  */
 describe('an entry slug can be overridden (AGL-2498)', () => {

@@ -18,6 +18,8 @@
 /**
  * Who is in each document of an org, for list and detail rows (AGL-2486).
  *
+ * It is what puts presence avatars on a list row and a detail page, so a
+ * reader can see who is already in a document before opening it.
  *
  * ## Why a server summary and not a subscription per row
  *

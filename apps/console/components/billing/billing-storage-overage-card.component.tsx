@@ -57,8 +57,10 @@ export interface BillingStorageOverageCardProps {
  * The customer's optional monthly storage cap (AGL-1957, for AGL-1886;
  * inverted 2026-08-18).
  *
- * ## What this card is now
+ * ## What this card is
  *
+ * A ceiling on metered spend is the END USER's control, offered to whoever
+ * wants one and never a gate everybody has to pass.
  *
  * So this card offers a cap and nothing is gated behind it. Storage past a
  * metered plan's included band **bills by default**; `usage-alerts` warns at
@@ -66,16 +68,16 @@ export interface BillingStorageOverageCardProps {
  * it. A customer who would rather be stopped than billed sets a number here,
  * and then — and only then — uploads are refused, citing their own limit.
  *
- * ## What it used to be, and why that was wrong
+ * ## Why it is NOT a consent switch
  *
- * It used to be a consent switch: `mediaStorageGate` refused every metered
- * org past its band until a manager clicked "Turn on metered storage". That
- * failed closed on the whole customer base — AGL-1957 found the route had no
- * caller at all, so no org could give the consent, so no org could store past
- * its band, so Aglyn collected nothing for capacity it would happily sell.
+ * A consent switch — `mediaStorageGate` refusing every metered org past its
+ * band until a manager clicks "Turn on metered storage" — fails closed across
+ * the whole customer base. AGL-1957 found exactly that: the route had no
+ * caller, so no org could give the consent, so no org could store past its
+ * band, and Aglyn collected nothing for capacity it would happily sell.
  *
- * The trade it made was churn for churn: it avoided bill shock by making the
- * product stop working. Alerts plus an optional cap avoid both.
+ * It also trades churn for churn: it avoids bill shock by making the product
+ * stop working. Alerts plus an optional cap avoid both.
  *
  * ## Why the cap is edited here and enforced there
  *

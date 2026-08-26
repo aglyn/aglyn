@@ -854,7 +854,6 @@ async function handler(request: Request): Promise<Response> {
       /*==========================================
        * USAGE BUDGETS (AGL-1528) — the GCP billing-budget half.
        *
-       *
        * Everything above answers "am I near a band". A budget answers "what
        * will I owe", which is a different question and the one a metered
        * customer actually has: an org at 60% of four bands may owe nothing,
@@ -1105,9 +1104,8 @@ async function handler(request: Request): Promise<Response> {
       /*==========================================
        * THE FREE PLAN'S BANDWIDTH HARD CAP (AGL-1967/2155).
        *
-       * ZACH, 2026-08-19, choosing to enforce now rather than at launch:
-       * "before public signups arrive, so the cap is proven under real
-       * traffic while the cohort is small and a mistake is cheap."
+       * Enforced from before public signups, so the cap is proven under real
+       * traffic while the cohort is small and a mistake is cheap.
        *
        * THE DECISION IS MADE HERE because the numbers are already here. This
        * sweep has just summed the org's page views for the current month and

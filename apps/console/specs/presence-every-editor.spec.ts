@@ -21,8 +21,11 @@ import { join, relative, resolve } from 'node:path'
 /**
  * EVERY editable document kind gets presence, in its own room (AGL-2486).
  *
+ * Components, layouts, templates and emails are edited on the same canvas as
+ * screens, so presence has to reach all of them, not just the one it was built
+ * against.
  *
- * It already is. All five org-scoped besigner editors mount `usePresence` and
+ * All five org-scoped besigner editors mount `usePresence` and
  * pass their own `docType`/`docId`, and the RTDB rules key on `$docType` and
  * `$docId` as WILDCARDS, so no document kind needs a rules change to get a
  * room. Confirmed live on 2026-08-23: two tabs on one component editor

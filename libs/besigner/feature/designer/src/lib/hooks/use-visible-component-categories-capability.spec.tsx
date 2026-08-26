@@ -176,12 +176,12 @@ describe('Members blocks follow the user-accounts capability (AGL-2486)', () => 
    *
    * MARK - the GENERAL rule, not a members-shaped special case
    *
-   *
-   * The rule is: an element whose PROVIDING plugin is disabled for this site
-   * is not offered on this site. That already held for every bundle through
-   * `pluginId` — what did not hold was Members, because those blocks are
-   * registered by the commerce bundle and so rode commerce's verdict. These
-   * pin the general behaviour so the next capability does not repeat it.
+   * The rule is: an element whose PROVIDING plugin is disabled for this site is
+   * not offered on this site — commerce, members, and any bundle after them.
+   * That holds for every bundle through `pluginId`; what does not is Members,
+   * because those blocks are registered by the commerce bundle and so ride
+   * commerce's verdict. These pin the general behavior so the next capability
+   * does not repeat it.
    *
    *=========================================*/
 

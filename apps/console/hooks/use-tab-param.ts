@@ -22,14 +22,13 @@ import { useCallback, useEffect, useState } from 'react'
 /**
  * `?tab=` ↔ the selected vertical tab, in one place (AGL-2486).
  *
- *
- * Three pages had three different answers and one of them was wrong. Host
- * Setup validated the incoming id against a HAND-MAINTAINED LIST of tab ids —
- * so the Tracking tab added minutes earlier was not on it, and
- * `/setup?tab=hostTracking` silently opened Basic details. Host Admin had the
- * same shape with two ids, correct only because nobody has added a third.
- * Manage Account had the right idea — validate against the sections that
- * actually exist — but read `window.location.search` once on mount.
+ * Every surface with vertical tabs deep-links the same way, and it is this
+ * hook that makes that true. Left to themselves, three pages produce three
+ * different answers and one of them is wrong: validating the incoming id
+ * against a HAND-MAINTAINED LIST silently opens the default tab for any id
+ * added later; validating against two hardcoded ids is correct only until a
+ * third arrives; and reading `window.location.search` once on mount ignores
+ * every later navigation.
  *
  * ## The list is the CALLER'S, and it is the real one
  *
@@ -43,8 +42,8 @@ import { useCallback, useEffect, useState } from 'react'
  *
  * Not just on mount. Back and forward are navigations between two states of
  * the same page, and a docs link or an in-app link can change the param under
- * a mounted page — both of which left the old tab selected while the URL said
- * otherwise.
+ * a mounted page — read once, either leaves the old tab selected while the URL
+ * says otherwise.
  *
  * This cannot fight the reader's own clicks: a click writes the param, so the
  * param and the state already agree by the time the effect looks.

@@ -55,13 +55,17 @@ import { postLegalAcceptance } from '../utils/legal-consent'
  * timestamp.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * THE WORDING IS THE FEATURE (2026-08-24)
+ * THE WORDING IS THE FEATURE
  *
+ * Somebody who agreed yesterday, and whose documents were updated overnight,
+ * may be asked to agree again — but must never be told they have not agreed
+ * before. That reading is both wrong and insulting, and it is the one the
+ * default phrasing produces.
  *
- * ⚠️ RE-ACCEPTANCE ON A VERSION CHANGE STAYS. An earlier pass on the same day
- * was briefed to suppress it — "accept once, never ask again" — and then to
- * keep the machinery behind a default-off flag. BOTH were withdrawn before
- * anything shipped. Do not re-derive either from the arguments for them: ToS
+ * ⚠️ RE-ACCEPTANCE ON A VERSION CHANGE STAYS. Two alternatives have been
+ * proposed and withdrawn before shipping: suppressing it entirely ("accept
+ * once, never ask again"), and keeping the machinery behind a default-off
+ * flag. Do not re-derive either from the arguments for them: ToS
  * §5.3's continued-use theory does make re-acceptance contractually optional,
  * and the decision is nevertheless to keep asking. The problem was never the
  * asking.

@@ -441,14 +441,15 @@ export function CollectionEntriesPage() {
   /**
    * EDITING a collection (AGL-2498).
    *
+   * A collection's name and slug are editable from this page, and that is the
+   * only place they are editable from.
    *
-   * It was missing from the CONSOLE only — `/api/hosts/collections` has
-   * answered `action: 'update'` since AGL-978, with `displayName` and `slug`
-   * on its allow-list and the same transactional slug claim the create uses.
-   * The route's own docblock says "Collection create/RENAME". Nothing ever
-   * called the rename half, so a collection created as "Blg" stayed "Blg"
-   * forever and the only way to fix a slug was to delete the collection and
-   * every entry under it.
+   * The server half has existed since AGL-978: `/api/hosts/collections`
+   * answers `action: 'update'` with `displayName` and `slug` on its allow-list
+   * and the same transactional slug claim the create uses — its own docblock
+   * says "Collection create/RENAME". With nothing calling the rename half, a
+   * collection created as "Blg" stays "Blg" forever, and the only way to fix a
+   * slug is to delete the collection and every entry under it.
    *
    * Through the API rather than `updateDoc`, and that is the substantive part:
    * the slug is the collection's public address, and two collections at

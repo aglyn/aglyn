@@ -16,15 +16,14 @@
  */
 
 /**
- * A `?tab=` link opens the tab it names (AGL-2486).
+ * A `?tab=` link opens the tab it names (AGL-2486), on every surface with
+ * vertical tabs.
  *
- *
- * Host Setup validated the incoming id against a hand-written condition, and
- * it was ALREADY WRONG when he found it: the Tracking tab had been added
- * minutes earlier, its id was not in the condition, and
- * `/setup?tab=hostTracking` silently opened Basic details. Nothing failed —
- * the page rendered a perfectly good panel, just not the one the URL asked
- * for, which is the kind of wrong nobody files a bug about twice.
+ * Validating the incoming id against a hand-written condition goes wrong
+ * quietly: a tab added after the condition was written is not in it, so
+ * `/setup?tab=<newTab>` opens Basic details instead. Nothing fails — the page
+ * renders a perfectly good panel, just not the one the URL asked for, which is
+ * the kind of wrong nobody files a bug about twice.
  *
  * `useTabParam` fixed the mechanism. This is what stops the LIST going stale
  * again: the rendered tabs are derived from the page's own source and compared

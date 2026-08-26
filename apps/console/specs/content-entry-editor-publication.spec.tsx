@@ -19,12 +19,10 @@
 /**
  * The entry editor carries the publication controls (AGL-2498).
  *
- *
- * All three controls — publish/unpublish, the future scheduler, and the
- * publish date from AGL-2497 — existed, and all three lived on the LIST
- * row's overflow menu. Somebody writing an entry had to close the editor,
- * find the row and open a different menu to decide when the piece went live.
- * The editor now carries them too.
+ * All three — publish/unpublish, the future scheduler, and the publish date
+ * from AGL-2497 — are also on the LIST row's overflow menu. Left only there,
+ * somebody writing an entry has to close the editor, find the row and open a
+ * different menu to decide when the piece goes live.
  *
  * ## What these assert, and what they deliberately do not
  *

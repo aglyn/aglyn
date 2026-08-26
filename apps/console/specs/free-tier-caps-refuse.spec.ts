@@ -19,8 +19,7 @@
  * EVERY free quota REFUSES at its cap, and refuses BECAUSE of that cap
  * (AGL-1529).
  *
- * ZACH, 2026-08-18, verbatim: **"We also need to make sure the free/hobby tier
- * does hard cap so it always actually stays free"**.
+ * The free/hobby tier hard-caps, so that it always actually stays free.
  *
  * ## The gap this closes, in the words of the guard that has it
  *

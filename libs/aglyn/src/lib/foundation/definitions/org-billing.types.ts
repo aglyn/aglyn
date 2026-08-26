@@ -524,6 +524,8 @@ export type OrgCollaboratorAllocations = Record<string, number>
  * The monthly storage-overage spend cap an org CHOSE for itself (AGL-1886,
  * corrected 2026-08-18).
  *
+ * The ceiling on metered spend is the END USER's control: it exists to prevent
+ * a surprise, not to gate the product on a customer's acknowledgement.
  *
  * So this document is **absent by default and absent is the normal state**.
  * Storage past a metered plan's included band bills without it; the customer
@@ -531,10 +533,10 @@ export type OrgCollaboratorAllocations = Record<string, number>
  * is a customer opting IN to being stopped, and it is the only thing that can
  * refuse an upload on a plan that meters.
  *
- * NOT a consent record. It was one before 2026-08-18 — an acknowledgement
- * that had to exist before a paying org could store a byte past its band —
- * and that shape cost revenue and blocked customers without preventing any
- * bill, because `report-usage` never read it.
+ * NOT a consent record. As an acknowledgement that must exist before a paying
+ * org may store a byte past its band, it costs revenue and blocks customers
+ * without preventing any bill — `report-usage` bills stored bytes and never
+ * reads this document.
  *
  * Still an ENTITLEMENT INPUT in the security sense, in the other direction: a
  * member who could raise their own `capUsd` could raise their own spend

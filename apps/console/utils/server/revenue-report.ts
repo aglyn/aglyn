@@ -28,10 +28,10 @@ import {
  * Revenue means two things at once — the cash Stripe settled, and the value of
  * what customers have contracted to pay — so this module computes both and,
  * more importantly, computes the GAP between them as a first-class figure with
- * named causes. Two numbers and a reader
- * left to subtract is the failure mode this exists to avoid: the difference
- * is dunning, failed cards, trials and comps, and each of those is an action
- * someone can take, not a rounding artifact.
+ * named causes. Two numbers and a reader left to subtract is the failure mode
+ * this exists to avoid: the difference is dunning, failed cards, trials and
+ * comps, and each of those is an action someone can take, not a rounding
+ * artifact.
  *
  * ## The trap this module is built around
  *
@@ -965,6 +965,8 @@ export function orgAttribution(
  *
  * MARK - Attribution by source (AGL-2486)
  *
+ * Every breakdown names its source — which org, which plugin, which host
+ * produced the gain or the loss.
  *
  * The right DIMENSION differs per source, which is why this is three groupings
  * and not one table with a spare column:

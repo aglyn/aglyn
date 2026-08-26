@@ -19,6 +19,9 @@
  * What a delete confirmation is allowed to TELL an author about what breaks
  * (AGL-703).
  *
+ * Deleting something that is referenced elsewhere breaks those references, so
+ * the confirmation has to name them — and name them in words that say what
+ * will break rather than in a reference count.
  *
  * A separate module for the same reason `media-usage-copy.ts` is one: the
  * sentence IS the safety control, not decoration on one. The media library

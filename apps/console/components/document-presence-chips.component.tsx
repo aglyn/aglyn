@@ -23,6 +23,7 @@ import type { PresentPerson } from '../hooks/use-presence-summary'
 /**
  * Who is already in this document, small enough for a list row (AGL-2486).
  *
+ * It is what lets a reader see who is in a document before opening it.
  *
  * ## Not a second avatar
  *

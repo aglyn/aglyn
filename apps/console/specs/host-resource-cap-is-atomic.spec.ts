@@ -23,9 +23,9 @@
 /**
  * AGL-2231 — a free plan's resource caps hold under CONCURRENCY.
  *
- * ZACH, 2026-08-18, verbatim: *"the free/hobby tier does hard cap so it always
- * actually stays free"*. A cap that a client can beat by sending its requests
- * at the same time is not a hard cap; it is a suggestion with a race in it.
+ * The free/hobby tier hard-caps so that it always actually stays free — and a
+ * cap a client can beat by sending its requests at the same time is not a hard
+ * cap, it is a suggestion with a race in it.
  *
  * ## The defect
  *

@@ -18,6 +18,9 @@
 /**
  * A delete confirmation may not promise safety it did not verify (AGL-703).
  *
+ * Deleting something that is referenced elsewhere breaks those references, so
+ * the confirmation has to name them — and it may not claim there are none
+ * unless it actually looked.
  *
  * The media library learned the general lesson first (AGL-1413): a panel that
  * reads `references.length === 0` and prints "not used anywhere" throws the

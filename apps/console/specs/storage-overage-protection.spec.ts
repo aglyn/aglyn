@@ -19,19 +19,18 @@
  * Metered storage: bills by default, warns before it does, caps only if asked
  * (AGL-1886, inverted 2026-08-18).
  *
- * ZACH, 2026-08-18, verbatim: "don't let it make us lose revenue or cost us
- * money, it should be a control by the end user, to prevent overage or usage
- * alerts rather, we just want to minimize churn" — and "We also need to make
- * sure the free/hobby tier does hard cap so it always actually stays free".
+ * Two rules meet here. A metered plan bills for what it delivers rather than
+ * refusing it, and the ceiling that stops the bill is the END USER's control.
+ * A free plan hard-caps, so that it always actually stays free.
  *
  * ## What this suite is for
  *
- * The design it replaced refused every metered org past its band until the org
- * acknowledged a consent, and the route writing that consent had no caller —
- * so the gate failed closed on the entire customer base and Aglyn collected
- * nothing. This suite's FIRST job is to make that shape impossible to restore
- * silently: the inversion is asserted directly, and every assertion below was
- * forced red against the pre-inversion code.
+ * A consent gate — refusing every metered org past its band until the org
+ * acknowledges something — fails closed across the entire customer base the
+ * moment nothing calls the route that writes the acknowledgement, and then
+ * Aglyn collects nothing. This suite's FIRST job is to make that shape
+ * impossible to restore silently: the metered path is asserted directly, and
+ * every assertion below was forced red against a consent-gated build.
  *
  * Its SECOND job is the opposite failure. A suite that only proves refusals is
  * satisfied by a product nobody can use — which is exactly the state AGL-1957

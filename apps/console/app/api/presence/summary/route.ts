@@ -29,6 +29,8 @@ import { summarizeOrgPresence } from '../../_lib/presence-summary'
  * Who is in each document of one site, for list rows and detail pages
  * (AGL-2486).
  *
+ * It is what puts presence avatars on a list row and a detail page, so a
+ * reader can see who is already in a document before opening it.
  *
  * ## Why this exists at all
  *

@@ -482,11 +482,11 @@ describe('InlineTextEditorComponent: a commit that changes nothing (AGL-2486)', 
 })
 
 /**
- * AGL-2486 — clicking away selected another element instead of committing.
+ * AGL-2486 — clicking away from an open editor commits it.
  *
- *
- * The editor commits on `blur`, and a canvas leaf never lets that blur
- * happen. `DraggableDroppable` registers its own listeners on the leaf
+ * Without this, the click selects another element and the edit is left open
+ * behind it. The editor commits on `blur`, and a canvas leaf never lets that
+ * blur happen. `DraggableDroppable` registers its own listeners on the leaf
  * element and `handleMouseDown` opens with
  * `e.preventDefault(); e.stopPropagation()` for BOTH `mousedown` and
  * `pointerdown` (`dnd/draggable-droppable.tsx`). Preventing the default of

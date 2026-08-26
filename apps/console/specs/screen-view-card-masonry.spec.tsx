@@ -23,11 +23,10 @@
  * carrying a 278px card — a 463px hole, 898px wasted across the two rows,
  * measured in Chrome at a 1488px content width.
  *
- * The arrangement that replaced it is ZACH'S, given card by card over three
- * rounds of looking at the rendered page, and it is deliberately not the
- * packing optimum — see the `CARD_WIDE`/`CARD_NARROW` comment on the page for
- * the measurement he overrode and why. This file pins the arrangement so that
- * a later reader who re-measures does not "correct" it back.
+ * The arrangement is deliberately not the packing optimum — see the
+ * `CARD_WIDE`/`CARD_NARROW` comment on the page for the measurement it
+ * overrides and why. This file pins it so that a later reader who re-measures
+ * does not "correct" it back.
  *
  * jsdom performs no layout, so these assert the arrangement the page DECLARES,
  * not geometry. The geometry was measured separately in Chrome against exactly

@@ -176,15 +176,14 @@ type EntryEditorState = {
   id: string | null
   title: string
   /**
-   * The entry's own address segment (AGL-2498).
+   * The entry's own address segment (AGL-2498), overridable by the author.
    *
-   *
-   * It was never a field. `handleSaveEntry` wrote `slug: slugify(title)` on
-   * EVERY save, which is two problems wearing one coat: there was no way to
-   * choose an address, and — worse — retitling a published post silently
-   * MOVED it. `/blog/our-launch` became `/blog/our-launch-2026` because
-   * somebody tightened a headline, and every inbound link, share and search
-   * result pointed at a 404 that nothing in the console mentioned.
+   * Deriving it — `slug: slugify(title)` on EVERY save — is two problems
+   * wearing one coat: there is no way to choose an address, and, worse,
+   * retitling a published post silently MOVES it. `/blog/our-launch` becomes
+   * `/blog/our-launch-2026` because somebody tightened a headline, and every
+   * inbound link, share and search result points at a 404 that nothing in the
+   * console mentions.
    *
    * Held slugified-on-save rather than slugified-on-keystroke, so typing a
    * space in the middle of a slug does not eat the cursor.
@@ -288,12 +287,12 @@ const isEditorDirty = (
 /**
  * ONE entry — its own route, its own component (AGL-2498).
  *
- *
- * They are now. This renders at
- * `…/content/{collectionSlug}/entries/{entryId}` and cannot render the list at
- * all — which is the whole fix. While the entry is still arriving it shows its
- * OWN loading state inside its own chrome, so the address and the page agree
- * from the first paint.
+ * This renders at `…/content/{collectionSlug}/entries/{entryId}` and cannot
+ * render the list at all — which is the point. A component that renders both
+ * paints the list first on a cold load, because that is the only thing it can
+ * paint while the entry is arriving. Here, the entry's own loading state shows
+ * inside its own chrome, so the address and the page agree from the first
+ * paint.
  *
  * The collection, the entries listener, the categories, the authors and the
  * screens come from `useContentScope()` — resolved once in the layout above

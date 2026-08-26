@@ -73,6 +73,7 @@ export interface BillingUsageBudgetCardProps {
  *
  * ## Why this card exists at all
  *
+ * A capability with no console surface is not a feature.
  *
  * The cron can evaluate a budget with no card at all. It would then be
  * alerting against a number no customer could ever have chosen — a feature

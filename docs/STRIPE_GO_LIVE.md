@@ -452,7 +452,7 @@ subscription product, Stripe records them and charges no one.
    runtime gate at all** — nothing refuses a page view — so it rests on the
    structural zero alone.
 
-   **THE REMAINING STEP IS ZACH'S**, because setting it starts real invoices:
+   **THE REMAINING STEP IS THE ACCOUNT OWNER'S**, because setting it starts real invoices:
 
    ```
    vercel env add BILL_ORG_LIBRARY_STORAGE_FROM production   # value: 2026-08
