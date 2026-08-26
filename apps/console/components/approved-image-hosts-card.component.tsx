@@ -51,6 +51,8 @@ export type ApprovedHostsField =
   | 'approvedMediaHosts'
   | 'approvedFontHosts'
   | 'approvedFormActions'
+  | 'approvedConnectHosts'
+  | 'approvedFrameHosts'
 
 export interface ApprovedHostsCardProps {
   hostId: string

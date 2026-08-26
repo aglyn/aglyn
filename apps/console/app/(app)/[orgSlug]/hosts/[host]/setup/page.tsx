@@ -1142,6 +1142,30 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                           placeholder="forms.example.com"
                           privacyNote="A form posts whatever the visitor typed. Approving a destination sends that data to it directly, so add one only if you intend it to receive submissions."
                         />
+                        {/* Embeds and connections. These two govern the
+                            Custom HTML block as well as the site's own
+                            runtime: a browser applies the page's policy
+                            inside a `srcdoc` iframe too, so a pasted widget
+                            that calls out to its own service needs its host
+                            approved under Connections. */}
+                        <ApprovedImageHostsCard
+                          hostId={hostId}
+                          field="approvedFrameHosts"
+                          header="Approved embeds"
+                          description="Other sites your pages may embed in a frame — a map, a booking widget, a player we don't build in. YouTube, Vimeo and checkout already work without being listed."
+                          emptyHint="No external embeds approved. The built-in video, plugin and checkout embeds still work."
+                          placeholder="calendar.example.com"
+                          privacyNote="An embedded page sees the IP address of everyone who visits yours, and can set its own cookies in their browser."
+                        />
+                        <ApprovedImageHostsCard
+                          hostId={hostId}
+                          field="approvedConnectHosts"
+                          header="Approved connections"
+                          description="Services your pages may send requests to in the background — an embedded widget calling its own API, for example. Your own forms, analytics and checkout already work without being listed."
+                          emptyHint="No external connections approved. Everything this site does on its own still works."
+                          placeholder="api.example.com"
+                          privacyNote="A connection can carry anything the page has, including what a visitor typed. Approve a host only if you meant to send it data."
+                        />
                       </Stack>
                     </TabPanel>
                     <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
