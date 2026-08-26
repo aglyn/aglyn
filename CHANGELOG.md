@@ -9,6 +9,20 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.23 — 2026-08-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.22...v1.0.0-beta.23)
+
+### Fixed
+
+- **test-infra:** the hermetic-env scrubber stops leaking the private key ([AGL-690](https://linear.app/aglyn/issue/AGL-690), [AGL-689](https://linear.app/aglyn/issue/AGL-689))
+
+### Performance
+
+- **tenant,console:** the ISR window stops being the propagation mechanism ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1150](https://linear.app/aglyn/issue/AGL-1150), [AGL-1302](https://linear.app/aglyn/issue/AGL-1302), [AGL-2195](https://linear.app/aglyn/issue/AGL-2195))
+- **tenant:** a page with a collection block stops paying a serial read ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1440](https://linear.app/aglyn/issue/AGL-1440))
+- **tenant,aglyn:** the enrichers stop queueing, and a phase stops mislabelling ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1302](https://linear.app/aglyn/issue/AGL-1302))
+
 ## v1.0.0-beta.22 — 2026-08-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/0703692fa...v1.0.0-beta.22)
