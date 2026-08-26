@@ -18,13 +18,12 @@
 /**
  * A free org's invoice is ZERO, by every path, even with every band blown.
  *
- * ZACH, 2026-08-18, verbatim: **"We also need to make sure the free/hobby tier
- * does hard cap so it always actually stays free"**.
+ * The free/hobby tier hard-caps so that it always actually stays free.
  *
  * ## Why this suite exists separately from the upload gate
  *
  * "The upload was refused" and "the invoice was zero" are different claims,
- * and only the second one is what Zach said. `storage-overage-protection.spec`
+ * and only the second one is the promise. `storage-overage-protection.spec`
  * proves the first: `mediaStorageGate` hard-bands free past
  * `storagePerHostMb`. That is a **runtime check on one ingress path**, and it
  * is the fragile half — it protects the bytes, not the bill, and it says
@@ -55,9 +54,9 @@
  * *only* by the structural zero. That is no longer true, and it now has TWO
  * braces, which are different instruments rather than two goes at one:
  *
- *  - `bandwidthCapEngaged` — the PLAN rule. Zach chose enforcement on
- *    2026-08-19 — "before public signups arrive, so the cap is proven under
- *    real traffic while the cohort is small and a mistake is cheap" — and it
+ *  - `bandwidthCapEngaged` — the PLAN rule, enforced from before public
+ *    signups so the cap is proven under real traffic while the cohort is
+ *    small and a mistake is cheap. It
  *    refuses the pages of a free org past its band, in the middleware ahead of
  *    the ISR cache and again in the loader. Proven end to end, with its paid
  *    positive control, in `apps/tenant/specs/bandwidth-cap-refusal.spec.ts`.

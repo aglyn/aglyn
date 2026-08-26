@@ -58,8 +58,8 @@ describe('presence chip copy (AGL-2486)', () => {
 
     it('says either of you can save, which is the point of the guard fix', () => {
       expect(text.toLowerCase()).toContain('either of you can save')
-      // The old promise was the opposite, and it is the sentence Zach was
-      // reading while the editor refused his save.
+      // The opposite promise — that co-editing pauses on a conflict — is the
+      // one an author would be reading while the editor refuses their save.
       expect(text.toLowerCase()).not.toContain('pauses')
     })
 

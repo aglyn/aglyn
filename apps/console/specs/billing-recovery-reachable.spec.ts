@@ -74,7 +74,8 @@ const EXEMPT_MARKER = /\/\/\s*lockdown-423:\s*exempt\s*—/
  * `api/billing/checkout` carries it on purpose: while staff have checkout off
  * over a billing bug, nobody may open a NEW Stripe session. Neither of those
  * is the org lock this file guards against, and folding them together would
- * make the guard demand the removal of a control Zach flips deliberately.
+ * make the guard demand the removal of a staff control that is meant to be
+ * there.
  *
  * Found the hard way: pointing this list at `api/billing/checkout` as a
  * deliberate-failure probe came back GREEN, because checkout refuses through

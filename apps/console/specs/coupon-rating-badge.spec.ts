@@ -22,7 +22,7 @@ import { checkDiscountMargin } from '@aglyn/aglyn/server'
  * (AGL-1120).
  *
  * `plan-entitlements.spec.ts` already pins `checkDiscountMargin` itself. This
- * pins the thing Zach reported: what the coupon form SHOWS while you type. The
+ * pins what the coupon form SHOWS while you type. The
  * two can diverge without either being individually wrong, because the page
  * supplies its own hypothetical org — bump its site count or change its plan
  * and the badge moves while every function-level test stays green.

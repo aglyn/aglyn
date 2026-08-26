@@ -72,7 +72,7 @@ describe('the analytics instance gate (AGL-1979)', () => {
   it('leaves NO firebase-analytics call outside that gate', () => {
     // The regression proper. Each of these threw a TypeError on every mount
     // and every route change for any visitor whose Analytics failed to
-    // initialize; `logEvent` was the one Zach hit on /admin/users.
+    // initialize — `logEvent` first, since every page logs a view.
     const ungated = gateSource(source)
 
     expect(ungated).not.toMatch(/logEvent\s*\(/)

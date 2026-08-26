@@ -398,7 +398,7 @@ describe('INGRESS AND report-usage TELL THE SAME STORY', () => {
 
     // The one equation. If ingress ever accepts billable bytes a rollup will
     // not charge for, that is given-away storage; if it refuses bytes the
-    // rollup would charge for, that is the lost revenue Zach named.
+    // rollup would charge for, that is revenue refused at the door.
     expect(gate.billed).toBe(rollup.billedCents > 0)
     // And both agree with the plan predicate they are supposed to share.
     expect(gate.billed).toBe(planMetersInfraOverage(org))

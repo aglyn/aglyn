@@ -226,7 +226,7 @@ import {
   signedUploadMaxBytes,
 } from '../utils/media-upload-limits'
 
-/** The four Zach named, plus the siblings that ship with them. */
+/** The four office formats the allowlist has to carry, plus their siblings. */
 const DOCUMENT_TYPES: ReadonlyArray<[string, string]> = [
   ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'contract.docx'],
   ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'price-list.xlsx'],
@@ -315,7 +315,7 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
     })
   })
 
-  describe('metering — the reason Zach asked', () => {
+  describe('metering — a document is billable storage like anything else', () => {
     it('increments counters/media.bytes by the document’s exact byte length', async () => {
       await upload(DOCUMENT_TYPES[0][0], 'contract.docx', 4096)
       expect(incrementedBytes()).toBe(4096)

@@ -107,7 +107,7 @@ describe('one upload allowlist, three layers (AGL-1465)', () => {
   const directRoute = read('app/api/media/upload/route.ts')
   const signedRoute = read('app/api/media/upload-url/route.ts')
 
-  /** The four Zach named, plus the siblings that ship alongside them. */
+  /** The four office formats every layer must carry, plus their siblings. */
   const REQUIRED = [
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -118,7 +118,7 @@ describe('presence in every editable document (AGL-2486)', () => {
     expect(shared).toEqual([])
   })
 
-  it('covers the kinds Zach named', () => {
+  it('covers every editable document kind', () => {
     const types = new Set<string>()
     for (const path of besignerPages()) {
       if (NO_ORG_TO_SCOPE_WITH.test(path)) continue

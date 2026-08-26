@@ -270,8 +270,9 @@ const invoiceCalls = () =>
 
 describe('THE FLICKER: no ledger paints before the permission read lands', () => {
   beforeEach(() => {
-    // The state Zach was in: the org doc has arrived (it is served from the
-    // persistent cache and needs no round trip), the member doc has not.
+    // The state that produces the flicker: the org doc has arrived (it is
+    // served from the persistent cache and needs no round trip), the member
+    // doc has not.
     mockPermissionsLoaded = false
     mockCanBillingView = false
   })

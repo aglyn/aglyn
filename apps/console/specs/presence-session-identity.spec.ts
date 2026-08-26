@@ -39,14 +39,13 @@ const entry = (over: Record<string, unknown> = {}) => ({
 const NOW = 1_000_000
 
 /**
- * Real keys, CHOSEN BECAUSE THEY COLLIDE under the per-session hash this
- * replaced — `uid` is Zach's own account and the session ids have the shape
- * `createResourceUid` produces.
+ * Real keys, CHOSEN BECAUSE THEY COLLIDE under a per-session hash: a real
+ * account uid, and session ids in the shape `createResourceUid` produces.
  *
- * Picking arbitrary keys is what makes a test like this worthless: the first
- * six I wrote happened to hash to six different slots, so the spec passed
- * against the very build that shipped the bug. These six occupy three slots
- * under the old scheme, so a regression to it fails the suite.
+ * Picking arbitrary keys is what makes a test like this worthless — six keys
+ * drawn at random are likely to hash to six different slots, and the spec
+ * then passes against a build that collides in practice. These six occupy
+ * three slots under a per-session hash, so a regression to one fails here.
  */
 const UID = '7AVEMtDa6OR1EuEspeLTx2xj7gg1'
 const COLLIDING_KEYS = [
@@ -60,8 +59,9 @@ const COLLIDING_KEYS = [
 
 describe('no two sessions in a room share a colour', () => {
   it('separates keys that the per-session hash put on one colour', () => {
-    // Six sessions of ONE account. Under the scheme that shipped, these took
-    // only three of the six colours — which is exactly what Zach photographed.
+    // Six sessions of ONE account. Under a per-session hash these take only
+    // three of the six colours, so three pairs of sessions are indistinguishable
+    // on the canvas.
     const assigned = assignRoomColours(COLLIDING_KEYS)
     expect(new Set(Object.values(assigned)).size).toBe(AVATAR_COLOURS.length)
   })
@@ -225,15 +225,15 @@ describe('the room hands the avatar something it can draw', () => {
   })
 
   it('never yields an entry whose initials would be a question mark', () => {
-    // The `?` Zach saw is what empty initials draw. Anything in the room that
-    // cannot produce initials is not a collaborator and must not become an
-    // avatar — a phantom that draws a cursor and a selection box is worse
-    // than a missing one.
+    // Empty initials draw a `?` disc. Anything in the room that cannot
+    // produce initials is not a collaborator and must not become an avatar —
+    // a phantom that draws a cursor and a selection box is worse than a
+    // missing one.
     const { entries } = projectRoom(
       {
         u1: { s1: entry() },
-        // A malformed row: the shape an abandoned fixture leaves behind. An
-        // agent wrote two `zzTESTCOLLAB` rows into PRODUCTION on 2026-08-22.
+        // A malformed row: the shape an abandoned fixture leaves behind in
+        // the database, with no `displayName` under the session key.
         u2: { s1: { lastSeenAt: NOW } },
       } as never,
       'someone-else',
@@ -275,10 +275,9 @@ describe('initials are meaningful for an account with no picture', () => {
   })
 
   it('falls back to the email for an SSO account asserting no name', () => {
-    // `zach@aglyn.com` signs in through `saml.aglyn-workspace`, whose
-    // assertion carries no picture and may carry no name. Read from the
-    // tenant pool `aglyn-org-y5v14` on 2026-08-22, its `photoURL` is
-    // undefined — so initials are the whole avatar for that account.
+    // A SAML account signs in through a tenant pool whose assertion carries
+    // no picture and may carry no name: `photoURL` and `displayName` both
+    // arrive undefined, so initials are the whole avatar for that account.
     expect(memberInitials('', 'zach@aglyn.com')).toBe('Z')
   })
 

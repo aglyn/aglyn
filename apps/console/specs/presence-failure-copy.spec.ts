@@ -53,7 +53,7 @@ describe('every presence failure keeps the two things that were right', () => {
   it.each(kinds)(
     'still warns that an empty stack is not proof you are alone (%s)',
     (kind) => {
-      // Zach asked for this sentence to be KEPT. It is the one thing on the
+      // This sentence is kept on EVERY branch. It is the one thing on the
       // badge that prevents the worst outcome — two people editing the same
       // screen, each believing the empty avatar stack means they are alone.
       expect(presenceFaultNotice(fault({ kind })).caution).toContain(

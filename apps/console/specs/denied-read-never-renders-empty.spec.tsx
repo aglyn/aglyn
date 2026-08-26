@@ -67,7 +67,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /* ------------------------------------------------------------------ *
- * The surface Zach was standing on.
+ * The surface under test: the Sites page and everything it reads.
  * ------------------------------------------------------------------ */
 
 const mockUseOrgHosts = jest.fn()
@@ -145,7 +145,7 @@ jest.mock('../components/host-icon.component', () => nullComponent)
 
 import HostsPage from '../app/(app)/[orgSlug]/hosts/page'
 
-/** The exact sentence pair Zach was shown. */
+/** The exact sentence pair a refused read must never produce. */
 const ZERO_STATE = /No sites yet/i
 const ZERO_STATE_COPY = /Create a site to start building/i
 

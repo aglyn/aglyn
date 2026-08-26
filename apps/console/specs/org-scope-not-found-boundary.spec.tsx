@@ -141,9 +141,10 @@ describe('the org scope on a route with no matched [orgSlug] (AGL-2486)', () => 
   })
 
   it('resolves the workspace the URL NAMES on the not-found boundary', () => {
-    // Zach's exact URL. `/screens/[screenId]` is not a route — the editor
-    // lives at `/screens/[screenId]/versions/[versionId]/…` — so this renders
-    // the not-found boundary with an empty params bag.
+    // A URL that names a workspace and matches no route:
+    // `/screens/[screenId]` is not one — the editor lives at
+    // `/screens/[screenId]/versions/[versionId]/…` — so this renders the
+    // not-found boundary with an empty params bag.
     openAt('/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV')
     expect(resolvedOrg()).toBe('Aglyn LLC')
     expect(screen.getByTestId('path-slug').textContent).toBe('aglyn-org')

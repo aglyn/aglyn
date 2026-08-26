@@ -145,9 +145,8 @@ describe('AGL-1932: every band is a Container at a stock width', () => {
     expect(offenders).toEqual([])
   })
 
-  it('XL is the default and the majority — Zach confirmed it 2026-08-18', () => {
-    // "XL is fine for the default page width on the marketing site, I like
-    // that." A standard whose default is used once is not a default.
+  it('XL is the default and the majority', () => {
+    // A standard whose default width is used once is not a default.
     const widths = allScreens()
       .flatMap(({ screen }) => nodesOf(screen))
       .filter((node) => node.componentId === 'muiContainer')

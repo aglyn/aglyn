@@ -35,8 +35,8 @@
  * free org's invoice is zero however far past a band it goes. It deliberately
  * assumes no gate at all, so it cannot say whether one exists.
  *
- * Neither answers the question Zach actually asked, which is about the BRACES
- * and is per-dimension: *at the cap, is the operation refused?* This file is
+ * Neither answers the question about the BRACES, which is per-dimension:
+ * *at the cap, is the operation refused?* This file is
  * that answer, and it is DERIVED from `PLAN_ENTITLEMENTS.free` so a quota
  * added tomorrow is red until somebody classifies it.
  *
@@ -567,7 +567,8 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
    *
    * ## Why a FLAT constant and not the `*_ABUSE_CEILING_MULTIPLE` shape
    *
-   * The two ceilings Zach named are both `max(floor, included × 10)`, which
+   * The two ceilings that shape is named for are both
+   * `max(floor, included × 10)`, which
    * needs an included band to multiply. Members and leads have none by
    * construction — that is the point of AGL-889 — so a multiple would have to
    * invent the plan dimension the decision forbids. The flat family those
