@@ -17,7 +17,7 @@
 'use client'
 
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
-import { Container } from '@aglyn/shared-ui-jsx'
+import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
 import FeatureGate from '../../../../components/feature-gate.component'
@@ -28,6 +28,7 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
+import { checkEntitlement, planLabelGrantingFeature } from '@aglyn/aglyn'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 
 /**
@@ -72,6 +73,50 @@ const OrgData: NextPageWithLayout<Record<string, never>> = () => {
               <Box sx={{ p: 2 }}>
                 <CircularProgress size={24} />
               </Box>
+            ) : !checkEntitlement(org, 'dataStore') ? (
+              /*
+                AN UNENTITLED ORG SAW A COMPLETELY BLANK PAGE (AGL-1152).
+                The Data console extension registers its widgets behind
+                `featureFlag: 'dataStore'`, and `free` does not carry it — so
+                the registry filtered the extension out, the `orgData` slot
+                found no widgets, and the page rendered its header over
+                nothing at all. No empty state, no explanation, no upgrade
+                path: indistinguishable from the console being broken, which
+                is how it was reported.
+
+                It is NOT a plan-less-org bug, though that is where it was
+                seen. Any org resolving to `free` gets it, and a plan-less org
+                resolves to `free` — so the population is every free workspace.
+
+                Ordered AFTER the `orgReady` hold above deliberately, and that
+                hold is what makes this safe: `checkEntitlement(undefined)`
+                resolves the FREE tier rather than "unknown", so refusing
+                before the billing doc settles would show a paying customer an
+                upgrade prompt for a render or two. Same three-state reasoning
+                the commerce gate spells out at length.
+              */
+              <Alert
+                severity="info"
+                action={
+                  orgSlug ? (
+                    <AppLink
+                      componentVariant="button"
+                      color="inherit"
+                      size="small"
+                      href={`/${orgSlug}/billing`}
+                    >
+                      {'Upgrade'}
+                    </AppLink>
+                  ) : undefined
+                }
+              >
+                {
+                  'Datasets are shared collections of records — product lists, team directories, anything repeatable — that your sites can bind to and render.'
+                }
+                {planLabelGrantingFeature('dataStore')
+                  ? ` Included from ${planLabelGrantingFeature('dataStore')}.`
+                  : null}
+              </Alert>
             ) : (
               <PluginWidgetSlot
                 slot="orgData"

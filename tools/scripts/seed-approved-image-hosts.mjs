@@ -158,6 +158,12 @@ function collectHosts(value, key, into) {
  * an ordinary prop, a nested `sx`, a `srcSet`, and — the two the editor
  * warning can never see — raw author CSS in a `<style>` block and in a
  * `style` attribute.
+ *
+ * ⛔ RFC 2606 RESERVED TLDs ONLY (`example.com/net/org`). A fixture host on a
+ * real TLD is indistinguishable from a live egress to the AGL-1648
+ * subprocessor sweep, which reads hostnames out of this repo's own source —
+ * `example.co` and `example.io` failed it, and rightly: an undeclared vendor
+ * host is exactly what that guard exists to catch.
  */
 if (SELF_TEST) {
   const tree = {
@@ -169,11 +175,11 @@ if (SELF_TEST) {
     },
     authorStyle: {
       props: {
-        html: '<style>.a{background-image:url("https://css.example.io/d.png")}</style>',
+        html: '<style>.a{background-image:url("https://css.example.com/d.png")}</style>',
       },
     },
     styleAttr: {
-      props: { html: '<div style="background: url(https://attr.example.co/e.gif)">' },
+      props: { html: '<div style="background: url(https://attr.example.net/e.gif)">' },
     },
     // Must NOT be seeded: an outbound link is never fetched as an image.
     link: { props: { href: 'https://not-an-image.example.com/page' } },
@@ -184,9 +190,9 @@ if (SELF_TEST) {
   collectHosts(tree, 'nodes', found)
   const got = [...found].sort()
   const want = [
-    'attr.example.co',
+    'attr.example.net',
     'cdn.example.com',
-    'css.example.io',
+    'css.example.com',
     'srcset.example.org',
     'sx.example.net',
   ]
