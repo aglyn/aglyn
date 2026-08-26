@@ -31,6 +31,7 @@
  * non-null buffer both pass while every grid card downloads a full-size PNG.
  */
 
+import { MEDIA_CDN_VARIANT_WIDTHS } from './serve-media-cdn'
 import {
   classifyLoadFailure,
   generateMediaVariants,
@@ -80,9 +81,24 @@ describe('mediaVariantWidthsFor (AGL-1468)', () => {
   })
 
   it('generates for an unreadable header rather than opting the asset out', () => {
+    // Asserted against the CONSTANT, not a literal. A restated `[320, 640,
+    // 1280]` is exactly how the renderer's srcSet fell out of step with the
+    // generator in the first place (2026-08-26) — a fourth width was added and
+    // nothing that hard-codes three would have noticed.
     expect(
       mediaVariantWidthsFor({ contentType: 'image/png', sourceWidth: null }),
-    ).toEqual([320, 640, 1280])
+    ).toEqual([...MEDIA_CDN_VARIANT_WIDTHS])
+  })
+
+  it('offers a candidate above 1280, so a retina srcSet never falls back to the original', () => {
+    // THE REGRESSION GUARD for the bare `1920w` candidate. `image.tsx` builds
+    // its srcSet from these widths; if the largest is 1280 then `sizes="100vw"`
+    // on a retina desktop has nothing wide enough and the browser takes the
+    // full-size original — a 335 KB PNG where a variant is 4 KB.
+    expect(Math.max(...MEDIA_CDN_VARIANT_WIDTHS)).toBeGreaterThan(1280)
+    expect(
+      mediaVariantWidthsFor({ contentType: 'image/png', sourceWidth: 4000 }),
+    ).toContain(1920)
   })
 
   it('excludes SVG and non-images', () => {

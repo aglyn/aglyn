@@ -31,8 +31,14 @@ import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
 
-/** Variant widths generated at upload (AGL-175). */
-export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280] as const
+/**
+ * Variant widths generated at upload (AGL-175).
+ *
+ * Re-exported, not defined: the list now lives in `@aglyn/aglyn`'s media-ref
+ * so the RENDERER can reach it too. `image.tsx` carried its own
+ * `[320, 640, 1280]` literal, so a width added here never reached the srcSet.
+ */
+export { MEDIA_CDN_VARIANT_WIDTHS } from '@aglyn/aglyn/server'
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
 

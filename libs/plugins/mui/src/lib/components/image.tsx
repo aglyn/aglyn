@@ -253,12 +253,30 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       ref={ref}
       component="img"
       src={src}
+      // EVERY CANDIDATE IS A `?w=` URL, and the bare one is gone (2026-08-26).
+      //
+      // The list used to be a literal `[320, 640, 1280]` with the BARE url
+      // appended as `1920w` — the only candidate that is never WebP. With
+      // `sizes="100vw"` below, any retina desktop needs more effective pixels
+      // than 1280w offers, so that bare candidate is precisely the one most
+      // desktop visitors download: measured on aglyn.com, 335 KB / 305 KB /
+      // 164 KB PNG originals where the WebP variants are 4 KB / 4 KB / 5 KB.
+      // Since ~94% of a media serve is bandwidth (AGL-1442), this was the
+      // largest remaining media cost AND the page weight a visitor feels.
+      //
+      // `?w=1920` is byte-identical to the bare url until a 1920 variant
+      // exists — `serveMediaCdn` serves the original for a width an asset does
+      // not have — so this ships zero regression and picks up the saving the
+      // moment the backfill runs, with no document or component change.
+      //
+      // Reading `MEDIA_CDN_VARIANT_WIDTHS` rather than restating it is the
+      // other half: the literal here is why adding a width to the generator
+      // never used to reach the markup.
       srcSet={
         isCdnUrl
-          ? [320, 640, 1280]
-              .map((variant) => `${src}?w=${variant} ${variant}w`)
-              .concat(`${src} 1920w`)
-              .join(', ')
+          ? Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map(
+              (variant) => `${src}?w=${variant} ${variant}w`,
+            ).join(', ')
           : undefined
       }
       // `sizes` is NOT only a delivery hint, and treating it as one broke every

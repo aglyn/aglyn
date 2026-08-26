@@ -236,6 +236,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // a stub returning `{ width: 1200 }` would prove nothing about whether the
   // route ever looked at the file.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-metadata'),
+  // The REAL variant widths (2026-08-26). `MEDIA_CDN_VARIANT_WIDTHS` moved to
+  // media-ref so the RENDERER could stop restating it as a literal, and
+  // `mediaVariantWidthsFor` reads it through this barrel. Omitted from this
+  // partial mock it arrives `undefined`, and `.filter` on it throws inside the
+  // route's own try/catch — a 500 with the suite otherwise looking healthy,
+  // which is precisely the failure shape the comments above guard against.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-ref'),
   createResourceUid: () => 'media-1',
   defaultScopeForNewResource: () => ['org'],
   pluginRequestFromWeb: async (request: Request) => ({

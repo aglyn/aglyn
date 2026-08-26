@@ -76,6 +76,37 @@ import { TENANT_APEX } from './host-naming'
 export const MEDIA_CDN_ROUTE = '/api/media/cdn'
 
 /**
+ * The WebP variant widths generated at upload (AGL-175), and the widths a
+ * renderer may advertise in a `srcSet`.
+ *
+ * Here rather than beside the handler for the reason above: `serveMediaCdn`
+ * lives in a server-only lib that a plugin component cannot import, and the
+ * renderer needs the same list. It was duplicated as a bare `[320, 640, 1280]`
+ * literal in `libs/plugins/mui/.../image.tsx`, so a width added to the
+ * generator never reached the markup.
+ *
+ * ⚠️ 1920 EXISTS SO THE LARGEST CANDIDATE IS STILL A VARIANT (2026-08-26).
+ *
+ * The srcSet used to top out with the BARE url labelled `1920w` — the only
+ * candidate that is never WebP. With `sizes="100vw"` any retina desktop needs
+ * more effective pixels than 1280w offers, so that bare candidate is the one
+ * most desktop visitors actually download. Measured on aglyn.com's own
+ * assets: 335 KB / 305 KB / 164 KB PNG originals against 4 KB / 4 KB / 5 KB
+ * WebP at `?w=320` — and ~94% of a media serve is bandwidth (AGL-1442).
+ *
+ * `mediaVariantWidthsFor` drops any width at or above the source width, so
+ * adding 1920 generates a fourth variant only for originals genuinely wider
+ * than that, and `serveMediaCdn` serves the original for a width an asset
+ * does not have. Both directions degrade to exactly today's bytes.
+ *
+ * ⛔ EXISTING ASSETS HAVE NO 1920 VARIANT until a backfill runs, so they keep
+ * answering `?w=1920` with the original — no regression, and no saving on
+ * them either. The backfill is a `sharp` pass over the corpus, a script and
+ * not a patch (AGL-1442 S7).
+ */
+export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
+
+/**
  * Scheme of a stored media reference. Chosen so `startsWith` is a decision:
  * no URL, path, or `{{binding}}` an author can type begins with it, and it
  * is not a registered URL scheme, so a browser handed one by mistake fails
