@@ -61,6 +61,7 @@ import {
   Toolbar,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material'
 import { useMemo } from 'react'
 
@@ -73,6 +74,61 @@ export interface ThemePreviewProps {
  * Sample kit of MUI components rendered under the draft theme so every
  * control change is visible immediately without saving.
  */
+
+/**
+ * Every typography variant the theme defines, largest first.
+ *
+ * `theme.typography` holds scalars (`fontFamily`, the `fontWeight*` tokens,
+ * `pxToRem`) alongside the variants; a variant is the entries that are OBJECTS
+ * carrying a `fontSize`. Sorting by resolved size makes it read as a ramp
+ * rather than as whatever order the theme object happened to be written in.
+ */
+function TypeRamp() {
+  const theme = useTheme()
+  const variants = useMemo(() => {
+    const t = theme.typography as unknown as Record<string, any>
+    return Object.keys(t)
+      .filter((key) => t[key] && typeof t[key] === 'object' && t[key].fontSize)
+      .map((key) => ({
+        key,
+        size: Number.parseFloat(String(t[key].fontSize)) || 0,
+        weight: t[key].fontWeight,
+        raw: String(t[key].fontSize),
+      }))
+      .sort((a, b) => b.size - a.size)
+  }, [theme])
+  return (
+    <Stack spacing={1}>
+      {variants.map(({ key, weight, raw }) => (
+        <Stack
+          key={key}
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}
+        >
+          <Typography variant={key as any} sx={{ minWidth: 0 }} noWrap>
+            {key}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ flexShrink: 0 }}
+          >
+            {`${raw} · ${weight ?? ''}`}
+          </Typography>
+        </Stack>
+      ))}
+      <Typography variant="body1">
+        {'Body copy shows the font family, size, and text colors. '}
+        <Link href="#" onClick={(e) => e.preventDefault()}>
+          {'A link'}
+        </Link>
+        {' sits inline with the text.'}
+      </Typography>
+    </Stack>
+  )
+}
+
 export function ThemePreview(props: ThemePreviewProps) {
   const { theme, scheme } = props
 
@@ -111,23 +167,20 @@ export function ThemePreview(props: ThemePreviewProps) {
           </Toolbar>
         </AppBar>
         <Stack spacing={2} sx={{ p: 2 }}>
-          {/* The type ramp, not one sample: heading sizes and weights are
-              the first thing a font change alters. */}
-          <Typography variant="h4">{'Heading four'}</Typography>
-          <Typography variant="h6">{'Heading six'}</Typography>
-          <Typography variant="subtitle2" color="text.secondary">
-            {'Subtitle two — secondary text'}
-          </Typography>
-          <Typography variant="body1">
-            {'Body copy shows the font family, size, and text colors. '}
-            <Link href="#" onClick={(e) => e.preventDefault()}>
-              {'A link'}
-            </Link>
-            {' sits inline with the text.'}
-          </Typography>
-          <Typography variant="caption" color="text.disabled">
-            {'Caption — disabled text, the smallest size in the ramp.'}
-          </Typography>
+          {/* The WHOLE type ramp, read off the theme (Zach 2026-08-25).
+              This was five hand-picked samples — h4, h6, subtitle2, body1,
+              caption — so the variants an author is most likely to retune
+              were the ones they could not see: every heading above h4, both
+              body sizes side by side, button and overline casing, and any
+              rung the host added itself (Aglyn's own theme carries `lede`,
+              `bodyCompact` and `micro`). A ramp you cannot see is a ramp you
+              tune by reloading the site.
+
+              Discovered rather than listed, for the same reason the besigner's
+              pickers discover theirs: a host that adds a step gets it here
+              with no edit. Each row names the variant and shows what it
+              resolves to, so the preview doubles as the legend. */}
+          <TypeRamp />
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {/* Every colour is named EXPLICITLY: this kit DEMOS the palette,
                 so each control must show the slot it is labelled with. It is
