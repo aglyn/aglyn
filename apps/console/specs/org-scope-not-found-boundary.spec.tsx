@@ -72,8 +72,17 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   // Stable identities, as reactfire provides: the membership effect keys on
   // `firestore`, so a fresh object per render would restart the listen.
   const firestore = {}
+  const auth = {}
   const user = { data: { uid: 'user-1' } }
-  return { useFirestore: () => firestore, useUser: () => user }
+  return {
+    useFirestore: () => firestore,
+    useUser: () => user,
+    // `useAuthRecovery` reads the Auth instance on every render (it re-runs a
+    // read that a dead SESSION killed, once the session comes back). Nothing
+    // in this suite makes it subscribe, but the accessor must exist or the
+    // provider throws before the behavior under test can run.
+    useAuth: () => auth,
+  }
 })
 
 /**

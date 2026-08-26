@@ -27,6 +27,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useFirestore, useHost, useUser } from '@aglyn/tenant-feature-instance'
+import { useAuthRecovery } from '../hooks/use-auth-recovery'
 import { useHostResolution } from '../hooks/use-host-resolution'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -60,6 +61,19 @@ export const HostRetryContext = createContext<() => void>(() => undefined)
  * is handed re-runs the membership listen, not subdomain resolution.
  */
 export const HostOrgErrorContext = createContext<boolean>(false)
+/**
+ * Whether the failure behind HostErrorContext was the SESSION rather than
+ * the network — a read refused for who you are, not one dropped in transit.
+ *
+ * Only the copy hangs on this. The RECOVERY does not: an auth-caused failure
+ * re-runs itself (see `useAuthRecovery` below and in `OrgScopeProvider`), so
+ * by the time a user could read the message the page has usually already
+ * healed. What it must never say meanwhile is "check your connection" — the
+ * report that started this was a tab whose token had gone stale overnight,
+ * told to check a connection that was fine, next to a Try again for a
+ * condition Firebase had already resolved on its own.
+ */
+export const HostAuthErrorContext = createContext<boolean>(false)
 
 /**
  * The current host's per-site plugin deny-list (AGL-1014), [] off host
@@ -101,6 +115,8 @@ export const useHostError = () => useContext(HostErrorContext)
 export const useHostRetry = () => useContext(HostRetryContext)
 /** Whether the ORG read (not host resolution) gave up (AGL-1260). */
 export const useHostOrgError = () => useContext(HostOrgErrorContext)
+/** Whether the latched failure was the session rather than the network. */
+export const useHostAuthError = () => useContext(HostAuthErrorContext)
 
 /**
  * Reads the resolved host's doc and provides its plugin policy (AGL-1014):
@@ -151,7 +167,13 @@ export function HostIdProvider({ children }) {
   const hostSubdomain = typeof params?.host === 'string' ? params.host : null
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { currentOrg, orgs, error: orgError, retry: orgRetry } = useOrgScope()
+  const {
+    currentOrg,
+    orgs,
+    error: orgError,
+    authError: orgAuthError,
+    retry: orgRetry,
+  } = useOrgScope()
   const router = useRouter()
   const pathname = usePathname()
 
@@ -160,7 +182,7 @@ export function HostIdProvider({ children }) {
   // a legacy fallback, replacing the scan of the org's whole host list. Scoping
   // to the current org is what the rules allow; a subdomain owned by another
   // org resolves to nothing here and the cross-org redirect below handles it.
-  const { hostId, ready, error, retry } = useHostResolution(
+  const { hostId, ready, error, authError, retry } = useHostResolution(
     firestore,
     hostSubdomain,
     user?.uid,
@@ -173,8 +195,25 @@ export function HostIdProvider({ children }) {
   // the same "errored is settled, never a false 404" shape resolution itself
   // uses (AGL-813) — and hands the guard the org read's retry instead.
   const orgFailed = Boolean(hostSubdomain) && !currentOrg && orgError
+  const hostFailed = Boolean(hostSubdomain) && error
   const hostReady =
     !hostSubdomain || Boolean(currentOrg && ready) || orgFailed
+
+  // A latched error is TERMINAL by construction: the resolution effect's deps
+  // are `[firestore, subdomain, uid, orgId, attempt]`, and a refreshed ID
+  // token moves none of them — `useUser()` re-emits the same `User` object
+  // for the same uid, so React bails out and nothing re-reads. That is fine
+  // for the cold-connection failure this retry budget was built for, and
+  // wrong for an expired token, which the app is told about explicitly.
+  //
+  // Only the AUTH half self-heals, and only while it is outstanding. The org
+  // side is wired inside `OrgScopeProvider` instead of here, because that
+  // state is app-wide and every consumer of it deserves the recovered list,
+  // not just this guard.
+  useAuthRecovery(hostFailed && authError, retry)
+  // Which retry the guard is handed decides which failure it is describing,
+  // so the auth flag has to follow the same fork (AGL-1260's shape).
+  const authFailed = orgFailed ? orgAuthError : hostFailed && authError
 
   // Cross-org deep links (AGL-628). A subdomain belonging to ANOTHER org the
   // user is a member of resolves to nothing above — the org-scoped resolution
@@ -225,23 +264,23 @@ export function HostIdProvider({ children }) {
 
   return (
     <HostReadyContext.Provider value={hostReady}>
-      <HostErrorContext.Provider
-        value={(Boolean(hostSubdomain) && error) || orgFailed}
-      >
+      <HostErrorContext.Provider value={hostFailed || orgFailed}>
         <HostOrgErrorContext.Provider value={orgFailed}>
-          <HostRetryContext.Provider value={orgFailed ? orgRetry : retry}>
-            <HostSubdomainContext.Provider value={hostSubdomain}>
-              <HostIdContext.Provider value={hostId ?? null}>
-                {hostId ? (
-                  <HostPluginPolicyBridge hostId={hostId} uid={user?.uid}>
-                    {children}
-                  </HostPluginPolicyBridge>
-                ) : (
-                  children
-                )}
-              </HostIdContext.Provider>
-            </HostSubdomainContext.Provider>
-          </HostRetryContext.Provider>
+          <HostAuthErrorContext.Provider value={authFailed}>
+            <HostRetryContext.Provider value={orgFailed ? orgRetry : retry}>
+              <HostSubdomainContext.Provider value={hostSubdomain}>
+                <HostIdContext.Provider value={hostId ?? null}>
+                  {hostId ? (
+                    <HostPluginPolicyBridge hostId={hostId} uid={user?.uid}>
+                      {children}
+                    </HostPluginPolicyBridge>
+                  ) : (
+                    children
+                  )}
+                </HostIdContext.Provider>
+              </HostSubdomainContext.Provider>
+            </HostRetryContext.Provider>
+          </HostAuthErrorContext.Provider>
         </HostOrgErrorContext.Provider>
       </HostErrorContext.Provider>
     </HostReadyContext.Provider>

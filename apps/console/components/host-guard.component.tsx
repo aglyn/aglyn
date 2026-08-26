@@ -20,6 +20,7 @@ import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import { notFound } from 'next/navigation'
 import { type ReactNode } from 'react'
 import {
+  useHostAuthError,
   useHostError,
   useHostId,
   useHostOrgError,
@@ -50,6 +51,13 @@ import {
  * up rather than leaving the spinner standing forever. The copy names the
  * right failure — the workspaces couldn't load, not this workspace's sites —
  * and "Try again" re-runs the membership listen.
+ *
+ * A SESSION failure names itself too, and mostly never gets read: an
+ * auth-caused failure re-runs itself when the token comes back
+ * (`useAuthRecovery`), so this branch is what the user sees only while the
+ * session is still down. What it must not do is what it used to do — tell a
+ * tab whose token expired overnight to check a connection that was never the
+ * problem, beside a Try again for something the browser had already fixed.
  */
 export function HostGuard({ children }: { children?: ReactNode }) {
   const subdomain = useHostSubdomain()
@@ -57,6 +65,7 @@ export function HostGuard({ children }: { children?: ReactNode }) {
   const hostId = useHostId()
   const errored = useHostError()
   const orgErrored = useHostOrgError()
+  const authErrored = useHostAuthError()
   const retry = useHostRetry()
 
   if (subdomain && !ready) {
@@ -68,6 +77,16 @@ export function HostGuard({ children }: { children?: ReactNode }) {
   }
   if (subdomain && !hostId) {
     if (errored) {
+      // Subject × cause, composed rather than enumerated: four hand-written
+      // strings drift, and the two axes are genuinely independent (either
+      // read can die of either cause).
+      const subject = orgErrored
+        ? "Couldn't load your workspaces"
+        : "Couldn't load this workspace's sites"
+      const cause = authErrored
+        ? 'Your session expired. This retries itself as soon as you are ' +
+          'signed in again.'
+        : 'Check your connection and try again.'
       return (
         <Box
           sx={{
@@ -80,11 +99,7 @@ export function HostGuard({ children }: { children?: ReactNode }) {
           }}
         >
           <Typography variant="body1" color="text.secondary">
-            {orgErrored
-              ? "Couldn't load your workspaces. Check your connection " +
-                'and try again.'
-              : "Couldn't load this workspace's sites. Check your " +
-                'connection and try again.'}
+            {`${subject}. ${cause}`}
           </Typography>
           {/*
             Retries in place, never `window.location.reload()` (AGL-1200). A
