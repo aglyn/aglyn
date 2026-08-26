@@ -430,7 +430,21 @@ const AGLYN_CONFIG = {
   // },
   optimizeFonts: IS_PRODUCTION,
   // outputFileTracing: true,
-  productionBrowserSourceMaps: false,
+  /**
+   * Browser source maps are emitted in production builds.
+   *
+   * Two things depend on them. The error beacon reports client exceptions
+   * with a stack, and without maps that stack names minified chunk offsets,
+   * which cannot be traced back to a file — the report arrives and says
+   * nothing. And the platform is Apache-2.0, so the sources a map points at
+   * are already published; withholding the map hides nothing from anyone and
+   * only makes our own failures harder to read.
+   *
+   * The cost is build output size and the extra `.map` fetch a devtools
+   * session makes. Neither reaches a visitor: browsers request a map only
+   * when devtools is open.
+   */
+  productionBrowserSourceMaps: true,
   poweredByHeader: false,
 
   /**
