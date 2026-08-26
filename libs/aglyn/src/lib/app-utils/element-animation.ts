@@ -103,8 +103,8 @@ export const ANIMATION_TRIGGERS = ['load', 'scroll', 'hover'] as const
 export type AnimationTrigger = (typeof ANIMATION_TRIGGERS)[number]
 
 /**
- * Easing ids — the SHAPE of the motion, which is the third dial Zach named
- * alongside duration and delay. Persisted; never rename one.
+ * Easing ids — the SHAPE of the motion, the third dial beside duration and
+ * delay. Persisted; never rename one.
  *
  * Only the ids live here. The `cubic-bezier()` curves themselves are in the
  * server-only stylesheet module, for the same reason the keyframes are: this

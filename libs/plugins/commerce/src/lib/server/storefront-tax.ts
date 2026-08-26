@@ -50,10 +50,9 @@
  * Aglyn's to remit. The live platform account has held an ACTIVE Texas state
  * sales tax registration since 2026-08-17, so this is not hypothetical.
  *
- * **This module describes that mechanism and records the money.** The position
- * it once reserved has since been taken: Zach decided on 2026-08-24 that Aglyn
- * IS a marketplace facilitator for storefront sales, and the published Terms
- * say so at §10.7 (AGL-1956). Facilitator status still attaches by operation of
+ * **This module describes that mechanism and records the money.** Aglyn IS a
+ * marketplace facilitator for storefront sales, and the published Terms say so
+ * at §10.7 (AGL-1956). Facilitator status still attaches by operation of
  * law rather than by our say-so, and §10.7 is deliberately narrow — Aglyn
  * collects and remits **where applicable law gives it an obligation**, not
  * universally — so this module still records the mechanism per sale and does

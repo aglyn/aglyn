@@ -953,8 +953,8 @@ export const MARKETPLACE_MAX_PRICE_USD = 1000
  * (AGL-1544) — which means Stripe debits its fee from the PLATFORM's balance.
  * Stripe's fixed 30¢ dominates at low prices, so under this figure the
  * platform's cut is smaller than the cost of collecting it and every sale is a
- * loss. Zach lifted the September 1 pricing lock for this on 2026-08-19:
- * "make a minimum price floor that does not cause us to lose money."
+ * loss. The floor is the cheapest listing price that still clears the cost of
+ * processing it.
  *
  * NOT A CHOSEN NUMBER. `marketplaceMinPriceUsd` derives it from the plan
  * table's lowest take rate and the dearest enabled payment method; this is a

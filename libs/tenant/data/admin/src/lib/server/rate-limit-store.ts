@@ -359,8 +359,9 @@ export function recordSignupRefusal(
  * degradation markers and the AGL-1907 refusal markers, for the reason those
  * two gave: it inherits the deny-all security rule and the `expiresAt` TTL
  * policy that already exist, instead of needing a new collection, a rules
- * deploy and a second TTL policy — i.e. instead of needing Zach. Minute
- * bucketed so concurrent instances converge:
+ * deploy and a second TTL policy — i.e. instead of needing a console action
+ * nobody can take from code. Minute bucketed so concurrent instances
+ * converge:
  *
  * ```
  * rateLimits/serverError_1755100800000

@@ -94,9 +94,9 @@
  *
  * ## The ad signals
  *
- * Denied in BOTH branches, everywhere. Zach decided analytics and only
- * analytics for these two surfaces: Google Signals is off, there is no Google
- * Ads link and enhanced conversions is off.
+ * Denied in BOTH branches, everywhere. These two surfaces run analytics and
+ * only analytics: Google Signals is off, there is no Google Ads link and
+ * enhanced conversions is off.
  *
  * This deliberately no longer matches `aglyn.com`, which has since taken an
  * advertising grant (see the note above). The asymmetry is the point rather
@@ -117,15 +117,15 @@ export type PlatformConsentSignal = 'granted' | 'denied'
 /**
  * Switzerland, and why it is here but NOT in the tenant's set.
  *
- * the 2026-08-20 brief names the EEA, the UK **and Switzerland** as prior
- * opt-in, and instructs that those regions not be defaulted on. The tenant's
+ * Aglyn's own consent brief treats the EEA, the UK **and Switzerland** as
+ * prior opt-in, and none of those regions may be defaulted on. The tenant's
  * {@link PRIOR_CONSENT_COUNTRY_CODES} does not include `CH` — defensibly, the
  * revised FADP has no ePrivacy-style prior-consent rule and regulates on a
  * transparency/opt-out basis — so the two sets genuinely disagree.
  *
  * That disagreement is resolved in the only direction that is safe to resolve
- * unilaterally: Aglyn's OWN surfaces take the stricter reading Zach asked
- * for, and the tenant set is left exactly as it is. Widening
+ * unilaterally: Aglyn's OWN surfaces take the stricter reading, and the tenant
+ * set is left exactly as it is. Widening
  * `PRIOR_CONSENT_COUNTRY_CODES` would flip Swiss visitors on every CUSTOMER
  * site from tracked to banner-gated — a change to customers' compliance
  * posture, made on their behalf, which is the specific thing this work is

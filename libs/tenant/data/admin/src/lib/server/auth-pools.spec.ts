@@ -301,8 +301,8 @@ describe('listUsersAcrossPools (AGL-1122)', () => {
   })
 
   /**
-   * AGL-1962. Zach saw an SSO account listed twice. One candidate cause was
-   * the tenant pools being re-appended on every page: the staff page appends
+   * AGL-1962, one of two ways an SSO account gets listed twice: the tenant
+   * pools being re-appended on every page. The staff page appends
    * each new page to the ones already loaded, so a tenant user attached to
    * more than one page would be re-listed once per "Load more".
    *
@@ -483,9 +483,9 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   })
 
   /**
-   * Guard 2. Merged is not hidden. Zach asked not to SEE two rows; he did not
-   * ask to be uninformed, and a merge that says nothing is indistinguishable
-   * from a real duplicate being quietly dropped.
+   * Guard 2. Merged is not hidden. Collapsing the twin rows is a display
+   * decision; a merge that records nothing is indistinguishable from a real
+   * duplicate being quietly dropped.
    *
    * Forced red by having `collapseCrossPoolUidRows` skip its internal
    * `markCrossPoolUidCollisions` call: `uidAlsoInPools` reads undefined and

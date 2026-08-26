@@ -166,8 +166,7 @@ export function assistEntitledMonthlyLimit(): number {
 }
 
 /**
- * The repo default spend ceiling: **$40 per org per month** (Zach,
- * 2026-08-19, closing AGL-2264).
+ * The repo default spend ceiling: **$40 per org per month** (AGL-2264).
  *
  * The number is arithmetic rather than pricing. After AGL-2441 the
  * 1,000-message entitled guard bounds roughly $28/org/month of worst-case

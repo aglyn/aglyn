@@ -64,8 +64,8 @@ export function useEnabledPlugins(): readonly string[] | undefined {
  * The Members blocks — Member sign-in, Member sign-up, Password recovery —
  * are registered by the COMMERCE bundle, so `pluginId` alone said "commerce
  * is on, offer them" on sites whose `/signin`, `/signup` and `/recover`
- * return 404. Zach saw exactly that on `aglyn-org`. An author could drop a
- * sign-in block on a page, publish it, and find out from a visitor.
+ * return 404. An author drops a sign-in block on a page, publishes it, and
+ * finds out from a visitor.
  *
  * Attribution by category rather than by re-registering the components
  * under the `accounts` id: re-registering moves where they LOAD from and

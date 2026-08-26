@@ -2062,10 +2062,10 @@ describe('marketplace sale economics (AGL-2343)', () => {
 })
 
 /**
- * THE FLOOR ITSELF (AGL-2343). Zach lifted the September 1 pricing lock on
- * 2026-08-19 for exactly one decision — "make a minimum price floor that does
- * not cause us to lose money" — so the property under test is not "the number
- * is 3", it is "the number is the cheapest one that does not lose money".
+ * THE FLOOR ITSELF (AGL-2343). The floor exists to stop a marketplace listing
+ * priced below what it costs to process, so the property under test is not
+ * "the number is 3" — it is "the number is the cheapest one that does not lose
+ * money".
  */
 describe('marketplace price floor (AGL-2343)', () => {
   const PAID_PLAN_FEE_PCT = PLAN_ENTITLEMENTS.pro.marketplaceFeePct

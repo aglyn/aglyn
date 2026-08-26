@@ -71,12 +71,11 @@ const WINDOW = 200
  * client sort below dutifully ordered that sample and sliced the top off it —
  * which made the result look right and be wrong.
  *
- * Measured on the production host that reported the bug: 996 activity
- * documents, so the window covered the ~200 lexicographically-lowest ids and
- * ended at `ClSZ…`. The screen Zach was looking at had FIVE real entries, ids
- * beginning `Y`, `h`, `j`, `k`, `t` — every one of them past the boundary. The
- * card fetched 200 rows, matched 0, and said "No activity yet" about a page
- * whose SEO had been changed that morning.
+ * Measured on a production host: 996 activity documents, so a 200-row window
+ * covers the lexicographically-lowest ids and ends at `ClSZ…`. A screen whose
+ * five entries have ids beginning `Y`, `h`, `j`, `k`, `t` has every one of
+ * them past that boundary — the card fetches 200 rows, matches 0, and says
+ * "No activity yet" about a page edited that morning.
  *
  * ## Why the targeted query filters SERVER-side
  *

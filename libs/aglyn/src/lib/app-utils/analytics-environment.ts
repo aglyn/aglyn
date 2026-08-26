@@ -39,9 +39,10 @@
  *
  * ## Why this is better than the stamp for the dev case
  *
- * `traffic_type: 'internal'` only helps once Zach creates the GA4 data filter,
- * and a filter is not retroactive: a hit that ships today is counted today.
- * Not emitting at all needs nobody's click and cannot be got wrong later.
+ * `traffic_type: 'internal'` only helps once a matching GA4 data filter exists
+ * in the property, and a filter is not retroactive: a hit that ships today is
+ * counted today. Not emitting at all needs no console configuration and cannot
+ * be got wrong later.
  *
  * ## The three signals, and why the default leans LOUD
  *

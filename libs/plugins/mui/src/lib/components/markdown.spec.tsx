@@ -656,8 +656,8 @@ describe('the table of contents scrolls rather than clipping (AGL-2486)', () => 
   })
 
   it('says that it scrolls — a drawn thumb and a fade at the cut', () => {
-    // The defect Zach reported was not the missing pixels, it was that the
-    // cut read as the end of the document. So the box opts out of the
+    // The defect is not the clipped pixels, it is that the cut reads as the
+    // end of the document. So the box opts out of the
     // invisible-until-you-scroll overlay scrollbar, and its bottom edge fades
     // instead of slicing a word in half.
     const { cls } = renderToc()
