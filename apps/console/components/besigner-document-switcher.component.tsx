@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  ICON_VARIANT_COMPONENT,
   ICON_VARIANT_DOCUMENT,
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_PAGES,
@@ -54,7 +55,7 @@ import SwitcherSearchField from './switcher-search-field.component'
 export interface BesignerDocumentSwitcherProps {
   hostId: string
   /** The document currently open in the besigner. */
-  current: { kind: 'screen' | 'layout'; id: string }
+  current: { kind: SwitchableKind; id: string }
 }
 
 /**
@@ -64,6 +65,19 @@ export interface BesignerDocumentSwitcherProps {
  * server-search hook instead.
  */
 const LAYOUT_LIMIT = 25
+/**
+ * Reusable components join screens and layouts (AGL-2486). Zach: "Why do we
+ * not have a component switcher like we have a screen switcher". There was no
+ * reason — the kind union simply stopped at two.
+ */
+const COMPONENT_LIMIT = 25
+export type SwitchableKind = 'screen' | 'layout' | 'component'
+/** Firestore collection under `hosts/{hostId}` for each switchable kind. */
+const COLLECTION_OF: Record<SwitchableKind, string> = {
+  screen: 'screens',
+  layout: 'layouts',
+  component: 'components',
+}
 
 /**
  * App-bar control that shows which screen/layout the besigner is editing and
@@ -117,13 +131,33 @@ export const BesignerDocumentSwitcherComponent = observer(
       [firestore, hostId],
       { idField: '$id' },
     )
+    /**
+     * Components load only once the menu is OPEN, unlike layouts above.
+     *
+     * A besigner mount that never touches this control should not pay for a
+     * list nobody asked to see — the standing rule that an expensive read
+     * needs an ask, not a mount. `useFirestoreCollection` is given a null
+     * query until `anchorEl` exists, so the read is issued on first open and
+     * cached from then on.
+     */
+    const { data: componentDocs } = useFirestoreCollection<any>(
+      () =>
+        anchorEl
+          ? query(
+              collection(firestore, 'hosts', hostId, 'components'),
+              limit(COMPONENT_LIMIT),
+            )
+          : null,
+      [firestore, hostId, anchorEl],
+      { idField: '$id' },
+    )
     const { data: currentDoc } = useFirestoreDoc<any>(
       () =>
         doc(
           firestore,
           'hosts',
           hostId,
-          current.kind === 'screen' ? 'screens' : 'layouts',
+          COLLECTION_OF[current.kind],
           current.id,
         ),
       [firestore, hostId, current.kind, current.id],
@@ -173,6 +207,32 @@ export const BesignerDocumentSwitcherComponent = observer(
       )
     }, [layoutDocs, current.kind, currentDoc, queryText])
 
+    // Same shape as `layouts` above: load-then-filter, with the current
+    // document folded in so the row you are standing on is always present
+    // even when the window or the filter would have excluded it.
+    const components = useMemo(() => {
+      const docs = (componentDocs ?? []).filter(
+        (component: any) => !component.deletedAt,
+      )
+      if (
+        current.kind === 'component' &&
+        currentDoc?.$id &&
+        !docs.some((component: any) => component.$id === currentDoc.$id)
+      ) {
+        docs.push(currentDoc)
+      }
+      const sorted = docs.sort((a: any, b: any) =>
+        (a.displayName ?? a.$id).localeCompare(b.displayName ?? b.$id),
+      )
+      const key = Aglyn.nameSearchKey(queryText)
+      if (!key) return sorted
+      return sorted.filter((component: any) =>
+        Aglyn.nameSearchKey(component.displayName ?? component.$id).startsWith(
+          key,
+        ),
+      )
+    }, [componentDocs, current.kind, currentDoc, queryText])
+
     const pathLabel = useCallback(
       (screenId: string) => {
         const path = routingMap?.[screenId]
@@ -187,13 +247,12 @@ export const BesignerDocumentSwitcherComponent = observer(
     }, [])
 
     const handleSelect = useCallback(
-      async (kind: 'screen' | 'layout', id: string) => {
+      async (kind: SwitchableKind, id: string) => {
         close()
         if (kind === current.kind && id === current.id) return
-        const target =
-          kind === 'screen'
-            ? screens.find((screen: any) => screen.$id === id)
-            : layouts.find((layout: any) => layout.$id === id)
+        const pool =
+          kind === 'screen' ? screens : kind === 'layout' ? layouts : components
+        const target = pool.find((item: any) => item.$id === id)
         if (!target?.versionId) return
 
         if (!Aglyn.canvas.isInitialSame) {
@@ -218,23 +277,42 @@ export const BesignerDocumentSwitcherComponent = observer(
                 screenId: id,
                 versionId: target.versionId,
               })
-            : buildRoute(Route.LAYOUT_BESIGNER, {
-                orgSlug,
-                host,
-                layoutId: id,
-                versionId: target.versionId,
-              })
+            : kind === 'layout'
+              ? buildRoute(Route.LAYOUT_BESIGNER, {
+                  orgSlug,
+                  host,
+                  layoutId: id,
+                  versionId: target.versionId,
+                })
+              : buildRoute(Route.COMPONENT_BESIGNER, {
+                  orgSlug,
+                  host,
+                  componentId: id,
+                  versionId: target.versionId,
+                })
         void router.push(url)
       },
-      [close, current.kind, current.id, screens, layouts, confirm, orgSlug, host, router],
+      [
+        close,
+        current.kind,
+        current.id,
+        screens,
+        layouts,
+        components,
+        confirm,
+        orgSlug,
+        host,
+        router,
+      ],
     )
 
     const label = currentDoc?.displayName ?? current.id
     // Don't flash "no matches" while a search request is still in flight.
-    const empty = screens.length === 0 && layouts.length === 0
+    const empty =
+      screens.length === 0 && layouts.length === 0 && components.length === 0
     const showEmpty = empty && !screensLoading
 
-    const renderRow = (kind: 'screen' | 'layout', item: any) => {
+    const renderRow = (kind: SwitchableKind, item: any) => {
       const isCurrent = kind === current.kind && item.$id === current.id
       return (
         <MenuItem
@@ -248,7 +326,9 @@ export const BesignerDocumentSwitcherComponent = observer(
               path={
                 kind === 'screen'
                   ? ICON_VARIANT_PAGES.path
-                  : ICON_VARIANT_DOCUMENT.path
+                  : kind === 'component'
+                    ? ICON_VARIANT_COMPONENT.path
+                    : ICON_VARIANT_DOCUMENT.path
               }
               fontSize="small"
               sx={{ color: isCurrent ? 'primary.main' : 'text.secondary' }}
@@ -262,12 +342,15 @@ export const BesignerDocumentSwitcherComponent = observer(
               secondary: { noWrap: true, variant: 'caption' },
             }}
           />
-          {kind === 'layout' ? (
+          {kind !== 'screen' ? (
             <Chip
-              label="Layout"
+              label={kind === 'layout' ? 'Layout' : 'Component'}
               size="small"
               variant="outlined"
-              sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }}
+              sx={{
+                height: 20,
+                '& .MuiChip-label': { px: 0.75, fontSize: 11 },
+              }}
             />
           ) : null}
           {isCurrent ? (
@@ -299,12 +382,16 @@ export const BesignerDocumentSwitcherComponent = observer(
               path={
                 current.kind === 'screen'
                   ? ICON_VARIANT_PAGES.path
-                  : ICON_VARIANT_DOCUMENT.path
+                  : current.kind === 'component'
+                    ? ICON_VARIANT_COMPONENT.path
+                    : ICON_VARIANT_DOCUMENT.path
               }
               fontSize="small"
             />
           }
-          endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />}
+          endIcon={
+            <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />
+          }
           sx={{
             maxWidth: 280,
             mx: 1,
@@ -320,9 +407,9 @@ export const BesignerDocumentSwitcherComponent = observer(
           >
             {label}
           </Typography>
-          {current.kind === 'layout' ? (
+          {current.kind !== 'screen' ? (
             <Chip
-              label="Layout"
+              label={current.kind === 'layout' ? 'Layout' : 'Component'}
               size="small"
               variant="outlined"
               sx={{
@@ -382,6 +469,19 @@ export const BesignerDocumentSwitcherComponent = observer(
                     {layouts.map((layout: any) => renderRow('layout', layout))}
                   </>
                 ) : null}
+                {components.length > 0 ? (
+                  <>
+                    <ListSubheader
+                      disableSticky
+                      sx={{ lineHeight: 2.5, bgcolor: 'transparent' }}
+                    >
+                      {'Components'}
+                    </ListSubheader>
+                    {components.map((component: any) =>
+                      renderRow('component', component),
+                    )}
+                  </>
+                ) : null}
               </>
             )}
           </Box>
@@ -389,7 +489,9 @@ export const BesignerDocumentSwitcherComponent = observer(
           <MenuItem
             onClick={() => {
               close()
-              void router.push(buildRoute(Route.HOST_SCREENS, { orgSlug, host }))
+              void router.push(
+                buildRoute(Route.HOST_SCREENS, { orgSlug, host }),
+              )
             }}
             sx={{ gap: 1 }}
           >
