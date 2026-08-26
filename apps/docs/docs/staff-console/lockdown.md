@@ -1303,20 +1303,20 @@ page with no way to update a card. Stripe then retries, and at the end of the
 retries the live terminal setting cancels the subscription. The email works, the
 notification works, and the customer still cannot pay.
 
-**The fix, and the one Zach rejected.** Pointing those fields at Stripe's own
-hosted card-update page was proposed and refused: *"they should be able to manage
-this inside the console not an external source."* That reframes the problem —
-the risk that proposal was routing around, a past-due or locked workspace unable
-to reach its own billing page, is a bug to fix rather than a reason to send
-customers away. See **The billing recovery path must survive a billing lock**
+**The fix, and the one that was refused.** Pointing those fields at Stripe's own
+hosted card-update page sends a paying customer outside the product to manage
+their own subscription, and it routes around a bug rather than fixing it: a
+past-due or locked workspace that cannot reach its own billing page is the
+actual defect. See **The billing recovery path must survive a billing lock**
 below.
 
 **What to paste, and the one-way door.** The URL is
 `https://app.aglyn.com/billing` (`Route.BILLING_ENTRY`), org-agnostic because
 Stripe stores ONE link for the whole account. ⛔ **Switching off `Use a mix of
 both (Legacy)` is irreversible** — Stripe shows a confirmation dialog saying so,
-and the legacy option cannot be restored afterwards. Zach has seen that dialog
-and declined it once, deliberately. It is his call and nobody else's.
+and the legacy option cannot be restored afterwards. That dialog has been
+declined deliberately; accepting it is the account owner's call and nobody
+else's.
 
 ### ⛔ "Include a link for customers to manage their subscriptions" stays OFF
 

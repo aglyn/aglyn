@@ -1,7 +1,7 @@
 # Multi-Tenant Organizations & Firestore v2 — Design
 
 Status: **In progress** (Linear project: Multi-Tenant Organizations & Firestore v2)
-Author: Zach Gover, 2026-07-09
+Author: Aglyn LLC, 2026-07-09
 
 > **2026-07-09 update:** the product is pre-launch, so the dual-write
 > machinery in §10 was dropped in favor of a direct cutover. Implemented:

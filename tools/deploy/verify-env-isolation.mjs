@@ -196,7 +196,7 @@ const ALLOW_SHARED = {
 const ACCEPTED = {
   // STRIPE_SECRET_KEY: {
   //   environments: ['preview'],
-  //   who: 'Zach, 2026-08-__',
+  //   who: '<name>, YYYY-MM-DD',
   //   why: 'preview exercises the real payment path before release (AGL-2401)',
   // },
 }

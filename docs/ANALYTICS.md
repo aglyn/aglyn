@@ -46,7 +46,7 @@ legally blocked when it is not. ⚑ Read the master, not this file's summary of 
 **Current state, verified 2026-08-25:** Google Signals **OFF** (leave it — that
 is cross-device identity on signed-in Google users, a bigger step than cookie
 retargeting and nothing here needs it). Ads personalization is now **307 of 307
-regions**, opened by Zach. The server-side sender still asserts
+regions**, opened in the Ads console. The server-side sender still asserts
 `non_personalized_ads` per hit.
 
 **The AGL-1559 posture line "no Google Ads link" expired on 2026-08-20** — the
@@ -1349,7 +1349,7 @@ when there is Google traffic, and simply found no tag. What it did find is
 before AGL-2067, and proof the hole was real. They are per-origin, so they
 cannot reach the production property; they are stale, not active.
 
-### 8d. What is left for Zach to click
+### 8d. What is left to click in the console
 
 🔴 **The Internal Traffic data filter is ACTIVE, not Testing — corrected
 2026-08-24 by reading Admin → Data filters on the live property.** It shows
@@ -1537,8 +1537,8 @@ the ambient `page_title`, closed by AGL-2087 in §11.
 
 ### 11. `page_title` is sent explicitly, and is not the tab title (AGL-2060)
 
-Zach read the Firebase overview report on 2026-08-18 and found one console
-page reported as three rows:
+The Firebase overview report, read on 2026-08-18, showed one console page as
+three separate rows:
 
 | Page title and screen class             | Views |
 | --------------------------------------- | ----- |
@@ -1938,7 +1938,7 @@ validates a payload and stores nothing.
 >
 > **⚑⚑ RE-READ 2026-08-24 (later the same day, AGL-1637 audit): EVERY
 > registration item below is now DONE.** The 18/2 reading quoted here was taken
-> in the morning; Zach registered the remaining 15 definitions at 06:25–06:27
+> in the morning; the remaining 15 definitions were registered at 06:25–06:27
 > GMT-5, and the property now reads **30 event-scoped dimensions and 5 custom
 > metrics**. Counted row by row off Admin → Data display → Custom definitions
 > (both tabs, both pages of the dimension list), and corroborated by Account
@@ -2246,7 +2246,7 @@ there is the merchant's to make, not one we can make for them.
    today** — the subscription `purchase`, the marketplace `purchase`, and the
    scheduled `site_published`. Not degraded: never sent, and silently, because
    `ga4Credentials()` returns null before any log line. The fix is two console
-   actions, both Zach's, in the click-list on AGL-1637.
+   actions, both in the click-list on AGL-1637.
 
    #### ✅ RESOLVED 2026-08-17 — everything above this line is HISTORY
 
@@ -2297,8 +2297,9 @@ there is the merchant's to make, not one we can make for them.
    `docsGaTrackingId ? {…} : undefined`, so docs.aglyn.com loaded no GA tag at
    all.
 
-   ⚠️ **This section previously recorded that Zach set it to `G-YW5PG16YTM` on
-   2026-08-23. That was wrong, and it went unchallenged for a day.** Measured on
+   ⚠️ **This section previously recorded that the variable was set to
+   `G-YW5PG16YTM` on 2026-08-23. That was wrong, and it went unchallenged for a
+   day.** Measured on
    **2026-08-24**: `aglyn-docs` had **zero** project-level environment variables,
    and `DOCS_GA_TRACKING_ID` was absent from the team shared set as well (15
    shared keys, checked via `GET /v1/env` — the source `vercel env ls` cannot

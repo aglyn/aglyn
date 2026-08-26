@@ -295,8 +295,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   })
 
   it('fails when a DECLARED-stale row is fixed on the page', () => {
-    // The direction that matters most: the moment Zach corrects the published
-    // page and the copy is re-extracted, the declaration has to come out. A
+    // The direction that matters most: the moment the published page is
+    // corrected and the copy re-extracted, the declaration has to come out. A
     // guard that only fired on regressions would leave the exemption behind to
     // pre-excuse the next one.
     resetFixtures()

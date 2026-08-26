@@ -148,7 +148,7 @@ auto-reply is sent by Google, is not observable from the repo, and has no
 per-message outcome to record — one more reason the remaining half of this
 issue cannot be closed from here.
 
-### The Workspace change — Zach's, because these are account settings
+### The Workspace change — the account owner's, because these are account settings
 
 **Groups → the group → Settings → Email options → Auto replies**, check
 *Enable auto-reply to non-members outside the organization*, paste the body,
@@ -321,7 +321,7 @@ that silence stops being ambiguous.
 >
 > This is an automated acknowledgement. Nobody has read your message yet.
 
-### The second member — also Zach's, and not fixed by anything above
+### The second member — also the account owner's, and not fixed by anything above
 
 Every one of the six has exactly one member, `zach@aglyn.com`. Because *Who can
 post* is "Anyone on the web" with no moderation, mail is **accepted** the whole

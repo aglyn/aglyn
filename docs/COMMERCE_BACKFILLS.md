@@ -1,7 +1,7 @@
 # Commerce backfills (AGL-1727 / 1745 / 1752 / 1753 / 1821)
 
 Five historical-data gaps in commerce money records, each filed as a "backfill
-decision" issue because rewriting merchant-facing financial history is the call, not an agent's. Zach authorised all five on **2026-08-20**.
+decision" issue because rewriting merchant-facing financial history is the account owner's call, not an agent's. All five were authorized on **2026-08-20**.
 
 **Nothing here has been applied to production.** Every script dry runs by
 default; the apply gate is double-keyed and deliberately awkward.

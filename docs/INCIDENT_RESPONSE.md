@@ -15,7 +15,8 @@ one**), `docs/DISASTER_RECOVERY.md`, `apps/docs/docs/staff-console/lockdown.md`.
 
 ## Who is on point
 
-**Zach. For everything, at all hours, with no rotation and no escalation path.**
+**The account owner. For everything, at all hours, with no rotation and no
+escalation path.**
 
 This is stated first because every other line in this document depends on it,
 and because pretending otherwise would make the rest of it useless. Every alert
@@ -158,9 +159,9 @@ status page shows only what the health checks say.
 - **Give the next update time and meet it**, even if the update is "still
   investigating, next update in an hour". A silence is read as an escalation.
 - **Affected customers get told directly.** A status page is not notice.
-- **One voice.** Every external word comes from Zach.
+- **One voice.** Every external word comes from the account owner.
 
-## The SLA decision — options for Zach, with the tradeoffs
+## The SLA decision — the options, with the tradeoffs
 
 **No number is committed here, deliberately.** AGL-1148's sequencing was
 the call — build the plumbing, commit to a figure once it is measured —

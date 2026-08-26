@@ -27,9 +27,10 @@
  * asserted only on things it should catch is half-tested, and the half left
  * out is the half that makes people delete it.
  *
- * The regression bytes are real. `libs/plugins/mui/.../container.ts:146` is
- * the line Zach reported; `#2e7d32` on 33 commerce entries and `#f57c00` on
- * 18 email ones are the two families the sweep found around it.
+ * The regression bytes are real: `libs/plugins/mui/.../container.ts:146` is the
+ * line that first tripped the detector, and `#2e7d32` on 33 commerce entries
+ * and `#f57c00` on 18 email ones are the two families the sweep found around
+ * it.
  */
 
 import { strict as assert } from 'node:assert'

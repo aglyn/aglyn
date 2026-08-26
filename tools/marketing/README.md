@@ -173,8 +173,8 @@ frame 77:38 is 1440px wide, which is not one of 375 (mobile), 768 (tablet),
 
 ### Variant comes from the frame's measured width
 
-Zach supplied four node ids without saying which was which, and they do not
-sort by breakpoint. Reading each frame's own `width` is the only non-guessing
+The four node ids arrive without a breakpoint attached, and they do not sort
+by one. Reading each frame's own `width` is the only non-guessing
 way to tell `572:2890` (768, tablet) from `77:38` (1440, desktop) — so the
 extractor keys on width and **refuses** an unrecognised one rather than
 falling back to file name or argument order.

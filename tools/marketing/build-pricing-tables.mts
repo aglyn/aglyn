@@ -928,8 +928,8 @@ const frameMetered = frame.sections
  * still carry the pre-AGL-1280 rates the frame was drawn with. AGL-1280
  * measured the real costs on 2026-08-09 (GCS Standard US multi-region list for
  * storage; the actual ~12 reads / ~9 writes / one ~0.4s invocation of
- * `/api/forms/submit` for submissions) and Zach LOCKED the corrected set on
- * 2026-08-18. The published page was corrected too — the 2026-08-19
+ * `/api/forms/submit` for submissions) and the corrected set was locked for
+ * the public beta. The published page was corrected too — the 2026-08-19
  * transcription in `apps/console/specs/published-pricing-table-parity.spec.ts`
  * records `aglyn.com/pricing` serving $0.0338 / GB-mo and $0.065 / 1k. The
  * frame is the one artifact left behind.

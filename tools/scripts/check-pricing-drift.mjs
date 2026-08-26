@@ -32,8 +32,8 @@
 //
 // The pin is a SECOND copy on purpose — the same mechanism as the committed
 // legal snapshots. Code is edited every day by whoever is closest to a
-// feature; the pin is an independent record of the price set Zach LOCKED on
-// 2026-08-18, verified line-by-line against
+// feature; the pin is an independent record of the locked price set,
+// verified line-by-line against
 // `Platform Docs/Pricing & Packaging/00-Pricing-Source-of-Truth` at the time.
 // One copy cannot detect its own drift. Changing a charged price is supposed
 // to cost two deliberate edits and a review, and that is the point.
@@ -59,13 +59,13 @@ const PLAN_ENTITLEMENTS_TS = 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
 
 /**
- * The price set Zach LOCKED on 2026-08-18 for the Sept 1 public beta.
+ * The price set LOCKED for the Sept 1 public beta.
  * Recorded on AGL-1885 and in the Pricing Decision Log entry
  * "2026-08-18 — Pricing LOCK for the Sept 1 public beta".
  *
  * ⚑ Do not edit to make a failing check pass. A disagreement here means the
  * code moved a charged price; the fix is to decide which is right, not to
- * re-pin. If Zach changes a price, this and the Decision Log change together.
+ * re-pin. A price change moves this pin and the Decision Log together.
  */
 const LOCKED = {
   monthly: { free: 0, starter: 25, pro: 56, business: 139, scale: 249, advanced: 399, agency: 799 },

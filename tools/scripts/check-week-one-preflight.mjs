@@ -36,7 +36,8 @@
 //   2  at least one item is UNKNOWN (could not be evaluated) and none failed
 //
 // WHAT THIS CANNOT DO. Minting the live Stripe coupon, naming twenty people,
-// and confirming zero enabled Google Ads campaigns are Zach's. This script
+// and confirming zero enabled Google Ads campaigns are console actions a
+// person takes by hand. This script
 // still checks the first (a live read is not a live write) and the second
 // (the names land in a file), and prints the third as an explicit manual
 // item rather than pretending silence is a pass.
@@ -169,8 +170,8 @@ function checkDecisions() {
   const open = []
   for (const n of [1, 2, 3, 4, 5]) {
     // A decision is settled when its bullet is struck through AND resolved.
-    // "⚖️ DECISION 4" with no strike is precisely the shape that read as
-    // pending for a day after Zach had actually decided it.
+    // "⚖️ DECISION 4" with no strike is precisely the shape that reads as
+    // pending after the decision has actually been made.
     const struck = new RegExp(`~~DECISION ${n}~~[^\\n]*RESOLVED`).test(doc)
     if (!struck) open.push(n)
   }

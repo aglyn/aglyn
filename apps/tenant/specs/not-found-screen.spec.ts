@@ -302,8 +302,9 @@ describe('half 1 — an unmatched path is a 404 AND resolves the screen', () => 
 
     expect(props?.nodes).toEqual(DESIGNED_NODES)
     expect((props?.data.screen?.data as any)?.$id).toBe('notFoundScreen')
-    // Not the platform's ~11KB status page: a real composed screen carries the
-    // site's own chrome, which is the whole of Zach's complaint.
+    // Not the platform's ~11KB status page: a real composed screen carries
+    // the site's own nav and footer, so a visitor who mistypes a URL stays
+    // inside the site rather than landing on Aglyn's chrome.
     expect(Object.keys(props?.nodes ?? {})).toEqual(
       expect.arrayContaining(['nav', 'foot']),
     )

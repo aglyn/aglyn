@@ -383,10 +383,10 @@ subscription product, Stripe records them and charges no one.
 
    ### the decision, 2026-08-17 (AGL-1886) — and its condition
 
-   Asked which date this should carry, Zach chose **immediately**, and added a
-   condition in his own words: *"also give overage protection and usage
-   alerts, so customers don't get a surprise bill."* The condition is not
-   garnish — billing turns on only when the protection ships with it.
+   The start date is **immediate**, and it carries a condition: overage
+   protection and usage alerts ship with it, so that no customer meets a
+   surprise bill. The condition is not garnish — billing turns on only when the
+   protection is in place.
 
    **Shipped (AGL-1886), all of it before this variable is set:**
 
@@ -414,11 +414,10 @@ subscription product, Stripe records them and charges no one.
 
    The shape above shipped as a **soft cap with an acknowledged opt-in**: past
    the band, a metered org was REFUSED until a manager accepted metered
-   storage in Billing. Zach reversed it the next day, verbatim:
-
-   > *"don't let it make us lose revenue or cost us money, it should be a
-   > control by the end user, to prevent overage or usage alerts rather, we
-   > just want to minimize churn"*
+   storage in Billing. That was reversed the next day: the ceiling is the end
+   user's control, set by them if they want one, and the platform neither
+   loses revenue nor blocks a paying customer to protect them from a bill they
+   have already agreed to pay.
 
    The opt-in gate cost revenue and blocked customers without preventing any
    bill. `/api/billing/storage-overage` had **no caller at all** until

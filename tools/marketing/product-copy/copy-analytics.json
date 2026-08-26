@@ -236,7 +236,7 @@
         { "title": "Beta notice", "body": "In early-access beta — features may change.", "meta": "badge 'Beta' + note" }
       ],
       "image": null,
-      "notes": "Shared Footer component instance (124:3298), byte-identical on all three frames. Dark background. The developer strapline originally claimed open source, self-hostable and API-first; Zach confirmed the first two (public, Apache-2.0) and dropped API-first, which is a term of art for an API-primary product. See claimsToVerify for the original wording."
+      "notes": "Shared Footer component instance (124:3298), byte-identical on all three frames. Dark background. The developer strapline originally claimed open source, self-hostable and API-first; the first two are accurate (public, Apache-2.0) and API-first was dropped, being a term of art for an API-primary product. See claimsToVerify for the original wording."
     }
   ],
   "claimsToVerify": [

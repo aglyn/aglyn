@@ -40,7 +40,7 @@
 //
 // It does not "fix" anything and it does not rank one source above another.
 // It reports disagreement and exits non-zero, because which side is right is
-// a pricing decision and belongs to Zach, not to a script.
+// a pricing decision and not a script's to make.
 //
 // ⛔ THE TWO PER-GB-MONTH PRICES ARE NOT A BUG. `storagePerGbMonth` ($0.026,
 // metered infra pass-through, published at ×1.30 = $0.0338) and

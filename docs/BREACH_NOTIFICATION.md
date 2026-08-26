@@ -290,7 +290,7 @@ Art. 33(1) expects notification even where facts are still being established
 and Art. 33(4) allows information in phases. For a customer's visitors, no,
 and we should not pretend otherwise: that answer belongs to the customer.
 
-**The open decision (Zach).** The only per-natural-person country signal we
+**The open decision (the account owner's).** The only per-natural-person country signal we
 hold is a **security** record — `users/{uid}/devices.location` — used here for
 a **different purpose**, and it currently has **unbounded retention** (no cron,
 no `expiresAt`; `DEVICE_LIMIT = 50` caps the read, not the stored set). Two
@@ -308,9 +308,10 @@ day to improve reporting for an incident that may never happen.**
 
 ## 4. Notify — who, and by when
 
-**Zach decides.** There is one decision-maker on notification, and that is not a
-gap to apologise for at this size — it is a fact the runbook should state so
-nobody waits for a committee. Counsel is consulted before any regulator filing.
+**The account owner decides.** There is one decision-maker on notification, and
+that is not a gap to apologize for at this size — it is a fact the runbook
+should state so nobody waits for a committee. Counsel is consulted before any
+regulator filing.
 
 ### As processor — to the customer. This one is clear and we can meet it.
 
@@ -440,7 +441,7 @@ is genuinely the stronger one and B is the honest description of where we are.
 But note that A costs roughly what one lunch costs per year at our size, which
 is a real argument for simply doing A and never thinking about it again. That
 trade — a defensible position maintained forever, versus €150–€400/yr to stop
-maintaining it — is the actual decision, and it is Zach's.
+maintaining it — is the actual decision, and it is the account owner's.
 
 Until (1) is signed off, **escalate to counsel on hour one** of any incident
 touching an EU or UK data subject rather than spending the window discovering
@@ -480,7 +481,7 @@ that the notification was late.
 - **Never speculate in writing.** "We are investigating a potential issue
   affecting X" is safe; a cause, a count or a scope stated before it is
   established becomes the thing you have to retract.
-- **One voice.** Every external word about a breach comes from Zach.
+- **One voice.** Every external word about a breach comes from the account owner.
 
 ## After any restore — the step DPA §11 requires
 

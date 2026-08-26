@@ -71,9 +71,9 @@ read "Nx CI is `disabled_manually` (AGL-1776) and no workflow builds PRs
 (AGL-1777)", and both halves are false (AGL-2381): `nx-ci.yml` is **active**
 and triggers on `pull_request`, so PRs are built. The release steps below
 simply have no workflow that invokes them, and that is deliberate — the bump
-is a step in the promotion, run by hand when Zach calls the batch.
+is a step in the promotion, run by hand when a batch is called.
 
-### 1 — On `main`, when Zach calls the batch
+### 1 — On `main`, when a batch is called
 
 ```bash
 npm run release:prepare                      # report only, changes nothing

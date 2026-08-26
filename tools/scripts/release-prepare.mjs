@@ -32,7 +32,7 @@
 // `git add -A` in this repo sweeps up other agents' work.
 //
 // WHERE THIS SITS IN THE PROMOTION FLOW — see docs/RELEASING.md. Short version:
-// run this on `main` when Zach calls the batch, commit, push, then open the
+// run this on `main` when a batch is called, commit, push, then open the
 // main→production PR as usual. The TAG goes on later, from release-tag.mjs,
 // only once the deploy is verified.
 

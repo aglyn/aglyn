@@ -481,7 +481,7 @@ Do not promise it in the same breath as phase 1.
    "The Auth emulator is SMS-only". Then a second pass with a *staff* account,
    with a second staff member standing by.
 
-## Open questions for Zach
+## Open questions for the account owner
 
 1. **Ship after Sept 1, or does a named deal need it sooner?** The
    recommendation above assumes no signed enterprise deal is blocked on this

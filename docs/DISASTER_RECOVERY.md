@@ -706,9 +706,9 @@ which of five artifacts is the right one.
 
 | What was lost | Restore from | Procedure | Who |
 | --- | --- | --- | --- |
-| Firestore documents, damage < 7 days old | PITR clone of `(default)` | B, then C | Zach (needs `datastore.owner`; no agent has it) |
-| Firestore documents, damage older than 7 days | Newest **READY** managed backup — check state first, they flip | A, then C | Zach |
-| Firestore documents, backup flipped `NOT_AVAILABLE` | `gs://aglyn-main-firestore-exports/<prefix>` (weekly Monday) | D | Zach |
+| Firestore documents, damage < 7 days old | PITR clone of `(default)` | B, then C | The account owner (needs `datastore.owner`; no agent has it) |
+| Firestore documents, damage older than 7 days | Newest **READY** managed backup — check state first, they flip | A, then C | The account owner |
+| Firestore documents, backup flipped `NOT_AVAILABLE` | `gs://aglyn-main-firestore-exports/<prefix>` (weekly Monday) | D | The account owner |
 | Firestore, whole `aglyn-main` project lost | **Nothing today.** Total loss | — | — (gap 1) |
 | Customer media, audit archive, plugin bundles | `gs://aglyn-dr-backup` in the **`aglyn-dr`** project — nightly Storage Transfer, versioned, 90-day noncurrent lifecycle | `gcloud storage rsync -r gs://aglyn-dr-backup/media/ gs://aglyn-main.appspot.com/` (and `plugin-artifacts/` likewise). A deletion is recoverable for 90 days from the surviving noncurrent generation, not 7 | Not yet rehearsed end to end — the copy is verified complete, the RESTORE direction is not |
 | Erasures resurrected by any import | `adminAudit` rows at/after the snapshot | `replay-erasures.mjs`, C step 4 / D step 4 | Any staff actor with a uid; **required**, not optional |

@@ -1241,7 +1241,7 @@ down), and the review-time `missing` check above is what stops a deleted route
 hiding behind it forever.
 :::
 
-#### Ordered steps — Zach
+#### Ordered steps — the account owner
 
 **No GCP or Vercel resource was created for any of this.** Steps 1–4 are free;
 step 5 onward costs money and is a decision, not a task.
@@ -1574,7 +1574,7 @@ Tracked in **AGL-1148**:
   history exists.
 - ~~An incident-response and comms process.~~ Written as
   [`docs/INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md) — severity levels tied to
-  the checks in the table above, who is on point (Zach, no rotation), and the
+  the checks in the table above, who is on point (one person, no rotation), and the
   comms rules. What is still missing from it is the **status page's
   incident-post mechanism**: the page shows live health only, so incident comms
   today are email to affected customers. That file specifies the cheapest
@@ -1583,7 +1583,7 @@ Tracked in **AGL-1148**:
 - The uptime percentage itself, plus SLA credit terms — the commercial half,
   and the part that must not be guessed. Four options with their tradeoffs are
   laid out in [`docs/INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md) §"The SLA
-  decision"; the number remains AGL-1148 and remains Zach's. The constraint
+  decision"; the number remains AGL-1148 and remains the account owner's. The constraint
   worth carrying back here: the alert path's ~20-minute floor (5 min probe memo
   + 5 min check period + ~10 min sustained failure) means **nothing shorter is
   even visible**, against a 43-minute monthly budget at 99.9%.

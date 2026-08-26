@@ -173,7 +173,7 @@ test('GREEN control: the same move WITH a Decision Log edit', () => {
     baseSources: sources(),
     headSources: sources({ proMonthly: 60 }),
     baseLog: GOOD_LOG,
-    headLog: `${GOOD_LOG}\n## 2026-08-24 — Pro moves to $60\n\n- **Decided by:** Zach\n- **Scope:** pricing\n- **Evidence:** AGL-0000\n`,
+    headLog: `${GOOD_LOG}\n## 2026-08-24 — Pro moves to $60\n\n- **Decided by:** the account owner\n- **Scope:** pricing\n- **Evidence:** AGL-0000\n`,
   })
   assert.equal(verdictFor(verdicts, 'change-control').status, 'in-sync')
 })

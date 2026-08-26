@@ -459,7 +459,7 @@ show up in any test that exercises one org.
 
 ---
 
-## 7. What Zach actually has to decide
+## 7. What the account owner actually has to decide
 
 | # | Decision | Weight |
 | --- | --- | --- |

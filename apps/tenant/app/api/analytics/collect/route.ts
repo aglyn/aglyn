@@ -198,7 +198,7 @@ type BeaconFreeze = 'none' | 'automations' | 'all'
  * answer, and a migration or repair now genuinely has nothing racing it
  * except a commutative counter.
  *
- * ## Still open for Zach, and cheap to change
+ * ## Still open, and cheap to change
  *
  * If the intended reading of read-only is "the meter stops too", this is one
  * line: return `'all'` for read-only instead of `'automations'`. The tests in

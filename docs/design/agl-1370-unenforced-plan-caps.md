@@ -6,11 +6,11 @@ Status: decided and **half implemented**. Filed out of AGL-1367's quota sweep.
 > verdict below — "Neither answer is 'add a wall'. Recommended change is
 > copy-only" — held for as long as bandwidth was purely a metered band. It no
 > longer holds for **free**, which has no subscription to meter onto, so its
-> band was a published number nothing could enforce. Zach, asked to choose
-> between enforcing now, enforcing with a raised ceiling, and leaving it off
-> through launch, chose to enforce now: *"before public signups arrive, so the
-> cap is proven under real traffic while the cohort is small and a mistake is
-> cheap."* A free org past its band now has its pages refused — see
+> band was a published number nothing could enforce. Of the three options —
+> enforce now, enforce with a raised ceiling, or leave it off through launch —
+> the choice was to enforce now, before public signups arrive, so the cap is
+> proven under real traffic while the cohort is small and a mistake is cheap.
+> A free org past its band has its pages refused — see
 > `libs/aglyn/src/lib/app-utils/bandwidth-cap.ts`.
 >
 > **Nothing about the paid plans changed**, and the analysis below is still

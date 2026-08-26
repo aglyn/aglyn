@@ -109,7 +109,7 @@ If a report is `csam`, stop reading the rest of this page and do this:
    it. Lockdown suppresses; it does not erase. That is the correct instrument
    here and quarantine is too, for the same reason — a quarantined file still
    exists and can still be produced.
-3. **Escalate to Zach immediately.** Whatever hour it is.
+3. **Escalate to the account owner immediately.** Whatever hour it is.
 
 The lever is **preservation plus notification**, not erasure. Deleting the
 material feels like the responsible act and is close to the opposite of one: it
@@ -444,7 +444,7 @@ incident.
   `groups.google.com/a/aglyn.com/g/<name>` — it returns **404** for an address
   that does not exist.
   Each is a single-member group with no auto-acknowledgement, so a report sits
-  unread and unacknowledged whenever Zach is away (AGL-2400).
+  unread and unacknowledged whenever its one member is away (AGL-2400).
   **The form is still the better route** — it captures the §512(c)(3)(A) fields
   a free-text email will not. If someone asks where to send a report, send them
   to `/api/report-abuse`; the address printed on the form is
