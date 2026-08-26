@@ -440,10 +440,11 @@ function Layouts(props) {
               key: 'details',
               label: 'View details',
               icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
-              onClick: () =>
-                router.push(
-                  buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId }),
-                ),
+              href: buildRoute(Route.LAYOUT_DETAILS, {
+                orgSlug,
+                host,
+                layoutId,
+              }),
             },
             {
               key: 'besigner',
@@ -451,15 +452,12 @@ function Layouts(props) {
               icon: (
                 <MdiIcon path={ICON_VARIANT_MODIFY_EDIT.path} size={0.8} />
               ),
-              onClick: () =>
-                router.push(
-                  buildRoute(Route.LAYOUT_BESIGNER, {
-                    orgSlug,
-                    host,
-                    layoutId,
-                    versionId,
-                  }),
-                ),
+              href: buildRoute(Route.LAYOUT_BESIGNER, {
+                orgSlug,
+                host,
+                layoutId,
+                versionId,
+              }),
             },
             {
               key: 'save-template',

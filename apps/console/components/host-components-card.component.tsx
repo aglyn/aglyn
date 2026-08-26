@@ -533,21 +533,34 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
               key: 'details',
               label: 'View details',
               icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
-              onClick: () =>
-                router.push(
-                  buildRoute(Route.COMPONENT_DETAILS, {
-                    orgSlug,
-                    host,
-                    componentId: definition.$id,
-                  }),
-                ),
+              href: buildRoute(Route.COMPONENT_DETAILS, {
+                orgSlug,
+                host,
+                componentId: definition.$id,
+              }),
             },
             {
               key: 'besigner',
               label: 'Edit in besigner',
               icon: <MdiIcon path={mdiVectorSquare.path} size={0.8} />,
               disabled: opening === definition.$id,
-              onClick: () => void handleOpenInBesigner(definition),
+              /*
+                A LINK only once the component has a version. A component that
+                predates the standalone editor has none, and opening it mints
+                the first one before it can navigate — that is a write, so it
+                stays a handler. Everything else on this list is an address,
+                and an address should behave like one.
+              */
+              ...(versionId
+                ? {
+                    href: buildRoute(Route.COMPONENT_BESIGNER, {
+                      orgSlug,
+                      host,
+                      componentId: definition.$id,
+                      versionId,
+                    }),
+                  }
+                : { onClick: () => void handleOpenInBesigner(definition) }),
             },
             {
               key: 'rename',

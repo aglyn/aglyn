@@ -683,14 +683,11 @@ export function HostTemplatesCard({
               size={0.8}
             />
           ),
-          onClick: () =>
-            router.push(
-              buildRoute(Route.TEMPLATE_DETAILS, {
-                orgSlug,
-                host,
-                templateId: template.$id,
-              }),
-            ),
+          href: buildRoute(Route.TEMPLATE_DETAILS, {
+            orgSlug,
+            host,
+            templateId: template.$id,
+          }),
         },
         ...(bundle
           ? []
@@ -699,14 +696,11 @@ export function HostTemplatesCard({
                 key: 'besigner',
                 label: 'Edit in besigner',
                 icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
-                onClick: () =>
-                  router.push(
-                    buildRoute(Route.TEMPLATE_BESIGNER, {
-                      orgSlug,
-                      host,
-                      templateId: template.$id,
-                    }),
-                  ),
+                href: buildRoute(Route.TEMPLATE_BESIGNER, {
+                  orgSlug,
+                  host,
+                  templateId: template.$id,
+                }),
               },
             ]),
         {

@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  MdiIcon,
+  type AppLinkNakedLinkProps,
+} from '@aglyn/shared-ui-jsx'
 import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
 import {
   IconButton,
@@ -24,18 +28,53 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  Tooltip,
 } from '@mui/material'
-import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 
 export interface RowActionsMenuItem {
   key: string
   label: string
   icon?: ReactNode
-  onClick: () => void
+  /**
+   * Where the item navigates. An item that carries one renders as a real
+   * anchor, so it can be middle-clicked into a new tab, copied, or opened
+   * from the browser's own context menu — the affordances a click handler
+   * cannot offer however faithfully it calls `router.push`.
+   */
+  href?: string
+  /** `href` leaves the console, so it opens in a new tab. */
+  external?: boolean
+  /** For items that open a dialog rather than navigate. */
+  onClick?: () => void
   /** Renders the row in the error colour, for destructive actions. */
   destructive?: boolean
   disabled?: boolean
+  /**
+   * Why the item cannot be used, shown as its tooltip. Mirrors the quick
+   * action's `unavailableReason`: a control that is present but inert says
+   * nothing on its own, and an absent one and an inapplicable one look alike.
+   */
+  disabledReason?: string
 }
+
+/**
+ * The anchor a linked menu item renders as.
+ *
+ * `naked` is the variant that adds no styling of its own — the MenuItem it is
+ * the root of already resets colour and text-decoration, so a linked item is
+ * pixel-identical to a handler-driven one.
+ */
+const MenuItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
+  (props, ref) => <AppLink ref={ref} {...props} componentVariant={'naked'} />,
+)
+MenuItemLinkComponent.displayName = 'MenuItemLinkComponent'
 
 export interface RowActionsMenuProps {
   items: RowActionsMenuItem[]
@@ -53,6 +92,12 @@ export interface RowActionsMenuProps {
  *
  * Every handler closes the menu first. Delete opens a confirmation, and a
  * menu left standing over that dialog reads as though the click missed.
+ *
+ * An item that names an `href` is an ANCHOR, not a handler — a navigation
+ * action must be middle-clickable and copyable like any other link. It still
+ * renders as a menu item: the anchor is the MenuItem's own root element, so
+ * it inherits the item's colour, padding and focus ring rather than the
+ * browser's link styling.
  */
 export function RowActionsMenu(props: RowActionsMenuProps) {
   const { items, label } = props
@@ -81,33 +126,60 @@ export function RowActionsMenu(props: RowActionsMenuProps) {
         onClose={handleClose}
         onClick={(event) => event.stopPropagation()}
       >
-        {items.map((item) => (
-          <MenuItem
-            key={item.key}
-            disabled={item.disabled}
-            onClick={() => {
-              handleClose()
-              item.onClick()
-            }}
-          >
-            {item.icon ? (
-              <ListItemIcon
-                sx={item.destructive ? { color: 'error.main' } : undefined}
-              >
-                {item.icon}
-              </ListItemIcon>
-            ) : null}
-            <ListItemText
-              slotProps={
-                item.destructive
-                  ? { primary: { color: 'error.main' } }
-                  : undefined
-              }
+        {items.map((item) => {
+          // A disabled item is never a link: an anchor whose destination is
+          // refused still navigates on a middle-click, which is the one route
+          // around the disabled state that `pointer-events: none` misses.
+          const linkProps =
+            item.href && !item.disabled
+              ? {
+                  component: MenuItemLinkComponent,
+                  href: item.href,
+                  ...(item.external
+                    ? { target: '_blank', rel: 'noreferrer' }
+                    : {}),
+                }
+              : {}
+          const menuItem = (
+            <MenuItem
+              key={item.key}
+              {...(linkProps as any)}
+              disabled={item.disabled}
+              onClick={() => {
+                handleClose()
+                item.onClick?.()
+              }}
             >
-              {item.label}
-            </ListItemText>
-          </MenuItem>
-        ))}
+              {item.icon ? (
+                <ListItemIcon
+                  sx={item.destructive ? { color: 'error.main' } : undefined}
+                >
+                  {item.icon}
+                </ListItemIcon>
+              ) : null}
+              <ListItemText
+                slotProps={
+                  item.destructive
+                    ? { primary: { color: 'error.main' } }
+                    : undefined
+                }
+              >
+                {item.label}
+              </ListItemText>
+            </MenuItem>
+          )
+          // span: a disabled item takes no pointer events, so the tooltip
+          // needs a wrapper that does. `MenuList` reads its items from
+          // context rather than from its direct children, so the wrapper
+          // costs nothing in keyboard navigation.
+          return item.disabled && item.disabledReason ? (
+            <Tooltip key={item.key} title={item.disabledReason}>
+              <span>{menuItem}</span>
+            </Tooltip>
+          ) : (
+            menuItem
+          )
+        })}
       </Menu>
     </>
   )

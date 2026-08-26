@@ -710,18 +710,29 @@ function Screens(props) {
       )
       const label = (row as { displayName?: string }).displayName ?? row.$id
       const versionId = row.versionId as string
+      /*
+        Both console destinations hang off the screen's version, so a screen
+        that has none has no address to link to — the same guard `rowHref`
+        applies to the name column. Disabled and saying so, rather than an
+        anchor onto a route built from `undefined`.
+      */
+      const noVersionReason = versionId
+        ? undefined
+        : 'This screen has no saved version yet.'
       return (
         <ArtifactRowActions
           label={label}
           /*
             A screen is the ONE artifact with a real address of its own, so its
-            quick action is the live page rather than a preview — it
-            should be preview if it is not a screen or open live page.
+            quick action is the live page rather than a preview. Layouts,
+            components and templates render inside something else and have no
+            route to open, so theirs is a Preview into the canvas.
 
             Shown DISABLED with the reason when there is no single live page: a
             collection template renders under routes the collection owns, so it
-            has no one URL. Removing the control there would read as the
-            feature being missing rather than inapplicable.
+            has no one URL, and an unpublished screen has no address at all.
+            Removing the control there would read as the feature being missing
+            rather than inapplicable.
           */
           quick={{
             icon: mdiOpenInNew.path,
@@ -730,7 +741,11 @@ function Screens(props) {
               ? { href: liveUrl }
               : {
                   unavailableReason:
-                    unavailableReason ?? 'No single live page for this screen.',
+                    unavailableReason ??
+                    (routingMap?.[row.$id] == null
+                      ? 'Not published yet — publish this screen to give it ' +
+                        'an address on the live site.'
+                      : 'No single live page for this screen.'),
                 }),
           }}
           items={[
@@ -738,21 +753,24 @@ function Screens(props) {
               key: 'details',
               label: 'View details',
               icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
-              onClick: () => handleRowOpen(row),
+              href: rowHref(row) ?? undefined,
+              disabled: Boolean(noVersionReason),
+              disabledReason: noVersionReason,
             },
             {
               key: 'besigner',
               label: 'Edit in besigner',
               icon: <MdiIcon path={ICON_VARIANT_BESIGNER.path} size={0.8} />,
-              onClick: () =>
-                router.push(
-                  buildRoute(Route.SCREEN_BESIGNER, {
+              href: versionId
+                ? buildRoute(Route.SCREEN_BESIGNER, {
                     orgSlug,
                     host,
                     screenId: row.$id,
                     versionId,
-                  }),
-                ),
+                  })
+                : undefined,
+              disabled: Boolean(noVersionReason),
+              disabledReason: noVersionReason,
             },
             // Translations only where the site HAS locales — the control is
             // meaningless on a single-language site and this is the one menu
@@ -798,13 +816,13 @@ function Screens(props) {
     },
     [
       handleDeleteScreen,
-      handleRowOpen,
+      rowHref,
       hostLocales.length,
       screens,
       hostData,
+      routingMap,
       buildTemplateSource,
       collectionTemplates,
-      router,
       orgSlug,
       host,
     ],

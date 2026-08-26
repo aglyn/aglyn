@@ -66,6 +66,16 @@ import {
  * artifact: **Open live page** for a screen, **Preview** for anything that has
  * no address of its own. It is the only per-kind variation in the trailing
  * cluster, and it is chosen by the caller rather than inferred here.
+ *
+ * A screen is the only artifact of the four with a route the public can reach,
+ * so it is the only one whose quick action says "live". Layouts, components
+ * and templates render inside something else and have no address to open, so
+ * theirs is a **Preview** into the console's own canvas render.
+ *
+ * The quick action is ALSO the menu's first entry — see
+ * {@link quickActionMenuItem}. The icon alone is a glyph with a tooltip; the
+ * menu is where every action on the row is spelled out, and an action missing
+ * from it reads as an action the row does not have.
  */
 
 /**
@@ -104,9 +114,35 @@ export interface ArtifactRowActionsProps {
   items: RowActionsMenuItem[]
 }
 
+/**
+ * The quick action, restated as the menu's first entry.
+ *
+ * The icon and the menu are two ways into ONE action, not two features: the
+ * icon is a bare glyph, so a reader who does not recognize it has the overflow
+ * as the place every action is named. Deriving the item from the same
+ * {@link ArtifactQuickAction} is what keeps the two in step — availability,
+ * destination and the reason it is refused are read once and cannot drift.
+ */
+function quickActionMenuItem(
+  quick: ArtifactQuickAction,
+): RowActionsMenuItem {
+  return {
+    key: 'quick',
+    label: quick.label,
+    icon: <MdiIcon path={quick.icon} size={0.8} />,
+    // `href` is off-site and opens a new tab; `to` is an in-app route.
+    href: quick.href ?? quick.to,
+    external: Boolean(quick.href),
+    onClick: quick.href || quick.to ? undefined : quick.onClick,
+    disabled: Boolean(quick.unavailableReason),
+    disabledReason: quick.unavailableReason,
+  }
+}
+
 /** The trailing cluster: one quick action, then the overflow menu. */
 export function ArtifactRowActions(props: ArtifactRowActionsProps) {
   const { label, quick, items } = props
+  const menuItems = quick ? [quickActionMenuItem(quick), ...items] : items
   return (
     <Stack
       direction="row"
@@ -129,7 +165,7 @@ export function ArtifactRowActions(props: ArtifactRowActionsProps) {
       onClick={(event) => event.stopPropagation()}
     >
       {quick ? <ArtifactQuickButton label={label} action={quick} /> : null}
-      <RowActionsMenu label={label} items={items} />
+      <RowActionsMenu label={label} items={menuItems} />
     </Stack>
   )
 }
