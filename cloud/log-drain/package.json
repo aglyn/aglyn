@@ -1,0 +1,13 @@
+{
+  "name": "aglyn-log-drain",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22"
+  },
+  "main": "server.mjs",
+  "scripts": {
+    "prepare:lib": "node prepare.mjs",
+    "start": "node server.mjs"
+  }
+}

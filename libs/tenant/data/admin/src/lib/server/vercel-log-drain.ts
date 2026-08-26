@@ -66,7 +66,25 @@
  * log-based metric on a jsonPayload field first.
  */
 
-import { beaconLoggingTarget } from './client-error-report'
+/**
+ * LAZY, and that is load-bearing rather than stylistic (AGL-1921, 2026-08-26).
+ *
+ * `client-error-report` reaches `firebase-admin`. A static import here would
+ * pull the whole SDK into anything that bundles this module — including the
+ * Cloud Run receiver, whose entire reason for existing is to run this gate
+ * OFF Vercel with nothing but `node:crypto` and a metadata-server token. That
+ * receiver always supplies its own {@link DrainIngestOptions.target}, so this
+ * path is never reached there and the SDK is never resolved.
+ *
+ * Called through `defaultLoggingTarget` below, never at module scope.
+ */
+async function defaultLoggingTarget(): Promise<{
+  token: string
+  projectId: string
+} | null> {
+  const { beaconLoggingTarget } = await import('./client-error-report')
+  return beaconLoggingTarget()
+}
 
 /**
  * The log id the drain writes to. Contains "vercel" on purpose: the proposed
@@ -80,10 +98,24 @@ export const DRAIN_SECRET_ENV = 'VERCEL_LOG_DRAIN_SECRET'
 /**
  * The receiver's own path — the FEEDBACK-LOOP GUARD (requirement 5).
  *
- * The receiver runs on `aglyn-console`, whose logs this same drain collects.
- * Left alone, one receiver 500 produces a log entry, which drains back in,
- * which the receiver writes, which produces another entry: a loop that bills
- * per iteration and is loudest exactly when something is already wrong.
+ * ⚠️ HISTORICAL, AND KEPT AS DEFENCE IN DEPTH (2026-08-26). The receiver USED
+ * to run on `aglyn-console`, whose logs the console drain collects, and the
+ * two cuts below were the answer to one receiver 500 draining back in.
+ *
+ * They were not enough, and the reason is worth stating plainly because the
+ * docstring that used to live here got it wrong: **both cuts are about the
+ * WRITE, and the cost was the DELIVERY.** Nothing inside a receiver can
+ * decline to be requested, and every delivery POST is itself a request that
+ * produces a log the same drain then delivers. Measured at 695K invocations
+ * in nine hours. Vercel's drain `sampling` rules are not a fix either — a
+ * single `{rate: 0}` rule with no path prefix moved delivery volume from 31
+ * to 32 per five minutes, i.e. the whole `schemas.log` filter block is stored
+ * and never applied.
+ *
+ * The receiver now lives OFF Vercel, at `cloud/log-drain` on Cloud Run, which
+ * no drain watches — so the loop is structurally impossible rather than
+ * filtered against. These cuts stay because they cost nothing and they are
+ * the backstop if anyone ever mounts this gate on a Vercel route again.
  *
  * Two structural cuts, not one:
  *
@@ -338,6 +370,34 @@ export interface DrainIngestResult {
 }
 
 /**
+ * Where the write goes, and under whose credential.
+ *
+ * Injectable because the receiver has to be able to run somewhere that is NOT
+ * a Vercel project this drain watches — a delivery POST is a request to
+ * whatever hosts it, and a request produces a log the same drain then
+ * delivers, which is the AGL-1921 feedback loop. Vercel's drain `sampling`
+ * rules look like the answer and are NOT: measured 2026-08-26, a single
+ * `{rate: 0}` rule with no path prefix — literally "drop everything" — changed
+ * delivery volume from 31 to 32 per five minutes. The whole `schemas.log`
+ * filter block is accepted by the API, echoed back on `GET`, and never
+ * applied. Separation is the only control that works.
+ *
+ * The default keeps every existing caller on the Firebase admin credential.
+ * A receiver hosted off Vercel (Cloud Run in `aglyn-main`) passes its own
+ * resolver instead and never imports `firebase-admin` at all, which is what
+ * lets this module be bundled for it without dragging the SDK along.
+ */
+export interface DrainIngestOptions {
+  /**
+   * Resolve the Cloud Logging bearer token and project. Returning `null`
+   * means "no credential" and the delivery is dropped, reported, and answered
+   * 200 — never an error, because Vercel disables a drain whose endpoint
+   * fails often enough.
+   */
+  target?: () => Promise<{ token: string; projectId: string } | null>
+}
+
+/**
  * Ingest ONE verified delivery: filter, budget, then a single batched write.
  *
  * Never throws. Vercel disables a drain whose endpoint fails often enough, so
@@ -346,6 +406,7 @@ export interface DrainIngestResult {
  */
 export async function ingestDrainDelivery(
   entries: readonly VercelDrainEntry[],
+  options?: DrainIngestOptions,
 ): Promise<DrainIngestResult> {
   const received = entries.length
   const matched = selectForwardableEntries(entries)
@@ -383,7 +444,7 @@ export async function ingestDrainDelivery(
   result.suppressed = suppressed
   if (!writable.length) return result
 
-  const target = await beaconLoggingTarget()
+  const target = await (options?.target ?? defaultLoggingTarget)()
   if (!target) {
     console.warn(
       JSON.stringify({

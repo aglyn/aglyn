@@ -1325,11 +1325,11 @@ step 5 onward costs money and is a decision, not a task.
    Then, per project (`aglyn-console` **and** `aglyn-tenant`) — Team Settings →
    Drains → Add Drain → Logs → Custom endpoint:
 
-   - **Endpoint URL** `https://app.aglyn.com/api/log-drain` — ONE receiver for
-     both projects, on the console, for the same reason
-     `/api/health/server-errors` is: a tenant runtime too broken to answer
-     anything still has its 5xx counted somewhere that answers, and each entry
-     carries its own `projectId` so the two never blur.
+   - **Endpoint URL** the Cloud Run receiver,
+     `https://log-drain-receiver-543499566626.us-central1.run.app` — ONE
+     receiver for both projects, and it must NOT be a Vercel project (see
+     "Why the receiver is not on Vercel" below). Each entry carries its own
+     `projectId`, so the two projects never blur.
    - **Format** `ndjson` (`json` also parses; the receiver reads either).
    - **Sources** `lambda`, `edge`, `external` — the runtime tiers. **Not**
      `build` or `static`: a build log has no status code, and a static 5xx is
@@ -1337,30 +1337,69 @@ step 5 onward costs money and is a decision, not a task.
    - **Environments** `production` only. Preview 5xx are expected and would
      page on unfinished work.
    - **Sampling** none (100%). The receiver's own 5xx filter is the cost
-     control, and sampling a rare error is how you miss it.
+     control, and sampling a rare error is how you miss it. ⛔ Do not reach for
+     sampling as a cost or loop control regardless: measured 2026-08-26, a
+     single `{environment:"production", rate:0}` rule with no path prefix —
+     literally "drop everything" — moved delivery volume from 31 to 32 per
+     five minutes. The whole `schemas.log` filter block (`sources`,
+     `environments`, `sampling`) is accepted by the API, echoed back on `GET`,
+     and never applied.
 
    Equivalent REST payload, if you would rather not click — note the current
    endpoint is `POST /v1/drains`; `POST /v2/integrations/log-drains` is
    deprecated and rejects anything but an OAuth2 integration token:
 
    ```jsonc
-   // POST /v2/integrations/log-drains?teamId=…   (deprecated shape, per project)
+   // POST /v1/drains?teamId=…   (current shape, one call per project)
    {
-     "name": "aglyn-runtime-5xx",
-     "url": "https://app.aglyn.com/api/log-drain",
-     "deliveryFormat": "ndjson",
-     "sources": ["lambda", "edge", "external"],
-     "environments": ["production"],
+     "name": "aglyn-console-runtime-5xx",
+     "projects": "some",                    // required ALONGSIDE projectIds
      "projectIds": ["<aglyn-console or aglyn-tenant project id>"],
-     "secret": "<the same VERCEL_LOG_DRAIN_SECRET>"
+     "schemas": { "log": { "version": "v1" } },
+     "delivery": {
+       "type": "http",
+       "endpoint": "https://log-drain-receiver-543499566626.us-central1.run.app",
+       "encoding": "ndjson",
+       "headers": {},                       // required, even when empty
+       "secret": "<the same VERCEL_LOG_DRAIN_SECRET>"
+     }
    }
    ```
+
+   Both drains share ONE secret because they share one receiver, which knows a
+   single `VERCEL_LOG_DRAIN_SECRET`. Recreating either must copy the secret out
+   of the surviving one, or the receiver fails closed on everything. Vercel
+   probes `delivery.endpoint` at create time, so the endpoint must already be
+   live and answering 200 to an unsigned empty body.
 
    Verify the same way the gap was measured: `GET
    /v2/integrations/log-drains` per project, now non-empty.
 
-   **The receiver** (`apps/console/app/api/log-drain/route.ts`, shipped
-   2026-08-25) is what makes this cost nothing much:
+   ### Why the receiver is not on Vercel
+
+   It was, at `apps/console/app/api/log-drain/route.ts`, from 2026-08-25 to
+   2026-08-26 — and the `aglyn-console-runtime-5xx` drain watched
+   `aglyn-console`. **A delivery POST is a request to whatever hosts the
+   receiver, and a request produces a log**, so every delivery manufactured its
+   own next input: 695K invocations in nine hours, ~21/sec, billing at once on
+   function invocations, function duration, edge requests, observability events
+   and drains volume, and projecting to ~$250–300/month.
+
+   The route's own filters (drop the receiver's path, drop `level: "warning"`)
+   were real and are still in the gate — but they cut the WRITE, and the cost
+   was the DELIVERY. Nothing inside a receiver can decline to be requested.
+
+   The loop is *positional*: it exists exactly when a drain's watched project is
+   also the receiver's host. So the receiver moved to `cloud/log-drain` on Cloud
+   Run, which no drain watches. That also removes a hop — the data was always
+   destined for Cloud Logging in `aglyn-main` — and swaps the Firebase admin
+   credential for Application Default Credentials.
+
+   ⛔ **Never point a drain at an endpoint hosted on a project that drain
+   watches**, and do not try to solve it with drain configuration.
+
+   **The receiver** (`cloud/log-drain/server.mjs`, on Cloud Run in `aglyn-main`)
+   is what makes this cost nothing much:
 
    - **It verifies `x-vercel-signature`** — HMAC-SHA1 of the *raw* body keyed
      by `VERCEL_LOG_DRAIN_SECRET`, timing-safe compared — and **fails closed**.
@@ -1379,12 +1418,20 @@ step 5 onward costs money and is a decision, not a task.
      `onRequestError` hook's log and step 4's policy keys on it; merging would
      count one incident twice and make triage start by asking which arm saw
      it. Same discipline that keeps `client-errors` and `server-errors` apart.
-   - **It cannot feed back on itself.** The receiver runs on the console,
-     whose logs this same drain collects. Every entry whose path is
-     `/api/log-drain` is dropped *before* the 5xx gate, so the receiver's own
-     500s are structurally unforwardable; and every line it logs about itself
-     is a `console.warn`, i.e. `level: "warning"`, which the 5xx gate drops on
-     a second, independent property.
+   - **It cannot feed back on itself, structurally.** It runs on Cloud Run,
+     which no Vercel drain watches, so its own request logs are never drained
+     anywhere. The two older guards remain as defence in depth for anyone who
+     mounts this gate on a Vercel route again: entries whose path is
+     `/api/log-drain` are dropped *before* the 5xx gate, and every line the
+     module logs about itself is a `console.warn` (`level: "warning"`), which
+     the 5xx gate drops on a second, independent property.
+   - **Its gate is BUNDLED from the workspace, not reimplemented.**
+     `cloud/log-drain/prepare.mjs` vendors the compiled
+     `vercel-log-drain.js` and `vercel-drain-signature.js` out of
+     `nx build tenant-data-admin`, so `vercel-log-drain.spec.ts` and
+     `vercel-drain-signature.spec.ts` still cover the code that actually runs.
+     It has zero npm dependencies, and `prepare.mjs` fails the build if either
+     module ever gains a static import beyond `node:`.
    - **Its cost is bounded and its lossiness is reported.** 60 entries per
      minute per instance, the same budget `reportServerError` uses; overflow
      increments a counter that is `console.warn`ed as a summary when the
