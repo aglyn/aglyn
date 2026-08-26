@@ -1148,14 +1148,14 @@ export function EntryDetailPage() {
                         autoFocus
                       />
                       {/*
-                        The slug is a FIELD now (AGL-2498) — Zach: "We are
-                        missing the ability to override the default slug."
+                        The slug is an editable FIELD, not a derivation
+                        (AGL-2498). It seeds from the title, but once
+                        `slugTouched` is set the title stops driving it.
 
-                        Two separate wrongs it fixes. There was no way to
-                        choose an address at all; and `slug: slugify(title)` on
-                        every save meant retitling a published post silently
-                        MOVED it, 404-ing every inbound link with nothing in
-                        the console to say so.
+                        Deriving it on every save would mean a published entry
+                        MOVES whenever it is retitled, 404-ing every inbound
+                        link, with nothing on this page to say the address had
+                        changed.
                       */}
                       <TextField
                         label="Slug"
@@ -1458,14 +1458,13 @@ export function EntryDetailPage() {
                     contentBordered="all"
                   >
                     {/*
-                      Publication controls, where the writing happens
-                      (AGL-2498). Zach: "We are also missing the ability
-                      schedule publishing on the content collections, only via
-                      the expanded menu on the list."
+                      Publication controls, on the page where the writing
+                      happens rather than only in the list row's menu
+                      (AGL-2498).
 
                       They are the SAME actions the row menu runs — shared
                       through the scope rather than copied — so there is one
-                      behaviour with two doors. Deliberately NOT folded into
+                      behavior with two doors. Deliberately NOT folded into
                       Save: publishing is an explicit act, and a Save that also
                       published would make every typo fix a publication event.
 

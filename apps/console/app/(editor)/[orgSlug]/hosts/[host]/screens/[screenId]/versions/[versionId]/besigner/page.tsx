@@ -695,27 +695,23 @@ function BesignerPage(props) {
   /**
    * A draft has been saved and NOT yet published.
    *
-   * The app bar's three states describe the LIVE SITE, not the canvas, which
-   * is the correction Zach asked for the first time round — "Is up to date
-   * accurate if they saved the draft but they did not save and publish?".
-   * It was not, and it would be wrong again here for a new reason: on the live
-   * version `versionId === screens/{id}.versionId` is true by definition, so
-   * the pointer alone reports "Up to date" while a draft sits unpublished
-   * beside it. The draft is the thing that makes the site out of date.
+   * The app bar's three states describe the LIVE SITE, not the canvas, and the
+   * version pointer alone cannot tell them apart: on the version a screen is
+   * serving, `versionId === screens/{id}.versionId` holds by definition, so the
+   * pointer reports "Up to date" even while an unpublished draft sits beside
+   * it. The draft is precisely what makes the live site out of date, so the app
+   * bar reads this flag as well as the pointer.
    */
   const [draftPending, setDraftPending] = useState(false)
 
   /**
    * SAVE THE WORKING DRAFT (AGL-1152).
    *
-   * the live site is unchanged" — while the toast said the live page was
-   * refreshing. Both were describing the same call.
-   *
-   * The cause was not the wiring but the target: on the version a screen is
-   * SERVING, the document an author edits IS the live one, so any write to it
-   * is a publish. There is no honest way to save that document without
-   * publishing it, which is why the draft now goes somewhere else entirely —
-   * its own document beside the version, never read by the tenant.
+   * The draft is written to its own document beside the version, and the tenant
+   * never reads it. It cannot be written to the version document instead: on
+   * the version a screen is SERVING, the document an author edits IS the live
+   * one, so any write to it is a publish. There is no way to save that document
+   * without publishing it, whatever the menu item is labeled.
    *
    * The mirror is cleared for the same reason a real save clears it: Firestore
    * is authoritative again, and replaying in-flight keystrokes over a draft

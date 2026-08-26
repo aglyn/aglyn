@@ -18,9 +18,9 @@
 /**
  * BOTH BASES, AND THE GAP, REACH THE SCREEN (AGL-2486).
  *
- * Zach asked for contracted and settled revenue "both, side by side" — and
- * the gap between them is the part that does the work, because two totals
- * with a reader left to subtract has wasted the decision.
+ * Contracted and settled revenue are shown side by side, and so is the GAP
+ * between them: two totals with the reader left to subtract answers nothing,
+ * because the difference is the figure the decision turns on.
  *
  * ASSERTED BY RENDERING, not by reading the helpers. The sibling AGL-2163
  * defect on the tax-return page was exactly a correct helper the page never

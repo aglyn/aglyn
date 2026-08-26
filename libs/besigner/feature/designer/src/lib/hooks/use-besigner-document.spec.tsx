@@ -260,8 +260,8 @@ describe('useBesignerDocument', () => {
     })
 
     /**
-     * Two tabs of ONE account, which is the case Zach lives in — he keeps
-     * four open (AGL-2486).
+     * Two tabs of ONE account — the ordinary case, not an exotic one
+     * (AGL-2486).
      *
      * The console runs `persistentMultipleTabManager`, so tabs share a cache
      * and their snapshots coalesce: this session's save can be answered by a
@@ -273,7 +273,7 @@ describe('useBesignerDocument', () => {
      * either layer.
      *
      * Nothing about that needs two different people. It needs two different
-     * SESSIONS, which is what the guard now keys on.
+     * SESSIONS, which is what the guard keys on.
      */
     it('flags another session’s write that lands in place of our echo', async () => {
       setCanvasDirty(true)

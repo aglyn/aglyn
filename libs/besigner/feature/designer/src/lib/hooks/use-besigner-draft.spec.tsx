@@ -137,10 +137,9 @@ describe('useBesignerDraft restore verdict (AGL-2486)', () => {
     mockCanvas.hasRemoteEdits = true
     const { state } = setup('ms:100')
 
-    // An earlier pass answered this with a blocked Restore and a Discard
-    // still on offer. Zach’s question was why the prompt is there at all,
-    // and it is not: a canvas the mirror has already written to is not a
-    // canvas anybody is recovering (AGL-2486).
+    // Not a blocked Restore beside a live Discard — no prompt at all. A
+    // canvas the mirror has already written to is not a canvas anybody is
+    // recovering, so there is nothing for the banner to offer (AGL-2486).
     expect(state().available).toBe(false)
     expect(state().restoreBlockedBy).toBeNull()
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull()
@@ -159,13 +158,12 @@ describe('useBesignerDraft restore verdict (AGL-2486)', () => {
 
     expect(localStorage.getItem(besignerDraftKey(IDS))).toBeNull()
     expect(state().available).toBe(false)
-    // And that is ALL it does. Zach pressed Discard on a shared canvas and
-    // reported "nothing actually changed", which was accurate and is worth
-    // pinning: the button deletes this browser's snapshot, and never
-    // touches the canvas, the mirror or the stored document. Its danger was
-    // never that it destroyed other people's work — it was that a prompt
-    // asking to destroy work appeared over a canvas that was not this
-    // author's alone (AGL-2486).
+    // And that is ALL it does, which is worth pinning: the button deletes
+    // this browser's snapshot and never touches the canvas, the mirror or
+    // the stored document. Pressed on a shared canvas, nothing anyone can
+    // see changes. The hazard was never that it destroyed other people's
+    // work — it is that a prompt offering to destroy work appears over a
+    // canvas that is not this author's alone (AGL-2486).
     expect(mockCanvas.applyNodes).not.toHaveBeenCalled()
   })
 })
@@ -173,11 +171,10 @@ describe('useBesignerDraft restore verdict (AGL-2486)', () => {
 /**
  * Whether the prompt appears AT ALL (AGL-2486).
  *
- * Zach, opening a third tab onto a document two other tabs were editing
- * unsaved: *"should we even show them that alert, that could remove the work
- * numerous people are currently working on, it would make sense if there
- * were no presence sessions and we just lost connection or browser quit
- * etc."*
+ * A recovery prompt is only ever correct for someone who lost a session of
+ * their own — a crash, a closed browser, a dropped connection. Open a third
+ * tab onto a document two other tabs are editing unsaved and the same prompt
+ * offers to throw away work several people are in the middle of.
  *
  * So these cases are about the ROOM, not about which button is drawn. The
  * pair that matters is the last two: a shared room gets nothing, and a
@@ -229,9 +226,9 @@ describe('useBesignerDraft room suppression (AGL-2486)', () => {
     const { state } = setup(1)
 
     expect(state().available).toBe(false)
-    // Not "Restore withheld, Discard offered" — no prompt at all. Discard is
-    // the button Zach pressed, and in a shared room there is nothing it can
-    // usefully do.
+    // Not "Restore withheld, Discard offered" — no prompt at all. In a shared
+    // room there is nothing Discard can usefully do, so offering it only
+    // invites someone to answer a question that should not have been asked.
     expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull()
   })

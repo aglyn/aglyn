@@ -130,18 +130,18 @@ export function CollaboratorOverlays({
       for (const entry of entriesRef.current) {
         const placement: Placement = {
           key: entry.key,
-          // Your own other tab is labelled as such rather than by name.
-          // Two marks reading "Zach Gover" on one canvas, one of which is
-          // your own second window, is exactly the confusion the flag
-          // exists to prevent (AGL-2486).
+          // Your own other tab is labeled as such rather than by name. One
+          // account open twice puts two marks carrying the SAME display name
+          // on one canvas, and nothing distinguishes the one you are driving
+          // from the one you left in another window (AGL-2486).
           displayName: entry.isSelf ? 'You, in another tab' : entry.displayName,
           // The SAME fallback the avatar chip uses, not a hardcoded blue
           // (AGL-2486). Both surfaces read `entry.colour` from one room-wide
-          // allocation, so in practice they always agree — but they used to
-          // disagree about what to do if it were ever missing, and the whole
-          // point of the dashed chip matching the dashed outline is that the
-          // two cannot drift. One fallback, seeded from the session key, so
-          // they land on the same colour even in the case neither expects.
+          // allocation, so in practice they always agree. The point of the
+          // dashed chip matching the dashed outline is that the two cannot
+          // drift, which a second fallback would allow the moment the
+          // allocation missed. One fallback, seeded from the session key, puts
+          // them on the same color even in the case neither expects.
           colour: entry.colour ?? avatarColourFor(entry.key),
           isSelf: entry.isSelf,
         }

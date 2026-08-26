@@ -83,11 +83,12 @@ const assignment = (text: string): Array<[string, string]> => {
 }
 
 /**
- * Zach's spec, verbatim across three messages: "the basic details probably
- * needs to be the smaller column like it was originally, page access can be 1
- * of 3 columns … seo 2 of 3", "the publishing card can move just below basic
- * details and be 1 of 3 columns", "Swap page activity and versions. make
- * activity full".
+ * The layout the page is required to render: every card, the span constant it
+ * carries, in source order.
+ *
+ * Both halves are load-bearing. The spans ARE the arrangement — `masonry`
+ * buckets items by width — and within one bucket it stacks in SOURCE order, so
+ * this list's order is the rendered column order.
  */
 const EXPECTED: Array<[string, string]> = [
   ['Basic Details', 'CARD_NARROW'],
@@ -99,7 +100,8 @@ const EXPECTED: Array<[string, string]> = [
   ['Used by', 'CARD_NARROW'],
   ['SEO', 'CARD_WIDE'],
   ['Versions', 'CARD_WIDE'],
-  // Touched it, and the activity feed is long enough to push the chart off
+  // Traffic sits ABOVE Page Activity: what the page is doing outranks who
+  // touched it, and the activity feed is long enough to push the chart off
   // the screen entirely.
   ['Screen traffic', '{ xs: 12 }'],
   ['Page Activity', '{ xs: 12 }'],
@@ -145,15 +147,15 @@ describe('the screen version view card layout (AGL-2486)', () => {
     expect(8 + 4).toBe(12)
   })
 
-  it('assigns every card the span Zach asked for, in his order', () => {
+  it('assigns every card its required span, in the required order', () => {
     expect(assignment(source)).toEqual(EXPECTED)
   })
 
   it('stacks the narrow column Basic Details, Publishing, Page Access', () => {
     // Masonry stacks in SOURCE order within a width bucket, so the authored
-    // order of these three IS the rendered column order. "the publishing card
-    // can move just below basic details" is a positional instruction, and
-    // this is the only thing enforcing it.
+    // order of these three IS the rendered column order. Nothing else in the
+    // page enforces it: reordering the three JSX items silently reorders the
+    // column, and only this assertion notices.
     expect(
       assignment(source)
         .filter(([, span]) => span === 'CARD_NARROW')

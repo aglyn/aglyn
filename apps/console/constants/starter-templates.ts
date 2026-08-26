@@ -223,17 +223,16 @@ type SectionWidth = 'md' | 'lg' | 'xl'
  * One page band: a `Container` at a stock width, carrying the band's own
  * vertical rhythm (AGL-1932).
  *
- * Zach's standard, AGL-1298: *"Every section should have container component.
- * We should be using the container component for everything and even if we
- * want something to be full width we use the full width attribute. Otherwise
- * it would be XL."* These templates seeded **zero** Containers, so every site
- * a customer created started in violation — and from Sept 1 that is strangers,
- * not us.
+ * The layout standard (AGL-1298): every section is a Container. Full-bleed is
+ * the Container's own full-width attribute, never the absence of a Container,
+ * and anything else is one of three stock widths. A template that seeds no
+ * Container hands every customer a site that starts outside the standard.
  *
  * How the three widths are chosen here, stated so the next audit does not
  * have to guess:
  *
  * - `xl` — a marketing band: hero, feature row, product grid, gallery. The
+ *   default width, and what an unremarkable page should be.
  * - `lg` — the deliberate middle case: wide but text-led and interactive.
  *   Cart and account are the honest instances, not decoration.
  * - `md` — long-form prose and narrow form columns, on READING grounds: at

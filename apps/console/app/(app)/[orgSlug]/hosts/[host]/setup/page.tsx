@@ -365,14 +365,14 @@ const seoSchema: FormSchema = {
       ],
     },
     /*
-      NO raw favicon box here (AGL-2486). `seo.favicon` had two editors on
-      this one tab — this text field and the Favicon card below — and the
-      text one showed the stored value as what it literally is, a
-      `media:org:…` reference, which is not something anybody can read or
-      type. Zach: *"we also have two separate favicon fields."*
+      NO raw favicon box here (AGL-2486). `seo.favicon` is edited by the
+      Favicon card further down this tab and by nothing else. A text field for
+      it would be a second editor for one value, and it could only show what
+      the field literally holds — a `media:org:…` reference, which nobody can
+      read or type.
 
-      The card is the editor now, and it grew the URL box this field was
-      carrying, so an externally hosted icon is still reachable.
+      The card carries the URL box too, so an externally hosted icon is still
+      reachable.
     */
     {
       component: FieldComponentType.SUB_FORM,
@@ -476,10 +476,9 @@ const SECURITY_TAB_ID = 'security'
  * the four constants above — so there is no second spelling to fall out of
  * date. The deep-link resolver reads this list and nothing else.
  *
- * It replaces a hand-maintained condition that was already wrong: the
- * Tracking tab was added minutes before Zach followed
- * `/setup?tab=hostTracking` and landed on Basic details, because the new id
- * was not in it. `setup-tab-deep-links.spec.ts` derives the rendered tabs
+ * A tab missing from this list is not reachable by deep link: `/setup?tab=<id>`
+ * finds no match and falls back to Basic details, with nothing to signal that
+ * the link was valid. `setup-tab-deep-links.spec.ts` derives the rendered tabs
  * from this file and fails if the two disagree, so the next tab is either on
  * this list or red — never silently unreachable.
  */
@@ -502,11 +501,11 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   /*
     Every tab this page has, DERIVED (AGL-2486).
 
-    This was a hand-maintained list of ids, and it was already wrong: the
-    Tracking tab was added minutes before Zach followed
-    `/setup?tab=hostTracking` and landed on Basic details, because the new id
-    was not on it. A list that has to be edited in a second place every time a
-    tab is added is a list that will be wrong again.
+    The ids come from `SETUP_TAB_IDS`, which is built out of the same schema
+    ids and constants the tabs render with, rather than being spelled a second
+    time here. A hand-kept copy has to be edited every time a tab is added, and
+    the cost of forgetting is silent: the new tab's deep link resolves to
+    nothing and drops the visitor on Basic details.
 
     `SETUP_TAB_IDS` is module scope and `setup-tab-deep-links.spec.ts` derives
     the rendered tabs from this file's source and fails if the two disagree —
@@ -986,20 +985,18 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         <FormRenderer
                           /*
                             The SEO tab renders its media controls INSIDE its
-                            own card (AGL-2486). Zach: *"You removed the field
-                            from entity you need to move the other fields too
-                            otherwise it looks separated"* and *"Social image
-                            could be moved up into the SEO part and not its
-                            own card."*
+                            own card (AGL-2486), which is why this one tab gets
+                            `SeoFormTemplate` instead of the shared
+                            `CardDisplayFormTemplate`.
 
-                            They are `seo.*` fields and always were; they are
-                            separate components only because a media pick needs
-                            a picker dialog and because a CLEARED value has to
-                            reach Firestore as `''` rather than being dropped
-                            by the form stack (AGL-1191) — implementation
-                            reasons that had been showing through as
-                            free-floating cards between the fields they belong
-                            to.
+                            The favicon and social image are `seo.*` fields like
+                            the rest of the tab. They are separate components
+                            only because a media pick needs a picker dialog and
+                            because a CLEARED value has to reach Firestore as
+                            `''` rather than being dropped by the form stack
+                            (AGL-1191). Rendered by the default template those
+                            implementation details surface as free-floating
+                            cards sitting between the fields they belong to.
                           */
                           FormTemplate={
                             schema.id === 'hostSeo'

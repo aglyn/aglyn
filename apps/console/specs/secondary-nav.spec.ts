@@ -98,9 +98,9 @@ describe('resolveNavSection', () => {
 
   /**
    * AGL-1130: the same bug one section over. `/manage/*` is not an org route
-   * either, so the scope fell back to the user's first org and Manage Account
-   * was chromed "Zach Gover Personal · Starter" with a site switcher and an
-   * Upgrade CTA for a workspace the page has nothing to do with.
+   * either, so the scope falls back to the user's first org and chromes
+   * Manage Account with that workspace's name, its site switcher and an
+   * Upgrade CTA for a plan the page has nothing to do with.
    *
    * Pinned as a URL-only predicate on purpose. Asking the RESOLVED org
    * instead would make the answer wait on the membership read, and the
