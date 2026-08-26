@@ -60,12 +60,36 @@ describe('brand display ramp (Zach 2026-08-25)', () => {
     // chose, so every built page hand-wrote size and weight over the top.
     expect(typography.h1.fontWeight).toBe(900)
     expect(typography.h2.fontWeight).toBe(800)
+    expect(typography.h3.fontWeight).toBe(700)
+  })
+
+  it('keeps the display ramp descending', () => {
+    // h3 came down WITH h1/h2 rather than staying on MUI's scale: retuning
+    // the two above it while h3 kept 48px left a Heading 3 larger than a
+    // Heading 2. `responsiveFontSizes` scales the big variants hardest, so
+    // compare the size each one REACHES, not its base.
+    const ceiling = (v: Record<string, any>) =>
+      Math.max(
+        ...[
+          v.fontSize,
+          ...Object.keys(v)
+            .filter((k) => k.startsWith('@media'))
+            .map((k) => v[k]?.fontSize),
+        ].map((x) => Number.parseFloat(String(x ?? '')) || 0),
+      )
+    const ramp = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((k) =>
+      ceiling(typography[k]),
+    )
+    ramp.forEach((size, i) => {
+      if (i > 0) expect(ramp[i - 1]).toBeGreaterThan(size)
+    })
   })
 
   it('leaves the variants the product actually uses alone', () => {
-    // h3–h6 carry 95 `variant="hN"` usages across the console and overline
-    // 19; h1/h2 carry none, which is why the ramp stops where it does.
-    expect(typography.h3.fontWeight).toBe(400)
+    // h4–h6 carry 95 `variant="hN"` usages across the console and overline
+    // 19. h1, h2 and h3 carry NONE — h3 was wrongly grouped here at first,
+    // which is how the ramp came to invert; retuning it restyles no product
+    // surface, so the line the brand stops at is h4, not h3.
     expect(typography.h4.fontWeight).toBe(400)
     expect(typography.h5.fontWeight).toBe(400)
     expect(typography.h6.fontWeight).toBe(500)

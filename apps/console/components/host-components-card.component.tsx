@@ -612,6 +612,12 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
             }),
           )
         }
+        // Screens, layouts and templates all hand the table their load state;
+        // this one did not, so the four lists that render the SAME table
+        // disagreed about whether a fetch is worth mentioning — components
+        // showed an empty table until the rows arrived, which reads as "you
+        // have none" rather than "these are on their way" (AGL-693).
+        loading={componentsStatus === 'loading'}
       />
       <Dialog
         open={Boolean(editor)}

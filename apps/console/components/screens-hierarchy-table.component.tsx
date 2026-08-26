@@ -433,7 +433,22 @@ export function ScreensHierarchyTableComponent(
     emptyAction,
     collectionTemplates,
   } = props
-  const [collapsedIds, setCollapsedIds] = useState<Set<ScreenUid>>(new Set())
+  /**
+   * EXPANDED ids, not collapsed ones — the set starts empty, so every parent
+   * starts closed (Zach 2026-08-25).
+   *
+   * Tracking the collapsed set meant "empty" was "everything open", so a site
+   * whose screens nest deeply rendered its whole tree on arrival and the
+   * footer's "1-10 of 22 top-level" described a fraction of what was on
+   * screen. Inverting it makes the default the cheap one and makes the count
+   * honest: ten roots on the page is ten rows until a reader asks for more.
+   *
+   * NOTE this bounds what is RENDERED, not what is read. The page still
+   * fetches the whole collection in one query (`limit(200)` in screens/page),
+   * so the children were already on the client either way — closing them by
+   * default costs no extra fetch when a reader opens one.
+   */
+  const [expandedIds, setExpandedIds] = useState<Set<ScreenUid>>(new Set())
   const [activeId, setActiveId] = useState<ScreenUid | undefined>(undefined)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -475,14 +490,14 @@ export function ScreensHierarchyTableComponent(
       for (const child of children) {
         const hasChildren = Boolean(childrenByParent.get(child.$id)?.length)
         rows.push({ row: child, depth, hasChildren })
-        if (hasChildren && !collapsedIds.has(child.$id)) {
+        if (hasChildren && expandedIds.has(child.$id)) {
           walk(child.$id, depth + 1)
         }
       }
     }
     walk(undefined, 0)
     return rows
-  }, [screens, screensById, collapsedIds])
+  }, [screens, screensById, expandedIds])
 
   /**
    * Pagination that pages ROOTS, never rows (AGL-693).
@@ -544,7 +559,7 @@ export function ScreensHierarchyTableComponent(
   }, [page, rootCount, rowsPerPage])
 
   const handleToggleCollapse = useCallback((id: ScreenUid) => {
-    setCollapsedIds((previous) => {
+    setExpandedIds((previous) => {
       const next = new Set(previous)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -672,7 +687,7 @@ export function ScreensHierarchyTableComponent(
                   />
                   <ScreenTableRow
                     entry={entry}
-                    collapsed={collapsedIds.has(row.$id)}
+                    collapsed={!expandedIds.has(row.$id)}
                     nestDisabled={nestDisabled}
                     onToggleCollapse={handleToggleCollapse}
                     renderRowActions={renderRowActions}
