@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { Leaf, LeafSxTransformContext } from '@aglyn/aglyn-node-renderer'
+import {
+  AglynNodeRenderer,
+  Leaf,
+  LeafSxTransformContext,
+} from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { createTheme, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { act, render } from '@testing-library/react'
@@ -828,5 +832,77 @@ describe('canvas reveal for hidden elements (AGL-592)', () => {
     renderLeaf('panel', ['panel'])
     expect(leafFor('panel').classList.contains(HIDDEN)).toBe(true)
     expect(Aglyn.canvas.getNode('panel')?.props?.['className']).toBe(HIDDEN)
+  })
+})
+
+describe('canvas reveal through the rendered tree (AGL-592)', () => {
+  const HIDDEN = Aglyn.ELEMENT_HIDDEN_CLASS
+
+  beforeEach(() => {
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        componentId: 'div',
+        nodes: ['wrapper'],
+      },
+      wrapper: {
+        $id: 'wrapper',
+        componentId: 'div',
+        parentId: Aglyn.NODE_ROOT_ID,
+        sx: { display: 'inline-flex' },
+        nodes: ['trigger', 'panel'],
+      },
+      trigger: {
+        $id: 'trigger',
+        componentId: 'div',
+        parentId: 'wrapper',
+        nodes: [],
+      },
+      panel: {
+        $id: 'panel',
+        componentId: 'div',
+        parentId: 'wrapper',
+        props: { className: HIDDEN },
+        sx: { position: 'absolute', top: '100%', left: 0 },
+        nodes: [],
+      },
+    } as never)
+  })
+
+  afterEach(() => act(() => Besigner.focus.clearFocusStatus()))
+
+  const renderTree = (revealedNodeIds?: string[]) =>
+    render(
+      <CanvasRevealContext.Provider value={revealedNodeIds}>
+        <AglynNodeRenderer
+          node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)! as never}
+          LeafComponent={ElementLeafComponent as never}
+        />
+      </CanvasRevealContext.Provider>,
+    )
+
+  const leafFor = ($id: string) =>
+    document.querySelector(`[data-aglyn="leaf:${$id}"]`) as HTMLElement
+
+  // The reveal is flagged on the hidden element itself rather than inferred
+  // from a marker on its parent, so this is the relationship it relies on.
+  it('renders the panel as a direct child of its parent leaf', () => {
+    renderTree()
+    expect(leafFor('panel').parentElement).toBe(leafFor('wrapper'))
+    expect(leafFor('panel').classList.contains(HIDDEN)).toBe(true)
+  })
+
+  it('flags only the revealed element, all the way down the tree', () => {
+    renderTree(['panel'])
+    expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(true)
+    expect(leafFor('trigger').hasAttribute('data-aglyn-revealed')).toBe(false)
+    expect(leafFor('wrapper').hasAttribute('data-aglyn-revealed')).toBe(false)
+  })
+
+  it('flags the panel while the selection sits on its sibling trigger', () => {
+    act(() => Besigner.focus.setSelectedNode(Aglyn.canvas.getNode('trigger')!))
+    renderTree()
+    expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(true)
   })
 })
