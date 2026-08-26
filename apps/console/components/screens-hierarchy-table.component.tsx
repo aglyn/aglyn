@@ -47,6 +47,7 @@ import {
 } from '@dnd-kit/core'
 import {
   Box,
+  Collapse,
   IconButton,
   LinearProgress,
   Paper,
@@ -62,6 +63,8 @@ import {
   Tooltip,
   Typography,
   alpha,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { Fragment, useCallback, useMemo, useState, type ReactNode,
   useEffect,
@@ -143,10 +146,65 @@ export interface ScreensHierarchyTableProps {
 
 const COLUMN_COUNT = 8
 
-type VisibleRow = {
+/**
+ * Column widths in px, after the leading controls column, in table order:
+ * display name, id, path, description, updated, published, actions. The
+ * Actions width is the one the grid lists give theirs, so the trailing
+ * cluster lands in the same place on all four.
+ *
+ * These are DECLARED rather than measured, and that is the point — see
+ * {@link ScreenColumnWidths}.
+ */
+const DATA_COLUMN_WIDTHS = [200, 130, 120, 200, 150, 150, 110]
+
+/** Indent per level of nesting, in theme spacing units. */
+const ROW_INDENT = 3
+
+/** The theme's spacing step, for the widths that must be arithmetic. */
+const SPACING_STEP = 8
+
+/**
+ * The controls column at zero depth: the row's left padding, the drag handle
+ * and the collapse toggle. Nesting adds {@link ROW_INDENT} per level on top,
+ * which is why the width is computed from the tree's depth rather than fixed.
+ */
+const CONTROLS_COLUMN_WIDTH = 68
+
+/**
+ * The width of every column, declared once and rendered into the root table
+ * and into the nested table each expanded row's children live in.
+ *
+ * Paired with `table-layout: fixed` this is what makes a column's width a
+ * property of the LIST rather than of the rows that happen to be on screen.
+ * Under the browser's default `auto` layout the table re-measures every
+ * column from the content of the mounted rows, so opening a parent — new
+ * names, new ids, new paths, and a deeper indent in this first column — moved
+ * every column to the right. The nested tables carry the same widths, so a
+ * child's cells line up with its parent's.
+ *
+ * ⚠️ The controls column is the one that can OVERFLOW rather than wrap: it is
+ * `nowrap` and holds the indent. `controlsWidth` must stay
+ * {@link CONTROLS_COLUMN_WIDTH} plus one {@link ROW_INDENT} per level of the
+ * deepest branch, counted from the whole tree and never from what is expanded.
+ */
+function ScreenColumnWidths(props: { controlsWidth: number }) {
+  const { controlsWidth } = props
+  return (
+    <colgroup>
+      <col style={{ width: controlsWidth }} />
+      {DATA_COLUMN_WIDTHS.map((width, index) => (
+        <col key={index} style={{ width }} />
+      ))}
+    </colgroup>
+  )
+}
+ScreenColumnWidths.displayName = 'ScreenColumnWidths'
+
+/** A screen and its descendants, built from the data and never from state. */
+type ScreenTreeNode = {
   row: ScreenHierarchyRow
   depth: number
-  hasChildren: boolean
+  children: ScreenTreeNode[]
 }
 
 /** Sibling display order: explicit `order` first, then creation time, then id. */
@@ -193,7 +251,7 @@ function GapDropRow(props: {
             sx={{
               position: 'absolute',
               inset: 0,
-              ml: 2 + depth * 3,
+              ml: 2 + depth * ROW_INDENT,
               bgcolor: 'primary.main',
               borderRadius: 1,
             }}
@@ -243,7 +301,7 @@ function RootDropRow(props: { dragging: boolean }) {
 }
 
 function ScreenTableRow(props: {
-  entry: VisibleRow
+  entry: ScreenTreeNode
   collapsed: boolean
   nestDisabled: boolean
   onToggleCollapse: (id: ScreenUid) => void
@@ -270,7 +328,8 @@ function ScreenTableRow(props: {
     routingMap,
     collectionTemplates,
   } = props
-  const { row, depth, hasChildren } = entry
+  const { row, depth } = entry
+  const hasChildren = entry.children.length > 0
   const href = rowHref?.(row) ?? null
   const { isOver, setNodeRef: setDropRef } = useDroppable({
     id: `drop:nest:${row.$id}`,
@@ -322,10 +381,9 @@ function ScreenTableRow(props: {
           pushed the text a couple of icons to the right of its heading. */}
       <TableCell
         padding="none"
-        // width '1%' + nowrap is the table idiom for "only as wide as its
-        // content". MUI sx reads a bare `1` as 100%, which made this column
-        // swallow the row.
-        sx={{ pl: 1 + depth * 3, whiteSpace: 'nowrap', width: '1%' }}
+        // No width here: the table's `colgroup` owns it, and it is sized for
+        // the deepest branch so this indent cannot widen the column.
+        sx={{ pl: 1 + depth * ROW_INDENT, whiteSpace: 'nowrap' }}
         onClick={(event) => event.stopPropagation()}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -452,19 +510,28 @@ export function ScreensHierarchyTableComponent(
    * fetches the whole collection in one query (`limit(200)` in screens/page),
    * so the children were already on the client either way — closing them by
    * default costs no extra fetch when a reader opens one.
+   *
+   * A closed parent renders its children's `Collapse` and nothing inside it:
+   * `unmountOnExit` keeps a closed subtree out of the DOM, out of React, and
+   * out of dnd-kit's droppable registry, and mounts it on the way in.
    */
   const [expandedIds, setExpandedIds] = useState<Set<ScreenUid>>(new Set())
   const [activeId, setActiveId] = useState<ScreenUid | undefined>(undefined)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   )
+  /*
+    A reader who has asked the system for less motion gets the rows in place
+    instead of the slide — the disclosure still happens, it simply does not
+    travel.
 
-  // True when any row in the tree has children, i.e. a collapse toggle can
-  // appear. Drives whether rows reserve space for that toggle.
-  const anyExpandable = useMemo(
-    () => screens.some((entry: any) => Boolean(entry.parentId)),
-    [screens],
-  )
+    A theme duration rather than `timeout="auto"`: `auto` derives the duration
+    from the height, so a parent with twenty children takes noticeably longer
+    to open than one with two, and a list of rows is not a drawer.
+  */
+  const theme = useTheme()
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+  const collapseTimeout = reduceMotion ? 0 : theme.transitions.duration.shorter
 
   const screensById = useMemo(() => {
     const map: Record<ScreenUid, ScreenRouteNode> = {}
@@ -474,7 +541,16 @@ export function ScreensHierarchyTableComponent(
     return map
   }, [screens])
 
-  const visibleRows = useMemo<VisibleRow[]>(() => {
+  /**
+   * The hierarchy, built from the SCREENS alone.
+   *
+   * Deliberately independent of `expandedIds`: the shape of the tree, its
+   * depth and its root count are facts about the data, and deriving them from
+   * what is currently open is how a column width, a page count or a footer
+   * total ends up changing when a reader opens a row. Expansion decides what
+   * is rendered, further down, and nothing else.
+   */
+  const tree = useMemo<ScreenTreeNode[]>(() => {
     const childrenByParent = new Map<ScreenUid | undefined, ScreenHierarchyRow[]>()
     for (const screen of screens) {
       // Screens whose parent is missing from the list render at the root so
@@ -487,31 +563,52 @@ export function ScreensHierarchyTableComponent(
       siblings.push(screen)
       childrenByParent.set(parentId, siblings)
     }
-    const rows: VisibleRow[] = []
-    const walk = (parentId: ScreenUid | undefined, depth: number) => {
-      const children = (childrenByParent.get(parentId) ?? []).sort(
-        compareScreenSiblings,
+    const build = (
+      parentId: ScreenUid | undefined,
+      depth: number,
+    ): ScreenTreeNode[] =>
+      (childrenByParent.get(parentId) ?? [])
+        .sort(compareScreenSiblings)
+        .map((row) => ({
+          row,
+          depth,
+          children: build(row.$id, depth + 1),
+        }))
+    return build(undefined, 0)
+  }, [screens, screensById])
+
+  /**
+   * How deep the DEEPEST branch goes, expanded or not — the number the
+   * controls column is sized for. Measuring only the open branches is what
+   * would put the width back under the reader's control.
+   */
+  const maxDepth = useMemo(() => {
+    const deepest = (nodes: ScreenTreeNode[]): number =>
+      nodes.reduce(
+        (max, node) => Math.max(max, node.depth, deepest(node.children)),
+        0,
       )
-      for (const child of children) {
-        const hasChildren = Boolean(childrenByParent.get(child.$id)?.length)
-        rows.push({ row: child, depth, hasChildren })
-        if (hasChildren && expandedIds.has(child.$id)) {
-          walk(child.$id, depth + 1)
-        }
-      }
-    }
-    walk(undefined, 0)
-    return rows
-  }, [screens, screensById, expandedIds])
+    return deepest(tree)
+  }, [tree])
+  const controlsWidth = CONTROLS_COLUMN_WIDTH + maxDepth * ROW_INDENT * SPACING_STEP
+  // Below this the columns cannot all fit, and the container scrolls instead
+  // of squeezing them; above it the surplus is shared out between them.
+  const tableSx = {
+    tableLayout: 'fixed' as const,
+    minWidth:
+      controlsWidth + DATA_COLUMN_WIDTHS.reduce((sum, width) => sum + width, 0),
+  }
+  // A collapse toggle can only appear where the tree actually nests. Drives
+  // whether rows reserve space for one.
+  const anyExpandable = maxDepth > 0
 
   /**
    * Pagination that pages ROOTS, never rows (AGL-693).
    *
-   * the requirement was for the pagination the layouts list has. A tree cannot take it
-   * literally: slicing `visibleRows` by row would put a child on a different
-   * page from its parent, and a hierarchy split across pages is not a
-   * hierarchy — the indentation would be describing a parent the reader
-   * cannot see.
+   * The layouts list pages rows. A tree cannot take that literally: slicing
+   * by row would put a child on a different page from its parent, and a
+   * hierarchy split across pages is not a hierarchy — the indentation would
+   * be describing a parent the reader cannot see.
    *
    * So the page unit is the TOP-LEVEL screen, and each one brings its whole
    * expanded subtree with it. A page therefore holds `rowsPerPage` roots and
@@ -530,27 +627,13 @@ export function ScreensHierarchyTableComponent(
    */
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const rootCount = useMemo(
-    () => visibleRows.filter((entry) => entry.depth === 0).length,
-    [visibleRows],
+  const rootCount = tree.length
+  // A root carries its descendants with it, so the slice is over ROOTS and
+  // the subtree travels inside the node.
+  const pagedRoots = useMemo(
+    () => tree.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [tree, page, rowsPerPage],
   )
-  const pagedRows = useMemo(() => {
-    if (rootCount <= rowsPerPage) return visibleRows
-    const firstRoot = page * rowsPerPage
-    const lastRoot = firstRoot + rowsPerPage
-    let seen = -1
-    let start = -1
-    let end = visibleRows.length
-    visibleRows.forEach((entry, index) => {
-      if (entry.depth !== 0) return
-      seen += 1
-      if (seen === firstRoot) start = index
-      // The row AFTER the page's last root is where the slice stops, which is
-      // what carries the final root's descendants along with it.
-      if (seen === lastRoot && end === visibleRows.length) end = index
-    })
-    return start === -1 ? [] : visibleRows.slice(start, end)
-  }, [visibleRows, rootCount, page, rowsPerPage])
 
   /*
     A tree that shrinks under a reader — a delete, a filter, a collapse — can
@@ -609,6 +692,84 @@ export function ScreensHierarchyTableComponent(
     ? screens.find((screen) => screen.$id === activeId)
     : undefined
 
+  /**
+   * One level of the tree, and — through the `Collapse` under each parent —
+   * every level below it.
+   *
+   * A parent's children live in a NESTED table inside a full-width cell,
+   * which is what lets the disclosure be a slide rather than an insert: a
+   * `<tr>` cannot be animated (`overflow` does not apply to a table row), a
+   * block wrapping one can. The nested table carries the same
+   * {@link ScreenColumnWidths}, so a child's cells sit under its parent's.
+   */
+  const renderNodes = (nodes: ScreenTreeNode[]): ReactNode =>
+    nodes.map((node) => {
+      const { row } = node
+      // A screen can't move inside its own subtree; nesting under a
+      // row and slotting between that row's siblings both re-parent,
+      // so both are disabled when the target parent would cycle.
+      // Droppables stay enabled while idle: dnd-kit measures rects at
+      // drag start, before the activeId re-render could enable them.
+      const gapDisabled = activeId
+        ? wouldCreateScreenCycle(activeId, row.parentId, screensById)
+        : false
+      const nestDisabled = activeId
+        ? wouldCreateScreenCycle(activeId, row.$id, screensById)
+        : false
+      return (
+        <Fragment key={row.$id}>
+          <GapDropRow
+            id={`drop:gap:${row.$id}`}
+            disabled={gapDisabled}
+            depth={node.depth}
+            dragging={Boolean(activeId)}
+          />
+          <ScreenTableRow
+            entry={node}
+            collapsed={!expandedIds.has(row.$id)}
+            nestDisabled={nestDisabled}
+            onToggleCollapse={handleToggleCollapse}
+            renderRowActions={renderRowActions}
+            renderRowLeadingActions={renderRowLeadingActions}
+            renderRowPresence={renderRowPresence}
+            rowHref={rowHref}
+            onRowOpen={onRowOpen}
+            anyExpandable={anyExpandable}
+            routingMap={routingMap}
+            collectionTemplates={collectionTemplates}
+          />
+          {node.children.length ? (
+            <TableRow>
+              <TableCell
+                colSpan={COLUMN_COUNT}
+                padding="none"
+                // The children draw their own rules; a border here would
+                // double the one under the last of them.
+                sx={{ border: 0 }}
+              >
+                <Collapse
+                  in={expandedIds.has(row.$id)}
+                  unmountOnExit
+                  timeout={collapseTimeout}
+                >
+                  <Table
+                    size="small"
+                    sx={tableSx}
+                    aria-label={`Screens nested under ${
+                      row.displayName || row.$id
+                    }`}
+                  >
+                    <ScreenColumnWidths controlsWidth={controlsWidth} />
+                    <TableBody>{renderNodes(node.children)}</TableBody>
+                  </Table>
+                </Collapse>
+              </TableCell>
+            </TableRow>
+          ) : null}
+        </Fragment>
+      )
+    })
+
   return (
     <DndContext
       sensors={sensors}
@@ -620,26 +781,30 @@ export function ScreensHierarchyTableComponent(
     >
       {loading && <LinearProgress color="primary" />}
       <TableContainer>
-        <Table size="small" aria-label="Screens hierarchy">
+        <Table size="small" aria-label="Screens hierarchy" sx={tableSx}>
+          <ScreenColumnWidths controlsWidth={controlsWidth} />
           {/* Header height matches the DataTable used by layouts, components
               and templates (AGL-693/694/695) — a size="small" TableHead is
               shorter than a DataGrid column header, so without this the
               screens table reads as a different, cramped design. */}
           <TableHead sx={{ '& .MuiTableCell-head': { height: TABLE_HEAD_HEIGHT } }}>
             <TableRow>
-              <TableCell padding="none" sx={{ width: '1%' }} />
-              <TableCell sx={{ minWidth: 200 }}>Display name</TableCell>
-              <TableCell sx={{ minWidth: 130 }}>ID</TableCell>
-              <TableCell sx={{ minWidth: 120 }}>Path</TableCell>
-              <TableCell sx={{ minWidth: 200 }}>Description</TableCell>
-              <TableCell sx={{ minWidth: 150 }}>Updated</TableCell>
-              <TableCell sx={{ minWidth: 150 }}>Published</TableCell>
+              {/* Widths live in the `colgroup` above, for every table in the
+                  tree at once — a per-cell width here would describe the root
+                  table only. */}
+              <TableCell padding="none" />
+              <TableCell>Display name</TableCell>
+              <TableCell>ID</TableCell>
+              <TableCell>Path</TableCell>
+              <TableCell>Description</TableCell>
+              <TableCell>Updated</TableCell>
+              <TableCell>Published</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading &&
-              !visibleRows.length &&
+              !rootCount &&
               [0, 1, 2].map((index) => (
                 <TableRow key={`skeleton-${index}`}>
                   {Array.from({ length: COLUMN_COUNT }).map((_, cell) => (
@@ -649,7 +814,7 @@ export function ScreensHierarchyTableComponent(
                   ))}
                 </TableRow>
               ))}
-            {!loading && !visibleRows.length && (
+            {!loading && !rootCount && (
               <TableRow>
                 <TableCell
                   colSpan={COLUMN_COUNT}
@@ -706,44 +871,7 @@ export function ScreensHierarchyTableComponent(
                 </TableCell>
               </TableRow>
             )}
-            {pagedRows.map((entry) => {
-              const { row } = entry
-              // A screen can't move inside its own subtree; nesting under a
-              // row and slotting between that row's siblings both re-parent,
-              // so both are disabled when the target parent would cycle.
-              // Droppables stay enabled while idle: dnd-kit measures rects at
-              // drag start, before the activeId re-render could enable them.
-              const gapDisabled = activeId
-                ? wouldCreateScreenCycle(activeId, row.parentId, screensById)
-                : false
-              const nestDisabled = activeId
-                ? wouldCreateScreenCycle(activeId, row.$id, screensById)
-                : false
-              return (
-                <Fragment key={row.$id}>
-                  <GapDropRow
-                    id={`drop:gap:${row.$id}`}
-                    disabled={gapDisabled}
-                    depth={entry.depth}
-                    dragging={Boolean(activeId)}
-                  />
-                  <ScreenTableRow
-                    entry={entry}
-                    collapsed={!expandedIds.has(row.$id)}
-                    nestDisabled={nestDisabled}
-                    onToggleCollapse={handleToggleCollapse}
-                    renderRowActions={renderRowActions}
-                    renderRowLeadingActions={renderRowLeadingActions}
-                    renderRowPresence={renderRowPresence}
-                    rowHref={rowHref}
-                    onRowOpen={onRowOpen}
-                    anyExpandable={anyExpandable}
-                    routingMap={routingMap}
-                    collectionTemplates={collectionTemplates}
-                  />
-                </Fragment>
-              )
-            })}
+            {renderNodes(pagedRoots)}
             {/*
               Only when there is something to reorder. The row is 32px tall and
               merely `visibility: hidden` while idle, so on an EMPTY list it
@@ -751,7 +879,7 @@ export function ScreensHierarchyTableComponent(
               which read as a stray border with a gap above it. Nothing can be
               dragged onto it when there are no rows.
             */}
-            {visibleRows.length > 0 ? (
+            {rootCount > 0 ? (
               <RootDropRow dragging={Boolean(activeId)} />
             ) : null}
           </TableBody>
