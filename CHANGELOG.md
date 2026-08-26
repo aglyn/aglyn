@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.21 — 2026-08-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.20...v1.0.0-beta.21)
+
+### Fixed
+
+- **cloud,console:** the log-drain receiver moves off the project its own drain watches ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+
+### Performance
+
+- **plugins,aglyn:** the srcSet stops advertising the full-size original ([AGL-1442](https://linear.app/aglyn/issue/AGL-1442), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
 ## v1.0.0-beta.20 — 2026-08-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/6d13021c3...v1.0.0-beta.20)
