@@ -55,11 +55,12 @@
  *
  * ## Read cost is a design input here, not an afterthought
  *
- * Zach's own caveat. Three controls, in order of how much they save:
+ * A palette that reads on open bills every org for every page mount, whether
+ * or not anybody searches. Three controls, in order of how much they save:
  *
- * 1. **Nothing is read until two characters are typed.** The old palette
- *    spent a read in every group just to be OPENED, to populate a
- *    recently-updated list nobody asked for. Opening now costs zero.
+ * 1. **Nothing is read until two characters are typed.** Populating a
+ *    recently-updated list on open would spend a read in every group before
+ *    anyone has asked for anything. Opening costs zero.
  * 2. **One fetch per collection per page mount**, cached. Typing more, or
  *    closing and reopening the palette, costs nothing further — a longer
  *    query can only ever narrow what a shorter one returned, so it is

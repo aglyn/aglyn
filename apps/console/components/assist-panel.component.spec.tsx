@@ -331,13 +331,12 @@ describe('the gate is a scope check, not a kill switch (AGL-1934)', () => {
 /**
  * What a person reads when the server can go no further (AGL-2486).
  *
- * The old line — "Aglyn Assist is not configured on this deployment" — names
- * a deployment the reader does not administer and a configuration they cannot
- * see. Zach met it in a besigner drawer, on the second question of a thread
- * whose first question had just been answered, and read it as the product
- * being broken.
+ * "Aglyn Assist is not configured on this deployment" names a deployment the
+ * reader does not administer and a configuration they cannot see. Met in a
+ * besigner drawer on the second question of a thread whose first question was
+ * answered in full, it reads as the product breaking rather than as a limit.
  *
- * The server now hands back the closest docs pages whenever it has any, so a
+ * The server hands back the closest docs pages whenever it has any, so a
  * 501 reaching this branch at all is rare — which makes the words it prints
  * more important, not less: it is the one message left with nothing else to
  * offer.

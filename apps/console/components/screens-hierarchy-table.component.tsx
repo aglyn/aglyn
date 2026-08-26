@@ -440,12 +440,12 @@ export function ScreensHierarchyTableComponent(
   } = props
   /**
    * EXPANDED ids, not collapsed ones — the set starts empty, so every parent
-   * starts closed (Zach 2026-08-25).
+   * starts closed.
    *
-   * Tracking the collapsed set meant "empty" was "everything open", so a site
-   * whose screens nest deeply rendered its whole tree on arrival and the
-   * footer's "1-10 of 22 top-level" described a fraction of what was on
-   * screen. Inverting it makes the default the cheap one and makes the count
+   * Tracking the COLLAPSED set instead would make "empty" mean "everything
+   * open", so a site whose screens nest deeply renders its whole tree on
+   * arrival and the footer's "1-10 of 22 top-level" describes a fraction of
+   * what is on screen. This way the default is the cheap one and the count is
    * honest: ten roots on the page is ten rows until a reader asks for more.
    *
    * NOTE this bounds what is RENDERED, not what is read. The page still

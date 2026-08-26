@@ -58,8 +58,8 @@ import {
  *
  * ## Why two bases and not one
  *
- * Asked whether revenue meant settled cash or contracted plan value, Zach
- * answered "Both, side by side". They answer different questions — contracted
+ * Settled cash and contracted plan value are both reported, side by side.
+ * They answer different questions — contracted
  * reflects a signup the instant its subscription mirror lands, settled is
  * what the bank saw — and the DIFFERENCE between them is the operationally
  * useful number: dunning, failed cards, trials, comps. `gap` decomposes it so

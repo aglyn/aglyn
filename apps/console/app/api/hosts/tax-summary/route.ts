@@ -46,8 +46,8 @@ const ROW_CAP = 2000
  *
  * It emits NO per-merchant, per-jurisdiction verdict on who must remit — and
  * that is still true now that the facilitator question itself is answered.
- * Zach decided on 2026-08-24 that Aglyn IS a marketplace facilitator for
- * storefront sales, and Terms §10.7 publishes it (AGL-1956). But §10.7 is
+ * Aglyn IS a marketplace facilitator for storefront sales, and Terms §10.7
+ * publishes that (AGL-1956). But §10.7 is
  * narrow by design: Aglyn calculates, collects and remits **where applicable
  * law gives it an obligation for that transaction**, and asserts nothing
  * anywhere else. A field answering "is Aglyn the facilitator for you" would

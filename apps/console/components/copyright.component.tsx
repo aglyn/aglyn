@@ -42,12 +42,12 @@ const CopyrightComponent = forwardRef<any, CopyrightProps>((props, ref) => {
        * `© 2026 Aglyn LLC. All rights reserved.` — the conventional order,
        * with the sentence actually closed (AGL-2486).
        *
-       * This read `2026 © Aglyn LLC Aglyn™ and Besigner™ are trademarks of
-       * Aglyn LLC.`: the year ahead of the symbol, and no full stop, so the
-       * legal name ran straight into the trademark sentence as one
-       * ungrammatical line. Zach, comparing it against the footer he had
-       * authored on a published page and the docs site's own: "we have some
-       * differences here, probably should be the same."
+       * The order and the punctuation both carry weight. `2026 © Aglyn LLC
+       * Aglyn™ and Besigner™ are trademarks of Aglyn LLC.` puts the year
+       * ahead of the symbol and closes nothing, so the legal name runs
+       * straight into the trademark sentence as one ungrammatical line. Every
+       * other footer Aglyn publishes — on the marketing site, on the docs
+       * site — reads the conventional way, and these have to match.
        *
        * The legal name and the trademark sentence both still come from the
        * brand configuration, so a self-host or white-label build says its own

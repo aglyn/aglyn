@@ -407,10 +407,10 @@ function Layouts(props) {
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
     /*
-      The trailing cluster every artifact list shares (AGL-693). Layouts put
-      FOUR inline icons in a LEADING column — the arrangement Zach called out
-      — so a delete sat two icons from the row's own open handler and the
-      first thing in the row was a toolbar rather than the layout's name.
+      The trailing cluster every artifact list shares (AGL-693). Four inline
+      icons in a LEADING column put a delete two icons away from the row's own
+      open handler, and make the first thing in the row a toolbar rather than
+      the layout's name.
     */
     artifactActionsColumn((row: any) => {
       const layoutId = row.$id as string

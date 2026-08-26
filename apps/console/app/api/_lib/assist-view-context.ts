@@ -27,7 +27,7 @@
  * The tempting design is to serialise the page — props, records, the loaded
  * list — into the prompt. That buys worse answers at higher cost: the model
  * gets rows when what it needs is *what this screen is for*, and every extra
- * token is billed per turn against a margin constraint Zach set as hard.
+ * token is billed per turn against a hard margin constraint.
  *
  * So the view block is assembled from a STATIC, in-repo table keyed by route
  * pattern, plus a fixed handful of scalars about the current org. Nothing is

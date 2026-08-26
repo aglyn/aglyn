@@ -77,8 +77,8 @@ import {
  *      existing notification path. A warning, not a wall.
  *   4. **A cap is the customer's option, never our default.** An org that
  *      wants a hard ceiling sets one in Billing; uploads past it are refused
- *      citing *their* limit, not ours. Off unless they choose it — that is
- *      the "control by the end user" Zach describes.
+ *      citing *their* limit, not ours. Off unless they choose it: the ceiling
+ *      is the end user's control, not the platform's.
  *
  * ## WHAT STILL HARD-BANDS, AND WHY IT MUST
  *

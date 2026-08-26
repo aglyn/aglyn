@@ -353,7 +353,7 @@ async function handler(request: Request): Promise<Response> {
 
       /*==========================================
        * THE FIRST SWEEP OF AN ORG IS SILENT — it BACKFILLS the guard map
-       * instead of firing (AGL-2420, Zach's call).
+       * instead of firing (AGL-2420).
        *
        * Removing the `continue` above, on its own, mails every free org on
        * the platform on the next run: their guard maps are empty, so every
@@ -787,12 +787,11 @@ async function handler(request: Request): Promise<Response> {
         // deduped from here on without ever having been mailed about a state
         // it was already in.
         if (!recordAlert(check.key, threshold)) continue
-        // THE ALERT IS THE PROTECTION (2026-08-18). Zach's condition on
-        // billing storage was "so customers don't get a surprise bill" — and
-        // once overage bills by default rather than being refused, this
-        // notification is the entire thing standing between a customer and a
-        // number they did not expect. So it must describe what actually
-        // happens at the band:
+        // THE ALERT IS THE PROTECTION. Metered storage bills by default
+        // rather than being refused, and the condition attached to that is
+        // that no customer gets a surprise bill — so this notification is the
+        // entire thing standing between a customer and a number they did not
+        // expect. It must describe what actually happens at the band:
         //
         //   billsOverage -> the product keeps working and starts charging;
         //                   the action is "cap it or upgrade", never "upgrade
@@ -1212,8 +1211,8 @@ async function handler(request: Request): Promise<Response> {
        *
        * THE SWITCH: `AUTO_LOCK_BILLING_FROM=YYYY-MM` (utils/
        * billing-auto-lock.ts). Unset/malformed = this whole block is
-       * inert — auto-suspending paying-ish customers is a policy Zach
-       * flips deliberately, never a default. The manual button is
+       * inert — auto-suspending paying-ish customers is a policy an
+       * operator turns on deliberately, never a default. The manual button is
        * /admin/lockdown, reason `billing`.
        *=========================================*/
       if (

@@ -740,8 +740,9 @@ describe('a docs-answerable question costs nothing', () => {
  * the questions retrieval could not answer.
  *
  * Every self-hosted install on its first day is this deployment, and so is
- * Aglyn's own production today. It used to refuse them all with a bare
- * capability error, which is what Zach read as the product being broken. The
+ * Aglyn's own production today. Refusing them all with a bare capability
+ * error reads as the product being broken, especially arriving after a
+ * question that worked. The
  * self-host charter's "degrade cleanly" has a floor: the whole documentation
  * corpus and an index over it are still there, so the answer is the closest
  * pages, never nothing.

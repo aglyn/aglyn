@@ -72,11 +72,11 @@ export function useUrlNamesOrg(): boolean {
  * right question for whether to render a workspace control at all, and the
  * wrong one for what to write in it, because the resolved org can be a
  * different workspace entirely: the scope falls back to a remembered selection
- * whenever its URL-derived candidates miss. Zach saw the two come apart on the
- * not-found boundary — `/aglyn-org/…` in the address bar, "Sale Test" in the
- * switcher, with Sale Test's plan badge next to it.
+ * whenever its URL-derived candidates miss. The two come apart on the
+ * not-found boundary: one workspace in the address bar, a different one in the
+ * switcher, with that other workspace's plan badge beside it.
  *
- * `use-org-scope` no longer misses on that boundary, so this is the *guard*
+ * `use-org-scope` does not miss on that boundary, so this is the *guard*
  * rather than the fix: a mistyped `/gibberish` still parses as a leading
  * segment that names no real workspace, and the chain still falls through
  * behind it. Comparing the two is what makes a wrong NAME unrenderable

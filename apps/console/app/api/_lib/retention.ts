@@ -96,11 +96,11 @@ export const CHURN_SURVEY_DETAIL_MAX_LENGTH = 500
  * Where the free text goes: its OWN subcollection, one document per survey,
  * sharing the survey's id (AGL-1978).
  *
- * A period had to be put on the free text, and a TTL policy deletes
- * DOCUMENTS. Stamping `expiresAt` on the survey document itself would have
- * reaped the closed-set `reason` along with the prose — which is the one
- * field the funnel exists to break down, and the thing Zach asked for. So
- * the two are separated by document rather than compromised on by period:
+ * The free text carries a retention period and a TTL policy deletes
+ * DOCUMENTS. Stamping `expiresAt` on the survey document itself would reap
+ * the closed-set `reason` along with the prose — and `reason` is the one
+ * field the churn funnel breaks down by, so it has to outlive the text. The
+ * two are separated by document rather than compromised on by period:
  * the survey keeps `surface`, `reason`, `plan` and `uid` for as long as the
  * workspace lives, and the sentence somebody typed on their way out expires.
  *

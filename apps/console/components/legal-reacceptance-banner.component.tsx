@@ -66,13 +66,13 @@ import { postLegalAcceptance } from '../utils/legal-consent'
  * and the decision is nevertheless to keep asking. The problem was never the
  * asking.
  *
- * The problem is that the two reasons used to share a voice, and the common
+ * The problem is a shared voice across two different situations. The common
  * one — `version-superseded`, a person who agreed and whose documents moved
- * under them — read as though we held no record of them. To someone who
- * clicked agree yesterday that is both wrong and insulting, and it is the
- * exact experience Zach hit.
+ * under them — reads, in the other branch's words, as though the platform
+ * held no record of them at all. To someone who clicked agree yesterday that
+ * is both wrong and insulting.
  *
- * So the two branches are now genuinely different situations:
+ * So the two branches read as the different situations they are:
  *
  *   `version-superseded`   LEADS WITH THE ACKNOWLEDGEMENT, and names the DAY
  *                          they agreed, because a date is what a person

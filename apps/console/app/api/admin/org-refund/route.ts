@@ -433,8 +433,8 @@ async function handler(request: Request): Promise<Response> {
         entryId: windowEntryId,
       })
     } catch (error) {
-      // FAILS CLOSED. Zach declined a second approver, so this cap is the
-      // only control on the largest staff action there is; a store outage
+      // FAILS CLOSED. There is no second approver on a refund, so this cap is
+      // the only control on the largest staff action there is; a store outage
       // that silently lifted it would be an unbounded window nobody could
       // see. One escalation is the cost of being wrong this way.
       console.error('Refund ceiling unreadable', { orgId, chargeId }, error)

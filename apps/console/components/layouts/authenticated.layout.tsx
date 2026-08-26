@@ -114,8 +114,8 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
       // …and stop bouncing once this tab has made the round trip too many
       // times without settling (AGL-2486). `AuthenticatingLayout` pushes
       // back here the moment the session returns, so a session that flaps
-      // makes these two layouts volley forever — which is what Zach saw on
-      // production, with no way out of it from inside the app.
+      // makes these two layouts volley forever, with no way out of it from
+      // inside the app.
       //
       // The prompt this raises is NOT a softer outcome than the redirect it
       // replaces: `unstable` carries `requiresSignIn`, so the only way

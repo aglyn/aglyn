@@ -128,11 +128,11 @@ const TOOLBAR_CONTROL_HEIGHT = 40
  * The collections list and one collection's entries (AGL-2498).
  *
  * Its OWN route component, served at both `…/content` and
- * `…/content/{collectionSlug}`. It used to be one branch of a component that
- * also rendered the entry editor, which is what produced the flash Zach
- * reported: on a cold load of an entry URL that component had nothing else to
- * show while the entry arrived, so it showed this. It cannot any more — this
- * file does not know the entry editor exists.
+ * `…/content/{collectionSlug}`. Sharing a component with the entry editor
+ * flashes the wrong screen: on a cold load of an entry URL, a component that
+ * renders both has nothing else to show while the entry arrives, so it paints
+ * the list first. This file cannot do that — it does not know the entry
+ * editor exists.
  *
  * Everything it reads comes from `useContentScope()`, resolved in the layout
  * above both routes, so the split did not duplicate the data layer.

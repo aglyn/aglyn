@@ -531,18 +531,18 @@ export function AssistPanelComponent() {
         if (locked) {
           failAnswer(lockdownRefusalText(locked))
         } else if (response.status === 501) {
-          // 501 now means the narrow thing it says: no model is available AND
+          // 501 means the narrow thing it says: no model is available AND
           // the documentation had nothing to offer for this question either
           // — the server hands back the closest pages whenever it has any
           // (AGL-2486), so reaching here means it had none.
           //
-          // Written for the person who is actually reading it. The old line
-          // was "is not configured on this deployment", which names a
-          // deployment the reader does not administer and a configuration
-          // they cannot see; Zach met it mid-thread, after a working answer,
-          // and read it as the product being broken. What a user needs here
-          // is what happened, what to try, and who can fix it — in that
-          // order, in words that assume no idea what an API key is. The
+          // Written for the person who is actually reading it. "Not
+          // configured on this deployment" names a deployment the reader does
+          // not administer and a configuration they cannot see, and landing
+          // mid-thread after a working answer it reads as a breakage. What a
+          // user needs here is what happened, what to try, and who can fix it
+          // — in that order, in words that assume no idea what an API key
+          // is. The
           // operator's half (the env var) stays in the API error body, where
           // an operator looks and a customer does not.
           failAnswer(

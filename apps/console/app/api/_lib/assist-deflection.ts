@@ -64,12 +64,11 @@ import {
  *      billing pages beautifully and answers a question nobody asked. The
  *      conversation is the missing half and only the model has it.
  *
- *      This gate USED TO BE "no prior turn", full stop, and that was wrong in
- *      a way nobody saw until Zach hit it (AGL-2486). Not every follow-up
- *      leans on the transcript: the second question in a thread is very often
- *      a fresh, complete question that happens to be asked second. Refusing
- *      all of them meant a thread answered its first question from the docs
- *      and then escalated forever — and on a deployment with no
+ *      The gate is NOT "no prior turn" (AGL-2486). Not every follow-up leans
+ *      on the transcript: the second question in a thread is very often a
+ *      fresh, complete question that happens to be asked second. Refusing all
+ *      of them means a thread answers its first question from the docs and
+ *      then escalates forever — and on a deployment with no
  *      `ANTHROPIC_API_KEY` that reads as "Aglyn Assist is not configured",
  *      one question in, to a user who just watched it work. A product that
  *      answers exactly once per thread is worse than one that never answers,
@@ -614,12 +613,11 @@ const MAX_LINKED_SECTIONS = 4
  *
  * A deployment with no `ANTHROPIC_API_KEY` — which includes every self-hosted
  * one on the day it comes up, and Aglyn's own production today — can answer
- * only what retrieval is confident about. Everything else used to return a
- * bare 501, which the panel printed as "Assist is not configured on this
- * deployment". Zach met that on the SECOND question of a thread whose first
- * question had just been answered in full, and read it as the product being
- * broken. He was not wrong to: a capability refusal arriving after a working
- * answer looks like a fault, not a limit.
+ * only what retrieval is confident about. A bare 501 for everything else
+ * reaches the panel as "Assist is not configured on this deployment" — and it
+ * can arrive on the SECOND question of a thread whose first question was just
+ * answered in full. A capability refusal that lands after a working answer
+ * reads as a fault, not a limit.
  *
  * The self-host charter says every Aglyn-operated dependency must be
  * configurable AND degrade cleanly. "Degrades cleanly" cannot mean "answers

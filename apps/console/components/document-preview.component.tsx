@@ -79,8 +79,8 @@ const KIND_LABEL: Record<PreviewKind, string> = {
 /**
  * Region simulation for the consent banner (AGL-1498): "view my site
  * as-if-from the EU / the US / an unknown region / a GPC browser" without
- * leaving the console. Zach is in the US and would otherwise never see the
- * EU banner — "it works" needs a better answer than trust.
+ * leaving the console. An author sitting in one region never sees the banner
+ * any other region gets, and "it works" needs a better answer than trust.
  *
  * It lives HERE, and only here, on purpose: the preview surface is
  * authenticated console UI, so the override can never reach an anonymous
@@ -109,12 +109,13 @@ const SIMULATED_COUNTRY: Record<'eu' | 'us' | 'unknown', string | null> = {
 /**
  * Where the simulator's own chrome sits in the stack (AGL-2486).
  *
- * Zach opened the region picker and its menu painted UNDER this panel's helper
- * text. Both elements are direct children of `<body>` and both are positioned,
- * so they share the root stacking context and the numbers really are
- * comparable — measured in the preview, the panel resolved to 2147483500 and
- * MUI's portalled menu to `theme.zIndex.modal`, i.e. 1300. Nothing exotic: the
- * menu simply never had a value that could clear the panel it belongs to.
+ * Without a raised value here, the region picker's own menu paints UNDER this
+ * panel's helper text. Both elements are direct children of `<body>` and both
+ * are positioned, so they share the root stacking context and the numbers
+ * really are comparable — measured in the preview, the panel resolves to
+ * 2147483500 and MUI's portalled menu to `theme.zIndex.modal`, i.e. 1300.
+ * Nothing exotic: the menu has no value that could clear the panel it belongs
+ * to.
  *
  * The panel's own number stays what it was, because it is load-bearing against
  * a ladder that lives OUTSIDE this component — the consent banner (2147483400)
@@ -577,7 +578,7 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         : null}
       {/* Consent region simulator (AGL-1498) — see ConsentSimulation. The
           picker is console chrome; the banner below it is the REAL shared
-          component the tenant mounts, fed simulated state, so what Zach
+          component the tenant mounts, fed simulated state, so what the author
           sees is what an EU/US/unknown/GPC visitor gets. */}
       <Paper
         elevation={4}

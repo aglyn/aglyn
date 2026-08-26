@@ -51,8 +51,8 @@
  * auth state. `localStorage` would let a second tab's healthy sign-in reset
  * a first tab's stuck one, and — worse — let one stuck tab arm the breaker
  * in a tab that is working fine. `sessionStorage` is the scope of the
- * problem. It also means a new tab starts clean, which is the recovery
- * Zach performed by hand.
+ * problem. It also means a new tab starts clean, which is the recovery a
+ * stuck user reaches for anyway.
  */
 
 const BOUNCE_KEY = 'aglyn:signin-bounces'

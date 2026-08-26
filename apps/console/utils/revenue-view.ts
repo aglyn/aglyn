@@ -282,10 +282,10 @@ export interface GapCause {
 /**
  * The gap, decomposed into causes a person can act on.
  *
- * This is the part of the page that justifies showing two bases at all. Zach
- * asked for both side by side; two totals with no explanation would leave the
- * reader to subtract and guess, and the guess is always "our reporting is
- * broken" rather than "three cards are failing".
+ * This is the part of the page that justifies showing two bases at all. Two
+ * totals with no explanation leave the reader to subtract and guess, and the
+ * guess is always "our reporting is broken" rather than "three cards are
+ * failing".
  */
 export function gapCauses(payload: RevenuePayload | null): GapCause[] {
   const causes = payload?.gap?.causes

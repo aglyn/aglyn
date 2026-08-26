@@ -297,12 +297,11 @@ export interface LinearConfig {
   /**
    * Destination project PER REPORT KIND inside {@link teamId}.
    *
-   * Linear requires a `teamId` on every issue, so the team is what makes
-   * this configured at all; the project is the finer destination Zach asked
-   * for on 2026-08-19 — "tracked in a separate linear **project** then our
-   * primary one" — and on 2026-08-22 he split it by kind: "each type of
-   * issue report feature, bug etc all options should be filed under its own
-   * project in the Customer Reports team".
+   * Linear requires a `teamId` on every issue, so the team is what makes this
+   * configured at all. The project is the finer destination: customer reports
+   * belong in a project of their own rather than mixed into the product
+   * backlog, and each report kind — feature, bug, and the rest — files into
+   * its own project inside the customer-reports team.
    *
    * A kind may map to `null`, and then the issue files into the team's own
    * backlog with no project. That is not a lost report, and it is the right
