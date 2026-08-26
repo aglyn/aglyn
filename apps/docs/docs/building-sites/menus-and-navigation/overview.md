@@ -100,9 +100,9 @@ is the same result assembled from **primitives** — insert it and you get:
 - a wrapper **Stack** (`position: relative`) holding
 - a trigger **Button**, and
 - a **panel Stack** positioned under the trigger, three link columns
-  inside, carrying the `aglyn-hidden` class so it starts closed on the
-  live site (the canvas starts it closed too — open it with the eye on
-  its hierarchy row when you want to design it).
+  inside, already set to **Hide on published site** so it starts closed
+  on the live site (the canvas starts it closed too — open it with the
+  eye on its hierarchy row when you want to design it).
 
 The difference from hand-building: **the hover choreography arrives
 pre-wired.** Inserting the preset creates two real interactions on the
@@ -151,15 +151,24 @@ Three patterns cover most menus:
   Open/close a drawer* (or *a menu*).
 
 :::tip Start hidden
-To make a show-target start hidden, add the `aglyn-hidden` class under
-**Styles → Classes & custom CSS**. The live site hides it from the very
-first paint, and so does the canvas, so you are designing what a
-visitor sees. Its row in the **Hierarchy** shows an eye: click it to
-show the element on the canvas while you work on it, and click again to
-put it back. That switch is yours alone — it is never saved and never
-changes what the published site does. Selecting the element, or
-anything alongside it inside its container, opens it for as long as it
-is selected.
+To make a show-target start hidden, open its **⋮** menu — on its
+**Hierarchy** row or on the canvas toolbar — and choose **Hide on
+published site**. The live site hides it from the very first paint, and
+so does the canvas, so you are designing what a visitor sees. The same
+menu says **Show on published site** to undo it.
+
+Its row in the **Hierarchy** then shows an eye: click it to show the
+element on the canvas while you work on it, and click again to put it
+back. That switch is yours alone — it is never saved and never changes
+what the published site does. Selecting the element, or anything
+alongside it inside its container, opens it for as long as it is
+selected, and hiding an element leaves it showing so you do not lose
+what you were working on.
+
+Under the hood this is the `aglyn-hidden` class, which you will see on
+the element's chip list under **Styles → Classes & custom CSS** — useful
+to know if you are targeting it from theme styles or a class action, but
+you never have to type it.
 :::
 
 ## Responsive visibility

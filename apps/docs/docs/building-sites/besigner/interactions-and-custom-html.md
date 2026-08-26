@@ -22,10 +22,10 @@ one dialog without leaving the besigner:
   pure in-page choreography — available on **every plan** (see
   [Plan availability](#plan-availability)):
   - **Show / hide / show-hide an element** — pick any other canvas
-    element from a list; no selectors or classes needed. Add the
-    `aglyn-hidden` class to a target to start it hidden on the live
-    site — and on the canvas, where the eye on its **Hierarchy** row
-    shows it again while you design it. Each of these takes an optional **Delay** (a later
+    element from a list; no selectors or classes needed. Use the
+    target's **⋮ → Hide on published site** to make it start hidden on
+    the live site — and on the canvas, where the eye on its
+    **Hierarchy** row shows it again while you design it. Each of these takes an optional **Delay** (a later
     show/hide on the same target cancels a pending one — the classic
     hover grace period) and, for steps that can show, **Close on
     Esc** / **Close on outside click** so a revealed panel dismisses
@@ -103,8 +103,9 @@ yourself).
 - **Hover reveal**: *When hovered → Show an element* plus *When hover
   ends → Hide an element*, both at frequency *every time*.
 - **Mega menu from scratch** (no Mega Menu element): wrap a trigger
-  button and a panel in one Stack (panel: `aglyn-hidden` class,
-  position absolute below the trigger). On the wrapper: *When hovered →
+  button and a panel in one Stack (wrapper: position relative; panel:
+  **⋮ → Hide on published site**, position absolute below the trigger).
+  On the wrapper: *When hovered →
   Show* the panel, *When hover ends → Hide* it with a small **Delay**
   (say 250ms) so the pointer can travel; add **Close on Esc** to the
   show step for keyboard dismissal. The **Dropdown Panel** preset

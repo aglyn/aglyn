@@ -21,6 +21,7 @@ import * as Besigner from '@aglyn/besigner'
 import {
   isNodeHiddenOnSite,
   isNodeRevealedOnCanvas,
+  nodePropsWithHiddenOnSite,
   toggleRevealedNodeId,
 } from './canvas-reveal'
 
@@ -145,5 +146,66 @@ describe('toggleRevealedNodeId', () => {
 
   it('starts from empty when nothing has been revealed yet', () => {
     expect(toggleRevealedNodeId(undefined, 'panel')).toEqual(['panel'])
+  })
+})
+
+/**
+ * The write behind "Hide on published site" (AGL-1476) — the control the
+ * hidden class never had. Before this, the only way to author a panel that
+ * starts hidden was to know the literal class name and type it in.
+ */
+describe('nodePropsWithHiddenOnSite', () => {
+  const withClassName = (className?: string) =>
+    ({ props: className === undefined ? {} : { className } }) as never
+
+  it('adds the class, keeping the classes already there', () => {
+    expect(nodePropsWithHiddenOnSite(withClassName('promo card'), true)).toEqual({
+      className: `promo card ${HIDDEN}`,
+    })
+  })
+
+  it('adds it to an element that carries no classes at all', () => {
+    expect(nodePropsWithHiddenOnSite(withClassName(), true)).toEqual({
+      className: HIDDEN,
+    })
+  })
+
+  it('removes it and leaves the rest of the list intact', () => {
+    expect(
+      nodePropsWithHiddenOnSite(withClassName(`promo ${HIDDEN} card`), false),
+    ).toEqual({ className: 'promo card' })
+  })
+
+  it('drops className entirely rather than storing an empty string', () => {
+    // A cleared attribute persisted as `''` is its own class of bug across
+    // this codebase; the key goes instead.
+    expect(nodePropsWithHiddenOnSite(withClassName(HIDDEN), false)).toEqual({})
+  })
+
+  it('answers null when nothing would change, so no identical write is made', () => {
+    expect(nodePropsWithHiddenOnSite(withClassName(HIDDEN), true)).toBeNull()
+    expect(nodePropsWithHiddenOnSite(withClassName('promo'), false)).toBeNull()
+    expect(nodePropsWithHiddenOnSite(null, true)).toBeNull()
+  })
+
+  it('never leaves a second copy of the class on the element', () => {
+    const once = nodePropsWithHiddenOnSite(withClassName(), true)
+    expect(nodePropsWithHiddenOnSite({ props: once } as never, true)).toBeNull()
+  })
+
+  it('carries the element other props through untouched', () => {
+    const node = { props: { direction: 'row', spacing: 2 } } as never
+    expect(nodePropsWithHiddenOnSite(node, true)).toEqual({
+      direction: 'row',
+      spacing: 2,
+      className: HIDDEN,
+    })
+  })
+
+  it('round-trips: what it writes is what isNodeHiddenOnSite reads', () => {
+    const hidden = nodePropsWithHiddenOnSite(withClassName('promo'), true)
+    expect(isNodeHiddenOnSite({ props: hidden } as never)).toBe(true)
+    const shown = nodePropsWithHiddenOnSite({ props: hidden } as never, false)
+    expect(isNodeHiddenOnSite({ props: shown } as never)).toBe(false)
   })
 })

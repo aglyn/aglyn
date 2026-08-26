@@ -30,6 +30,8 @@ import {
   ICON_VARIANT_MODIFY_MOVE_OUT,
   ICON_VARIANT_MODIFY_MOVE_UP,
   ICON_VARIANT_MODIFY_PASTE,
+  ICON_VARIANT_VISIBILITY_HIDDEN,
+  ICON_VARIANT_VISIBILITY_SHOWN,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -42,8 +44,10 @@ import {
   type PaperProps,
   Typography,
 } from '@mui/material'
+import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { ChangeEvent, forwardRef, useCallback, useState } from 'react'
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
 import {
@@ -57,6 +61,10 @@ import {
   useMoveNodeInCallback,
   useMoveNodeOutCallback,
 } from '../hooks/use-move-node-callbacks'
+import {
+  isNodeHiddenOnSite,
+  nodePropsWithHiddenOnSite,
+} from '../utils/canvas-reveal'
 import SubtreeJsonDialog from './subtree-json-dialog.component'
 
 export interface NodeContextMenuProps extends PaperProps {
@@ -193,6 +201,50 @@ export const NodeContextMenu = observer(
     const canPaste = Besigner.clipboard.hasContent()
     const clipboardLabels = Besigner.clipboard.getLabels()
 
+    /**
+     * Start hidden on the published site (AGL-1476).
+     *
+     * The hidden class had no control that SET it. The eye on a hierarchy row
+     * only appears once an element already carries the class, and it is
+     * canvas-only — so the single way to author a mega-menu panel, a drawer,
+     * or anything else an interaction reveals at runtime was to know the
+     * literal string `aglyn-hidden` and type it into the Classes box. An
+     * element property with no picker is a missing feature, not a
+     * power-user path.
+     *
+     * The class stays the storage: the published site's stylesheet, the
+     * interaction builder's show/hide steps and the canvas reveal all key off
+     * it. This writes it, which is the part that was missing.
+     */
+    const [revealedNodeIds, setRevealedNodeIds] =
+      useAglynBesignerFlag('revealedNodeIds')
+    const hiddenOnSite = isNodeHiddenOnSite(node as never)
+    const handleToggleHiddenClick = useCallback(() => {
+      if (isRootNode) return
+      onAction?.()
+      const targets = multi ? Besigner.focus.getSelected() : [node]
+      const changed: string[] = []
+      action(() => {
+        for (const target of targets) {
+          if (!target || Aglyn.canvas.isRootNode(target)) continue
+          const props = nodePropsWithHiddenOnSite(target as never, !hiddenOnSite)
+          if (!props) continue
+          target.props = props as never
+          changed.push(target.$id)
+        }
+      })()
+      // Hiding something makes it vanish from the canvas, which is a poor
+      // answer to "I just asked to work on this". Reveal what was hidden so
+      // it stays on screen — canvas-only, exactly what the row's eye does,
+      // and the row now shows an eye to turn it back off.
+      if (!hiddenOnSite && changed.length) {
+        setRevealedNodeIds((current) => [
+          ...(current ?? []).filter((id) => !changed.includes(id)),
+          ...changed,
+        ])
+      }
+    }, [node, isRootNode, multi, hiddenOnSite, onAction, setRevealedNodeIds])
+
     const deleteElementCallback = useDeleteElementCallback()
     const deleteElementsCallback = useDeleteElementsCallback()
     const handleDeleteClick = useCallback(() => {
@@ -302,6 +354,28 @@ export const NodeContextMenu = observer(
               <ListItemText inset>Edit JSON</ListItemText>
             </MenuItem>
           )}
+          <MenuItem disabled={isRootNode} onClick={handleToggleHiddenClick}>
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={
+                  hiddenOnSite
+                    ? ICON_VARIANT_VISIBILITY_SHOWN.path
+                    : ICON_VARIANT_VISIBILITY_HIDDEN.path
+                }
+              />
+            </ListItemIcon>
+            <ListItemText
+              secondary={
+                hiddenOnSite
+                  ? 'Visitors see it from the first paint'
+                  : 'An interaction can reveal it — you keep designing it here'
+              }
+              slotProps={{ secondary: { sx: { whiteSpace: 'normal' } } }}
+            >
+              {hiddenOnSite ? 'Show on published site' : 'Hide on published site'}
+            </ListItemText>
+          </MenuItem>
           <Divider />
           <MenuItem disabled={isRootNode} onClick={handleCopyClick}>
             <ListItemIcon>

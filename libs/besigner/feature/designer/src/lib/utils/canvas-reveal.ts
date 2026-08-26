@@ -102,3 +102,34 @@ export function toggleRevealedNodeId(
     ? current.filter((id) => id !== nodeId)
     : [...current, nodeId]
 }
+
+/**
+ * The class list a node would carry with the hidden class added or removed.
+ *
+ * Returns the props object to assign, or `null` when nothing would change —
+ * so a caller never writes an identical value and never puts a second copy of
+ * the class on an element that already has one.
+ *
+ * Reads and writes `props.className` only. `node.className` is also consulted
+ * when ASKING whether an element is hidden, because a component may
+ * contribute one of its own, but that is the component's business and not a
+ * value an author's toggle may edit.
+ */
+export function nodePropsWithHiddenOnSite(
+  node: RevealNode,
+  hidden: boolean,
+): Record<string, unknown> | null {
+  if (!node) return null
+  const current = String(node.props?.['className'] ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+  const has = current.includes(Aglyn.ELEMENT_HIDDEN_CLASS)
+  if (has === hidden) return null
+  const next = hidden
+    ? [...current, Aglyn.ELEMENT_HIDDEN_CLASS]
+    : current.filter((name) => name !== Aglyn.ELEMENT_HIDDEN_CLASS)
+  const props: Record<string, unknown> = { ...(node.props ?? {}) }
+  if (next.length) props['className'] = next.join(' ')
+  else delete props['className']
+  return props
+}

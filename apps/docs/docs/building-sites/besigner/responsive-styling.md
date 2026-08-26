@@ -43,9 +43,11 @@ The same eye is on the rows under **Classes & custom CSS**: each
 declaration in the **Builder** list, and each **class chip**. A switched-off
 class stays on the element — the chip's ✕ is still the only thing that
 removes one — so the chips are always the class list your site ships.
-The one exception is `aglyn-hidden`: its chip is the same switch as the
-eye on the element's hierarchy row, because "stop applying the hidden
-class here" and "show this element while I design it" are one decision.
+The one exception is `aglyn-hidden` — the class behind **⋮ → Hide on
+published site**. Its chip is the same switch as the eye on the
+element's hierarchy row, because "stop applying the hidden class here"
+and "show this element while I design it" are one decision. Its ✕ still
+removes it, which is the same as choosing **Show on published site**.
 
 Switching a style off is a **canvas** setting, like the device preview:
 it is never saved, it never reaches Preview or your published site, and
