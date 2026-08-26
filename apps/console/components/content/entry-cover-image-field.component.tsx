@@ -21,6 +21,7 @@ import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { mdiImageOutline } from '@aglyn/shared-data-mdi'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
+import { COVER_IMAGE_HINT } from '../../constants/media-size-hints'
 
 export interface EntryCoverImageFieldProps {
   /** Media-library scope, and the scope the preview src resolves against. */
@@ -135,6 +136,10 @@ export function EntryCoverImageField(props: EntryCoverImageFieldProps) {
           <Typography variant="caption">{'No cover image'}</Typography>
         </Stack>
       )}
+      {/* What to bring, said before the upload (AGL-2486). */}
+      <Typography variant="caption" color="text.secondary" component="div">
+        {COVER_IMAGE_HINT}
+      </Typography>
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
         <Button size="small" variant="outlined" onClick={onChoose}>
           {trimmed ? 'Replace image' : 'Choose image'}

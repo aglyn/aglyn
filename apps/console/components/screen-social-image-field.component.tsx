@@ -22,6 +22,7 @@ import {
   inheritedMediaAlt,
 } from '@aglyn/aglyn/app-utils/media-metadata'
 import { Box, Button, Stack, TextField, Typography } from '@mui/material'
+import { SOCIAL_IMAGE_HINT } from '../constants/media-size-hints'
 import { useState } from 'react'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 import type { ScreenSocialImageDraft } from '../constants/screen-seo'
@@ -114,6 +115,10 @@ export function ScreenSocialImageField(props: ScreenSocialImageFieldProps) {
           }}
         />
       ) : null}
+      {/* What to bring, said before the upload (AGL-2486). */}
+      <Typography variant="caption" color="text.secondary" component="div">
+        {SOCIAL_IMAGE_HINT}
+      </Typography>
       <Stack direction="row" spacing={1}>
         <Button
           size="small"

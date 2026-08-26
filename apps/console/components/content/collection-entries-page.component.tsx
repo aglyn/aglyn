@@ -82,6 +82,7 @@ import RowActionsMenu, {
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
+import { AVATAR_HINT } from '../../constants/media-size-hints'
 import {
   collectionCreateBody,
   collectionTemplateBodies,
@@ -1978,7 +1979,7 @@ export function CollectionEntriesPage() {
               }
               helperText={
                 'Pick from the media library, or paste a URL — an external ' +
-                'avatar is a legitimate answer.'
+                `avatar is a legitimate answer. ${AVATAR_HINT}`
               }
             />
             <Button

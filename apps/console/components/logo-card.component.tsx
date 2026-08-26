@@ -23,6 +23,7 @@ import { useHost } from '@aglyn/tenant-feature-instance'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { SITE_LOGO_HINT } from '../constants/media-size-hints'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface LogoCardProps {
@@ -68,6 +69,15 @@ export function LogoCard(props: LogoCardProps) {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {'Shown while pages load on your live site. Without a logo, the ' +
           'site name is shown instead.'}
+      </Typography>
+      {/* What to bring, said before the upload (AGL-2486). */}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="div"
+        sx={{ mt: 0.5 }}
+      >
+        {SITE_LOGO_HINT}
       </Typography>
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
         {preview ? (
