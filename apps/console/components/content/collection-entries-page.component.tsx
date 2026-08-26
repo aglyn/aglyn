@@ -277,7 +277,11 @@ export function CollectionEntriesPage() {
       {
         component: 'text-field',
         name: 'slug',
-        label: 'Address',
+        // SLUG, the word every other address field in the console uses —
+        // screens create, screen detail, the besigner, entry detail, and this
+        // collection's own settings editor. It was the only "Address" among
+        // them, which makes the same concept read as two.
+        label: 'Slug',
         type: 'text',
         helperText:
           'The path entries publish under, e.g. blog → /blog/{entry}. ' +

@@ -247,7 +247,9 @@ export function UseTemplateDialog({
           {kind === 'page' ? (
             <TextField
               size="small"
-              label="Address"
+              // `Slug`, matching every other address field in the console
+              // (AGL-2498) — this dialog was the second and last "Address".
+              label="Slug"
               value={slug}
               onChange={(event) => setSlug(event.target.value)}
               disabled={busy}
