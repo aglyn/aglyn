@@ -31,6 +31,8 @@ import {
   withBesignerContext,
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
+  clearServerDraft,
+  writeServerDraft,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -182,6 +184,19 @@ function ComponentBesignerPage(props) {
   // Id-based screen links: a component can contain a link, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
+  /**
+   * Only the LIVE version has a draft (AGL-1152).
+   *
+   * A component's test is NOT `publishedVersionId === versionId` alone, for
+   * the same reason the save button's is not: that says the parent was
+   * promoted from this version once, not that it still matches. A save writes
+   * the version and leaves the parent — which is what the tenant renders —
+   * behind. `savedSincePublish` is the other half, and both are needed here.
+   */
+  const editingLiveVersion = Boolean(
+    versionId && versionId === publishedVersionId,
+  )
+  const [draftPending, setDraftPending] = useState(false)
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
     [firestore, hostId],
@@ -314,6 +329,8 @@ function ComponentBesignerPage(props) {
       docId: componentId,
       versionId,
     },
+    // The SHARED working draft, live version only.
+    firestore: editingLiveVersion ? firestore : undefined,
     // The crash-recovery prompt is withheld while anyone else is in this
     // room (AGL-2486): the mirror already has the unsaved work, so there is
     // nothing to recover and both of its buttons could only take something
@@ -553,13 +570,69 @@ function ComponentBesignerPage(props) {
    * either way, so `savedLandedRef` is the signal; pushing the canvas live
    * after a refused save is the one outcome worse than not pushing at all.
    */
+  /**
+   * Saves the working draft rather than the component the sites are serving.
+   * A component republish pushes into every page that uses it, so the gap
+   * between "saved" and "published" is widest here — which is exactly the gap
+   * a draft is for.
+   */
+  const handleSaveDraft = useCallback(async () => {
+    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
+    const wrote = await writeServerDraft(
+      firestore,
+      { scope: hostId, kind: 'component', docId: componentId, versionId },
+      {
+        nodes,
+        baseStamp: Aglyn.versionStamp(componentResult?.data?.updatedAt),
+        updatedByUid: user?.uid ?? null,
+        updatedByEmail: user?.email ?? null,
+      },
+    ).catch(() => false)
+    if (!wrote) {
+      enqueueSnackbar('Could not save the draft — your work is still here.', {
+        variant: 'error',
+        persist: false,
+      })
+      return
+    }
+    clearMirrorRef.current?.()
+    setDraftPending(true)
+    enqueueSnackbar('Draft saved — the live sites are unchanged.', {
+      variant: 'success',
+      persist: false,
+    })
+  }, [
+    firestore,
+    hostId,
+    componentId,
+    versionId,
+    componentResult?.data?.updatedAt,
+    user,
+    enqueueSnackbar,
+  ])
+
   const handleSaveAndPublish = useCallback(async () => {
     if (publishing) return
     savedLandedRef.current = false
     await handleSave()
     if (!savedLandedRef.current) return
     await promoteToSites()
-  }, [publishing, handleSave, promoteToSites])
+    void clearServerDraft(firestore, {
+      scope: hostId,
+      kind: 'component',
+      docId: componentId,
+      versionId,
+    })
+    setDraftPending(false)
+  }, [
+    publishing,
+    handleSave,
+    promoteToSites,
+    firestore,
+    hostId,
+    componentId,
+    versionId,
+  ])
 
   // The site's theme with this site's overrides resolved over it
   // (AGL-1021). The editor must render exactly what the tenant will.
@@ -791,14 +864,20 @@ function ComponentBesignerPage(props) {
                           onPreview={handlePreview}
                           detailsUrl={listUrl}
                           presence={<PresenceAvatars presence={presence} />}
-                          onSave={handleSave}
+                          onSave={
+                            editingLiveVersion ? handleSaveDraft : handleSave
+                          }
                           onSaveAndPublish={handleSaveAndPublish}
                           // A component is live only once its tree has been promoted onto
                           // the PARENT document — the pointer alone is not enough, which
                           // is the asymmetry with screens this whole change is about.
                           livePublished={
                             publishedVersionId === versionId &&
-                            !savedSincePublish
+                            !savedSincePublish &&
+                            // An unpublished draft makes the sites out of date
+                            // just as surely as an unpromoted save does.
+                            !draftPending &&
+                            !draft.available
                           }
                           publishBlockedReason={
                             canPublish ? undefined : publishBlock

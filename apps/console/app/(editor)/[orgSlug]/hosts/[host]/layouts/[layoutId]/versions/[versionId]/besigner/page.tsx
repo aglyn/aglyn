@@ -31,6 +31,8 @@ import {
   withBesignerContext,
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
+  clearServerDraft,
+  writeServerDraft,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -59,7 +61,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Dynamic site-plugin activation (AGL-417): canvas components register
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
@@ -75,11 +77,17 @@ import ReusableComponentsProvider from '../../../../../../../../../../components
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
-import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
+import {
+  buildRoute,
+  Route,
+} from '../../../../../../../../../../constants/route-links'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
 import useScreenLinkRoutes from '../../../../../../../../../../hooks/use-screen-link-routes'
-import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
+import {
+  useHostId,
+  useHostSubdomain,
+} from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
@@ -88,7 +96,6 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
-
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
@@ -128,7 +135,7 @@ function LayoutBesignerPage(props) {
   // layout at all, and the picker there had no installs to offer.
   usePluginDrawerRegistration(hostId)
   const handleAddElementClick = useAddElementDrawerCallback()
-  const listUrl = buildRoute(Route.HOST_LAYOUTS, { orgSlug,  host })
+  const listUrl = buildRoute(Route.HOST_LAYOUTS, { orgSlug, host })
   const { doc: hostResult } = useHost({ hostId })
   /** Did the last save actually land? See `onSaved`. */
   const savedLandedRef = useRef(false)
@@ -145,6 +152,19 @@ function LayoutBesignerPage(props) {
   // live, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
+  /**
+   * Only the LIVE version has a draft (AGL-1152). Zach: "versions should not
+   * have a draft, only the current live version should be able to have a
+   * draft" — a non-live version is already somewhere to work without touching
+   * the live site, so a draft there answers a question versions already
+   * answer. A layout is the sharper case for the gate, not the softer one: it
+   * has no route of its own, so the only way its edits reach a visitor is the
+   * version pointer, and every screen wrapped in it changes at once.
+   */
+  const editingLiveVersion = Boolean(
+    versionId && versionId === layoutPublishedVersionId,
+  )
+  const [draftPending, setDraftPending] = useState(false)
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
     [firestore, hostId],
@@ -156,9 +176,7 @@ function LayoutBesignerPage(props) {
   const collectionTemplates = useCollectionTemplates(hostId)
   const linkableRoutes = useScreenLinkRoutes({
     templates: collectionTemplates,
-    routingMap: hostResult?.data?.screens as
-      | Record<string, string>
-      | undefined,
+    routingMap: hostResult?.data?.screens as Record<string, string> | undefined,
     screens: screenDocs,
   })
   const screenLinks = useMemo(
@@ -257,6 +275,8 @@ function LayoutBesignerPage(props) {
       docId: layoutId,
       versionId,
     },
+    // The SHARED working draft, live version only.
+    firestore: editingLiveVersion ? firestore : undefined,
     // The crash-recovery prompt is withheld while anyone else is in this
     // room (AGL-2486): the mirror already has the unsaved work, so there is
     // nothing to recover and both of its buttons could only take something
@@ -348,6 +368,45 @@ function LayoutBesignerPage(props) {
    * A layout is chrome, so promoting one changes EVERY screen rendered inside
    * it; `revalidateLivePages` walks that fan-out rather than dropping one page.
    */
+  /**
+   * Saves the working draft rather than the layout the site is serving. See
+   * the screens editor for why this cannot be a write to the version itself.
+   */
+  const handleSaveDraft = useCallback(async () => {
+    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
+    const wrote = await writeServerDraft(
+      firestore,
+      { scope: hostId, kind: 'layout', docId: layoutId, versionId },
+      {
+        nodes,
+        baseStamp: Aglyn.versionStamp(layoutResult?.data?.updatedAt),
+        updatedByUid: user?.uid ?? null,
+        updatedByEmail: user?.email ?? null,
+      },
+    ).catch(() => false)
+    if (!wrote) {
+      enqueueSnackbar('Could not save the draft — your work is still here.', {
+        variant: 'error',
+        persist: false,
+      })
+      return
+    }
+    clearMirrorRef.current?.()
+    setDraftPending(true)
+    enqueueSnackbar('Draft saved — the live site is unchanged.', {
+      variant: 'success',
+      persist: false,
+    })
+  }, [
+    firestore,
+    hostId,
+    layoutId,
+    versionId,
+    layoutResult?.data?.updatedAt,
+    user,
+    enqueueSnackbar,
+  ])
+
   const handleSaveAndPublish = useCallback(async () => {
     savedLandedRef.current = false
     await handleSave()
@@ -358,7 +417,16 @@ function LayoutBesignerPage(props) {
     // Not awaited: the writes have succeeded, and a cache hint that fails must
     // never make a completed publish look failed.
     void revalidateLivePages({ user, hostId, layoutId })
+    // Published, so the draft must stop being offered.
+    void clearServerDraft(firestore, {
+      scope: hostId,
+      kind: 'layout',
+      docId: layoutId,
+      versionId,
+    })
+    setDraftPending(false)
   }, [
+    firestore,
     handleSave,
     layoutPublishedVersionId,
     versionId,
@@ -369,9 +437,7 @@ function LayoutBesignerPage(props) {
   ])
 
   const handlePreview = useOpenPreview({
-    ids: hostId
-      ? { hostId, kind: 'layout', docId: layoutId, versionId }
-      : null,
+    ids: hostId ? { hostId, kind: 'layout', docId: layoutId, versionId } : null,
     href: buildRoute(Route.LAYOUT_PREVIEW, {
       orgSlug,
       host,
@@ -401,187 +467,201 @@ function LayoutBesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
-    <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
-    <EntityPickerProvider hostId={hostId}>
-    <ReusableComponentsProvider hostId={hostId}>
-    <BindingPickerProvider hostId={hostId}>
-    <InteractionsProvider hostId={hostId}>
-    <BesignerMediaPickerProvider hostId={hostId}>
-      {hostFontsHref ? (
-        <>
-          <link
-            key="host-fonts-preconnect"
-            rel="preconnect"
-            href="https://fonts.gstatic.com"
-            crossOrigin="anonymous"
-          />
-          <link key="host-fonts" rel="stylesheet" href={hostFontsHref} />
-        </>
-      ) : null}
-      <MainLayout
-        enableAppBarElevation
-        besigner
-        centerPrefix={
-          <BesignerDocumentSwitcherComponent
-            hostId={hostId}
-            current={{ kind: 'layout', id: layoutId }}
-          />
-        }
-        actionsPrefix={
-          <>
-            <BesignerFunctionsButton hostId={hostId} />
-            <BesignerVersionsComponent
-              hostId={hostId}
-              parent={{ kind: 'layout', id: layoutId }}
-              versionId={versionId}
-              publishedVersionId={layoutPublishedVersionId}
-            />
-          </>
-        }
-        backButton={
-          {
-            component: AppLink,
-            componentVariant: 'naked',
-            href: listUrl,
-          } as any
-        }
-        centerNavigationItems={[
-          {
-            id: 'center-nav-file',
-            children: 'File',
-            items: [
-              {
-                id: 'center-nav-file-save',
-                icon: saveAvailable
-                  ? { path: ICON_VARIANT_MODIFY_SAVE.path }
-                  : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
-                children: saveAvailable ? 'Save' : 'Up to Date',
-                onClick: handleSave,
-              },
-              {
-                id: 'center-nav-file-close',
-                children: 'Close',
-                href: listUrl,
-                component: AppLink,
-                componentVariant: 'naked',
-                ListItemTextProps: { inset: true },
-              },
-            ],
-          },
-          {
-            id: 'center-nav-edit',
-            children: 'Edit',
-            items: [
-              {
-                id: 'center-nav-edit-undo',
-                children: 'Undo',
-                onClick: () => Aglyn.canvas.undo(),
-                disabled: !Aglyn.canvas.canUndo,
-                ListItemTextProps: { inset: true },
-              },
-              {
-                id: 'center-nav-edit-redo',
-                children: 'Redo',
-                onClick: () => Aglyn.canvas.redo(),
-                disabled: !Aglyn.canvas.canRedo,
-                ListItemTextProps: { inset: true },
-              },
-              {
-                type: 'divider',
-              },
-              {
-                id: 'center-nav-edit-rawjson',
-                children: 'Raw JSON',
-                onClick: () => openJsonEditor(),
-                ListItemTextProps: { inset: true },
-              },
-            ],
-          },
-          {
-            id: 'center-nav-insert',
-            children: 'Insert',
-            items: [
-              {
-                id: 'center-nav-insert-element',
-                icon: {
-                  path: ICON_VARIANT_MODIFY_ADD.path,
-                },
-                children: 'New Element',
-                // Capture the current selection as the insert target when
-                // the picker opens. Passing the callback directly handed the
-                // menu click event in as `parent`, which both detached the
-                // created node from the tree and broke placement-constraint
-                // validation (AGL-537).
-                onClick: () =>
-                  handleAddElementClick(Besigner.focus.getLastSelected()),
-              },
-            ],
-          },
-        ]}
-      >
-        {/* `hasError`, not the raw `error` — see the screens besigner
+      <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+        <EntityPickerProvider hostId={hostId}>
+          <ReusableComponentsProvider hostId={hostId}>
+            <BindingPickerProvider hostId={hostId}>
+              <InteractionsProvider hostId={hostId}>
+                <BesignerMediaPickerProvider hostId={hostId}>
+                  {hostFontsHref ? (
+                    <>
+                      <link
+                        key="host-fonts-preconnect"
+                        rel="preconnect"
+                        href="https://fonts.gstatic.com"
+                        crossOrigin="anonymous"
+                      />
+                      <link
+                        key="host-fonts"
+                        rel="stylesheet"
+                        href={hostFontsHref}
+                      />
+                    </>
+                  ) : null}
+                  <MainLayout
+                    enableAppBarElevation
+                    besigner
+                    centerPrefix={
+                      <BesignerDocumentSwitcherComponent
+                        hostId={hostId}
+                        current={{ kind: 'layout', id: layoutId }}
+                      />
+                    }
+                    actionsPrefix={
+                      <>
+                        <BesignerFunctionsButton hostId={hostId} />
+                        <BesignerVersionsComponent
+                          hostId={hostId}
+                          parent={{ kind: 'layout', id: layoutId }}
+                          versionId={versionId}
+                          publishedVersionId={layoutPublishedVersionId}
+                        />
+                      </>
+                    }
+                    backButton={
+                      {
+                        component: AppLink,
+                        componentVariant: 'naked',
+                        href: listUrl,
+                      } as any
+                    }
+                    centerNavigationItems={[
+                      {
+                        id: 'center-nav-file',
+                        children: 'File',
+                        items: [
+                          {
+                            id: 'center-nav-file-save',
+                            icon: saveAvailable
+                              ? { path: ICON_VARIANT_MODIFY_SAVE.path }
+                              : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
+                            children: saveAvailable ? 'Save' : 'Up to Date',
+                            onClick: handleSave,
+                          },
+                          {
+                            id: 'center-nav-file-close',
+                            children: 'Close',
+                            href: listUrl,
+                            component: AppLink,
+                            componentVariant: 'naked',
+                            ListItemTextProps: { inset: true },
+                          },
+                        ],
+                      },
+                      {
+                        id: 'center-nav-edit',
+                        children: 'Edit',
+                        items: [
+                          {
+                            id: 'center-nav-edit-undo',
+                            children: 'Undo',
+                            onClick: () => Aglyn.canvas.undo(),
+                            disabled: !Aglyn.canvas.canUndo,
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-redo',
+                            children: 'Redo',
+                            onClick: () => Aglyn.canvas.redo(),
+                            disabled: !Aglyn.canvas.canRedo,
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-rawjson',
+                            children: 'Raw JSON',
+                            onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                        ],
+                      },
+                      {
+                        id: 'center-nav-insert',
+                        children: 'Insert',
+                        items: [
+                          {
+                            id: 'center-nav-insert-element',
+                            icon: {
+                              path: ICON_VARIANT_MODIFY_ADD.path,
+                            },
+                            children: 'New Element',
+                            // Capture the current selection as the insert target when
+                            // the picker opens. Passing the callback directly handed the
+                            // menu click event in as `parent`, which both detached the
+                            // created node from the tree and broke placement-constraint
+                            // validation (AGL-537).
+                            onClick: () =>
+                              handleAddElementClick(
+                                Besigner.focus.getLastSelected(),
+                              ),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    {/* `hasError`, not the raw `error` — see the screens besigner
             (AGL-1066). */}
-        {hasError || notFound ? (
-          <Stack
-            sx={{
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Typography>{'Not found'}</Typography>
-          </Stack>
-        ) : status === 'loading' ? (
-          LOADING_OVERLAY_ELEMENT
-        ) : (
-          <>
-            <CollaboratorOverlays entries={presence.entries} />
-            <BesignerAppBarComponent
-              onPreview={handlePreview}
-              detailsUrl={listUrl}
-              presence={<PresenceAvatars presence={presence} />}
-              onSave={handleSave}
-              onSaveAndPublish={handleSaveAndPublish}
-              // Live only when the parent's pointer names THIS version.
-              livePublished={layoutPublishedVersionId === versionId}
-              saveAvailable={saveAvailable}
-            />
-            <BesignerDraftAlertComponent
-              draft={draft}
-              noun="layout"
-              remoteChanged={remoteChanged}
-            />
-            {/* Shown as soon as their save lands, not on Save — finding out
+                    {hasError || notFound ? (
+                      <Stack
+                        sx={{
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Typography>{'Not found'}</Typography>
+                      </Stack>
+                    ) : status === 'loading' ? (
+                      LOADING_OVERLAY_ELEMENT
+                    ) : (
+                      <>
+                        <CollaboratorOverlays entries={presence.entries} />
+                        <BesignerAppBarComponent
+                          onPreview={handlePreview}
+                          detailsUrl={listUrl}
+                          presence={<PresenceAvatars presence={presence} />}
+                          onSave={
+                            editingLiveVersion ? handleSaveDraft : handleSave
+                          }
+                          onSaveAndPublish={handleSaveAndPublish}
+                          // Live only when the parent's pointer names THIS version.
+                          livePublished={
+                            layoutPublishedVersionId === versionId &&
+                            !draftPending &&
+                            !draft.available
+                          }
+                          saveAvailable={saveAvailable}
+                        />
+                        <BesignerDraftAlertComponent
+                          draft={draft}
+                          noun="layout"
+                          remoteChanged={remoteChanged}
+                        />
+                        {/* Shown as soon as their save lands, not on Save — finding out
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
-            {remoteChanged && !draft.available ? (
-              <BesignerConflictAlertComponent noun="layout" />
-            ) : null}
-            <WorkspaceEditorComponent>
-              <ViewportRootComponent>
-                <ViewportCanvasComponent />
-              </ViewportRootComponent>
-            </WorkspaceEditorComponent>
-          </>
-        )}
-      </MainLayout>
-      {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
-        <JsonEditor
-          open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
-          onClose={closeJsonEditor}
-          onSave={handleJsonSave}
-          defaultValue={Aglyn.canvas.nestedNodes as any}
-        />
-      )}
-    </BesignerMediaPickerProvider>
-    </InteractionsProvider>
-    </BindingPickerProvider>
-    </ReusableComponentsProvider>
-    </EntityPickerProvider>
-    </Aglyn.ScreenLinkContext.Provider>
+                        {remoteChanged && !draft.available ? (
+                          <BesignerConflictAlertComponent noun="layout" />
+                        ) : null}
+                        <WorkspaceEditorComponent>
+                          <ViewportRootComponent>
+                            <ViewportCanvasComponent />
+                          </ViewportRootComponent>
+                        </WorkspaceEditorComponent>
+                      </>
+                    )}
+                  </MainLayout>
+                  {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+                    <JsonEditor
+                      open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+                      onClose={closeJsonEditor}
+                      onSave={handleJsonSave}
+                      defaultValue={Aglyn.canvas.nestedNodes as any}
+                    />
+                  )}
+                </BesignerMediaPickerProvider>
+              </InteractionsProvider>
+            </BindingPickerProvider>
+          </ReusableComponentsProvider>
+        </EntityPickerProvider>
+      </Aglyn.ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )
 }
 
 LayoutBesignerPage.displayName = 'Page:LayoutBesigner'
 
-export default withSitePlugins(withBesignerContext(observer(LayoutBesignerPage)))
+export default withSitePlugins(
+  withBesignerContext(observer(LayoutBesignerPage)),
+)
