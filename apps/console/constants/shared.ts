@@ -48,15 +48,24 @@ export const TABLE_HEAD_HEIGHT = 48
 export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 /**
- * The default page size, and it is the LARGEST list's answer rather than the
- * smallest's.
+ * The default page size: THE SMALLEST OPTION, always.
  *
- * At 5, a site with six layouts paginated — a footer, a second page, and a
- * control to dismiss both — to hide one row. 25 is past the length of nearly
- * every list in the console, so the common case is a footer that reports the
- * whole list and never asks anything of the reader.
+ * Zach: *"Make all paginated lists default to the minimum count … that goes
+ * for all lists across the entire platform."* Derived from the options rather
+ * than written as a number, so the rule survives the options changing — a
+ * hardcoded default is how the console ended up with five different ones.
+ *
+ * It is also the cheaper default, and not only in pixels. A list whose
+ * listener is bounded by its page size — layouts is one, `limit(pageSize)` —
+ * reads exactly this many DOCUMENTS on load, so the smallest page is the
+ * smallest bill (AGL-703). A reader who wants more says so once.
+ *
+ * ⚠️ The screens tree pages TOP-LEVEL screens and drag-to-reorder cannot cross
+ * a page boundary — dnd-kit only knows about mounted rows. A smaller default
+ * makes that limit reachable on a smaller site; see the pagination block in
+ * `screens-hierarchy-table.component.tsx`.
  */
-export const TABLE_PAGE_SIZE_DEFAULT = 25
+export const TABLE_PAGE_SIZE_DEFAULT = TABLE_PAGE_SIZE_OPTIONS[0]
 
 /**
  * The label beside the size menu, on every list.

@@ -499,9 +499,14 @@ export function ScreensHierarchyTableComponent(
    * something on this page anyway: "25 sections", not "25 rows of tree".
    *
    * ⚠️ Drag-to-reorder cannot cross a page boundary — dnd-kit only knows about
-   * mounted rows. That is a real limit and the reason the default is generous
-   * (25) rather than the grid's 5: on a host whose whole tree fits on one page
-   * nothing changes at all, which is the common case.
+   * mounted rows, so a screen cannot be dragged onto a page it is not on.
+   *
+   * The default used to be 25 to keep that limit out of reach on a typical
+   * site. It is `TABLE_PAGE_SIZE_DEFAULT` now, which is the smallest option
+   * the console offers — every list defaults to its minimum, by Zach's rule —
+   * so a site with more than ten top-level screens meets the limit sooner.
+   * Reordering across pages means raising rows-per-page first, or moving the
+   * screen by re-parenting it rather than dragging.
    */
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)

@@ -100,6 +100,16 @@ describe('the console has one table footer (AGL-693)', () => {
     )
   })
 
+  it('every list starts on the SMALLEST page size', () => {
+    // Zach: "Make all paginated lists default to the minimum count … that
+    // goes for all lists across the entire platform." Asserted against the
+    // options rather than against `10`, so the rule outlives the number: a
+    // default that stops being the minimum is the failure, whatever the
+    // minimum becomes.
+    expect(TABLE_PAGE_SIZE_DEFAULT).toBe(Math.min(...TABLE_PAGE_SIZE_OPTIONS))
+    expect(TABLE_PAGE_SIZE_DEFAULT).toBe(TABLE_PAGE_SIZE_OPTIONS[0])
+  })
+
   it('every list starts on the same page size', () => {
     // The three lists that own their own page-size state, and the one that
     // sets it through `initialState`. A default that differs per list is the
