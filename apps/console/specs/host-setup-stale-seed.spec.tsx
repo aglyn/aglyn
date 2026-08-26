@@ -69,10 +69,22 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHost: () => ({ doc: hostDoc, setDoc: mockSetDoc }),
   useAnalytics: () => ({}),
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),
+  // The setup page mounts `ApprovedImageHostsCard` (AGL-1152), which reads
+  // Firestore directly. An inert handle is enough: these specs are about the
+  // theme-save guard, and the card's own reads resolve to nothing.
+  useFirestore: () => ({}),
   // The REAL guard (AGL-1358). A stub would let all three writes through
   // whatever the page passed it, which is what these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+}))
+
+// Same reason as `useFirestore` above: the approved-image-hosts card reads the
+// host doc through this hook. `undefined` data is the card's empty state, which
+// renders and does nothing — exactly what these specs want it to do.
+jest.mock('../hooks/use-firestore-doc', () => ({
+  __esModule: true,
+  default: () => ({ data: undefined, ready: true }),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

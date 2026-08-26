@@ -62,15 +62,37 @@ jest.mock('firebase/firestore', () => ({
   },
 }))
 
+/**
+ * The recovery seams `useAuthRecovery` opens once this suite's denials latch.
+ *
+ * They are stubbed INERT rather than driven: a `permission-denied` streak is
+ * an auth-caused failure, so the self-heal genuinely subscribes here — and
+ * this suite is about the retry BUDGET, which must behave identically whether
+ * or not a session ever comes back. `host-guard-auth-recovery.spec.tsx` is
+ * where the recovery itself is driven.
+ */
+jest.mock('firebase/auth', () => ({
+  onIdTokenChanged: (_auth: unknown, next: (user: unknown) => void) => {
+    // Firebase replays the current user on subscribe; keeping that faithful
+    // is what proves the budget assertions below are not quietly counting
+    // an extra listen the replay kicked off.
+    next({ uid: 'user-1' })
+    return () => undefined
+  },
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => {
   // Stable identities, as reactfire provides: the membership effect keys on
   // `firestore`, so a fresh object per render would silently restart the
   // listen (and its retry budget) on every state change.
   const firestore = {}
+  const auth = {}
   const user = { data: { uid: 'user-1' } }
   return {
     useFirestore: () => firestore,
     useUser: () => user,
+    useAuth: () => auth,
+    subscribeFirestoreSessionHeal: () => () => undefined,
   }
 })
 

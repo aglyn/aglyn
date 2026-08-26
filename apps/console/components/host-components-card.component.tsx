@@ -110,6 +110,19 @@ export interface HostComponentsCardProps {
    * page that counted separately would be a second source for one fact.
    */
   onQuota?: (readout: ComponentQuotaReadout) => void
+  /**
+   * The empty state's way OUT (AGL-1152).
+   *
+   * The card owns the list and therefore the empty state, but the PAGE owns
+   * the create drawer and the template gallery — so the buttons have to come
+   * down rather than be rebuilt here, or the empty state would open a second
+   * drawer that knows nothing about the page's quota check.
+   *
+   * Optional: a caller with no create affordance gets the illustration and the
+   * sentence, which is what this list showed before.
+   */
+  onCreate?: () => void
+  onBrowseTemplates?: () => void
 }
 
 /**
@@ -121,7 +134,7 @@ export interface HostComponentsCardProps {
  * with the marketplace component editor.
  */
 export function HostComponentsCard(props: HostComponentsCardProps) {
-  const { hostId, onQuota } = props
+  const { hostId, onQuota, onCreate, onBrowseTemplates } = props
   const firestore = useFirestore()
   const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -599,7 +612,24 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       <ArtifactTable
         rowHeight={TABLE_ROW_HEIGHT}
         columns={columns}
-        noRowsLabel="No reusable components yet — use Create component above, or save one from the besigner"
+        noRowsLabel="No reusable components yet"
+        noRowsDescription="A reusable component is a block you build once and drop onto any screen — a hero, a pricing table, a footer. Create one, or save one from the besigner."
+        noRowsAction={
+          onCreate || onBrowseTemplates ? (
+            <Stack direction="row" spacing={1}>
+              {onCreate ? (
+                <Button variant="contained" onClick={onCreate}>
+                  {'Create your first component'}
+                </Button>
+              ) : null}
+              {onBrowseTemplates ? (
+                <Button variant="outlined" onClick={onBrowseTemplates}>
+                  {'Browse templates'}
+                </Button>
+              ) : null}
+            </Stack>
+          ) : null
+        }
         rows={components}
         // The whole row opens the detail page (AGL-693); the action cluster
         // stops propagation so a menu click never navigates underneath it.

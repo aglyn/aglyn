@@ -28,6 +28,10 @@ import {
   ICON_VARIANT_MODIFY_DRAG,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+// Subpath, not the barrel: `empty-state.component` is deliberately kept out
+// of `@aglyn/shared-ui-jsx`'s index (nothing in the tenant page graph shows an
+// empty state, and the barrel rule is enforced in CI).
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import {
   DndContext,
   DragOverlay,
@@ -46,17 +50,18 @@ import {
   IconButton,
   LinearProgress,
   Paper,
+  Skeleton,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
-  Skeleton,
-  Stack,
   Tooltip,
   Typography,
-  TablePagination,
+  alpha,
 } from '@mui/material'
 import { Fragment, useCallback, useMemo, useState, type ReactNode,
   useEffect,
@@ -646,21 +651,58 @@ export function ScreensHierarchyTableComponent(
               ))}
             {!loading && !visibleRows.length && (
               <TableRow>
-                <TableCell colSpan={COLUMN_COUNT} align="center">
-                  <Stack
-                    spacing={1}
-                    sx={{ alignItems: 'center', py: 4 }}
-                  >
-                    <Typography variant="subtitle1">
-                      {'No screens yet — this site is a blank canvas.'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {'Create your first screen or start from a template ' +
-                        'using the buttons above, then open it with the ' +
-                        'besigner to design your page.'}
-                    </Typography>
-                    {emptyAction ?? null}
-                  </Stack>
+                <TableCell
+                  colSpan={COLUMN_COUNT}
+                  align="center"
+                  sx={(theme) => ({
+                    // MUI's OWN `GridOverlay` FORMULA, not an approximation of
+                    // it. The three grid lists render their empty state inside
+                    // that overlay, which fills with `background.default` at
+                    // `action.disabledOpacity` — a very faint wash over the
+                    // white card. Setting `background.default` SOLID here (the
+                    // first attempt) produced a visibly darker grey than the
+                    // lists it was supposed to match. Written as the same
+                    // expression so a theme change moves both together.
+                    backgroundColor: alpha(
+                      theme.palette.background.default,
+                      theme.palette.action.disabledOpacity,
+                    ),
+                    // No bottom rule: the pagination below draws the only line
+                    // this region needs, and the two together read as a stray
+                    // border with a gap in it.
+                    borderBottom: 0,
+                  })}
+                >
+                  {/*
+                    THE SHARED EMPTY STATE, illustration and all (AGL-1152).
+                    This was a hand-rolled Stack: the only list in the console
+                    with a create flow and the only one WITHOUT the
+                    illustration, while layouts/components/templates had the
+                    illustration and no way out. Both halves were the same
+                    omission seen from opposite sides, and `EmptyStateComponent`
+                    has drawn label + description + action since AGL-693 — the
+                    grid simply never passed the last two, and this table never
+                    called it at all.
+
+                    Not `compact`: this cell has the vertical room, and
+                    matching the other three lists is the entire point.
+                  */}
+                  <EmptyStateComponent
+                    label={'No screens yet — this site is a blank canvas.'}
+                    description={
+                      // WHAT A SCREEN IS, then what to do — the shape the
+                      // other three lists use ("Layouts are the chrome your
+                      // screens render inside…"). This read as instructions
+                      // for a reader who already knew the noun, which is not
+                      // the reader looking at an empty list. Framed the same
+                      // way the page's own help tip frames it: pages, their
+                      // addresses, and the hierarchy that builds the URLs.
+                      'Screens are your pages — each one gets its own address, ' +
+                      'and nesting them builds your URL structure. Create one, ' +
+                      'or start from a template.'
+                    }
+                    action={emptyAction ?? null}
+                  />
                 </TableCell>
               </TableRow>
             )}
@@ -702,7 +744,16 @@ export function ScreensHierarchyTableComponent(
                 </Fragment>
               )
             })}
-            <RootDropRow dragging={Boolean(activeId)} />
+            {/*
+              Only when there is something to reorder. The row is 32px tall and
+              merely `visibility: hidden` while idle, so on an EMPTY list it
+              added a blank strip between the empty state and the footer —
+              which read as a stray border with a gap above it. Nothing can be
+              dragged onto it when there are no rows.
+            */}
+            {visibleRows.length > 0 ? (
+              <RootDropRow dragging={Boolean(activeId)} />
+            ) : null}
           </TableBody>
         </Table>
       </TableContainer>
@@ -716,6 +767,20 @@ export function ScreensHierarchyTableComponent(
       */}
       <TablePagination
         component="div"
+        /*
+          MATCH THE GRID'S FOOTER CHROME (AGL-1152). The other three lists are
+          MUI DataGrids, whose `.MuiDataGrid-footerContainer` carries a top
+          divider and a 52px min-height; this is a bare `TablePagination`, so
+          it sat at the default toolbar height with no rule above it and read
+          as a different component in a screenshot beside them. The COUNT stays
+          different on purpose — see the note above — but the chrome should
+          not be.
+        */
+        sx={{
+          borderTop: 1,
+          borderColor: 'divider',
+          '& .MuiTablePagination-toolbar': { minHeight: 52 },
+        }}
         count={rootCount}
         page={page}
         onPageChange={(_event, next) => setPage(next)}

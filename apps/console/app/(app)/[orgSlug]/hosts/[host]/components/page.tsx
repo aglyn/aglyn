@@ -177,7 +177,14 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
       }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <HostComponentsCard hostId={hostId} onQuota={setQuota} />
+        <HostComponentsCard
+          hostId={hostId}
+          onQuota={setQuota}
+          // Same two actions as the header, so the empty state opens the
+          // page's own drawer and gallery rather than a second pair.
+          onCreate={() => setCreateOpen(true)}
+          onBrowseTemplates={() => setTemplatesOpen(true)}
+        />
         <TemplateGalleryDialog
           hostId={hostId}
           open={templatesOpen}

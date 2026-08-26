@@ -1364,9 +1364,18 @@ service cloud.firestore {
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
                      'bandwidthCeiling',
                      'projectId', 'projectNumber']) &&
+          // `approvedImageHosts` joins the same admin tier (AGL-1152), and for
+          // the sharper of the two reasons its siblings are here: it is the
+          // source the tenant's enforced `img-src` is BUILT from. An editor
+          // able to write it could add any host on the internet to their
+          // site's content-security policy — which is not "widening their own
+          // plugin set", it is disabling the egress control on a page their
+          // visitors load. Owner/admin only, like every other key on this
+          // document that decides what a visitor's browser is allowed to do.
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['disabledPlugins', 'enabledPlugins'])) &&
+              .hasAny(['disabledPlugins', 'enabledPlugins',
+                       'approvedImageHosts'])) &&
           // `screens` is the ROUTING MAP, and registering a path in it is
           // what makes a page reachable on the live site — see
           // `publishScreenRoute`, which writes this key and the screen doc's

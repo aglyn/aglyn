@@ -52,6 +52,7 @@ jest.mock('../hooks/use-host-resolution', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => {
   // Stable identities, as reactfire provides — effect deps include these.
   const firestore = {}
+  const auth = {}
   const user = { data: { uid: 'user-1' } }
   // The host plugin-policy bridge (AGL-1014) reads the host doc once a
   // hostId resolves; a loading doc is the honest default here.
@@ -60,6 +61,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useFirestore: () => firestore,
     useUser: () => user,
     useHost: () => hostDoc,
+    // The provider asks for the Auth instance on every render so a
+    // SESSION-caused failure can heal itself. Neither stub below raises
+    // `authError`, so nothing here subscribes — these failures are the
+    // network kind, which stays manual on purpose.
+    useAuth: () => auth,
   }
 })
 

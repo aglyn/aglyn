@@ -19,6 +19,7 @@
 import {
   isEnterpriseOrg,
   PLAN_LABELS,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
@@ -200,8 +201,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
               <Stack spacing={2}>
                 <Typography variant="body2" color="text.secondary">
                   {'Overrides write to the org doc and are audited to ' +
-                    'adminAudit. Organizations without a plan keep every ' +
-                    'feature (dark launch).'}
+                    'adminAudit. The Plan column shows the plan an org READS ' +
+                    'as; where that differs from what is stored, the stored ' +
+                    'value is shown beside it.'}
                 </Typography>
                 <Stack direction="row" spacing={1}>
                   <TextField
@@ -248,6 +250,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   <TableBody>
                     {orgs.map((org) => {
                       const resolved = resolveOrgEntitlements(org)
+                      const effectivePlan = resolveEffectivePlan(org as never)
+                      const storedPlanLabel = org.plan ?? 'no plan'
                       return (
                         <TableRow key={org.$id} hover>
                           <TableCell>
@@ -269,15 +273,42 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                                 org on a pre-AGL-1118 enterprise arrangement
                                 stores a lower base plan, and listing that here
                                 contradicted its own Billing page. */}
+                            {/* THE PLAN THE ORG READS AS, not the one stored
+                                (AGL-1152). This column showed `org.plan` raw,
+                                and the two diverge in both directions —
+                                exactly when it matters:
+
+                                  - a LAPSED payer stores `starter` and reads
+                                    as `free`, because `resolveEffectivePlan`
+                                    drops any paid plan with a dead
+                                    subscription (AGL-247). The list said
+                                    `starter` while every gate walled them.
+                                  - an org with NO plan reads as `free` too —
+                                    pinned by `plan-entitlements.spec.ts`:
+                                    "resolves as free and is walled, not
+                                    metered". The blurb here used to claim the
+                                    opposite. */}
                             <Chip
                               label={
                                 isEnterpriseOrg(org as never)
                                   ? PLAN_LABELS.enterprise
-                                  : (org.plan ?? 'no plan')
+                                  : effectivePlan
                               }
                               size="small"
                               color={org.plan ? 'primary' : 'default'}
                             />
+                            {/* Only when the stored value would surprise
+                                someone reading the effective one — a lapsed
+                                subscription, or no plan at all. */}
+                            {!isEnterpriseOrg(org as never) &&
+                            storedPlanLabel !== effectivePlan ? (
+                              <Chip
+                                label={`stored: ${storedPlanLabel}`}
+                                size="small"
+                                variant="outlined"
+                                sx={{ ml: 1 }}
+                              />
+                            ) : null}
                             {org.suspendedAt ? (
                               <Chip
                                 label="suspended"
@@ -303,12 +334,18 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                             {/* An UNLIMITED quota is Number.POSITIVE_INFINITY,
                                 which renders as the literal "Infinity"
                                 (AGL-1118 — the enterprise plan is the first
-                                one whose hostLimit is uncapped). */}
-                            {!org.plan
-                              ? '∞ (no plan)'
-                              : Number.isFinite(resolved.hostLimit)
-                                ? resolved.hostLimit
-                                : '∞'}
+                                one whose hostLimit is uncapped).
+
+                                The `!org.plan → '∞ (no plan)'` special case is
+                                GONE (AGL-1152): it asserted that a plan-less
+                                org is uncapped, and nothing in the codebase
+                                grants that. `resolveEffectivePlan` returns
+                                `free` for an absent plan and the spec pins it,
+                                so the real limit was free's all along and this
+                                cell was the only thing saying otherwise. */}
+                            {Number.isFinite(resolved.hostLimit)
+                              ? resolved.hostLimit
+                              : '∞'}
                             {overrideCount(org) ? (
                               <Chip
                                 label={`${overrideCount(org)} override${

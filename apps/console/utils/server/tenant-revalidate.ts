@@ -48,7 +48,8 @@
  * that posts its revalidation at OUR apex: that is a cache-drop which never
  * lands on their pages, and an unsolicited request to a host they do not own.
  */
-import { TENANT_APEX } from '@aglyn/aglyn/server'
+import { TENANT_APEX, screenRoutePathToUrl } from '@aglyn/aglyn/server'
+import type { Firestore } from 'firebase-admin/firestore'
 
 /** A publish should feel instant; a slow tenant must not hold the caller. */
 const TIMEOUT_MS = 5000
@@ -76,6 +77,34 @@ export interface TenantRevalidateResult {
  * be sent must not make a completed publish look failed, and the ISR window is
  * still underneath it as the backstop.
  */
+/**
+ * A CUSTOM DOMAIN IS A SECOND CACHE KEY, and publishes were missing it
+ * (AGL-1152).
+ *
+ * The tenant middleware rewrites `https://{host}{path}` to `/{tenantHost}{path}`
+ * and THAT is what Next stores the page under. For a platform subdomain
+ * `tenantHost` is the label (`acme`); for an attached custom domain it is the
+ * `cname--acme.com` sentinel. The two are different keys for the same page.
+ *
+ * This helper only ever sent the subdomain, so on a site with a domain
+ * attached a publish dropped `/acme/pricing` — a URL nobody visits — and left
+ * `/cname--acme.com/pricing`, the one everybody does, serving the old page
+ * until its ISR window expired on its own. Observed on `aglyn.com`: a
+ * component published at 09:20 was still absent from the live page minutes
+ * later, while the parent document already carried the change.
+ *
+ * The tag bust is unaffected either way — `tenant-data:{hostId}` is keyed on
+ * the host id, which no domain changes — so the DATA was always fresh. It was
+ * the HTML that was not, which is why the page looked stale while every
+ * document behind it was correct.
+ */
+function cnameCacheHost(cname: string | undefined): string | undefined {
+  const value = (cname ?? '').trim().toLowerCase()
+  // The sentinel the middleware builds, and it must match byte for byte or the
+  // drop lands on a key nothing reads.
+  return value ? `cname--${value}` : undefined
+}
+
 export async function postTenantRevalidate(options: {
   /** The site's subdomain — the tenant keys its cache on it, not on `hostId`. */
   subdomain: string
@@ -83,6 +112,12 @@ export async function postTenantRevalidate(options: {
   hostId: string
   /** Site-absolute paths (`/`, `/menu`). The tenant caps them at 250. */
   paths: string[]
+  /**
+   * The site's attached custom domain, when it has one. Pages served on it
+   * live under a DIFFERENT cache key and are dropped by a second call — see
+   * `cnameCacheHost`. Omitted for a site with no domain, which costs nothing.
+   */
+  cname?: string
 }): Promise<TenantRevalidateResult> {
   const { subdomain, hostId, paths } = options
   const secret = process.env['REVALIDATE_SECRET']
@@ -107,8 +142,49 @@ export async function postTenantRevalidate(options: {
         pathsDropped: 0,
       }
     }
+    // The same paths again under the custom domain's key. Sequential rather
+    // than parallel: the second call is only worth making if the first was
+    // accepted, and a site with no domain never makes it at all.
+    const cnameHost = cnameCacheHost(options.cname)
+    let cnameRevalidated: string[] = []
+    if (cnameHost) {
+      try {
+        const second = await fetch(
+          `https://${subdomain}.${TENANT_APEX}/api/revalidate`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-revalidate-secret': secret,
+            },
+            body: JSON.stringify({ host: cnameHost, hostId, paths }),
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+          },
+        )
+        const body = (await second.json().catch(() => null)) as {
+          revalidated?: unknown
+        } | null
+        if (second.ok && Array.isArray(body?.revalidated)) {
+          cnameRevalidated = body.revalidated as string[]
+        } else if (!second.ok) {
+          // Reported, never silent: the subdomain drop succeeded, so the
+          // publish is not a failure — but the domain everybody actually
+          // visits is still serving the old page and somebody should know.
+          console.error(
+            '[tenant-revalidate] custom-domain drop refused',
+            second.status,
+            cnameHost,
+          )
+        }
+      } catch (error) {
+        console.error('[tenant-revalidate] custom-domain drop failed', error)
+      }
+    }
     return {
-      revalidated: Array.isArray(result?.revalidated) ? (result.revalidated as string[]) : [],
+      revalidated: [
+        ...(Array.isArray(result?.revalidated) ? (result.revalidated as string[]) : []),
+        ...cnameRevalidated,
+      ],
       reason: 'ok',
       pathsDropped: Number(result?.truncated ?? 0) || 0,
     }
@@ -119,3 +195,244 @@ export async function postTenantRevalidate(options: {
 }
 
 export default postTenantRevalidate
+
+/**
+ * Matches the tenant's own `MAX_PATHS`; more would be dropped there anyway.
+ */
+const MAX_WHOLE_HOST_PATHS = 250
+
+export interface WholeHostRevalidateResult extends TenantRevalidateResult {
+  hostId: string
+  /** True when the drop was actually attempted against a resolved subdomain. */
+  attempted: boolean
+}
+
+/**
+ * Drop EVERY routed page of one host, plus its root (AGL-1152).
+ *
+ * ## Why this is not just `postTenantRevalidate` with a path list
+ *
+ * A publish knows which pages it changed. The callers here do not: a plugin
+ * revocation and a plan change alter what EVERY page of a site renders, and
+ * neither has a path list to send. So the paths come from the host document's
+ * own `screens` map, which is the same source `/api/screens/revalidate` walks.
+ *
+ * ## Why these callers need it at all
+ *
+ * Anything that changes WITHOUT a publish reaches a live page only when that
+ * page happens to re-render. Three things are in that category — a plan change,
+ * a plugin revocation, and a lockdown flip — and until this existed only the
+ * lockdown had a bust, so the other two waited out the page's ISR window.
+ *
+ * That window was 60s, which made the gap easy to miss and easy to
+ * under-rate: on a low-traffic site a page is not requested every minute, so
+ * "at most 60s" was already "until somebody visits twice". Raising the window
+ * to the hour-long backstop (AGL-1152) makes the gap plain rather than
+ * creating it, and this is what pays for the raise.
+ *
+ * BEST EFFORT, and deliberately so: enforcement never depends on a cache drop.
+ * A revoked plugin is refused by the tenant's own render-time revocation read,
+ * and a suspended org by the middleware verdict — this only shrinks the window
+ * in which already-cached HTML still shows the old answer. It never throws;
+ * callers report the result rather than failing the operation that triggered it.
+ */
+export async function revalidateEntireHost(
+  firestore: Firestore,
+  hostId: string,
+): Promise<WholeHostRevalidateResult> {
+  const miss = (reason: TenantRevalidateResult['reason']) => ({
+    hostId,
+    attempted: false,
+    revalidated: [],
+    reason,
+    pathsDropped: 0,
+  })
+  try {
+    const snapshot = await firestore.collection('hosts').doc(hostId).get()
+    if (!snapshot.exists) return miss('error')
+    const subdomain = String(snapshot.get('subdomain') ?? '')
+    if (!subdomain) return miss('error')
+    const screens = (snapshot.get('screens') ?? {}) as Record<string, string>
+    const paths = [
+      ...new Set([
+        '/',
+        ...Object.values(screens).map((path) => screenRoutePathToUrl(path)),
+      ]),
+    ].slice(0, MAX_WHOLE_HOST_PATHS)
+    const result = await postTenantRevalidate({
+      subdomain,
+      hostId,
+      paths,
+      // Whole-host drops need the custom domain too — a locked or revoked
+      // site serving its old pages on the domain visitors actually use is the
+      // failure these callers exist to prevent.
+      cname: String(snapshot.get('cname') ?? '') || undefined,
+    })
+    return { hostId, attempted: true, ...result }
+  } catch (error) {
+    console.error('[tenant-revalidate] whole-host drop failed', hostId, error)
+    return miss('error')
+  }
+}
+
+/**
+ * Cap on how many hosts one revocation fans out to.
+ *
+ * A revocation is rare and its blast radius is "every site running the code
+ * we just killed", so this is set high enough that ordinary use never reaches
+ * it. When it does bite it is REPORTED, never silently truncated: a caller
+ * that thinks it dropped every affected page and did not is the failure this
+ * whole mechanism exists to avoid.
+ */
+const MAX_REVOKE_FANOUT_HOSTS = 200
+/** Concurrent tenant round trips. Bounded so a wide fan-out is not a burst. */
+const FANOUT_CONCURRENCY = 10
+
+export interface PluginFanoutResult {
+  hosts: WholeHostRevalidateResult[]
+  /** Install pins matched by the collection-group query. */
+  installsFound: number
+  /** Affected hosts NOT dropped because the cap bit — 0 in the normal case. */
+  hostsDropped: number
+}
+
+/**
+ * Drop the cached pages of every host running a given plugin (AGL-1152).
+ *
+ * ## Why a revocation needs this
+ *
+ * The tenant stamps each `marketplacePlugin` node with its pinned install and
+ * its kill-switch state AT COMPOSE TIME, so a page cached before a revocation
+ * goes on serving the pre-revocation answer until it re-renders. The
+ * per-install revocation read is deliberately kept on a short TTL as a
+ * security bound — but that bound is only consulted DURING a render, so on a
+ * page nobody is requesting it bounds nothing at all. This is what actually
+ * makes a kill switch take effect on already-cached HTML.
+ *
+ * ## Scope
+ *
+ * Installs live at BOTH `orgs/{orgId}/installs/{listingId}` (org-tier, applies
+ * to every host in the org — AGL-237) and `hosts/{hostId}/installs/{listingId}`,
+ * so the collection-group query finds both and org hits are expanded to their
+ * hosts. Backed by the `installs.listingId` COLLECTION_GROUP field override;
+ * Firestore auto-creates single-field indexes at COLLECTION scope only.
+ *
+ * BEST EFFORT, like everything else here: the tenant still refuses a revoked
+ * plugin at render time. This only shrinks the window in which cached HTML
+ * shows the old answer. Never throws.
+ */
+export async function revalidateHostsWithPlugin(
+  firestore: Firestore,
+  listingId: string,
+): Promise<PluginFanoutResult> {
+  const empty: PluginFanoutResult = {
+    hosts: [],
+    installsFound: 0,
+    hostsDropped: 0,
+  }
+  if (!listingId) return empty
+  try {
+    const installs = await firestore
+      .collectionGroup('installs')
+      .where('listingId', '==', listingId)
+      .get()
+    if (installs.empty) return empty
+
+    const hostIds = new Set<string>()
+    const orgIds = new Set<string>()
+    for (const doc of installs.docs) {
+      const owner = doc.ref.parent.parent
+      if (!owner) continue
+      if (owner.parent.id === 'hosts') hostIds.add(owner.id)
+      else if (owner.parent.id === 'orgs') orgIds.add(owner.id)
+    }
+    // An org-tier pin applies to every host in the org, so it is the org's
+    // hosts that hold the cached HTML — the org itself renders nothing.
+    await Promise.all(
+      [...orgIds].map(async (orgId) => {
+        const hosts = await firestore
+          .collection('hosts')
+          .where('orgId', '==', orgId)
+          .get()
+        for (const host of hosts.docs) hostIds.add(host.id)
+      }),
+    )
+
+    const all = [...hostIds]
+    const targets = all.slice(0, MAX_REVOKE_FANOUT_HOSTS)
+    const hostsDropped = all.length - targets.length
+    if (hostsDropped > 0) {
+      // Said out loud, for the same reason the tenant logs its own path cap
+      // (AGL-1161): the only record that some sites were left serving the
+      // revoked bundle on purpose.
+      console.warn(
+        JSON.stringify({
+          tag: 'AGL-1152:revoke-fanout-truncated',
+          listingId,
+          affected: all.length,
+          cap: MAX_REVOKE_FANOUT_HOSTS,
+          dropped: hostsDropped,
+        }),
+      )
+    }
+
+    const results: WholeHostRevalidateResult[] = []
+    for (let i = 0; i < targets.length; i += FANOUT_CONCURRENCY) {
+      const batch = targets.slice(i, i + FANOUT_CONCURRENCY)
+      results.push(
+        ...(await Promise.all(
+          batch.map((hostId) => revalidateEntireHost(firestore, hostId)),
+        )),
+      )
+    }
+    return { hosts: results, installsFound: installs.size, hostsDropped }
+  } catch (error) {
+    console.error('[tenant-revalidate] plugin fan-out failed', listingId, error)
+    return empty
+  }
+}
+
+/**
+ * Drop the cached pages of every host in one org (AGL-1152).
+ *
+ * ## Why a plan change needs this
+ *
+ * Entitlements resolve from `org.plan` AT RENDER TIME, and the most visible
+ * one is the free-tier branding badge: `showBranding` is computed inside the
+ * tenant loader from the org doc. Nothing busts a tenant page when a plan
+ * changes — a plan change happens in Stripe and the console, neither of which
+ * publishes — so an upgrade left the badge on every cached page until that page
+ * next re-rendered on its own. A customer who has just paid to remove the badge
+ * is the least good audience for an ISR window.
+ *
+ * Caller decides WHEN: this fires on a plan transition, not on every billing
+ * write, because a seat-addon change or a customer-id stamp alters nothing a
+ * visitor can see and a site-wide cache drop is not free.
+ *
+ * BEST EFFORT and never throws, like the rest of this module.
+ */
+export async function revalidateOrgHosts(
+  firestore: Firestore,
+  orgId: string,
+): Promise<WholeHostRevalidateResult[]> {
+  if (!orgId) return []
+  try {
+    const hosts = await firestore
+      .collection('hosts')
+      .where('orgId', '==', orgId)
+      .get()
+    const results: WholeHostRevalidateResult[] = []
+    for (let i = 0; i < hosts.docs.length; i += FANOUT_CONCURRENCY) {
+      const batch = hosts.docs.slice(i, i + FANOUT_CONCURRENCY)
+      results.push(
+        ...(await Promise.all(
+          batch.map((doc) => revalidateEntireHost(firestore, doc.id)),
+        )),
+      )
+    }
+    return results
+  } catch (error) {
+    console.error('[tenant-revalidate] org fan-out failed', orgId, error)
+    return []
+  }
+}

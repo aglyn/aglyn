@@ -126,6 +126,23 @@
  * - `composeScreenNodes` is ~320 ms of a multi-second render, so this is a
  *   1-2 % end-to-end win, not a headline one. It is recorded here because the
  *   NEXT such lead will look identical and is worth measuring before building.
+ * - **`composeScreenNodes` IS ITS READS. The tree work is free** (AGL-1152).
+ *   The phase varies enormously with the page — ~20 ms for a page with no
+ *   collection block, ~572 ms for one with a Collection entries block — and
+ *   the obvious reading, that big pages cost more to compose, is WRONG. Every
+ *   tree stage the phase runs (`expandCollectionEntries`,
+ *   `expandCollectionEntryMeta`, `resolveNodesBindings`,
+ *   `resolveNodesHostTokens`, `attachFunctionDefinitions`,
+ *   `attachPluginInstalls`, `resolveNamedTokens`,
+ *   `processNodesToDenormalized`) was benchmarked off-Firestore at 1.65 ms
+ *   TOTAL for a 654-node, 50-entry page, and entry body size barely moves it
+ *   — 200 KB bodies cost the same as 8 KB, because the passes that copy props
+ *   do not walk into the strings. `processNodesToDenormalized` is a
+ *   passthrough on this path: the tenant hands it a flat map, which falls to
+ *   its final `else`.
+ *
+ *   So a plan to CACHE the composed tree is a plan to cache 2 ms of work, and
+ *   the variance is entirely which reads a page triggers. Measure the reads.
  *
  * Timings go through `console.log` as one line of JSON so a Vercel runtime-log
  * query can pull them without a log drain. Overhead is a `Date.now()` per

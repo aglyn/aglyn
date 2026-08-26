@@ -63,9 +63,9 @@
  */
 
 import {
+  TENANT_APEX,
   bandwidthCapEngaged,
   isLockdownActive,
-  type LockdownState,
   lockdownMode,
   lockdownNotice,
   lockdownRetryAfterSeconds,
@@ -73,6 +73,7 @@ import {
   normalizeOrgLockdown,
   resolveLockdown,
   showsPlatformAttribution,
+  type LockdownState,
 } from '@aglyn/aglyn/server'
 import { getDomainLockdown, getPlatformLockdown } from '@aglyn/tenant-data-admin'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
@@ -94,7 +95,13 @@ export const dynamic = 'force-dynamic'
  */
 function lockedVerdict(
   state: LockdownState,
-  facts: { attribution: boolean; overQuota: boolean },
+  facts: {
+    attribution: boolean
+    overQuota: boolean
+    approvedImageHosts?: string[]
+    runsMeasurement?: boolean
+    siteOrigins?: string[]
+  },
 ): Response {
   const notice = lockdownNotice(state)
   const retryAfter = lockdownRetryAfterSeconds(state, Date.now())
@@ -103,6 +110,9 @@ function lockedVerdict(
       locked: true,
       attribution: facts.attribution,
       overQuota: facts.overQuota,
+      approvedImageHosts: facts.approvedImageHosts ?? [],
+      runsMeasurement: facts.runsMeasurement ?? false,
+      siteOrigins: facts.siteOrigins ?? [],
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -153,11 +163,20 @@ export async function GET(request: Request): Promise<Response> {
       // fingerprint.
       if (!domain || !isLockdownActive(domain, Date.now())) {
         return Response.json(
-          { locked: false, attribution: false, overQuota: false },
+          {
+            locked: false,
+            attribution: false,
+            overQuota: false,
+            approvedImageHosts: [],
+          },
           { status: 200 },
         )
       }
-      return lockedVerdict(domain, { attribution: false, overQuota: false })
+      return lockedVerdict(domain, {
+        attribution: false,
+        overQuota: false,
+        approvedImageHosts: [],
+      })
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
     const attribution = showsPlatformAttribution(orgRes.org)
@@ -173,6 +192,70 @@ export async function GET(request: Request): Promise<Response> {
     // nothing here that is not already implied by the notice the visitor is
     // about to read.
     const overQuota = bandwidthCapEngaged(orgRes.org)
+    /**
+     * The site's owner-approved image hosts (AGL-1152) — a FOURTH answer on
+     * this verdict, riding here for the reason the other three do: the route
+     * already holds the host doc, so the middleware pays no extra edge round
+     * trip, and only the middleware runs ahead of the ISR cache where the
+     * header has to be set.
+     *
+     * Sent RAW, exactly as stored. The parse that decides what is admissible
+     * lives in `security-origins.js` and runs in the middleware, so there is
+     * one implementation of it rather than one here and one there — and an
+     * entry this route silently dropped would be an entry the console's
+     * editor warning still believed in.
+     *
+     * Disclosure posture matches the other three: this is a list the site
+     * owner typed, describing hosts their own public pages already load. It
+     * says nothing a visitor could not learn by viewing source.
+     */
+    const stored = hostRes.host.approvedImageHosts
+    const approvedImageHosts = Array.isArray(stored)
+      ? stored.filter((entry): entry is string => typeof entry === 'string')
+      : []
+    /**
+     * Does this site run measurement tags (AGL-1152)?
+     *
+     * Decides whether `img-src` admits the analytics and ad-network beacons.
+     * A GTM container counts on its own and is the broader of the two: a
+     * container carries whatever tags the operator put in it — Meta's pixel
+     * most often — so a site with one needs the vendor beacons even with no
+     * GA id of its own.
+     *
+     * Gated rather than always-on because a site with no analytics has no
+     * reason to permit an ad network's beacon, and permitting one anyway
+     * would make the policy describe our convenience instead of the site.
+     */
+    /**
+     * The site's OWN addresses (AGL-1152).
+     *
+     * `'self'` covers only the origin a page was served from, and a site with
+     * a custom domain attached has two. Sent from here because this route
+     * already holds the host doc, and derived from `TENANT_APEX` rather than
+     * a literal so a self-host install names its own apex (AGL-2195).
+     *
+     * The `www.` form rides along because `liveCustomDomain` treats the two as
+     * one site, so an author can legitimately have referenced either.
+     */
+    const subdomain = String(hostRes.host.subdomain ?? '').trim()
+    const cname = String(hostRes.host.cname ?? '').trim()
+    const siteOrigins = [
+      subdomain ? `${subdomain}.${TENANT_APEX}` : '',
+      cname,
+      cname ? `www.${cname}` : '',
+    ].filter(Boolean)
+    const analytics = hostRes.host.analytics
+    const runsMeasurement = Boolean(
+      analytics?.gaMeasurementId ||
+        analytics?.gtmContainerId ||
+        // `adTags` is how an ad pixel is ACTUALLY configured — a vendor id →
+        // account id map, and the field `aglyn-marketing` carries its Meta
+        // pixel in. Omitting it was a real defect for the narrow case that
+        // matters most: a site running an ad pixel and NO analytics id would
+        // have had `runsMeasurement: false`, and the very beacon this gate
+        // exists to permit would have been the one thing refused.
+        Object.keys(analytics?.adTags ?? {}).length > 0,
+    )
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -184,11 +267,24 @@ export async function GET(request: Request): Promise<Response> {
     )
     if (!state) {
       return Response.json(
-        { locked: false, attribution, overQuota },
+        {
+          locked: false,
+          attribution,
+          overQuota,
+          approvedImageHosts,
+          runsMeasurement,
+          siteOrigins,
+        },
         { status: 200 },
       )
     }
-    return lockedVerdict(state, { attribution, overQuota })
+    return lockedVerdict(state, {
+      attribution,
+      overQuota,
+      approvedImageHosts,
+      runsMeasurement,
+      siteOrigins,
+    })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)
     // Fail open on the LOCK: the middleware treats any non-locked answer as
@@ -202,7 +298,16 @@ export async function GET(request: Request): Promise<Response> {
     // party. A month of missed enforcement costs Aglyn egress; an hour of
     // wrongly enforced cap costs a customer their site.
     return Response.json(
-      { locked: false, attribution: false, overQuota: false },
+      {
+        locked: false,
+        attribution: false,
+        overQuota: false,
+        // ABSENT, not empty: the middleware distinguishes "this site approved
+        // nothing" from "we could not ask", and retains its last known good
+        // list for the second. An empty list here would blank every approved
+        // host's images across the platform during a verdict outage.
+        approvedImageHosts: null,
+      },
       { status: 200 },
     )
   }

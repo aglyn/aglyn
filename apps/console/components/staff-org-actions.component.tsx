@@ -65,7 +65,13 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
  * path, so a staff override is the only way an org gets onto it.
  */
 export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'No plan (dark launch — everything on)' },
+  // ⚠️ NOT a dark launch, and the old label said it was (AGL-1152). Clearing
+  // an org's plan does not grant everything — `resolveEffectivePlan` returns
+  // `free` for an absent plan, and `plan-entitlements.spec.ts` pins it:
+  // "An org with no plan at all resolves as free and is walled, not metered."
+  // So the option that read as "comp this org" actually DOWNGRADES it, which
+  // is the worst possible direction for a label to be wrong in.
+  { value: '', label: 'No plan (reads as Free)' },
   ...(Object.keys(PLAN_LABELS) as OrgPlan[]).map((plan) => ({
     value: plan,
     label: PLAN_LABELS[plan],

@@ -19,6 +19,9 @@
 import { mediaNodeSrc } from '@aglyn/aglyn'
 import { MediaPickerContext } from '@aglyn/besigner-ui'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { doc } from 'firebase/firestore'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface BesignerMediaPickerProviderProps {
@@ -36,6 +39,7 @@ export function BesignerMediaPickerProvider(
   props: BesignerMediaPickerProviderProps,
 ) {
   const { hostId, children } = props
+  const firestore = useFirestore()
   const [open, setOpen] = useState(false)
   const pendingPick = useRef<
     ((value: string, asset?: { alt?: string }) => void) | null
@@ -48,7 +52,22 @@ export function BesignerMediaPickerProvider(
     },
     [],
   )
-  const value = useMemo(() => ({ onPickMedia }), [onPickMedia])
+  // The site's approved image hosts (AGL-1152), so the attribute panel can
+  // warn an author that a pasted URL will be refused on the published page.
+  // Read here because this provider already knows the host and the designer
+  // must not read Firestore itself.
+  const { data: host } = useFirestoreDoc<{ approvedImageHosts?: string[] }>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  // `undefined` while the read is in flight, which the context reads as "not
+  // known" and warns about nothing — never as "nothing approved".
+  const approvedImageHosts = host?.approvedImageHosts
+  const value = useMemo(
+    () => ({ onPickMedia, approvedImageHosts }),
+    [onPickMedia, approvedImageHosts],
+  )
 
   return (
     <MediaPickerContext.Provider value={value}>

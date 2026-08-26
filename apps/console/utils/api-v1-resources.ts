@@ -1233,7 +1233,14 @@ async function handlePublish(
     )
   }
 
-  const result = await postTenantRevalidate({ subdomain, hostId, paths })
+  const result = await postTenantRevalidate({
+    subdomain,
+    hostId,
+    paths,
+    // Same second cache key as the console's own publish route — a site on a
+    // custom domain serves its pages under `cname--{domain}`.
+    cname: String(snap.get('cname') ?? '') || undefined,
+  })
   return apiJson(
     {
       object: 'publish',

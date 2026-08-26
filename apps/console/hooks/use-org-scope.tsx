@@ -36,7 +36,9 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { isAuthFailure } from '../utils/auth-failure'
 import { resolveNavSection } from './nav-section'
+import { useAuthRecovery } from './use-auth-recovery'
 import { MAX_RETRIES, retryDelayMs } from './use-host-resolution'
 
 const SELECTED_ORG_STORAGE_KEY = 'aglyn.selectedOrgId'
@@ -108,6 +110,17 @@ export interface OrgScopeContextValue {
    * so consumers must offer a retry, never a 404 or a Free-tier default.
    */
   error: boolean
+  /**
+   * The failure behind `error` was the SESSION, not the network — the listen
+   * was refused for who you are, not dropped in transit.
+   *
+   * The console cannot heal a network fault and must not pretend to, so that
+   * one keeps the standing error and the manual retry. This one it CAN heal:
+   * `useAuthRecovery` below re-runs the listen the moment the session comes
+   * back, and consumers use the flag to stop saying "check your connection"
+   * about an expired token.
+   */
+  authError: boolean
   /** Re-runs the membership listen after it gave up (AGL-1260). */
   retry: () => void
   /**
@@ -130,6 +143,7 @@ const OrgScopeContext = createContext<OrgScopeContextValue>({
   confirmed: false,
   slugExists: null,
   error: false,
+  authError: false,
   retry: () => undefined,
   hasMoreOrgs: false,
   loadMoreOrgs: () => undefined,
@@ -187,10 +201,17 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [subdomainOrgId, setSubdomainOrgId] = useState<string | null>(null)
   const [error, setError] = useState(false)
+  const [authError, setAuthError] = useState(false)
   // Bumping this re-runs the membership effect below — the whole mechanism
   // behind `retry`, same shape as useHostResolution's (AGL-1200).
   const [attempt, setAttempt] = useState(0)
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
+  // A latched SESSION failure heals itself (AGL-1066's channel, plus a token
+  // that refreshed with nobody watching). Wired here rather than at each
+  // consumer so every reader of this context — not just the host guard —
+  // gets the recovered list; `retry` is the same re-run the button calls, so
+  // there is one recovery path, not two that can drift.
+  useAuthRecovery(authError, retry)
   // The membership window (AGL-2336). A page, not a ceiling.
   const [windowSize, setWindowSize] = useState(ORG_PAGE_SIZE)
   const [hasMoreOrgs, setHasMoreOrgs] = useState(false)
@@ -216,6 +237,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       setLoading(false)
       setConfirmed(false)
       setError(false)
+      setAuthError(false)
       return undefined
     }
     // Growing the window re-subscribes; that is not a fresh cold load, and
@@ -225,6 +247,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       setConfirmed(false)
     }
     setError(false)
+    setAuthError(false)
     // Metadata changes included so the cache→server confirmation is
     // delivered even when the data is identical (AGL-886): without it, a
     // cache-served empty that the server agrees with would never re-fire,
@@ -261,7 +284,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
           }
           setLoading(false)
         },
-        () => {
+        (caught) => {
           // Firestore TERMINATES a listener on error — `permission-denied`
           // on a cold load, before the restored session's ID token attaches
           // (AGL-216/1179). This used to `setLoading(false)` and stop: no
@@ -275,6 +298,12 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
             retried += 1
           } else {
             setError(true)
+            // The handler used to take no argument at all, which is how a
+            // refused SESSION and a dropped connection ended up sharing one
+            // error state and one piece of copy. Classify the failure that
+            // actually exhausted the budget — it is what decides whether
+            // this can heal itself.
+            setAuthError(isAuthFailure(caught))
             setLoading(false)
           }
         },
@@ -458,6 +487,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       confirmed,
       slugExists,
       error,
+      authError,
       retry,
       hasMoreOrgs,
       loadMoreOrgs,
@@ -472,6 +502,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       confirmed,
       slugExists,
       error,
+      authError,
       retry,
       hasMoreOrgs,
       loadMoreOrgs,

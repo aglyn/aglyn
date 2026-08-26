@@ -42,14 +42,20 @@ export let fbAdminApp: App
   }
   const privateKey = process.env.FIREBASE_PRIVATE_KEY
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  if (!privateKey || !projectId) return
+  // ALL THREE, because `cert()` requires all three (AGL-1152). This guard
+  // checked two of them and let a missing `FIREBASE_CLIENT_EMAIL` through to
+  // throw "must contain a string client_email" at module load — the very
+  // partial-credential crash the comment above describes, from the one field
+  // it forgot to name. Nine tenant suites failed to load on it.
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+  if (!privateKey || !projectId || !clientEmail) return
   fbAdminApp = initializeApp({
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-    serviceAccountId: process.env.FIREBASE_CLIENT_EMAIL,
+    serviceAccountId: clientEmail,
     credential: cert({
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      projectId,
+      clientEmail,
       // https://stackoverflow.com/a/41044630/1332513
       privateKey: privateKey.replace(/\\n/g, '\n'),
     }),

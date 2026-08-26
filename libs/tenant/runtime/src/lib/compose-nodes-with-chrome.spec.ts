@@ -616,3 +616,155 @@ describe('composeNodesWithChrome fills Collection Search blocks (AGL-1516)', () 
     expect('searchCapped' in composed['box'].props).toBe(false)
   })
 })
+
+/**
+ * AGL-1152: the collection source read OVERLAPS the chrome bundle.
+ *
+ * `getPublishedCollectionSource` is three SEQUENTIAL round trips
+ * (`findContentCollection` → `listLiveEntries` → `attachEntryAuthors`), and it
+ * used to be issued from `expandCollectionEntryBlocks` — which runs after the
+ * chrome bundle has already been awaited. So every page carrying a Collection
+ * entries block paid the whole read as a serial TAIL on the compose phase.
+ *
+ * The measurement that motivated this: a page with no collection block
+ * composes in ~20 ms and one with a block in ~572 ms, while the tree work
+ * itself — every expansion, binding and denormalize pass, benchmarked at 50
+ * entries — accounts for under 2 ms. The gap was never the tree. It was this
+ * read, queued behind reads it shares nothing with.
+ *
+ * Like every other concurrency property in this file, it is invisible to an
+ * output-equality test: re-serialising the read leaves every assertion about
+ * the composed nodes green. So the ordering is asserted directly, with the
+ * old sequential shape as the explicit negative control.
+ */
+describe('composeNodesWithChrome overlaps the collection read (AGL-1152)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup()
+  })
+
+  /** A press/blog rail: a block naming its collection on a plain screen. */
+  const withRail = (slug = 'press') => ({
+    root: { $id: 'root', componentId: 'div', nodes: ['rail'] },
+    rail: {
+      $id: 'rail',
+      componentId: 'collectionEntries',
+      parentId: 'root',
+      props: { collectionSlug: slug },
+      nodes: ['tpl'],
+    },
+    tpl: {
+      $id: 'tpl',
+      componentId: 'typography',
+      parentId: 'rail',
+      props: { children: '{{entry.title}}' },
+      nodes: [],
+    },
+  })
+
+  const source = { entries: [], categories: [], reachedBound: false }
+
+  it('THE REGRESSION GUARD: the read STARTS before the chrome bundle ENDS', async () => {
+    mockCollectionSource.mockImplementation(tracked('collection', source))
+
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: withRail(),
+    })
+
+    const started = order.indexOf('collection:start')
+    expect(started).toBeGreaterThan(-1)
+    // Every chrome read that is still outstanding when the collection read is
+    // issued. Under the old shape this was empty: the collection read could
+    // not begin until all of them had already resolved.
+    const overlapped = ['components', 'variables', 'installs', 'layout1'].filter(
+      (label) => order.indexOf(`${label}:end`) > started,
+    )
+    expect(overlapped).toEqual(['components', 'variables', 'installs', 'layout1'])
+  })
+
+  it('reads the collection exactly ONCE — the prefetch is consumed, not added to', async () => {
+    // The prefetch is a reschedule, not a second read. Getting this wrong
+    // doubles the cost of the very thing being optimised, and no output
+    // assertion would notice.
+    mockCollectionSource.mockResolvedValue(source)
+
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: withRail(),
+    })
+
+    expect(mockCollectionSource).toHaveBeenCalledTimes(1)
+    expect(mockCollectionSource).toHaveBeenCalledWith({
+      hostId: 'h1',
+      collectionSlug: 'press',
+    })
+  })
+
+  it('issues NO collection read for a page with no collection block', async () => {
+    mockCollectionSource.mockResolvedValue(source)
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: PLAIN_SCREEN_NODES,
+    })
+    expect(mockCollectionSource).not.toHaveBeenCalled()
+  })
+
+  it('does NOT prefetch the routed collection whose entries are already in hand', async () => {
+    // The expansion answers this slug from `collection.entries` without
+    // reading at all, so a prefetch here would buy a read nobody awaits.
+    mockCollectionSource.mockResolvedValue(source)
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: withRail('blog'),
+      collection: { slug: 'blog', entries: [] },
+    })
+    expect(mockCollectionSource).not.toHaveBeenCalled()
+  })
+
+  it('STILL fetches a block that only appears after LAYOUT grafting', async () => {
+    // The screen-level scan is a fast path, never the correctness gate. A
+    // block living in a layout is invisible to the prefetch, and dropping it
+    // would render an empty rail on a page that has posts.
+    mockCollectionSource.mockResolvedValue(source)
+    mockGetPublishedLayoutVersion.mockReset()
+    mockGetPublishedLayoutVersion.mockImplementationOnce(
+      tracked('layout1', {
+        version: {
+          nodes: {
+            [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['lRail', 'lSlot'] },
+            lRail: {
+              $id: 'lRail',
+              componentId: 'collectionEntries',
+              parentId: ROOT,
+              props: { collectionSlug: 'press' },
+              nodes: [],
+            },
+            lSlot: {
+              $id: 'lSlot',
+              componentId: 'layoutSlot',
+              parentId: ROOT,
+              nodes: [],
+            },
+          },
+        },
+        layout: {},
+      }),
+    )
+
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: PLAIN_SCREEN_NODES,
+    })
+
+    expect(mockCollectionSource).toHaveBeenCalledWith({
+      hostId: 'h1',
+      collectionSlug: 'press',
+    })
+  })
+})

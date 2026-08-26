@@ -190,7 +190,15 @@ const PLATFORM_GENERATOR_NAME =
 const LOCKDOWN_VERDICT_TTL_MS = 30_000
 const lockdownVerdicts = new Map<
   string,
-  { at: number; blocked: boolean; attribution: boolean; overQuota: boolean }
+  {
+    at: number
+    blocked: boolean
+    attribution: boolean
+    overQuota: boolean
+    approvedImageHosts: string[]
+    runsMeasurement: boolean
+    siteOrigins: string[]
+  }
 >()
 
 /**
@@ -210,13 +218,23 @@ const lockdownVerdicts = new Map<
 async function hostVerdict(
   origin: string,
   tenantHost: string,
-): Promise<{ blocked: boolean; attribution: boolean; overQuota: boolean }> {
+): Promise<{
+  blocked: boolean
+  attribution: boolean
+  overQuota: boolean
+  approvedImageHosts: string[]
+  runsMeasurement: boolean
+  siteOrigins: string[]
+}> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
     return {
       blocked: cached.blocked,
       attribution: cached.attribution,
       overQuota: cached.overQuota,
+      approvedImageHosts: cached.approvedImageHosts,
+      runsMeasurement: cached.runsMeasurement,
+      siteOrigins: cached.siteOrigins,
     }
   }
   let blocked = false
@@ -246,6 +264,33 @@ async function hostVerdict(
   // viral free site keep serving its hot pages indefinitely while the cap
   // "engaged" against pages nobody was requesting.
   let overQuota = false
+  /**
+   * ⚠️ THIS ONE FAILS BY GOING STALE, not by emptying (AGL-1152).
+   *
+   * The three flags above each fail toward a safe CONSTANT. This cannot: an
+   * empty list is not a neutral default, it is the strictest possible policy,
+   * and once `img-src` is enforcing it would blank every approved host's
+   * images on every site that uses one — turning a verdict outage into a
+   * platform-wide visual outage on customers' businesses.
+   *
+   * So the initialiser is the LAST KNOWN GOOD list rather than `[]`, read from
+   * the memo even when that entry has aged out. A site that has been served
+   * once keeps its policy through an outage; a cold instance that has never
+   * reached the verdict route gets `[]`, which is the shipped baseline and
+   * still serves first-party and Storage images.
+   *
+   * The route answers `approvedImageHosts: null` from its own catch for the
+   * same reason — "we could not ask" and "this owner approved nothing" are
+   * different facts and must not share an encoding.
+   */
+  let approvedImageHosts: string[] = cached?.approvedImageHosts ?? []
+  // Stale-retentive for the same reason as the list beside it: losing this to
+  // an outage would blank a site's analytics beacons rather than its images,
+  // which is quieter and therefore worse.
+  let runsMeasurement: boolean = cached?.runsMeasurement ?? false
+  // Stale-retentive with the rest: a site's own addresses going missing during
+  // an outage would refuse its own images.
+  let siteOrigins: string[] = cached?.siteOrigins ?? []
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -257,10 +302,30 @@ async function hostVerdict(
         mode?: string
         attribution?: boolean
         overQuota?: boolean
+        approvedImageHosts?: unknown
+        runsMeasurement?: boolean
+        siteOrigins?: unknown
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
       overQuota = data?.overQuota === true
+      // Only an ARRAY replaces what we hold. `null` is the route saying it
+      // could not read the host doc, and an older deployment that predates
+      // this field sends nothing at all — both must keep the last known good
+      // list rather than silently narrowing the policy.
+      if (Array.isArray(data?.approvedImageHosts)) {
+        approvedImageHosts = data.approvedImageHosts.filter(
+          (entry): entry is string => typeof entry === 'string',
+        )
+      }
+      if (typeof data?.runsMeasurement === 'boolean') {
+        runsMeasurement = data.runsMeasurement
+      }
+      if (Array.isArray(data?.siteOrigins)) {
+        siteOrigins = data.siteOrigins.filter(
+          (entry): entry is string => typeof entry === 'string',
+        )
+      }
     }
   } catch {
     // Fail open on the lock and the cap, closed on the attribution.
@@ -270,8 +335,18 @@ async function hostVerdict(
     blocked,
     attribution,
     overQuota,
+    approvedImageHosts,
+    runsMeasurement,
+    siteOrigins,
   })
-  return { blocked, attribution, overQuota }
+  return {
+    blocked,
+    attribution,
+    overQuota,
+    approvedImageHosts,
+    runsMeasurement,
+    siteOrigins,
+  }
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
@@ -604,7 +679,40 @@ export const middleware: NextMiddleware = async (req, event) => {
   // What DOES enforce here, unchanged: the base directives below — `object-src
   // 'none'`, `base-uri 'self'`, `frame-ancestors` — plus the plugin sandbox.
   const response = NextResponse.rewrite(new URL(rewrite, req.url))
-  response.headers.set('Content-Security-Policy', baseDirectives)
+  /*
+   * `img-src` IS NOW ENFORCED, alongside the base directives (AGL-1152).
+   *
+   * AGL-1726 read the evidence and refused this flip on two conditions, and
+   * both are answered rather than waived:
+   *
+   *   - Condition 2, which actually decided it: a first-party-only policy
+   *     would silently revoke hotlinking, an ADVERTISED authoring feature.
+   *     The list is the site owner's now, so nothing is revoked — and the
+   *     besigner warns at authoring time, so a refusal is never the first
+   *     anyone hears of it.
+   *   - Condition 6, which it said should stop the flip on its own: no
+   *     deploy-free rollback. The directive is host data now; emptying or
+   *     widening it is a Firestore write that lands within the verdict TTL.
+   *
+   * Condition 4 — the gtag and Meta beacons — is why `MEASUREMENT_IMAGE_ORIGINS`
+   * exists, ccTLDs included.
+   *
+   * The reporting tail rides the ENFORCING policy on purpose: after the flip a
+   * violation is an image that did NOT load, which is the most urgent thing the
+   * log can carry.
+   */
+  // Computed here rather than beside `Reporting-Endpoints` below, because the
+  // policy itself now carries the reporting tail and needs the answer first.
+  const secureTransport = isSecureTransport(req.headers, req.nextUrl.protocol)
+  response.headers.set(
+    'Content-Security-Policy',
+    `${baseDirectives}; ${tenantImgSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedImageHosts,
+      verdict.runsMeasurement,
+      verdict.siteOrigins,
+    )}; ${reportingDirectives(secureTransport)}`,
+  )
   // A REPORT-ONLY `img-src`, and its reporting endpoint (AGL-1703). What the
   // directive contains, and why it is not the console's, lives with
   // `tenantImgSrcDirective`. What belongs here is why a second header is safe
@@ -640,14 +748,36 @@ export const middleware: NextMiddleware = async (req, event) => {
   // http the pair delivers nothing at all (AGL-1788; the measured table lives
   // with `reportingDirectives`). Published customer sites are https, so this
   // changes nothing for them; it is `nx serve tenant` that was silent.
-  const secureTransport = isSecureTransport(req.headers, req.nextUrl.protocol)
+  /**
+   * ORIGIN ISOLATION (AGL-1152). Severs the `window.opener` relationship with
+   * any cross-origin page that opens this one, which is what stops a malicious
+   * opener from poking at this document — the "tabnabbing" family, and the
+   * precondition for cross-origin isolation later.
+   *
+   * ⚠️ `same-origin-allow-popups`, NOT `same-origin`, and the difference is
+   * load-bearing: plain `same-origin` also severs popups this page OPENS, and
+   * Firebase's `signInWithPopup` depends on the opener reference to hand the
+   * credential back. Federated sign-in would break silently — a popup that
+   * closes and never signs anyone in. `allow-popups` keeps that direction
+   * working while still isolating this document from a hostile opener.
+   */
+  response.headers.set(
+    'Cross-Origin-Opener-Policy',
+    'same-origin-allow-popups',
+  )
   const endpoints = reportingEndpointsHeader(secureTransport)
   if (endpoints) response.headers.set('Reporting-Endpoints', endpoints)
-  response.headers.set(
-    'Content-Security-Policy-Report-Only',
-    `${tenantImgSrcDirective(process.env.NODE_ENV === 'production')}; ` +
-      reportingDirectives(secureTransport),
-  )
+  /*
+   * The report-only header is GONE now that `img-src` enforces (AGL-1152).
+   *
+   * ⛔ Do NOT reinstate a report-only policy here "to keep gathering evidence".
+   * Next resolves a nonce as
+   * `content-security-policy || content-security-policy-report-only`, so a
+   * second header is only ever safe while the enforcing one carries no
+   * `script-src` — the AGL-523 shadowing shape. The enforcing policy above now
+   * carries the reporting tail instead, which is where a post-flip violation
+   * belongs anyway.
+   */
   // The deliberate, versionless platform fingerprint (AGL-2088), replacing the
   // accidental `x-aglyn-package-version` / `x-aglyn-process-version` pair that
   // shipped from `next.config` on every response of every site regardless of

@@ -142,7 +142,15 @@ export interface Props {
 
 /** Discriminated result of {@link Props} loading — mirrors the old
  * `getStaticProps` return shapes so the page can map them to
- * `notFound()` / `redirect()` / render. */
+ * `notFound()` / `redirect()` / render.
+ *
+ * ⛔ `revalidate` HERE IS INERT (AGL-1152). It is a Pages Router leftover: in
+ * the App Router the route segment's own `export const revalidate` in
+ * `page.tsx` is the only thing that sets the ISR window, and nothing reads
+ * these fields except the specs that assert on them. Several branches carry
+ * comments reasoning about "30s" or "60s" bounds that the value they name has
+ * never actually enforced. Change the window in `page.tsx`; leave these alone
+ * unless you are removing them everywhere at once. */
 export type LoadResult =
   | { props: Props; revalidate?: number }
   | { notFound: true; revalidate?: number }

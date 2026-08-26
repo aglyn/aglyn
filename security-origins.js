@@ -642,12 +642,265 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * measurement because neither can leave the machine, so neither can carry a
  * visitor's IP anywhere. They cover inline icons and canvas exports.
  */
-function tenantImgSrcDirective(isProduction) {
+/**
+ * How many hosts one site may approve (AGL-1152).
+ *
+ * A bound, not a quota: the header goes on every response of every page, and
+ * an unbounded owner-editable list is an unbounded header. Well above any real
+ * site — the widest thing observed is a handful of image CDNs — and small
+ * enough that a pasted-in dump cannot make the policy the largest thing on the
+ * wire.
+ */
+/**
+ * Image hosts the MEASUREMENT tags need, added only to sites that run them
+ * (AGL-1152).
+ *
+ * ## Why this is platform-curated and not the owner's list
+ *
+ * `approvedImageHosts` is for hosts the owner's own CONTENT comes from, and
+ * they can reasonably be expected to know those. Nobody can reasonably be
+ * expected to know that Google Ads conversions land on
+ * `googleads.g.doubleclick.net` while Signals uses `stats.g.doubleclick.net`.
+ * Worse, an owner who could REMOVE these would silently break their own
+ * conversion tracking and have no way to connect the two events. So the
+ * platform owns this set, and it is added only when the site actually
+ * configures a measurement id — a site with no analytics gets no wider policy
+ * than it needs.
+ *
+ * ## The two vendors, and where Meta actually comes from
+ *
+ * NOT from a GTM container — no host on the platform has one configured. Meta
+ * is a FIRST-CLASS pixel: `analytics.adTags.meta` holds the account id, and
+ * `advertising-tags.ts` turns it into a `connect.facebook.net` script whose
+ * beacon posts to `www.facebook.com/tr`. That is the report-only violation
+ * visible on `aglyn.com` today, and it is why both hosts are named here.
+ *
+ * `advertising-tags.ts` is the source of truth for which vendors load what.
+ * It cannot be imported from this file — this one is root-level CommonJS,
+ * outside the nx graph, because `next.config.js` must `require` it — so a
+ * spec asserts every script-loading vendor in that registry has its origin
+ * covered here. A GTM container, when one is eventually configured, is a
+ * separate and broader problem: it can carry any vendor's tag, and what it
+ * loads beyond this list is the owner's to approve.
+ *
+ * ⛔ NOT A PLACE FOR A TRACKING HOST THAT MERELY SHOWED UP IN THE REPORTS.
+ * Each entry here is a host a tag we DELIBERATELY ship fetches an image from.
+ * Adding one to silence its own violation is the AGL-1671 mistake played
+ * backwards — the report is the evidence, and deleting the evidence is not the
+ * same as answering it.
+ *
+ * ## ⚠️ What this CANNOT cover, and nothing can
+ *
+ * GA4's remarketing-audience pixel is fetched from the visitor's LOCAL Google
+ * domain — `www.google.<cctld>/ads/ga-audiences`, observed as
+ * `www.google.com.vn` on 2026-08-24. CSP source expressions cannot wildcard a
+ * TLD: `https://*.google.com` is expressible, `https://www.google.*` is not.
+ * Enumerating ~190 ccTLDs in a header shipped on every response is not a
+ * policy, it is a payload.
+ *
+ * So that ONE pixel is refused under enforcement, and the consequence is
+ * bounded and worth stating plainly: GA4 → Google Ads audience building
+ * degrades for visitors outside the `www.google.com` region. CONVERSION
+ * tracking is unaffected — it posts to `googleads.g.doubleclick.net` and
+ * `www.googleadservices.com`, both named below — so ad performance
+ * measurement keeps working; it is retargeting reach that narrows.
+ *
+ * The real fix is server-side tagging: route measurement through a
+ * first-party endpoint and no third-party image pixel is needed at all. That
+ * removes this entire class of problem rather than allowlisting around it.
+ */
+/**
+ * Google's country domains, for the ONE beacon a wildcard cannot reach
+ * (AGL-1152).
+ *
+ * GA4's remarketing-audience pixel is fetched from the visitor's LOCAL Google
+ * domain — `www.google.<tld>/ads/ga-audiences` — which is why the reports
+ * showed `www.google.com.vn`. CSP source expressions cannot wildcard a TLD:
+ * `https://*.google.com` is expressible, `https://www.google.*` is not. So the
+ * only way to keep GA4 → Google Ads audience building working under an
+ * enforced `img-src` is to name them.
+ *
+ * ## The cost, measured rather than asserted
+ *
+ * ~190 entries, about 4.8 KB of header. That sounds worse than it is: the
+ * value is byte-identical on every response, so HPACK/QPACK carries it once
+ * per connection and references the table afterwards — the first request on a
+ * connection pays, the rest do not. And it is added ONLY to sites that
+ * configure measurement, so a customer site with no analytics ships none of
+ * it.
+ *
+ * An earlier revision of this file called enumerating them "a payload, not a
+ * policy" and left the pixel refused. That was the wrong call: the cost is one
+ * compressed header on the operator's own marketing site, and the thing it
+ * buys is remarketing reach outside the `.com` region.
+ *
+ * ⚠️ THIS LIST GOES STALE. Google adds and retires country domains, and a
+ * missing entry is a silently narrowed audience rather than an error anyone
+ * sees. The `img-src` violation reports are the instrument: a
+ * `www.google.<something>` in them that is not here is the signal to add it.
+ * Do not treat a quiet report as proof the list is complete — see AGL-1726 on
+ * why an empty room is not a quiet one.
+ */
+const GOOGLE_CCTLDS = [
+  'com', 'ad', 'ae', 'com.af', 'com.ag', 'al', 'am', 'co.ao', 'com.ar', 'as',
+  'at', 'com.au', 'az', 'ba', 'com.bd', 'be', 'bf', 'bg', 'com.bh', 'bi', 'bj',
+  'com.bn', 'com.bo', 'com.br', 'bs', 'bt', 'co.bw', 'by', 'com.bz', 'ca',
+  'cat', 'cd', 'cf', 'cg', 'ch', 'ci', 'co.ck', 'cl', 'cm', 'cn', 'com.co',
+  'co.cr', 'com.cu', 'cv', 'com.cy', 'cz', 'de', 'dj', 'dk', 'dm', 'com.do',
+  'dz', 'com.ec', 'ee', 'com.eg', 'es', 'com.et', 'fi', 'com.fj', 'fm', 'fr',
+  'ga', 'ge', 'gg', 'com.gh', 'com.gi', 'gl', 'gm', 'gr', 'com.gt', 'gy',
+  'com.hk', 'hn', 'hr', 'ht', 'hu', 'co.id', 'ie', 'co.il', 'im', 'co.in',
+  'iq', 'is', 'it', 'je', 'com.jm', 'jo', 'co.jp', 'co.ke', 'com.kh', 'ki',
+  'kg', 'co.kr', 'com.kw', 'kz', 'la', 'com.lb', 'li', 'lk', 'co.ls', 'lt',
+  'lu', 'lv', 'com.ly', 'co.ma', 'md', 'me', 'mg', 'mk', 'ml', 'com.mm', 'mn',
+  'ms', 'com.mt', 'mu', 'mv', 'mw', 'com.mx', 'com.my', 'co.mz', 'com.na',
+  'com.ng', 'com.ni', 'ne', 'nl', 'no', 'com.np', 'nr', 'nu', 'co.nz',
+  'com.om', 'com.pa', 'com.pe', 'com.pg', 'com.ph', 'com.pk', 'pl', 'pn',
+  'com.pr', 'ps', 'pt', 'com.py', 'com.qa', 'ro', 'rs', 'ru', 'rw', 'com.sa',
+  'com.sb', 'sc', 'se', 'com.sg', 'sh', 'si', 'sk', 'com.sl', 'sm', 'sn', 'so',
+  'sr', 'st', 'com.sv', 'td', 'tg', 'co.th', 'com.tj', 'tl', 'tm', 'tn', 'to',
+  'com.tr', 'tt', 'com.tw', 'co.tz', 'com.ua', 'co.ug', 'co.uk', 'com.uy',
+  'co.uz', 'com.vc', 'co.ve', 'co.vi', 'com.vn', 'vu', 'ws', 'co.za', 'co.zm',
+  'co.zw',
+]
+
+/** `https://www.google.<tld>` for every country domain above. */
+const GOOGLE_CCTLD_ORIGINS = GOOGLE_CCTLDS.map((tld) => `https://www.google.${tld}`)
+
+const MEASUREMENT_IMAGE_ORIGINS = [
+  // Google Tag Manager / gtag delivery.
+  'https://www.googletagmanager.com',
+  // GA4 collection, including the regional endpoints (`region1.` … `region#.`).
+  'https://www.google-analytics.com',
+  'https://*.google-analytics.com',
+  // Google Signals.
+  'https://stats.g.doubleclick.net',
+  // Google Ads conversion tracking.
+  'https://googleads.g.doubleclick.net',
+  'https://www.googleadservices.com',
+  // Meta pixel: the beacon and the loader that installs it.
+  'https://www.facebook.com',
+  'https://connect.facebook.net',
+  // Every Google country domain, for the remarketing pixel. `www.google.com`
+  // is the first entry of that list, so it is not repeated here.
+  ...GOOGLE_CCTLD_ORIGINS,
+]
+
+const APPROVED_IMAGE_HOSTS_MAX = 50
+
+/**
+ * A hostname a site owner may add, or null (AGL-1152).
+ *
+ * ⛔ THIS IS AN ALLOWLIST BUILT FROM CUSTOMER-EDITABLE DATA, so it is parsed
+ * rather than trusted. The failure mode is not a broken header — it is a
+ * header that silently permits more than the owner asked for. Anything with a
+ * scheme, a path, a port, whitespace, a comma or a semicolon is REFUSED
+ * outright rather than sanitised: `evil.com; script-src *` cannot be repaired
+ * into something safe, and a value that has to be repaired is a value nobody
+ * should be shipping into a policy.
+ *
+ * A single leading `*.` is allowed — CSP understands it and image CDNs are
+ * routinely per-account subdomains — but a bare `*` is not, because that is
+ * the whole internet wearing an allowlist's clothes.
+ */
+function normalizeApprovedImageHost(value) {
+  if (typeof value !== 'string') return null
+  const host = value.trim().toLowerCase()
+  if (!host || host.length > 253) return null
+  // No scheme, no path, no port, no separators. `img-src` sources are
+  // space-delimited, so a space is an injection point, not a typo.
+  if (/[\s;,/\\?#@:]/.test(host)) return null
+  const bare = host.startsWith('*.') ? host.slice(2) : host
+  if (!bare || bare === '*') return null
+  // A conservative hostname: labels of alphanumerics and hyphens, at least one
+  // dot, no leading/trailing hyphen. Deliberately refuses IP literals — an
+  // owner approving a raw address is far more likely a mistake than a CDN.
+  if (!/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(bare)) {
+    return null
+  }
+  return `https://${host}`
+}
+
+/**
+ * The hosts a site has approved, cleaned and bounded (AGL-1152).
+ *
+ * Exported so the console's editor warning and the middleware agree on what
+ * counts as approved — a second implementation of this parse is how the editor
+ * comes to promise something the header does not deliver.
+ */
+function approvedImageHostSources(approved) {
+  if (!Array.isArray(approved)) return []
+  const seen = new Set()
+  const out = []
+  for (const entry of approved) {
+    const source = normalizeApprovedImageHost(entry)
+    if (!source || seen.has(source)) continue
+    seen.add(source)
+    out.push(source)
+    if (out.length >= APPROVED_IMAGE_HOSTS_MAX) break
+  }
+  return out
+}
+
+/**
+ * PER-SITE since AGL-1152, and that is what makes the enforcing flip reachable.
+ *
+ * AGL-1726 read the evidence and refused to enforce this directive, for two
+ * reasons that both dissolve once the list belongs to the site owner:
+ *
+ *   - Condition 2, the one that actually decided it: hotlinking an external
+ *     image is an ADVERTISED authoring feature, so a first-party-only enforced
+ *     `img-src` would silently revoke a documented capability from every
+ *     published site at once. An owner-approved list revokes nothing — it
+ *     enforces what that owner chose, and the editor warns at authoring time
+ *     so a refusal is never the first anyone hears of it.
+ *   - Condition 6, which it said should stop the flip on its own: "a rollback
+ *     that does not need a deploy... the directive is a build-time constant in
+ *     `security-origins.js`". It is not a constant any more. The list is host
+ *     data, so widening or emptying it is a Firestore write that propagates
+ *     within the verdict TTL, with no Vercel build in the path.
+ *
+ * ⚠️ STILL ISR-SAFE, and for the same reason the shipped version was. AGL-1228
+ * removed a report-only `script-src` because a per-REQUEST nonce cannot match
+ * cached bytes. This is per-HOST, not per-request: every response for one site
+ * carries the identical string, and the policy lives in a header rather than
+ * in the cached body, so there is nothing for the two to disagree about. Do
+ * not read "it varies" as "it is per-request" — that is the distinction the
+ * whole directive turns on.
+ *
+ * `firebasestorage.googleapis.com` is PINNED via `TENANT_IMAGE_ORIGINS` and is
+ * deliberately not owner-removable (AGL-1726 condition 5): orgs without the
+ * paid `mediaCdn` entitlement store absolute download URLs rather than `media:`
+ * references, so an owner who deleted it would blank their own free-tier
+ * images while paying customers' sites kept working.
+ */
+function tenantImgSrcDirective(
+  isProduction,
+  approvedImageHosts,
+  runsMeasurement,
+  siteOrigins,
+) {
   const development = isProduction
     ? []
     : ['http://localhost:*', 'http://127.0.0.1:*']
   const sources = ["'self'", 'data:', 'blob:']
+    // THE SITE'S OWN ADDRESSES, always (AGL-1152).
+    //
+    // `'self'` is only the origin the page was SERVED from, and a site with a
+    // custom domain attached has two: `{subdomain}.{apex}` and the domain
+    // itself. Content authored before an attach references the platform
+    // subdomain; content authored after references the custom domain; a
+    // visitor gets whichever origin they arrived on, so on an enforced policy
+    // one of the two halves is refused on its own site. The owner should not
+    // have to approve their own address to make their own images load, and
+    // would have no way to know they must.
+    .concat(approvedImageHostSources(siteOrigins))
     .concat(TENANT_IMAGE_ORIGINS)
+    // Only for a site that configured a measurement id. A site with no
+    // analytics has no reason to permit an ad network's beacon, and a policy
+    // that permits one anyway is documenting our convenience, not its needs.
+    .concat(runsMeasurement ? MEASUREMENT_IMAGE_ORIGINS : [])
+    .concat(approvedImageHostSources(approvedImageHosts))
     .concat(development)
   return `img-src ${sources.join(' ')}`
 }
@@ -762,4 +1015,9 @@ module.exports = {
   reportingEndpointsHeader,
   scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
+  approvedImageHostSources,
+  normalizeApprovedImageHost,
+  APPROVED_IMAGE_HOSTS_MAX,
+  MEASUREMENT_IMAGE_ORIGINS,
+  GOOGLE_CCTLD_ORIGINS,
 }

@@ -42,7 +42,6 @@
  *     do (AGL-1615: it kills the URL, never the bytes already fetched).
  */
 
-import { screenRoutePathToUrl } from '@aglyn/aglyn/server'
 import {
   authForPool,
   findUserByUidAcrossPools,
@@ -53,11 +52,8 @@ import {
   type DownloadTokenRotationResult,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
+import { revalidateEntireHost } from './tenant-revalidate'
 
-const TENANT_DOMAIN = process.env['NEXT_PUBLIC_TENANT_DOMAIN'] ?? 'aglyn.app'
-/** Matches the tenant /api/revalidate cap; more would be dropped anyway. */
-const MAX_REVALIDATE_PATHS = 250
-const REVALIDATE_TIMEOUT_MS = 5000
 /**
  * Revocation fan-out bound. An org roster larger than this still locks —
  * the enforcement is server-side — but tail members keep their tokens for
@@ -88,52 +84,28 @@ export interface LockdownWriteOptions {
 }
 
 /**
- * Ask the tenant runtime to drop EVERY routed page of a host, plus its root.
- * Same chain as /api/screens/revalidate (the console holds the service
- * secret; the browser never does), but host-wide: the lockdown flip must
- * evict the whole site, and `hostId` rides along so the tenant also busts
- * its `tenant-data:{hostId}` document cache — without that the host doc the
- * middleware verdict reads would stay stale for its 60s TTL.
+ * Ask the tenant runtime to drop EVERY routed page of a host.
  *
- * BEST EFFORT: enforcement does not depend on it (the tenant middleware
- * verdict is request-level); this only shrinks the stale window of any
- * cached HTML to zero. Returns what happened so callers can report it.
+ * DELEGATES to `revalidateEntireHost` (AGL-1152). This was a hand-rolled copy
+ * of the same request, and it carried the bug AGL-2195 exists to prevent: it
+ * re-derived the apex from `NEXT_PUBLIC_TENANT_DOMAIN` with OUR domain as the
+ * literal default, so a self-hoster's lockdown posted its cache drop at
+ * `aglyn.app` — a drop that never lands on their pages, and an unsolicited
+ * request to a host they do not own. `revalidateEntireHost` reads `TENANT_APEX`,
+ * which is the one sanctioned reader of that variable.
+ *
+ * The return shape is unchanged, so `OrgLockdownResult` and the routes that
+ * report it are untouched.
+ *
+ * BEST EFFORT: enforcement does not depend on it (the tenant middleware verdict
+ * is request-level); this only shrinks the stale window of any cached HTML.
  */
 export async function revalidateHostAfterLockdown(
   firestore: Firestore,
   hostId: string,
 ): Promise<{ hostId: string; ok: boolean; reason: string }> {
-  try {
-    const secret = process.env['REVALIDATE_SECRET']
-    if (!secret) return { hostId, ok: false, reason: 'not-configured' }
-    const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
-    if (!hostSnapshot.exists) return { hostId, ok: false, reason: 'unknown-host' }
-    const subdomain = String(hostSnapshot.get('subdomain') ?? '')
-    if (!subdomain) return { hostId, ok: false, reason: 'no-subdomain' }
-    const screens = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
-    const paths = [
-      ...new Set([
-        '/',
-        ...Object.values(screens).map((path) => screenRoutePathToUrl(path)),
-      ]),
-    ].slice(0, MAX_REVALIDATE_PATHS)
-    const response = await fetch(
-      `https://${subdomain}.${TENANT_DOMAIN}/api/revalidate`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-revalidate-secret': secret,
-        },
-        body: JSON.stringify({ host: subdomain, hostId, paths }),
-        signal: AbortSignal.timeout(REVALIDATE_TIMEOUT_MS),
-      },
-    )
-    return { hostId, ok: response.ok, reason: response.ok ? 'ok' : `tenant-${response.status}` }
-  } catch (error) {
-    console.error('[lockdown] revalidate failed', hostId, error)
-    return { hostId, ok: false, reason: 'error' }
-  }
+  const result = await revalidateEntireHost(firestore, hostId)
+  return { hostId, ok: result.reason === 'ok', reason: result.reason }
 }
 
 export interface OrgLockdownResult {

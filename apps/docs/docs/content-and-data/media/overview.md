@@ -403,6 +403,43 @@ stops the file being fetched again; it cannot recall a copy that is already on s
 disk, in a browser cache or in a web archive. Nothing anyone sells can, and a product that
 implied otherwise would be the more dangerous thing to trust.
 
+## Approved image hosts {#approved-image-hosts}
+
+Most images on your site are ones you uploaded here, and those always work. But you can
+also point a block at an image that lives somewhere else by pasting its URL — a photo on
+your own CDN, say, or an image your supplier hosts.
+
+Those are worth being deliberate about, for a reason that is easy to miss: when a visitor
+opens a page with an external image on it, **their browser fetches that image directly
+from the other site.** So that site sees your visitor's IP address and which page they
+were on, whether or not you have any relationship with them. It is a real disclosure, and
+it is one you are making on your visitors' behalf.
+
+So your site keeps a list of the external hosts it is allowed to load images from, under
+**Setup → Approved image hosts**. Add a host and images from it load normally. Leave it
+off the list and browsers refuse it.
+
+You do not have to think about this for anything you upload — your own media is always
+allowed, and so is your site's own address.
+
+### Adding a host {#adding-an-approved-image-host}
+
+Enter the host on its own, with no `https://` and no path:
+
+- `cdn.example.com` allows exactly that host.
+- `*.example.com` allows every subdomain of it, which is what most image CDNs need
+  because they give each account its own.
+
+If you paste a URL into an image block for a host you have not approved, the editor tells
+you so while you are editing, rather than letting you publish a page whose image is blank
+for everyone but you. The warning names the host, so approving it is a copy and paste.
+
+### When an image does not appear {#approved-image-host-troubleshooting}
+
+If an image shows in the editor but not on the published page, an unapproved host is the
+first thing to check. Open the page, right-click the missing image, and the browser
+console will name the host it refused.
+
 ## Reference {#reference}
 
 The details behind the screens above, for anyone wiring media into their own code.

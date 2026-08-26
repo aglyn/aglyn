@@ -27,6 +27,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { isAuthFailure } from '../utils/auth-failure'
 
 /**
  * Every host role, as a value (AGL-1145).
@@ -86,6 +87,17 @@ export interface HostResolution {
   /** Resolution gave up after retries — show retry, never a false 404 (AGL-813). */
   error: boolean
   /**
+   * The failure behind `error` was the SESSION, not the network.
+   *
+   * Always false while `error` is false. Two things hang on it: the guard's
+   * copy (a stale token is not "check your connection"), and
+   * `useAuthRecovery`, which re-runs resolution by itself when the session
+   * comes back. A network fault deliberately gets neither — nothing tells
+   * the page a connection returned, so its manual retry stays the honest
+   * recovery. See `utils/auth-failure.ts` for the discriminator.
+   */
+  authError: boolean
+  /**
    * Re-runs resolution from scratch (AGL-1200).
    *
    * `error` is otherwise terminal: the effect's deps do not change after it
@@ -144,6 +156,7 @@ export function useHostResolution(
     hostId: null,
     ready: false,
     error: false,
+    authError: false,
   })
   // Bumping this re-runs the effect below, which is the whole mechanism
   // behind `retry` (AGL-1200).
@@ -153,12 +166,24 @@ export function useHostResolution(
   useEffect(() => {
     // Off a host route there is nothing to resolve.
     if (!subdomain) {
-      setState({ for: null, hostId: null, ready: true, error: false })
+      setState({
+        for: null,
+        hostId: null,
+        ready: true,
+        error: false,
+        authError: false,
+      })
       return
     }
     // Hold (spinner) until we know the user and their current org.
     if (!uid || !orgId) {
-      setState({ for: subdomain, hostId: null, ready: false, error: false })
+      setState({
+        for: subdomain,
+        hostId: null,
+        ready: false,
+        error: false,
+        authError: false,
+      })
       return
     }
 
@@ -189,6 +214,7 @@ export function useHostResolution(
             hostId: projected.id,
             ready: true,
             error: false,
+            authError: false,
           })
           return
         }
@@ -226,21 +252,44 @@ export function useHostResolution(
             hostId: host.id,
             ready: true,
             error: false,
+            authError: false,
           })
           return
         }
-        setState({ for: subdomain, hostId: null, ready: true, error: false })
-      } catch {
+        setState({
+          for: subdomain,
+          hostId: null,
+          ready: true,
+          error: false,
+          authError: false,
+        })
+      } catch (caught) {
         if (cancelled) return
         if (retried < MAX_RETRIES) {
           timer = setTimeout(resolve, retryDelayMs(retried))
           retried += 1
         } else {
-          setState({ for: subdomain, hostId: null, ready: true, error: true })
+          // The LAST failure is the one still standing, so it is the one
+          // the user is being told about and the one the recovery is keyed
+          // on. A streak that started `unavailable` and ended
+          // `permission-denied` is a session fault by the time it latches.
+          setState({
+            for: subdomain,
+            hostId: null,
+            ready: true,
+            error: true,
+            authError: isAuthFailure(caught),
+          })
         }
       }
     }
-    setState({ for: subdomain, hostId: null, ready: false, error: false })
+    setState({
+      for: subdomain,
+      hostId: null,
+      ready: false,
+      error: false,
+      authError: false,
+    })
     void resolve()
 
     return () => {
@@ -253,12 +302,19 @@ export function useHostResolution(
   // stand in for this one: until the effect re-runs, the honest answer is "not
   // ready" (a spinner), never a settled miss the guard would 404 (AGL-894).
   if (state.for !== subdomain) {
-    return { hostId: null, ready: !subdomain, error: false, retry }
+    return {
+      hostId: null,
+      ready: !subdomain,
+      error: false,
+      authError: false,
+      retry,
+    }
   }
   return {
     hostId: state.hostId,
     ready: state.ready,
     error: state.error,
+    authError: state.authError,
     retry,
   }
 }

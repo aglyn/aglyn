@@ -19,7 +19,10 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
-import { getPublishedCollectionSource } from './get-collection-content'
+import {
+  getPublishedCollectionSource,
+  type PublishedCollectionSource,
+} from './get-collection-content'
 import getPluginInstalls from './get-plugin-installs'
 import getVariables, { getFunctions, getWorkflows } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
@@ -64,17 +67,27 @@ export interface ComposeCollectionContext {
   entriesReachedBound?: boolean
 }
 
+interface CollectionBlockScan {
+  slugs: Set<string>
+  hasRelated: boolean
+  hasCategories: boolean
+  hasSearch: boolean
+}
+
 /**
- * Expands Collection entries blocks (AGL-551) against their collections'
- * published entries, and Related posts blocks (AGL-582) against the routed
- * entry. Fetches lazily — screens without the blocks cost nothing — and
- * fails open on lookup errors like every other compose stage.
+ * Which collections does this tree ask for (AGL-1152)?
+ *
+ * Extracted so the PREFETCH below and the expansion that consumes it read the
+ * tree through one function rather than two copies of the same predicate. A
+ * divergence between them is not a type error — it is a slug prefetched and
+ * never awaited, or (worse) a slug the prefetch missed that then pays the full
+ * serial read anyway — so there is deliberately no second implementation to
+ * drift.
  */
-async function expandCollectionEntryBlocks(
-  hostId: string,
+function scanCollectionBlocks(
   nodes: Record<string, any>,
   collection?: ComposeCollectionContext,
-): Promise<Record<string, any>> {
+): CollectionBlockScan {
   const slugs = new Set<string>()
   let hasRelated = false
   let hasCategories = false
@@ -117,6 +130,72 @@ async function expandCollectionEntryBlocks(
       slugs.add(collection.slug)
     }
   }
+  return { slugs, hasRelated, hasCategories, hasSearch }
+}
+
+/**
+ * Issue the collection reads AS SOON AS THE SCREEN NODES EXIST (AGL-1152).
+ *
+ * `getPublishedCollectionSource` is three SEQUENTIAL round trips —
+ * `findContentCollection`, then `listLiveEntries`, then `attachEntryAuthors`
+ * — and until this existed it ran after the chrome bundle had already been
+ * awaited, so a page carrying a Collection entries block paid the whole thing
+ * as a serial tail on the compose phase. Measured on the tenant: a page with
+ * no collection block composes in ~20 ms, one with a block in ~572 ms, and the
+ * tree work itself accounts for under 2 ms of that at 50 entries. The gap is
+ * this read, waiting for reads it shares nothing with.
+ *
+ * Same shape as `screenDatasetsPromise` directly below, and the same caveat
+ * applies: the SCREEN's own nodes are a fast path, NOT the correctness gate. A
+ * collection block can arrive from a layout or a grafted reusable component,
+ * neither of which exists yet at this point, so the real scan still runs
+ * against the composed tree and still fetches anything this missed.
+ *
+ * The ROUTED collection is deliberately excluded when its entries are already
+ * in hand: the expansion below answers that slug from `collection.entries`
+ * without reading at all, so prefetching it would buy a read nobody awaits.
+ */
+function prefetchCollectionSources(
+  hostId: string,
+  screenNodes: Record<string, any>,
+  collection?: ComposeCollectionContext,
+): Record<string, Promise<PublishedCollectionSource>> {
+  const prefetched: Record<
+    string,
+    Promise<PublishedCollectionSource>
+  > = {}
+  for (const slug of scanCollectionBlocks(screenNodes, collection).slugs) {
+    if (slug === collection?.slug && collection.entries) continue
+    const pending = getPublishedCollectionSource({
+      hostId,
+      collectionSlug: slug,
+    })
+    // Marked handled the moment it exists, for the reason `composed` is in
+    // `composeScreenNodes`: a tree that turns out not to need this slug never
+    // awaits it, and an unawaited rejection takes the process down rather than
+    // failing this one read. The real await below still sees the rejection.
+    void pending.catch(() => undefined)
+    prefetched[slug] = pending
+  }
+  return prefetched
+}
+
+/**
+ * Expands Collection entries blocks (AGL-551) against their collections'
+ * published entries, and Related posts blocks (AGL-582) against the routed
+ * entry. Fetches lazily — screens without the blocks cost nothing — and
+ * fails open on lookup errors like every other compose stage.
+ */
+async function expandCollectionEntryBlocks(
+  hostId: string,
+  nodes: Record<string, any>,
+  collection?: ComposeCollectionContext,
+  prefetched?: Record<string, Promise<PublishedCollectionSource>>,
+): Promise<Record<string, any>> {
+  const { slugs, hasRelated, hasCategories, hasSearch } = scanCollectionBlocks(
+    nodes,
+    collection,
+  )
   if (!slugs.size) return nodes
   const sources: Record<string, Aglyn.CollectionEntriesSource> = {}
   await Promise.all(
@@ -137,10 +216,10 @@ async function expandCollectionEntryBlocks(
         }
         return
       }
-      const fetched = await getPublishedCollectionSource({
-        hostId,
-        collectionSlug: slug,
-      })
+      // The prefetch when this slug was visible on the screen's own nodes;
+      // a live read when it only appeared after layout/component grafting.
+      const fetched = await (prefetched?.[slug] ??
+        getPublishedCollectionSource({ hostId, collectionSlug: slug }))
       sources[slug] = {
         slug,
         entries: fetched.entries,
@@ -316,6 +395,13 @@ export async function composeNodesWithChrome(options: {
   const screenDatasetsPromise = Aglyn.hasRepeatableNodes(screenNodes)
     ? getDatasets({ hostId })
     : undefined
+  // Issued HERE, beside the datasets read and before the chrome bundle is
+  // awaited, so the collection read overlaps it instead of trailing it.
+  const prefetchedSources = prefetchCollectionSources(
+    hostId,
+    screenNodes,
+    options.collection,
+  )
   const [layoutNodesChain, componentsRes, bulk] = await chromeBundle
   const [rawVariables, functions, workflows, pluginInstalls] = bulk
   const screenDatasets = await screenDatasetsPromise
@@ -361,6 +447,7 @@ export async function composeNodesWithChrome(options: {
     hostId,
     repeated,
     options.collection,
+    prefetchedSources,
   )
   // Entry Meta blocks (AGL-1385): fill in the routed entry's date/category/
   // tags. Needs no source fetch — the routed entry and its taxonomy are
