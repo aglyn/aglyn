@@ -156,9 +156,31 @@ export async function runSitePageEnrichers(
   const merged: Record<string, unknown> = {}
   const contributors = new Set<string>()
   let unattributed = false
-  for (const enricher of enrichers) {
+
+  // CONCURRENT, MERGED IN REGISTRATION ORDER (2026-08-26).
+  //
+  // This was a sequential `for … await`, so every enricher waited on the one
+  // before it for no reason: each takes the same immutable `context`, returns
+  // its own prop slice, and shares nothing. Production timing put the phase at
+  // a flat ~85–120 ms on EVERY render — including pages whose entire loader
+  // was 137 ms — because it is a fixed number of round trips, not work that
+  // scales with the page.
+  //
+  // `allSettled` rather than `all`: a broken plugin must drop its slice, never
+  // the page, which is the isolation the per-enricher try/catch gave and the
+  // plugin docs promise. Results are merged in ARRAY order, which `allSettled`
+  // preserves — so two enrichers contributing the same key resolve exactly as
+  // they did when the loop was sequential, and `contributors` keeps its
+  // insertion order.
+  const settled = await Promise.allSettled(
+    enrichers.map(async (enricher) => (await enricher(context)) ?? {}),
+  )
+
+  for (const [index, outcome] of settled.entries()) {
+    const enricher = enrichers[index]
     try {
-      const result = (await enricher(context)) ?? {}
+      if (outcome.status === 'rejected') throw outcome.reason
+      const result = outcome.value
       Object.assign(merged, result)
       // "Contributed" means produced something with content, not merely
       // returned a key. Every marketing enricher returns its full key set on

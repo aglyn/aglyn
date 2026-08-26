@@ -261,21 +261,31 @@ const loadPageDataCached = cache(
     // branches below, as before.
     const orgRes = await getOrgBilling({ hostId })
     timer.mark('getOrgBilling')
+    // BOTH SCOPE READS AT ONCE. They were sequential `await`s inside the
+    // object literal, so a cold 15s window paid two Firestore round trips
+    // back to back for reads that share no input. Each is independently
+    // TTL-cached and pending-deduped, so this changes nothing about what is
+    // read or when it expires — only that the two misses overlap.
+    const [platformLock, domainLock] = await Promise.all([
+      getPlatformLockdown(),
+      // DOMAIN scope (AGL-1513). Mirrored here for the same reason every
+      // other scope is: this branch is what keeps a freshly REGENERATED
+      // page honest, and a lock the loader cannot see is one an ISR
+      // revalidation quietly serves straight past.
+      host.startsWith(CNAME_HOST_PREFIX)
+        ? getDomainLockdown(host.slice(CNAME_HOST_PREFIX.length))
+        : Promise.resolve(null),
+    ])
     const lockdownState = Aglyn.resolveLockdown(
       {
-        platform: await getPlatformLockdown(),
+        platform: platformLock,
         org: Aglyn.normalizeOrgLockdown(orgRes.org as any),
         host: Aglyn.normalizeHostLockdown(hostRes.host as any),
-        // DOMAIN scope (AGL-1513). Mirrored here for the same reason every
-        // other scope is: this branch is what keeps a freshly REGENERATED
-        // page honest, and a lock the loader cannot see is one an ISR
-        // revalidation quietly serves straight past.
-        domain: host.startsWith(CNAME_HOST_PREFIX)
-          ? await getDomainLockdown(host.slice(CNAME_HOST_PREFIX.length))
-          : null,
+        domain: domainLock,
       },
       Date.now(),
     )
+    timer.mark('lockdownScopes')
     // READ-ONLY (AGL-1511) renders the page normally. A read-only lock is a
     // WRITE freeze; replacing the page with the maintenance fallback here
     // would undo the middleware's decision one layer down and take the site
@@ -456,13 +466,32 @@ const loadPageDataCached = cache(
       }
     }
 
+    // Everything between the lockdown scopes and here: the lockdown branches,
+    // the maintenance/notice fallbacks and the bandwidth-ceiling test.
+    //
+    // ⚠️ IT USED TO BE INSIDE `ensureAll` (2026-08-26). The mark below was the
+    // FIRST one after `getOrgBilling`, so it spanned 203 lines and reported
+    // all of them under the name of the single call at the bottom. Production
+    // then read `ensureAll: 160–200 ms` on every WARM render — which sent the
+    // last profiling pass hunting a plugin-loading cost that does not exist:
+    // `createPluginLoader` is module scope and `ensure` memoises per
+    // (ids, surfaces), so a warm `ensureAll` returns a settled promise. The
+    // tell was in the data and easy to miss — the one `cold: true` sample
+    // reported 39 ms against warm samples at ~180 ms, i.e. exactly backwards
+    // for anything that loads modules once.
+    //
+    // A phase name has to name the work, or it sends the next person to the
+    // wrong file.
+    timer.mark('lockdownBranches')
+
     // Plugin site-page hooks (AGL-417/418) register through the tenant
     // server manifest; ensure they're loaded before any hook runs.
     await serverPluginLoader.ensureAll(['tenantApi'])
     // Was suspect #1 for the cold-start cost; MEASURED AND CLEARED (AGL-1152).
     // Production timing lines put this at 0–45 ms on the very first render of a
     // fresh instance, against a 2–5 s total. It is not the cold-start cost, so
-    // do not remove it on that theory — the API dispatcher needs it.
+    // do not remove it on that theory — the API dispatcher needs it. Now that
+    // this mark brackets ONLY the call, that claim is finally falsifiable.
     timer.mark('ensureAll')
 
     // Redirect rules (AGL-155) fire before any route resolution, so a
