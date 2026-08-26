@@ -63,7 +63,6 @@
  */
 
 import {
-  TENANT_APEX,
   bandwidthCapEngaged,
   isLockdownActive,
   lockdownMode,
@@ -75,6 +74,14 @@ import {
   showsPlatformAttribution,
   type LockdownState,
 } from '@aglyn/aglyn/server'
+// THE LEAF MODULE, NOT THE `/server` BARREL (AGL-1289). Imported from the
+// barrel, `TENANT_APEX` typechecked and then resolved `undefined` at runtime —
+// this route is reachable through the barrel itself, so the cycle left the
+// binding unset and the handler threw `TENANT_APEX is not defined` on every
+// request under `nx serve tenant`. It is the same shape `site-page-hooks.ts`
+// documents, and the same fix: reach past the barrel to the module that
+// declares it.
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { getDomainLockdown, getPlatformLockdown } from '@aglyn/tenant-data-admin'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
