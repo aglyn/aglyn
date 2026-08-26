@@ -66,23 +66,47 @@ const EmptyStateRoot = styled(Box, { name: 'AglynEmptyState' })(
     [`& .${classKeys.action}`]: {
       marginTop: theme.spacing(2),
     },
-    // The five fills the artwork is built from. Mode-aware because the flat
-    // light greys disappear entirely against a dark surface.
+    // The five fills the artwork is built from, taken off the theme's grey
+    // ramp rather than written as hex (AGL-693). Still mode-aware — the flat
+    // light greys disappear entirely against a dark surface — but the ramp is
+    // what decides the tone now, so a host that retunes its greys retunes the
+    // illustration with them instead of leaving it behind.
+    //
+    // The steps are chosen to keep the original stack's ORDER: img4 is the
+    // paper the shape sits on, img2/img3 are its faces, img1 is the darkest
+    // edge. Two of the originals carried a faint blue cast that the neutral
+    // ramp does not; at this size, in a placeholder graphic, the depth
+    // ordering is what reads, not the hue.
     [`& .${classKeys.img1}`]: {
-      fill: theme.palette.mode === 'light' ? '#AEB8C2' : '#262626',
+      fill:
+        theme.palette.mode === 'light'
+          ? theme.palette.grey[400]
+          : theme.palette.grey[900],
     },
     [`& .${classKeys.img2}`]: {
-      fill: theme.palette.mode === 'light' ? '#F5F5F7' : '#595959',
+      fill:
+        theme.palette.mode === 'light'
+          ? theme.palette.grey[100]
+          : theme.palette.grey[700],
     },
     [`& .${classKeys.img3}`]: {
-      fill: theme.palette.mode === 'light' ? '#DCE0E6' : '#434343',
+      fill:
+        theme.palette.mode === 'light'
+          ? theme.palette.grey[300]
+          : theme.palette.grey[800],
     },
     [`& .${classKeys.img4}`]: {
-      fill: theme.palette.mode === 'light' ? '#FFFFFF' : '#1C1C1C',
+      fill:
+        theme.palette.mode === 'light'
+          ? theme.palette.common.white
+          : theme.palette.grey[900],
     },
     [`& .${classKeys.img5}`]: {
       fillOpacity: theme.palette.mode === 'light' ? '0.8' : '0.08',
-      fill: theme.palette.mode === 'light' ? '#F5F5F5' : '#FFFFFF',
+      fill:
+        theme.palette.mode === 'light'
+          ? theme.palette.grey[100]
+          : theme.palette.common.white,
     },
   }),
 )
