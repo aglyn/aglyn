@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.22 — 2026-08-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/0703692fa...v1.0.0-beta.22)
+
+### Added
+
+- **tools:** a backfill that gives existing media the variants it advertises ([AGL-1442](https://linear.app/aglyn/issue/AGL-1442), [AGL-1476](https://linear.app/aglyn/issue/AGL-1476))
+
 ## v1.0.0-beta.21 — 2026-08-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.20...v1.0.0-beta.21)
