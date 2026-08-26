@@ -63,9 +63,9 @@
  */
 
 import {
+  TENANT_APEX,
   bandwidthCapEngaged,
   isLockdownActive,
-  type LockdownState,
   lockdownMode,
   lockdownNotice,
   lockdownRetryAfterSeconds,
@@ -73,6 +73,7 @@ import {
   normalizeOrgLockdown,
   resolveLockdown,
   showsPlatformAttribution,
+  type LockdownState,
 } from '@aglyn/aglyn/server'
 import { getDomainLockdown, getPlatformLockdown } from '@aglyn/tenant-data-admin'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
@@ -99,6 +100,7 @@ function lockedVerdict(
     overQuota: boolean
     approvedImageHosts?: string[]
     runsMeasurement?: boolean
+    siteOrigins?: string[]
   },
 ): Response {
   const notice = lockdownNotice(state)
@@ -110,6 +112,7 @@ function lockedVerdict(
       overQuota: facts.overQuota,
       approvedImageHosts: facts.approvedImageHosts ?? [],
       runsMeasurement: facts.runsMeasurement ?? false,
+      siteOrigins: facts.siteOrigins ?? [],
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -223,6 +226,24 @@ export async function GET(request: Request): Promise<Response> {
      * reason to permit an ad network's beacon, and permitting one anyway
      * would make the policy describe our convenience instead of the site.
      */
+    /**
+     * The site's OWN addresses (AGL-1152).
+     *
+     * `'self'` covers only the origin a page was served from, and a site with
+     * a custom domain attached has two. Sent from here because this route
+     * already holds the host doc, and derived from `TENANT_APEX` rather than
+     * a literal so a self-host install names its own apex (AGL-2195).
+     *
+     * The `www.` form rides along because `liveCustomDomain` treats the two as
+     * one site, so an author can legitimately have referenced either.
+     */
+    const subdomain = String(hostRes.host.subdomain ?? '').trim()
+    const cname = String(hostRes.host.cname ?? '').trim()
+    const siteOrigins = [
+      subdomain ? `${subdomain}.${TENANT_APEX}` : '',
+      cname,
+      cname ? `www.${cname}` : '',
+    ].filter(Boolean)
     const analytics = hostRes.host.analytics
     const runsMeasurement = Boolean(
       analytics?.gaMeasurementId ||
@@ -252,6 +273,7 @@ export async function GET(request: Request): Promise<Response> {
           overQuota,
           approvedImageHosts,
           runsMeasurement,
+          siteOrigins,
         },
         { status: 200 },
       )
@@ -261,6 +283,7 @@ export async function GET(request: Request): Promise<Response> {
       overQuota,
       approvedImageHosts,
       runsMeasurement,
+      siteOrigins,
     })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)

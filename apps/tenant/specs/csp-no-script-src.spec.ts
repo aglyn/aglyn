@@ -140,26 +140,38 @@ describe('tenant CSP (AGL-1228)', () => {
   })
 })
 
-describe('tenant report-only img-src (AGL-1703)', () => {
-  it('CONTROL — the report-only header exists and actually carries `img-src`', async () => {
-    // The counterpart to the base-directive control above. Every assertion in
-    // this block is about the CONTENTS of a header, and all of them would pass
-    // against a middleware that stopped sending it — which is the regression
-    // this whole arc exists to prevent, since a policy that reports nothing is
-    // indistinguishable from a site with nothing to report.
-    const reportOnly =
-      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).toContain('img-src')
-    expect(reportOnly).toContain("'self'")
+describe('tenant ENFORCED img-src (AGL-1703, flipped by AGL-1152)', () => {
+  /**
+   * This block used to assert the opposite, and AGL-1726 said to update it
+   * rather than delete it when the flip came — so this is that update, with
+   * the reasoning that changed recorded rather than replaced.
+   *
+   * The old guard existed because enforcing a PLATFORM-WIDE list would blank
+   * author-hotlinked images across published customer sites: a stranger's
+   * shopfront, failing silently. That is no longer what enforcing means. The
+   * list is the site owner's, the besigner warns before an unapproved host is
+   * published, and the site's own origins and the measurement beacons are
+   * admitted automatically — so nothing an author already had stops working.
+   */
+  it('CONTROL — the enforcing header exists and carries `img-src`', async () => {
+    // Every assertion below is about the CONTENTS of a header, and all of them
+    // would pass against a middleware that stopped sending it — the regression
+    // this arc exists to prevent, since a policy nobody sends is
+    // indistinguishable from one with nothing to say.
+    const policy = (await headersFor())?.get('Content-Security-Policy') ?? ''
+    expect(policy).toContain('img-src')
+    expect(policy).toContain("'self'")
   })
 
-  it('keeps `img-src` OUT of the enforcing policy', async () => {
-    // The load-bearing one. Enforcing this list would blank author-hotlinked
-    // images across published customer sites — a stranger's shopfront, failing
-    // silently. AGL-1726 states what must be true before that flips; until
-    // then, an `img-src` reaching the enforcing header is the bug.
-    const policy = (await headersFor())?.get('Content-Security-Policy') ?? ''
-    expect(policy).not.toContain('img-src')
+  it('sends NO report-only header any more', async () => {
+    // Not tidiness. Next resolves a nonce as `content-security-policy ||
+    // content-security-policy-report-only`, so a second header is only ever
+    // safe while the enforcing one carries no `script-src` — the AGL-523
+    // shadowing shape. With `img-src` moved across, the enforcing policy
+    // carries the reporting tail and the second header has no reason to exist.
+    expect(
+      (await headersFor())?.get('Content-Security-Policy-Report-Only'),
+    ).toBeNull()
   })
 
   it('carries BOTH reporting directives and resolves the `report-to` group', async () => {
@@ -171,9 +183,11 @@ describe('tenant report-only img-src (AGL-1703)', () => {
     // without it nothing is delivered by EITHER browser (AGL-1788), which is
     // why the header is asserted here rather than treated as decoration.
     const headers = await headersFor()
-    const reportOnly = headers?.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).toContain('report-uri /api/csp-report')
-    expect(reportOnly).toContain('report-to csp')
+    // On the ENFORCING policy now: after the flip a violation is an image that
+    // did NOT load, which is the most urgent thing the log can carry.
+    const policy = headers?.get('Content-Security-Policy') ?? ''
+    expect(policy).toContain('report-uri /api/csp-report')
+    expect(policy).toContain('report-to csp')
     expect(headers?.get('Reporting-Endpoints')).toBe('csp="/api/csp-report"')
   })
 
@@ -193,10 +207,9 @@ describe('tenant report-only img-src (AGL-1703)', () => {
     if (!response || !('headers' in response)) {
       throw new Error('middleware returned no response')
     }
-    const reportOnly =
-      response.headers.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).toContain('report-uri /api/csp-report')
-    expect(reportOnly).not.toContain('report-to')
+    const policy = response.headers.get('Content-Security-Policy') ?? ''
+    expect(policy).toContain('report-uri /api/csp-report')
+    expect(policy).not.toContain('report-to')
     expect(response.headers.get('Reporting-Endpoints')).toBeNull()
   })
 
@@ -206,10 +219,13 @@ describe('tenant report-only img-src (AGL-1703)', () => {
     // issue a cross-origin request to an aglyn host — a CORS preflight per
     // origin, and our hostname in the network log of a stranger reading
     // someone's blog.
-    const reportOnly =
-      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).not.toContain('https://console.aglyn')
-    expect(reportOnly).not.toContain('report-uri http')
+    // Scoped to the REPORTING directives. Checking the whole policy would now
+    // trip over `frame-ancestors`, which legitimately names every first-party
+    // origin — a false positive about a directive this test is not about.
+    const policy = (await headersFor())?.get('Content-Security-Policy') ?? ''
+    const reporting = policy.slice(policy.indexOf('report-uri'))
+    expect(reporting).not.toContain('https://')
+    expect(reporting).not.toContain('report-uri http')
   })
 
   it('allowlists the DAM storage host and nothing else third-party', async () => {
@@ -226,13 +242,16 @@ describe('tenant report-only img-src (AGL-1703)', () => {
     // The analytics hosts are pinned because gtag runs on published sites and
     // silencing its own image beacon by allowlisting it is the AGL-1671
     // mistake played backwards.
-    const reportOnly =
-      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).toContain('https://firebasestorage.googleapis.com')
-    expect(reportOnly).not.toContain('lh3')
-    expect(reportOnly).not.toContain('doubleclick')
-    expect(reportOnly).not.toContain('google-analytics')
-    expect(reportOnly).not.toContain('googletagmanager')
+    const policy = (await headersFor())?.get('Content-Security-Policy') ?? ''
+    const imgSrc = (policy.match(/img-src[^;]*/) ?? [''])[0]
+    expect(imgSrc).toContain('https://firebasestorage.googleapis.com')
+    expect(imgSrc).not.toContain('lh3')
+    // The measurement beacons are gated on the site running measurement, and
+    // this fixture host configures none — so their absence here is the GATE
+    // working, not the allowlist being narrow.
+    expect(imgSrc).not.toContain('doubleclick')
+    expect(imgSrc).not.toContain('google-analytics')
+    expect(imgSrc).not.toContain('googletagmanager')
   })
 
   it('does not drag in the 26 console first-party origins', async () => {

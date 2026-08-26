@@ -197,6 +197,7 @@ const lockdownVerdicts = new Map<
     overQuota: boolean
     approvedImageHosts: string[]
     runsMeasurement: boolean
+    siteOrigins: string[]
   }
 >()
 
@@ -223,6 +224,7 @@ async function hostVerdict(
   overQuota: boolean
   approvedImageHosts: string[]
   runsMeasurement: boolean
+  siteOrigins: string[]
 }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
@@ -232,6 +234,7 @@ async function hostVerdict(
       overQuota: cached.overQuota,
       approvedImageHosts: cached.approvedImageHosts,
       runsMeasurement: cached.runsMeasurement,
+      siteOrigins: cached.siteOrigins,
     }
   }
   let blocked = false
@@ -285,6 +288,9 @@ async function hostVerdict(
   // an outage would blank a site's analytics beacons rather than its images,
   // which is quieter and therefore worse.
   let runsMeasurement: boolean = cached?.runsMeasurement ?? false
+  // Stale-retentive with the rest: a site's own addresses going missing during
+  // an outage would refuse its own images.
+  let siteOrigins: string[] = cached?.siteOrigins ?? []
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -298,6 +304,7 @@ async function hostVerdict(
         overQuota?: boolean
         approvedImageHosts?: unknown
         runsMeasurement?: boolean
+        siteOrigins?: unknown
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
@@ -314,6 +321,11 @@ async function hostVerdict(
       if (typeof data?.runsMeasurement === 'boolean') {
         runsMeasurement = data.runsMeasurement
       }
+      if (Array.isArray(data?.siteOrigins)) {
+        siteOrigins = data.siteOrigins.filter(
+          (entry): entry is string => typeof entry === 'string',
+        )
+      }
     }
   } catch {
     // Fail open on the lock and the cap, closed on the attribution.
@@ -325,8 +337,16 @@ async function hostVerdict(
     overQuota,
     approvedImageHosts,
     runsMeasurement,
+    siteOrigins,
   })
-  return { blocked, attribution, overQuota, approvedImageHosts, runsMeasurement }
+  return {
+    blocked,
+    attribution,
+    overQuota,
+    approvedImageHosts,
+    runsMeasurement,
+    siteOrigins,
+  }
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
@@ -659,7 +679,40 @@ export const middleware: NextMiddleware = async (req, event) => {
   // What DOES enforce here, unchanged: the base directives below — `object-src
   // 'none'`, `base-uri 'self'`, `frame-ancestors` — plus the plugin sandbox.
   const response = NextResponse.rewrite(new URL(rewrite, req.url))
-  response.headers.set('Content-Security-Policy', baseDirectives)
+  /*
+   * `img-src` IS NOW ENFORCED, alongside the base directives (AGL-1152).
+   *
+   * AGL-1726 read the evidence and refused this flip on two conditions, and
+   * both are answered rather than waived:
+   *
+   *   - Condition 2, which actually decided it: a first-party-only policy
+   *     would silently revoke hotlinking, an ADVERTISED authoring feature.
+   *     The list is the site owner's now, so nothing is revoked — and the
+   *     besigner warns at authoring time, so a refusal is never the first
+   *     anyone hears of it.
+   *   - Condition 6, which it said should stop the flip on its own: no
+   *     deploy-free rollback. The directive is host data now; emptying or
+   *     widening it is a Firestore write that lands within the verdict TTL.
+   *
+   * Condition 4 — the gtag and Meta beacons — is why `MEASUREMENT_IMAGE_ORIGINS`
+   * exists, ccTLDs included.
+   *
+   * The reporting tail rides the ENFORCING policy on purpose: after the flip a
+   * violation is an image that did NOT load, which is the most urgent thing the
+   * log can carry.
+   */
+  // Computed here rather than beside `Reporting-Endpoints` below, because the
+  // policy itself now carries the reporting tail and needs the answer first.
+  const secureTransport = isSecureTransport(req.headers, req.nextUrl.protocol)
+  response.headers.set(
+    'Content-Security-Policy',
+    `${baseDirectives}; ${tenantImgSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedImageHosts,
+      verdict.runsMeasurement,
+      verdict.siteOrigins,
+    )}; ${reportingDirectives(secureTransport)}`,
+  )
   // A REPORT-ONLY `img-src`, and its reporting endpoint (AGL-1703). What the
   // directive contains, and why it is not the console's, lives with
   // `tenantImgSrcDirective`. What belongs here is why a second header is safe
@@ -695,18 +748,19 @@ export const middleware: NextMiddleware = async (req, event) => {
   // http the pair delivers nothing at all (AGL-1788; the measured table lives
   // with `reportingDirectives`). Published customer sites are https, so this
   // changes nothing for them; it is `nx serve tenant` that was silent.
-  const secureTransport = isSecureTransport(req.headers, req.nextUrl.protocol)
   const endpoints = reportingEndpointsHeader(secureTransport)
   if (endpoints) response.headers.set('Reporting-Endpoints', endpoints)
-  response.headers.set(
-    'Content-Security-Policy-Report-Only',
-    `${tenantImgSrcDirective(
-      process.env.NODE_ENV === 'production',
-      verdict.approvedImageHosts,
-      verdict.runsMeasurement,
-    )}; ` +
-      reportingDirectives(secureTransport),
-  )
+  /*
+   * The report-only header is GONE now that `img-src` enforces (AGL-1152).
+   *
+   * ⛔ Do NOT reinstate a report-only policy here "to keep gathering evidence".
+   * Next resolves a nonce as
+   * `content-security-policy || content-security-policy-report-only`, so a
+   * second header is only ever safe while the enforcing one carries no
+   * `script-src` — the AGL-523 shadowing shape. The enforcing policy above now
+   * carries the reporting tail instead, which is where a post-flip violation
+   * belongs anyway.
+   */
   // The deliberate, versionless platform fingerprint (AGL-2088), replacing the
   // accidental `x-aglyn-package-version` / `x-aglyn-process-version` pair that
   // shipped from `next.config` on every response of every site regardless of

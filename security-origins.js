@@ -878,11 +878,23 @@ function tenantImgSrcDirective(
   isProduction,
   approvedImageHosts,
   runsMeasurement,
+  siteOrigins,
 ) {
   const development = isProduction
     ? []
     : ['http://localhost:*', 'http://127.0.0.1:*']
   const sources = ["'self'", 'data:', 'blob:']
+    // THE SITE'S OWN ADDRESSES, always (AGL-1152).
+    //
+    // `'self'` is only the origin the page was SERVED from, and a site with a
+    // custom domain attached has two: `{subdomain}.{apex}` and the domain
+    // itself. Content authored before an attach references the platform
+    // subdomain; content authored after references the custom domain; a
+    // visitor gets whichever origin they arrived on, so on an enforced policy
+    // one of the two halves is refused on its own site. The owner should not
+    // have to approve their own address to make their own images load, and
+    // would have no way to know they must.
+    .concat(approvedImageHostSources(siteOrigins))
     .concat(TENANT_IMAGE_ORIGINS)
     // Only for a site that configured a measurement id. A site with no
     // analytics has no reason to permit an ad network's beacon, and a policy

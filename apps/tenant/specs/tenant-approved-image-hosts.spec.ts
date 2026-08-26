@@ -301,3 +301,46 @@ describe('advertising vendors are covered by the CSP (AGL-1152)', () => {
     ).toBe(true)
   })
 })
+
+/**
+ * A SITE'S OWN ADDRESSES ARE NEVER THE OWNER'S PROBLEM (AGL-1152).
+ *
+ * `'self'` is only the origin the page was SERVED from, and a site with a
+ * custom domain attached has two of them. Content authored before the attach
+ * references `{subdomain}.{apex}`; content authored after references the
+ * domain; a visitor arrives on one or the other. Under an enforced policy that
+ * means one half of a site's own images is refused ON ITS OWN SITE — and the
+ * owner has no way to know they were supposed to approve their own address.
+ */
+describe('the site owns its own origins (AGL-1152)', () => {
+  it('admits the platform subdomain AND the custom domain, without approval', () => {
+    const directive = tenantImgSrcDirective(true, [], false, [
+      'acme.aglyn.app',
+      'acme.com',
+      'www.acme.com',
+    ])
+    expect(directive).toContain('https://acme.aglyn.app')
+    expect(directive).toContain('https://acme.com')
+    // `liveCustomDomain` treats the two as one site, so an author can
+    // legitimately have referenced either.
+    expect(directive).toContain('https://www.acme.com')
+  })
+
+  it('runs them through the same parse as everything else', () => {
+    // They arrive from a document, so they are data like any other. A cname
+    // someone wrote by hand as a URL must not widen the policy.
+    const directive = tenantImgSrcDirective(true, [], false, [
+      'https://evil.com; script-src *',
+      'ok.example.com',
+    ])
+    expect(directive).not.toContain(';')
+    expect(directive).not.toContain('script-src')
+    expect(directive).toContain('https://ok.example.com')
+  })
+
+  it('a site with no custom domain is unchanged', () => {
+    expect(tenantImgSrcDirective(true, [], false, [])).toBe(
+      tenantImgSrcDirective(true, []),
+    )
+  })
+})
