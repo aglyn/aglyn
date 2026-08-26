@@ -104,6 +104,13 @@ describe('docs security headers (AGL-1152)', () => {
     expect(hsts).toContain('includeSubDomains')
   })
 
+  it('isolates the origin with COOP', () => {
+    // The STRICT value, which the two app surfaces cannot use: `same-origin`
+    // also severs popups a page opens, and Firebase's `signInWithPopup` hands
+    // its credential back through that reference. Docs opens no such popup.
+    expect(valueOf('Cross-Origin-Opener-Policy')).toBe('same-origin')
+  })
+
   it('⛔ ships NO script-src until the inline hashes are computed at build time', () => {
     // The guard that matters most here, and the one a future change is most
     // likely to trip: adding `script-src` WITHOUT hashing the five inline

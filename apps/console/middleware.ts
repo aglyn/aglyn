@@ -377,6 +377,19 @@ export async function middleware(request: NextRequest) {
     // the two can never drift apart.
     const endpoints = reportingEndpointsHeader(secureTransport)
     if (endpoints) res.headers.set('Reporting-Endpoints', endpoints)
+    /**
+     * ORIGIN ISOLATION (AGL-1152). Severs `window.opener` for any cross-origin
+     * page that opens the console — the tabnabbing family, and the
+     * precondition for cross-origin isolation later.
+     *
+     * ⚠️ `same-origin-allow-popups`, NOT `same-origin`. Plain `same-origin`
+     * also severs popups the console OPENS, and Firebase's `signInWithPopup`
+     * hands its credential back through exactly that reference: federated
+     * sign-in would break as a popup that closes and signs nobody in. The
+     * commerce console's `window.open('')` + `document.write` receipt and POS
+     * windows are same-origin `about:blank` and unaffected either way.
+     */
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
     // ONE policy carrying script-src and the base directives together, so it is
     // self-consistent by construction: the nonce Next stamps on scripts is read
     // from this exact string. Splitting them is what shadowed the nonce — see

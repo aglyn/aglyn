@@ -748,6 +748,23 @@ export const middleware: NextMiddleware = async (req, event) => {
   // http the pair delivers nothing at all (AGL-1788; the measured table lives
   // with `reportingDirectives`). Published customer sites are https, so this
   // changes nothing for them; it is `nx serve tenant` that was silent.
+  /**
+   * ORIGIN ISOLATION (AGL-1152). Severs the `window.opener` relationship with
+   * any cross-origin page that opens this one, which is what stops a malicious
+   * opener from poking at this document — the "tabnabbing" family, and the
+   * precondition for cross-origin isolation later.
+   *
+   * ⚠️ `same-origin-allow-popups`, NOT `same-origin`, and the difference is
+   * load-bearing: plain `same-origin` also severs popups this page OPENS, and
+   * Firebase's `signInWithPopup` depends on the opener reference to hand the
+   * credential back. Federated sign-in would break silently — a popup that
+   * closes and never signs anyone in. `allow-popups` keeps that direction
+   * working while still isolating this document from a hostile opener.
+   */
+  response.headers.set(
+    'Cross-Origin-Opener-Policy',
+    'same-origin-allow-popups',
+  )
   const endpoints = reportingEndpointsHeader(secureTransport)
   if (endpoints) response.headers.set('Reporting-Endpoints', endpoints)
   /*
