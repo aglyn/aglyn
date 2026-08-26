@@ -382,7 +382,7 @@ export interface OrgEntitlements {
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
   /** Included customer REST API requests per calendar month (AGL-634);
-   * beyond it, metered overage per 1,000 where the plan prices it. Only
+   * Beyond it, metered overage per 1,000 where the plan prices it. Only
    * Business/Advanced carry `apiAccess`, so lower tiers are 0. */
   apiRequestsPerMonth?: number
   /** Dynamic data caps — org-scoped (AGL-239/240): datasets are shared
@@ -392,7 +392,7 @@ export interface OrgEntitlements {
   maxDatasetsPerOrg?: number
   recordsPerDataset?: number
   /** Included aggregate dataset storage (MB) across the org (AGL-240);
-   * beyond it, metered overage per GB where the plan prices it. */
+   * Beyond it, metered overage per GB where the plan prices it. */
   dataStorageMbPerOrg?: number
   /** @deprecated Legacy host-keyed override (pre-AGL-240); resolved into
    * `datasetsPerOrg` by `resolveOrgEntitlements`. */
@@ -524,9 +524,6 @@ export type OrgCollaboratorAllocations = Record<string, number>
  * The monthly storage-overage spend cap an org CHOSE for itself (AGL-1886,
  * corrected 2026-08-18).
  *
- * don't let it make us lose revenue or cost us
- * money, it should be a control by the end user, to prevent overage or usage
- * alerts rather, we just want to minimize churn.
  *
  * So this document is **absent by default and absent is the normal state**.
  * Storage past a metered plan's included band bills without it; the customer

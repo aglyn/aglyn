@@ -37,8 +37,6 @@ import { type ExtendedFieldMeta, validationError } from './validation-error'
  * CssBorder (AGL-2486, Zach 2026-08-22): a thickness box plus a line-style
  * picker for anything holding a CSS border shorthand.
  *
- * This is not very friendly for
- * someone who does not know code. Every control in that group was a raw
  * shorthand text box — `Border` wanted you to type `1px solid`, the four
  * per-side fields wanted the same, and `Outline` wanted `2px solid`. A
  * border is two obvious choices (how thick, what kind of line) plus a
@@ -312,7 +310,7 @@ export const CssBorderField = (props: CssBorderProps) => {
             : selected
               ? CSS_BORDER_STYLE_SHORT_LABELS[selected as CssBorderStyle]
               : // An unset picker is one em-dash wide, exactly like the unit
-                // picker on a length field. The words "line style" here read
+                // Picker on a length field. The words "line style" here read
                 // as help but behave as layout: they push the adornment over
                 // the field's own label on every per-side border.
                 '—'

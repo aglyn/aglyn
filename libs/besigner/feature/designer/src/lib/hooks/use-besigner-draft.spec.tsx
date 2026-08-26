@@ -55,9 +55,6 @@ jest.mock('@aglyn/aglyn', () => {
  * What the crash net may and may not do once a document is shared
  * (AGL-2486).
  *
- * if we come into a working
- * session we should be seeing the draft everyone is working on, and
- * restoring a draft probably would cause issues? — and it does. Restoring
  * is a whole-map replace which the co-edit mirror publishes verbatim, so on
  * the running editor a peer's freshly created node was deleted on the peer's
  * own screen, and a stale restore reverted a colleague's SAVED work in a way
@@ -141,7 +138,7 @@ describe('useBesignerDraft restore verdict (AGL-2486)', () => {
     const { state } = setup('ms:100')
 
     // An earlier pass answered this with a blocked Restore and a Discard
-    // still on offer. the question was why the prompt is there at all,
+    // still on offer. Zach’s question was why the prompt is there at all,
     // and it is not: a canvas the mirror has already written to is not a
     // canvas anybody is recovering (AGL-2486).
     expect(state().available).toBe(false)

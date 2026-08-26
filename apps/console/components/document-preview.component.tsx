@@ -628,7 +628,6 @@ export function DocumentPreview(props: DocumentPreviewProps) {
                     ? ` — recorded "${consentPreview.stored.status}"`
                     : ' — awaiting the visitor choice') +
                   // The advertising verdict, reported only where the site asks
-                  // the question (AGL-2486). I only see GA off this
                   // very caption; it named one category because it only ever
                   // knew about one.
                   (consentPreview.asksAds

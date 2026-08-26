@@ -68,8 +68,6 @@ describe('richTextToPlain', () => {
 /**
  * AGL-2486 — the break the Attributes panel could not see.
  *
- * I also still do not see the line break in the text field in the
- * attributes panel. Measured on `yFjgqiG2wm`, node `C3rodYc1Gd` stores
  * `html: "Your entire web <div>presence. </div>"` beside
  * `children: "Your entire web presence. "`. The canvas renders `html` and
  * shows two lines; the panel renders `children` and showed one. The two

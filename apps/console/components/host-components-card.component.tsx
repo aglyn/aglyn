@@ -169,8 +169,6 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   /**
    * The readout the page header renders (AGL-693).
    *
-   * Reusable components is also missing the usage cap notice in the
-   * header. It was left out on the argument that `reusableComponents` is a
    * BOOLEAN entitlement, so there is no denominator to print — which was the
    * wrong conclusion from a true premise. The denominator is exactly what a
    * boolean says: a plan that grants it caps nothing (`∞`, which is what

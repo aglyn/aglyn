@@ -18,10 +18,6 @@
 /**
  * A report names the workspace the reporter was IN, or names none (AGL-2486).
  *
- * I was in the staff console
- * and therefore was not viewing an org but those fields said there was an org
- * attached to it. If we are not viewing an org the org context should be
- * nothing.
  *
  * AGL-2485 is the evidence: it recorded `/admin/media-quarantine` as the route
  * and `Test Org` as the organization — a workspace that page has nothing to do

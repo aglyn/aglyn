@@ -139,7 +139,7 @@ describe('estimateMonthlyUsageCost', () => {
         {
           // 10 GB past the 2 GB band → 10 × $0.026 = $0.26
           storageBytes: (included.storageGb + 10) * GB,
-          // exactly the band → free, and it must not drag storage down
+          // Exactly the band → free, and it must not drag storage down
           pageViews: included.pageViews,
           // 200 past the 200 band → 200 × $0.00005 = $0.01
           formSubmissions: included.formSubmissions + 200,
@@ -251,8 +251,6 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   })
 
   /**
-   * The Sept-1 lock, pinned ($0.0338/GB-mo · $0.13/1k page
-   * views · $0.065/1k form submissions. Those are the CUSTOMER-facing figures,
    * so they are asserted post-markup — the form the published page states and
    * the form a customer can check. `published-pricing-table-parity.spec.ts`
    * pins the same three figures from the other direction, as transcribed off

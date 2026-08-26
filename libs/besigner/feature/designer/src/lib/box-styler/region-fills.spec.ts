@@ -22,8 +22,6 @@ import { regionFills, type RegionFills } from './region-fills'
 /**
  * The box diagram's dark mode (AGL-2486).
  *
- * we are also missing a dark mode version of colors, this is too
- * bright on dark mode. The console runs MUI with CSS variables and
  * `colorSchemeSelector: 'class'` — measured in the running app, `:root,
  * .light` and `.dark` each redefine `--mui-palette-*` — so a fill built
  * only from palette VARIABLES re-resolves when the class flips, with no
@@ -139,7 +137,7 @@ describe('the box diagram gets its colour from the theme, never from literals', 
     // value is chosen by CSS at paint time, not by JS at build time.
     const darkFills = regionFills(theme.vars as any)
     expect(darkFills).toEqual(fills)
-    // and the ink the textures are carried by is the one token that is
+    // And the ink the textures are carried by is the one token that is
     // near-black on light and near-white on dark.
     expect(fills.margin.background).toContain('text-primaryChannel')
   })

@@ -70,10 +70,6 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
  * `page.tsx` files at the same component. That kept the data layer single —
  * which was the point — and bought a defect with it:
  *
- * The content collection page flashes before the content detail page
- * appears, that mean they are not separate pages, they need to be actual
- * separate files and routes in the app directory just like any other page in
- * the console.
  *
  * He is right, and the flash is structural rather than cosmetic. One component
  * cannot render the detail until its buffer is seeded, and the buffer is

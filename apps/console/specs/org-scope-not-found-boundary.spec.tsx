@@ -18,8 +18,6 @@
 /**
  * The URL stays authoritative on the NOT-FOUND boundary (AGL-2486).
  *
- * We have access to both orgs but even though the url has a different
- * org in it, it still chose to use a different org in the switcher. Address
  * bar `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV`, switcher chip
  * "Sale Test".
  *
@@ -143,7 +141,7 @@ describe('the org scope on a route with no matched [orgSlug] (AGL-2486)', () => 
   })
 
   it('resolves the workspace the URL NAMES on the not-found boundary', () => {
-    // the exact URL. `/screens/[screenId]` is not a route — the editor
+    // Zach's exact URL. `/screens/[screenId]` is not a route — the editor
     // lives at `/screens/[screenId]/versions/[versionId]/…` — so this renders
     // the not-found boundary with an empty params bag.
     openAt('/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV')

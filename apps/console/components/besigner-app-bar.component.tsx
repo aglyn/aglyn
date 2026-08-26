@@ -300,9 +300,6 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           {documentSwitcher}
           <HistoryControlsComponent sx={{ flexGrow: 1 }} />
           {/*
-           * Presence leads the control group (AGL-2486). We also
-           * should probably move all of them to be before the theme mode
-           * switcher.
            *
            * It also fixes the lopsided spacing he saw. Sitting last, the
            * cluster had the `Divider`'s `ml: spacing(2) !important` on its

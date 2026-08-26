@@ -21,8 +21,6 @@
  * Linear is Aglyn's issue tracker, so a bug a customer hits belongs where a
  * bug we find goes — not in a Firestore collection nobody opens. Reports land
  * in the **Customer bug reports** project, never mixed into the engineering
- * backlog: tracked in a separate linear project then our
- * primary one.
  *
  * That separation survives because the Sept-1 cut is defined by the
  * `launch-blocker` LABEL, not by an open-issue count — so inbound volume,
@@ -121,9 +119,6 @@ export interface ReportField {
 /**
  * What each kind of report asks for (AGL-2486).
  *
- * provide more fields to the issue report to really
- * encourage greater detail and this way it will naturally moderate/limit how
- * many we get. The friction is deliberate — but it is aimed, not sprayed.
  * Nothing here asks for a fact the server can observe for itself: the route,
  * org, host, role, plan, app version, build id, browser, viewport and release
  * flags are all attached automatically and are more reliable than what

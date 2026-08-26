@@ -22,7 +22,6 @@ import { presenceChipTooltip } from '../components/document-presence-chips.compo
 /**
  * A detail page reports the room WITHOUT joining it (AGL-2486).
  *
- * identify who is currently in the document already before joining.
  * The word doing the work there is BEFORE. An affordance that announces the
  * person reading it has destroyed the thing it was built to report: once a
  * detail page joins, everybody browsing a site is listed as editing, and the

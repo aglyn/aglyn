@@ -65,7 +65,6 @@ export interface GlobalSearchDialogProps {
  *
  * ## The dead click, named
  *
- * console search does not seem to do anything when you click on it.
  * Driven against a real signed-in console, the row markup turned out to be
  * sound — the anchor carries its `href`, `AppLink` resolves it through
  * `NextLink`, and clicking one navigates. Two other things were producing the

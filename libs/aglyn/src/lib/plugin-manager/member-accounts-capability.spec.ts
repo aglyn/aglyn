@@ -28,11 +28,6 @@ import {
 /**
  * The per-site user-accounts capability (AGL-2486).
  *
- * the members pages (signin, signup, recover etc) for
- * hosts should be visitable unless user accounts features is turned on ...
- * they should not be enabled by default. We should also provide the option
- * for an org/agency to enable that kind of feature on a per site basis just
- * like the other core plugins.
  *
  * The example is our own marketing site: `aglyn.com/signin` served a member
  * sign-in form while the real console sign-in lives on `app.aglyn.com`. A

@@ -223,7 +223,7 @@ type SectionWidth = 'md' | 'lg' | 'xl'
  * One page band: a `Container` at a stock width, carrying the band's own
  * vertical rhythm (AGL-1932).
  *
- * the standard, AGL-1298: *"Every section should have container component.
+ * Zach's standard, AGL-1298: *"Every section should have container component.
  * We should be using the container component for everything and even if we
  * want something to be full width we use the full width attribute. Otherwise
  * it would be XL."* These templates seeded **zero** Containers, so every site
@@ -234,8 +234,6 @@ type SectionWidth = 'md' | 'lg' | 'xl'
  * have to guess:
  *
  * - `xl` — a marketing band: hero, feature row, product grid, gallery. The
- *   default, and XL is fine for the default
- *   page width on the marketing site, I like that.
  * - `lg` — the deliberate middle case: wide but text-led and interactive.
  *   Cart and account are the honest instances, not decoration.
  * - `md` — long-form prose and narrow form columns, on READING grounds: at

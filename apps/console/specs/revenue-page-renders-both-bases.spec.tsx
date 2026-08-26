@@ -18,7 +18,7 @@
 /**
  * BOTH BASES, AND THE GAP, REACH THE SCREEN (AGL-2486).
  *
- * the requirement was for contracted and settled revenue "both, side by side" — and
+ * Zach asked for contracted and settled revenue "both, side by side" — and
  * the gap between them is the part that does the work, because two totals
  * with a reader left to subtract has wasted the decision.
  *
@@ -359,7 +359,6 @@ describe('a figure that cannot be trusted is never shown as a total', () => {
 })
 
 /**
- * The gap model, and this negative number is confusing (AGL-2486).
  *
  * On July 2026 in production the gap read `$-25.00` with the whole amount as
  * "unexplained residual". The arithmetic was right and the MODEL was wrong:

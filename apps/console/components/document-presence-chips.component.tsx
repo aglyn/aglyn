@@ -23,9 +23,6 @@ import type { PresentPerson } from '../hooks/use-presence-summary'
 /**
  * Who is already in this document, small enough for a list row (AGL-2486).
  *
- * add the presence avatars indicators to the detail page and list rows
- * as well to easily identify who is currently in the document already before
- * joining.
  *
  * ## Not a second avatar
  *

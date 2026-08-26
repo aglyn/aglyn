@@ -195,8 +195,6 @@ describe('MemberAvatar (AGL-1683)', () => {
   it('rings a PHOTO avatar in the identity colour (AGL-2486)', () => {
     // A photo covers the background completely, so on exactly the sessions
     // that have a picture the one signal tying the avatar to its cursor and
-    // its selection box was invisible. right now only those without an
-    // image can you tell because it uses the background.
     const { container } = render(
       <MemberAvatar
         photoURL="https://lh3.googleusercontent.com/a/ada"
@@ -213,9 +211,6 @@ describe('MemberAvatar (AGL-1683)', () => {
     // This REPLACES an earlier assertion that an initials chip is left
     // unringed. That reasoning — the background already carries the colour, so
     // a same-colour ring adds no information — was correct and incomplete.
-    // I know we are using the background color on the avatars with no
-    // picture, but it should still have a border, because now they are
-    // different sizes. A ring is geometry as well as information.
     const { container } = render(
       <MemberAvatar colour="#9334e6" name="Ada Lovelace" />,
     )
@@ -223,7 +218,7 @@ describe('MemberAvatar (AGL-1683)', () => {
   })
 
   it('gives a photo chip and an initials chip the SAME painted size', () => {
-    // the acceptance test, stated as he stated it: every chip in the stack
+    // Zach's acceptance test, stated as he stated it: every chip in the stack
     // occupies the same space. Asserted on painted extent, because the
     // bounding boxes are equal either way — see `paintedExtent`.
     const photo = render(
@@ -300,9 +295,6 @@ describe('memberInitials', () => {
  *
  * The ring is dashed because the CANVAS is. `collaborator-overlays` draws a
  * dashed outline around whatever your other session has selected, from the
- * same `entry.colour`. go ahead and go back to the dashed border on the
- * avatars when it is you in the other tabs so it matches what appears in the
- * canvas. So the two signals are not redundant with each other — they are one
  * statement made consistently across two SURFACES. Making the chip solid did
  * not delete a duplicate; it made the app contradict itself.
  *
@@ -353,7 +345,7 @@ describe('a presence chip distinguishes your own session (AGL-2486)', () => {
   })
 
   it('gives EVERY chip in a stack the same painted size, overflow included', () => {
-    // the acceptance test in his own terms: "they are different sizes".
+    // Zach's acceptance test in his own terms: "they are different sizes".
     // Over the whole rendered row, not one component in isolation — the `+N`
     // overflow chip is not a `MemberAvatar`, so fixing that component left it
     // 4px smaller than everything beside it. That gap was found by measuring

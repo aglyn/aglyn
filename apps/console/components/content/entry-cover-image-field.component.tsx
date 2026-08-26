@@ -39,8 +39,6 @@ export interface EntryCoverImageFieldProps {
 /**
  * The entry's cover image, WITH the picture on screen (AGL-2498).
  *
- * make the image previewable just like we have on the screen detail
- * pages. The field was a bare text input holding
  * `media:DXnRbPH4CQ/4sY9JMK9fV` beside a "Choose" button — an opaque
  * reference an author cannot check, on the surface they share most
  * deliberately. Every other image field in the console (the screen's social

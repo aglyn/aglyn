@@ -294,8 +294,6 @@ describe('AGL-2316 · re-acceptance fires, and does not fire', () => {
 
 /**
  * The two facts the banner needs to acknowledge an existing acceptance rather
- * than read like a first-time ask (don't phrase it that
- * they havent agreed before it creates confusion and frustration.
  *
  * WHEN they last agreed, and WHAT moved since. Both are derived from records
  * that already exist — no changelog mechanism is invented, and where the
@@ -344,7 +342,7 @@ describe('AGL-2316 · when they last agreed, and what moved since', () => {
       ],
       currentVersion: 'v6',
       currentDocuments: [
-        // terms re-pinned, privacy untouched.
+        // Terms re-pinned, privacy untouched.
         { ...DOCUMENTS[0], sha256: 'c'.repeat(64) },
         PRIVACY,
       ],

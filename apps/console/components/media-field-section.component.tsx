@@ -24,8 +24,6 @@ import type { ReactNode } from 'react'
  * A media control that can be its own card OR a section inside someone else's
  * (AGL-2486).
  *
- * You removed the field from entity you need to move
- * the other fields too otherwise it looks separated and *"Social image could
  * be moved up into the SEO part and not its own card."*
  *
  * The favicon, the entity logo and the social image are all `seo.*` fields —

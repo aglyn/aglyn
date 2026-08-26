@@ -48,8 +48,6 @@ import {
 /**
  * The org's own USAGE BUDGET — set it, see it, clear it (AGL-1528).
  *
- * *our usage metering, usage alerts, budgets for
- * usage alerts, similar to how google cloud charges*; and, on the same day,
  * the lens this route exists to satisfy: "*Always make sure features are
  * available in the console and not just that the capability exists.*"
  *

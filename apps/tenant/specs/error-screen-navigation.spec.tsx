@@ -23,8 +23,6 @@
 /**
  * A visitor on the fallback error screen can navigate away (AGL-2187).
  *
- * there is no ability to navigate away that is
- * horrible UX. Two halves have to hold for that to be fixed, and only one of
  * them is a render:
  *
  * 1. **The screen renders what it is given.** Nav in the header, the same

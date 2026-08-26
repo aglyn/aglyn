@@ -33,8 +33,6 @@ import { useFirestoreDoc } from './use-firestore-doc'
  * address with no space in it — produced the single letter `Z` while the
  * presence stack beside it showed `ZG`.
  *
- * The name was never missing. `users/{uid}` holds `firstName: "`,
- * `lastName: Gover"` for that account (and for the Google one), the org
  * member doc holds `displayName: "Zach Gover"`, and presence had already
  * worked around the gap by reading the ID token's IdP claims. Three surfaces,
  * three different answers to "what is this person called", and the one the

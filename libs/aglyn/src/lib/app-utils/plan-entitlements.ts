@@ -205,9 +205,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       redirects: false,
       screenAnalytics: false,
       /**
-       * ON for FREE (AGL-1152). Isn't the cdn offered on all plans
-       * because that's what saves us money right or? — it is, and gating it
-       * had the economics backwards.
+       * Had the economics backwards.
        *
        * A site without this entitlement does not simply lose a nicety: it
        * falls back to absolute `firebasestorage.googleapis.com` URLs, so every
@@ -1474,8 +1472,6 @@ export function orgMonthlyCogsUsd(
      * Already dollars, so ×1 — see `OrgUsageRollupInput.assistCostUsd`.
      *
      * This is the ONE meter on the platform whose unit cost is not a fraction
-     * of a cent. `assist-usage.ts` records `estCostUsd` citing Assist
-     * must not eat margins constraint by name, and until now nothing in the
      * margin model read it: the discount guardrail priced six meters that
      * together measured $0.0000054 for the largest real org, and ignored the
      * only line item that can plausibly clear the $2/site floor on its own.
@@ -1887,7 +1883,7 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
  * "fixing" this add.
  *
  * `posRegisters` IS NOT ADDED HERE, and this is the fix, not an omission
- * (AGL-1775, the 2026-08-17 decision). The register add-on is priced "per
+ * (AGL-1775, Zach's 2026-08-17 decision). The register add-on is priced "per
  * extra register/location" and enforced PER SITE, so folding the org-wide
  * purchase into an org-level value every site inherits sold one register and
  * delivered `hostLimit` of them. `seatAddons.posRegisters` is now a POOL and
@@ -2144,7 +2140,7 @@ export function resolveHostCollaboratorCap(
  *
  * ## THE GRANDFATHER BOUNDARY — explicit, and this field is it
  *
- * the decision, 2026-08-19: fix the cap, and do NOT evict or lock out any
+ * Zach's decision, 2026-08-19: fix the cap, and do NOT evict or lock out any
  * org that is currently above the corrected cap.
  *
  * The boundary is drawn between two different questions, and they are
@@ -2669,7 +2665,7 @@ export function marketplacePriceCostNote(
  * (AGL-2343): the minimum stated up front, so a publisher meets it while
  * typing instead of discovering it as a refusal.
  *
- * the rule — a capability that is not surfaced in the console does not
+ * Zach's rule — a capability that is not surfaced in the console does not
  * count as shipped — applies to a REFUSAL as much as to a feature: a floor
  * only a route knows about is a trap.
  *
@@ -3065,7 +3061,7 @@ export function checkSeatQuota(
       ? pricing.extraSeatMonthlyUsd
       : pricing.extraCollaboratorMonthlyUsd
   // `members` IS NOT ADDED HERE, and this is the fix, not an omission
-  // (AGL-2439, the 2026-08-19 decision) — the AGL-1775 shape, applied to
+  // (AGL-2439, Zach's 2026-08-19 decision) — the AGL-1775 shape, applied to
   // the key that never got it. `seatAddons.members` is an ORG-LEVEL purchased
   // quantity and `membersPerHost` is enforced PER SITE, so folding one into
   // the other handed every site the whole purchase: an org with 20 sites that
@@ -3580,7 +3576,7 @@ export function checkBandwidthAbuseCeiling(
  * incident? (AGL-2155)
  *
  * Only on a plan that does NOT meter the infra pass-through — which today is
- * free/hobby, and is precisely the requirement that free "always actually
+ * free/hobby, and is precisely Zach's requirement that free "always actually
  * stays free". On free the traffic is uncompensated, so serving it is a
  * straight loss and the least destructive way to stop the bleeding is to stop
  * paying for the expensive render.

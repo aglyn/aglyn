@@ -23,8 +23,6 @@
 /**
  * The console's budget surface (AGL-1528).
  *
- * *Always make sure features are available in
- * the console and not just that the capability exists.* The cron can
  * evaluate a budget with no route at all — and would then be alerting on a
  * number no customer could ever have chosen. This suite is the proof that a
  * customer can set one, see one, and remove one.

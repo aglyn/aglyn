@@ -586,8 +586,6 @@ describe('style field groups (AGL-540/587)', () => {
 
   /**
    * Plain-English controls for the fields that were raw CSS shorthand
-   * (AGL-2486, This is not very friendly for someone who
-   * does not know code..
    *
    * Asserted at the DECLARATION end, like the length editors above, so a
    * field that quietly reverts to a text box fails here rather than in a
@@ -684,8 +682,6 @@ describe('style field groups (AGL-540/587)', () => {
   })
 
   /**
-   * ROW RHYTHM (AGL-2486, Lot's of spacing in here…
-   * compared to here..
    *
    * Both halves of this are invisible in the source — an orphan depends on
    * a field's NEIGHBOURS, and a wrapped caption depends on a width nobody
@@ -934,7 +930,7 @@ describe('per-side borders (AGL-1199)', () => {
   })
 
   it('is scheme-agnostic — only the colour follows dark mode', () => {
-    // borderColor is scheme-scoped; the widths are not, so previewing
+    // BorderColor is scheme-scoped; the widths are not, so previewing
     // dark must not fork a divider into the dark slice.
     for (const side of SIDES) expect(isSchemeScopedStyleField(side)).toBe(false)
     expect(isSchemeScopedStyleField('borderColor')).toBe(true)

@@ -57,9 +57,6 @@ import { postLegalAcceptance } from '../utils/legal-consent'
  * ─────────────────────────────────────────────────────────────────────────
  * THE WORDING IS THE FEATURE (2026-08-24)
  *
- * Okay then leave it and they can agree again, but don't
- * phrase it that they havent agreed before it creates confusion and
- * frustration, I know I agree yesterday (but we updated overnight).
  *
  * ⚠️ RE-ACCEPTANCE ON A VERSION CHANGE STAYS. An earlier pass on the same day
  * was briefed to suppress it — "accept once, never ask again" — and then to

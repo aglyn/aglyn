@@ -297,8 +297,6 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
       // Withheld when there is no template: the besigner would open on an
       // id with no document behind it (AGL-706).
       // Presence sits BESIDE the button that would join the room (AGL-2486).
-      // identify who is currently in the document already before
-      // joining — so it belongs where the joining decision is made, not in a
       // card further down the page. It watches without announcing: a page
       // that joined on arrival would report every browser as an editor.
       headerRight={

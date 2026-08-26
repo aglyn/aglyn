@@ -28,7 +28,6 @@ import { resolveUserName } from './use-user-name'
  * blank for the enterprise tier. Measured on production: the SSO account
  * `zach@aglyn.com` (tenant `aglyn-org-y5v14`) has `displayName: undefined` on
  * its auth record, while `users/IHumyGGhGxZKjVV26qCRx5Okf573` holds
- * `firstName: "`, `lastName: Gover"`. Presence had already worked around
  * the same gap by reading the ID token's IdP claims, which is why the two
  * surfaces disagreed.
  *

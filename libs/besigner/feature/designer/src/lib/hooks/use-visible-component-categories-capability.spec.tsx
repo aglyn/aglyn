@@ -32,8 +32,6 @@ jest.mock('./use-aglyn-besigner-flag', () => ({
  * The Members blocks follow the per-site USER ACCOUNTS capability, not the
  * bundle that happens to ship them (AGL-2486).
  *
- * Memberships are disabled for aglyn-org but yet we
- * still see the components in besigner — the Elements panel offering
  * Password recovery, Member sign-in and Member sign-up on a site whose
  * `/signin`, `/signup` and `/recover` now 404.
  *
@@ -178,9 +176,6 @@ describe('Members blocks follow the user-accounts capability (AGL-2486)', () => 
    *
    * MARK - the GENERAL rule, not a members-shaped special case
    *
-   * That hiding membership features if the plugin is
-   * turned off should also work for commerce if commerce is turned off and
-   * the same thing with any other plugin for that matter.
    *
    * The rule is: an element whose PROVIDING plugin is disabled for this site
    * is not offered on this site. That already held for every bundle through

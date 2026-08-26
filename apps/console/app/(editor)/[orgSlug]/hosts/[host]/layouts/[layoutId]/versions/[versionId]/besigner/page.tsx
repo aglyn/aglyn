@@ -153,10 +153,7 @@ function LayoutBesignerPage(props) {
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
   /**
-   * Only the LIVE version has a draft (AGL-1152). versions should not
-   * have a draft, only the current live version should be able to have a
-   * draft — a non-live version is already somewhere to work without touching
-   * the live site, so a draft there answers a question versions already
+   * The live site, so a draft there answers a question versions already
    * answer. A layout is the sharper case for the gate, not the softer one: it
    * has no route of its own, so the only way its edits reach a visitor is the
    * version pointer, and every screen wrapped in it changes at once.

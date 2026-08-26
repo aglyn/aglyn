@@ -137,7 +137,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       await renderPanel({})
       const label = screen.getByText('Border', { selector: '.label.border' })
       expect(label.closest('.borderRing')).toBeTruthy()
-      // and the padding label is inside the padding box, same rule
+      // And the padding label is inside the padding box, same rule
       const padding = screen.getByText('Padding', {
         selector: '.label.padding',
       })
@@ -354,7 +354,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     })
   })
 
-  describe('the BORDER label chip (decided)', () => {
+  describe('the BORDER label chip (Zach, 2026-08-23)', () => {
     /**
      * The CSS emotion actually emitted for one selector, whitespace
      * removed.
@@ -430,7 +430,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
           try {
             walk(sheet.cssRules, '')
           } catch {
-            // unreadable sheet
+            // Unreadable sheet
           }
         }
       }
@@ -486,15 +486,13 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
         try {
           walk(sheet.cssRules, '')
         } catch {
-          // unreadable sheet
+          // Unreadable sheet
         }
       }
       return found
     }
 
     it('sits on the same opaque chip as MARGIN and PADDING', async () => {
-      // the border label on the box styler needs a background to
-      // make it more legible just like padding and margin labels. The
       // chip painted the band's own stripes, and because `background` is
       // a SHORTHAND that also reset the base chip's opaque paper ground —
       // so the one label sitting on the figure's only patterned region
@@ -562,7 +560,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       expect(NATURAL_GAP[340]).toBeLessThan(4)
       expect(DIAGRAM_WIDTH[340]).toBeLessThan(PADDING_CHIP_MIN_WIDTH)
 
-      // and the stock panel is well clear of the boundary, so an ordinary
+      // And the stock panel is well clear of the boundary, so an ordinary
       // author never meets it.
       expect(DIAGRAM_WIDTH[375]).toBeGreaterThan(PADDING_CHIP_MIN_WIDTH)
       expect(DIAGRAM_WIDTH[375] - PADDING_CHIP_MIN_WIDTH).toBeGreaterThan(20)
@@ -615,7 +613,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     })
   })
 
-  describe('auto is on the list, for margins only (decided)', () => {
+  describe('auto is on the list, for margins only (Zach, 2026-08-23)', () => {
     /** Open one side's select and read the options it offers. */
     const optionsFor = async (side: string) => {
       act(() => {
@@ -633,7 +631,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       // Its own group: `auto` is not a size, and listing it among the
       // rungs would put "let the browser decide" in a ladder of amounts.
       expect(options.getByText('Automatic')).toBeTruthy()
-      // and the three genuinely different answers stay distinguishable.
+      // And the three genuinely different answers stay distinguishable.
       expect(options.getByText('Not set')).toBeTruthy()
       expect(options.getByText('None')).toBeTruthy()
     })
@@ -670,7 +668,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
         screen.getByLabelText('Space outside — left value').textContent,
       ).toContain('Auto')
       expect(screen.queryByLabelText('Space outside — left amount')).toBeNull()
-      // and the diagram, which already understood the value, shows it.
+      // And the diagram, which already understood the value, shows it.
       expect(
         within(screen.getByLabelText('Space outside — left')).getByText('auto'),
       ).toBeTruthy()

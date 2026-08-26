@@ -145,7 +145,6 @@ describe('publish-time token normalization over stored nodes', () => {
  * What the publish is allowed to READ before it knows there is anything to
  * rewrite (AGL-703).
  *
- * Do another sweep for things like the 53 reads. This block fetched
  * EVERY variable and EVERY function on the site — two `limit(1000)` gets —
  * and only then looked at the version. Almost no version needs either: AGL-188
  * migrated the corpus and the picker has written id-form tokens ever since, so

@@ -60,7 +60,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 /**
  * One entry per editing SESSION currently in a document.
  *
- * A session, not a person (AGL-2486). the call: "we should see co-editing
+ * A session, not a person (AGL-2486). Zach's call: "we should see co-editing
  * regardless anyways if we are in the same account or not". A cursor and a
  * selection belong to a tab, so collapsing two tabs into one entry threw away
  * exactly the thing the overlays draw — and it made your own second window
@@ -138,8 +138,6 @@ export type PresenceStatus =
 /**
  * What the reader should DO about it (AGL-2486).
  *
- * what does this mean? It gives the
- * users no course of action on how to fix it. The old tooltip ended at
  * `Failed at: broker (500)` — a stage name and a status code, in front of a
  * customer. `stage` and `code` are still carried, because whoever debugs this
  * next needs them; they are just no longer the message.
@@ -319,9 +317,6 @@ export const TAB_SESSION_ID =
 /**
  * A colour per SESSION, not per person (AGL-2486).
  *
- * We should also see the same avatar repeated for each of its active
- * sessions all with a different presence color not just consolidated into
- * one. Seeding on `uid:sessionId` is what makes that work: two windows of
  * one account draw the same face in two different colours, and — because the
  * colour is WRITTEN INTO the room entry by the session it belongs to —
  * everyone else sees that session in that same colour too, including the
@@ -346,8 +341,6 @@ function colourIndexFor(key: string): number {
  *
  * ## The bug
  *
- * even though the canvas does not have focus because of the
- * drawer/dialog for aglyn assist the presence does still report cursor. A
  * session typing into the Assist panel kept broadcasting a canvas position, so
  * a colleague saw a cursor implying attention on the document while the person
  * was somewhere else entirely.
@@ -422,7 +415,7 @@ export const PRESENCE_CURRENT_VERSION = 'current'
 /**
  * The room a session belongs in — PER VERSION, not per document (AGL-2486).
  *
- * the call, after seeing the trade-off: you should only see people editing
+ * Zach's call, after seeing the trade-off: you should only see people editing
  * the version you are editing. Presence used to be keyed per document while
  * the co-edit mirror was keyed per version, so two people on different
  * versions of one screen appeared to each other as collaborators while not one
@@ -499,7 +492,6 @@ function report(
  * Each session used to pick its own colour by hashing `uid:sessionId` into a
  * six-entry palette and writing the result into its own RTDB row. Independent
  * picks from a six-wide palette collide about one time in six, which is
- * exactly sometimes our same user gets the same color — two
  * discs purple in one screenshot, purple and orange in the next. Nothing was
  * wrong with the input's uniqueness; the OUTPUT space was small and nobody
  * was reconciling it. Two sessions sharing a colour defeats the entire point
@@ -587,7 +579,7 @@ export function projectRoom(
    * Both halves of that are load-bearing.
    *
    * LIVE, because this used to be every row in the room. A room accumulates
-   * reaped rows between sweeps — the held 15 against a palette of 6 — and
+   * reaped rows between sweeps — Zach's held 15 against a palette of 6 — and
    * once six colours are taken the allocator has nowhere left to probe, so
    * everything after falls back to its raw hash and collides. The sessions
    * actually drawn were a subset of that spoiled pool: two `ZG` chips, one
@@ -632,7 +624,7 @@ export function projectRoom(
       // fallback chain ends at 'Someone', so an entry lacking it is not an
       // entry. It is a stray field under a malformed uid node, or a fixture
       // somebody left behind (an agent wrote two `zzTESTCOLLAB` rows into
-      // PRODUCTION on 2026-08-22, one of them into the org). Rendered,
+      // PRODUCTION on 2026-08-22, one of them into Zach's own org). Rendered,
       // those became the `?` discs Zach reported: `String(undefined ?? '')`
       // is empty, and empty initials draw a question mark.
       //
@@ -703,7 +695,7 @@ export type RoomProjection = ReturnType<typeof projectRoom>
  *
  * ## The runaway this exists to stop
  *
- * in the besigner on a marketing screen — not a warning, a
+ * Zach, 2026-08-24, in the besigner on a marketing screen — not a warning, a
  * React bail-out:
  *
  *   Maximum update depth exceeded.
@@ -1125,7 +1117,7 @@ export function usePresence(options: {
    * WATCH the room without joining it (AGL-2486).
    *
    * For the surfaces that report presence without being an editing session —
-   * a document's detail page, where the ask is to "identify who is
+   * a document's detail page, where Zach's ask is to "identify who is
    * currently in the document already BEFORE joining". Reading someone's
    * answer to that question must not change it: if merely opening a detail
    * page announced you, then everybody browsing would be reported as editing,

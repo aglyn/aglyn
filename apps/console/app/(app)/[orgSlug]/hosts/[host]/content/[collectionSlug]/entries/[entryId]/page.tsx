@@ -24,10 +24,6 @@
  * ## Why this is a real page rather than an alias
  *
  * It was an alias of the collection route for one release, and the alias is
- * The content collection page flashes before the content
- * detail page appears, that mean they are not separate pages, they need to be
- * actual separate files and routes in the app directory just like any other
- * page in the console.
  *
  * One component cannot render an entry until its buffer is seeded from the
  * entries listener, so on a cold load it rendered the only thing it could

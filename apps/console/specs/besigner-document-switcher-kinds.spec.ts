@@ -34,8 +34,6 @@ const SCREEN_BESIGNER = `${EDITOR}/screens/[screenId]/versions/[versionId]/besig
 const LAYOUT_BESIGNER = `${EDITOR}/layouts/[layoutId]/versions/[versionId]/besigner/page.tsx`
 
 /**
- * AGL-2486. Why do we not have a component switcher like we have a
- * screen switcher in the besigner and layout switcher on layouts etc.
  *
  * There was no reason — the switcher's kind union stopped at
  * `'screen' | 'layout'`, and the components editor never mounted it. Source

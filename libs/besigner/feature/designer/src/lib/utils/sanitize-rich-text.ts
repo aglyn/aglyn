@@ -98,8 +98,6 @@ const LINE_BREAKING_TAGS = new Set(['BR', 'DIV', 'P', 'LI', 'UL', 'OL'])
 /**
  * Plain-text projection of markup, for the `children` fallback prop.
  *
- * Line breaks SURVIVE (AGL-2486). I also still do not see the line
- * break in the text field in the attributes panel — and he was right, on
  * a node that really does carry one. Measured on `yFjgqiG2wm`, node
  * `C3rodYc1Gd` stores `html: "Your entire web <div>presence. </div>"` beside
  * `children: "Your entire web presence. "`. The canvas renders `html` and

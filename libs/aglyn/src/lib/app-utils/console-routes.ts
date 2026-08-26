@@ -157,7 +157,6 @@ export enum Route {
   // uniform — the seeded ones were given readable ids (`blog`, `changelog`)
   // and everything created since gets a `createResourceUid`, so routing by id
   // produced `/content/changelog` beside `/content/QgXv7lU_rG` on ONE site.
-  // one is using the id in the url while others use a slug.
   //
   // A slug is the right key on the merits too: it is unique per host and kind
   // (claimed in a transaction by /api/hosts/collections), it is the

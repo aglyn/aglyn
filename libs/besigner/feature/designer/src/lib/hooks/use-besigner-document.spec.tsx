@@ -260,7 +260,7 @@ describe('useBesignerDocument', () => {
     })
 
     /**
-     * Two tabs of ONE account, which is the case the owner lives in — he keeps
+     * Two tabs of ONE account, which is the case Zach lives in — he keeps
      * four open (AGL-2486).
      *
      * The console runs `persistentMultipleTabManager`, so tabs share a cache
@@ -488,11 +488,6 @@ describe('useBesignerDocument', () => {
    * Two people building a page together must both be able to save
    * (AGL-2486).
    *
-   * I made an edit in the top browser, saved it in the bottom
-   * browser, then the alert appeared in the top browser for someone else
-   * saved, the save button is still offered rather than up to date now. But
-   * any user collaborating should be able to save as they all go along and
-   * make changes.
    *
    * The guard used to ask "did the stored document move", which is the wrong
    * question once the co-edit mirror has already delivered their work to

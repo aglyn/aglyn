@@ -841,8 +841,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             `permissionsLoaded && !can('billing.view') ? refusal : …page…`,
             which puts the loading flag in the REFUSAL branch — so while the
             member read was in flight the refusal was false and the else-branch
-            painted the entire ledger. we see it flicker with real
-            data then show this message they shouldn't see it at all. The plan,
+            painted the entire ledger. Zach saw it: "we see it flicker with real
+            data then show this message they shouldn't see it at all." The plan,
             the subscription status, the negotiated price and the renewal date
             were all on screen first, and a screenshot or a screen recording
             keeps them. 200ms is not a mitigation.
@@ -1135,9 +1135,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               ),
             },
             {
-              // The narrow cards read two-abreast (AGL-2486). Many of
-              // these full width cards could share a half width or something
-              // with others. Each of these declared `size: { xs: 12 }`, and a
               // full-width item is its own band in `GridItems masonry` — so
               // seven cards holding one sentence or an empty state each took a
               // full page width, one under the next. `Billing history` was the
@@ -1220,7 +1217,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     {
                       key: 'usage-budget',
                       children: (
-                        // The customer's MONTHLY USAGE BUDGET (AGL-1528) — the // "budgets for usage alerts, similar to how google cloud
+                        // The customer's MONTHLY USAGE BUDGET (AGL-1528) — Zach's
+                        // "budgets for usage alerts, similar to how google cloud
                         // charges". Deliberately BELOW the storage cap and visibly
                         // separate from it: the cap refuses uploads, the budget
                         // refuses nothing and only warns. A card that blurred the two

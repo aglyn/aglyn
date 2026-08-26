@@ -21,8 +21,6 @@
  *
  * ## What was wrong, measured rather than reasoned
  *
- * console search does not seem to do anything when you click on it,
- * but you should also be able to search more than just screens. Driven
  * against the seeded emulator, the palette does this: opening it lists four
  * rows — a site and three pages, one of them literally named **Home** — and
  * typing `home` returns **zero**.
@@ -57,7 +55,7 @@
  *
  * ## Read cost is a design input here, not an afterthought
  *
- * the caveat. Three controls, in order of how much they save:
+ * Zach's own caveat. Three controls, in order of how much they save:
  *
  * 1. **Nothing is read until two characters are typed.** The old palette
  *    spent a read in every group just to be OPENED, to populate a

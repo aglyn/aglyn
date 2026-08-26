@@ -157,10 +157,7 @@ describe('AGL-2185 · configuration', () => {
   })
 
   it('each kind takes its OWN project, and a per-kind var beats the shared one', () => {
-    // each type of issue report feature, bug etc all
-    // options should be filed under its own project in the Customer Reports
-    // team. `question` is left off deliberately: a kind with no project of
-    // its own must fall back rather than file nowhere.
+    // Its own must fall back rather than file nowhere.
     expect(
       linearConfigFromEnv({
         LINEAR_API_KEY: 'lin_api_x',

@@ -66,9 +66,7 @@ export interface BesignerDocumentSwitcherProps {
  */
 const LAYOUT_LIMIT = 25
 /**
- * Reusable components join screens and layouts (AGL-2486). Why do we
- * not have a component switcher like we have a screen switcher. There was no
- * reason — the kind union simply stopped at two.
+ * Reason — the kind union simply stopped at two.
  */
 const COMPONENT_LIMIT = 25
 export type SwitchableKind = 'screen' | 'layout' | 'component'

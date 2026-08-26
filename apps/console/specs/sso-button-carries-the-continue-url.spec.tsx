@@ -23,9 +23,6 @@
 /**
  * AGL-2486 — the SSO button keeps the destination.
  *
- * if you are logged out and it sets the continue url but you need to
- * sign in with sso and click the sso button the url does not carry the
- * continue url and is dropped entirely.
  *
  * `AuthenticatedLayout` sends a session-less deep link to
  * `/signin?continue=…`, and `AuthenticatingLayout` — which wraps the WHOLE
@@ -93,7 +90,7 @@ jest.mock('@aglyn/shared-data-mdi', () => ({
   mdiGoogle: { path: 'M0 0' },
   mdiShieldKeyOutline: { path: 'M0 0' },
 }))
-// href IS the subject — a mock that swallows it makes this spec unable to
+// Href IS the subject — a mock that swallows it makes this spec unable to
 // fail, which is the trap the rest of the suite's `AppLink` mocks fall into.
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ children, href }: { children: ReactNode; href?: string }) => (

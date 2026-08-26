@@ -43,7 +43,6 @@ export const PRESENCE_SUMMARY_POLL_MS = 30_000
 /**
  * Who is already in each document of a site, for list rows (AGL-2486).
  *
- * identify who is currently in the document already before joining.
  *
  * ## Only while the tab is VISIBLE
  *

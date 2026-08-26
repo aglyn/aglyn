@@ -18,8 +18,6 @@
 /**
  * What creating a collection actually SENDS (AGL-2498).
  *
- * New collections need more details to define when creating the
- * collection. The dialog asked for a name; a collection is defined by four
  * things — name, the address it serves, and the two screens that render its
  * list and its entries.
  *
@@ -45,7 +43,7 @@ export interface CollectionCreateInput {
 export type CollectionCreateBody = Record<string, unknown>
 
 /** The create request, always sent first — nothing can point at a document
- * that does not exist yet. */
+ * That does not exist yet. */
 export function collectionCreateBody(
   input: CollectionCreateInput,
 ): CollectionCreateBody {

@@ -18,8 +18,6 @@
 /**
  * A collection entry opens a DETAIL PAGE, not a dialog (AGL-2498).
  *
- * We should probably make the content collections open a detail page
- * rather than a dialog and then it would become a bit more friendly.
  *
  * The friendliness is not cosmetic. A dialog has no address, so it could not
  * be linked, bookmarked or sent to a colleague; Back closed it and lost the
@@ -474,8 +472,6 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
   /**
    * The defect this split exists to remove, asserted directly.
    *
-   * The content collection page flashes before the content detail page
-   * appears, that mean they are not separate pages.
    *
    * While the two screens were one component, the detail could not render
    * until its buffer was seeded from the entries listener — so on a cold load
@@ -662,7 +658,6 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
 /**
  * The entry's address segment is AUTHORED (AGL-2498).
  *
- * We are missing the ability to override the default slug.
  *
  * Two wrongs in one: there was no way to choose an address, and
  * `slug: slugify(title)` on every save silently MOVED a published post
@@ -782,7 +777,6 @@ describe('the collection list addresses its entries (AGL-2498)', () => {
   })
 
   it('addresses the collection by SLUG, not by document id', () => {
-    // one is using the id in the url while others use a slug.
     // Collection document ids are not uniform — seeded ones were given
     // readable ids and everything created since gets a uid — so routing by id
     // put `/content/changelog` beside `/content/QgXv7lU_rG` on one site.

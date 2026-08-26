@@ -620,7 +620,6 @@ describe('delivery is console AND email (AGL-2052)', () => {
 
   it('emails the QUOTA alerts too, not only the budget ones', async () => {
     // AGL-2052 is about EVERY alert this cron sends, not just the new ones —
-    // the storage warning is the one no surprise bill condition
     // actually rests on. Free plan, org library at its whole 250 MB band.
     mockOrgs = [
       {

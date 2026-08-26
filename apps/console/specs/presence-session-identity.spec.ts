@@ -24,8 +24,6 @@ import { assignRoomColours, projectRoom } from '../hooks/use-presence'
 /**
  * Two sessions are told apart on sight (AGL-2486).
  *
- * sometimes our same user
- * gets the same color. We also seem to have question marks on the avatars.
  * Both are failures of the same promise — an avatar per session, each
  * identifiable — and both were invisible to the suite that shipped them,
  * because the colour was picked per session in isolation and the avatar was
@@ -42,7 +40,7 @@ const NOW = 1_000_000
 
 /**
  * Real keys, CHOSEN BECAUSE THEY COLLIDE under the per-session hash this
- * replaced — `uid` is the account and the session ids have the shape
+ * replaced — `uid` is Zach's own account and the session ids have the shape
  * `createResourceUid` produces.
  *
  * Picking arbitrary keys is what makes a test like this worthless: the first
@@ -103,8 +101,6 @@ describe('no two LIVE sessions in a room share a colour', () => {
    * DISJOINTNESS, not determinism (AGL-2486).
    *
    * The previous round moved colour from a per-session hash to a room-wide
-   * assignment and reported it fixed. we have two users with the same
-   * color, this shouldn't happen — two `ZG` chips carrying one red ring.
    *
    * The allocation WAS disjoint. Its INPUT was every row in the room,
    * including reaped ones, and his room held 15 rows against a palette of 6.

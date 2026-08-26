@@ -18,8 +18,6 @@
 /**
  * THE FEATURE MATRIX, GENERATED (AGL-1152).
  *
- * We need to be tracking the feature matrix in these docs as well! idk
- * why that was overlooked. It was overlooked because the pricing docs track
  * PRICES — list prices, transaction ladders, metered unit rates — and a
  * feature matrix is a different object that nothing owned. The visible cost:
  * `mediaCdn` was gated to paid tiers, the row was published on `/pricing` and

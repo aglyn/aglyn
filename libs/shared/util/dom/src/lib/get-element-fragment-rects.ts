@@ -51,8 +51,6 @@ export interface ElementFragmentRects {
  *
  * ## The defect this exists for
  *
- * the element outline doesn't wrap the text on the new line unless
- * you are editing it. The besigner drew selection, hover, the drag
  * affordance and the collaborator selection boxes from ONE
  * `getBoundingClientRect()`. For a block that is right. For an inline run
  * that has wrapped it is not merely imprecise — it is a different shape.

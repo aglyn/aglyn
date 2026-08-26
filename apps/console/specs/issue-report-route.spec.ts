@@ -363,8 +363,6 @@ describe('AGL-2185 · what actually reaches Linear', () => {
   })
 
   it('files into the "Customer bug reports" PROJECT, from configuration', async () => {
-    // tracked in a separate linear project then our
-    // primary one. The destination must be configuration, not a constant —
     // a compiled-in project id would file a self-host operator's reports at a
     // project their key cannot see, which loses them silently.
     process.env.LINEAR_CUSTOMER_REPORTS_PROJECT_ID = 'project-other'

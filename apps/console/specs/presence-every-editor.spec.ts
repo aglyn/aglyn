@@ -21,8 +21,6 @@ import { join, relative, resolve } from 'node:path'
 /**
  * EVERY editable document kind gets presence, in its own room (AGL-2486).
  *
- * We need to make sure presence also is working inside components,
- * layouts, templates, emails, versions etc.
  *
  * It already is. All five org-scoped besigner editors mount `usePresence` and
  * pass their own `docType`/`docId`, and the RTDB rules key on `$docType` and

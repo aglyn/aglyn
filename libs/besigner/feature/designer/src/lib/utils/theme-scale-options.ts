@@ -557,8 +557,6 @@ function firstFamily(stack: string): string {
 
 /**
  * Font-family choices: the SITE THEME's own faces first, then web-safe
- * stacks (AGL-2486, font family should be a selection
- * and then option for custom.
  *
  * The old field was free text carrying the advice *"Prefer theme typography
  * when possible"* — advice with no way to act on it. Leading with the

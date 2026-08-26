@@ -18,7 +18,6 @@
 /**
  * The four site-structure surfaces each explain a different thing (AGL-2486).
  *
- * Screen and layouts share the same documentation tooltip — and they
  * did. `/hosts/{host}/screens` and `/hosts/{host}/layouts` both resolved to
  * the one combined "Screens & Layouts" docs page, so both `?` tips opened with
  * the same title and the same body. Two surfaces, one answer, and the reader

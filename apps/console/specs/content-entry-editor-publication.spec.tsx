@@ -19,8 +19,6 @@
 /**
  * The entry editor carries the publication controls (AGL-2498).
  *
- * We are also missing the ability schedule publishing on the content
- * collections, only via the expanded menu on the list.
  *
  * All three controls — publish/unpublish, the future scheduler, and the
  * publish date from AGL-2497 — existed, and all three lived on the LIST

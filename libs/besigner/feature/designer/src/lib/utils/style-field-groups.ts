@@ -157,7 +157,7 @@ function withStoredValueParse(group: StyleFieldGroup): StyleFieldGroup {
 }
 
 /** Attaches {@link STYLE_FIELD_HELP} to a group's fields, each with a
- * deep link into the responsive-styling docs. */
+ * Deep link into the responsive-styling docs. */
 function withStyleFieldHelp(group: StyleFieldGroup): StyleFieldGroup {
   return {
     ...group,
@@ -192,8 +192,6 @@ const textField = (
 /**
  * ROW RHYTHM (AGL-2486, Zach 2026-08-22).
  *
- * Lot's of
- * spacing in here… compared to here. The two groups read as different
  * panels, and neither was wrong on its own — the difference was two things
  * this file controls and nothing else does.
  *

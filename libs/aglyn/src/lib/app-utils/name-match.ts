@@ -28,7 +28,6 @@
  *
  * ## The defect this closes
  *
- * console search … should be able to search more than just screens,
  * and separately the matcher itself was wrong for humans. Search was a
  * Firestore PREFIX range over `nameLower`, anchored at the start of the whole
  * string — so it finds "Main Layout" when you type `main` and never when you

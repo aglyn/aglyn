@@ -242,8 +242,6 @@ export function CollectionEntriesPage() {
   /**
    * Creating a collection is a DRAWER, like every other artifact (AGL-2498).
    *
-   * The create content collection should be using the drawer approach
-   * just like the screens, layouts, components etc. — and the rule the
    * drawer itself states is older than that: *"creating is a drawer, picking
    * is a dialog"* (AGL-699). This was the one create still in a modal.
    *
@@ -443,8 +441,6 @@ export function CollectionEntriesPage() {
   /**
    * EDITING a collection (AGL-2498).
    *
-   * We seem to be missing the ability to edit the content
-   * collections.
    *
    * It was missing from the CONSOLE only — `/api/hosts/collections` has
    * answered `action: 'update'` since AGL-978, with `displayName` and `slug`
@@ -613,7 +609,7 @@ export function CollectionEntriesPage() {
     setDeleteBusy(true)
     try {
       const idToken = await (user as any)?.getIdToken?.()
-      // recursiveDelete is Admin-SDK-only and the rules deny a client delete of
+      // RecursiveDelete is Admin-SDK-only and the rules deny a client delete of
       // a collection doc (AGL-947), so this goes through the shared erase route
       // — never a hand-rolled loop over `entries`.
       const response = await fetch('/api/resources/erase', {

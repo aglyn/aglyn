@@ -25,8 +25,6 @@ import { pointerIsOnCanvas } from '../hooks/use-presence'
  * A cursor is only broadcast when the pointer is really ON the canvas
  * (AGL-2486).
  *
- * even though the canvas does not have focus because of the
- * drawer/dialog for aglyn assist the presence does still report cursor — a
  * session typing into the Assist panel was publishing a canvas position, so a
  * colleague saw a cursor implying attention that was not there.
  *

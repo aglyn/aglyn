@@ -26,8 +26,6 @@
  *
  * ## The observation
  *
- * we see it
- * flicker with real data then show this message they shouldn't see it at all.
  * The refusal is correct. What is wrong is that the plan, the subscription
  * status, the price and the renewal date are on screen first, for as long as
  * the permission read takes — a screenshot or a screen recording keeps them.

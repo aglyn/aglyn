@@ -18,8 +18,6 @@
 /**
  * A `?tab=` link opens the tab it names (AGL-2486).
  *
- * tab param did not automatically navigate the vertical tabs, fix this
- * and make it fixed everywhere that uses the vertical tabs and tab param.
  *
  * Host Setup validated the incoming id against a hand-written condition, and
  * it was ALREADY WRONG when he found it: the Tracking tab had been added

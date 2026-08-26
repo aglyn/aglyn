@@ -34,11 +34,6 @@ import {
 /**
  * ONE row grammar for every artifact list (AGL-693).
  *
- * We need to carry this standard across all of them the screens list,
- * the layouts list, the components list, the templates list. They all could
- * have the same context menu and clicking them should open the detail view. …
- * They should all share the same kind of table, seems they all use a different
- * table right now.
  *
  * They did. Three of the four are `DataTableComponent`, but each declared its
  * own column set, its own action arrangement and its own row-click, and the
@@ -103,7 +98,7 @@ export interface ArtifactQuickAction {
 
 export interface ArtifactRowActionsProps {
   /** The artifact's name — every control is labelled with it, because these
-   * repeat once per row and "More actions" alone says nothing about which. */
+   * Repeat once per row and "More actions" alone says nothing about which. */
   label: string
   quick?: ArtifactQuickAction | null
   items: RowActionsMenuItem[]

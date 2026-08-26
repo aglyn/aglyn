@@ -59,8 +59,6 @@ export interface BillingStorageOverageCardProps {
  *
  * ## What this card is now
  *
- * it should be a control by the end user, to
- * prevent overage or usage alerts rather, we just want to minimize churn.
  *
  * So this card offers a cap and nothing is gated behind it. Storage past a
  * metered plan's included band **bills by default**; `usage-alerts` warns at
