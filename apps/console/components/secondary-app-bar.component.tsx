@@ -94,26 +94,7 @@ export function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
             {children}
 
             {!_isArrEmpty(navTabItems) && (
-              <AppLinkTabsComponent
-                items={navTabItems}
-                activeTab={activeTab}
-                /**
-                 * With no title before them, the tabs are the bar's first
-                 * content, and a tab carries its own horizontal padding — so
-                 * the first LABEL lands a gutter's width right of where every
-                 * other bar starts its content, and the two bars visibly fail
-                 * to line up. Dropping that one tab's leading padding puts the
-                 * label on the content edge.
-                 *
-                 * Only when there is no title: after one, the tab follows a
-                 * divider and the padding is the gap that separates them.
-                 */
-                sx={
-                  tabBarTitle
-                    ? undefined
-                    : { '& .MuiTab-root:first-of-type': { paddingLeft: 0 } }
-                }
-              />
+              <AppLinkTabsComponent items={navTabItems} activeTab={activeTab} />
             )}
           </Toolbar>
         </AppBar>
