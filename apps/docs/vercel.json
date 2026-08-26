@@ -11,10 +11,36 @@
       "source": "/",
       "destination": "/status",
       "permanent": false,
-      "has": [{ "type": "host", "value": "status.aglyn.com" }]
+      "has": [
+        {
+          "type": "host",
+          "value": "status.aglyn.com"
+        }
+      ]
     }
   ],
   "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains"
+        }
+      ]
+    },
     {
       "source": "/status",
       "headers": [
