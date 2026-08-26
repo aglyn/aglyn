@@ -253,6 +253,20 @@ export interface AglynHost extends AglynDocument {
      * and advertising is opt-in worldwide.
      */
     gtmContainerId?: string
+    /**
+     * Advertising pixels, vendor id → that vendor's account id (AGL-2486).
+     *
+     * Declared here for exactly the reason the `gtmContainerId` comment above
+     * gives, and it is the field that proved the point: the console persisted
+     * it and the tenant read it through `advertising-tags.ts`, while no type
+     * knew about it. `aglyn-marketing` carries a live Meta pixel in it today,
+     * and a whole-object write to `analytics` would have dropped it silently.
+     *
+     * The vendor descriptors — which script each id loads, and therefore which
+     * hosts the CSP has to admit — live in `advertising-tags.ts`. An id here
+     * for a vendor with no descriptor loads nothing.
+     */
+    adTags?: Record<string, string> | null
   }
   /**
    * Visitor consent tool (AGL-1498). The tool is ACTIVE when this is absent

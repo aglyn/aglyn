@@ -667,13 +667,21 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * configures a measurement id — a site with no analytics gets no wider policy
  * than it needs.
  *
- * ## The two vendors, and why Meta is in a Google-shaped list
+ * ## The two vendors, and where Meta actually comes from
  *
- * A GTM container is an OPEN DOOR: it can carry any vendor's tag, and Meta's
- * pixel is the one it carries most often — observed live on `aglyn.com` as a
- * report-only violation on `www.facebook.com/tr`. Naming it here rather than
- * making every operator rediscover it is the same reasoning as the Google
- * entries. Anything else a container loads is the owner's to approve.
+ * NOT from a GTM container — no host on the platform has one configured. Meta
+ * is a FIRST-CLASS pixel: `analytics.adTags.meta` holds the account id, and
+ * `advertising-tags.ts` turns it into a `connect.facebook.net` script whose
+ * beacon posts to `www.facebook.com/tr`. That is the report-only violation
+ * visible on `aglyn.com` today, and it is why both hosts are named here.
+ *
+ * `advertising-tags.ts` is the source of truth for which vendors load what.
+ * It cannot be imported from this file — this one is root-level CommonJS,
+ * outside the nx graph, because `next.config.js` must `require` it — so a
+ * spec asserts every script-loading vendor in that registry has its origin
+ * covered here. A GTM container, when one is eventually configured, is a
+ * separate and broader problem: it can carry any vendor's tag, and what it
+ * loads beyond this list is the owner's to approve.
  *
  * ⛔ NOT A PLACE FOR A TRACKING HOST THAT MERELY SHOWED UP IN THE REPORTS.
  * Each entry here is a host a tag we DELIBERATELY ship fetches an image from.
@@ -701,6 +709,64 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * first-party endpoint and no third-party image pixel is needed at all. That
  * removes this entire class of problem rather than allowlisting around it.
  */
+/**
+ * Google's country domains, for the ONE beacon a wildcard cannot reach
+ * (AGL-1152).
+ *
+ * GA4's remarketing-audience pixel is fetched from the visitor's LOCAL Google
+ * domain — `www.google.<tld>/ads/ga-audiences` — which is why the reports
+ * showed `www.google.com.vn`. CSP source expressions cannot wildcard a TLD:
+ * `https://*.google.com` is expressible, `https://www.google.*` is not. So the
+ * only way to keep GA4 → Google Ads audience building working under an
+ * enforced `img-src` is to name them.
+ *
+ * ## The cost, measured rather than asserted
+ *
+ * ~190 entries, about 4.8 KB of header. That sounds worse than it is: the
+ * value is byte-identical on every response, so HPACK/QPACK carries it once
+ * per connection and references the table afterwards — the first request on a
+ * connection pays, the rest do not. And it is added ONLY to sites that
+ * configure measurement, so a customer site with no analytics ships none of
+ * it.
+ *
+ * An earlier revision of this file called enumerating them "a payload, not a
+ * policy" and left the pixel refused. That was the wrong call: the cost is one
+ * compressed header on the operator's own marketing site, and the thing it
+ * buys is remarketing reach outside the `.com` region.
+ *
+ * ⚠️ THIS LIST GOES STALE. Google adds and retires country domains, and a
+ * missing entry is a silently narrowed audience rather than an error anyone
+ * sees. The `img-src` violation reports are the instrument: a
+ * `www.google.<something>` in them that is not here is the signal to add it.
+ * Do not treat a quiet report as proof the list is complete — see AGL-1726 on
+ * why an empty room is not a quiet one.
+ */
+const GOOGLE_CCTLDS = [
+  'com', 'ad', 'ae', 'com.af', 'com.ag', 'al', 'am', 'co.ao', 'com.ar', 'as',
+  'at', 'com.au', 'az', 'ba', 'com.bd', 'be', 'bf', 'bg', 'com.bh', 'bi', 'bj',
+  'com.bn', 'com.bo', 'com.br', 'bs', 'bt', 'co.bw', 'by', 'com.bz', 'ca',
+  'cat', 'cd', 'cf', 'cg', 'ch', 'ci', 'co.ck', 'cl', 'cm', 'cn', 'com.co',
+  'co.cr', 'com.cu', 'cv', 'com.cy', 'cz', 'de', 'dj', 'dk', 'dm', 'com.do',
+  'dz', 'com.ec', 'ee', 'com.eg', 'es', 'com.et', 'fi', 'com.fj', 'fm', 'fr',
+  'ga', 'ge', 'gg', 'com.gh', 'com.gi', 'gl', 'gm', 'gr', 'com.gt', 'gy',
+  'com.hk', 'hn', 'hr', 'ht', 'hu', 'co.id', 'ie', 'co.il', 'im', 'co.in',
+  'iq', 'is', 'it', 'je', 'com.jm', 'jo', 'co.jp', 'co.ke', 'com.kh', 'ki',
+  'kg', 'co.kr', 'com.kw', 'kz', 'la', 'com.lb', 'li', 'lk', 'co.ls', 'lt',
+  'lu', 'lv', 'com.ly', 'co.ma', 'md', 'me', 'mg', 'mk', 'ml', 'com.mm', 'mn',
+  'ms', 'com.mt', 'mu', 'mv', 'mw', 'com.mx', 'com.my', 'co.mz', 'com.na',
+  'com.ng', 'com.ni', 'ne', 'nl', 'no', 'com.np', 'nr', 'nu', 'co.nz',
+  'com.om', 'com.pa', 'com.pe', 'com.pg', 'com.ph', 'com.pk', 'pl', 'pn',
+  'com.pr', 'ps', 'pt', 'com.py', 'com.qa', 'ro', 'rs', 'ru', 'rw', 'com.sa',
+  'com.sb', 'sc', 'se', 'com.sg', 'sh', 'si', 'sk', 'com.sl', 'sm', 'sn', 'so',
+  'sr', 'st', 'com.sv', 'td', 'tg', 'co.th', 'com.tj', 'tl', 'tm', 'tn', 'to',
+  'com.tr', 'tt', 'com.tw', 'co.tz', 'com.ua', 'co.ug', 'co.uk', 'com.uy',
+  'co.uz', 'com.vc', 'co.ve', 'co.vi', 'com.vn', 'vu', 'ws', 'co.za', 'co.zm',
+  'co.zw',
+]
+
+/** `https://www.google.<tld>` for every country domain above. */
+const GOOGLE_CCTLD_ORIGINS = GOOGLE_CCTLDS.map((tld) => `https://www.google.${tld}`)
+
 const MEASUREMENT_IMAGE_ORIGINS = [
   // Google Tag Manager / gtag delivery.
   'https://www.googletagmanager.com',
@@ -712,12 +778,12 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   // Google Ads conversion tracking.
   'https://googleads.g.doubleclick.net',
   'https://www.googleadservices.com',
-  // The `www.google.com` region's remarketing pixel. Its localized siblings
-  // are unreachable by any expressible source — see the note above.
-  'https://www.google.com',
-  // Meta pixel: the beacon and the loader it arrives through.
+  // Meta pixel: the beacon and the loader that installs it.
   'https://www.facebook.com',
   'https://connect.facebook.net',
+  // Every Google country domain, for the remarketing pixel. `www.google.com`
+  // is the first entry of that list, so it is not repeated here.
+  ...GOOGLE_CCTLD_ORIGINS,
 ]
 
 const APPROVED_IMAGE_HOSTS_MAX = 50
@@ -941,4 +1007,5 @@ module.exports = {
   normalizeApprovedImageHost,
   APPROVED_IMAGE_HOSTS_MAX,
   MEASUREMENT_IMAGE_ORIGINS,
+  GOOGLE_CCTLD_ORIGINS,
 }

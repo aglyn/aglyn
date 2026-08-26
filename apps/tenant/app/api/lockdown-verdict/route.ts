@@ -225,7 +225,15 @@ export async function GET(request: Request): Promise<Response> {
      */
     const analytics = hostRes.host.analytics
     const runsMeasurement = Boolean(
-      analytics?.gaMeasurementId || analytics?.gtmContainerId,
+      analytics?.gaMeasurementId ||
+        analytics?.gtmContainerId ||
+        // `adTags` is how an ad pixel is ACTUALLY configured — a vendor id →
+        // account id map, and the field `aglyn-marketing` carries its Meta
+        // pixel in. Omitting it was a real defect for the narrow case that
+        // matters most: a site running an ad pixel and NO analytics id would
+        // have had `runsMeasurement: false`, and the very beacon this gate
+        // exists to permit would have been the one thing refused.
+        Object.keys(analytics?.adTags ?? {}).length > 0,
     )
     const state = resolveLockdown(
       {

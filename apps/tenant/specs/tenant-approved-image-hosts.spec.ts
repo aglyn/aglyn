@@ -40,6 +40,7 @@ const {
   normalizeApprovedImageHost,
   approvedImageHostSources,
   APPROVED_IMAGE_HOSTS_MAX,
+  GOOGLE_CCTLD_ORIGINS,
   // eslint-disable-next-line @typescript-eslint/no-var-requires
 } = require('../../../security-origins.js')
 
@@ -193,9 +194,11 @@ describe('measurement image origins (AGL-1152)', () => {
     }
   })
 
-  it('admits the Meta pixel, which arrives through a GTM container', () => {
-    // A container is an open door and Meta's tag is what it carries most
-    // often — observed live on aglyn.com as a report-only violation.
+  it('admits the Meta pixel, configured as a first-class ad tag', () => {
+    // NOT via GTM — nothing on the platform has a container. The id lives at
+    // `analytics.adTags.meta`, `advertising-tags.ts` loads
+    // `connect.facebook.net` from it, and the beacon posts to
+    // `www.facebook.com/tr` — the report-only violation on aglyn.com today.
     expect(withMeasurement).toContain('https://www.facebook.com')
     expect(withMeasurement).toContain('https://connect.facebook.net')
   })
@@ -217,18 +220,84 @@ describe('measurement image origins (AGL-1152)', () => {
     )
   })
 
-  it('DOCUMENTS the one beacon it cannot cover', () => {
-    // GA4's remarketing pixel is fetched from the visitor's LOCAL Google
-    // domain (`www.google.<cctld>/ads/ga-audiences`). CSP cannot wildcard a
-    // TLD — `https://*.google.com` is expressible, `https://www.google.*` is
-    // not — and enumerating ~190 ccTLDs in a header sent on every response is
-    // a payload, not a policy.
-    //
-    // Pinned so the gap stays a known, bounded consequence (audience building
-    // narrows outside the .com region; CONVERSIONS are unaffected, which is
-    // why the two doubleclick hosts above are the ones that matter) rather
-    // than something rediscovered from a dashboard going quiet.
+  it('names every Google country domain, so remarketing survives worldwide', () => {
+    // The remarketing pixel is fetched from the visitor's LOCAL Google domain
+    // — `www.google.<tld>/ads/ga-audiences`, which is why the reports showed
+    // `www.google.com.vn`. CSP cannot wildcard a TLD, so the only way to keep
+    // GA4 → Google Ads audience building working under enforcement is to name
+    // them. The observed one is the regression case.
+    expect(withMeasurement).toContain('https://www.google.com.vn')
     expect(withMeasurement).toContain('https://www.google.com')
+    expect(withMeasurement).toContain('https://www.google.co.uk')
+    expect(withMeasurement).toContain('https://www.google.de')
     expect(withMeasurement).not.toContain('www.google.*')
+  })
+
+  it('the ccTLD list is a plausible size and free of duplicates', () => {
+    // A hand-maintained list of ~190 strings is exactly the shape that grows a
+    // duplicate nobody notices — harmless in behaviour, but it inflates a
+    // header sent on every response and makes the next diff harder to read.
+    expect(GOOGLE_CCTLD_ORIGINS.length).toBeGreaterThan(150)
+    expect(new Set(GOOGLE_CCTLD_ORIGINS).size).toBe(GOOGLE_CCTLD_ORIGINS.length)
+  })
+
+  it('a site with NO measurement pays none of those bytes', () => {
+    // The whole reason the list is affordable. ~4.8 KB on an operator's own
+    // marketing site is a compressed header; the same bytes on every customer
+    // page that never asked for analytics would not be.
+    const without = tenantImgSrcDirective(true, [])
+    expect(without.length).toBeLessThan(200)
+    // `firebasestorage.googleapis.com` is PINNED and legitimately present, so
+    // the check is for the measurement hosts specifically, not the substring.
+    expect(without).not.toContain('www.google.')
+    expect(without).not.toContain('doubleclick')
+    expect(withMeasurement.length).toBeGreaterThan(4000)
+  })
+})
+
+/**
+ * THE VENDOR REGISTRY AND THE CSP CANNOT DRIFT (AGL-1152).
+ *
+ * `advertising-tags.ts` decides which vendor scripts a published page loads;
+ * `security-origins.js` decides which hosts the policy admits. They live in
+ * different modules for a hard reason — the second is root-level CommonJS
+ * outside the nx graph, because `next.config.js` must `require` it — so
+ * neither can import the other and a new vendor added to one is invisible to
+ * the other.
+ *
+ * The failure that would cause is quiet and specific: someone adds a vendor,
+ * a site configures its id, the tag loads, and its beacon is refused with the
+ * only evidence being a violation report nobody is reading. This is the check
+ * that turns that into a red build instead.
+ */
+import { ADVERTISING_VENDORS } from '@aglyn/aglyn/app-utils/advertising-tags'
+
+describe('advertising vendors are covered by the CSP (AGL-1152)', () => {
+  const measurement: string[] = [
+    ...(
+      require('../../../security-origins.js') as {
+        MEASUREMENT_IMAGE_ORIGINS: string[]
+      }
+    ).MEASUREMENT_IMAGE_ORIGINS,
+  ]
+
+  it('every vendor that LOADS a script has that script host allowed', () => {
+    // `sweepOnly` vendors (google-ads today) load nothing of their own — they
+    // exist so consent withdrawal can tear their cookies down — so they have
+    // no host to cover and must not be demanded to have one.
+    const loaders = ADVERTISING_VENDORS.filter((vendor) => vendor.scriptSrc)
+    expect(loaders.length).toBeGreaterThan(0)
+    for (const vendor of loaders) {
+      const origin = new URL(vendor.scriptSrc as string).origin
+      expect(measurement).toContain(origin)
+    }
+  })
+
+  it('CONTROL — the registry really does carry a script-loading vendor', () => {
+    // Without this the assertion above passes vacuously the day someone makes
+    // every vendor sweep-only.
+    expect(
+      ADVERTISING_VENDORS.some((vendor) => vendor.id === 'meta'),
+    ).toBe(true)
   })
 })
