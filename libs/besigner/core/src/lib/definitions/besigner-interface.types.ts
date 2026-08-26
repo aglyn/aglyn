@@ -59,6 +59,14 @@ export type BesignerContext = {
      * site with it open.
      */
     revealedNodeIds?: string[]
+    /**
+     * Style declarations the canvas is rendering without, so a layout can be
+     * compared against itself with one property switched off (AGL-2486).
+     * Encoded `nodeId|state|breakpoint|property` — see `muted-styles`. Canvas
+     * only: the declaration stays in the document exactly where it was
+     * written, and only the canvas's copy of the sx drops it.
+     */
+    mutedStyles?: string[]
     /** What kind of host view the canvas is editing (screen or shared layout). */
     viewType?: HostViewType
     /**

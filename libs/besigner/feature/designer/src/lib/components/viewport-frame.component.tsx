@@ -53,6 +53,7 @@ import {
   devicePreviewWidth,
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
+import { applyMutedStyles } from '../utils/muted-styles'
 import { hoistStateSx } from '../utils/state-sx'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
@@ -180,17 +181,26 @@ const ThemedElementContainer = ({ children }) => {
   // the width transform at the top level.
   const [heldState] = useAglynBesignerFlag('heldState')
   const [heldStateNodeId] = useAglynBesignerFlag('heldStateNodeId')
+  // Declarations switched off for comparison (AGL-2486). Third rider on the
+  // same canvas-only transform, and it runs FIRST: a muted base declaration
+  // has to be gone before a held state's slice is folded over it, and a muted
+  // slice declaration has to leave the slice so the base shows through.
+  const [mutedStyles] = useAglynBesignerFlag('mutedStyles')
   const sxTransform = useMemo(() => {
     const held = heldState && heldStateNodeId ? heldState : null
-    if (deviceWidth == null && !held) return undefined
+    const muted = mutedStyles?.length ? mutedStyles : null
+    if (deviceWidth == null && !held && !muted) return undefined
     return (sx: unknown, nodeId?: string) => {
+      const unmuted = muted ? applyMutedStyles(sx, nodeId, muted) : sx
       const scoped =
-        held && nodeId === heldStateNodeId ? hoistStateSx(sx, held) : sx
+        held && nodeId === heldStateNodeId
+          ? hoistStateSx(unmuted, held)
+          : unmuted
       return deviceWidth == null
         ? scoped
         : resolveSxForDeviceWidth(scoped, deviceWidth)
     }
-  }, [deviceWidth, heldState, heldStateNodeId])
+  }, [deviceWidth, heldState, heldStateNodeId, mutedStyles])
   // Elements the author opened up for designing (AGL-592). Subscribed once
   // here, exactly like the held state above, and handed down by context so a
   // canvas of several hundred leaves carries one subscription rather than one
@@ -317,8 +327,9 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
   )
 })
 
-export interface ViewportFrameComponentProps
-  extends ComponentProps<typeof ViewportFrame> {}
+export interface ViewportFrameComponentProps extends ComponentProps<
+  typeof ViewportFrame
+> {}
 
 export const ViewportFrameComponent = forwardRef<
   any,

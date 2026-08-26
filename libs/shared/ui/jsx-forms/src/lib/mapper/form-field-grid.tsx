@@ -22,8 +22,22 @@
 
 import type { ReactNode } from 'react'
 
-import { HelpTip, type HelpTipContent } from '@aglyn/shared-ui-jsx'
-import { Grid, type GridProps, IconButton, Tooltip } from '@mui/material'
+import {
+  ICON_VARIANT_VISIBILITY_HIDDEN,
+  ICON_VARIANT_VISIBILITY_SHOWN,
+} from '@aglyn/shared-data-enums'
+import { HelpTip, type HelpTipContent, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  formControlClasses,
+  formLabelClasses,
+  Grid,
+  type GridProps,
+  IconButton,
+  inputBaseClasses,
+  Tooltip,
+  toggleButtonGroupClasses,
+  typographyClasses,
+} from '@mui/material'
 import { styled } from '@mui/material/styles'
 
 import clsx from 'clsx'
@@ -32,11 +46,30 @@ const PREFIX = 'FormFieldGrid'
 
 const classes = {
   grid: `${PREFIX}-grid`,
+  muted: `${PREFIX}-muted`,
 }
 
 const StyledGrid = styled(Grid)({
   [`&.${classes.grid}`]: {
     position: 'relative',
+  },
+  // A muted field has to read as "set but not applying", never as unset —
+  // that distinction is the whole point of switching a declaration off
+  // rather than deleting it. So the VALUE is struck through and the control
+  // fades, while the corner buttons stay at full strength: they are the way
+  // back and must not look disabled themselves.
+  [`&.${classes.muted}`]: {
+    [[
+      `& .${formControlClasses.root}`,
+      `& .${formLabelClasses.root}`,
+      `& .${typographyClasses.root}`,
+      `& .${toggleButtonGroupClasses.root}`,
+    ].join(',')]: {
+      opacity: 0.5,
+    },
+    [`& .${inputBaseClasses.input}`]: {
+      textDecoration: 'line-through',
+    },
   },
 })
 
@@ -92,6 +125,28 @@ export const buildFieldClear = (options: {
   }
 }
 
+/**
+ * The "stop applying this one declaration, keep its value" affordance
+ * (AGL-2486) — the browser-devtools checkbox, in the styles panel.
+ *
+ * Distinct from {@link FieldClearAction} in the only way that matters: clear
+ * takes the value off the element, mute leaves it exactly where it is and
+ * stops it painting, so a layout can be looked at with one property switched
+ * off and the comparison value is still there to switch back on.
+ *
+ * Supplied by the panel through the field's `FormFieldGridProps`, not by each
+ * editor, because unlike clear it needs nothing from the editor: which
+ * declaration to mute is the field's own name, and where the mute lives is
+ * the panel's business.
+ */
+export interface FieldMuteAction {
+  /** Accessible name, e.g. `Stop applying Max Width`. */
+  label: string
+  /** True while the declaration is switched off. */
+  muted?: boolean
+  onToggle: () => void
+}
+
 export interface FormFieldGridProps extends Omit<GridProps, 'size'> {
   children?: ReactNode
   className?: string
@@ -100,6 +155,8 @@ export interface FormFieldGridProps extends Omit<GridProps, 'size'> {
   help?: HelpTipContent
   /** Reset-to-unset affordance at the field's top-right (AGL-2486). */
   clear?: FieldClearAction
+  /** Switch this declaration off without losing it (AGL-2486). */
+  mute?: FieldMuteAction
 }
 
 export const FormFieldGrid = ({
@@ -107,11 +164,47 @@ export const FormFieldGrid = ({
   className,
   help,
   clear,
+  mute,
   size = { xs: 12 },
   ...props
 }: FormFieldGridProps) => (
-  <StyledGrid size={size} className={clsx(classes.grid, className)} {...props}>
+  <StyledGrid
+    size={size}
+    className={clsx(classes.grid, mute?.muted && classes.muted, className)}
+    {...props}
+  >
     {children}
+    {mute && (
+      <Tooltip title={mute.label}>
+        <IconButton
+          size="small"
+          aria-label={mute.label}
+          aria-pressed={!!mute.muted}
+          onClick={mute.onToggle}
+          sx={{
+            position: 'absolute',
+            top: -8,
+            // Outermost of the corner controls, so adding it never moves the
+            // help tip or the clear button an author has learned the place of.
+            right: (help ? 22 : 0) + (clear && !clear.hidden ? 22 : 0),
+            zIndex: 1,
+            p: 0.25,
+            fontSize: '0.85rem',
+            lineHeight: 1,
+            color: mute.muted ? 'secondary.main' : 'text.secondary',
+          }}
+        >
+          <MdiIcon
+            fontSize="inherit"
+            path={
+              mute.muted
+                ? ICON_VARIANT_VISIBILITY_HIDDEN.path
+                : ICON_VARIANT_VISIBILITY_SHOWN.path
+            }
+          />
+        </IconButton>
+      </Tooltip>
+    )}
     {clear && !clear.hidden && (
       <Tooltip title={clear.label}>
         {/* Sits beside the help tip rather than under it — both are pinned
