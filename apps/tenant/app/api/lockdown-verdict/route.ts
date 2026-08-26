@@ -98,6 +98,7 @@ function lockedVerdict(
     attribution: boolean
     overQuota: boolean
     approvedImageHosts?: string[]
+    runsMeasurement?: boolean
   },
 ): Response {
   const notice = lockdownNotice(state)
@@ -108,6 +109,7 @@ function lockedVerdict(
       attribution: facts.attribution,
       overQuota: facts.overQuota,
       approvedImageHosts: facts.approvedImageHosts ?? [],
+      runsMeasurement: facts.runsMeasurement ?? false,
       mode: lockdownMode(state),
       reason: state.reason,
       title: notice.title,
@@ -208,6 +210,23 @@ export async function GET(request: Request): Promise<Response> {
     const approvedImageHosts = Array.isArray(stored)
       ? stored.filter((entry): entry is string => typeof entry === 'string')
       : []
+    /**
+     * Does this site run measurement tags (AGL-1152)?
+     *
+     * Decides whether `img-src` admits the analytics and ad-network beacons.
+     * A GTM container counts on its own and is the broader of the two: a
+     * container carries whatever tags the operator put in it — Meta's pixel
+     * most often — so a site with one needs the vendor beacons even with no
+     * GA id of its own.
+     *
+     * Gated rather than always-on because a site with no analytics has no
+     * reason to permit an ad network's beacon, and permitting one anyway
+     * would make the policy describe our convenience instead of the site.
+     */
+    const analytics = hostRes.host.analytics
+    const runsMeasurement = Boolean(
+      analytics?.gaMeasurementId || analytics?.gtmContainerId,
+    )
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -219,11 +238,22 @@ export async function GET(request: Request): Promise<Response> {
     )
     if (!state) {
       return Response.json(
-        { locked: false, attribution, overQuota, approvedImageHosts },
+        {
+          locked: false,
+          attribution,
+          overQuota,
+          approvedImageHosts,
+          runsMeasurement,
+        },
         { status: 200 },
       )
     }
-    return lockedVerdict(state, { attribution, overQuota, approvedImageHosts })
+    return lockedVerdict(state, {
+      attribution,
+      overQuota,
+      approvedImageHosts,
+      runsMeasurement,
+    })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)
     // Fail open on the LOCK: the middleware treats any non-locked answer as

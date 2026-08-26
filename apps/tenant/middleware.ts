@@ -196,6 +196,7 @@ const lockdownVerdicts = new Map<
     attribution: boolean
     overQuota: boolean
     approvedImageHosts: string[]
+    runsMeasurement: boolean
   }
 >()
 
@@ -221,6 +222,7 @@ async function hostVerdict(
   attribution: boolean
   overQuota: boolean
   approvedImageHosts: string[]
+  runsMeasurement: boolean
 }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
@@ -229,6 +231,7 @@ async function hostVerdict(
       attribution: cached.attribution,
       overQuota: cached.overQuota,
       approvedImageHosts: cached.approvedImageHosts,
+      runsMeasurement: cached.runsMeasurement,
     }
   }
   let blocked = false
@@ -278,6 +281,10 @@ async function hostVerdict(
    * different facts and must not share an encoding.
    */
   let approvedImageHosts: string[] = cached?.approvedImageHosts ?? []
+  // Stale-retentive for the same reason as the list beside it: losing this to
+  // an outage would blank a site's analytics beacons rather than its images,
+  // which is quieter and therefore worse.
+  let runsMeasurement: boolean = cached?.runsMeasurement ?? false
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -290,6 +297,7 @@ async function hostVerdict(
         attribution?: boolean
         overQuota?: boolean
         approvedImageHosts?: unknown
+        runsMeasurement?: boolean
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
@@ -303,6 +311,9 @@ async function hostVerdict(
           (entry): entry is string => typeof entry === 'string',
         )
       }
+      if (typeof data?.runsMeasurement === 'boolean') {
+        runsMeasurement = data.runsMeasurement
+      }
     }
   } catch {
     // Fail open on the lock and the cap, closed on the attribution.
@@ -313,8 +324,9 @@ async function hostVerdict(
     attribution,
     overQuota,
     approvedImageHosts,
+    runsMeasurement,
   })
-  return { blocked, attribution, overQuota, approvedImageHosts }
+  return { blocked, attribution, overQuota, approvedImageHosts, runsMeasurement }
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
@@ -691,6 +703,7 @@ export const middleware: NextMiddleware = async (req, event) => {
     `${tenantImgSrcDirective(
       process.env.NODE_ENV === 'production',
       verdict.approvedImageHosts,
+      verdict.runsMeasurement,
     )}; ` +
       reportingDirectives(secureTransport),
   )

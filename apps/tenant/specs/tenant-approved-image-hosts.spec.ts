@@ -162,3 +162,73 @@ describe('tenantImgSrcDirective composes the site policy (AGL-1152)', () => {
     expect(tenantImgSrcDirective(true, [])).not.toContain('localhost')
   })
 })
+
+/**
+ * MEASUREMENT BEACONS SURVIVE ENFORCEMENT (AGL-1152).
+ *
+ * AGL-1726 left this as its condition 4, unanswered: gtag on a published site
+ * emits an image beacon, observed live as `www.google.com.vn` on 2026-08-24,
+ * and the Meta pixel does the same on `www.facebook.com/tr`. Enforcing a
+ * first-party `img-src` would refuse both — which is not a side effect to
+ * discover after the fact, it is the ad tracking the business runs on.
+ *
+ * So the vendors' beacon hosts are PLATFORM-curated rather than left to the
+ * owner (nobody should have to know that conversions land on
+ * `googleads.g.doubleclick.net` while Signals uses `stats.g.doubleclick.net`),
+ * and they are added only to a site that configured a measurement id.
+ */
+describe('measurement image origins (AGL-1152)', () => {
+  const withMeasurement = tenantImgSrcDirective(true, [], true)
+
+  it('admits the Google measurement and ad beacons', () => {
+    for (const host of [
+      'https://www.googletagmanager.com',
+      'https://www.google-analytics.com',
+      'https://*.google-analytics.com',
+      'https://stats.g.doubleclick.net',
+      'https://googleads.g.doubleclick.net',
+      'https://www.googleadservices.com',
+    ]) {
+      expect(withMeasurement).toContain(host)
+    }
+  })
+
+  it('admits the Meta pixel, which arrives through a GTM container', () => {
+    // A container is an open door and Meta's tag is what it carries most
+    // often — observed live on aglyn.com as a report-only violation.
+    expect(withMeasurement).toContain('https://www.facebook.com')
+    expect(withMeasurement).toContain('https://connect.facebook.net')
+  })
+
+  it('GATES them on the site actually running measurement', () => {
+    // A site with no analytics has no reason to permit an ad network's
+    // beacon. Without this the policy would describe our convenience.
+    const without = tenantImgSrcDirective(true, [])
+    expect(without).not.toContain('doubleclick')
+    expect(without).not.toContain('facebook')
+    expect(without).not.toContain('google-analytics')
+  })
+
+  it('an owner cannot remove them by emptying their own list', () => {
+    // They are not in `approvedImageHosts`, so there is no owner action that
+    // silently breaks their own conversion tracking.
+    expect(tenantImgSrcDirective(true, undefined, true)).toContain(
+      'https://googleads.g.doubleclick.net',
+    )
+  })
+
+  it('DOCUMENTS the one beacon it cannot cover', () => {
+    // GA4's remarketing pixel is fetched from the visitor's LOCAL Google
+    // domain (`www.google.<cctld>/ads/ga-audiences`). CSP cannot wildcard a
+    // TLD — `https://*.google.com` is expressible, `https://www.google.*` is
+    // not — and enumerating ~190 ccTLDs in a header sent on every response is
+    // a payload, not a policy.
+    //
+    // Pinned so the gap stays a known, bounded consequence (audience building
+    // narrows outside the .com region; CONVERSIONS are unaffected, which is
+    // why the two doubleclick hosts above are the ones that matter) rather
+    // than something rediscovered from a dashboard going quiet.
+    expect(withMeasurement).toContain('https://www.google.com')
+    expect(withMeasurement).not.toContain('www.google.*')
+  })
+})

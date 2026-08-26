@@ -651,6 +651,75 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * enough that a pasted-in dump cannot make the policy the largest thing on the
  * wire.
  */
+/**
+ * Image hosts the MEASUREMENT tags need, added only to sites that run them
+ * (AGL-1152).
+ *
+ * ## Why this is platform-curated and not the owner's list
+ *
+ * `approvedImageHosts` is for hosts the owner's own CONTENT comes from, and
+ * they can reasonably be expected to know those. Nobody can reasonably be
+ * expected to know that Google Ads conversions land on
+ * `googleads.g.doubleclick.net` while Signals uses `stats.g.doubleclick.net`.
+ * Worse, an owner who could REMOVE these would silently break their own
+ * conversion tracking and have no way to connect the two events. So the
+ * platform owns this set, and it is added only when the site actually
+ * configures a measurement id — a site with no analytics gets no wider policy
+ * than it needs.
+ *
+ * ## The two vendors, and why Meta is in a Google-shaped list
+ *
+ * A GTM container is an OPEN DOOR: it can carry any vendor's tag, and Meta's
+ * pixel is the one it carries most often — observed live on `aglyn.com` as a
+ * report-only violation on `www.facebook.com/tr`. Naming it here rather than
+ * making every operator rediscover it is the same reasoning as the Google
+ * entries. Anything else a container loads is the owner's to approve.
+ *
+ * ⛔ NOT A PLACE FOR A TRACKING HOST THAT MERELY SHOWED UP IN THE REPORTS.
+ * Each entry here is a host a tag we DELIBERATELY ship fetches an image from.
+ * Adding one to silence its own violation is the AGL-1671 mistake played
+ * backwards — the report is the evidence, and deleting the evidence is not the
+ * same as answering it.
+ *
+ * ## ⚠️ What this CANNOT cover, and nothing can
+ *
+ * GA4's remarketing-audience pixel is fetched from the visitor's LOCAL Google
+ * domain — `www.google.<cctld>/ads/ga-audiences`, observed as
+ * `www.google.com.vn` on 2026-08-24. CSP source expressions cannot wildcard a
+ * TLD: `https://*.google.com` is expressible, `https://www.google.*` is not.
+ * Enumerating ~190 ccTLDs in a header shipped on every response is not a
+ * policy, it is a payload.
+ *
+ * So that ONE pixel is refused under enforcement, and the consequence is
+ * bounded and worth stating plainly: GA4 → Google Ads audience building
+ * degrades for visitors outside the `www.google.com` region. CONVERSION
+ * tracking is unaffected — it posts to `googleads.g.doubleclick.net` and
+ * `www.googleadservices.com`, both named below — so ad performance
+ * measurement keeps working; it is retargeting reach that narrows.
+ *
+ * The real fix is server-side tagging: route measurement through a
+ * first-party endpoint and no third-party image pixel is needed at all. That
+ * removes this entire class of problem rather than allowlisting around it.
+ */
+const MEASUREMENT_IMAGE_ORIGINS = [
+  // Google Tag Manager / gtag delivery.
+  'https://www.googletagmanager.com',
+  // GA4 collection, including the regional endpoints (`region1.` … `region#.`).
+  'https://www.google-analytics.com',
+  'https://*.google-analytics.com',
+  // Google Signals.
+  'https://stats.g.doubleclick.net',
+  // Google Ads conversion tracking.
+  'https://googleads.g.doubleclick.net',
+  'https://www.googleadservices.com',
+  // The `www.google.com` region's remarketing pixel. Its localized siblings
+  // are unreachable by any expressible source — see the note above.
+  'https://www.google.com',
+  // Meta pixel: the beacon and the loader it arrives through.
+  'https://www.facebook.com',
+  'https://connect.facebook.net',
+]
+
 const APPROVED_IMAGE_HOSTS_MAX = 50
 
 /**
@@ -739,12 +808,20 @@ function approvedImageHostSources(approved) {
  * references, so an owner who deleted it would blank their own free-tier
  * images while paying customers' sites kept working.
  */
-function tenantImgSrcDirective(isProduction, approvedImageHosts) {
+function tenantImgSrcDirective(
+  isProduction,
+  approvedImageHosts,
+  runsMeasurement,
+) {
   const development = isProduction
     ? []
     : ['http://localhost:*', 'http://127.0.0.1:*']
   const sources = ["'self'", 'data:', 'blob:']
     .concat(TENANT_IMAGE_ORIGINS)
+    // Only for a site that configured a measurement id. A site with no
+    // analytics has no reason to permit an ad network's beacon, and a policy
+    // that permits one anyway is documenting our convenience, not its needs.
+    .concat(runsMeasurement ? MEASUREMENT_IMAGE_ORIGINS : [])
     .concat(approvedImageHostSources(approvedImageHosts))
     .concat(development)
   return `img-src ${sources.join(' ')}`
@@ -863,4 +940,5 @@ module.exports = {
   approvedImageHostSources,
   normalizeApprovedImageHost,
   APPROVED_IMAGE_HOSTS_MAX,
+  MEASUREMENT_IMAGE_ORIGINS,
 }
