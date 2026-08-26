@@ -81,6 +81,7 @@ import RowActionsMenu, {
 } from '../row-actions-menu.component'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
+import CreateArtifactDrawer from '../create-artifact-drawer.component'
 import {
   collectionCreateBody,
   collectionTemplateBodies,
@@ -237,52 +238,104 @@ export function CollectionEntriesPage() {
   /* ── create / delete a collection ──────────────────────────────────── */
 
   const [newCollectionOpen, setNewCollectionOpen] = useState(false)
-  const [collectionName, setCollectionName] = useState('')
   /**
-   * The rest of what a collection IS, at the moment it is created (AGL-2498).
+   * Creating a collection is a DRAWER, like every other artifact (AGL-2498).
    *
-   * Zach: *"New collections need more details to define when creating the
-   * collection."* The dialog asked for a name and nothing else, while a
-   * collection is defined by four things — its name, the ADDRESS it serves,
-   * and the two screens that render its list and its entries. All three of the
-   * others were settings-only, so every new collection was created and then
-   * immediately opened to finish defining it.
+   * Zach: *"The create content collection should be using the drawer approach
+   * just like the screens, layouts, components etc."* — and the rule the
+   * drawer itself states is older than that: *"creating is a drawer, picking
+   * is a dialog"* (AGL-699). This was the one create still in a modal.
    *
-   * The address is the one that actually mattered. It is a live URL derived
-   * from the name, and changing it later moves every entry beneath it — the
-   * settings panel warns about exactly that — so the cheapest moment to get it
-   * right is before anything is published under it.
-   *
-   * The template screens are offered, not required: both fall back to a
-   * built-in themed page, which is what makes a collection render on the day
-   * it is made. The docs teach the same order — create, write, then design the
-   * pages — so an empty pair here is the expected answer, not a gap.
+   * So the fields live in the drawer's schema and this component keeps only
+   * what the drawer cannot: the error to show, because uniqueness is a
+   * question about the OTHER collections and the server settles it in a
+   * transaction (AGL-978).
    */
-  const [collectionSlug, setCollectionSlug] = useState('')
+  const [createError, setCreateError] = useState<unknown>(null)
+
   /**
-   * Whether the author has typed an address of their own.
+   * The rest of what a collection IS, as drawer fields (AGL-2498).
    *
-   * Until they do, the slug FOLLOWS the name, which is what makes the common
-   * case one field. After they do, the name must never overwrite it — the same
-   * rule the entry slug override follows.
+   * A collection is defined by four things — its name, the ADDRESS it serves,
+   * and the two screens that render its list and its entries. Three of them
+   * were settings-only, so every new collection was created and then
+   * immediately reopened to finish defining it.
+   *
+   * The address is the one that mattered: it is a live URL, it was silently
+   * derived from the name with no way to say otherwise, and changing it later
+   * moves every entry beneath it. Left blank it still derives from the name,
+   * so the common case is still one field.
+   *
+   * The template screens are OFFERED, not required. Both fall back to a
+   * built-in themed page, which is what lets a collection render on the day it
+   * is made, and the docs teach that order: create, write entries, then design
+   * the pages. An empty pair is the expected answer here, not a gap.
    */
-  const [collectionSlugTouched, setCollectionSlugTouched] = useState(false)
-  const [collectionListScreen, setCollectionListScreen] = useState('')
-  const [collectionEntryScreen, setCollectionEntryScreen] = useState('')
-  const effectiveCollectionSlug = collectionSlugTouched
-    ? slugify(collectionSlug)
-    : slugify(collectionName)
-  // The slug is the collection's public address and nothing enforced
-  // uniqueness (AGL-957): a second /blog made the first unreachable, silently.
-  const collectionSlugOwner = Aglyn.findCollectionSlugOwner(
-    effectiveCollectionSlug,
-    'content',
-    collections,
+  const collectionCreateFields = useMemo(
+    () => [
+      {
+        component: 'text-field',
+        name: 'slug',
+        label: 'Address',
+        type: 'text',
+        helperText:
+          'The path entries publish under, e.g. blog → /blog/{entry}. ' +
+          'Leave blank to use the name.',
+      },
+      {
+        component: 'select',
+        name: 'listScreenId',
+        label: 'List screen',
+        helperText: 'Lists every entry. Leave on the built-in themed list.',
+        options: [
+          { label: 'Built-in themed list', value: '' },
+          ...screenOptions.map((screen: any) => ({
+            label: String(screen.displayName ?? screen.$id),
+            value: String(screen.$id),
+          })),
+        ],
+      },
+      {
+        component: 'select',
+        name: 'entryScreenId',
+        label: 'Entry screen',
+        helperText:
+          'Renders one entry. Leave on the built-in themed article.',
+        options: [
+          { label: 'Built-in themed article', value: '' },
+          ...screenOptions.map((screen: any) => ({
+            label: String(screen.displayName ?? screen.$id),
+            value: String(screen.$id),
+          })),
+        ],
+      },
+    ],
+    [screenOptions],
   )
-  const handleCreateCollection = useCallback(async () => {
-    const displayName = collectionName.trim()
-    const slug = effectiveCollectionSlug
-    if (!displayName || !slug || collectionSlugOwner !== null) return
+
+  const handleCreateCollection = useCallback(
+    async (values: Record<string, any>) => {
+    const displayName = String(values?.displayName ?? '').trim()
+    /*
+      A blank address means "use the name", which is what it has always
+      silently done — said out loud now, and overridable, because the slug is
+      a LIVE URL and moving it later moves every entry beneath it.
+    */
+    const slug = slugify(String(values?.slug ?? '').trim() || displayName)
+    const listScreenId = String(values?.listScreenId ?? '')
+    const entryScreenId = String(values?.entryScreenId ?? '')
+    if (!displayName || !slug) return
+    setCreateError(null)
+    /*
+      The fast check, in front of the server's. Uniqueness is claimed in a
+      transaction server-side because two people can create /blog at the same
+      moment; this is only so the common mistake answers instantly.
+    */
+    if (Aglyn.findCollectionSlugOwner(slug, 'content', collections) !== null) {
+      return void setCreateError(
+        new Error(`Another collection already serves /${slug}`),
+      )
+    }
     // The slug is the collection's public address, so uniqueness is claimed in
     // a transaction server-side (AGL-978) — the check above is only the fast
     // feedback in this dialog. Rules deny a client create.
@@ -305,9 +358,9 @@ export function CollectionEntriesPage() {
       }
       id = String(result.id)
     } catch (error: any) {
-      return void enqueueSnackbar(error?.message ?? 'Collection create failed', {
-        variant: 'error',
-      })
+      // Into the drawer, not a snackbar: the drawer is still open with the
+      // author's typing in it, and that is where the answer belongs.
+      return void setCreateError(error)
     }
     /*
       The template pointers are a SECOND request, and deliberately so: the
@@ -327,8 +380,8 @@ export function CollectionEntriesPage() {
       id,
       displayName,
       slug,
-      listScreenId: collectionListScreen,
-      entryScreenId: collectionEntryScreen,
+      listScreenId,
+      entryScreenId,
     })
     if (templateBodies.length) {
       try {
@@ -353,11 +406,6 @@ export function CollectionEntriesPage() {
       }
     }
     setNewCollectionOpen(false)
-    setCollectionName('')
-    setCollectionSlug('')
-    setCollectionSlugTouched(false)
-    setCollectionListScreen('')
-    setCollectionEntryScreen('')
     // The new collection IS the page now, so the address says so (AGL-2498).
     //
     // Claimed FIRST: the listener has not delivered the new document yet, and
@@ -375,12 +423,9 @@ export function CollectionEntriesPage() {
       id,
       name: displayName,
     })
-  }, [
-    collectionName,
-    effectiveCollectionSlug,
-    collectionSlugOwner,
-    collectionListScreen,
-    collectionEntryScreen,
+    },
+  [
+    collections,
     user,
     hostId,
     enqueueSnackbar,
@@ -1783,126 +1828,27 @@ export function CollectionEntriesPage() {
           />
         </Container>
       </DashboardLayout>
-      <Dialog
+      {/*
+        CREATING IS A DRAWER (AGL-699/AGL-2498). Screens, layouts, components
+        and templates all create through `CreateArtifactDrawer`; this was the
+        last modal, and it asked for a name where the others ask for a name and
+        the things that define the artifact.
+
+        No Description: the collections route's content allowlist is
+        `displayName` + `slug`, so one typed here would be dropped in silence.
+      */}
+      <CreateArtifactDrawer
         open={newCollectionOpen}
-        onClose={() => setNewCollectionOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{'New collection'}</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-        >
-          <TextField
-            label="Name"
-            value={collectionName}
-            onChange={(event) => setCollectionName(event.target.value)}
-            size="small"
-            fullWidth
-            autoFocus
-            helperText="Shown in the console; not published"
-          />
-          {/*
-            The ADDRESS, editable here rather than only in settings
-            (AGL-2498). It follows the name until it is typed in, so the
-            common case is still one field — and it is worth getting right
-            now, because changing it later moves every entry beneath it.
-          */}
-          <TextField
-            label="Address"
-            value={effectiveCollectionSlug}
-            onChange={(event) => {
-              setCollectionSlugTouched(true)
-              setCollectionSlug(event.target.value)
-            }}
-            size="small"
-            fullWidth
-            error={collectionSlugOwner !== null}
-            helperText={
-              collectionSlugOwner !== null
-                ? `Another collection already serves /${effectiveCollectionSlug}`
-                : effectiveCollectionSlug
-                  ? `Entries publish at /${effectiveCollectionSlug}/{entry}`
-                  : 'e.g. blog, news, projects'
-            }
-          />
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-            <Typography variant="subtitle2">{'Template screens'}</Typography>
-            <HelpTip
-              title="Template screens"
-              href={docsHelp('buildABlog').href}
-              excerpt={
-                'Leave either on the built-in themed page and ' +
-                `${branding.productName} renders it for you. You can design ` +
-                'your own later — the list screen needs a Collection Entries ' +
-                'block, and the entry screen can use {{entry.title}}, Entry ' +
-                'Body and the entry’s other fields.'
-              }
-            />
-          </Stack>
-          <Box
-            sx={{
-              display: 'grid',
-              gap: 2,
-              gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-            }}
-          >
-            <TextField
-              select
-              size="small"
-              label="List screen"
-              value={collectionListScreen}
-              onChange={(event) =>
-                setCollectionListScreen(event.target.value)
-              }
-              helperText={`Lists every entry at /${
-                effectiveCollectionSlug || '…'
-              }`}
-            >
-              <MenuItem value="">{'Built-in themed list'}</MenuItem>
-              {screenOptions.map((screen: any) => (
-                <MenuItem key={screen.$id} value={screen.$id}>
-                  {screen.displayName ?? screen.$id}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              size="small"
-              label="Entry screen"
-              value={collectionEntryScreen}
-              onChange={(event) =>
-                setCollectionEntryScreen(event.target.value)
-              }
-              helperText={`Renders one entry under /${
-                effectiveCollectionSlug || '…'
-              }`}
-            >
-              <MenuItem value="">{'Built-in themed article'}</MenuItem>
-              {screenOptions.map((screen: any) => (
-                <MenuItem key={screen.$id} value={screen.$id}>
-                  {screen.displayName ?? screen.$id}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewCollectionOpen(false)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={
-              !collectionName.trim() ||
-              !effectiveCollectionSlug ||
-              collectionSlugOwner !== null
-            }
-            onClick={handleCreateCollection}
-          >
-            {'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onClose={() => {
+          setNewCollectionOpen(false)
+          setCreateError(null)
+        }}
+        title="New collection"
+        onSubmit={handleCreateCollection}
+        error={createError}
+        includeDescription={false}
+        extraFields={collectionCreateFields}
+      />
       {/* Delete collection (AGL-1324). Type-the-name confirmation, matching the
           site delete. Refuses while a template screen still renders it or
           entries still live under it — naming which — because deleting a

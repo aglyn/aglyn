@@ -39,6 +39,16 @@ export interface CreateArtifactDrawerProps {
   extraFields?: any[]
   /** Rendered under the form when a submit fails. */
   error?: unknown
+  /**
+   * Whether to offer the shared Description box (AGL-2498).
+   *
+   * True for every artifact whose document stores one. Content collections do
+   * not: `/api/hosts/collections` filters `data` through a per-kind allowlist
+   * of `displayName` + `slug`, so a description typed here would be dropped
+   * without a word. A field the writer silently discards is worse than a field
+   * that was never offered.
+   */
+  includeDescription?: boolean
 }
 
 /**
@@ -55,9 +65,22 @@ export interface CreateArtifactDrawerProps {
  * a dialog (AGL-699).
  */
 export function CreateArtifactDrawer(props: CreateArtifactDrawerProps) {
-  const { open, onClose, title, onSubmit, extraFields, error } = props
+  const {
+    open,
+    onClose,
+    title,
+    onSubmit,
+    extraFields,
+    error,
+    includeDescription = true,
+  } = props
   const schema = {
-    fields: [...BASE_FIELDS, ...(extraFields ?? [])],
+    fields: [
+      ...(includeDescription
+        ? BASE_FIELDS
+        : BASE_FIELDS.filter((field) => field.name !== 'description')),
+      ...(extraFields ?? []),
+    ],
   }
   return (
     <NavigationDrawerComponent
