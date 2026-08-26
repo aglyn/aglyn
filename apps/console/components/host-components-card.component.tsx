@@ -621,7 +621,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       >
         <DialogTitle>{'Edit component'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
           <TextField
             label="Name"
@@ -675,7 +675,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       >
         <DialogTitle>{'Publish to marketplace'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
           <Typography variant="body2" color="text.secondary">
             {'Publishes a snapshot as a public listing under your ' +

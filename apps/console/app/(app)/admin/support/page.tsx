@@ -297,7 +297,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
           ) : null}
         </DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           {(thread?.messages ?? []).map((message) => (
             <Stack key={message.$id} spacing={0.25}>

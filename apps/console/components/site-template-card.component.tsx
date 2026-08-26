@@ -130,7 +130,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
       >
         <DialogTitle>{'Publish as template'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <TextField
             label="Template name"

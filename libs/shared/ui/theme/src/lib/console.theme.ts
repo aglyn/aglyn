@@ -253,6 +253,35 @@ const baseOptions: ThemeOptions = {
         },
       },
     },
+    /**
+     * Room for a floated label at the top of a dialog (AGL-703).
+     *
+     * MUI zeroes a DialogContent's top padding when it follows a DialogTitle
+     * — `.MuiDialogTitle-root + .MuiDialogContent-root` — and the content box
+     * scrolls (`overflow-y: auto`). So the first field's shrunk outlined
+     * label, which sits ABOVE its own border, is clipped by the scroll
+     * container. It shows on any dialog whose first control has a value on
+     * open: the New author dialog's `Type` select had its label shaved in
+     * half.
+     *
+     * Twenty-seven dialogs tried to fix this themselves with
+     * `sx={{ pt: 1 }}`, and NONE of them worked: MUI's rule is two classes
+     * and `sx` is one, so the adjacent-sibling selector wins on specificity
+     * every time. Matching that selector here is what makes the fix apply —
+     * which is why it belongs in the theme rather than at any call site.
+     *
+     * 12px: the shrunk label rises ~9px above the input's top edge, plus a
+     * little air so it does not sit ON the dialog title.
+     */
+    MuiDialogContent: {
+      styleOverrides: {
+        root: ({ theme }: any) => ({
+          '.MuiDialogTitle-root + &': {
+            paddingTop: theme.spacing(1.5),
+          },
+        }),
+      },
+    },
     MuiFab: {
       defaultProps: {
         color: 'primary',

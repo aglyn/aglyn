@@ -813,7 +813,7 @@ export function OrgMembersCard() {
       >
         <DialogTitle>{`Site access — ${accessDraft?.label ?? ''}`}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
         >
           <FormControlLabel
             control={

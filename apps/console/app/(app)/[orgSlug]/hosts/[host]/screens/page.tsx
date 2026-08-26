@@ -977,7 +977,7 @@ function Screens(props) {
       >
         <DialogTitle>{'Screen translations'}</DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
           <TextField
             select

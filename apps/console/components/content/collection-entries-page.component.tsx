@@ -1798,7 +1798,7 @@ export function CollectionEntriesPage() {
           {authorEditor?.id ? 'Edit author' : 'New author'}
         </DialogTitle>
         <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
           <TextField
             select
