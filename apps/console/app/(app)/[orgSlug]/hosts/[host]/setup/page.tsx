@@ -48,6 +48,7 @@ import CardDisplayFormTemplate, {
   FormCardWrapper,
 } from '../../../../../../components/card-display-form-template'
 import { useFormApi } from '@aglyn/shared-ui-jsx-forms'
+import useTabParam from '../../../../../../hooks/use-tab-param'
 import { Grid } from '@mui/material'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
@@ -454,21 +455,66 @@ const ACTIVITY_TAB_ID = 'activity'
 /** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
 const EMAILS_TAB_ID = 'emails'
 
+/**
+ * Every tab id this page renders, in nav order (AGL-2486).
+ *
+ * Built from the SAME values the tabs are rendered with — the schema ids and
+ * the four constants above — so there is no second spelling to fall out of
+ * date. The deep-link resolver reads this list and nothing else.
+ *
+ * It replaces a hand-maintained condition that was already wrong: the
+ * Tracking tab was added minutes before Zach followed
+ * `/setup?tab=hostTracking` and landed on Basic details, because the new id
+ * was not in it. `setup-tab-deep-links.spec.ts` derives the rendered tabs
+ * from this file and fails if the two disagree, so the next tab is either on
+ * this list or red — never silently unreachable.
+ */
+export const SETUP_TAB_IDS = [
+  basicSchema.id,
+  seoSchema.id,
+  trackingSchema.id,
+  THEME_TAB_ID,
+  DOMAIN_TAB_ID,
+  EMAILS_TAB_ID,
+  ACTIVITY_TAB_ID,
+] as const
+
 const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
 
   const searchParams = useSearchParams()
-  const requestedTab = searchParams?.get('tab')
-  const [tab, setTab] = useState(
-    requestedTab === THEME_TAB_ID ||
-      requestedTab === DOMAIN_TAB_ID ||
-      requestedTab === ACTIVITY_TAB_ID ||
-      requestedTab === EMAILS_TAB_ID ||
-      requestedTab === seoSchema.id
-      ? requestedTab
-      : basicSchema.id,
-  )
+  /*
+    Every tab this page has, DERIVED (AGL-2486).
+
+    This was a hand-maintained list of ids, and it was already wrong: the
+    Tracking tab was added minutes before Zach followed
+    `/setup?tab=hostTracking` and landed on Basic details, because the new id
+    was not on it. A list that has to be edited in a second place every time a
+    tab is added is a list that will be wrong again.
+
+    `SETUP_TAB_IDS` is module scope and `setup-tab-deep-links.spec.ts` derives
+    the rendered tabs from this file's source and fails if the two disagree —
+    so the next tab is either on the list or red, never silently unreachable.
+  */
+  const { tab, onTabChange } = useTabParam({
+    ids: SETUP_TAB_IDS,
+    fallback: basicSchema.id,
+    onChange: (value) => {
+      const form = forms.find(({ schema }) => schema.id === value)
+      // `analytics` is undefined whenever Firebase Analytics failed to
+      // initialize (ad blocker, blocked storage, missing measurement id) —
+      // `useAnalytics()` is typed as if it never is, and strictNullChecks is
+      // off. Unguarded this throws out of a tab-change handler on every
+      // switch, for a pageview.
+      if (analytics) {
+        logEvent(analytics, 'screen_view', {
+          firebase_screen: (form?.schema.title as string) ?? 'Theme',
+          firebase_screen_class: HostSetup.displayName,
+        })
+      }
+    },
+  })
   const analytics = useAnalytics()
   const { data: user } = useUser()
   const hostId = useHostId()
@@ -807,30 +853,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       onSubmit: handleBasicSave,
     },
   ]
-
-  const onTabChange = useCallback(
-    async (e, value) => {
-      setTab(value)
-      // Mirror the active tab into `?tab=` (shallow replace, no scroll) so the
-      // section deep-links and survives back/forward — matching HubTabs.
-      const nextParams = new URLSearchParams(searchParams?.toString())
-      nextParams.set('tab', value)
-      router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false })
-      const form = forms.find(({ schema }) => schema.id === value)
-      // `analytics` is undefined whenever Firebase Analytics failed to
-      // initialize (ad blocker, blocked storage, missing measurement id) —
-      // `useAnalytics()` is typed as if it never is, and strictNullChecks is
-      // off. Unguarded this throws out of a tab-change handler on every
-      // switch, for a pageview.
-      if (analytics) {
-        logEvent(analytics, 'screen_view', {
-          firebase_screen: (form?.schema.title as string) ?? 'Theme',
-          firebase_screen_class: HostSetup.displayName,
-        })
-      }
-    },
-    [forms, analytics, router, pathname, searchParams],
-  )
 
   /**
    * The SEO card's own form template (AGL-2486).

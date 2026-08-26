@@ -23,6 +23,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { Tab, Typography } from '@mui/material'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import useTabParam from '../../../../../../hooks/use-tab-param'
 import { useCallback, useState } from 'react'
 import DeleteSiteCard from '../../../../../../components/delete-site-card.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
@@ -52,29 +53,20 @@ const DANGER_TAB_ID = 'danger'
  * renders.
  */
 const HostAdmin: NextPageWithLayout<Record<string, never>> = () => {
-  const searchParams = useSearchParams()
-  const requestedTab = searchParams?.get('tab')
-  const [tab, setTab] = useState(
-    requestedTab === DANGER_TAB_ID ? requestedTab : PLUGINS_TAB_ID,
-  )
+  // Through the shared resolver (AGL-2486): validated against the tabs that
+  // exist, and it keeps following the param rather than reading it once. The
+  // condition this replaces named two ids and was correct only because nobody
+  // had added a third — the same shape that made `?tab=hostTracking` open the
+  // wrong panel on Setup.
+  const { tab, onTabChange } = useTabParam({
+    ids: [PLUGINS_TAB_ID, DANGER_TAB_ID],
+  })
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const isAdmin = useIsHostAdmin()
   const router = useRouter()
   const pathname = usePathname()
-
-  const onTabChange = useCallback(
-    (_event: unknown, value: string) => {
-      setTab(value)
-      // Mirror the active tab into `?tab=` (shallow replace, no scroll) so
-      // the section deep-links and survives back/forward — matching Setup.
-      const nextParams = new URLSearchParams(searchParams?.toString())
-      nextParams.set('tab', value)
-      router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false })
-    },
-    [router, pathname, searchParams],
-  )
 
   return (
     <DashboardLayout
