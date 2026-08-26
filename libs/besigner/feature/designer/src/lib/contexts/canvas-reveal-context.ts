@@ -30,4 +30,14 @@ export const CanvasRevealContext = createContext<readonly string[] | undefined>(
 )
 CanvasRevealContext.displayName = 'CanvasRevealContext'
 
+/**
+ * Classes the canvas is rendering without (AGL-2486). Read from the
+ * `mutedClasses` flag once, at the top of the canvas, for the same reason
+ * the reveal list is: every leaf needs the answer.
+ */
+export const CanvasMutedClassesContext = createContext<
+  readonly string[] | undefined
+>(undefined)
+CanvasMutedClassesContext.displayName = 'CanvasMutedClassesContext'
+
 export default CanvasRevealContext

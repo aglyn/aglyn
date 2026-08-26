@@ -29,7 +29,9 @@ import { alpha, Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useCallback, useContext, useMemo, useRef } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
-import CanvasRevealContext from '../contexts/canvas-reveal-context'
+import CanvasRevealContext, {
+  CanvasMutedClassesContext,
+} from '../contexts/canvas-reveal-context'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
@@ -37,6 +39,7 @@ import {
   isNodeHiddenOnSite,
   isNodeRevealedOnCanvas,
 } from '../utils/canvas-reveal'
+import { stripMutedClasses } from '../utils/muted-classes'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
 
@@ -215,6 +218,7 @@ export const NodeLeaf = observer(
     // context rather than the flag itself: the canvas subscribes once and
     // every leaf reads the result.
     const revealedNodeIds = useContext(CanvasRevealContext)
+    const mutedClasses = useContext(CanvasMutedClassesContext)
 
     // WYSIWYG bindings (AGL-97): resolve variable/function tokens
     // live on the rendered copy (selection/dnd keep the original node).
@@ -257,6 +261,15 @@ export const NodeLeaf = observer(
       }
       return { ...node, props: resolved }
     }, [node, boundProps, resolveFlag, variables, functions])
+
+    // Classes switched off for comparison (AGL-2486). Composed onto the SAME
+    // render copy the binding resolution builds, never onto the canvas node:
+    // selection, the hierarchy and every save keep reading the element's real
+    // class list, and the canvas paints without the switched-off names.
+    const renderNodeUnclassed = useMemo(
+      () => stripMutedClasses(renderNode as never, node?.$id, mutedClasses),
+      [renderNode, node, mutedClasses],
+    )
 
     // A component instance renders its definition (AGL-1251) instead of the
     // named dashed box. Authors placed a hero and saw a grey rectangle, so
@@ -349,7 +362,7 @@ export const NodeLeaf = observer(
       >
         <Leaf
           ref={registerElement}
-          node={renderNode as typeof node}
+          node={renderNodeUnclassed as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
           // Present while the selection lives in this node's subtree (the
           // node itself or any descendant). Canvas-aware components (nav

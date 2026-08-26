@@ -39,6 +39,14 @@ straight back. It is the way to answer "what does this section look like
 without the max width?" without deleting a value you want to compare
 against.
 
+The same eye is on the rows under **Classes & custom CSS**: each
+declaration in the **Builder** list, and each **class chip**. A switched-off
+class stays on the element — the chip's ✕ is still the only thing that
+removes one — so the chips are always the class list your site ships.
+The one exception is `aglyn-hidden`: its chip is the same switch as the
+eye on the element's hierarchy row, because "stop applying the hidden
+class here" and "show this element while I design it" are one decision.
+
 Switching a style off is a **canvas** setting, like the device preview:
 it is never saved, it never reaches Preview or your published site, and
 reloading the editor brings every declaration back. It also follows the

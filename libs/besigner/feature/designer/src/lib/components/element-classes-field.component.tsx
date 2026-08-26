@@ -16,10 +16,19 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { FieldMuteButton } from '@aglyn/shared-ui-jsx-forms'
 import { Autocomplete, Chip, TextField } from '@mui/material'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useMemo } from 'react'
+
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import { toggleRevealedNodeId } from '../utils/canvas-reveal'
+import {
+  isClassMuted,
+  isClassSwitchable,
+  toggleMutedClass,
+} from '../utils/muted-classes'
 
 /** Valid CSS class identifier (letters, digits, hyphen, underscore). */
 const CLASS_NAME_PATTERN = /^-?[_a-zA-Z][_a-zA-Z0-9-]*$/
@@ -36,6 +45,16 @@ export interface ElementClassesFieldProps {
  * into `node.props.className` (space-separated), merged into the
  * rendered className by the node renderer. Pairs with theme stylesheet
  * classes and the interaction builder's class actions.
+ *
+ * Each chip carries an eye as well as its ✕ (AGL-2486). The eye stops the
+ * class applying ON THE CANVAS and keeps it on the element; the ✕ is still
+ * the one control that takes a class off. Nothing about the eye is written
+ * down, so the chips are always the class list that ships.
+ *
+ * The hidden class is the exception, and deliberately so: switching it off
+ * on the canvas is the same act as the hierarchy's visibility eye (AGL-592),
+ * so its chip drives THAT state rather than a second one that could
+ * disagree with it.
  */
 export const ElementClassesField = observer(
   (props: ElementClassesFieldProps) => {
@@ -46,6 +65,38 @@ export const ElementClassesField = observer(
           .split(/\s+/)
           .filter(Boolean),
       [(node?.props as any)?.className],
+    )
+
+    const [mutedClasses, setMutedClasses] = useAglynBesignerFlag('mutedClasses')
+    const [revealedNodeIds, setRevealedNodeIds] =
+      useAglynBesignerFlag('revealedNodeIds')
+
+    const nodeId = node?.$id
+
+    /** Whether the canvas is currently rendering without this class. */
+    const isSwitchedOff = useCallback(
+      (className: string) => {
+        if (!nodeId) return false
+        return isClassSwitchable(className)
+          ? isClassMuted(mutedClasses, { nodeId, className })
+          : Boolean(revealedNodeIds?.some((id) => id === nodeId))
+      },
+      [nodeId, mutedClasses, revealedNodeIds],
+    )
+
+    const toggleClass = useCallback(
+      (className: string) => {
+        if (!nodeId) return
+        if (isClassSwitchable(className)) {
+          setMutedClasses((current) =>
+            toggleMutedClass(current, { nodeId, className }),
+          )
+          return
+        }
+        // One switch, two places to reach it.
+        setRevealedNodeIds((current) => toggleRevealedNodeId(current, nodeId))
+      },
+      [nodeId, setMutedClasses, setRevealedNodeIds],
     )
 
     const handleChange = useCallback(
@@ -73,14 +124,40 @@ export const ElementClassesField = observer(
         value={classes}
         onChange={handleChange}
         renderValue={(value, getItemProps) =>
-          value.map((option, index) => (
-            <Chip
-              label={option}
-              size="small"
-              {...getItemProps({ index })}
-              key={option}
-            />
-          ))
+          value.map((option, index) => {
+            const off = isSwitchedOff(option)
+            const switchable = isClassSwitchable(option)
+            return (
+              <Chip
+                label={option}
+                size="small"
+                {...getItemProps({ index })}
+                key={option}
+                variant={off ? 'outlined' : 'filled'}
+                sx={
+                  off
+                    ? { textDecoration: 'line-through', opacity: 0.6 }
+                    : undefined
+                }
+                icon={
+                  <FieldMuteButton
+                    mute={{
+                      muted: off,
+                      label: switchable
+                        ? off
+                          ? `Apply ${option} again`
+                          : `Stop applying ${option} while designing`
+                        : off
+                          ? `Stop showing this element on the canvas`
+                          : `Show this element on the canvas`,
+                      onToggle: () => toggleClass(option),
+                    }}
+                    sx={{ ml: 0.5 }}
+                  />
+                }
+              />
+            )
+          })
         }
         renderInput={(params) => (
           <TextField

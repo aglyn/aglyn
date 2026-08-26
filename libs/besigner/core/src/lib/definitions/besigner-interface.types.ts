@@ -67,6 +67,13 @@ export type BesignerContext = {
      * written, and only the canvas's copy of the sx drops it.
      */
     mutedStyles?: string[]
+    /**
+     * Classes the canvas is rendering without, encoded `nodeId|className`
+     * (AGL-2486). Canvas only, like the style mutes: the element's class list
+     * in the document is untouched, so what the Classes chips show is what
+     * ships.
+     */
+    mutedClasses?: string[]
     /** What kind of host view the canvas is editing (screen or shared layout). */
     viewType?: HostViewType
     /**

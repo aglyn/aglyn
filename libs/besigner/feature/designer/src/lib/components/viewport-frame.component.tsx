@@ -45,7 +45,9 @@ import {
   useCallback,
   useMemo,
 } from 'react'
-import CanvasRevealContext from '../contexts/canvas-reveal-context'
+import CanvasRevealContext, {
+  CanvasMutedClassesContext,
+} from '../contexts/canvas-reveal-context'
 import { useLayoutChromeContext } from '../contexts/layout-chrome-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import {
@@ -206,13 +208,17 @@ const ThemedElementContainer = ({ children }) => {
   // canvas of several hundred leaves carries one subscription rather than one
   // per element.
   const [revealedNodeIds] = useAglynBesignerFlag('revealedNodeIds')
+  // Classes switched off for comparison (AGL-2486), subscribed the same way.
+  const [mutedClasses] = useAglynBesignerFlag('mutedClasses')
   return (
     <ThemeProvider theme={canvasTheme}>
       <CssBaseline />
       <CanvasRevealContext.Provider value={revealedNodeIds}>
-        <LeafSxTransformContext.Provider value={sxTransform}>
-          {children}
-        </LeafSxTransformContext.Provider>
+        <CanvasMutedClassesContext.Provider value={mutedClasses}>
+          <LeafSxTransformContext.Provider value={sxTransform}>
+            {children}
+          </LeafSxTransformContext.Provider>
+        </CanvasMutedClassesContext.Provider>
       </CanvasRevealContext.Provider>
     </ThemeProvider>
   )
