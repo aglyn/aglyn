@@ -444,6 +444,18 @@ const baseOptions: ThemeOptions = {
       lineHeight: 1.15,
       letterSpacing: '-0.02em',
     },
+    // h3 has to come DOWN with them, or the ramp inverts. Retuning h1/h2 to
+    // the brand (56/40px) while h3 kept MUI's 48px left a Heading 3 LARGER
+    // than a Heading 2 — visible the moment the theme preview listed the
+    // variants in size order. h3 carries zero `variant="h3"` usages, the same
+    // as h1 and h2, so this restyles no product surface; h4-h6 keep MUI's
+    // scale because 95 usages ride on them.
+    h3: {
+      fontSize: '2.25rem',
+      fontWeight: 700,
+      lineHeight: 1.2,
+      letterSpacing: '-0.015em',
+    },
     // The three text rungs the brand uses that MUI's scale has no name for
     // (Zach 2026-08-25). MUI runs 16 / 14 / 12 (`body1` / `body2` /
     // `caption`); the built pages kept reaching for 17, 13 and 11 and, with

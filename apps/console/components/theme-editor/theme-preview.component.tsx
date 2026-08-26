@@ -87,11 +87,35 @@ function TypeRamp() {
   const theme = useTheme()
   const variants = useMemo(() => {
     const t = theme.typography as unknown as Record<string, any>
+    // Rank by the size the variant reaches at its WIDEST breakpoint, not by
+    // its base. `responsiveFontSizes` scales a variant down from the desktop
+    // figure, and it scales the big ones hardest — so h2 (2.5rem desktop)
+    // carries a SMALLER base than h3 (2rem, barely scaled) and a base-order
+    // sort prints h1, h3, h2. Reading the ceiling puts the ramp back in the
+    // order the ramp actually is.
+    const ceiling = (v: Record<string, any>) => {
+      const sizes = [v.fontSize, ...Object.keys(v)
+        .filter((k) => k.startsWith('@media'))
+        .map((k) => v[k]?.fontSize)]
+      return Math.max(
+        ...sizes.map((x) => Number.parseFloat(String(x ?? '')) || 0),
+      )
+    }
     return Object.keys(t)
-      .filter((key) => t[key] && typeof t[key] === 'object' && t[key].fontSize)
+      .filter((key) => {
+        const v = t[key]
+        // `inherit` names no size of its own — listing it prints
+        // "inherit · inherit", which tells an author nothing.
+        return (
+          v &&
+          typeof v === 'object' &&
+          v.fontSize &&
+          Number.isFinite(Number.parseFloat(String(v.fontSize)))
+        )
+      })
       .map((key) => ({
         key,
-        size: Number.parseFloat(String(t[key].fontSize)) || 0,
+        size: ceiling(t[key]),
         weight: t[key].fontWeight,
         raw: String(t[key].fontSize),
       }))
@@ -269,6 +293,11 @@ export function ThemePreview(props: ThemePreviewProps) {
               (AGL-1244): the pairing is the whole point of the token, so the
               preview renders each wash under the accent that belongs on it
               rather than as three bare swatches. */}
+          <Typography variant="body2" color="text.secondary">
+            {'Tints are the pale washes a tile or panel is filled with — each '}
+            {'one named after the accent whose icon sits on it. They are not '}
+            {'the light shades of those accents.'}
+          </Typography>
           <Stack direction="row" spacing={1}>
             {(
               [
@@ -288,7 +317,9 @@ export function ThemePreview(props: ThemePreviewProps) {
                 }}
               >
                 <Typography variant="subtitle2">{label}</Typography>
-                <Typography variant="caption">{'tint'}</Typography>
+                <Typography variant="caption" sx={{ display: 'block' }}>
+                  {`tint.${label.toLowerCase()}`}
+                </Typography>
               </Box>
             ))}
           </Stack>
