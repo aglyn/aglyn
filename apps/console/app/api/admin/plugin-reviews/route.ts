@@ -69,6 +69,7 @@ import {
   notifyOrgAdmins,
 } from '@aglyn/tenant-data-admin'
 import { sendEmail } from '@aglyn/shared-util-email'
+import { revalidateHostsWithPlugin } from '../../../../utils/server/tenant-revalidate'
 
 /**
  * Emails a publisher's owners and admins about a review outcome (AGL-972).
@@ -767,6 +768,12 @@ async function handler(request: Request): Promise<Response> {
         } else if (current) {
           await revocationRef.delete()
         }
+        // Make the kill switch reach ALREADY-CACHED pages (AGL-1152). The
+        // tenant stamps each plugin node with its revocation state at compose
+        // time, so without this the bundle we just killed keeps executing on
+        // every cached page until it happens to re-render. Best effort: the
+        // tenant refuses a revoked plugin at render time regardless.
+        await revalidateHostsWithPlugin(firestore, listingId)
         // The offer follows the kill switch here too (AGL-2368). AGL-2306
         // taught the per-version revoke and the reject path to repair the
         // mirror and left this one out, so a takedown flattened `versions` to
@@ -1170,6 +1177,10 @@ async function handler(request: Request): Promise<Response> {
       } else {
         await revocationRef.delete()
       }
+      // Same reach as the takedown path above (AGL-1152): a per-version
+      // revocation changes what every cached page renders, and nothing else
+      // drops that HTML.
+      await revalidateHostsWithPlugin(firestore, listingId)
 
       // Withdraw the "Reviewed" chip when the bytes we just killed are the ones
       // customers are being offered (AGL-1121).

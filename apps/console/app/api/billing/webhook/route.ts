@@ -47,6 +47,7 @@ import {
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
@@ -592,7 +593,42 @@ async function handler(request: Request): Promise<Response> {
         // included. `updateExisting` distinguishes that rejection from every
         // other failure — a `.catch(() => …)` here would read a permission or
         // transport error as "the org is gone" and record a lie.
+        // Read BEFORE the mirror lands, so the comparison below is against
+        // what the tenant's cached pages were actually rendered from.
+        const previousPlan = String(orgSnapshot?.get('plan') ?? '')
         const mirrored = await updateExisting(orgRef, { plan, ...discountUpdate })
+        // Make an upgrade or downgrade reach ALREADY-CACHED pages (AGL-1152).
+        //
+        // `showBranding` is computed in the tenant loader from `org.plan`, so
+        // until this existed a customer who paid to remove the free-tier badge
+        // kept seeing it on every cached page until that page next happened to
+        // re-render — which on a quiet site can be a long time, and is longer
+        // still now the ISR window is the hour-long backstop rather than 60s.
+        //
+        // ONLY on an actual transition. Stripe re-delivers and the webhook is
+        // idempotent, so mirroring the same plan again is the common case and
+        // must not fan a site-wide cache drop out across every host each time.
+        if (mirrored && previousPlan !== String(plan)) {
+          // No `ledger.effect()` beside it, per AGL-1954's rule directly
+          // above: this is a cache hint over HTTP, not a committed write, and
+          // a hand-written claim would outlive the call it names. The org
+          // update that triggered it already reaches the ledger from inside
+          // `updateExisting`, so the delivery is correctly 'acted' regardless.
+          const fanout = await revalidateOrgHosts(observed(), String(orgId))
+          if (fanout.some((result) => result.reason !== 'ok')) {
+            console.warn(
+              JSON.stringify({
+                tag: 'AGL-1152:plan-change-revalidate-partial',
+                orgId: String(orgId),
+                from: previousPlan,
+                to: String(plan),
+                failed: fanout
+                  .filter((result) => result.reason !== 'ok')
+                  .map((result) => ({ hostId: result.hostId, reason: result.reason })),
+              }),
+            )
+          }
+        }
         // NOT noted here, deliberately (AGL-1954). `updateExisting` writes
         // through the OBSERVED handle above, so `orgs.update` reaches the
         // ledger from inside the call that commits it. A note beside this

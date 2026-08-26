@@ -35,7 +35,45 @@ import type { Props } from './types'
 // ISR: the old getStaticPaths used `fallback: 'blocking'` with per-page
 // revalidate 60s. generateStaticParams returns nothing (nothing prebuilt);
 // every path server-renders on demand and caches for `revalidate` seconds.
-export const revalidate = 60
+/**
+ * 60s WAS THE BACKSTOP SET TO THE REQUEST RATE (AGL-1152).
+ *
+ * This is the only value that controls ISR on this route. The `revalidate`
+ * fields the loader returns are INERT — Pages Router leftovers that nothing but
+ * the specs reads (see the note on `LoadPageDataResult`) — so tuning them
+ * changes nothing and this line is the whole lever.
+ *
+ * At 60s a page is stale again a minute after it is built, so any path requested
+ * less often than that regenerates on essentially EVERY visit and pays the full
+ * loader. That is the shape of the traffic this platform actually has: the
+ * uptime checks alone hit `/` every minute or so from several regions, and each
+ * one was triggering a fresh render. Publishing has been instant since AGL-1150
+ * (`revalidateTag` + `revalidatePath` the moment content changes), so the timer
+ * was never the propagation mechanism — it was a backstop set to the request
+ * rate, the same mistake the render-cache TTLs carried until AGL-1302.
+ *
+ * ## Why 600 and not the 3600 the doc-cache backstop uses
+ *
+ * Because three states still have no bust and would inherit the full window:
+ *
+ *   - MAINTENANCE MODE — flipping the toggle off must recover the site, and
+ *     nothing revalidates on that write.
+ *   - THE BANDWIDTH CEILING notice — clears when the month rolls over, which is
+ *     arithmetic on a counter, not an action anything hooks. (An UPGRADE now
+ *     does bust it, via the plan-change fan-out added with this change.)
+ *   - SOFT 404s — a path that starts resolving should not stay a 404.
+ *
+ * Everything else that changes without a publish is now busted on demand:
+ * publish, scheduled publish, lockdown/takedown, plan change, and plugin
+ * revocation. 600 keeps ~90% of the regeneration saving — the checks that
+ * dominate our traffic run well inside it — while bounding those three at ten
+ * minutes instead of an hour.
+ *
+ * ⛔ Do not raise this to 3600 until the maintenance toggle and the bandwidth
+ * counter reset call `revalidateEntireHost`. At that point the remaining
+ * exposure is soft 404s and the value can go to the doc-cache backstop.
+ */
+export const revalidate = 600
 export const dynamicParams = true
 
 /**
