@@ -318,7 +318,7 @@ a second one. **Two surfaces competing to be "the status page" is the failure
 mode to avoid** — whichever way this is done, one URL must end up serving the
 other.
 
-**Exact steps (Zach — this is a domain change, not an agent action):**
+**Exact steps (account owner — this is a domain change, not an agent action):**
 
 1. Vercel → `aglyn-docs` → Settings → Domains → **Add** `status.aglyn.com`.
    The apex is already on Vercel DNS, so no registrar work is needed and the

@@ -121,7 +121,7 @@ Who files the report with NCMEC, under whose account, and on what timeline is
 **not established**. There is no registered account, no runbook step you can
 follow, and nothing in the code that does it for you. Until that is settled, the
 only correct action a staff member can take on a `csam` report is preserve,
-suppress, and escalate to Zach — do not improvise a filing, and do not assume
+suppress, and escalate to the account owner — do not improvise a filing, and do not assume
 someone else has already made one.
 
 The public form no longer implies otherwise (AGL-2045). Its `csam` hint used to
@@ -453,7 +453,7 @@ incident.
   Still true, and the public form now says so by omission rather than
   claiming the opposite (AGL-2045). Building a real reporting path —
   registered CyberTipline account, the §2258A duties that attach with it,
-  and retention — is a decision for Zach, not something to improvise on a
+  and retention — is a decision for the account owner, not something to improvise on a
   live report.
 - **The designated agent is filed; the required publication is not.** The
   registration is live (`DMCA-1038349`, active 2026-08-18). What is missing is

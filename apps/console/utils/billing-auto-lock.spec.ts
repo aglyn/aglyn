@@ -27,7 +27,7 @@ const periodEnd = (daysAgo: number) => ({
   seconds: Math.floor((NOW - daysAgo * DAY_MS) / 1000),
 })
 
-describe('billingAutoLockEnabled — the switch is OFF until Zach flips it', () => {
+describe('billingAutoLockEnabled — the switch is OFF until the account owner flips it', () => {
   it('is disabled with no env value, an empty one, or garbage', () => {
     expect(billingAutoLockEnabled('2026-08', undefined)).toBe(false)
     expect(billingAutoLockEnabled('2026-08', '')).toBe(false)

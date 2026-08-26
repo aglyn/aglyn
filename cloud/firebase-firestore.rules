@@ -1477,9 +1477,8 @@ service cloud.firestore {
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
         // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
         //
-        // Zach: a draft is "the working document" now — you save into it as you
-        // work and publish when you are done — and there is exactly ONE per
-        // target. The fixed document id is what enforces that: there is no
+        // A draft is the working document: you save into it as you work and
+        // publish when you are done, and there is exactly ONE per target. The fixed document id is what enforces that: there is no
         // second name to create.
         //
         // It needs its own rule because the recursive matcher below allows
@@ -1537,9 +1536,8 @@ service cloud.firestore {
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
         // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
         //
-        // Zach: a draft is "the working document" now — you save into it as you
-        // work and publish when you are done — and there is exactly ONE per
-        // target. The fixed document id is what enforces that: there is no
+        // A draft is the working document: you save into it as you work and
+        // publish when you are done, and there is exactly ONE per target. The fixed document id is what enforces that: there is no
         // second name to create.
         //
         // It needs its own rule because the recursive matcher below allows
@@ -1603,9 +1601,8 @@ service cloud.firestore {
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
         // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
         //
-        // Zach: a draft is "the working document" now — you save into it as you
-        // work and publish when you are done — and there is exactly ONE per
-        // target. The fixed document id is what enforces that: there is no
+        // A draft is the working document: you save into it as you work and
+        // publish when you are done, and there is exactly ONE per target. The fixed document id is what enforces that: there is no
         // second name to create.
         //
         // It needs its own rule because the recursive matcher below allows

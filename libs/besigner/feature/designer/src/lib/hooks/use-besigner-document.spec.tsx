@@ -260,7 +260,7 @@ describe('useBesignerDocument', () => {
     })
 
     /**
-     * Two tabs of ONE account, which is the case Zach lives in — he keeps
+     * Two tabs of ONE account, which is the case the owner lives in — he keeps
      * four open (AGL-2486).
      *
      * The console runs `persistentMultipleTabManager`, so tabs share a cache

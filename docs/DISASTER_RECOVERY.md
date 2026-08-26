@@ -385,7 +385,7 @@ dated so this never matters.
    would be lost, so it is structurally incapable of reporting this. That is
    what `npm run check:backup-copies` exists for.
 
-   ### What closing it takes (Zach — these create/modify cloud resources)
+   ### What closing it takes (account owner — these create/modify cloud resources)
 
    Order matters: the bucket and its IAM must exist **before** anything is
    pointed at it, or the first scheduled export fails and the health probe
@@ -592,7 +592,7 @@ dated so this never matters.
    projects, and it shares the DR project gap 1 already needs — so AGL-1882 and
    AGL-2422 are one sitting, not two.
 
-   ### What closing it takes (Zach — creates cloud resources)
+   ### What closing it takes (account owner — creates cloud resources)
 
    Assumes the `aglyn-dr` project from gap 1 exists. **Order matters**: steps 3
    and 4 must both be done before step 6, or the first sync runs against a
@@ -713,7 +713,7 @@ which of five artifacts is the right one.
 | Customer media, audit archive, plugin bundles | `gs://aglyn-dr-backup` in the **`aglyn-dr`** project — nightly Storage Transfer, versioned, 90-day noncurrent lifecycle | `gcloud storage rsync -r gs://aglyn-dr-backup/media/ gs://aglyn-main.appspot.com/` (and `plugin-artifacts/` likewise). A deletion is recoverable for 90 days from the surviving noncurrent generation, not 7 | Not yet rehearsed end to end — the copy is verified complete, the RESTORE direction is not |
 | Erasures resurrected by any import | `adminAudit` rows at/after the snapshot | `replay-erasures.mjs`, C step 4 / D step 4 | Any staff actor with a uid; **required**, not optional |
 
-Every row above that says "Zach" says so because the restore commands need
+Every row above assigned to the account owner is so assigned because the restore commands need
 project-level Firestore admin, which is deliberately not delegated. The
 verification half is not gated that way: `firestore-inventory.mjs` and
 `check-backup-copies.mjs` read with the console service account, so an agent

@@ -360,7 +360,7 @@ describe('element detail in both picker surfaces (AGL-2486)', () => {
         /grid-template-columns:\s*repeat\(\s*auto-fill\s*,\s*minmax\(\s*(\d+)px\s*,\s*1fr\s*\)\s*\)/,
       )
       expect(track).toBeTruthy()
-      // The tile floor is what Zach lost twice — once to the detail pane,
+      // The tile floor is what was lost twice — once to the detail pane,
       // once to the even split. Pinned so neither can quietly take it again.
       expect(Number(track[1])).toBeGreaterThanOrEqual(150)
 

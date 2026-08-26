@@ -36,10 +36,10 @@ import type { BesignerDraftIds } from './besigner-draft-store'
  * saved, in this browser, and dies the moment a save succeeds. That is still
  * exactly what it should be, and nothing here changes it.
  *
- * This is the other thing Zach asked for, and it is genuinely different: "the
+ * This is the other thing asked for, and it is genuinely different: the
  * draft was originally only to save lost work, but now it is becoming a
  * working document and we want to save the working document as we make changes
- * and then publish after we are all done." So a draft here is written
+ * and then publish after we are all done. So a draft here is written
  * DELIBERATELY, survives the browser, and lives until it is published.
  *
  * ## Why it is not a free version history

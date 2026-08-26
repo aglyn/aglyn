@@ -1285,7 +1285,7 @@ The mode-tagged constants, and the probe evidence above, live in one place:
 
 ### What the live Dashboard did say, once someone opened it (AGL-2430)
 
-Zach read Settings → Billing → **Subscriptions and emails** on the live account
+Settings was read at → Billing → **Subscriptions and emails** on the live account
 on 2026-08-23, a day before the retry schedule above was read. What that first
 pass read was the **email** half, and it found a defect worse than an unknown
 number — one that is still open, because its fix is gated on a deploy.

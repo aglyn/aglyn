@@ -102,8 +102,8 @@ export const isSafeContinueUrl = (url: string): boolean => {
  * A signed-out user who deep-links in arrives at `/signin?continue=…`, and
  * every link OUT of that page to another auth route — the SSO button above
  * all — has to carry the value or the destination they were going to is
- * gone. Zach hit this on the SSO button: "the url does not carry the
- * continue url and is dropped entirely".
+ * gone. Observed on the SSO button: the url does not carry the
+ * continue url and is dropped entirely.
  *
  * Unsafe or absent values append nothing, so a poisoned `continue` degrades
  * to a plain link rather than being laundered one hop further along.

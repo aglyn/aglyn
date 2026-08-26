@@ -262,7 +262,7 @@ automatically.
 >
 > This is an automated acknowledgement. Nobody has read your report yet.
 
-**Steps for Zach** (nobody else can do this — it is Workspace account state):
+**Steps for the account owner** (nobody else can do this — it is Workspace account state):
 
 1. Open `https://groups.google.com/a/aglyn.com/g/security/settings` — or
    Groups → **security** → **Settings**. You need Owner or Manager on the group.

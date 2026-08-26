@@ -20,8 +20,8 @@
  *
  * The starter templates seeded **zero** `muiContainer` nodes and four
  * hardcoded pixel caps (560 / 720), so a customer creating a site did not
- * drift out of AGL-1298's standard — they started outside it. Zach chose "fix
- * before launch", and from Sept 1 the people creating sites are strangers.
+ * drift out of AGL-1298's standard — they started outside it. chose fix
+ * before launch, and from Sept 1 the people creating sites are strangers.
  *
  * The issue asked for coverage that can actually go red, so the predicates
  * here are asserted against the exact shapes the templates used to carry —

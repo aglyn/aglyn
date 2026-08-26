@@ -282,7 +282,7 @@ describe('accentTextColor still ANSWERS the question, wired to nothing', () => {
   })
 })
 
-describe('FINDINGS for a decision Zach owns — measured, never applied', () => {
+describe('FINDINGS for a decision the account owner owns — measured, never applied', () => {
   it('FINDING: `#00b0ff` as normal text misses both WCAG bars', () => {
     const ratio = contrastRatio(BRAND_BLUE, '#FFFFFF')
     expect(Number(ratio.toFixed(2))).toBe(2.43)

@@ -452,7 +452,7 @@ export function buildVisibilityFields(
  *
  * Presets rather than a keyframes box, because the audience includes people
  * who have never written CSS: an author picks "Slide up", "on scroll into
- * view", and adjusts a few obvious knobs. Zach named the knobs — duration,
+ * view", and adjusts a few obvious knobs. The knobs named — duration,
  * delay, easing — plus stagger, and this is that list and nothing more. There
  * is deliberately no keyframe editor and no general trigger picker; the
  * things that are NOT offered (the distance a slide travels, the difference

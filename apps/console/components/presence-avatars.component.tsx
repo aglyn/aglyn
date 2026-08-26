@@ -93,7 +93,7 @@ export function PresenceAvatars({ presence }: { presence: PresenceState }) {
  * with, and they were the whole sentence.
  *
  * So the order is inverted. The lead is what happened in the reader's terms
- * and what they can do about it; the caution Zach kept — an empty stack is
+ * and what they can do about it; the caution kept — an empty stack is
  * NOT proof you are alone — stays on every branch; and stage/code/message
  * move behind a details affordance, still one click away for whoever is
  * debugging this, no longer in the way of whoever is not.

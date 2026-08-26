@@ -282,7 +282,7 @@ export const formatMarketingWidthDoctrineFailure = (result) => {
  *     mobile      inset 20/16/0     (unchanged)
  *
  * Every variant was drawn to a 1280 column originally. On 2026-08-08 — the day
- * Zach ruled "keep the default container widths and update the designs"
+ * ruled keep the default container widths and update the designs
  * (AGL-1298) — the desktop and widescreen frames were re-cut to what the code
  * renders, and the tablet and mobile frames were not. The 40px and 20px
  * margins are therefore the SAME vintage as the 1280 column that AGL-2360

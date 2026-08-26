@@ -2338,7 +2338,7 @@ there is the merchant's to make, not one we can make for them.
    authentication, security, preferences, and analytics"), so it contradicts
    itself independently of docs. It reads like it was drafted to mean "no
    adtech", which is true, but that is not what it says. **This is a legal-copy
-   decision for Zach, not an engineering one** — and it should be settled
+   decision for the account owner, not an engineering one** — and it should be settled
    before the docs tag is deployed, since deploying widens an existing
    inaccuracy rather than creating one. Filed as AGL-1594. The scope clause
    itself is fine: it names `docs.aglyn.com` explicitly in every version.

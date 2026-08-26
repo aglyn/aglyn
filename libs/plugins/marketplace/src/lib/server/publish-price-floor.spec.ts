@@ -276,8 +276,8 @@ describe('the price floor decision (AGL-2343)', () => {
   })
 
   it('does not lose money AT the floor, and does one dollar below', () => {
-    // The property Zach asked for, asserted directly on the money: "a minimum
-    // price floor that does not cause us to lose money" (2026-08-19). Both
+    // The property asked for, asserted directly on the money: a minimum
+    // price floor that does not cause us to lose money (2026-08-19). Both
     // directions, because a floor set too HIGH also passes a one-sided test.
     const fee = bindingMarketplaceFeePct()
     expect(

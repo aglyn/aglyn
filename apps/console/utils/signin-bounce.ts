@@ -24,9 +24,9 @@
  * half is right on its own; together they are a ping-pong that a FLAPPING
  * session drives forever, because neither side counts.
  *
- * Zach hit it on production 2026-08-22: an org page "redirected a few times
+ * hit it on production 2026-08-22: an org page redirected a few times
  * then asked me to sign in again, then redirected a few times from the
- * auth/signin page then brought me back to the org with no sites loaded".
+ * auth/signin page then brought me back to the org with no sites loaded.
  * That is this loop, and there was no exit from it inside the app — the fix
  * he found was refreshing a different tab.
  *

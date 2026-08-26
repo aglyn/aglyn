@@ -113,7 +113,7 @@ export type PaletteContrastViolation = {
  * outstanding.
  *
  * The rest of what {@link auditPaletteContrast} reports is a FINDING: a
- * measurement offered for a decision Zach owns, not a defect queued for
+ * measurement offered for a decision the account owner owns, not a defect queued for
  * repair. Nothing in this module changes a rendered colour.
  *
  * This is not a suppression list and it must not become one. Each entry pins

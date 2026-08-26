@@ -235,8 +235,8 @@ loss, not a break-even), cash/folio POS tenders recording no fee (the fee
 attaches to the **sale**, not the tender), and the absent marketplace listing
 minimum (the fixed 30¢ component dominates a small order).
 
-⚠️ This is a **narrow, explicit exception**. The standard Zach set is *"not
-losing money"* — derived from break-even arithmetic, not a round number. The
+⚠️ This is a **narrow, explicit exception**. The standard set is * not
+losing money* — derived from break-even arithmetic, not a round number. The
 rest of the lock holds: visibility may change, **the charged price may not**.
 
 ## 2026-08-19 — The free tier hard-caps at three workspaces per person, with a staff-console control
@@ -340,8 +340,7 @@ which is the only thing that proves what the edit produced — cannot run.
 
 Carried into AGL-1908's brief as a requirement: re-acceptance stays, but the
 banner must not imply the user never agreed. ⚠️ **Recorded as a question, not a
-decision** — no Zach quote stands behind it, and the console's current
-"no record of your acceptance" copy is literally true pre-launch. Needs his read
+decision** — no quote stands behind it, and the console's current no record of your acceptance copy is literally true pre-launch. Needs his read
 before any wording moves, and any change is gdoc-first if it touches a legal page.
 
 ### Event Calendar packaging

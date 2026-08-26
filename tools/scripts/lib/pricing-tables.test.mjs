@@ -331,8 +331,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   })
 
   it('publishes the LOCKED metered rates, to four decimals where needed', () => {
-    // Zach locked "$0.0338/GB-mo · $0.13/1k page views · $0.065/1k form
-    // submissions" on 2026-08-18. Asserted on the generator's OUTPUT rather
+    // locked $0.0338/GB-mo · $0.13/1k page views · $0.065/1k form
+    // submissions on 2026-08-18. Asserted on the generator's OUTPUT rather
     // than on the constants, because two-decimal formatting would round the
     // cost and the +30% columns into agreement and publish a table that looks
     // internally consistent while stating neither figure.

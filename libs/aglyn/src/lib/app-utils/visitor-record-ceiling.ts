@@ -50,7 +50,7 @@
  *
  * ## Why the shape here is the FLAT family, not the MULTIPLE family
  *
- * The two ceilings Zach named as precedent — `FORM_ABUSE_CEILING_*` and
+ * The two ceilings named as precedent — `FORM_ABUSE_CEILING_*` and
  * `BANDWIDTH_ABUSE_CEILING_*` — are both `max(floor, included × 10)`. They
  * can be, because forms and bandwidth each have an *included band* on the
  * price list to multiply. Members and leads have no included band by

@@ -102,8 +102,8 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // wrong: `useCurrentOrg` resolves through `useOrgScope().currentOrg`, which
   // falls back to a remembered selection and then to the user's FIRST org, so
   // on the workspace picker `plan` is perfectly truthy — it just belongs to an
-  // org the URL never named. Zach photographed the result: "You've reached
-  // your team seats limit — upgrade to keep adding" above the four unopened
+  // org the URL never named. You've reached
+  // your team seats limit — upgrade to keep adding above the four unopened
   // workspace cards, naming none of them, with UPGRADE pointing at the
   // fallback org's billing page. A guard against NO answer is not a guard
   // against the WRONG answer.

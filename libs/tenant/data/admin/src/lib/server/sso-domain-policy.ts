@@ -307,7 +307,7 @@ export const SSO_DOMAIN_REFUSAL_MESSAGE =
  * The refusal a caller should return, or null to carry on.
  *
  * Returns null whenever the switch is off, so wiring this into an
- * authentication path is inert until Zach flips it — the call site is live,
+ * authentication path is inert until the account owner flips it — the call site is live,
  * the consequence is not.
  */
 export function ssoDomainRefusal(
