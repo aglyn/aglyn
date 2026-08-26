@@ -94,6 +94,33 @@ describe('expanding a screen holds the columns still (AGL-693)', () => {
     expect(columnWidths(nested[1])).toEqual(columnWidths(root))
   })
 
+  it('reserves the toggle slot and the indent only where the tree nests', () => {
+    const flat = render(
+      <ScreensHierarchyTableComponent
+        screens={[
+          { $id: 'a', displayName: 'A' },
+          { $id: 'b', displayName: 'B' },
+        ]}
+        onMoveScreen={() => undefined}
+        renderRowActions={() => null}
+      />,
+    )
+    const flatWidths = columnWidths(
+      flat.container.querySelector('table') as Element,
+    )
+    const nestedWidths = columnWidths(
+      renderTable().container.querySelector('table') as Element,
+    )
+
+    // A list with nothing to expand pays for neither the toggle nor a level
+    // of indent, exactly as its rows draw neither.
+    expect(parseInt(flatWidths[0], 10)).toBeLessThan(
+      parseInt(nestedWidths[0], 10),
+    )
+    // The shape of the tree reaches the leading column and nothing else.
+    expect(flatWidths.slice(1)).toEqual(nestedWidths.slice(1))
+  })
+
   it('lays the table out from those widths, not from its rows', () => {
     const { container } = renderTable()
     for (const table of Array.from(container.querySelectorAll('table'))) {

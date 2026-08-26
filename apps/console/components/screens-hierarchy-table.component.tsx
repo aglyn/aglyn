@@ -163,12 +163,15 @@ const ROW_INDENT = 3
 /** The theme's spacing step, for the widths that must be arithmetic. */
 const SPACING_STEP = 8
 
+/** The row's left padding plus the drag handle, in px. */
+const CONTROLS_COLUMN_WIDTH = 36
+
 /**
- * The controls column at zero depth: the row's left padding, the drag handle
- * and the collapse toggle. Nesting adds {@link ROW_INDENT} per level on top,
- * which is why the width is computed from the tree's depth rather than fixed.
+ * The collapse toggle and the gap before it, in px. Reserved only where the
+ * tree actually nests — on a flat list this is dead width in every row, which
+ * is the same reason the rows themselves reserve the slot conditionally.
  */
-const CONTROLS_COLUMN_WIDTH = 68
+const TOGGLE_SLOT_WIDTH = 32
 
 /**
  * The width of every column, declared once and rendered into the root table
@@ -183,9 +186,11 @@ const CONTROLS_COLUMN_WIDTH = 68
  * child's cells line up with its parent's.
  *
  * ⚠️ The controls column is the one that can OVERFLOW rather than wrap: it is
- * `nowrap` and holds the indent. `controlsWidth` must stay
- * {@link CONTROLS_COLUMN_WIDTH} plus one {@link ROW_INDENT} per level of the
- * deepest branch, counted from the whole tree and never from what is expanded.
+ * `nowrap` and holds the indent. `controlsWidth` must account for everything
+ * in it — the drag handle, the toggle slot where the tree nests, one
+ * {@link ROW_INDENT} per level of the DEEPEST branch, and anything a caller
+ * draws through `renderRowLeadingActions` — and it must be counted from the
+ * whole tree, never from the part of it that happens to be expanded.
  */
 function ScreenColumnWidths(props: { controlsWidth: number }) {
   const { controlsWidth } = props
@@ -590,7 +595,13 @@ export function ScreensHierarchyTableComponent(
       )
     return deepest(tree)
   }, [tree])
-  const controlsWidth = CONTROLS_COLUMN_WIDTH + maxDepth * ROW_INDENT * SPACING_STEP
+  // A collapse toggle can only appear where the tree actually nests. Drives
+  // whether rows reserve space for one, and whether the column pays for it.
+  const anyExpandable = maxDepth > 0
+  const controlsWidth =
+    CONTROLS_COLUMN_WIDTH +
+    (anyExpandable ? TOGGLE_SLOT_WIDTH : 0) +
+    maxDepth * ROW_INDENT * SPACING_STEP
   // Below this the columns cannot all fit, and the container scrolls instead
   // of squeezing them; above it the surplus is shared out between them.
   const tableSx = {
@@ -598,9 +609,6 @@ export function ScreensHierarchyTableComponent(
     minWidth:
       controlsWidth + DATA_COLUMN_WIDTHS.reduce((sum, width) => sum + width, 0),
   }
-  // A collapse toggle can only appear where the tree actually nests. Drives
-  // whether rows reserve space for one.
-  const anyExpandable = maxDepth > 0
 
   /**
    * Pagination that pages ROOTS, never rows (AGL-693).
