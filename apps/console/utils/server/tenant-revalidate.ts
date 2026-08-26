@@ -77,6 +77,34 @@ export interface TenantRevalidateResult {
  * be sent must not make a completed publish look failed, and the ISR window is
  * still underneath it as the backstop.
  */
+/**
+ * A CUSTOM DOMAIN IS A SECOND CACHE KEY, and publishes were missing it
+ * (AGL-1152).
+ *
+ * The tenant middleware rewrites `https://{host}{path}` to `/{tenantHost}{path}`
+ * and THAT is what Next stores the page under. For a platform subdomain
+ * `tenantHost` is the label (`acme`); for an attached custom domain it is the
+ * `cname--acme.com` sentinel. The two are different keys for the same page.
+ *
+ * This helper only ever sent the subdomain, so on a site with a domain
+ * attached a publish dropped `/acme/pricing` — a URL nobody visits — and left
+ * `/cname--acme.com/pricing`, the one everybody does, serving the old page
+ * until its ISR window expired on its own. Observed on `aglyn.com`: a
+ * component published at 09:20 was still absent from the live page minutes
+ * later, while the parent document already carried the change.
+ *
+ * The tag bust is unaffected either way — `tenant-data:{hostId}` is keyed on
+ * the host id, which no domain changes — so the DATA was always fresh. It was
+ * the HTML that was not, which is why the page looked stale while every
+ * document behind it was correct.
+ */
+function cnameCacheHost(cname: string | undefined): string | undefined {
+  const value = (cname ?? '').trim().toLowerCase()
+  // The sentinel the middleware builds, and it must match byte for byte or the
+  // drop lands on a key nothing reads.
+  return value ? `cname--${value}` : undefined
+}
+
 export async function postTenantRevalidate(options: {
   /** The site's subdomain — the tenant keys its cache on it, not on `hostId`. */
   subdomain: string
@@ -84,6 +112,12 @@ export async function postTenantRevalidate(options: {
   hostId: string
   /** Site-absolute paths (`/`, `/menu`). The tenant caps them at 250. */
   paths: string[]
+  /**
+   * The site's attached custom domain, when it has one. Pages served on it
+   * live under a DIFFERENT cache key and are dropped by a second call — see
+   * `cnameCacheHost`. Omitted for a site with no domain, which costs nothing.
+   */
+  cname?: string
 }): Promise<TenantRevalidateResult> {
   const { subdomain, hostId, paths } = options
   const secret = process.env['REVALIDATE_SECRET']
@@ -108,8 +142,49 @@ export async function postTenantRevalidate(options: {
         pathsDropped: 0,
       }
     }
+    // The same paths again under the custom domain's key. Sequential rather
+    // than parallel: the second call is only worth making if the first was
+    // accepted, and a site with no domain never makes it at all.
+    const cnameHost = cnameCacheHost(options.cname)
+    let cnameRevalidated: string[] = []
+    if (cnameHost) {
+      try {
+        const second = await fetch(
+          `https://${subdomain}.${TENANT_APEX}/api/revalidate`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-revalidate-secret': secret,
+            },
+            body: JSON.stringify({ host: cnameHost, hostId, paths }),
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+          },
+        )
+        const body = (await second.json().catch(() => null)) as {
+          revalidated?: unknown
+        } | null
+        if (second.ok && Array.isArray(body?.revalidated)) {
+          cnameRevalidated = body.revalidated as string[]
+        } else if (!second.ok) {
+          // Reported, never silent: the subdomain drop succeeded, so the
+          // publish is not a failure — but the domain everybody actually
+          // visits is still serving the old page and somebody should know.
+          console.error(
+            '[tenant-revalidate] custom-domain drop refused',
+            second.status,
+            cnameHost,
+          )
+        }
+      } catch (error) {
+        console.error('[tenant-revalidate] custom-domain drop failed', error)
+      }
+    }
     return {
-      revalidated: Array.isArray(result?.revalidated) ? (result.revalidated as string[]) : [],
+      revalidated: [
+        ...(Array.isArray(result?.revalidated) ? (result.revalidated as string[]) : []),
+        ...cnameRevalidated,
+      ],
       reason: 'ok',
       pathsDropped: Number(result?.truncated ?? 0) || 0,
     }
@@ -184,7 +259,15 @@ export async function revalidateEntireHost(
         ...Object.values(screens).map((path) => screenRoutePathToUrl(path)),
       ]),
     ].slice(0, MAX_WHOLE_HOST_PATHS)
-    const result = await postTenantRevalidate({ subdomain, hostId, paths })
+    const result = await postTenantRevalidate({
+      subdomain,
+      hostId,
+      paths,
+      // Whole-host drops need the custom domain too — a locked or revoked
+      // site serving its old pages on the domain visitors actually use is the
+      // failure these callers exist to prevent.
+      cname: String(snapshot.get('cname') ?? '') || undefined,
+    })
     return { hostId, attempted: true, ...result }
   } catch (error) {
     console.error('[tenant-revalidate] whole-host drop failed', hostId, error)

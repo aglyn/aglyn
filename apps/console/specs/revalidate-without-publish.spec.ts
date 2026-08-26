@@ -34,7 +34,7 @@
  * revoked plugin at render time and still enforces suspension in middleware, so
  * a failed drop shortens nothing but never lets anything through.
  */
-import {
+import postTenantRevalidate, {
   revalidateEntireHost,
   revalidateHostsWithPlugin,
   revalidateOrgHosts,
@@ -198,5 +198,123 @@ describe('cache drops for changes that are not a publish (AGL-1152)', () => {
     const result = await revalidateEntireHost(firestore, 'h1')
     expect(result.reason).toBe('not-configured')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A CUSTOM DOMAIN IS A SECOND CACHE KEY (AGL-1152).
+ *
+ * The tenant middleware rewrites `https://{host}{path}` to `/{tenantHost}{path}`
+ * and that is what Next stores the page under. For a platform subdomain
+ * `tenantHost` is the label; for an attached domain it is the `cname--acme.com`
+ * sentinel. Two keys, same page.
+ *
+ * Publishes only ever sent the subdomain, so on a site with a domain attached
+ * the drop landed on `/acme/pricing` — a URL nobody visits — and left
+ * `/cname--acme.com/pricing`, the one everybody does, serving the old page
+ * until its own ISR window expired.
+ *
+ * Observed live: a component published on `aglyn.com` at 09:20 was still
+ * missing from the page minutes later while the component document already
+ * carried the change. The DATA was never stale — `tenant-data:{hostId}` is
+ * keyed on the host id, which no domain changes — so every document behind the
+ * page was correct and only the HTML was old, which is exactly why it looked
+ * like a publish that had silently failed.
+ */
+describe('custom-domain cache key (AGL-1152)', () => {
+  let fetchMock: jest.Mock
+  const OLD = process.env['REVALIDATE_SECRET']
+
+  beforeEach(() => {
+    process.env['REVALIDATE_SECRET'] = 'test-secret'
+    fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ revalidated: ['/x'], truncated: 0 }),
+    }))
+    global.fetch = fetchMock as never
+  })
+  afterEach(() => {
+    if (OLD === undefined) delete process.env['REVALIDATE_SECRET']
+    else process.env['REVALIDATE_SECRET'] = OLD
+  })
+
+  const hostsSent = () =>
+    fetchMock.mock.calls.map(
+      ([, init]) => JSON.parse((init as { body: string }).body).host,
+    )
+
+  it('drops BOTH the subdomain and the cname key', async () => {
+    await postTenantRevalidate({
+      subdomain: 'acme',
+      hostId: 'h1',
+      paths: ['/pricing'],
+      cname: 'acme.com',
+    })
+    expect(hostsSent()).toEqual(['acme', 'cname--acme.com'])
+  })
+
+  it('sends the SAME paths under both keys', async () => {
+    await postTenantRevalidate({
+      subdomain: 'acme',
+      hostId: 'h1',
+      paths: ['/pricing', '/about'],
+      cname: 'acme.com',
+    })
+    const bodies = fetchMock.mock.calls.map(([, init]) =>
+      JSON.parse((init as { body: string }).body),
+    )
+    expect(bodies[1].paths).toEqual(bodies[0].paths)
+    // `hostId` must ride both, or the second drop regenerates from the doc
+    // cache the first one busted (AGL-1302).
+    expect(bodies[1].hostId).toBe('h1')
+  })
+
+  it('a site with NO domain makes exactly one call', async () => {
+    await postTenantRevalidate({
+      subdomain: 'acme',
+      hostId: 'h1',
+      paths: ['/pricing'],
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('the cname sentinel matches the middleware byte for byte', async () => {
+    // Lowercased and trimmed, because the middleware builds it from the
+    // request hostname. A drop on `cname--Acme.com` lands on a key nothing
+    // reads and reports success.
+    await postTenantRevalidate({
+      subdomain: 'acme',
+      hostId: 'h1',
+      paths: ['/'],
+      cname: '  ACME.com ',
+    })
+    expect(hostsSent()[1]).toBe('cname--acme.com')
+  })
+
+  it('a refused custom-domain drop does not fail the publish', async () => {
+    // The subdomain drop already succeeded and the publish itself is done;
+    // turning this into an error would invite an operator to republish.
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ revalidated: ['/x'], truncated: 0 }),
+      })
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) })
+    const err = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const result = await postTenantRevalidate({
+      subdomain: 'acme',
+      hostId: 'h1',
+      paths: ['/'],
+      cname: 'acme.com',
+    })
+
+    expect(result.reason).toBe('ok')
+    // But it is REPORTED — the domain visitors use is still serving the old
+    // page and somebody should be able to find out why.
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
   })
 })

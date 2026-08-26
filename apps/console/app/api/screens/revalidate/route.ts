@@ -378,6 +378,11 @@ export async function POST(request: Request): Promise<Response> {
       subdomain,
       hostId,
       paths: routePaths.map((path) => screenRoutePathToUrl(path)),
+      // A site with a domain attached caches its pages under a SECOND key
+      // (`cname--acme.com`), and that is the one visitors read — see
+      // `postTenantRevalidate`. Without this a publish dropped only the
+      // subdomain's copy.
+      cname: String(hostSnapshot.get('cname') ?? '') || undefined,
     })
     if (result.reason !== 'ok') {
       return Response.json(
