@@ -74,7 +74,9 @@ import {
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../utils/revalidate-live-pages'
-import rewriteStoredBindingTokens from '../utils/rewrite-stored-binding-tokens'
+import rewriteStoredBindingTokens, {
+  storedBindingTokenNeeds,
+} from '../utils/rewrite-stored-binding-tokens'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
@@ -260,31 +262,6 @@ export const BesignerVersionsComponent = observer(
           // actively-maintained content converges without the AGL-188
           // script. Best-effort — a failure never blocks the publish.
           try {
-            const [variableDocs, functionDocs] = await Promise.all([
-              getDocs(
-                query(
-                  collection(firestore, 'hosts', hostId, 'variables'),
-                  limit(1000),
-                ),
-              ),
-              getDocs(
-                query(
-                  collection(firestore, 'hosts', hostId, 'functions'),
-                  limit(1000),
-                ),
-              ),
-            ])
-            const toLookup = (docs: typeof variableDocs) => {
-              const lookup: Record<string, { name?: string; $id?: string }> =
-                {}
-              for (const snapshot of docs.docs) {
-                const name = snapshot.get('name')
-                if (!name || snapshot.get('deletedAt')) continue
-                lookup[String(name)] = { name, $id: snapshot.id }
-                lookup[snapshot.id] = { name, $id: snapshot.id }
-              }
-              return lookup
-            }
             const versionRef = doc(
               firestore,
               ...parentPath,
@@ -292,6 +269,57 @@ export const BesignerVersionsComponent = observer(
               targetVersionId,
             )
             const versionSnapshot = await getDoc(versionRef)
+            /*
+              The VERSION decides whether the lookups are worth reading
+              (AGL-703).
+
+              This block used to fetch every variable and every function on
+              the site — two `limit(1000)` gets — and only then look at
+              whether the version being published contained a token to
+              rewrite. Almost none do: AGL-188 migrated the corpus and the
+              picker has written id-form tokens ever since, so the common
+              publish paid up to 2000 document reads to discover there was
+              nothing to do.
+
+              Read the one document that answers it first, and the two flags
+              come back separately because the two rewrites are separate — a
+              legacy `{{name}}` resolves against VARIABLES and a `{{fn:…}}`
+              against FUNCTIONS, so a page holding only one kind reads only
+              one collection. A page whose tokens are all `{{var:id}}` — what
+              anything authored through the picker looks like — reads neither.
+            */
+            const needs = storedBindingTokenNeeds(versionSnapshot.get('nodes'))
+            const [variableDocs, functionDocs] = await Promise.all([
+              needs.variables
+                ? getDocs(
+                    query(
+                      collection(firestore, 'hosts', hostId, 'variables'),
+                      limit(1000),
+                    ),
+                  )
+                : null,
+              needs.functions
+                ? getDocs(
+                    query(
+                      collection(firestore, 'hosts', hostId, 'functions'),
+                      limit(1000),
+                    ),
+                  )
+                : null,
+            ])
+            const toLookup = (
+              docs: Awaited<ReturnType<typeof getDocs>> | null,
+            ) => {
+              const lookup: Record<string, { name?: string; $id?: string }> =
+                {}
+              for (const snapshot of docs?.docs ?? []) {
+                const name = snapshot.get('name')
+                if (!name || snapshot.get('deletedAt')) continue
+                lookup[String(name)] = { name, $id: snapshot.id }
+                lookup[snapshot.id] = { name, $id: snapshot.id }
+              }
+              return lookup
+            }
             // Through the storage-form-aware rewrite (AGL-1397). A
             // besigner-saved version's `nodes` is a `Bytes`, and handing the
             // wrapper straight to `rewriteBindingTokensDeep` did not skip the

@@ -234,6 +234,75 @@ export function rewriteBindingTokensDeep<T>(
   return { value, changed: false }
 }
 
+/**
+ * Which binding lookups a value's tokens would actually need (AGL-703).
+ *
+ * A read-only twin of {@link rewriteBindingTokensDeep}, and it exists for
+ * cost. Publish-time normalization used to fetch EVERY variable and EVERY
+ * function on the site — two `limit(1000)` gets — before looking at whether
+ * the version being published contained a single token to rewrite. Almost
+ * none do: AGL-188 migrated the corpus years ago and the picker has written
+ * id-form tokens ever since, so the overwhelming majority of publishes paid
+ * for two collection reads to discover there was nothing to do.
+ *
+ * The two flags are separate because the two rewrites are:
+ *
+ * - a legacy `{{name}}` token is resolved against VARIABLES and nothing else
+ *   — {@link normalizeBindingTokens} only consults `variables` for it;
+ * - a `{{fn:ref(...)}}` token is resolved against FUNCTIONS.
+ *
+ * So a page holding only function tokens never reads the variables.
+ *
+ * `{{var:id}}` deliberately sets NEITHER. It is already the rename-safe form,
+ * nothing rewrites it, and it cannot match `NAME_TOKEN_PATTERN` because a
+ * name may not contain `:`. A page whose tokens are all id-form — which is
+ * what a page authored through the picker looks like — costs nothing.
+ *
+ * A `{{fn:}}` token sets `functions` even when its ref is ALREADY an id,
+ * because telling an id from a legacy name is exactly what the lookup is for.
+ * Erring that way costs one read on a page that has function tokens; erring
+ * the other way would skip a rewrite that was due.
+ */
+export interface BindingTokenNeeds {
+  /** A legacy `{{name}}` token is present — needs the variables lookup. */
+  variables: boolean
+  /** A `{{fn:…}}` token is present — needs the functions lookup. */
+  functions: boolean
+}
+
+export function bindingTokenNeedsDeep(value: unknown): BindingTokenNeeds {
+  const needs: BindingTokenNeeds = { variables: false, functions: false }
+  /*
+    Fresh, NON-GLOBAL copies. The exported patterns carry the `g` flag, and a
+    global regex's `.test()` advances its own `lastIndex` — so testing the
+    same shared object twice in a walk skips matches, and does it in a way
+    that depends on the order the tree happened to be visited in.
+  */
+  const nameToken = new RegExp(NAME_TOKEN_PATTERN.source)
+  const functionToken = new RegExp(FUNCTION_TOKEN_PATTERN.source)
+
+  const walk = (current: unknown): void => {
+    if (needs.variables && needs.functions) return
+    if (typeof current === 'string') {
+      if (!current.includes('{{')) return
+      if (!needs.variables && nameToken.test(current)) needs.variables = true
+      if (!needs.functions && functionToken.test(current)) {
+        needs.functions = true
+      }
+      return
+    }
+    if (Array.isArray(current)) {
+      for (const item of current) walk(item)
+      return
+    }
+    if (current && typeof current === 'object') {
+      for (const item of Object.values(current)) walk(item)
+    }
+  }
+  walk(value)
+  return needs
+}
+
 /** Editor display text for a token whose referent no longer exists. */
 export const MISSING_BINDING_LABEL = 'missing binding'
 
