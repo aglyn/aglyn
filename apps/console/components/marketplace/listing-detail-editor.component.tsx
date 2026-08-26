@@ -32,6 +32,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
+import { LISTING_LOGO_HINT } from '../../constants/media-size-hints'
 import { docsHelp } from '../../constants/docs-links'
 import {
   MarkdownField,
@@ -378,6 +379,7 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
             onChange={set('logoUrl')}
             size="small"
             sx={{ flex: 1 }}
+            helperText={LISTING_LOGO_HINT}
           />
           <Button
             size="small"

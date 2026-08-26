@@ -71,6 +71,7 @@ import {
 } from 'firebase/auth'
 import { deleteField, doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { AVATAR_HINT } from '../../../../constants/media-size-hints'
 import {
   useAnalytics,
   useAuth,
@@ -808,7 +809,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         ) : null}
         <MediaUrlField
           label="Image URL"
-          helperText="Browse the org media library to upload or pick an image, or paste an https URL"
+          helperText={`Browse the org media library to upload or pick an image, or paste an https URL. ${AVATAR_HINT}`}
           orgId={currentOrg?.$id ?? null}
           value={photoUrl}
           onChange={setPhotoUrl}

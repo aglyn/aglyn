@@ -49,6 +49,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { SITE_LOGO_HINT } from '../../../../constants/media-size-hints'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import MediaUrlField from '../../../../components/media-url-field.component'
 import OrgApiKeysCard from '../../../../components/org-api-keys-card.component'
@@ -570,7 +571,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                 </Avatar>
                 <MediaUrlField
                   label="Logo URL"
-                  helperText="Browse the org media library or paste an https URL"
+                  helperText={`Browse the org media library or paste an https URL. ${SITE_LOGO_HINT}`}
                   orgId={currentOrg.$id}
                   value={profile.logoUrl}
                   onChange={(logoUrl) =>

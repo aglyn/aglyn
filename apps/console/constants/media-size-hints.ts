@@ -81,3 +81,25 @@ export const AVATAR_HINT =
 export const COVER_IMAGE_HINT =
   'Recommended: 1200×630 PNG or JPG — it heads the entry and doubles as its ' +
   'share card.'
+
+/**
+ * An email logo, which is the one that must NOT be an SVG.
+ *
+ * Most email clients refuse SVG outright and none of them resize an image the
+ * way a browser does — a logo arrives at the width it was authored at, on a
+ * screen that may be twice that density. So the advice here is the opposite of
+ * {@link SITE_LOGO_HINT}'s, and saying "same as your site logo" would be
+ * wrong in both directions.
+ */
+export const EMAIL_LOGO_HINT =
+  'Recommended: a PNG about 400px wide — email clients do not resize images, ' +
+  'and most refuse SVG.'
+
+/**
+ * A marketplace listing's mark, rendered in a grid of square tiles beside
+ * other publishers' — so square is not a preference here, it is the shape of
+ * the slot.
+ */
+export const LISTING_LOGO_HINT =
+  'Recommended: a square PNG or SVG, at least 256×256 — listings are shown ' +
+  'as square tiles.'

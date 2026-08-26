@@ -62,6 +62,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { SITE_LOGO_HINT } from '../../../../../constants/media-size-hints'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import CardColumns from '../../../../../components/card-columns.component'
@@ -1088,6 +1089,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         />
                         <MediaUrlField
                           label="Logo URL"
+                          helperText={SITE_LOGO_HINT}
                           orgId={orgId}
                           value={orgEdit.logoUrl}
                           onChange={(logoUrl) =>
