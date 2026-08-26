@@ -442,7 +442,7 @@ describe('markCrossPoolUidCollisions (AGL-1962)', () => {
 })
 
 /**
- * AGL-2005. **Zach, 2026-08-18:** "We still have two users list in this list
+ * AGL-2005. **decided:** "We still have two users list in this list
  * with the same uid but one without an email attached, this needs fixed we
  * should only see one user, even if they are sso."
  *
@@ -560,7 +560,7 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   /**
    * The staff list composed exactly as `/api/admin/users` composes it: the
    * honest primitive still returns both records, and the display merges them.
-   * Zach's report was about the list, so the list is where it is asserted.
+   * the report was about the list, so the list is where it is asserted.
    */
   it('gives the staff list ONE row for the production shape', async () => {
     projectUsers.set(uid, shadowRecord(uid))

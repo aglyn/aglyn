@@ -87,8 +87,8 @@ export function PresenceAvatars({ presence }: { presence: PresenceState }) {
  *
  * ## What changed, and why
  *
- * This badge previously led with `Failed at: broker (500)`. Zach: "what does
- * this mean? It gives the users no course of action on how to fix it." A
+ * This badge previously led with `Failed at: broker (500)`. what does
+ * this mean? It gives the users no course of action on how to fix it. A
  * stage name and an HTTP status are the two things a customer can do least
  * with, and they were the whole sentence.
  *
@@ -204,16 +204,16 @@ function PresenceFaultBadge({ presence }: { presence: PresenceState }) {
  *
  * Six, not four: with one avatar PER SESSION rather than per person, a pair
  * working in two windows each already fills four slots, and collapsing at
- * that point would hide exactly the thing Zach asked to be able to see.
+ * that point would hide exactly the thing the requirement was to be able to see.
  */
 const MAX_VISIBLE_SESSIONS = 6
 
 /**
  * One avatar per open SESSION (AGL-2486).
  *
- * Zach: "We should also see the same avatar repeated for each of its active
+ * We should also see the same avatar repeated for each of its active
  * sessions all with a different presence color not just consolidated into
- * one." So the same face appears once per window that has this document
+ * one. So the same face appears once per window that has this document
  * open — yours and everyone else's alike — each in the colour that session
  * draws its cursor and its selection box in. The stack and the canvas are
  * then readable against each other: the orange caret belongs to the orange
@@ -240,8 +240,8 @@ const MAX_VISIBLE_SESSIONS = 6
  * children's margins and outranks `sx` — measured, `mr: 1.5` computed to
  * `0px` while the left spacing came from the parent rather than from this
  * component at all. Padding is untouched by that rule, so it is the one that
- * holds, and it is symmetric: Zach saw "the enormous right margin and very
- * small left margin".
+ * holds, and it is symmetric: the enormous right margin and very
+ * small left margin.
  */
 function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
   const visible = entries.slice(0, MAX_VISIBLE_SESSIONS)
@@ -278,9 +278,9 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               data-aglyn-presence-session={entry.key}
               data-aglyn-presence-self={entry.isSelf ? '' : undefined}
               // DASHED for your own other sessions, in that session's own
-              // colour, to match the canvas (AGL-2486). Zach: "go ahead and
+              // colour, to match the canvas (AGL-2486). go ahead and
               // go back to the dashed border on the avatars when it is you in
-              // the other tabs so it matches what appears in the canvas."
+              // the other tabs so it matches what appears in the canvas.
               //
               // `collaborator-overlays` draws the selection outline for the
               // same session dashed, from the same `entry.colour`, so the
@@ -380,9 +380,9 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
  *
  * ## Why this no longer says "saves are not merged"
  *
- * Zach: *"Why are saves not merged? Isn't this the point of being able to
+ * Why are saves not merged? Isn't this the point of being able to
  * collaborate together and build a page alongside someone at the same
- * time"* — and again, on the guard that stopped him: *"any user
+ * time — and again, on the guard that stopped him: *"any user
  * collaborating should be able to save as they all go along and make
  * changes... there should be no problem with this"*.
  *

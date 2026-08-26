@@ -2123,7 +2123,7 @@ describe('marketplace price floor (AGL-2343)', () => {
   })
 
   it('states the minimum in the standing hint, before anything is refused', () => {
-    // Zach's rule: a capability not surfaced in the console is not shipped —
+    // the rule: a capability not surfaced in the console is not shipped —
     // which for a refusal means the publisher reads the minimum while typing.
     expect(marketplacePriceFloorHint()).toContain(`$${marketplaceMinPriceUsd()}`)
     expect(marketplacePriceFloorHint()).toContain('0 for free')

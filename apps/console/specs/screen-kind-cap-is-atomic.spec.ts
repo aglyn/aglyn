@@ -494,7 +494,7 @@ describe('CONCURRENTLY: promotion cannot be laundered', () => {
   })
 
   it('a DEAD subscription is enforced at the free number it resolves to', async () => {
-    // The production shape behind Zach's 8-of-5 email: a canceled subscription
+    // The production shape behind the 8-of-5 email: a canceled subscription
     // downgrades a paid plan to free (`resolveEffectivePlan`). The cap must
     // follow the EFFECTIVE plan, or a canceled org keeps the cap it stopped
     // paying for.

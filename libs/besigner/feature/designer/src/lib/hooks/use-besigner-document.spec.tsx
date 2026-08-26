@@ -488,11 +488,11 @@ describe('useBesignerDocument', () => {
    * Two people building a page together must both be able to save
    * (AGL-2486).
    *
-   * Zach: *"I made an edit in the top browser, saved it in the bottom
+   * I made an edit in the top browser, saved it in the bottom
    * browser, then the alert appeared in the top browser for someone else
    * saved, the save button is still offered rather than up to date now. But
    * any user collaborating should be able to save as they all go along and
-   * make changes."*
+   * make changes.
    *
    * The guard used to ask "did the stored document move", which is the wrong
    * question once the co-edit mirror has already delivered their work to

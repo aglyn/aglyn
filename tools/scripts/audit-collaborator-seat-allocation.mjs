@@ -29,7 +29,7 @@
 // `members`. AGL-2439 makes the purchase a POOL allocated per site.
 //
 // That is a de-facto DOWNGRADE for anybody whose sites are only under the cap
-// because of the multiplication. Zach's decision is to GRANDFATHER them, so
+// because of the multiplication. the decision is to GRANDFATHER them, so
 // the population has to be counted rather than reasoned about: the count is
 // what decides whether this ships quietly or with customer comms.
 //

@@ -198,8 +198,8 @@ export function OrgSwitcherNav() {
   /**
    * Whether the URL names a workspace but not THIS one (AGL-2486).
    *
-   * Zach: "even though the url has a different org in it, it still chose to
-   * use a different org in the switcher" — `/aglyn-org/…` in the address bar,
+   * even though the url has a different org in it, it still chose to
+   * use a different org in the switcher — `/aglyn-org/…` in the address bar,
    * "Sale Test · Free" here. The gate above had already passed, because it
    * asks whether the route is about SOME workspace; it was the NAME that was
    * wrong, taken from a scope that had fallen through to a remembered

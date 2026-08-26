@@ -38,7 +38,7 @@
  *
  * ## 2. One answer for both ends of the ICP range
  *
- * Zach's requirement is a single feature that is "easy for someone who
+ * the requirement is a single feature that is "easy for someone who
  * doesn't know code and even easier for someone who does". Two modes would
  * be the obvious build and the wrong one — it makes the beginner choose a
  * label for themselves before they have a question, and it makes the

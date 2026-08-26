@@ -117,7 +117,7 @@ Nothing, unless `DOCS_STATUS_TARGETS` is set on the `aglyn-docs` Vercel
 project — and for weeks it was set on no scope at all, so the page shipped
 reading *"not configured to check any services"* while `/pricing` pointed
 customers at it (AGL-2411 found it, AGL-2496 fixed it). Set 2026-08-24, first to
-five targets, then narrowed to three, then widened to **six** on Zach's call the
+five targets, then narrowed to three, then widened to **six** on the call the
 same evening:
 
 | Card | Origin | Path | Asserts |

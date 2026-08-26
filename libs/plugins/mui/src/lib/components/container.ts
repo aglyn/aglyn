@@ -131,8 +131,8 @@ export const presets: Aglyn.PresetSchema[] = [
     },
   },
   {
-    // AGL-1298, Zach 2026-08-18: "Use the mui breakpoints, XL, LG, MD, SM,
-    // XS". XL is confirmed as the marketing default and stays. The prose
+    // AGL-1298, Use the mui breakpoints, XL, LG, MD, SM,
+    // XS. XL is confirmed as the marketing default and stays. The prose
     // case is MD on READING grounds, not as "one step down" — at XL a
     // paragraph runs 110–120 characters a line, and even LG (1200px) is far
     // past the 65–75 the eye tracks without losing its place. MD is the

@@ -467,10 +467,10 @@ export function useBesignerDocument<TData = unknown>(
     // Somebody else's write. Whether it is a CONFLICT is a different
     // question from whether the document moved (AGL-2486).
     //
-    // Zach: *"I made an edit in the top browser, saved it in the bottom
+    // I made an edit in the top browser, saved it in the bottom
     // browser, then the alert appeared in the top browser for someone else
     // saved… any user collaborating should be able to save as they all go
-    // along and make changes."* He is right, and the reason is the mirror:
+    // along and make changes. He is right, and the reason is the mirror:
     // their changes reached this canvas node by node before they pressed
     // Save, so this session usually already holds what they stored and its
     // own write is a superset of it. `incorporatesStoredNodes` is the

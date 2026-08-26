@@ -352,7 +352,7 @@ describe('the answer is composed for the surface that renders it', () => {
    *
    * So markup this template emits and that renderer does not understand
    * reaches the user as punctuation. It shipped that way once — the header
-   * was wrapped in `**…**` and Zach's besigner drawer showed
+   * was wrapped in `**…**` and the besigner drawer showed
    * `**Drag-and-drop hierarchy — Moving an element without dragging**`,
    * asterisks and all.
    *
@@ -384,7 +384,7 @@ describe('the answer is composed for the surface that renders it', () => {
   it('quotes text that reads as lines, not as one run-on paragraph', () => {
     // The docs write these as lists. The index used to collapse every run of
     // whitespace to a single space — harmless while the text only ever went
-    // into a model prompt, and the reason Zach's answer ran three bullets
+    // into a model prompt, and the reason the answer ran three bullets
     // together inside one paragraph the first time a human was shown it.
     const verdict = verdictFor('how do I move an element without dragging')
     expect(verdict.answered).toBe(true)
@@ -399,7 +399,7 @@ describe('the gates, each forced on its own', () => {
    *
    * It used to be `if (hasHistory) return refuse('follow-up')` and this spec
    * used to assert exactly that. The rule was too strong and the failure was
-   * user-visible: Zach's thread answered its first question from the docs and
+   * user-visible: the thread answered its first question from the docs and
    * then, on "how do I add an element to my page" — a question the docs
    * plainly answer, from a page the FIRST answer had just quoted — escalated
    * to a model this deployment has no key for, and printed a capability
@@ -459,7 +459,7 @@ describe('the gates, each forced on its own', () => {
   })
 
   it('a follow-up standing alone but retrieving weakly ALSO escalates', () => {
-    // Zach's own second question, and the reason the follow-up bar is raised
+    // the second question, and the reason the follow-up bar is raised
     // rather than removed. It stands on its own words, and retrieval still
     // does not know the answer: the page that wins is a coming-soon LAUNCH
     // GUIDE, ahead of an animations page by well under 2x, because the guide
@@ -581,7 +581,7 @@ describe('the keyless degrade — the closest pages, honestly labelled', () => {
 
   it('says nothing an operator would say — no env var, no status code', () => {
     // The reader is a user in a besigner drawer, not the person who sets the
-    // deployment's variables. Zach's standing note: the console must not talk
+    // deployment's variables. the standing note: the console must not talk
     // to a non-technical user in operator vocabulary.
     const answer = composeDocsLinksAnswer(sections())
     expect(answer).not.toMatch(/ANTHROPIC|API[_ ]KEY|env|501|deployment is/i)

@@ -24,8 +24,8 @@ export interface CopyrightProps extends TypographyProps<any, any> {}
 const CopyrightComponent = forwardRef<any, CopyrightProps>((props, ref) => {
   const { children, ...rest } = props
   /*
-   * `body2`, not `subtitle2` (AGL-2486). Zach: "We probably don't need to
-   * make this copyright text so bold." `subtitle2` is a 500-weight,
+   * `body2`, not `subtitle2` (AGL-2486). We probably don't need to
+   * make this copyright text so bold. `subtitle2` is a 500-weight,
    * heading-ish role, which gave a legal footnote more visual weight than the
    * links beside it and the version beneath it. It is boilerplate: it has to
    * be present and legible, not prominent.

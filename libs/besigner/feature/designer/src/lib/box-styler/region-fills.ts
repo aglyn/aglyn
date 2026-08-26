@@ -20,8 +20,8 @@
  *
  * Two reasons this is not inline in the component.
  *
- * **The legend has to be readable.** Zach: "you also can't really understand
- * the key below it." Four abstract swatches beside a textured diagram is a
+ * **The legend has to be readable.** you also can't really understand
+ * the key below it. Four abstract swatches beside a textured diagram is a
  * puzzle. A swatch that is painted with the *same* declaration as the region
  * it names needs no decoding — so the diagram and the legend both read their
  * fills from here, and the two cannot drift.
@@ -120,8 +120,8 @@ export function regionFills(tv: RegionFillTheme): RegionFills {
      *
      * It used to carry the stripes. That put the two loudest materials on
      * the two outermost regions and the diagram read as busy rather than
-     * layered, which is Zach's "the stripes should not be on the margin
-     * buttons". A flat grey tint is all it needs: it is the region an
+     * layered, which is the stripes should not be on the margin
+     * buttons. A flat grey tint is all it needs: it is the region an
      * author looks at last.
      */
     margin: {

@@ -120,7 +120,7 @@ describe('a write of our own must not commit a projection', () => {
   })
 
   it('does not commit when our own cursor is WITHDRAWN', () => {
-    // `clearCursor` is the frame in Zach's stack, and it is the one path in
+    // `clearCursor` is the frame in the stack, and it is the one path in
     // `onMove` that never stamps the throttle — so it can fire on every
     // single pointermove.
     const { project, commits } = projector()

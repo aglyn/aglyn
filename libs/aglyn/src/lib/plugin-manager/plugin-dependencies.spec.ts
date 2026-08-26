@@ -18,9 +18,9 @@
 /**
  * The AGL-2486 disable-cascade model.
  *
- * Zach: "if we turn off a plugin that another plugin depends on ... warn the
+ * if we turn off a plugin that another plugin depends on ... warn the
  * user that by disabling that plugin it will also disable said plugin because
- * it depends on it, give them the option to cancel, or continue".
+ * it depends on it, give them the option to cancel, or continue.
  *
  * These tests pin the DECLARED model — not an inferred one. A warning derived
  * from guesswork is worse than no warning, because it claims a completeness it

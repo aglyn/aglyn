@@ -327,7 +327,7 @@ describe('freeWorkspaceCapVerdict', () => {
 })
 
 describe('the stored configuration', () => {
-  it('is Zach’s 3 when nothing has ever been written', () => {
+  it('is the 3 when nothing has ever been written', () => {
     const config = normalizeFreeWorkspaceCapConfig(null, { ready: true })
     expect(config.limit).toBe(DEFAULT_FREE_WORKSPACE_CAP)
     expect(config.enabled).toBe(true)

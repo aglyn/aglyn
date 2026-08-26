@@ -25,7 +25,7 @@ import InlineTextEditorComponent from './inline-text-editor.component'
 /**
  * AGL-2486 — the canvas leaf IS the editing surface.
  *
- * Zach: *"We see/edit it exactly how it appears"*, then *"the original
+ * We see/edit it exactly how it appears, then *"the original
  * allocated space is not reflecting changes"*, then *"The reserved space is
  * still not updating as we are editing text live"* with two texts drawn over
  * each other, and finally *"No don't go back to the inlined boxed editor,
@@ -240,8 +240,8 @@ describe('the canvas leaf is the editing surface (AGL-2486)', () => {
   })
 
   /**
-   * AGL-2486 — Zach: *"the line break persists regardless if you remove it
-   * or not once you click out"*.
+   * AGL-2486 — the line break persists regardless if you remove it
+   * or not once you click out.
    *
    * The markup the commit computed was always right; it was being undone a
    * moment later. Ending the edit restores the element's original child

@@ -277,7 +277,7 @@ content on the marketing site and is written separately.
 - **crons:** the two frequent sweeps move to the punctual runner ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617), [AGL-2010](https://linear.app/aglyn/issue/AGL-2010), [AGL-2176](https://linear.app/aglyn/issue/AGL-2176), [AGL-786](https://linear.app/aglyn/issue/AGL-786), [AGL-1955](https://linear.app/aglyn/issue/AGL-1955))
 - **redirects:** only a publisher may route a live site off-platform ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334), [AGL-2372](https://linear.app/aglyn/issue/AGL-2372))
 - **guards:** the facilitator charge shape is an exit code, not a comment ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
-- **console:** the screen version view takes Zach's card spans, and Raw JSON collapses ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** the screen version view takes the card spans, and Raw JSON collapses ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
 - **console:** the page activity card asks for the newest entries, not a random 200 ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-2292](https://linear.app/aglyn/issue/AGL-2292))
 - **docs:** a bare {date} placeholder is MDX, and it broke the whole docs build ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498))
 - **guards:** a ratchet's own output names the row that clears it ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
@@ -1076,8 +1076,8 @@ content on the marketing site and is written separately.
 ### Documentation
 
 - **analytics:** the page_title dimension, both defects and what is left ([AGL-2060](https://linear.app/aglyn/issue/AGL-2060))
-- **handoff:** close 2026-08-18 — Zach's decisions, the restated mandate, six agents in flight
-- **claude:** /release carries Zach's 2026-08-18 restated mandate verbatim
+- **handoff:** close 2026-08-18 — the decisions, the restated mandate, six agents in flight
+- **claude:** /release carries the 2026-08-18 restated mandate verbatim
 
 <details>
 <summary>Also in this release: 4 test, 1 ci</summary>

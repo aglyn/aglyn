@@ -20,7 +20,7 @@
  *
  * The register ignored `oversellPolicy` entirely — `pos-order.ts` carried no
  * `canPurchase` call — so a merchant who chose "deny" in the product editor
- * silently got "backorder" at the counter. Zach's decision: warn, never block.
+ * silently got "backorder" at the counter. the decision: warn, never block.
  *
  * ## What these tests are built to catch
  *

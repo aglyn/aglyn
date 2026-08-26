@@ -25,7 +25,7 @@
 //
 // `seatAddons.posRegisters` is bought once, org-wide, and enforced per host,
 // so one $89/mo purchase raises the register cap on every site the org runs
-// (AGL-1775). Zach's 2026-08-17 decision is to enforce it per host through an
+// (AGL-1775). the 2026-08-17 decision is to enforce it per host through an
 // allocation pool. That is a de-facto DOWNGRADE for anybody already running
 // registers on more than one site off a single purchase — so before the
 // enforcement changes, the population has to be asked directly rather than

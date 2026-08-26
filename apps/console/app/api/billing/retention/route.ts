@@ -92,7 +92,7 @@ function hasExistingDiscount(subscription: any): boolean {
 
 /**
  * Cancellation/deletion funnel storage + winback minting (AGL-1863, under
- * AGL-1859 — Zach's twice-given retention directive). billing.manage-gated,
+ * AGL-1859 — the twice-given retention directive). billing.manage-gated,
  * POST only:
  *
  * - `survey`  → stores one why-are-you-leaving answer in

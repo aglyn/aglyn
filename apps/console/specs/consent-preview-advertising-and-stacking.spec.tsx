@@ -248,7 +248,7 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     await simulateRegion('EU visitor')
     fireEvent.click(await screen.findByRole('button', { name: 'Preferences' }))
 
-    // This is the surface in Zach's screenshot: he saw the analytics row and
+    // This is the surface in the screenshot: he saw the analytics row and
     // nothing else.
     expect(screen.queryByText(/Analytics \(Google Analytics\)/)).not.toBeNull()
     expect(screen.queryByText(/Advertising — personalized ads/)).not.toBeNull()

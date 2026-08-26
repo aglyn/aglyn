@@ -234,7 +234,7 @@ export function PosConsolePage({
    * `canPurchase` call — so a merchant who chose "deny" in the product editor
    * silently got "backorder" at the counter. That silence is the defect.
    *
-   * WARNS, NEVER BLOCKS (Zach's decision on AGL-2357). Nothing here touches
+   * WARNS, NEVER BLOCKS (the decision on AGL-2357). Nothing here touches
    * `disabled` on the settle buttons, and nothing gates `settle`: a till is the
    * wrong place for a stale number to stop a real sale, because the cashier is
    * holding the goods. Honouring the policy behind a manager override is the

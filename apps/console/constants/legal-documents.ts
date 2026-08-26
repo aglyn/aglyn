@@ -48,7 +48,7 @@
  *
  * TO PUBLISH A CHANGE, BEFORE LAUNCH: publish first, re-capture from the live
  * page, and update the hashes here — LEAVING `LEGAL_DOCUMENT_VERSION` AT `v1`.
- * Zach, 2026-08-24: no v2 exists until Aglyn has released. See the 2026-08-24
+ * decided: no v2 exists until Aglyn has released. See the 2026-08-24
  * entry in the changelog below for the full reasoning; the short form is that
  * a version can only supersede a version somebody accepted, and nobody has.
  * Archive the re-captured bytes over `Acceptance-Snapshots/v1/<key>.txt` in
@@ -135,7 +135,7 @@ export interface LegalDocumentManifestEntry {
  *
  * ⚠️ §7's licence for "internal business OR PERSONAL purposes" is DELIBERATE
  * and MUST NOT BE "FIXED". Consumers — solo founders and pre-entity
- * individuals starting a business — are an intended ICP (Zach, 2026-08-14),
+ * individuals starting a business — are an intended ICP (decided),
  * so §7 correctly describes the market. An earlier pass on the same day
  * recommended deleting "or personal" and scoping the beta to business use;
  * that recommendation is REVERSED and must not be quietly re-reversed. It was
@@ -317,7 +317,7 @@ export interface LegalDocumentManifestEntry {
  *     "commission", though AGL-1987 named "commission" as must-survive. The
  *     Terms define the fee at §4.3 and have never used "commission"; an
  *     undefined synonym for a defined money term is how a dispute over which
- *     one governs starts. Zach's call, recorded on the issue.
+ *     one governs starts. the call, recorded on the issue.
  *
  *     ⚠️ NOT ESTABLISHED, and it is a real limitation: no Stripe dispute has
  *     been exercised end to end. `transfer.amount === charge.amount` is
@@ -363,9 +363,9 @@ export interface LegalDocumentManifestEntry {
  * assert a version history that never happened, and the re-acceptance
  * interstitial it forces would be shown for a document nobody has ever
  * accepted. `v1` is not a claim that the text never changed — it is a claim
- * that nothing has been agreed to yet. Zach, 2026-08-24: "Legal documents
+ * that nothing has been agreed to yet. Legal documents
  * should all still be v1, we have not released yet so a v2 should not exist
- * yet. Everything is being updated in the v1."
+ * yet. Everything is being updated in the v1.
  *
  * ⚠️ THE HASHES BELOW MOVED WITHOUT THE LABEL, and that is what "updated in
  * the v1" MEANS. `v1` must pin the text that is actually live. Holding the
@@ -389,7 +389,7 @@ export interface LegalDocumentManifestEntry {
  * why, and the answer expires at the first acceptance.
  *
  * WHAT THE 2026-08-24 PUBLISH CHANGED: Aglyn ACCEPTS marketplace-facilitator
- * status for US sales tax (Zach, 2026-08-24), and the Terms are aligned to it.
+ * status for US sales tax (decided), and the Terms are aligned to it.
  * This is the decision the v5 note above recorded as deliberately unmade — the
  * ⚠️ paragraph saying §10.3 was "UNTOUCHED for the same reason" no longer
  * states current policy: changing it was correctly identified there as "a tax
@@ -434,7 +434,7 @@ export interface LegalDocumentManifestEntry {
  *     Legal/README index, so no straggler contradicts the corrected clause.
  *
  * §18 is otherwise UNTOUCHED and must stay that way: AAA Consumer Clause
- * Registry registration is DEFERRED on cost (Zach, 2026-08-24), and the
+ * Registry registration is DEFERRED on cost (decided), and the
  * decision was explicitly to keep naming AAA and to keep both the consumer
  * arbitration clause and the class-action waiver. What changed in §18 are
  * defects that are wrong on their own merits, not the structure.

@@ -54,8 +54,8 @@ export function selectionOf(element: Node): Selection | null {
 /**
  * Turns the canvas leaf ITSELF into the editing surface (AGL-2486).
  *
- * Zach, on the boxed fallback: *"No don't go back to the inlined boxed
- * editor, just finish the project"*. He is right, and so is the reason the
+ * No don't go back to the inlined boxed
+ * editor, just finish the project. He is right, and so is the reason the
  * fallback existed: an overlay is a rectangle, the thing it stands in for is
  * a flow of line boxes, and those two geometries can always disagree. Every
  * bug in this area — the surface wrapping before the element did, the

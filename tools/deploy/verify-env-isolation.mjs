@@ -443,7 +443,7 @@ const isAllowed = (key) => key.startsWith('NEXT_PUBLIC_') || Object.hasOwn(ALLOW
  * would miss precisely the state the runbook creates.
  *
  * `ACCEPTED` is honoured per environment, so a decision to point PREVIEW at
- * live (Zach's stated reason for the key being there — a preview build that
+ * live (the stated reason for the key being there — a preview build that
  * exercises the real payment path before release) silences preview and leaves
  * development still failing. Same table, same attribution requirement.
  *

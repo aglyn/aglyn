@@ -84,8 +84,7 @@
  * **What this suite still claims is the BELT**, and the belt is unchanged: a
  * free org cannot reach a billable state even with the gate removed. The two
  * are deliberately separate — the braces protect Aglyn's egress bill, the
- * belt protects the customer's invoice, and only the second is what Zach's
- * "always actually stays free" is about. So the bandwidth case below still
+ * belt protects the customer's invoice, and only the second is what the * "always actually stays free" is about. So the bandwidth case below still
  * drives 100x the band and still asserts a literal zero: if the cap were
  * reverted tomorrow the customer would still owe nothing.
  *

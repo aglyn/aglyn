@@ -636,7 +636,7 @@ separately; it is outside the six items.
 
 ---
 
-## Addendum 3 — Zach's ratifications, and state as of 2026-08-24
+## Addendum 3 — the ratifications, and state as of 2026-08-24
 
 Addendum 2 above is **stale from the moment it was written**: Zach answered
 1(d), 2 and 5 on the issue the next day (2026-08-12) and that never reached this

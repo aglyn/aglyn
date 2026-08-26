@@ -18,8 +18,8 @@
 /**
  * The switcher names the workspace the URL names, or names none (AGL-2486).
  *
- * Zach: "We have access to both orgs but even though the url has a different
- * org in it, it still chose to use a different org in the switcher."
+ * We have access to both orgs but even though the url has a different
+ * org in it, it still chose to use a different org in the switcher.
  *
  * `use-org-scope` no longer misses on the not-found boundary, so this is the
  * GUARD rather than the fix, and it is worth having on its own: the scope

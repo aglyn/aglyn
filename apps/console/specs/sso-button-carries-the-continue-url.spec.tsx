@@ -23,9 +23,9 @@
 /**
  * AGL-2486 — the SSO button keeps the destination.
  *
- * Zach: "if you are logged out and it sets the continue url but you need to
+ * if you are logged out and it sets the continue url but you need to
  * sign in with sso and click the sso button the url does not carry the
- * continue url and is dropped entirely".
+ * continue url and is dropped entirely.
  *
  * `AuthenticatedLayout` sends a session-less deep link to
  * `/signin?continue=…`, and `AuthenticatingLayout` — which wraps the WHOLE

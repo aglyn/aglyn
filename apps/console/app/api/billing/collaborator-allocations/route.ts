@@ -40,7 +40,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 /**
  * Assign purchased COLLABORATOR seats to sites (AGL-2439).
  *
- * `seatAddons.members` is an org-level POOL since Zach's 2026-08-19 decision:
+ * `seatAddons.members` is an org-level POOL since the 2026-08-19 decision:
  * one extra collaborator seat buys one site's worth of capacity, not one per
  * site. This route is the ONLY thing that writes `org.collaboratorAllocations`,
  * which says which site holds each seat.

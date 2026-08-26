@@ -18,8 +18,8 @@
 /**
  * What creating a collection actually SENDS (AGL-2498).
  *
- * Zach: *"New collections need more details to define when creating the
- * collection."* The dialog asked for a name; a collection is defined by four
+ * New collections need more details to define when creating the
+ * collection. The dialog asked for a name; a collection is defined by four
  * things — name, the address it serves, and the two screens that render its
  * list and its entries.
  *

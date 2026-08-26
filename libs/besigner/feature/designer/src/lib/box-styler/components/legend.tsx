@@ -24,7 +24,7 @@ import { regionFills } from '../region-fills'
 /**
  * The key under the diagram (AGL-2486).
  *
- * Zach: "you also can't really understand the key below it." It was four
+ * you also can't really understand the key below it. It was four
  * small outlined squares whose colours only loosely echoed the regions —
  * something to decode rather than something to read.
  *

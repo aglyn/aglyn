@@ -22,8 +22,8 @@ import isEqual from 'lodash-es/isEqual'
 /**
  * Interaction-state style slices for the Styles panel (AGL-2486 item 39).
  *
- * Zach: *"We are missing the ability to style custom states for styles, for
- * example hover state and active, focus etc"*. The capability was always in
+ * We are missing the ability to style custom states for styles, for
+ * example hover state and active, focus etc. The capability was always in
  * the document — the JSS tab's own caption advertises nested selectors — but
  * the only way to reach it was to type raw sx, which most of the audience
  * cannot do.
@@ -119,8 +119,8 @@ export const SX_STATE_SELECTORS: Readonly<Record<SxState, string>> =
  * that the mouse-click ring is what you are styling. The reasoning was right
  * and the label was wrong: measured against the styles panel, the five chips
  * needed **368px** of the **359px** a default 375px panel has, so `Disabled`
- * fell to a second line and the row read as a layout accident. Zach: *"please
- * fix the states pills"*.
+ * fell to a second line and the row read as a layout accident. please
+ * fix the states pills.
  *
  * Short labels bring the row to 272px, which fits every panel width down to
  * about 290px, and {@link SX_STATE_LABEL_MAX} pins them so the next person to

@@ -18,7 +18,7 @@
 /**
  * THE FREE-WORKSPACE CEILING, on the staff console (AGL-2265).
  *
- * Zach's decision was two things, and this is the second one: **three, with a
+ * the decision was two things, and this is the second one: **three, with a
  * control in the staff console.** A number in a constant would have been the
  * first half only, and the half that matters least — the population this
  * refuses (a script minting free workspaces) and the population it must never

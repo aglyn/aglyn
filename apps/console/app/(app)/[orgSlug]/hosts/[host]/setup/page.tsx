@@ -150,7 +150,7 @@ const basicSchema: FormSchema = {
 /**
  * Tracking (AGL-2486) — its own tab, and not part of SEO.
  *
- * Zach: *"GTAG code can be in its own card, it is not SEO it is tracking"*,
+ * GTAG code can be in its own card, it is not SEO it is tracking,
  * then *"We also need the support for Google tag manager there too not just
  * google analytics, maybe move GA and GTM to its own tracking tab."*
  *
@@ -370,7 +370,7 @@ const seoSchema: FormSchema = {
       this one tab — this text field and the Favicon card below — and the
       text one showed the stored value as what it literally is, a
       `media:org:…` reference, which is not something anybody can read or
-      type. Zach: *"we also have two separate favicon fields."*
+      type. we also have two separate favicon fields.
 
       The card is the editor now, and it grew the URL box this field was
       carrying, so an externally hosted icon is still reachable.
@@ -987,9 +987,9 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         <FormRenderer
                           /*
                             The SEO tab renders its media controls INSIDE its
-                            own card (AGL-2486). Zach: *"You removed the field
+                            own card (AGL-2486). You removed the field
                             from entity you need to move the other fields too
-                            otherwise it looks separated"* and *"Social image
+                            otherwise it looks separated and *"Social image
                             could be moved up into the SEO part and not its
                             own card."*
 

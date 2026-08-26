@@ -18,9 +18,9 @@
 /**
  * "Used by" costs money, so it runs when ASKED (AGL-703).
  *
- * Zach, looking at a layout whose card reported 53 dependents: *"Make sure the
+ * Make sure the
  * used by does not produce 53 reads, that will get expensive, let's do it on
- * demand like we do the DAM files."*
+ * demand like we do the DAM files.
  *
  * The scan reads every screen, every layout and — for a component — every
  * component definition, decoding published node trees as it goes. That is

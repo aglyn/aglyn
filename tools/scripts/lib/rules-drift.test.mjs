@@ -698,7 +698,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'the public Actions log must never carry the diff body',
     )
     // It gates nothing on purpose: the check is RED today for a reason no
-    // engineer can fix (publishing legal text is Zach's and counsel's call),
+    // engineer can fix (publishing legal text is the and counsel's call),
     // so a push or pull_request trigger would redden every merge in the repo
     // and teach everyone to ignore it.
     const triggers = workflow.slice(workflow.indexOf('\non:'), workflow.indexOf('\njobs:'))

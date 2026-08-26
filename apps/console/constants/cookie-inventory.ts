@@ -368,7 +368,7 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
   },
   /**
    * The advertising category (AGL-1649/AGL-2402), disclosed by CAPABILITY
-   * rather than by rollout — Zach's standing rule, and the published Cookie
+   * rather than by rollout — the standing rule, and the published Cookie
    * Policy (2026-08-20) already names Google and Meta, so the inventory is the
    * half that was behind.
    *

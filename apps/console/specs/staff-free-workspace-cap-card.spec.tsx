@@ -18,7 +18,7 @@
 /**
  * THE CONTROL IS CLICKABLE (AGL-2265).
  *
- * Zach's standing rule is that a capability is not a feature until the console
+ * the standing rule is that a capability is not a feature until the console
  * exposes it, and `admin-free-workspace-cap-route.spec.ts` proves only that
  * the endpoint exists. This file proves a staff member can see the number and
  * change it: the assertions read rendered TEXT and drive real clicks, and the

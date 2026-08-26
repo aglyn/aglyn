@@ -551,7 +551,7 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
    * `entries`: *"uncapped Firestore documents and write volume behind a $0
    * subscription"*.
    *
-   * ## Zach's decision, 2026-08-23, verbatim
+   * ## the decision, 2026-08-23, verbatim
    *
    * > A platform-wide ceiling — **not a plan dimension**, so "unlimited
    * > member accounts on every plan" stays true, because **an abuse control
@@ -683,7 +683,7 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
   })
 
   it('the sign-up refusal is visible to the HOST and opaque to the VISITOR', () => {
-    // Zach's standing rule: a control that exists but is not visible in the
+    // the standing rule: a control that exists but is not visible in the
     // console did not ship. The handler must record the trip, and the inbox
     // console page — where the members and leads lists already live — must
     // read it back.

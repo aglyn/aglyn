@@ -19,7 +19,7 @@
  * Flat platform ceilings on the two host subcollections an ANONYMOUS VISITOR
  * can create documents in (AGL-1529).
  *
- * ## Zach's decision, 2026-08-23, in his own words
+ * ## the decision, 2026-08-23, in his own words
  *
  * > A platform-wide ceiling — **not a plan dimension**, so "unlimited member
  * > accounts on every plan" stays true, because **an abuse control is not
@@ -81,7 +81,7 @@
  */
 
 /**
- * How many member accounts one site may hold (AGL-1529). Zach's figure.
+ * How many member accounts one site may hold (AGL-1529). the figure.
  *
  * Sized to the busiest plausible membership site rather than to today's data,
  * which is the only property a flat ceiling needs. A site member is a human

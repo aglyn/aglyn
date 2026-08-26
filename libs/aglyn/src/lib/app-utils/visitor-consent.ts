@@ -227,7 +227,7 @@ export function advertisingGrantedByStatus(
   // despite the type — an equality test denies those, an exclusion list
   // (`status !== 'declined' && …`) would have granted them.
   //
-  // `implied` GRANTS from 2026-08-25, and the policy went first (Zach's call,
+  // `implied` GRANTS from 2026-08-25, and the policy went first (the call,
   // executed in that order). `decideVisitorConsent` only ever writes `implied`
   // in the OPT-OUT posture — `resolveConsentPosture` keeps the EU 27, the
   // EEA/EFTA three, the UK, Gibraltar, the EU outermost regions AND any visitor
@@ -809,7 +809,7 @@ export function advertisingGrantedByRecord(
  * stated AGL-1498 property and it is intact everywhere the gate applies;
  * `consent-mode-default.spec.tsx` fails if that ever stops being true.
  *
- * Zach's decision, 2026-08-14: load-then-restrict is approved for the UNITED
+ * the decision, 2026-08-14: load-then-restrict is approved for the UNITED
  * STATES, where the implied-consent posture already permits the load and the
  * restriction signals act on a tag that is legitimately resident. EU and UK
  * keep the prior-consent gate exactly as it is, because loading an analytics

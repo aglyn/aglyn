@@ -22,7 +22,7 @@
  * all: every load of `aglyn.com`, `/pricing` or a published test site while
  * building counted as a real visitor in the Platform property, and no GA4 data
  * filter could ever have caught it because there was no parameter to match on.
- * That was the largest of the leaks Zach's 2026-08-18 ask names, because it
+ * That was the largest of the leaks the 2026-08-18 ask names, because it
  * needs no sign-in — the console's AGL-1582 stamp cannot reach it.
  *
  * Three properties are asserted, and each one is a different way to get this

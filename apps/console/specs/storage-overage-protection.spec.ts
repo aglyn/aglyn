@@ -275,7 +275,7 @@ describe("THE CUSTOMER'S CAP: their control, their number, and only theirs", () 
 
 describe('WHAT STILL HARD-BANDS: free/hobby, so it always actually stays free', () => {
   it('refuses a free org past its band, and does not mark it billable', () => {
-    // Zach, 2026-08-18: free "always actually stays free". Forced red by
+    // decided: free "always actually stays free". Forced red by
     // dropping the `planMetersInfraOverage` arm — the free org fell through to
     // the cap logic, was allowed, and came back `billed: true`, which is
     // unbilled storage AND a false invoice signal in one result.

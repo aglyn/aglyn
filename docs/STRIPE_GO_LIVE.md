@@ -381,7 +381,7 @@ subscription product, Stripe records them and charges no one.
    today changes **no org's bill by a single cent**, which makes now the
    cheapest moment it will ever be to turn on.
 
-   ### Zach's decision, 2026-08-17 (AGL-1886) — and its condition
+   ### the decision, 2026-08-17 (AGL-1886) — and its condition
 
    Asked which date this should carry, Zach chose **immediately**, and added a
    condition in his own words: *"also give overage protection and usage
@@ -410,7 +410,7 @@ subscription product, Stripe records them and charges no one.
    - The rollup records `orgLibraryBilledFrom` verbatim beside
      `orgLibraryBilled`, so a month's audit document says why it billed.
 
-   ### Zach's correction, 2026-08-18 — the opt-in became a cap
+   ### the correction, 2026-08-18 — the opt-in became a cap
 
    The shape above shipped as a **soft cap with an acknowledged opt-in**: past
    the band, a metered org was REFUSED until a manager accepted metered

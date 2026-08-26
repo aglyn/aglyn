@@ -353,7 +353,7 @@ async function handler(request: Request): Promise<Response> {
 
       /*==========================================
        * THE FIRST SWEEP OF AN ORG IS SILENT — it BACKFILLS the guard map
-       * instead of firing (AGL-2420, Zach's call).
+       * instead of firing (AGL-2420, the call).
        *
        * Removing the `continue` above, on its own, mails every free org on
        * the platform on the next run: their guard maps are empty, so every
@@ -787,7 +787,7 @@ async function handler(request: Request): Promise<Response> {
         // deduped from here on without ever having been mailed about a state
         // it was already in.
         if (!recordAlert(check.key, threshold)) continue
-        // THE ALERT IS THE PROTECTION (2026-08-18). Zach's condition on
+        // THE ALERT IS THE PROTECTION (2026-08-18). the condition on
         // billing storage was "so customers don't get a surprise bill" — and
         // once overage bills by default rather than being refused, this
         // notification is the entire thing standing between a customer and a
@@ -855,8 +855,8 @@ async function handler(request: Request): Promise<Response> {
       /*==========================================
        * USAGE BUDGETS (AGL-1528) — the GCP billing-budget half.
        *
-       * Zach, 2026-08-18, verbatim: "our usage metering, usage alerts,
-       * budgets for usage alerts, similar to how google cloud charges".
+       * our usage metering, usage alerts,
+       * budgets for usage alerts, similar to how google cloud charges.
        *
        * Everything above answers "am I near a band". A budget answers "what
        * will I owe", which is a different question and the one a metered

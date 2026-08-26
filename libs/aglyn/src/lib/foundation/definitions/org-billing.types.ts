@@ -524,9 +524,9 @@ export type OrgCollaboratorAllocations = Record<string, number>
  * The monthly storage-overage spend cap an org CHOSE for itself (AGL-1886,
  * corrected 2026-08-18).
  *
- * Zach, 2026-08-18, verbatim: *"don't let it make us lose revenue or cost us
+ * don't let it make us lose revenue or cost us
  * money, it should be a control by the end user, to prevent overage or usage
- * alerts rather, we just want to minimize churn"*.
+ * alerts rather, we just want to minimize churn.
  *
  * So this document is **absent by default and absent is the normal state**.
  * Storage past a metered plan's included band bills without it; the customer

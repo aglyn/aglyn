@@ -43,8 +43,8 @@ export interface ArtifactDeleteConfirmProps {
 /**
  * The body of an artifact delete confirmation, filled in live (AGL-703).
  *
- * Zach: *"When we delete anything we need to make sure we show the user where
- * it is referenced (used by) … Make sure the break friendly too."*
+ * When we delete anything we need to make sure we show the user where
+ * it is referenced (used by) … Make sure the break friendly too.
  *
  * Media has answered this since AGL-1461 and artifacts did not: the component
  * dialog said "existing instances render as empty placeholders" without ever

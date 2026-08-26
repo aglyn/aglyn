@@ -354,7 +354,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     })
   })
 
-  describe('the BORDER label chip (Zach, 2026-08-23)', () => {
+  describe('the BORDER label chip (decided)', () => {
     /**
      * The CSS emotion actually emitted for one selector, whitespace
      * removed.
@@ -493,8 +493,8 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     }
 
     it('sits on the same opaque chip as MARGIN and PADDING', async () => {
-      // Zach: "the border label on the box styler needs a background to
-      // make it more legible just like padding and margin labels". The
+      // the border label on the box styler needs a background to
+      // make it more legible just like padding and margin labels. The
       // chip painted the band's own stripes, and because `background` is
       // a SHORTHAND that also reset the base chip's opaque paper ground —
       // so the one label sitting on the figure's only patterned region
@@ -615,7 +615,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
     })
   })
 
-  describe('auto is on the list, for margins only (Zach, 2026-08-23)', () => {
+  describe('auto is on the list, for margins only (decided)', () => {
     /** Open one side's select and read the options it offers. */
     const optionsFor = async (side: string) => {
       act(() => {

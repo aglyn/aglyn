@@ -145,7 +145,7 @@ const NodeOverlay = observer(
      * The selection chrome stands down while this node is being edited in
      * place (AGL-2486).
      *
-     * Zach: *"background becomes white in when editing"* and *"the element
+     * background becomes white in when editing and *"the element
      * outline doesn't wrap the text on the new line unless you are
      * editing it"*. Both are this overlay. It paints a translucent FILL
      * behind the node as well as an outline (`node-outline.tsx`), and while
@@ -174,8 +174,8 @@ const NodeOverlay = observer(
       /**
        * The element's REAL shape, not its bounding box (AGL-2486).
        *
-       * Zach: *"the element outline doesn't wrap the text on the new line
-       * unless you are editing it"*. A wrapped inline run is a set of line
+       * the element outline doesn't wrap the text on the new line
+       * unless you are editing it. A wrapped inline run is a set of line
        * fragments and one rectangle cannot describe it — see
        * `getElementFragmentRects` for why the union is not merely imprecise
        * but a different shape. A block yields one fragment that IS the

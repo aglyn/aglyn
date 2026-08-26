@@ -507,7 +507,7 @@ export function ScreensHierarchyTableComponent(
   /**
    * Pagination that pages ROOTS, never rows (AGL-693).
    *
-   * Zach asked for the pagination the layouts list has. A tree cannot take it
+   * the requirement was for the pagination the layouts list has. A tree cannot take it
    * literally: slicing `visibleRows` by row would put a child on a different
    * page from its parent, and a hierarchy split across pages is not a
    * hierarchy — the indentation would be describing a parent the reader
@@ -523,7 +523,7 @@ export function ScreensHierarchyTableComponent(
    *
    * The default used to be 25 to keep that limit out of reach on a typical
    * site. It is `TABLE_PAGE_SIZE_DEFAULT` now, which is the smallest option
-   * the console offers — every list defaults to its minimum, by Zach's rule —
+   * the console offers — every list defaults to its minimum, by the rule —
    * so a site with more than ten top-level screens meets the limit sooner.
    * Reordering across pages means raising rows-per-page first, or moving the
    * screen by re-parenting it rather than dragging.

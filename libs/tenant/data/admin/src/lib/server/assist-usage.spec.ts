@@ -472,7 +472,7 @@ describe('reserveAssistMessage — the cap must be spent BEFORE the tokens', () 
  * prompt's length, and how much history a client chooses to post. So these
  * assert against the MEASURED figure the meters already write.
  *
- * The ceiling ships ON, at a repo default of $40 (Zach, 2026-08-19) — an
+ * The ceiling ships ON, at a repo default of $40 (decided) — an
  * unset ceiling was the fail-open AGL-2264 was opened about, so a fresh
  * deployment and a self-hoster must both inherit a bound without knowing
  * the variable exists. Which means the load-bearing test in this block is

@@ -37,7 +37,7 @@
  *    identical JSON for this fixture while leaking every merchant's sales to
  *    the next reader who forgot the second step.
  *
- * 2. NO REMITTANCE DETERMINATION. Zach's 2026-08-19 decision is to ship the
+ * 2. NO REMITTANCE DETERMINATION. the 2026-08-19 decision is to ship the
  *    NUMBER and not the LABEL: the three buckets stay separate, nothing sums
  *    them, and no field says whose tax it is. `storefront-tax.ts` reserves
  *    marketplace-facilitator status to counsel, and a merged "tax collected"

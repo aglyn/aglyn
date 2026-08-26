@@ -276,7 +276,7 @@ const ALLOWED = new Map<string, string>([
     'Generated release record (AGL-2102): the word appears inside a quoted commit subject naming this very guard, and the file is regenerated from commit subjects so it cannot be fixed in place.',
   ],
   // `.claude/commands/release.md` was the third entry (AGL-2066) and is GONE.
-  // `6423f5245` rewrote that file, at Zach's request, to carry his directive
+  // `6423f5245` rewrote that file, at the request, to carry his directive
   // verbatim and nothing else — the quoted speech the exemption covered went
   // with the operational lore around it, and the staleness test below is what
   // reported the entry the moment it stopped being used. Removed rather than
@@ -331,7 +331,7 @@ describe('the marketplace no longer calls itself community (AGL-975)', () => {
   it('keeps the exemptions narrow, and still polices the product surfaces', () => {
     // An exemption is the ONE mechanism that can silently shrink this guard,
     // and AGL-2066 added the first entry outside the product tree — a verbatim
-    // quote of Zach's mandate in `.claude/commands/release.md`. The staleness
+    // quote of the mandate in `.claude/commands/release.md`. The staleness
     // test above only asks whether an exemption is still USED; it cannot see
     // an exemption that has grown to cover more than it should. This one asks
     // the other question: is the guard still pointed at what it exists for?

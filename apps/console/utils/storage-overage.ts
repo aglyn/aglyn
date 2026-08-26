@@ -85,7 +85,7 @@ import {
  * A plan that does **not** meter infrastructure overage has no way to bill
  * for the bytes, so accepting them is pure cost with nothing to invoice
  * against. Free/hobby therefore keeps the hard band exactly where it was, and
- * that is the point of Zach's second sentence: free "always actually stays
+ * that is the point of the second sentence: free "always actually stays
  * free" — no metered price, no invoice line, no cap to configure.
  *
  * The hard band here is the *braces*. The **belt** is structural and lives in
@@ -364,7 +364,7 @@ export interface MediaStorageGateResult {
  *
  * - **Unmetered plan (free/hobby) → REFUSED.** There is no metered price to
  *   attach, so accepting the bytes would be cost with no invoice. This is the
- *   band Zach asked to keep so free "always actually stays free", and it is
+ *   band the requirement was to keep so free "always actually stays free", and it is
  *   unchanged from the original design.
  * - **Metered plan, no customer cap → ALLOWED AND BILLED.** The default. No
  *   consent step, because `report-usage` bills these bytes and the customer

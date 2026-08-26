@@ -84,7 +84,7 @@ const RESULT_TTL_MS = 60_000
 /**
  * Per-screen traffic comparison (AGL-1844): every screen's pageviews over a
  * selectable window, side by side, from the AGL-151 attribution docs — the
- * dashboard-level view Zach asked for beyond the single-screen panel on each
+ * dashboard-level view the requirement was for beyond the single-screen panel on each
  * screen's view page (AGL-152). Same paid gate as that panel: data is always
  * collected, display is what `screenAnalytics` (Pro+) buys.
  */

@@ -34,7 +34,7 @@ export const TABLE_HEAD_HEIGHT = 48
 /**
  * ONE table footer for the whole console (AGL-693).
  *
- * Zach: *"The table footer is not consistent."* It was not: layouts paged 5 at
+ * The table footer is not consistent. It was not: layouts paged 5 at
  * a time, components and templates 10, the team list and the screens tree 25,
  * and the labels ranged from `Rows per page` to `Top-level screens per page`.
  * Three of those footers are MUI X `DataGrid`, two are a hand-rolled
@@ -50,8 +50,8 @@ export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50]
 /**
  * The default page size: THE SMALLEST OPTION, always.
  *
- * Zach: *"Make all paginated lists default to the minimum count … that goes
- * for all lists across the entire platform."* Derived from the options rather
+ * Make all paginated lists default to the minimum count … that goes
+ * for all lists across the entire platform. Derived from the options rather
  * than written as a number, so the rule survives the options changing — a
  * hardcoded default is how the console ended up with five different ones.
  *

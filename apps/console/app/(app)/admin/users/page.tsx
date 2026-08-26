@@ -123,7 +123,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * list holding both could merge them.
    *
    * Paging replaces the rows instead, so the merge would have lost its second
-   * half and Zach's two-rows-for-one-human bug would be back the moment the
+   * half and the two-rows-for-one-human bug would be back the moment the
    * project pool needs a second page. Keeping what each page held costs one
    * map and restores it: the collapse is fed this page PLUS the rows of every
    * other page seen, then narrowed back to the uids on this page. A twin is
@@ -196,7 +196,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     // once, and it is handed one page: the project pool paginates 200 at a
     // time and the SSO tenant users are appended only on the LAST page. So
     // past the first page the emailless twin and the real record arrive in
-    // different responses, and this list showed Zach's two rows again, the
+    // different responses, and this list showed the two rows again, the
     // twin with no merged chip on it. Re-applied here, where the list is
     // actually assembled.
     //
@@ -432,7 +432,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                           />
                         ) : null}
                         {/* One uid, more than one pool. The rows are merged
-                            now (AGL-2005) — Zach asked to see one user, not
+                            now (AGL-2005) — the requirement was to see one user, not
                             two — but merged is not the same as hidden, so the
                             surviving row says what was folded into it and
                             which pools those records are in. Without this the

@@ -300,8 +300,8 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
       // Withheld when there is no layout: Open Besigner would mint a
       // version document under an id that has none (AGL-706).
       // Presence sits BESIDE the button that would join the room (AGL-2486).
-      // Zach: "identify who is currently in the document already before
-      // joining" — so it belongs where the joining decision is made, not in a
+      // identify who is currently in the document already before
+      // joining — so it belongs where the joining decision is made, not in a
       // card further down the page. It watches without announcing: a page
       // that joined on arrival would report every browser as an editor.
       headerRight={

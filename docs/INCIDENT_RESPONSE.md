@@ -163,7 +163,7 @@ status page shows only what the health checks say.
 ## The SLA decision — options for Zach, with the tradeoffs
 
 **No number is committed here, deliberately.** AGL-1148's sequencing was
-Zach's own call — build the plumbing, commit to a figure once it is measured —
+the call — build the plumbing, commit to a figure once it is measured —
 and it is still the right one. What follows is the decision laid out so it can
 be made rather than deferred by default.
 

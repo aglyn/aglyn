@@ -346,7 +346,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
 
       // THE TAKE RATE IS THE STOREFRONT LADDER'S, NOT A NEW ONE (AGL-2315).
       //
-      // Zach's decision, 2026-08-19: bookings mirror the storefront ladder —
+      // the decision, 2026-08-19: bookings mirror the storefront ladder —
       // the same rate a storefront sale already takes, tapering to 0% on the
       // upper tiers. It is consistent with what merchants already agreed to
       // and needs no new price communication, so pricing stays locked for

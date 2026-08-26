@@ -438,7 +438,7 @@ describe('the finalize still only pays for what it can use (AGL-1476)', () => {
     mockState.contentType = 'image/png'
     mockState.source = await sourcePng()
     await finalize()
-    expect(writtenDocument()['variants'].length).toBeGreaterThan(0)
+    expect((writtenDocument()['variants'] as unknown[]).length).toBeGreaterThan(0)
     // Unchanged and still the point of the rest of this test: these are not
     // CDN features and must land regardless of plan.
     expect(writtenDocument()['width']).toBe(1200)

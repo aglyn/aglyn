@@ -18,9 +18,9 @@
 /**
  * Who is in each document of an org, for list and detail rows (AGL-2486).
  *
- * Zach: "add the presence avatars indicators to the detail page and list rows
+ * add the presence avatars indicators to the detail page and list rows
  * as well to easily identify who is currently in the document already before
- * joining."
+ * joining.
  *
  * ## Why a server summary and not a subscription per row
  *

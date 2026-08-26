@@ -366,7 +366,7 @@ export const SCREEN_KIND_TEMPLATE = 'template'
  * one of `errorScreens`' four status slots, rendered on paths that did not
  * match — and so, like an entry template, at no address of its own.
  *
- * Zach's decision on 2026-08-18 was that these must not spend the plan's screen
+ * the decision on 2026-08-18 was that these must not spend the plan's screen
  * allowance, for the reason AGL-1173 excluded an entry template: the governing
  * question is whether the screen occupies a URL of its own, and a 404 body does
  * not. (A collection's LIST template does — `/{collectionSlug}` renders that

@@ -248,8 +248,8 @@ function BesignerPage(props) {
   /**
    * Is the version being edited the one the site is SERVING?
    *
-   * Zach: "versions should not have a draft, only the current live version
-   * should be able to have a draft." That is the whole gate. A non-live
+   * versions should not have a draft, only the current live version
+   * should be able to have a draft. That is the whole gate. A non-live
    * version is already a place to work without touching the live site — that
    * is what versions are for — so a draft there would be a second answer to a
    * question that already has one, offering a distinction with nothing behind
@@ -698,7 +698,7 @@ function BesignerPage(props) {
    * A draft has been saved and NOT yet published.
    *
    * The app bar's three states describe the LIVE SITE, not the canvas, which
-   * is the correction Zach asked for the first time round — "Is up to date
+   * is the correction the requirement was for the first time round — "Is up to date
    * accurate if they saved the draft but they did not save and publish?".
    * It was not, and it would be wrong again here for a new reason: on the live
    * version `versionId === screens/{id}.versionId` is true by definition, so
@@ -710,8 +710,8 @@ function BesignerPage(props) {
   /**
    * SAVE THE WORKING DRAFT (AGL-1152).
    *
-   * Zach: "Save draft seemed to save and publish at the same time for screens,
-   * we need both". It did, and the menu said the opposite — "Keeps your work;
+   * Save draft seemed to save and publish at the same time for screens,
+   * we need both. It did, and the menu said the opposite — "Keeps your work;
    * the live site is unchanged" — while the toast said the live page was
    * refreshing. Both were describing the same call.
    *

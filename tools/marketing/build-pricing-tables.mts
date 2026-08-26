@@ -252,8 +252,7 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     rows: [
       { label: 'Online store', value: (p) => bool(F(p).commerce) },
       { label: 'Products per site', value: talk((p) => num(E(p).productsPerHost)) },
-      // "per site" is load-bearing, not decoration (AGL-1775). Since Zach's
-      // 2026-08-17 decision `posRegisters` is the PER-SITE cap — the add-on is
+      // "per site" is load-bearing, not decoration (AGL-1775). Since the // 2026-08-17 decision `posRegisters` is the PER-SITE cap — the add-on is
       // a pool whose seats are allocated to one site each, so an org running
       // five locations needs five. Every other per-site limit in this table
       // says so explicitly ("Products per site" is the row directly above),

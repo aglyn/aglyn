@@ -26,7 +26,7 @@
  *
  * ## The low-data case is the DESIGN, not an excuse
  *
- * Zach asked for these now, so the page is ready when there is real data —
+ * the requirement was for these now, so the page is ready when there is real data —
  * which means what they do at launch, with $25.00 and one paying org, is a
  * requirement rather than a caveat. Stated per chart:
  *

@@ -41,7 +41,7 @@ export type { Measurements }
  *
  * The geometry is the original's — wedge-shaped bands framing the content,
  * because that shape is what says these are frames AROUND something rather
- * than four unrelated numbers, and it is the shape Zach's eye had learned.
+ * than four unrelated numbers, and it is the shape the eye had learned.
  * Two attempts to improve on it were both wrong: one repainted it in
  * saturated colour, the other removed the wedges along with the paint.
  *
@@ -414,7 +414,7 @@ const StyledWrapper = styled('div')(({ theme }) => {
 
       /**
        * BORDER, on the same opaque chip as MARGIN and PADDING, in the
-       * same TOP-LEFT corner of its own band (Zach, 2026-08-23; top-left
+       * same TOP-LEFT corner of its own band (decided; top-left
        * supersedes a top-right pass earlier the same day).
        *
        * Two asks that turn out to be one change. The chip painted

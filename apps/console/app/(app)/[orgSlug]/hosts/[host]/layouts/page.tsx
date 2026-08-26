@@ -523,10 +523,10 @@ function Layouts(props) {
           /*
             The plan readout sits OPPOSITE the heading, beside the create
             button (AGL-2113) — the arrangement the Sites page uses for
-            `6 of 10 sites · Business plan`. Zach: *"the 'templates on your
+            `6 of 10 sites · Business plan`. the 'templates on your
             plan' need to be moved to the header like we have on the hosts
             page, same thing goes for the screens page, components, layouts
-            and templates."*
+            and templates.
 
             Above the table rather than inside it, because it is a fact about
             the PAGE: a reader deciding whether to create another one is

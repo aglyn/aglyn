@@ -157,9 +157,9 @@ describe('AGL-2185 · configuration', () => {
   })
 
   it('each kind takes its OWN project, and a per-kind var beats the shared one', () => {
-    // Zach, 2026-08-22: "each type of issue report feature, bug etc all
+    // each type of issue report feature, bug etc all
     // options should be filed under its own project in the Customer Reports
-    // team." `question` is left off deliberately: a kind with no project of
+    // team. `question` is left off deliberately: a kind with no project of
     // its own must fall back rather than file nowhere.
     expect(
       linearConfigFromEnv({

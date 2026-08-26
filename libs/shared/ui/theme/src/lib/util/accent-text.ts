@@ -42,16 +42,16 @@ export const AA_NON_TEXT_CONTRAST = 3
  *
  * `c03a2d754` routed `MuiButton`'s `--variant-textColor` /
  * `--variant-outlinedColor`, `MuiLink`'s `color` and `MuiTab`'s selected
- * label through this function. That shipped, and it repainted Zach's brand
+ * label through this function. That shipped, and it repainted the brand
  * blue: links and text/outlined button labels went `#00b0ff` → `#0077ad` in
- * light and → `rgb(76, 199, 255)` in dark. Zach, 2026-08-18: **"You changed
+ * light and → `rgb(76, 199, 255)` in dark. decided: **"You changed
  * my theme colors, I told you deliberately not to do that."** Every one of
  * those call sites is reverted; `#00b0ff` renders everywhere it rendered
  * before.
  *
  * What survives here is the ability to ANSWER the question — "what would
  * accent-coloured text resolve to if we ever decided to change it" — for a
- * decision that is Zach's to make. Wiring it into a component override again
+ * decision that is the to make. Wiring it into a component override again
  * is a visual change to the brand and needs him to ask for it.
  *
  * Returns a CSS variable reference (`var(--mui-palette-primary-dark)`) on a
@@ -147,7 +147,7 @@ export const DOCUMENTED_CONTRAST_EXCEPTIONS: ReadonlyArray<{
     value: '#FFFFFF',
     against: '#00b0ff',
     reason:
-      'AGL-1293 — Zach, 2026-08-18: "don\'t change the current blue and leave it as white text" (white on #00b0ff = 2.43:1, knowingly below AA)',
+      'AGL-1293 — don\'t change the current blue and leave it as white text (white on #00b0ff = 2.43:1, knowingly below AA)',
   },
 ]
 

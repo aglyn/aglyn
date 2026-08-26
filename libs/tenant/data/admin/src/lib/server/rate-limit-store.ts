@@ -347,7 +347,7 @@ export function recordSignupRefusal(
  * **403 `Permission denied for all log views`**, because the firebase-admin
  * service account can create log entries and cannot list them. So the only
  * reader the log has is a GCP alert policy that does not exist yet, and
- * creating one is Zach's click, not a thing that ships with a commit.
+ * creating one is the click, not a thing that ships with a commit.
  *
  * That is the AGL-2486 shape exactly — a detector written into a place nothing
  * watches. This marker is the second copy of the count, in a store we can

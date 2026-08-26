@@ -101,7 +101,7 @@ landed URL on a signed-in staff browser as a broken linker.
 
 What is **still not** established is that GA4 then reports it as one session with
 the original source retained, which needs DebugView or Realtime across the hop —
-Zach's console, and on the click-list. Two structural reasons it is best-effort
+the console, and on the click-list. Two structural reasons it is best-effort
 rather than certain, both worth knowing before reading the funnel:
 
 - **The `_gl` decoration requires a loaded tag at click time.** On `aglyn.com`
@@ -774,7 +774,7 @@ configured. A customer's contact form reports to the customer's property;
 
 The gate above decides whether the tag LOADS. Three commits then settled what
 a loaded tag is _told_, and the posture they implement, stated as the decision
-was made (Zach, 2026-08-14): **load-then-restrict is approved for the United
+was made (decided): **load-then-restrict is approved for the United
 States**, where the implied-consent posture already permits the load and the
 restriction signals act on a tag that is legitimately resident.
 **EU/UK/EEA and unknown-region visitors are unchanged** — the gate still means

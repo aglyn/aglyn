@@ -106,7 +106,7 @@ const PLATFORM_TTL_MS = 15_000
  * HOLDS: a takedown that a process has already observed keeps being
  * enforced by that process for as long as Firestore is unreachable. That is
  * the real incident shape — a takedown placed hours or days ago, then a
- * Firestore blip — and it is what Zach's decision asks for.
+ * Firestore blip — and it is what the decision asks for.
  *
  * DOES NOT HOLD: a COLD process that has never once read the takedown has
  * nothing to remember and fails open, like everything else. Closing that

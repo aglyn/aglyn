@@ -96,7 +96,7 @@ const GOOD_LOG = `# Decision Log
 
 ## 2026-08-19 — Free tier hard-caps at three workspaces per person
 
-- **Decided by:** Zach, 2026-08-19, verbatim: "3 but provide a control in the staff console."
+- **Decided by:** 3 but provide a control in the staff console.
 - **Scope:** packaging
 - **Evidence:** \`81c432500\`, AGL-2265
 `

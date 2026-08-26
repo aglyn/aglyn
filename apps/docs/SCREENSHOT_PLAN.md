@@ -266,7 +266,7 @@ both had been read as manual because of where the earlier passes stopped:
 **The four that remain are A1, A2, A7 and A15, and none of them is a capture.**
 A1/A2 need a real Stripe customer with a scheduled downgrade; A7 needs a real
 paid invoice on Stripe's own pages, carrying real billing data into a **public**
-repository; A15 is Zach's decision about a release flag that is still off. There
+repository; A15 is the decision about a release flag that is still off. There
 is no harness time left in this issue.
 
 **New guard: `npm run check:docs-screenshots`.** Every `/img/…` reference in
@@ -321,7 +321,7 @@ Each correction is recorded on its own entry rather than silently applied.
 
 Two conventions worth restating because most of these need them:
 
-- **`clipTo` beats a full page.** Zach's ask is section- and component-level
+- **`clipTo` beats a full page.** the ask is section- and component-level
   crops. A `clipTo` crops to what the element *measures at capture time*, which
   is what a card whose neighbours keep growing needs. Reach for a fixed `rect`
   only when there is no element to name (page chrome, a toolbar band).

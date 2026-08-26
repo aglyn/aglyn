@@ -121,8 +121,7 @@ export interface RetentionFunnelDialogProps {
 }
 
 /**
- * The cancellation/deletion funnel (AGL-1863, under AGL-1859 — Zach's
- * twice-given directive: commitment over churn).
+ * The cancellation/deletion funnel (AGL-1863, under AGL-1859 — the * twice-given directive: commitment over churn).
  *
  * Four steps, in order, for BOTH leave paths: a short why-are-you-leaving
  * survey whose answer is stored org-scoped; a downsell to a smaller PAID

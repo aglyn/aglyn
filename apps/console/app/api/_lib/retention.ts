@@ -31,7 +31,7 @@ import { SELF_SERVE_PLANS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /**
- * Retention-funnel primitives (AGL-1863 / AGL-1859 — Zach's twice-given
+ * Retention-funnel primitives (AGL-1863 / AGL-1859 — the twice-given
  * directive: commitment over churn, and we must not lose money doing it).
  *
  * Everything the cancellation/deletion funnel stores lives in

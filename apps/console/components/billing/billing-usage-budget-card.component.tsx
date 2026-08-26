@@ -73,10 +73,10 @@ export interface BillingUsageBudgetCardProps {
  *
  * ## Why this card exists at all
  *
- * Zach, 2026-08-18, verbatim: "*Always make sure features are available in
+ * *Always make sure features are available in
  * the console and not just that the capability exists... if there are any
  * features that are the capability exists but they are not implemented in the
- * UI of the console or where appropriate then we need to add them now.*"
+ * UI of the console or where appropriate then we need to add them now.*
  *
  * The cron can evaluate a budget with no card at all. It would then be
  * alerting against a number no customer could ever have chosen — a feature

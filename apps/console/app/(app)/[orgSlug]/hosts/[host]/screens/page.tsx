@@ -626,8 +626,8 @@ function Screens(props) {
 
   /*
     The row's LEFT is the drag handle and the expand chevron, and nothing else
-    (AGL-693). Zach: *"The screens should only have the drag or expand icon to
-    the left."*
+    (AGL-693). The screens should only have the drag or expand icon to
+    the left.
 
     A "Details" icon used to sit there, on the argument that it is navigation
     rather than a row action. That was true and is now moot: the ROW opens the
@@ -715,8 +715,8 @@ function Screens(props) {
           label={label}
           /*
             A screen is the ONE artifact with a real address of its own, so its
-            quick action is the live page rather than a preview — Zach: *"it
-            should be preview if it is not a screen or open live page"*.
+            quick action is the live page rather than a preview — it
+            should be preview if it is not a screen or open live page.
 
             Shown DISABLED with the reason when there is no single live page: a
             collection template renders under routes the collection owns, so it

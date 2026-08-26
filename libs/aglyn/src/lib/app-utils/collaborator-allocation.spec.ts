@@ -26,7 +26,7 @@ import {
 
 /**
  * The collaborator seat add-on is a POOL allocated per site (AGL-2439,
- * Zach's 2026-08-19 decision) — the AGL-1775 register mechanism, applied to
+ * the 2026-08-19 decision) — the AGL-1775 register mechanism, applied to
  * the `members` key that never got it.
  *
  * `seatAddons.members` is bought once, org-wide; `membersPerHost` is enforced

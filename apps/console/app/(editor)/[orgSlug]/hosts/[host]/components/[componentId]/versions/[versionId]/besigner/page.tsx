@@ -852,8 +852,8 @@ function ComponentBesignerPage(props) {
                         <CollaboratorOverlays entries={presence.entries} />
                         <BesignerAppBarComponent
                           // Components get the same switcher screens and layouts have
-                          // (AGL-2486). Zach: "Why do we not have a component switcher
-                          // like we have a screen switcher". There was no reason — the
+                          // (AGL-2486). Why do we not have a component switcher
+                          // like we have a screen switcher. There was no reason — the
                           // switcher's kind union simply stopped at two.
                           documentSwitcher={
                             <BesignerDocumentSwitcherComponent

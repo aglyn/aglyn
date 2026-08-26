@@ -36,8 +36,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * from `orgs/{id}/assistUsage/{month}.estCostUsd`. Assist cost had five
  * writers and two readers — the budget alert and the billing card — and
  * neither of them is the margin model, so the one cost line that can actually
- * clear the $2/site floor never reached the discount guardrail at all. Zach's
- * standing constraint is that Assist must not eat margins; a guardrail that
+ * clear the $2/site floor never reached the discount guardrail at all. the * standing constraint is that Assist must not eat margins; a guardrail that
  * cannot see Assist cannot enforce it.
  *
  * SAME MONTH as the rollup, not "now". The cron writes the CLOSED month, so

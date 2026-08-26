@@ -16,8 +16,7 @@
  */
 
 /**
- * In-console tier visibility (AGL-1864, under AGL-1859 §1 — Zach's
- * twice-given directive: "hide or de-emphasize the lower subscription tiers …
+ * In-console tier visibility (AGL-1864, under AGL-1859 §1 — the * twice-given directive: "hide or de-emphasize the lower subscription tiers …
  * upgrade paths prominent and one-click").
  *
  * This shipped with NO test at all. Nothing in `apps/console/specs` touched

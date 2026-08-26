@@ -186,7 +186,7 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
 /**
  * A PERSON does not have a logo (AGL-2486).
  *
- * Zach: *"it also doesn't reflect copy when the entity is a person."* Every
+ * it also doesn't reflect copy when the entity is a person. Every
  * word on this card said logo — publisher's mark, the organization publishing
  * this site — while the Type select one field up may say Person, which is the
  * common case for a portfolio or a one-person consultancy.

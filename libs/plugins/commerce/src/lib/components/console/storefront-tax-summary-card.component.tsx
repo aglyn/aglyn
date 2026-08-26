@@ -115,7 +115,7 @@ function monthOptions(): Array<{ value: string; label: string; from: string; to:
  * `totals.taxCents` at a time and nothing else. This card is that absence
  * closed, and closing it is all it does.
  *
- * ## THE NUMBER, NOT THE LABEL — Zach's 2026-08-19 decision, as amended
+ * ## THE NUMBER, NOT THE LABEL — the 2026-08-19 decision, as amended
  *
  * This card presents the buckets SEPARATELY and prints no per-row verdict on
  * who must remit which one. That structure is unchanged. What changed is the

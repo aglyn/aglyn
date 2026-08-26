@@ -251,8 +251,8 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   })
 
   /**
-   * The Sept-1 lock, pinned (Zach, 2026-08-18): "$0.0338/GB-mo · $0.13/1k page
-   * views · $0.065/1k form submissions". Those are the CUSTOMER-facing figures,
+   * The Sept-1 lock, pinned ($0.0338/GB-mo · $0.13/1k page
+   * views · $0.065/1k form submissions. Those are the CUSTOMER-facing figures,
    * so they are asserted post-markup — the form the published page states and
    * the form a customer can check. `published-pricing-table-parity.spec.ts`
    * pins the same three figures from the other direction, as transcribed off

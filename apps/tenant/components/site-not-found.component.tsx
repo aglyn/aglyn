@@ -27,8 +27,8 @@ import SiteStatusScreen from './site-status-screen.component'
 /**
  * The body of a tenant 404 (AGL-2342).
  *
- * Zach, twice now: *"once they reach a 404 page currently there is no ability
- * to navigate away that is horrible UX."* AGL-2187 answered that with a
+ * once they reach a 404 page currently there is no ability
+ * to navigate away that is horrible UX. AGL-2187 answered that with a
  * navigable fallback; this answers it with the site's OWN page — the screen its
  * author designed, with the header, nav and footer they put on it.
  *

@@ -29,9 +29,9 @@ import { summarizeOrgPresence } from '../../_lib/presence-summary'
  * Who is in each document of one site, for list rows and detail pages
  * (AGL-2486).
  *
- * Zach: "add the presence avatars indicators to the detail page and list rows
+ * add the presence avatars indicators to the detail page and list rows
  * as well to easily identify who is currently in the document already before
- * joining."
+ * joining.
  *
  * ## Why this exists at all
  *

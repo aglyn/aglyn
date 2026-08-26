@@ -19,9 +19,9 @@
  * What a delete confirmation is allowed to TELL an author about what breaks
  * (AGL-703).
  *
- * Zach: *"When we delete anything we need to make sure we show the user where
+ * When we delete anything we need to make sure we show the user where
  * it is referenced (used by) … meaning things are going to break. Make sure
- * the break friendly too."*
+ * the break friendly too.
  *
  * A separate module for the same reason `media-usage-copy.ts` is one: the
  * sentence IS the safety control, not decoration on one. The media library

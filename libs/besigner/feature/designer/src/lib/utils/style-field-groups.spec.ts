@@ -586,8 +586,8 @@ describe('style field groups (AGL-540/587)', () => {
 
   /**
    * Plain-English controls for the fields that were raw CSS shorthand
-   * (AGL-2486, Zach 2026-08-22: *"This is not very friendly for someone who
-   * does not know code."*).
+   * (AGL-2486, This is not very friendly for someone who
+   * does not know code..
    *
    * Asserted at the DECLARATION end, like the length editors above, so a
    * field that quietly reverts to a text box fails here rather than in a
@@ -684,8 +684,8 @@ describe('style field groups (AGL-540/587)', () => {
   })
 
   /**
-   * ROW RHYTHM (AGL-2486, Zach 2026-08-22: *"Lot's of spacing in here…
-   * compared to here."*).
+   * ROW RHYTHM (AGL-2486, Lot's of spacing in here…
+   * compared to here..
    *
    * Both halves of this are invisible in the source — an orphan depends on
    * a field's NEIGHBOURS, and a wrapped caption depends on a width nobody

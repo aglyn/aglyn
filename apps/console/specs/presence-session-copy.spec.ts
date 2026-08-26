@@ -21,9 +21,9 @@ import type { PresenceEntry } from '../hooks/use-presence'
 /**
  * What a presence chip promises about collaborating (AGL-2486).
  *
- * Zach: *"Why are saves not merged? Isn't this the point of being able to
+ * Why are saves not merged? Isn't this the point of being able to
  * collaborate together and build a page alongside someone at the same
- * time"*. The old copy described the storage — one whole-document write —
+ * time. The old copy described the storage — one whole-document write —
  * and presented it as the user's experience, which predicted a fight that
  * does not happen in the common case: the mirror carries unsaved work per
  * NODE, so two people on different elements both keep theirs.

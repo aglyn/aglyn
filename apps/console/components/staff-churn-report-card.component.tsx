@@ -71,7 +71,7 @@ function ranked(counts: Record<string, number>): Array<[string, number]> {
  * The funnel has stored every survey answer since AGL-1863 and nothing could
  * read them: `orgs/{orgId}/retention` is Admin-SDK-only, so the answers were
  * reachable only by opening the Firebase console one workspace at a time.
- * Zach's rule — a capability is not a feature until the console exposes it.
+ * the rule — a capability is not a feature until the console exposes it.
  *
  * Counts, and — since AGL-2294 — the free text behind a disclosure.
  *

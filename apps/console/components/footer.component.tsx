@@ -51,8 +51,8 @@ const FooterComponent = forwardRef<any, FooterProps>((props, ref) => {
             </Stack>
 
             {/*
-              * LINKS, not buttons (AGL-2486). Zach: "probably should just do
-              * applinks and not buttons".
+              * LINKS, not buttons (AGL-2486). probably should just do
+              * applinks and not buttons.
               *
               * `componentVariant: 'button'` rendered five MUI buttons, which
               * brought uppercase labels, button padding and a hover surface

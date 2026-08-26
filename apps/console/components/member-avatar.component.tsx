@@ -44,7 +44,7 @@ export const AVATAR_COLOURS = [
  *
  * The SEED is the caller's choice and it matters. Member surfaces seed on the
  * email, so a rename does not repaint someone. Presence seeds on
- * `uid:sessionId`, because Zach asked for one avatar per open SESSION each in
+ * `uid:sessionId`, because the requirement was for one avatar per open SESSION each in
  * its own colour, matching the cursor that session draws.
  */
 export function avatarColourFor(seed: string): string {
@@ -227,9 +227,9 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // The old reasoning was that an initials chip's background
               // already IS the identity colour, so a same-colour ring carries
               // no new information. That was true and it was beside the point.
-              // Zach: "I know we are using the background color on the avatars
+              // I know we are using the background color on the avatars
               // with no picture, but it should still have a border, because
-              // now they are different sizes." The ring is not only
+              // now they are different sizes. The ring is not only
               // information, it is GEOMETRY: it paints 2px outside the circle,
               // so in a mixed stack the photo chips read 4px wider than the
               // initials chips beside them and the row looks uneven.
@@ -262,9 +262,9 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // everywhere, on the reasoning that the monitor badge already
               // says "this is you" and a second signal was noise.
               //
-              // That last step was the one mistake. Zach: "go ahead and go
+              // That last step was the one mistake. go ahead and go
               // back to the dashed border on the avatars when it is you in
-              // the other tabs so it matches what appears in the canvas."
+              // the other tabs so it matches what appears in the canvas.
               // The canvas draws a DASHED outline around what your other
               // session has selected, so making the chip solid did not remove
               // a redundant signal — it made two surfaces disagree about how

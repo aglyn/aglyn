@@ -220,7 +220,7 @@ const STRONG_PAGE_MARGIN = 3
  * one where the page is right whatever came before — may be answered without
  * reading the conversation.
  *
- * The calibration case is Zach's own second question, "how do I add an
+ * The calibration case is the second question, "how do I add an
  * element to my page": top score 7.9, and the winning page beats its rival by
  * 1.80 with a coming-soon LAUNCH GUIDE, because that guide happens to say
  * "add", "element" and "page". As a first question that is retrieval doing
@@ -560,14 +560,12 @@ export function deflectToDocs(
  * bare URLs into links and renders everything else literally, under
  * `whiteSpace: 'pre-wrap'`. That is a deliberate phase-1 decision, not a gap.
  *
- * This template shipped once with the heading wrapped in `**…**`, and Zach's
- * besigner drawer duly showed `**Drag-and-drop hierarchy — Moving an element
+ * This template shipped once with the heading wrapped in `**…**`, and the * besigner drawer duly showed `**Drag-and-drop hierarchy — Moving an element
  * without dragging**`, asterisks and all. The lesson is not "escape the
  * asterisks" — it is that the composer has to know what renders it.
  *
  * So the heading is a bare `[label](url)` on its own line — a LINK, which is
- * the one markup the panel speaks, and which is why the title in Zach's
- * screenshot was correctly clickable even while the asterisks around it were
+ * the one markup the panel speaks, and which is why the title in the * screenshot was correctly clickable even while the asterisks around it were
  * not. Everything else is carried by NEWLINES, which `pre-wrap` renders,
  * rather than by markup, which it does not.
  *

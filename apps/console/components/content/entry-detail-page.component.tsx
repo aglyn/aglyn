@@ -178,7 +178,7 @@ type EntryEditorState = {
   /**
    * The entry's own address segment (AGL-2498).
    *
-   * Zach: *"We are missing the ability to override the default slug."*
+   * We are missing the ability to override the default slug.
    *
    * It was never a field. `handleSaveEntry` wrote `slug: slugify(title)` on
    * EVERY save, which is two problems wearing one coat: there was no way to
@@ -289,8 +289,8 @@ const isEditorDirty = (
 /**
  * ONE entry — its own route, its own component (AGL-2498).
  *
- * Zach: *"The content collection page flashes before the content detail page
- * appears, that mean they are not separate pages."*
+ * The content collection page flashes before the content detail page
+ * appears, that mean they are not separate pages.
  *
  * They are now. This renders at
  * `…/content/{collectionSlug}/entries/{entryId}` and cannot render the list at
@@ -868,7 +868,7 @@ export function EntryDetailPage() {
   /**
    * Everything recorded ABOUT the entry, in one list (AGL-2498).
    *
-   * Zach: *"created at dates, published at dates, scheduled dates, etc."* All
+   * created at dates, published at dates, scheduled dates, etc. All
    * four timestamps were stored and none were readable on the page that writes
    * them — an author could set a published date in a dialog and then had
    * nowhere to read it back.
@@ -1152,8 +1152,8 @@ export function EntryDetailPage() {
                         autoFocus
                       />
                       {/*
-                        The slug is a FIELD now (AGL-2498) — Zach: "We are
-                        missing the ability to override the default slug."
+                        The slug is a FIELD now (AGL-2498) — We are
+                        missing the ability to override the default slug.
 
                         Two separate wrongs it fixes. There was no way to
                         choose an address at all; and `slug: slugify(title)` on
@@ -1463,9 +1463,9 @@ export function EntryDetailPage() {
                   >
                     {/*
                       Publication controls, where the writing happens
-                      (AGL-2498). Zach: "We are also missing the ability
+                      (AGL-2498). We are also missing the ability
                       schedule publishing on the content collections, only via
-                      the expanded menu on the list."
+                      the expanded menu on the list.
 
                       They are the SAME actions the row menu runs — shared
                       through the scope rather than copied — so there is one

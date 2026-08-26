@@ -22,8 +22,8 @@ import { regionFills, type RegionFills } from './region-fills'
 /**
  * The box diagram's dark mode (AGL-2486).
  *
- * Zach: "we are also missing a dark mode version of colors, this is too
- * bright on dark mode." The console runs MUI with CSS variables and
+ * we are also missing a dark mode version of colors, this is too
+ * bright on dark mode. The console runs MUI with CSS variables and
  * `colorSchemeSelector: 'class'` — measured in the running app, `:root,
  * .light` and `.dark` each redefine `--mui-palette-*` — so a fill built
  * only from palette VARIABLES re-resolves when the class flips, with no

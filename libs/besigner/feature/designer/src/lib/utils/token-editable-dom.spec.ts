@@ -201,8 +201,8 @@ describe('materialize / serialize pills (AGL-586)', () => {
 /**
  * AGL-2486 — the stand-down rule, expressed once.
  *
- * Zach, on the live editor: *"I can't seem to click the text or move the
- * text cursor or select text"* — the editor open, styled, and completely
+ * I can't seem to click the text or move the
+ * text cursor or select text — the editor open, styled, and completely
  * uninteractive.
  *
  * Every canvas leaf registers pointer handlers that begin by preventing the

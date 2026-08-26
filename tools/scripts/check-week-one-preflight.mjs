@@ -343,7 +343,7 @@ function checkAgreementTemplate() {
       'P4.4a',
       'Founding-agreement email template ready to send',
       FAIL,
-      'exists but still marked DRAFT — awaiting Zach’s voice pass',
+      'exists but still marked DRAFT — awaiting the voice pass',
     )
   return record(
     'P4.4a',
@@ -494,7 +494,7 @@ async function runSelfTest() {
   )
   writeFileSync(
     join(dir, 'Founding-Agreement-Email-Template.md'),
-    '**Status:** DRAFT for Zach’s voice pass\n',
+    '**Status:** DRAFT for the voice pass\n',
   )
   writeFileSync(
     join(dir, 'Design-Partner-Outreach.md'),

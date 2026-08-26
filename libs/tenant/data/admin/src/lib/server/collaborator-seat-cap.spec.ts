@@ -680,7 +680,7 @@ describe('the collaborator add-on is a per-site POOL (AGL-2439)', () => {
   /**
    * THE GRANDFATHER, at the only place it could be violated.
    *
-   * Zach's 2026-08-19 decision: do NOT evict or lock out any org that is
+   * the 2026-08-19 decision: do NOT evict or lock out any org that is
    * currently over the corrected cap. The cap binds ALLOCATION, never ACCESS.
    *
    * These are the tests that would catch someone adding a reconciliation

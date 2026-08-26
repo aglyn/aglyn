@@ -24,7 +24,7 @@
  * Assist messages a day. `/api/orgs/create` is rate limited per uid and per IP
  * (AGL-1534), which bounds the RATE and not the TOTAL.
  *
- * Zach's decision, 2026-08-19: **three, with a control in the staff console.**
+ * the decision, 2026-08-19: **three, with a control in the staff console.**
  * Three is the number; the number living in a Firestore document rather than a
  * constant is the other half of the decision, because the population this
  * refuses (a script minting workspaces) and the population it must not refuse
@@ -115,7 +115,7 @@ import { resolveEffectivePlan } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
 import { RATE_LIMIT_COLLECTION } from './rate-limit-store'
 
-/** Zach's number, 2026-08-19. The floor the console can move off. */
+/** the number, 2026-08-19. The floor the console can move off. */
 export const DEFAULT_FREE_WORKSPACE_CAP = 3
 
 /** Document id of the live ceiling. NEVER written with `expiresAt`. */

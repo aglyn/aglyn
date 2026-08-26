@@ -25,7 +25,7 @@ import {
 /**
  * Staff revenue reporting on TWO bases at once (AGL-2486).
  *
- * Zach, asked whether "revenue" meant the cash Stripe settled or the value of
+ * revenue meant the cash Stripe settled or the value of
  * what customers have contracted to pay, answered "Both, side by side" — so
  * this module computes both and, more importantly, computes the GAP between
  * them as a first-class figure with named causes. Two numbers and a reader
@@ -841,8 +841,8 @@ export interface OrgAttribution {
 /**
  * Who produced the numbers (AGL-2486).
  *
- * Zach: *"We need to also list the sources of these numbers in a more visual
- * way, show which orgs did what"*. A staff revenue page whose totals cannot be
+ * We need to also list the sources of these numbers in a more visual
+ * way, show which orgs did what. A staff revenue page whose totals cannot be
  * traced to a customer is a page nobody can act on — the point of seeing a gap
  * is knowing whose card to chase, and "Comped / staff override: 2" is useless
  * until it names the two.
@@ -967,9 +967,9 @@ export function orgAttribution(
  *
  * MARK - Attribution by source (AGL-2486)
  *
- * Zach: *"We need to see the source of all breakdowns including which org and
+ * We need to see the source of all breakdowns including which org and
  * which plugin and which host etc contributed to what revenue gain or revenue
- * loss."*
+ * loss.
  *
  * The right DIMENSION differs per source, which is why this is three groupings
  * and not one table with a spare column:

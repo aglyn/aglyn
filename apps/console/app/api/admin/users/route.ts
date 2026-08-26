@@ -103,8 +103,8 @@ async function handler(request: Request): Promise<Response> {
     const page = await listUsersAcrossPools(200, pageToken)
     // One row per human (AGL-2005). `listUsersAcrossPools` stays the honest
     // primitive and returns every auth record; the collapse happens here, at
-    // the display, where Zach's "we should only see one user, even if they
-    // are sso" applies. It merges on uid alone — two distinct accounts that
+    // the display, where we should only see one user, even if they
+    // are sso applies. It merges on uid alone — two distinct accounts that
     // share an email are two people and stay two rows — and the survivor is
     // the identified record, never the emailless twin.
     const rows = collapseCrossPoolUidRows(page.users)

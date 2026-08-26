@@ -82,7 +82,7 @@ file carries the phrases its extractor flagged. **The lists are kept as
 written** — they are the record of what was questioned, so a resolved claim is
 answered in the copy and in `notes`, never by editing the list.
 
-**26 are resolved** (Zach, 2026-08-03) and applied to the JSONs:
+**26 are resolved** (decided) and applied to the JSONs:
 
 - **Plugins** — *"reviewed before it **ships**"* → *"before it's **listed**"*.
   Review gates the listing; a publisher installing their own unreviewed

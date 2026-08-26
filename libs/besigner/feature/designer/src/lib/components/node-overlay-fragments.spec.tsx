@@ -38,8 +38,8 @@ jest.mock('../hooks/use-add-element-drawer-callback', () => ({
 /**
  * AGL-2486 — the selection and hover chrome is drawn per LINE FRAGMENT.
  *
- * Zach: *"the element outline doesn't wrap the text on the new line unless
- * you are editing it"*. The overlay positioned everything from one
+ * the element outline doesn't wrap the text on the new line unless
+ * you are editing it. The overlay positioned everything from one
  * `getBoundingClientRect()`, which cannot describe an inline run that has
  * wrapped.
  *

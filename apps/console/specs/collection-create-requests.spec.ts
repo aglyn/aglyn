@@ -18,8 +18,8 @@
 /**
  * What creating a collection sends (AGL-2498).
  *
- * Zach: *"New collections need more details to define when creating the
- * collection."* The dialog asked for a name and nothing else, while a
+ * New collections need more details to define when creating the
+ * collection. The dialog asked for a name and nothing else, while a
  * collection is defined by four things — its name, the ADDRESS it serves, and
  * the two screens that render its list and its entries. Every one of the other
  * three was settings-only, so a new collection was created and then

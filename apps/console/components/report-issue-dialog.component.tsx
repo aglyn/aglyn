@@ -74,8 +74,8 @@ const kindLabels = (brand: string): Record<string, string> => ({
 /**
  * Concrete cases, because the boundary is NOT "platform versus content".
  *
- * Zach, 2026-08-22: "we don't need someone submitting tickets when they have
- * an issue with a page that was created by their agency". The failure mode is
+ * we don't need someone submitting tickets when they have
+ * an issue with a page that was created by their agency. The failure mode is
  * specific — an agency builds a site, their client signs in, finds their own
  * page wrong, and files it with us. A legalistic disclaimer does not sort
  * that; three real sentences do, and the third one matters most because it
@@ -170,10 +170,10 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
    * fallback is right for an action and wrong for a claim — and the org
    * stamped onto a bug report is a claim about where the reporter was.
    *
-   * Zach, 2026-08-22, filing from the staff console: "I was in the staff
+   * I was in the staff
    * console and therefore was not viewing an org but those fields said there
    * was an org attached to it. If we are not viewing an org the org context
-   * should be nothing." AGL-2485 is the evidence — it recorded
+   * should be nothing. AGL-2485 is the evidence — it recorded
    * `/admin/media-quarantine` as the route and `Test Org` as the
    * organization, a workspace that page has nothing to do with. A triager
    * reading that goes looking in the wrong tenant's data.

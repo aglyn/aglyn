@@ -83,7 +83,7 @@ const assignment = (text: string): Array<[string, string]> => {
 }
 
 /**
- * Zach's spec, verbatim across three messages: "the basic details probably
+ * the spec, verbatim across three messages: "the basic details probably
  * needs to be the smaller column like it was originally, page access can be 1
  * of 3 columns … seo 2 of 3", "the publishing card can move just below basic
  * details and be 1 of 3 columns", "Swap page activity and versions. make
@@ -99,8 +99,8 @@ const EXPECTED: Array<[string, string]> = [
   ['Used by', 'CARD_NARROW'],
   ['SEO', 'CARD_WIDE'],
   ['Versions', 'CARD_WIDE'],
-  // Traffic leads the full-width band (Zach, 2026-08-26): "Screen traffic
-  // should be above page activity". What the page is DOING outranks who
+  // Traffic leads the full-width band (Screen traffic
+  // should be above page activity. What the page is DOING outranks who
   // touched it, and the activity feed is long enough to push the chart off
   // the screen entirely.
   ['Screen traffic', '{ xs: 12 }'],

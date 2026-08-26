@@ -83,7 +83,7 @@ import {
  * ## Who may issue one
  *
  * Not `super`-only any more (AGL-2486). Support may refund up to a cap and
- * escalates above it — Zach's call, on the grounds that the person a customer
+ * escalates above it — the call, on the grounds that the person a customer
  * actually reaches is support, and making them escalate a $12 refund means
  * the customer waits on one person's availability. He declined a second
  * approver, so the cap IS the control and there are two of them: per refund,

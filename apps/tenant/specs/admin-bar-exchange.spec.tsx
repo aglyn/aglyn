@@ -25,7 +25,7 @@
  * The auto-armed bar's same-site hint exchange (AGL-1842) — the path that
  * makes the bar appear on `*.aglyn.app` with no chord, no param, and no
  * cross-site iframe. Environment URL is deliberately the failing host from
- * Zach's report.
+ * the report.
  *
  * - a 200 exchange renders the bar WITHOUT ever mounting a probe iframe,
  *   and persists the token exactly like a popup/probe delivery would;

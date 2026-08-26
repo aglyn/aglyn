@@ -34,11 +34,11 @@ import {
 /**
  * ONE row grammar for every artifact list (AGL-693).
  *
- * Zach: *"We need to carry this standard across all of them the screens list,
+ * We need to carry this standard across all of them the screens list,
  * the layouts list, the components list, the templates list. They all could
  * have the same context menu and clicking them should open the detail view. …
  * They should all share the same kind of table, seems they all use a different
- * table right now."*
+ * table right now.
  *
  * They did. Three of the four are `DataTableComponent`, but each declared its
  * own column set, its own action arrangement and its own row-click, and the

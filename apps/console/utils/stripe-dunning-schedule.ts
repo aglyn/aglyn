@@ -216,7 +216,7 @@ export const LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS = {
    * The other four customer emails on that screen, all ON as of the read:
    * trial-ending reminder (7 days), upcoming renewals, expiring cards, and
    * bank-debit payment failures. The last was OFF and was turned ON on
-   * 2026-08-24 at Zach's explicit instruction, verified persisted after a
+   * 2026-08-24 at the explicit instruction, verified persisted after a
    * reload — the only Dashboard write in this whole issue.
    */
   otherCustomerEmailsAllOn: true,

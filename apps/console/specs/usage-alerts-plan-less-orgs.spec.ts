@@ -40,7 +40,7 @@
  * Those orgs' guard maps are empty, so every band they already sit above
  * reads as a threshold crossed for the first time — deleting the `continue`
  * alone mails the whole free tier at once, about states they have been in for
- * weeks. Zach's call: BACKFILL the guard map on an org's first evaluation and
+ * weeks. the call: BACKFILL the guard map on an org's first evaluation and
  * send nothing; a genuine crossing after that mails normally.
  *
  * ## What this suite pins

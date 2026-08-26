@@ -43,7 +43,7 @@
  *     `sx.maxWidth` on a Container is the thing AGL-1298 exists to remove —
  *     1328 was 1280 + the Container's own 24px gutters, and it is not
  *     reproducible with a stock MUI width.
- *  3. **Does every page section sit in a Container?** Zach's standard, stated
+ *  3. **Does every page section sit in a Container?** the standard, stated
  *     2026-08-08: every section is a Container, and full-bleed is expressed
  *     with the width attribute rather than by omitting the component.
  *  4. **Does any Container sit INSIDE another one?** (AGL-2366) Two stock

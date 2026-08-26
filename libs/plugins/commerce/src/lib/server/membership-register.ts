@@ -135,7 +135,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       return res.status(409).json({ error: 'That email is already a member' })
     }
     if (refusal) {
-      // Visible to the HOST — Zach's rule that a control nobody can see in
+      // Visible to the HOST — the rule that a control nobody can see in
       // the console did not ship. Durable counter + one notification.
       await recordVisitorRecordCeilingTrip({
         hostRef,

@@ -106,7 +106,7 @@ function plural(count: number, one: string, many: string): string {
 /**
  * Assign purchased POS register seats to sites (AGL-1947, for AGL-1775).
  *
- * `seatAddons.posRegisters` is an org-level POOL since Zach's 2026-08-17
+ * `seatAddons.posRegisters` is an org-level POOL since the 2026-08-17
  * decision: $89/mo buys one register's worth of entitlement, not one per
  * site. `/api/billing/register-allocations` is the only writer of
  * `org.registerAllocations`, and until this card existed it had no caller at

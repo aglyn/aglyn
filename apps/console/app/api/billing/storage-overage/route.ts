@@ -46,8 +46,8 @@ export const STORAGE_CAP_MAX_USD = 5_000
  * Set or clear the org's own monthly storage-overage cap (AGL-1886, corrected
  * 2026-08-18).
  *
- * Zach, 2026-08-18, verbatim: *"it should be a control by the end user, to
- * prevent overage or usage alerts rather, we just want to minimize churn"*.
+ * it should be a control by the end user, to
+ * prevent overage or usage alerts rather, we just want to minimize churn.
  * This route is that control, and nothing else — it is **not** a consent
  * surface and there is nothing here a customer must do before storage works.
  *

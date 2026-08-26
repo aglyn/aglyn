@@ -40,7 +40,7 @@
  * for the same file.
  *
  * THE BILLING SWITCH is separate from the metering, deliberately. Charging for
- * bytes that have sat in org libraries for months is Zach's call, so
+ * bytes that have sat in org libraries for months is the call, so
  * `BILL_ORG_LIBRARY_STORAGE_FROM` names the first month whose invoice includes
  * them, and is unset by default. Everything else — the measurement, the COGS
  * figure, the audit fields — is live immediately, because none of it appears

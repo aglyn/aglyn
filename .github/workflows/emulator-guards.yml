@@ -44,7 +44,7 @@ name: Emulator guards
 on:
   push:
     branches:
-      # Sept-1 freeze (Zach, 2026-08-20): the push trigger moved from `main`
+      # Sept-1 freeze (decided): the push trigger moved from `main`
       # to `production`. With many agents landing on `main` continuously this
       # workflow was running dozens of times an hour and every red notified
       # him, so CI became noise rather than signal. It is a RELEASE gate until

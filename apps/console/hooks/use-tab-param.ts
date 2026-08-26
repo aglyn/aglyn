@@ -22,8 +22,8 @@ import { useCallback, useEffect, useState } from 'react'
 /**
  * `?tab=` ↔ the selected vertical tab, in one place (AGL-2486).
  *
- * Zach: *"tab param did not automatically navigate the vertical tabs, fix this
- * and make it fixed everywhere that uses the vertical tabs and tab param."*
+ * tab param did not automatically navigate the vertical tabs, fix this
+ * and make it fixed everywhere that uses the vertical tabs and tab param.
  *
  * Three pages had three different answers and one of them was wrong. Host
  * Setup validated the incoming id against a HAND-MAINTAINED LIST of tab ids —

@@ -192,8 +192,8 @@ const textField = (
 /**
  * ROW RHYTHM (AGL-2486, Zach 2026-08-22).
  *
- * Zach, comparing POSITION & OVERFLOW against BORDERS & SHADOWS: *"Lot's of
- * spacing in here… compared to here."* The two groups read as different
+ * Lot's of
+ * spacing in here… compared to here. The two groups read as different
  * panels, and neither was wrong on its own — the difference was two things
  * this file controls and nothing else does.
  *

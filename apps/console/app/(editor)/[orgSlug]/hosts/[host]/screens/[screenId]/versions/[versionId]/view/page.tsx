@@ -172,9 +172,9 @@ const SCREEN_LOAD_OVERLAY_MAX_MS = 12000
  * The two card widths in the detail band, as `GridItems masonry` reads them
  * (AGL-2486).
  *
- * Three columns at `lg`, and NOT three equal ones — Zach: "I like that this
+ * Three columns at `lg`, and NOT three equal ones — I like that this
  * before had 3 columns, we just don't need to make all of 3 columns, some
- * could be 2 columns and 1". `masonry` buckets items by their `size`, so these
+ * could be 2 columns and 1. `masonry` buckets items by their `size`, so these
  * two values ARE the arrangement: every `CARD_WIDE` card stacks in one column
  * two thirds across, every `CARD_NARROW` card stacks in the other. Each column
  * is a flex stack at natural heights, which is what stops a short card from
@@ -840,8 +840,8 @@ function ScreenDetails() {
   const [seoImage, setSeoImage] = useState<ScreenSocialImageDraft | null>(null)
 
   /**
-   * `Raw JSON` starts CLOSED (AGL-2486). Zach: "Raw JSON can be the very last
-   * card and it should probably be collapsed by default". It is a developer
+   * `Raw JSON` starts CLOSED (AGL-2486). Raw JSON can be the very last
+   * card and it should probably be collapsed by default. It is a developer
    * view of the stored document — useful, but it was several hundred pixels of
    * machine text sitting between the reader and the bottom of the page.
    *
@@ -1008,8 +1008,8 @@ function ScreenDetails() {
           icon: { path: ICON_VARIANT_PAGES.path },
         }}
         // Presence leads the actions, beside the button that would join the
-        // room (AGL-2486). Zach: "identify who is currently in the document
-        // already before joining" — so it belongs where the joining decision
+        // room (AGL-2486). identify who is currently in the document
+        // already before joining — so it belongs where the joining decision
         // is made. This page WATCHES without announcing: a detail page that
         // joined on arrival would report everybody browsing as an editor and
         // destroy the signal it exists to give.
@@ -1087,7 +1087,7 @@ function ScreenDetails() {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* MASONRY (AGL-2486). Zach: "card masonry needs fixed". Without
+          {/* MASONRY (AGL-2486). card masonry needs fixed. Without
               `masonry` this is a twelve-column flex ROW, in which every item
               is as tall as the tallest one beside it — measured here, `Page
               Activity` sat in a 741px row cell carrying a 278px card, a 463px
@@ -1595,8 +1595,8 @@ function ScreenDetails() {
                 ),
               },
               {
-                // Per-screen traffic (AGL-152), ABOVE Page Activity — Zach: "Screen
-                // traffic should be above page activity". What the page is
+                // Per-screen traffic (AGL-152), ABOVE Page Activity — Screen
+                // traffic should be above page activity. What the page is
                 // DOING outranks who touched it, and the activity feed is a
                 // long list that pushed the chart off the screen entirely.
                 // `Raw JSON` still sits below both.

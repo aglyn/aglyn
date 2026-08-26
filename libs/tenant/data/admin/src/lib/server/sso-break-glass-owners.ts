@@ -17,7 +17,7 @@
 
 /**
  * Break-glass by way of an org owner who lives OUTSIDE the SSO pool
- * (AGL-1888, option (a) — Zach, 2026-08-23).
+ * (AGL-1888, option (a) — decided).
  *
  * ## Why this exists
  *

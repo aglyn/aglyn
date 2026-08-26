@@ -3554,8 +3554,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
           This was one line of grey body text where screens, layouts,
           components and templates all show an illustration, a sentence and
-          the button that fills the space. Zach: *"We also need a better empty
-          view on the DAM like we have everywhere else."*
+          the button that fills the space. We also need a better empty
+          view on the DAM like we have everywhere else.
 
           Three DIFFERENT empty states, kept apart, because "nothing here"
           means three different things and only one of them is worth an

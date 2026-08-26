@@ -18,8 +18,8 @@
 /**
  * What size to upload, said BEFORE the upload (AGL-2486).
  *
- * Zach: *"We need to suggest the recommended size for the users to upload on
- * all uploads areas."* Only the social image ever said one, and it said it
+ * We need to suggest the recommended size for the users to upload on
+ * all uploads areas. Only the social image ever said one, and it said it
  * about the picture already chosen — the current file's dimensions, which is
  * a different sentence from "here is what to bring".
  *

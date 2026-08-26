@@ -353,8 +353,8 @@ export const InlineTextEditorComponent = observer(
       /**
        * Collected first, WRITTEN LAST (AGL-2486).
        *
-       * Zach: *"the line break persists regardless if you remove it or not
-       * once you click out"*. The markup this computes was always correct;
+       * the line break persists regardless if you remove it or not
+       * once you click out. The markup this computes was always correct;
        * it was being undone a moment later. Ending the edit restores the
        * element's original child nodes — deliberately, by reference, so
        * React's fibers keep pointing at live nodes — and that restore used

@@ -96,7 +96,7 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
   /**
    * A PERSON does not have a logo (AGL-2486).
    *
-   * Zach: *"it also doesn't reflect copy when the entity is a person."* Every
+   * it also doesn't reflect copy when the entity is a person. Every
    * word here said logo, publisher's mark, the organization publishing this
    * site — while the Type select one field up may say Person, and a site run
    * by one человек is the common case for a portfolio or a consultancy.

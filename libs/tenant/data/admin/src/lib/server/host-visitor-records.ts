@@ -36,8 +36,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { notifyHostManagers } from './notifications'
 
 /**
- * Make a tripped ceiling OBSERVABLE rather than a silent drop — Zach's
- * standing rule that a control which is not visible in the console does not
+ * Make a tripped ceiling OBSERVABLE rather than a silent drop — the * standing rule that a control which is not visible in the console does not
  * count as shipped.
  *
  * Two audiences, one call, in exactly `recordAbuseCeilingTrip`'s shape

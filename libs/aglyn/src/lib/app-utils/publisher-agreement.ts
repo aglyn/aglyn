@@ -61,7 +61,7 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
  *
  * ⚠️ Read against the "a typo fix is not a bump" rule above, both edits are
  * closer to a typo than to substance, and the tension is real. The bump was
- * taken anyway on Zach's decision (2026-08-18), for a reason the rule does not
+ * taken anyway on the decision (2026-08-18), for a reason the rule does not
  * cover: the served page changed, so keeping `2026-08-14.1` would leave the
  * pin below asserting a hash for text nobody is shown any more — a FALSE
  * RECORD, which is the exact failure the pin exists to detect. The choice is
@@ -74,8 +74,8 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
  * `2026-08-18.1` stayed. That is not the third option the paragraph above says
  * does not exist — it is the same choice with one input changed. A bump exists
  * to re-ask publishers who accepted the OLD text; production holds exactly one
- * acceptance record and it is Zach's own, so there is nobody to re-ask and the
- * bump would buy nothing. Zach's decision, 2026-08-22.
+ * acceptance record and it is the own, so there is nobody to re-ask and the
+ * bump would buy nothing. the decision, 2026-08-22.
  *
  * The pin still had to move, for precisely the reason given above: the served
  * bytes changed, so leaving the old hash here would assert a document nobody
@@ -88,7 +88,7 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
  * ## 2026-08-24 — `2026-08-24.1`, and why this one CANNOT be folded (AGL-1956)
  *
  * §13.3 changed twice in one sentence. The venue moved from Williamson County
- * to TRAVIS County (Zach, 2026-08-24) — Williamson entered from the former
+ * to TRAVIS County (decided) — Williamson entered from the former
  * Jarrell residential address, while every published Aglyn address is 5900
  * Balcones Dr STE 100, Austin, TX 78731, which is Travis. And the clause cited
  * "Terms of Service Section 19" for governing law and venue when those live at
@@ -110,7 +110,7 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
  *
  * ⚠️ THIS IS THE ONE PLACE THE CLICKWRAP ARGUMENT DOES NOT REACH. The signup
  * clickwrap folded its 2026-08-24 corrections into `v1` and did not bump
- * (`apps/console/constants/legal-documents.ts`) — Zach, 2026-08-24: no v2
+ * (`apps/console/constants/legal-documents.ts`) — decided: no v2
  * before launch. That works there because `v1` is a REPO-SIDE label: the
  * published Terms carry a "Last updated" date and no version string at all, so
  * the label can stay still while the text moves. Here the label is part of the
@@ -121,7 +121,7 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
  * On the merits it would have been a bump anyway: a forum-selection clause is
  * substance, not a typo — it names the court a publisher would have to travel
  * to. The 2026-08-22 cost argument is unchanged and still cheap, production
- * holding exactly one acceptance record which is Zach's own.
+ * holding exactly one acceptance record which is the own.
  *
  * §8.1 and §8.3 are UNTOUCHED and were already correct: they have said Aglyn is
  * merchant of record and determines, collects and remits transaction tax since

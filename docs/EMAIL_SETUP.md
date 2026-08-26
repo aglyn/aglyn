@@ -238,7 +238,7 @@ carried the **3 business days** from `SECURITY.md` (§"Our commitment", lines
 where a report arrives in a tracked queue with a named reporter. Pasting it here
 would newly extend the commitment to *every* inbound mail to `security@` —
 vendor questionnaires, scanner output, phishing reports, mistakes — on an inbox
-with one member. Zach's decision, 2026-08-23: acknowledge receipt, invent no
+with one member. the decision, 2026-08-23: acknowledge receipt, invent no
 timeframe. **Do not re-add a number here** without also changing `SECURITY.md`
 and `trust.md`, because then there would be three places to keep true.
 

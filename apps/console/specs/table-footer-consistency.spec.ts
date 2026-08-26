@@ -18,7 +18,7 @@
 /**
  * ONE table footer, and no call site may re-decide it (AGL-693).
  *
- * Zach: *"The table footer is not consistent."* It was not — layouts paged 5
+ * The table footer is not consistent. It was not — layouts paged 5
  * at a time, components and templates 10, the team list 10, the screens tree
  * 25, and the size menu was labelled three different ways. Nothing was wrong
  * with any single one; they were written at different times and each picked
@@ -101,8 +101,8 @@ describe('the console has one table footer (AGL-693)', () => {
   })
 
   it('every list starts on the SMALLEST page size', () => {
-    // Zach: "Make all paginated lists default to the minimum count … that
-    // goes for all lists across the entire platform." Asserted against the
+    // Make all paginated lists default to the minimum count … that
+    // goes for all lists across the entire platform. Asserted against the
     // options rather than against `10`, so the rule outlives the number: a
     // default that stops being the minimum is the failure, whatever the
     // minimum becomes.

@@ -242,8 +242,8 @@ export function CollectionEntriesPage() {
   /**
    * Creating a collection is a DRAWER, like every other artifact (AGL-2498).
    *
-   * Zach: *"The create content collection should be using the drawer approach
-   * just like the screens, layouts, components etc."* — and the rule the
+   * The create content collection should be using the drawer approach
+   * just like the screens, layouts, components etc. — and the rule the
    * drawer itself states is older than that: *"creating is a drawer, picking
    * is a dialog"* (AGL-699). This was the one create still in a modal.
    *
@@ -443,8 +443,8 @@ export function CollectionEntriesPage() {
   /**
    * EDITING a collection (AGL-2498).
    *
-   * Zach: *"We seem to be missing the ability to edit the content
-   * collections."*
+   * We seem to be missing the ability to edit the content
+   * collections.
    *
    * It was missing from the CONSOLE only — `/api/hosts/collections` has
    * answered `action: 'update'` since AGL-978, with `displayName` and `slug`

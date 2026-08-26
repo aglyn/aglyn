@@ -127,7 +127,7 @@ export const COEDIT_PUBLISH_MS = 120
  * How long an unsaved mirror entry survives before a joiner reaps it
  * (AGL-1870 R4).
  *
- * Zach's call, 2026-08-20: reap on join by age. Not `onDisconnect().remove()`
+ * the call, 2026-08-20: reap on join by age. Not `onDisconnect().remove()`
  * — that fires on any loss of connection, and because `shadowRef` still holds
  * the JSON the tab published, `publish()` diffs clean on reconnect and never
  * re-sends. A thirty-second blip would destroy unsaved work permanently and

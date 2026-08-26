@@ -27,9 +27,9 @@ import type { PresentPerson } from '../hooks/use-presence-summary'
  * Who is in this document, on the page that decides whether to open it
  * (AGL-2486).
  *
- * Zach: "add the presence avatars indicators to the detail page and list rows
+ * add the presence avatars indicators to the detail page and list rows
  * as well to easily identify who is currently in the document already before
- * joining."
+ * joining.
  *
  * ## A detail page WATCHES the room; it does not join it
  *

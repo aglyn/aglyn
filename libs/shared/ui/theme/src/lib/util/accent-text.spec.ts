@@ -24,7 +24,7 @@
  * `MuiTab`'s selected label through `accentTextColor`, and raised
  * `contrastThreshold` to 4.5, so the brand blue stopped rendering as itself:
  * links and text/outlined button labels went `#00b0ff` → `#0077ad` in light
- * and → `rgb(76, 199, 255)` in dark. Zach, 2026-08-18:
+ * and → `rgb(76, 199, 255)` in dark. decided:
  *
  *   "You changed my theme colors, I told you deliberately not to do that."
  *
@@ -152,7 +152,7 @@ describe('the brand blue renders as itself — nothing repaints it', () => {
     )
   })
 
-  it('a FILLED button is the brand blue with WHITE text — Zach, 2026-08-18', () => {
+  it('a FILLED button is the brand blue with WHITE text — decided', () => {
     // "don't change the current blue and leave it as white text". The one
     // token `c03a2d754` computed to dark ink; restored, and the fill is
     // untouched.
@@ -330,7 +330,7 @@ describe('FINDINGS for a decision Zach owns — measured, never applied', () => 
 
   it('FINDING: the authored sub-AA contrastText literals, pinned as a set', () => {
     // AGL-1936. Reported, not repaired: flipping any of them repaints alert
-    // and destructive semantics product-wide, which is Zach's call. Pinned so
+    // and destructive semantics product-wide, which is the call. Pinned so
     // the set can only change knowingly.
     const residue = (palette: any) =>
       auditPaletteContrast(palette)

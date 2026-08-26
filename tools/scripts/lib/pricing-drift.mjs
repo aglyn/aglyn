@@ -29,7 +29,7 @@
 //  2. **Stripe live mode** — what a customer is ACTUALLY charged. Code can
 //     say $56 all it likes; the invoice comes from the Stripe price.
 //  3. **The source-of-truth doc** — `Platform Docs/Pricing & Packaging/
-//     00-Pricing-Source-of-Truth`, the human record Zach's pricing LOCK was
+//     00-Pricing-Source-of-Truth`, the human record the pricing LOCK was
 //     verified against on 2026-08-18.
 //
 // Every published price is HAND-AUTHORED copy on `/pricing`, and the tier

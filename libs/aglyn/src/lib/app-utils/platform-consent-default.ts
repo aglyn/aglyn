@@ -19,7 +19,7 @@
  * The Consent Mode v2 `default` declaration for AGLYN'S OWN surfaces — the
  * console (`app.aglyn.com`) and the docs site (`docs.aglyn.com`) (AGL-1597).
  *
- * Zach's decision, 2026-08-20: analytics is ENABLED BY DEFAULT with implied
+ * the decision, 2026-08-20: analytics is ENABLED BY DEFAULT with implied
  * consent **where that is lawful**, and denied by default where prior consent
  * is required. This module is the "where applicable" half, expressed in the
  * one mechanism that can carry it on a surface with no consent gate: a
@@ -117,7 +117,7 @@ export type PlatformConsentSignal = 'granted' | 'denied'
 /**
  * Switzerland, and why it is here but NOT in the tenant's set.
  *
- * Zach's 2026-08-20 brief names the EEA, the UK **and Switzerland** as prior
+ * the 2026-08-20 brief names the EEA, the UK **and Switzerland** as prior
  * opt-in, and instructs that those regions not be defaulted on. The tenant's
  * {@link PRIOR_CONSENT_COUNTRY_CODES} does not include `CH` — defensibly, the
  * revised FADP has no ePrivacy-style prior-consent rule and regulates on a

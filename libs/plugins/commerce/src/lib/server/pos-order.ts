@@ -397,7 +397,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
      * cash and folio never touch Stripe, so there is no charge to take an
      * `application_fee_amount` out of, so record nothing. That left a merchant
      * on a non-zero rate one tap away from paying Aglyn nothing forever —
-     * ring every in-person sale as cash. Zach's decision, 2026-08-19: close
+     * ring every in-person sale as cash. the decision, 2026-08-19: close
      * it. The tender is at most an input to the RATE; it is never a switch
      * that zeroes the fee.
      *

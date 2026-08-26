@@ -38,8 +38,7 @@ export function NotFoundContent() {
    *
    * The single description below blamed three unrelated things at once — a
    * stale link, a workspace you can't open, a site you can't open — and on the
-   * commonest 404 of all it blamed the wrong one. Zach's
-   * `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV` names a workspace he
+   * commonest 404 of all it blamed the wrong one. the * `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV` names a workspace he
    * owns and a site that exists; the only thing wrong with it is that
    * `/screens/[screenId]` is not a route (the editor lives at
    * `…/screens/[screenId]/versions/[versionId]/…`). Telling him the workspace

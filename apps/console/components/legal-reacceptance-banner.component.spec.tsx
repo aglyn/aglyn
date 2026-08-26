@@ -136,9 +136,9 @@ describe('AGL-2316 · when the banner appears', () => {
 })
 
 /**
- * Zach, 2026-08-24: "Okay then leave it and they can agree again, but don't
+ * Okay then leave it and they can agree again, but don't
  * phrase it that they havent agreed before it creates confusion and
- * frustration, I know I agree yesterday (but we updated overnight)."
+ * frustration, I know I agree yesterday (but we updated overnight).
  *
  * The behaviour is unchanged — a superseded version still prompts. What these
  * tests pin is that the prompt a RETURNING acceptor sees is not the prompt

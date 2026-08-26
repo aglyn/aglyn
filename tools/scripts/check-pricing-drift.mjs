@@ -171,7 +171,7 @@ function fetchStripePrices() {
   // prices, issue refunds and move money; this guard needs `prices.list` and
   // nothing else, and a guard must not hold permission to change the thing it
   // guards. Naming the variable `STRIPE_SECRET_KEY` invited exactly this
-  // mistake — Zach asked "rk or sk?" the first time he met the form, which is
+  // mistake — rk or sk? the first time he met the form, which is
   // the tell that the NAME was the defect. Renamed, and now enforced rather
   // than merely documented, because a convention nobody can violate beats a
   // sentence in a comment.
