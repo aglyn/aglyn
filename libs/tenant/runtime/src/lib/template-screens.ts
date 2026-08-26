@@ -18,6 +18,7 @@
 import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -28,7 +29,7 @@ import {
  * re-points a collection or the store settings, and both writes ride the
  * same publish flow that busts `tenant-data:{hostId}`; 60s is the backstop.
  */
-const TEMPLATE_SCREEN_IDS_TTL_SECONDS = 60
+const TEMPLATE_SCREEN_IDS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * The three fields a CONTENT collection can point at a template screen with.

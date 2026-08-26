@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import {
   resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -29,7 +30,7 @@ import {
  * plugin keeps rendering — 60s, on par with the page ISR window that already
  * bounded it. Do not raise it.
  */
-const PLUGIN_INSTALLS_TTL_SECONDS = 60
+const PLUGIN_INSTALLS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Resolves a host's pinned plugin installs (AGL-45) into the compose-time

@@ -20,6 +20,7 @@ import { Fuse } from '@aglyn/shared-util-vendor/fuse'
 import {
   orgDataQueryForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -47,7 +48,7 @@ const matches = (haystack: string | undefined, needle: string) =>
   Boolean(haystack && haystack.toLowerCase().includes(needle))
 
 /** How long one query's answer stays warm (AGL-1525). */
-const SEARCH_TTL_SECONDS = 60
+const SEARCH_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Site search (AGL-88), cached per query (AGL-1525).

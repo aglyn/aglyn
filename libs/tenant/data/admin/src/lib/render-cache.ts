@@ -72,6 +72,47 @@ import { unstable_cache } from 'next/cache'
 export const tenantDataTag = (hostId: string): string => `tenant-data:${hostId}`
 
 /**
+ * The backstop TTL for published site data — every read that
+ * `revalidateTag(tenantDataTag(hostId))` busts on publish.
+ *
+ * WHY AN HOUR AND NOT A MINUTE (2026-08-26, from the Vercel cost review).
+ *
+ * Every cache in this layer shipped at 60s, and the page above them was
+ * `revalidate = 60` too. Setting the backstop to the same order as the
+ * request rate makes it the PRIMARY propagation mechanism rather than a
+ * backstop: the whole chain expired together, so a render a minute paid the
+ * full sequential Firestore walk — host, org billing, redirect rules, page
+ * resolution, screen, compose bundle, enrichers — and none of it was ever
+ * stale in a way anyone could observe, because the publish path had already
+ * busted the tag the moment the content changed.
+ *
+ * Measured on `/[host]/[[...slug]]`: 0.78 GB-hr across 635 invocations, a P75
+ * of 3.65s, and ~4.4 GB-s per render — the most expensive route per hit in
+ * the account, on a site with no real traffic yet.
+ *
+ * So the TTL goes back to being what `withRenderCache`'s own docstring says
+ * it is: "the backstop for writes that never announce themselves." An hour
+ * bounds an unannounced direct-to-Firestore edit. Everything that goes
+ * through the product announces itself and is busted in the same instant it
+ * always was, so publish latency is unchanged.
+ *
+ * ⛔ NOT for reads that change OUTSIDE a publish. Two deliberately keep their
+ * own short TTLs and must not be moved onto this one:
+ *
+ *   - `ORG_BILLING_TTL_SECONDS` — a plan change happens in the console and
+ *     nothing busts the tenant tag for it, so this TTL is the ONLY thing
+ *     propagating an upgrade or a downgrade to the live site.
+ *   - `HOST_ALIAS_TTL_SECONDS` / `HOST_DOC_TTL_SECONDS` — a custom domain
+ *     attaching is the customer sitting there waiting for their site
+ *     (AGL-2010), and the `cname--` alias entry expires only by TTL.
+ *
+ * Takedowns are unaffected either way: the middleware runs ahead of every
+ * cache here and carries its own memo, which is what
+ * `lockdown-middleware-propagation.spec.ts` measures.
+ */
+export const PUBLISHED_SITE_DATA_TTL_SECONDS = 3600
+
+/**
  * The alias→hostId resolution is tagged separately because it is the one
  * cache keyed BEFORE the hostId is known. It only changes on subdomain
  * rename or custom-domain (dis)connect, never on publish.

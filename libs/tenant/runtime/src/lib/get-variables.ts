@@ -18,6 +18,7 @@
 import type * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -29,7 +30,7 @@ import {
  * uncached read rather than an empty map. 60s matches the page's own ISR
  * window; the publish path busts `tenant-data:{hostId}` on top.
  */
-const HOST_BINDINGS_TTL_SECONDS = 60
+const HOST_BINDINGS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 const cachedBindingsRead = async <T>(
   name: string,

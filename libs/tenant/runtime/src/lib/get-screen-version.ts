@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, screenVersionConverter } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -31,7 +32,7 @@ import {
  * that exactly like the page's ISR window did, and the publish-path tag
  * bust covers the announced case (AGL-1302).
  */
-const SCREEN_VERSION_TTL_SECONDS = 60
+const SCREEN_VERSION_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 async function readScreenVersionDoc(
   hostId: string,

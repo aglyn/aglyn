@@ -22,6 +22,7 @@ import {
   layoutVersionConverter,
 } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -34,7 +35,7 @@ import applyDuePublishSchedule from './apply-publish-schedule'
  * instant and 60s only bounds unannounced writes, exactly like the page's
  * own ISR window did.
  */
-const LAYOUT_VERSION_TTL_SECONDS = 60
+const LAYOUT_VERSION_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Fetches a layout's published version (the `versionId` pointer on the

@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as MarketingModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -37,7 +38,7 @@ import {
  * decision — `marketingOverlays` is checked against the live org document by
  * the caller, which is why the gate is there and not in here.
  */
-const OVERLAYS_TTL_SECONDS = 60
+const OVERLAYS_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Marketing hub overlays (AGL-251): the host's configured announcement

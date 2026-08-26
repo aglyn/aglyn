@@ -31,6 +31,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
@@ -43,7 +44,7 @@ import {
  * (`flipDueEntry`) is a write a cache must not suppress. The 60s TTL means
  * a scheduled entry's lazy flip waits at most one extra window.
  */
-const COLLECTION_SOURCE_TTL_SECONDS = 60
+const COLLECTION_SOURCE_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
 /**
  * Resolve a public content-collection slug (AGL-954). Commerce's product
