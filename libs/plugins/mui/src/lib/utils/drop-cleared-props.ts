@@ -37,12 +37,29 @@
  * other site one cleared dropdown away from the same 500.
  *
  * `0` and `false` are kept — those are real values an author can mean.
+ *
+ * `data-*` and `aria-*` are kept whatever their value. Only an authored
+ * ATTRIBUTE can be cleared, and neither of those is one: they are stamped by
+ * the renderer, and the canvas writes its flags PRESENCE-BASED — `''` for on,
+ * `undefined` for off — which is the same empty string a cleared select
+ * persists as. Dropping them took out every presence flag on every component
+ * that funnels through here: `data-aglyn-revealed`, so a panel carrying the
+ * hidden class could never be shown for designing; `data-aglyn-selected-within`,
+ * which is how a nav menu and a drawer know to open while they are being
+ * authored; and `data-aglyn-bound`, the outline on an element whose props
+ * carry bindings. They are also incapable of the crash above — both go
+ * straight to the DOM, where an empty attribute is ordinary HTML and nothing
+ * calls `capitalize()` on the value.
  */
+function isRendererAttribute(key: string): boolean {
+  return key.startsWith('data-') || key.startsWith('aria-')
+}
+
 export function dropClearedProps<T extends Record<string, any>>(props: T): T {
   let cleared = false
   for (const key in props) {
     const value = props[key]
-    if (value === null || value === '') {
+    if ((value === null || value === '') && !isRendererAttribute(key)) {
       cleared = true
       break
     }
@@ -51,7 +68,7 @@ export function dropClearedProps<T extends Record<string, any>>(props: T): T {
   const next: Record<string, any> = {}
   for (const key in props) {
     const value = props[key]
-    if (value === null || value === '') continue
+    if ((value === null || value === '') && !isRendererAttribute(key)) continue
     next[key] = value
   }
   return next as T
