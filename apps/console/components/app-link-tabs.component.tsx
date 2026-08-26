@@ -191,6 +191,26 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
           {
             minHeight: TAB_HEIGHT,
             alignItems: 'center',
+            /**
+             * Narrower scroll arrows.
+             *
+             * `scrollButtons="auto"` mounts both arrows while the strip
+             * overflows, which it does on every bar this renders. At the stock
+             * width each one takes 40px of layout, and the leading arrow sits
+             * between the bar's edge and the first tab, so the strip starts
+             * noticeably further in than the content of the bar above it.
+             *
+             * Narrowing them reclaims most of that. They stay IN flow at a
+             * fixed width, which is what keeps the tabs from moving when an
+             * arrow enables or disables mid-scroll — taking them out of flow
+             * or collapsing the disabled one buys a few more pixels and pays
+             * for it with a jump the reader feels while using the bar.
+             */
+            '& .MuiTabs-scrollButtons': {
+              width: 24,
+              minWidth: 24,
+              marginInline: -0.5,
+            },
             '& .MuiTabs-flexContainer': {
               alignItems: 'center',
             },
