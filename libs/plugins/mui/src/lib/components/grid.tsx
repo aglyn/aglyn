@@ -17,11 +17,18 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiViewGrid, mdiViewGridOutline } from '@aglyn/shared-data-mdi'
+// Deep import, NOT the barrel (AGL-1151): `@aglyn/shared-data-enums` re-exports
+// `firebase-auth`, whose `AuthErrorCodes` is a VALUE import of `firebase/auth`.
+// This bundle is `alwaysOn`, so the barrel put the whole Firebase auth client
+// into the chunk every published tenant page loads — a database/identity SDK
+// shipped and evaluated to render static HTML that authenticates nobody. Three
+// breakpoint symbols are the entire reason this module reaches for that
+// library; they live here, one file away from the barrel.
 import {
   parseBreakpointSpan,
   SPAN_BREAKPOINTS,
   type SpanBreakpoint,
-} from '@aglyn/shared-data-enums'
+} from '@aglyn/shared-data-enums/breakpoint-span'
 import MuiGrid from '@mui/material/Grid'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'

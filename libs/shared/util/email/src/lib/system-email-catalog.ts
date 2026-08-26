@@ -45,7 +45,12 @@ const SAMPLE_SUPPORT_URL: string =
     ? `mailto:${(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()}`
     : 'https://aglyn.com/support')
 
-import { BRAND } from '@aglyn/shared-data-enums'
+// Deep import, NOT the barrel (AGL-1151): `@aglyn/shared-data-enums` re-exports
+// `firebase-auth`, whose `AuthErrorCodes` is a VALUE import of `firebase/auth`.
+// This module is reachable from the email plugin's site half, which a PUBLISHED
+// tenant page loads, so the barrel put the Firebase auth client into that
+// page's chunks for one brand constant.
+import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 
 /**
