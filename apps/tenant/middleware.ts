@@ -743,13 +743,54 @@ export const middleware: NextMiddleware = async (req, event) => {
   // unnonced, and should not read that as the fix having failed.
   //
   // Dropping `strict-dynamic` for a plain `script-src 'self'` is not an escape
-  // either: Next emits ~12 INLINE scripts per page for RSC flight data, and
-  // `'self'` alone blocks inline. Making this enforceable needs a real design —
-  // a nonce baked into the cached bytes (per-page-version, not per-visitor) or
-  // build-time hashes — not a header change. Tracked in AGL-1228.
+  // either: Next emits INLINE scripts per page for RSC flight data, and
+  // `'self'` alone blocks inline. Re-measured on production 2026-08-26,
+  // `https://aglyn.com/pricing`: 62 `<script>` elements, EIGHT of them inline,
+  // ZERO carrying a nonce — the inline set being the JSON-LD block and the
+  // `self.__next_f.push([1,"…"])` flight payload, whose content IS the
+  // serialized page tree.
   //
-  // What DOES enforce here, unchanged: the base directives below — `object-src
-  // 'none'`, `base-uri 'self'`, `frame-ancestors` — plus the plugin sandbox.
+  // ## The two escapes that look available and are not (AGL-1152)
+  //
+  // 1. **A per-HOST nonce.** It solves the ISR mismatch — the same string on
+  //    every response for one site, so cached bytes and header agree — and it
+  //    is what makes the owner-widened directives beside this one shippable. It
+  //    is worthless HERE and only here: a nonce defends by being unguessable,
+  //    and a value baked into bytes every visitor downloads is a value the
+  //    injected script can simply read off the page and wear. Per-host is the
+  //    right shape for an allowlist and a contradiction in terms for a nonce.
+  // 2. **Hashes computed at render.** The bytes are stable for the life of one
+  //    cached render, so per-page hashes would be valid — but this function
+  //    runs BEFORE the render and sets the header without ever seeing them, and
+  //    the flight payload changes on every revalidation. That leaves a
+  //    build-time hash pipeline, which cannot cover a payload built per page
+  //    per revalidation. It is a real project, not a header change (AGL-1228).
+  //
+  // ## And it would revoke an advertised feature, which nothing can give back
+  //
+  // Measured: a `srcdoc` iframe INHERITS `script-src`. Under a policy allowing
+  // only two hashes, a srcdoc child's unhashed inline script did not run. The
+  // Custom HTML block's Embed mode is exactly that — its own field help says
+  // "Runs the raw snippet in a sandboxed iframe (scripts allowed)" — and the
+  // script is INLINE in an author's snippet, so no allowlist entry reaches it.
+  // The only source expression that would is `'unsafe-inline'`, which makes the
+  // directive worthless. That is a third reason on top of the two above, and it
+  // is the one an owner allowlist cannot answer.
+  //
+  // ⛔ `style-src` is ABSENT for the same shape and must not be reached for as
+  // the easier one. The same production page carried three `<style>` elements,
+  // two of them emotion's runtime injection, none with a nonce, plus 13
+  // elements with an inline `style=` attribute and NO external stylesheet at
+  // all — every byte of CSS is inline. Emotion accepts a nonce and lands on
+  // escape 1 above; hashes land on escape 2; `custom-html.tsx` emits an
+  // author's `<style>` block whose content is customer data. An enforced
+  // `style-src` would therefore need `'unsafe-inline'` for elements AND
+  // attributes, which is a directive that forbids nothing while looking like
+  // one that does.
+  //
+  // What DOES enforce here: the base directives below — `object-src 'none'`,
+  // `base-uri 'self'`, `frame-ancestors` — the six owner-widened directives,
+  // and the plugin sandbox.
   const response = NextResponse.rewrite(new URL(rewrite, req.url))
   /*
    * `img-src` IS NOW ENFORCED, alongside the base directives (AGL-1152).
