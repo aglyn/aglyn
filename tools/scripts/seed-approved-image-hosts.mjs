@@ -237,9 +237,16 @@ for (const hostSnapshot of hostDocs) {
   const hostId = hostSnapshot.id
   const subdomain = String(hostSnapshot.get('subdomain') ?? '')
   const cname = String(hostSnapshot.get('cname') ?? '')
+  // The apex comes from the environment with NO hard-coded default (AGL-2195):
+  // a self-hoster's sites are not on our domain, and baking ours in here would
+  // make this script fail to recognise their own origins and seed them as
+  // "external". Unset simply means the subdomain form is not excluded — the
+  // custom domain still is, and a site's own host being on its own list is
+  // untidy rather than wrong.
+  const tenantApex = (process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? '').trim()
   const siteOrigins = new Set(
     [
-      subdomain ? `${subdomain}.aglyn.app` : '',
+      subdomain && tenantApex ? `${subdomain}.${tenantApex}` : '',
       cname,
       cname ? `www.${cname}` : '',
     ].filter(Boolean),

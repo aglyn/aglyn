@@ -145,8 +145,19 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
     // could stand up a sign-in page on the org's marketing domain. Asserting
     // the keys share a list is what stops a later edit splitting them and
     // leaving the newer one open.
-    expect(rules).toContain(
-      "hasAny(['disabledPlugins', 'enabledPlugins'])",
-    )
+    //
+    // Matched per-KEY rather than as one literal string (AGL-1152). The list
+    // gained `approvedImageHosts` and wrapped across lines, which broke a
+    // substring match without anything about the guarantee changing — and the
+    // guarantee is "these keys are admin-gated", not "they are formatted on
+    // one line". The single-list property is asserted separately below so
+    // splitting them still fails.
+    const adminGate = rules.slice(rules.indexOf('hostMemberRole(hostId) =='))
+    const keyList = adminGate.slice(0, adminGate.indexOf('])') + 2)
+    for (const key of ['disabledPlugins', 'enabledPlugins']) {
+      expect(keyList).toContain(`'${key}'`)
+    }
+    // ONE list: both keys inside the same `hasAny([...])`.
+    expect(keyList.match(/hasAny\(\[/g) ?? []).toHaveLength(1)
   })
 })
