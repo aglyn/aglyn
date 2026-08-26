@@ -81,9 +81,58 @@ export const ConsoleMethodKey: Partial<Record<string, string>> = {
 }
 
 /**
+ * Rank of each level, so "at or above the configured level" is comparable.
+ *
+ * The levels are string values, so `level >= instance.logLevel` compares them
+ * alphabetically — under which `'debug' >= 'error'` holds and `'warn' >= 'info'`
+ * does not. A level needs a number to be ordered by.
+ *
+ * SILENT sits above ERROR: it is the level at which nothing qualifies.
+ */
+const LOG_LEVEL_RANK: Record<string, number> = {
+  [LogLevel.DEBUG]: 0,
+  [LogLevel.VERBOSE]: 1,
+  [LogLevel.INFO]: 2,
+  [LogLevel.WARN]: 3,
+  [LogLevel.ERROR]: 4,
+  [LogLevel.SILENT]: 5,
+}
+
+/**
+ * Whether a message at `level` clears the `configured` threshold.
+ *
+ * `setLogLevel` accepts any `keyof Console`, not just a `LogLevel`, so either
+ * side can be a string this table has no rank for. An unranked THRESHOLD falls
+ * back to the default one rather than admitting everything; an unranked
+ * MESSAGE is passed through to the invalid-logType throw below, which is what
+ * names the mistake.
+ */
+function meetsLogLevel(level: LogLevelString, configured: LogLevelString): boolean {
+  const messageRank = LOG_LEVEL_RANK[level as string]
+  if (messageRank === undefined) return true
+  const threshold =
+    LOG_LEVEL_RANK[configured as string] ?? LOG_LEVEL_RANK[FALLBACK_LOG_LEVEL]
+  return messageRank >= threshold
+}
+
+/**
  * The default log handler will forward DEBUG, VERBOSE, INFO, WARN, and ERROR
  * messages on to their corresponding console counterparts (if the log method
  * is supported by the current log level)
+ *
+ * ## The level was decorative (AGL-1151)
+ *
+ * This handler used to test only the level of the CALL — dropping the literal
+ * `'silent'` and forwarding everything else — so `_logLevel` decided nothing
+ * and `logger.debug()` reached `console.log` at every level including the
+ * default INFO. On a published tenant page that is not a stray line: plugin
+ * registration walks every component and preset through `lifecycleEvent`,
+ * which logs a before and an after for each, so a visitor's browser formatted
+ * and retained ~400 `console.log` calls of internal event names and payloads
+ * before the page was interactive — measurably, and on a customer's site.
+ *
+ * The threshold is now the INSTANCE's, which is what the level's own docblock
+ * has always said it means.
  */
 export const defaultLogHandler: LogHandler = (
   instance: Logger,
@@ -91,6 +140,7 @@ export const defaultLogHandler: LogHandler = (
   ...args: any[]
 ): void => {
   if (!level || level === 'silent') return
+  if (!meetsLogLevel(level, instance.logLevel)) return
 
   const now = new Date().toISOString()
   const method = ConsoleMethodKey[level]
@@ -107,13 +157,43 @@ export const defaultLogHandler: LogHandler = (
 export const FALLBACK_LOG_LEVEL = LogLevel.INFO
 
 /**
+ * Whether this build is something other than a deployed one.
+ *
+ * Proven, never assumed: the default is the QUIET level, and only a readable
+ * `NODE_ENV` that is positively not `production` raises it. A bundler that
+ * does not substitute the expression, or a realm-plugin bundle with no
+ * `process` at all, leaves this false and the deployed behaviour stands —
+ * which is the direction a wrong answer here has to fail in.
+ *
+ * Dot notation on both reads is load-bearing: the substitution is textual and
+ * matches only this exact form.
+ */
+const DEVELOPMENT_RUNTIME: boolean =
+  typeof process !== 'undefined' &&
+  typeof process.env !== 'undefined' &&
+  typeof process.env.NODE_ENV === 'string' &&
+  process.env.NODE_ENV !== 'production'
+
+/**
  * TODO: INTEGRATE PACKAGE`debug`
  */
 export class Logger {
   /**
-   * The default log level
+   * The default log level.
+   *
+   * DEBUG outside production, so a developer keeps the running commentary the
+   * handler used to emit unconditionally, and a deployed build does not.
+   * Nothing in the workspace calls `setLogLevel`, so this constant is the only
+   * threshold that applies anywhere until something does.
+   *
+   * `process` is guarded because this library is reachable from a browser
+   * realm that has no bundler substituting `process.env` — a marketplace
+   * plugin bundle. Dot notation is load-bearing: the substitution is textual
+   * and never sees the bracket form.
    */
-  public static defaultLogLevel: LogLevel = LogLevel.INFO
+  public static defaultLogLevel: LogLevel = DEVELOPMENT_RUNTIME
+    ? LogLevel.DEBUG
+    : LogLevel.INFO
 
   _logLevel: LogLevelString = Logger.defaultLogLevel
   _logHandler: LogHandler = defaultLogHandler
