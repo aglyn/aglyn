@@ -40,7 +40,7 @@ describe('entity picker demand (AGL-703)', () => {
   it('asks for nothing when the node has no picker', () => {
     expect(entityKindsForAttributes(undefined)).toEqual([])
     expect(
-      entityKindsForAttributes([field(Aglyn.FieldComponentType.TEXT)]),
+      entityKindsForAttributes([field(Aglyn.FieldComponentType.TEXT_FIELD)]),
     ).toEqual([])
   })
 
