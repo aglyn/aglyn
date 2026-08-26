@@ -50,17 +50,18 @@ import {
   IconButton,
   LinearProgress,
   Paper,
+  Skeleton,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
-  Skeleton,
-  Stack,
   Tooltip,
   Typography,
-  TablePagination,
+  alpha,
 } from '@mui/material'
 import { Fragment, useCallback, useMemo, useState, type ReactNode,
   useEffect,
@@ -650,7 +651,28 @@ export function ScreensHierarchyTableComponent(
               ))}
             {!loading && !visibleRows.length && (
               <TableRow>
-                <TableCell colSpan={COLUMN_COUNT} align="center">
+                <TableCell
+                  colSpan={COLUMN_COUNT}
+                  align="center"
+                  sx={(theme) => ({
+                    // MUI's OWN `GridOverlay` FORMULA, not an approximation of
+                    // it. The three grid lists render their empty state inside
+                    // that overlay, which fills with `background.default` at
+                    // `action.disabledOpacity` — a very faint wash over the
+                    // white card. Setting `background.default` SOLID here (the
+                    // first attempt) produced a visibly darker grey than the
+                    // lists it was supposed to match. Written as the same
+                    // expression so a theme change moves both together.
+                    backgroundColor: alpha(
+                      theme.palette.background.default,
+                      theme.palette.action.disabledOpacity,
+                    ),
+                    // No bottom rule: the pagination below draws the only line
+                    // this region needs, and the two together read as a stray
+                    // border with a gap in it.
+                    borderBottom: 0,
+                  })}
+                >
                   {/*
                     THE SHARED EMPTY STATE, illustration and all (AGL-1152).
                     This was a hand-rolled Stack: the only list in the console
@@ -668,8 +690,16 @@ export function ScreensHierarchyTableComponent(
                   <EmptyStateComponent
                     label={'No screens yet — this site is a blank canvas.'}
                     description={
-                      'Create your first screen or start from a template, ' +
-                      'then open it with the besigner to design your page.'
+                      // WHAT A SCREEN IS, then what to do — the shape the
+                      // other three lists use ("Layouts are the chrome your
+                      // screens render inside…"). This read as instructions
+                      // for a reader who already knew the noun, which is not
+                      // the reader looking at an empty list. Framed the same
+                      // way the page's own help tip frames it: pages, their
+                      // addresses, and the hierarchy that builds the URLs.
+                      'Screens are your pages — each one gets its own address, ' +
+                      'and nesting them builds your URL structure. Create one, ' +
+                      'or start from a template.'
                     }
                     action={emptyAction ?? null}
                   />
@@ -714,7 +744,16 @@ export function ScreensHierarchyTableComponent(
                 </Fragment>
               )
             })}
-            <RootDropRow dragging={Boolean(activeId)} />
+            {/*
+              Only when there is something to reorder. The row is 32px tall and
+              merely `visibility: hidden` while idle, so on an EMPTY list it
+              added a blank strip between the empty state and the footer —
+              which read as a stray border with a gap above it. Nothing can be
+              dragged onto it when there are no rows.
+            */}
+            {visibleRows.length > 0 ? (
+              <RootDropRow dragging={Boolean(activeId)} />
+            ) : null}
           </TableBody>
         </Table>
       </TableContainer>
