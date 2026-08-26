@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.25 — 2026-08-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.24...v1.0.0-beta.25)
+
+### Fixed
+
+- **tenant:** the verdict route's apex import resolved undefined at runtime ([AGL-1289](https://linear.app/aglyn/issue/AGL-1289))
+
 ## v1.0.0-beta.24 — 2026-08-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/29892ba1d...v1.0.0-beta.24)
