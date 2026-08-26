@@ -205,20 +205,17 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       redirects: false,
       screenAnalytics: false,
       /**
-       * Had the economics backwards.
+       * CDN delivery and responsive image variants, on every plan (AGL-1152).
        *
-       * A site without this entitlement does not simply lose a nicety: it
-       * falls back to absolute `firebasestorage.googleapis.com` URLs, so every
-       * visitor pulls the FULL-SIZE ORIGINAL straight from Storage egress with
-       * no shared edge cache. The entitlement covers responsive images too, so
-       * the ungated path was the most expensive one we have on both axes —
-       * bytes per request and origin requests per byte. The CDN path is
-       * edge-cacheable and serves a resized variant, which is cheaper for us
-       * per visitor than the fallback it was protecting.
+       * Without this, media is addressed by its absolute
+       * `firebasestorage.googleapis.com` URL: a visitor fetches the full-size
+       * original from Storage egress on every request, with no shared edge
+       * cache in front of it. With it, media is served over the CDN path,
+       * which is edge-cacheable and returns a resized WebP variant.
        *
-       * The counterweight, recorded rather than hidden: this removes a rung
-       * from the paid ladder, which is the shape of a free feature
-       * cannibalising a paid one. Zach made that call knowing it.
+       * The ungated path therefore costs more to run, on both bytes per
+       * request and origin requests per byte. Gating this would raise the cost
+       * of the tier that pays nothing.
        */
       mediaCdn: true,
       marketingOverlays: false,
@@ -996,7 +993,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.15,
     // NULL, not 0.2, because Agency's `contactsPerHost` is UNLIMITED and an
-    // uncapped band has no "over" (2026-08-21, Zach). The rate was unreachable
+    // uncapped band has no "over" (AGL-2439). The rate was unreachable
     // — `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is
     // 0 at every usage level — so no charge changes; what changes is that we
     // stop advertising a fee we could never collect. The plan card and
@@ -1883,7 +1880,7 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
  * "fixing" this add.
  *
  * `posRegisters` IS NOT ADDED HERE, and this is the fix, not an omission
- * (AGL-1775, Zach's 2026-08-17 decision). The register add-on is priced "per
+ * (AGL-1775). The register add-on is priced "per
  * extra register/location" and enforced PER SITE, so folding the org-wide
  * purchase into an org-level value every site inherits sold one register and
  * delivered `hostLimit` of them. `seatAddons.posRegisters` is now a POOL and
@@ -2140,8 +2137,8 @@ export function resolveHostCollaboratorCap(
  *
  * ## THE GRANDFATHER BOUNDARY — explicit, and this field is it
  *
- * Zach's decision, 2026-08-19: fix the cap, and do NOT evict or lock out any
- * org that is currently above the corrected cap.
+ * The cap is corrected, and no org already above it is evicted or locked
+ * out.
  *
  * The boundary is drawn between two different questions, and they are
  * different lines of code rather than one number used for two purposes:
@@ -2352,10 +2349,9 @@ export function storefrontProcessingCostCents(chargeCents: number): number {
  *     fee = take%(feeBaseCents) + processing%(chargeCents) + 30¢
  *
  * so Aglyn's net per order is AT LEAST the advertised take, at every order
- * size down to Stripe's own 50¢ charge minimum, and never negative. Zach
- * lifted the September-1 price lock for this one change on 2026-08-19 ("make
- * sure we are not losing money"); see the Pricing Decision Log entry of the
- * same date. No advertised PLATFORM rate moved — a 0% tier is still 0%
+ * size down to Stripe's own 50¢ charge minimum, and never negative. The
+ * September-1 price lock was lifted for this one change; see the Pricing
+ * Decision Log entry of 2026-08-19. No advertised PLATFORM rate moved — a 0% tier is still 0%
  * platform take — what changed is that the card cost stops being absorbed
  * silently by Aglyn.
  *
@@ -2556,10 +2552,8 @@ export function marketplaceSaleEconomics(
  * `marketplaceSaleEconomics` — the rounding in there is what decides the
  * answer at these amounts, and a closed form would drift from it silently.
  *
- * THIS IS NOW THE ENFORCED FLOOR. Zach lifted the September 1 pricing lock for
- * this one decision on 2026-08-19 — "make a minimum price floor that does not
- * cause us to lose money" — so `marketplaceMinPriceUsd` returns this figure and
- * every publish door refuses a paid listing under it. Recorded in the Pricing
+ * THIS IS THE ENFORCED FLOOR: `marketplaceMinPriceUsd` returns this figure
+ * and every publish door refuses a paid listing under it. Recorded in the Pricing
  * Decision Log and on AGL-2343.
  */
 export function marketplaceBreakEvenUsd(
@@ -2586,9 +2580,8 @@ export function marketplaceBreakEvenUsd(
 /**
  * THE MINIMUM PRICE a paid marketplace listing may carry (AGL-2343).
  *
- * Zach lifted the September 1 pricing lock for this decision on 2026-08-19:
- * *"make a minimum price floor that does not cause us to lose money"*. So the
- * floor is not a chosen round number — it is the break-even price itself, the
+ * The floor is not a chosen round number — it is the break-even price itself,
+ * the
  * cheapest whole dollar at which `marketplaceSaleEconomics` stops returning a
  * negative platform net, computed at the take rate that breaks even LATEST and
  * the dearest payment method the live configuration enables. Today that is $3.
@@ -2665,9 +2658,9 @@ export function marketplacePriceCostNote(
  * (AGL-2343): the minimum stated up front, so a publisher meets it while
  * typing instead of discovering it as a refusal.
  *
- * Zach's rule — a capability that is not surfaced in the console does not
- * count as shipped — applies to a REFUSAL as much as to a feature: a floor
- * only a route knows about is a trap.
+ * A capability that is not surfaced in the console does not count as shipped,
+ * and that applies to a REFUSAL as much as to a feature: a floor only a route
+ * knows about is a trap.
  *
  * @param suffix whatever else that particular form needs to say, appended.
  */
@@ -3061,7 +3054,7 @@ export function checkSeatQuota(
       ? pricing.extraSeatMonthlyUsd
       : pricing.extraCollaboratorMonthlyUsd
   // `members` IS NOT ADDED HERE, and this is the fix, not an omission
-  // (AGL-2439, Zach's 2026-08-19 decision) — the AGL-1775 shape, applied to
+  // (AGL-2439) — the AGL-1775 shape, applied to
   // the key that never got it. `seatAddons.members` is an ORG-LEVEL purchased
   // quantity and `membersPerHost` is enforced PER SITE, so folding one into
   // the other handed every site the whole purchase: an org with 20 sites that
@@ -3576,8 +3569,8 @@ export function checkBandwidthAbuseCeiling(
  * incident? (AGL-2155)
  *
  * Only on a plan that does NOT meter the infra pass-through — which today is
- * free/hobby, and is precisely Zach's requirement that free "always actually
- * stays free". On free the traffic is uncompensated, so serving it is a
+ * free/hobby, where the requirement is that free always actually stays free.
+ * On free the traffic is uncompensated, so serving it is a
  * straight loss and the least destructive way to stop the bleeding is to stop
  * paying for the expensive render.
  *
