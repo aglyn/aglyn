@@ -16,23 +16,25 @@
  */
 
 import {
-  defaultScopeForNewResource,
-  pluginRequestFromWeb,
-} from '@aglyn/aglyn/server'
-import {
-  mediaStorageGate,
-  scopeBillsStorageOverage,
-} from '../../../../utils/storage-overage'
-import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
-import {
   checkEntitlement,
   createResourceUid,
+  defaultScopeForNewResource,
   inspectUploadBytes,
+  pluginRequestFromWeb,
   readImageDimensions,
   UPLOAD_INSPECTION_HEAD_BYTES,
   UPLOAD_INSPECTION_TAIL_BYTES,
   uploadInspectionNeedsTail,
 } from '@aglyn/aglyn/server'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '@aglyn/aglyn/app-utils/sanitize-svg'
+import {
+  mediaStorageGate,
+  scopeBillsStorageOverage,
+} from '../../../../utils/storage-overage'
+import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -57,10 +59,6 @@ import {
   SIGNED_UPLOAD_TYPES_MESSAGE,
   storageContentHash,
 } from '../../../../utils/media-upload-limits'
-import {
-  isSvgUploadType,
-  sanitizeSvgBuffer,
-} from '../../../../utils/sanitize-svg'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
 

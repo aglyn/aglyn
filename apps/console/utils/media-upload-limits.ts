@@ -27,6 +27,11 @@
  * path (`/api/media/upload-url`), which PUTs the bytes straight to GCS.
  */
 
+import {
+  isImageUploadContentType,
+  normalizeImageContentType,
+} from '@aglyn/aglyn/app-utils/image-upload-types'
+
 export const MB = 1024 * 1024
 
 /**
@@ -54,9 +59,10 @@ export const SIGNED_UPLOAD_THRESHOLD_BYTES = 3 * MB
  * layer. Adding a type means adding one row, and a row cannot exist
  * without a ceiling.
  *
- * Images are the one family that is NOT enumerated: `image/*` is open by
- * design (a DAM should take whatever the browser calls an image), so they
- * are matched by prefix and carry one shared ceiling.
+ * Images are enumerated too, in `@aglyn/aglyn`'s `IMAGE_UPLOAD_TYPES` rather
+ * than here — the same module the byte-signature table keys off, so a format
+ * cannot be accepted by one and unrecognised by the other (AGL-1476). They
+ * carry one shared ceiling, which is why they are not rows in this table.
  */
 export interface UploadTypeSpec {
   /** Canonical content type — what gets stored on the asset document. */
@@ -198,6 +204,12 @@ export function normalizeUploadContentType(
   fileName?: string,
 ): string {
   if (ZIP_ALIAS_TYPES.has(contentType)) return 'application/zip'
+  // `image/jpg`, `image/x-png`, `image/svg` and friends fold to the canonical
+  // spelling, so one format is one stored type. Returns the bare type
+  // unchanged for anything it does not recognise, so this cannot widen the
+  // allowlist below.
+  const image = normalizeImageContentType(contentType)
+  if (isImageUploadContentType(image)) return image
   const extension = fileName ? fileExtension(fileName) : ''
   const byExtension = extension
     ? UPLOAD_TYPES_BY_EXTENSION.get(extension)
@@ -209,9 +221,17 @@ export function normalizeUploadContentType(
   return contentType
 }
 
-/** `image/*` is open by design — a DAM takes whatever the browser calls one. */
+/**
+ * Whether this is one of the image formats media ingress accepts.
+ *
+ * Was `contentType.startsWith('image/')`, on a string the CALLER supplies.
+ * Three decisions hang off the answer — the `videoMedia` entitlement, the
+ * size ceiling, and whether `inspectUploadBytes` has a signature to check the
+ * bytes against — and an open prefix got all three wrong for a label nothing
+ * recognises. See `IMAGE_UPLOAD_TYPES` for the set and the reasoning.
+ */
 export function isImageUploadType(contentType: string): boolean {
-  return contentType.startsWith('image/')
+  return isImageUploadContentType(contentType)
 }
 
 /** Whether a (normalized) content type may be uploaded at all. */
