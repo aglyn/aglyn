@@ -20,7 +20,8 @@ import { join } from 'path'
 
 /**
  * Canvas chrome is the SLATE; the accent belongs to the user's content
- * (AGL-1194).
+ * (AGL-1194), with the two stated carve-outs below for the states that say
+ * what is being edited.
  *
  * Three separate chrome surfaces needed the same correction one at a time
  * after the AGL-1186 rotation, because each was found by looking at a
@@ -72,13 +73,38 @@ const ACCENT_LITERAL_EXCEPTION = {
  *
  * So this is a CARVE-OUT, not a relaxation. Exactly one line of
  * `node-outline.tsx` may name `secondary`, it must be the declaration below,
- * and it may only be spent on the selection rule. Every other accent
- * reference in that file — including `primary` anywhere, and `secondary` on
- * hover / drag / drop-over — still fails.
+ * and it may only be spent on the selection rule. `secondary` on hover, drag
+ * or drop-over still fails, as does every `primary` reference outside the
+ * hover carve-out stated next.
  */
 const SELECTION_ACCENT_EXCEPTION = {
   file: 'node-outline.tsx',
   declaration: /^\s*const selectionAccent = tv\.palette\.secondary\.main$/,
+}
+
+/**
+ * The third deliberate exception (AGL-2486): the HOVER outline and its wash
+ * carry `primary`, and nothing else on the canvas does.
+ *
+ * AGL-1194's reasoning held for drag and drop-over, which are momentary. It
+ * did not hold for hover, for the same reason it did not hold for selection:
+ * hover is the pointer's half of "what am I about to edit", and it has to be
+ * findable at a glance. The slate cannot do that job — it is a DESATURATED
+ * BLUE roughly 17 degrees of hue from `primary`, so against the dark canvas
+ * it reads as the disabled version of the affordance rather than a live one.
+ *
+ * So this is a second CARVE-OUT on the same terms as the selection one.
+ * Exactly two lines of `node-outline.tsx` may name `primary`, they must be
+ * the declarations below, and they may only be spent on the hover rule.
+ * `secondary` on hover, `primary` on drag or drop-over, and any other member
+ * of either slot still fail.
+ */
+const HOVER_ACCENT_EXCEPTION = {
+  file: 'node-outline.tsx',
+  declarations: [
+    /^\s*const hoverAccent = tv\.palette\.primary\.main$/,
+    /^\s*const hoverAccentChannel = tv\.palette\.primary\.mainChannel$/,
+  ],
 }
 
 const read = (file: string) => readFileSync(join(__dirname, file), 'utf8')
@@ -107,6 +133,15 @@ const accentOffenders = (file: string, source: string) =>
         !(
           file === SELECTION_ACCENT_EXCEPTION.file &&
           SELECTION_ACCENT_EXCEPTION.declaration.test(line)
+        ),
+    )
+    .filter(
+      (line) =>
+        !(
+          file === HOVER_ACCENT_EXCEPTION.file &&
+          HOVER_ACCENT_EXCEPTION.declarations.some((pattern) =>
+            pattern.test(line),
+          )
         ),
     )
 
@@ -241,11 +276,13 @@ describe('the selection outline is pink, as a carve-out (AGL-1221)', () => {
     )
   })
 
-  it('leaves the transient states on the slate', () => {
+  it('leaves the momentary states on the slate', () => {
     const source = outline()
-    for (const state of ['hoveringSelf', 'draggingSelf', 'draggingOver']) {
+    for (const state of ['draggingSelf', 'draggingOver']) {
       const rule = source.slice(source.indexOf(`classKeys.${state}}\`]`))
-      expect(rule.slice(0, rule.indexOf('},'))).not.toContain('selectionAccent')
+      const body = rule.slice(0, rule.indexOf('},'))
+      expect(body).toContain('slate')
+      expect(body).not.toContain('Accent')
     }
   })
 
@@ -260,15 +297,21 @@ describe('the selection outline is pink, as a carve-out (AGL-1221)', () => {
         'outlineColor: slate,\n      backgroundColor',
         'outlineColor: tv.palette.secondary.dark,\n      backgroundColor',
       ),
-      // ...a second accent declaration hiding behind the same shape...
+      // ...a third accent declaration hiding behind the same shape...
       source.replace(
         '  const selectionAccent = tv.palette.secondary.main',
-        '  const selectionAccent = tv.palette.secondary.main\n  const hoverAccent = tv.palette.secondary.light',
+        '  const selectionAccent = tv.palette.secondary.main\n  const fillAccent = tv.palette.secondary.light',
       ),
-      // ...and `primary`, which has no exception at all.
+      // ...`primary` on a state that has no exception...
       source.replace(
         'const slate = tv.palette.tertiary.main',
         'const slate = tv.palette.primary.main',
+      ),
+      // ...and the hover exception spent on a member it does not cover, so
+      // the carve-out cannot widen into "any `primary` under that name".
+      source.replace(
+        'const hoverAccent = tv.palette.primary.main',
+        'const hoverAccent = tv.palette.primary.light',
       ),
     ]
     for (const mutated of rejected) {
@@ -280,6 +323,164 @@ describe('the selection outline is pink, as a carve-out (AGL-1221)', () => {
   })
 })
 
+describe('the hover outline is the blue primary, as a carve-out (AGL-2486)', () => {
+  const outline = () => read(HOVER_ACCENT_EXCEPTION.file)
+
+  /** The hover rule: its selector, and everything it declares. */
+  const hoverRule = () => {
+    const source = outline()
+    const start = source.indexOf('`&.${classKeys.hoveringSelf}')
+    const open = source.indexOf(']: {', start) + 3
+    return {
+      selector: source.slice(start, open),
+      body: source.slice(open, source.indexOf('},', open)),
+    }
+  }
+
+  it('declares the accent once per member, from `primary`', () => {
+    const lines = outline().split('\n')
+    for (const pattern of HOVER_ACCENT_EXCEPTION.declarations) {
+      expect(lines.filter((line) => pattern.test(line))).toHaveLength(1)
+    }
+  })
+
+  it('spends it on the hover rule and nothing else', () => {
+    const { body } = hoverRule()
+    expect(body).toContain('outlineColor: hoverAccent,')
+    expect(body).toContain('hoverAccentChannel')
+    expect(body).not.toContain('selectionAccent')
+    // Every use is the declaration plus this rule; a third would mean the
+    // blue had leaked onto a state it does not name.
+    const source = outline()
+    expect([...source.matchAll(/\bhoverAccent\b/g)]).toHaveLength(2)
+    expect([...source.matchAll(/\bhoverAccentChannel\b/g)]).toHaveLength(2)
+  })
+
+  it('stays subordinate to selection by weight and style', () => {
+    // The root is 1px dashed and the hover rule overrides neither, so the
+    // blue can only ever be the lighter of the two treatments against the
+    // selection's 2px solid.
+    const { body } = hoverRule()
+    expect(body).not.toContain('outlineWidth')
+    expect(body).not.toContain('outlineStyle')
+    expect(outline()).toContain("outlineStyle: 'dashed',")
+  })
+
+  it('stands down on the selected node rather than overpainting it', () => {
+    // The two rules have equal specificity and hover is declared second, so
+    // without this exclusion the blue would repaint the pink outline of
+    // whichever element the pointer is resting on — which is most of the
+    // time, since selecting an element means hovering it first.
+    const { selector } = hoverRule()
+    expect(selector).toContain(':not(.${classKeys.selectedSelf})')
+  })
+
+  it('corrects the wash and the border in one declaration', () => {
+    // The overlay component measures geometry and renders this outline once
+    // per line fragment; it declares no colour of its own. That is why the
+    // translucent wash over a hovered node and the border around it are the
+    // same two properties of the same rule, not two places to keep in sync.
+    expect(paletteLines(read('node-overlay.tsx'))).toEqual([])
+    const { body } = hoverRule()
+    expect(body).toContain('outlineColor:')
+    expect(body).toContain('backgroundColor:')
+  })
+
+  it('keeps the wash the faintest fill on the canvas', () => {
+    // Hover 0.08 < node-in-flight 0.12 < drop target 0.16. Hover is the
+    // state you are in most of the time, so it is the one that must not
+    // tint the design being edited.
+    const alphas = [...outline().matchAll(/rgba\(\$\{\w+} \/ (0\.\d+)\)/g)].map(
+      (match) => Number(match[1]),
+    )
+    expect(Math.min(...alphas)).toBe(0.08)
+    expect(hoverRule().body).toContain('/ 0.08)')
+  })
+})
+
+/**
+ * The two accent literals, resolved from the built console theme rather than
+ * copied from the palette source — `primary` and `secondary` are each ONE
+ * colour across both schemes, so one literal per accent is the whole truth.
+ */
+const BLUE = '#00B0FF' // palette.primary.main
+const PINK = '#E040FB' // palette.secondary.main
+
+describe('the hover outline is the blue primary, as a carve-out (AGL-2486)', () => {
+  const outline = () => read(HOVER_ACCENT_EXCEPTION.file)
+
+  /** The hover rule: its selector, and everything it declares. */
+  const hoverRule = () => {
+    const source = outline()
+    const start = source.indexOf('`&.${classKeys.hoveringSelf}')
+    const open = source.indexOf(']: {', start) + 3
+    return {
+      selector: source.slice(start, open),
+      body: source.slice(open, source.indexOf('},', open)),
+    }
+  }
+
+  it('declares the accent once per member, from `primary`', () => {
+    const lines = outline().split('\n')
+    for (const pattern of HOVER_ACCENT_EXCEPTION.declarations) {
+      expect(lines.filter((line) => pattern.test(line))).toHaveLength(1)
+    }
+  })
+
+  it('spends it on the hover rule and nothing else', () => {
+    const { body } = hoverRule()
+    expect(body).toContain('outlineColor: hoverAccent,')
+    expect(body).toContain('hoverAccentChannel')
+    expect(body).not.toContain('selectionAccent')
+    // Every use is the declaration plus this rule; a third would mean the
+    // blue had leaked onto a state it does not name.
+    const source = outline()
+    expect([...source.matchAll(/\bhoverAccent\b/g)]).toHaveLength(2)
+    expect([...source.matchAll(/\bhoverAccentChannel\b/g)]).toHaveLength(2)
+  })
+
+  it('stays subordinate to selection by weight and style', () => {
+    // The root is 1px dashed and the hover rule overrides neither, so the
+    // blue can only ever be the lighter of the two treatments against the
+    // selection's 2px solid.
+    const { body } = hoverRule()
+    expect(body).not.toContain('outlineWidth')
+    expect(body).not.toContain('outlineStyle')
+    expect(outline()).toContain("outlineStyle: 'dashed',")
+  })
+
+  it('stands down on the selected node rather than overpainting it', () => {
+    // The two rules have equal specificity and hover is declared second, so
+    // without this exclusion the blue would repaint the pink outline of
+    // whichever element the pointer is resting on — which is most of the
+    // time, since selecting an element means hovering it first.
+    const { selector } = hoverRule()
+    expect(selector).toContain(':not(.${classKeys.selectedSelf})')
+  })
+
+  it('corrects the wash and the border in one declaration', () => {
+    // The overlay component measures geometry and renders this outline once
+    // per line fragment; it declares no colour of its own. That is why the
+    // translucent wash over a hovered node and the border around it are the
+    // same two properties of the same rule, not two places to keep in sync.
+    expect(paletteLines(read('node-overlay.tsx'))).toEqual([])
+    const { body } = hoverRule()
+    expect(body).toContain('outlineColor:')
+    expect(body).toContain('backgroundColor:')
+  })
+
+  it('keeps the wash the faintest fill on the canvas', () => {
+    // Hover 0.08 < node-in-flight 0.12 < drop target 0.16. Hover is the
+    // state you are in most of the time, so it is the one that must not
+    // tint the design being edited.
+    const alphas = [...outline().matchAll(/rgba\(\$\{\w+} \/ (0\.\d+)\)/g)].map(
+      (match) => Number(match[1]),
+    )
+    expect(Math.min(...alphas)).toBe(0.08)
+    expect(hoverRule().body).toContain('/ 0.08)')
+  })
+})
+
 describe('the selection outline reads against the canvas, in both schemes', () => {
   // `viewport-frame.component.tsx` paints the artboard `background.paper`
   // over a `background.default` page, and measuring in the running console
@@ -288,8 +489,6 @@ describe('the selection outline reads against the canvas, in both schemes', () =
   // 4.5:1 — and `secondary` is ONE colour in both schemes, so the question
   // is whether the same pink clears it at both ends. The light paper is the
   // tight end; the dark scheme has room to spare.
-  const PINK = '#E040FB' // palette.secondary.main, light and dark alike
-
   const CANVASES = [
     { name: 'light paper', bg: '#FFFFFF' }, //   3.34:1
     { name: 'light page', bg: '#F5F5F5' }, //    3.06:1 — the worst case
@@ -303,16 +502,58 @@ describe('the selection outline reads against the canvas, in both schemes', () =
     })
   }
 
-  it('is a different hue from the hovered slate, in both schemes', () => {
-    // AGL-1194's actual worry was two accent hues on one control. They are
-    // two hues again by design, so what matters is that they are not near
+  it('is a different hue from the hover accent and from the slate', () => {
+    // AGL-1194's actual worry was two accent hues on one control. There are
+    // two by design now, so what matters is that they are not near
     // neighbours that read as the same state at a glance. Measured in HUE,
     // not luminance: pink and the dark-scheme slate are within 1.03:1 of
     // each other in luminance, which is precisely why a contrast ratio
     // cannot answer this question. Weight carries the rest — selection is
-    // 2px solid where hover is 1px dashed, pinned by the rule test above.
-    for (const slate of ['#404C5C', '#7C8CA3']) {
-      expect(hueDistance(PINK, slate)).toBeGreaterThanOrEqual(60)
+    // 2px solid where hover is 1px dashed, pinned by the rule tests above.
+    for (const other of [BLUE, '#404C5C', '#7C8CA3']) {
+      expect(hueDistance(PINK, other)).toBeGreaterThanOrEqual(60)
     }
+  })
+})
+
+describe('the hover outline reads against the dark canvas', () => {
+  // The affordance was reported illegible on the dark canvas, and that is
+  // what these numbers answer. `primary` is ONE colour in both schemes, so
+  // the slate it replaces is the honest comparison: on the dark artboard the
+  // slate measures 3.69:1 and the blue 5.20:1, and the hue tells the rest of
+  // the story — the slate is a DESATURATED BLUE, 17 degrees away, so it read
+  // as the disabled version of the same indicator rather than a live one.
+  const CANVASES = [
+    { name: 'dark paper', bg: '#2A3440' }, //   5.20:1, was 3.69:1 on slate
+    { name: 'dark page', bg: '#161C21' }, //    7.08:1, was 5.02:1 on slate
+  ]
+
+  for (const { name, bg } of CANVASES) {
+    it(`${name}: hover clears the non-text bar against the canvas`, () => {
+      expect(contrast(BLUE, bg)).toBeGreaterThanOrEqual(3)
+    })
+  }
+
+  it('is a near neighbour of the slate it replaces, which is the bug', () => {
+    // Stated as a measurement so the reasoning is not re-litigated from a
+    // screenshot: these two are the same hue family, which is why raising
+    // contrast alone would never have fixed the affordance.
+    for (const slate of ['#404C5C', '#7C8CA3']) {
+      expect(hueDistance(BLUE, slate)).toBeLessThan(30)
+    }
+  })
+
+  it('trades contrast on the LIGHT canvas, recorded rather than hidden', () => {
+    // The one place this is a step down: against white paper the blue
+    // measures 2.43:1 where the slate measured 8.73:1, so it does NOT clear
+    // the 3:1 non-text bar there. Hover is momentary pointer-tracking
+    // feedback, it carries a second cue in the wash, and it sits under the
+    // pointer itself, so it is held to the dark-canvas bar above. If the
+    // light scheme has to clear 3:1 too, `primary.dark` is the scheme-aware
+    // slot for it (#0077ad light, rgb(76, 199, 255) dark) — a different
+    // blue, so that is a palette decision rather than something to fold in
+    // silently here.
+    expect(contrast(BLUE, '#FFFFFF')).toBeLessThan(3)
+    expect(contrast('#0077ad', '#FFFFFF')).toBeGreaterThanOrEqual(3)
   })
 })

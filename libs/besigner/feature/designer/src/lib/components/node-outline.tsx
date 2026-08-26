@@ -43,10 +43,13 @@ const NodeOutlineRoot = styled('div', {
   // verified against the running console's computed custom properties.
   const slate = tv.palette.tertiary.main
   const slateChannel = tv.palette.tertiary.mainChannel
-  // The ONE accent left on the canvas (AGL-1221). See the selection rule
-  // below for why selection — and only selection — is exempt from the
-  // slate; `canvas-chrome-palette.spec.ts` pins the exemption to this line.
+  // The two accents the canvas is allowed, one rule each: pink says WHAT IS
+  // SELECTED, blue says WHAT THE POINTER WOULD SELECT. See the rules below
+  // for why these two states — and no others — are exempt from the slate;
+  // `canvas-chrome-palette.spec.ts` pins each exemption to its declaration.
   const selectionAccent = tv.palette.secondary.main
+  const hoverAccent = tv.palette.primary.main
+  const hoverAccentChannel = tv.palette.primary.mainChannel
   return {
     pointerEvents: 'none',
     position: 'absolute',
@@ -60,25 +63,41 @@ const NodeOutlineRoot = styled('div', {
     outlineStyle: 'dashed',
     content: '""',
 
-    // Canvas chrome is the SLATE (AGL-1194): hover, drag and drop-over are
-    // transient feedback, so they differ by STYLE and WEIGHT on one hue —
-    // dashed hover, a fill for the node in flight, and the heaviest
-    // treatment for the drop target.
+    // Canvas chrome is the SLATE (AGL-1194) for DRAG and DROP-OVER: those
+    // are momentary, so they differ by STYLE and WEIGHT on one hue — a fill
+    // for the node in flight, and the heaviest treatment for the drop
+    // target.
     //
-    // Selection is the exception (AGL-1221). It is not transient feedback:
-    // it is a persistent statement about what the panels on the right are
-    // editing, it has to survive against an arbitrary subscriber palette,
-    // and pink is the one hue on this canvas that never competes with the
-    // design being edited. So selection alone carries `secondary`, and it
-    // still differs from hover by weight as well as hue.
+    // The two states that answer "what am I editing" carry an accent
+    // instead. Selection (AGL-1221) is a persistent statement about what the
+    // panels on the right are editing, it has to survive against an
+    // arbitrary subscriber palette, and pink is the one hue on this canvas
+    // that never competes with the design being edited.
+    //
+    // Hover is the pointer's half of that same question, and the slate
+    // cannot answer it: the slate is a DESATURATED BLUE, ~17 degrees of hue
+    // from `primary`, so on the dark canvas it reads as the disabled version
+    // of an affordance rather than a live one. It carries `primary`, which
+    // is the same one hue in both schemes.
+    //
+    // Selection stays the stronger of the two by weight, by style and by
+    // exclusivity: 2px solid against 1px dashed, and hover stands down
+    // entirely on the selected node. The `:not()` is load-bearing — these
+    // two rules have equal specificity and hover is declared second, so
+    // without it the blue would repaint the pink outline of whichever
+    // element the pointer happens to rest on.
     [`&.${classKeys.selectedSelf}`]: {
       outlineWidth: 2,
       outlineStyle: 'solid',
       outlineColor: selectionAccent,
     },
-    [`&.${classKeys.hoveringSelf}`]: {
-      outlineColor: slate,
-      backgroundColor: `rgba(${slateChannel} / 0.08)`,
+    // One declaration covers both hover affordances: this element IS the
+    // border and the translucent wash the canvas draws over a hovered node,
+    // so `outlineColor` and `backgroundColor` here are the only two places a
+    // hover colour is decided.
+    [`&.${classKeys.hoveringSelf}:not(.${classKeys.selectedSelf})`]: {
+      outlineColor: hoverAccent,
+      backgroundColor: `rgba(${hoverAccentChannel} / 0.08)`,
     },
     [`&.${classKeys.draggingSelf}`]: {
       outlineColor: 'transparent',
