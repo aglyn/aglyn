@@ -45,6 +45,7 @@ import {
   useCallback,
   useMemo,
 } from 'react'
+import CanvasRevealContext from '../contexts/canvas-reveal-context'
 import { useLayoutChromeContext } from '../contexts/layout-chrome-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import {
@@ -125,17 +126,16 @@ const ViewportGlobalStyles = (
         all: 'initial',
       },
       // Canvas-sense for aglyn-hidden elements (AGL-592): start closed
-      // like the live site, but reveal while the panel's DIRECT PARENT
-      // carries the selected-within stamp — i.e. the selection is on the
-      // wrapper, the trigger, the panel, or anything inside it. The
-      // direct-child combinator is load-bearing: the stamp cascades up
-      // to the root leaf, so a descendant combinator would reveal every
-      // hidden element whenever anything on the page is selected.
+      // like the live site, and stay closed unless the leaf itself is
+      // flagged as revealed. `node-leaf` decides that from the reveal
+      // toggle and the selection and stamps the flag on the hidden
+      // element — the same element this rule hides — so no wrapper a
+      // component renders around its children can separate the two.
       // Expressed as a :not() guard (not hide-then-revert) so a revealed
-      // panel keeps its natural display; :where() keeps specificity at a
-      // single class. Injected into the closed shadow root via the
-      // shadow-scoped emotion cache — the live tenant is untouched.
-      '.aglyn-hidden:not(:where([data-aglyn-selected-within] > *))': {
+      // panel keeps its natural display. Injected into the closed shadow
+      // root via the shadow-scoped emotion cache — the live tenant is
+      // untouched.
+      '.aglyn-hidden:not([data-aglyn-revealed])': {
         display: 'none !important',
       },
     }}
@@ -191,12 +191,19 @@ const ThemedElementContainer = ({ children }) => {
         : resolveSxForDeviceWidth(scoped, deviceWidth)
     }
   }, [deviceWidth, heldState, heldStateNodeId])
+  // Elements the author opened up for designing (AGL-592). Subscribed once
+  // here, exactly like the held state above, and handed down by context so a
+  // canvas of several hundred leaves carries one subscription rather than one
+  // per element.
+  const [revealedNodeIds] = useAglynBesignerFlag('revealedNodeIds')
   return (
     <ThemeProvider theme={canvasTheme}>
       <CssBaseline />
-      <LeafSxTransformContext.Provider value={sxTransform}>
-        {children}
-      </LeafSxTransformContext.Provider>
+      <CanvasRevealContext.Provider value={revealedNodeIds}>
+        <LeafSxTransformContext.Provider value={sxTransform}>
+          {children}
+        </LeafSxTransformContext.Provider>
+      </CanvasRevealContext.Provider>
     </ThemeProvider>
   )
 }

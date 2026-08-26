@@ -22,6 +22,8 @@ import {
   ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_MODIFY_DRAG,
   ICON_VARIANT_SHOW_MORE_VERTICAL,
+  ICON_VARIANT_VISIBILITY_HIDDEN,
+  ICON_VARIANT_VISIBILITY_SHOWN,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
@@ -45,6 +47,7 @@ import {
   type ListProps as MuiListProps,
   Popper,
   Stack,
+  Tooltip,
 } from '@mui/material'
 import clsx from 'clsx'
 import uniq from 'lodash-es/uniq'
@@ -59,8 +62,13 @@ import {
   useMemo,
   useState,
 } from 'react'
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
+import {
+  isNodeHiddenOnSite,
+  toggleRevealedNodeId,
+} from '../utils/canvas-reveal'
 import ComponentIconComponent from './component-icon.component'
 import NodeContextMenu from './node-context-menu'
 
@@ -71,6 +79,7 @@ const classKey = generateComponentClassKeys('TreeView', [
   'treeListItem',
   'dragHandle',
   'moreButton',
+  'visibilityButton',
   'itemSelected',
   'itemHovered',
   'itemIsDragging',
@@ -328,6 +337,31 @@ const NodeTreeItem = observer(
     const isHovered = Besigner.focus.isNodeHovered(node)
     const dragDisabled = Boolean(isRootNode || !dragAllowed)
 
+    // Canvas visibility for an element that starts hidden on the published
+    // site (AGL-592). The row is the only place a hidden element is always
+    // on screen — on the canvas it is, by definition, the thing you cannot
+    // see — so the state is reported here and toggled here. The toggle
+    // writes a canvas-only flag; the node's class, and therefore what the
+    // published site does, is never touched.
+    const [revealedNodeIds, setRevealedNodeIds] =
+      useAglynBesignerFlag('revealedNodeIds')
+    const hiddenOnSite = isNodeHiddenOnSite(node)
+    const revealedOnCanvas = Boolean(
+      revealedNodeIds?.some((id) => id === nodeId),
+    )
+    const toggleReveal = useCallback(
+      (e: any) => {
+        // The row is a button and a drop target; without this the click
+        // also selects the row under the control.
+        e.stopPropagation()
+        e.preventDefault()
+        setRevealedNodeIds((current) =>
+          toggleRevealedNodeId(current, nodeId),
+        )
+      },
+      [nodeId, setRevealedNodeIds],
+    )
+
     const {
       attributes: dragAttributes,
       transform,
@@ -470,11 +504,58 @@ const NodeTreeItem = observer(
               slotProps={{
                 primary: {
                   noWrap: true,
-                  sx: { maxWidth: '180px', width: 'fit-content', textOverflow: 'ellipsis' },
+                  sx: {
+                    maxWidth: '180px',
+                    width: 'fit-content',
+                    textOverflow: 'ellipsis',
+                    // An element the site hides reads as hidden without
+                    // being selected or hovered, so a mega menu is not just
+                    // a row whose element cannot be found on the canvas.
+                    ...(hiddenOnSite && !revealedOnCanvas
+                      ? { color: 'text.disabled', fontStyle: 'italic' }
+                      : {}),
+                  },
                 },
               }}
             />
           </MuiListItemButton>
+          {hiddenOnSite && (
+            <Tooltip
+              title={
+                revealedOnCanvas
+                  ? 'Shown here while you design it. The published site still hides it.'
+                  : 'Hidden on the published site. Show it here to design it — the site is unchanged.'
+              }
+            >
+              <IconButton
+                aria-label={
+                  revealedOnCanvas
+                    ? `Stop showing ${nodeLabel} on the canvas`
+                    : `Show ${nodeLabel} on the canvas`
+                }
+                aria-pressed={revealedOnCanvas}
+                className={classKey.visibilityButton}
+                color={revealedOnCanvas ? 'secondary' : 'default'}
+                onClick={toggleReveal}
+                size="small"
+                sx={{
+                  alignSelf: 'center',
+                  flexShrink: 0,
+                  padding: '2px',
+                  color: revealedOnCanvas ? 'secondary.main' : 'text.disabled',
+                }}
+              >
+                <MdiIcon
+                  fontSize="inherit"
+                  path={
+                    revealedOnCanvas
+                      ? ICON_VARIANT_VISIBILITY_SHOWN.path
+                      : ICON_VARIANT_VISIBILITY_HIDDEN.path
+                  }
+                />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton
             aria-label={`Actions for ${nodeLabel}`}
             aria-expanded={menuOpen}

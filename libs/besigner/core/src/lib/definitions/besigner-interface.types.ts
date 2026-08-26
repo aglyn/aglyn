@@ -51,6 +51,14 @@ export type BesignerContext = {
     heldState?: BesignerStateFlag
     /** The node the held state applies to; every other leaf renders at rest. */
     heldStateNodeId?: string
+    /**
+     * Nodes the canvas shows even though they carry the hidden class
+     * (AGL-592) — a mega-menu panel or a drawer opened up for designing.
+     * Canvas only, never persisted and never written back to the document:
+     * showing a panel to work on it is a different act from publishing the
+     * site with it open.
+     */
+    revealedNodeIds?: string[]
     /** What kind of host view the canvas is editing (screen or shared layout). */
     viewType?: HostViewType
     /**

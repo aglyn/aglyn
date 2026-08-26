@@ -24,7 +24,8 @@ one dialog without leaving the besigner:
   - **Show / hide / show-hide an element** — pick any other canvas
     element from a list; no selectors or classes needed. Add the
     `aglyn-hidden` class to a target to start it hidden on the live
-    site. Each of these takes an optional **Delay** (a later
+    site — and on the canvas, where the eye on its **Hierarchy** row
+    shows it again while you design it. Each of these takes an optional **Delay** (a later
     show/hide on the same target cancels a pending one — the classic
     hover grace period) and, for steps that can show, **Close on
     Esc** / **Close on outside click** so a revealed panel dismisses

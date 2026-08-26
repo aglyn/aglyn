@@ -101,7 +101,8 @@ is the same result assembled from **primitives** — insert it and you get:
 - a trigger **Button**, and
 - a **panel Stack** positioned under the trigger, three link columns
   inside, carrying the `aglyn-hidden` class so it starts closed on the
-  live site (the canvas still shows it for editing).
+  live site (the canvas starts it closed too — open it with the eye on
+  its hierarchy row when you want to design it).
 
 The difference from hand-building: **the hover choreography arrives
 pre-wired.** Inserting the preset creates two real interactions on the
@@ -152,7 +153,13 @@ Three patterns cover most menus:
 :::tip Start hidden
 To make a show-target start hidden, add the `aglyn-hidden` class under
 **Styles → Classes & custom CSS**. The live site hides it from the very
-first paint; the canvas keeps it visible so you can keep editing it.
+first paint, and so does the canvas, so you are designing what a
+visitor sees. Its row in the **Hierarchy** shows an eye: click it to
+show the element on the canvas while you work on it, and click again to
+put it back. That switch is yours alone — it is never saved and never
+changes what the published site does. Selecting the element, or
+anything alongside it inside its container, opens it for as long as it
+is selected.
 :::
 
 ## Responsive visibility

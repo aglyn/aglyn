@@ -57,6 +57,8 @@ import {
   mdiFileTree,
   mdiFilter,
   mdiEmailOutline,
+  mdiEyeOffOutline,
+  mdiEyeOutline,
   mdiFlagVariant,
   mdiFormatAlignCenter,
   mdiFormatAlignJustify,
@@ -186,6 +188,12 @@ export const ICON_VARIANT_SIGN_OUT = mdiLogoutVariant
 export const ICON_VARIANT_USER_SETTINGS = mdiAccountSettings
 export const ICON_VARIANT_HOST_GROUP = mdiWebBox
 export const ICON_VARIANT_HOST = mdiWeb
+
+// Canvas visibility (AGL-592): whether an element is shown while it is being
+// designed. Distinct from whether the published site shows it — the eye
+// reports and toggles the CANVAS, never the document.
+export const ICON_VARIANT_VISIBILITY_SHOWN = mdiEyeOutline
+export const ICON_VARIANT_VISIBILITY_HIDDEN = mdiEyeOffOutline
 
 // Views + Panels
 export const ICON_VARIANT_ELEMENT_BROWSE = mdiGroup

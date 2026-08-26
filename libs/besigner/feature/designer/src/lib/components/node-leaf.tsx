@@ -29,9 +29,14 @@ import { alpha, Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useCallback, useContext, useMemo, useRef } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
+import CanvasRevealContext from '../contexts/canvas-reveal-context'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import {
+  isNodeHiddenOnSite,
+  isNodeRevealedOnCanvas,
+} from '../utils/canvas-reveal'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
 
@@ -206,6 +211,11 @@ export const NodeLeaf = observer(
       !node?.nodes?.length &&
       viewType !== Aglyn.HostViewType.LAYOUT
 
+    // Nodes the author has opened up for designing (AGL-592). Through a
+    // context rather than the flag itself: the canvas subscribes once and
+    // every leaf reads the result.
+    const revealedNodeIds = useContext(CanvasRevealContext)
+
     // WYSIWYG bindings (AGL-97): resolve variable/function tokens
     // live on the rendered copy (selection/dnd keep the original node).
     // Bound nodes are flagged either way so editors can spot them.
@@ -214,8 +224,7 @@ export const NodeLeaf = observer(
     const boundProps = useMemo(
       () =>
         Object.entries(node?.props ?? {}).filter(
-          ([, value]) =>
-            typeof value === 'string' && Aglyn.hasBindings(value),
+          ([, value]) => typeof value === 'string' && Aglyn.hasBindings(value),
         ),
       // MobX props are observable; the JSON string keys the memo cheaply.
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -318,7 +327,9 @@ export const NodeLeaf = observer(
         definitions as any,
       )
       const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
-      return graftedRootId ? denormalizeTree(composed, graftedRootId) : undefined
+      return graftedRootId
+        ? denormalizeTree(composed, graftedRootId)
+        : undefined
       // Observable props/overrides: the JSON strings key the memo, as above.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
@@ -348,6 +359,17 @@ export const NodeLeaf = observer(
           data-aglyn-selected-within={
             Besigner.focus.isNodeOrDescendantSelected(node) ? '' : undefined
           }
+          // Present on an element that carries the hidden class while the
+          // canvas is showing it anyway (AGL-592) — the flag the canvas
+          // stylesheet checks before collapsing it. Stamped on the hidden
+          // element itself, so no wrapper a component renders around its
+          // children can come between the two.
+          data-aglyn-revealed={
+            isNodeHiddenOnSite(node) &&
+            isNodeRevealedOnCanvas(node, revealedNodeIds)
+              ? ''
+              : undefined
+          }
           data-aglyn-bound={boundProps.length ? '' : undefined}
           {...rest}
         >
@@ -364,7 +386,9 @@ export const NodeLeaf = observer(
             </Box>
           ) : null}
           {showSlotMarker ? (
-            <SlotMarker caption={node?.props?.['caption'] as string | undefined} />
+            <SlotMarker
+              caption={node?.props?.['caption'] as string | undefined}
+            />
           ) : null}
           {showEmptyDocumentSlot ? <EmptyDocumentSlot /> : null}
         </Leaf>
