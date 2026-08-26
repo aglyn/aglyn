@@ -180,7 +180,30 @@ function baseCspDirectives(isProduction) {
   // by anyone. `'self'` is the strict reading of an empty allowlist and is
   // never wrong: a page may always frame itself (AGL-2446).
   const ancestors = safe.length ? safe.join(' ') : "'self'"
-  return `object-src 'none'; base-uri 'self'; frame-ancestors ${ancestors}`
+  /**
+   * `worker-src` and `manifest-src` (AGL-1152). Both were unconstrained, and
+   * because this policy carries NO `default-src` there was nothing for them to
+   * fall back to — an injected script could start a worker from any origin it
+   * liked, and a worker is the most useful thing an injection can get: it keeps
+   * running after the page moves on, and it is out of sight of anything
+   * watching the document.
+   *
+   * Safe to ENFORCE rather than report first, which the rest of this file
+   * rightly defaults to, because both were checked against real usage instead
+   * of assumed: there is no `new Worker`, `new SharedWorker` or
+   * `serviceWorker.register` anywhere in apps/ or libs/, and the only manifest
+   * is `/manifest.webmanifest`, which the tenant middleware rewrites to its own
+   * `/api/manifest` — same origin either way.
+   *
+   * `blob:` is allowed for workers and not for the manifest: a bundler or a
+   * library may legitimately mint a worker from a blob, and blocking the
+   * REMOTE origin is what closes the exfiltration path. A manifest has no such
+   * pattern, so it gets the tighter `'self'`.
+   */
+  return (
+    `object-src 'none'; base-uri 'self'; frame-ancestors ${ancestors}; ` +
+    `worker-src 'self' blob:; manifest-src 'self'`
+  )
 }
 
 /**
