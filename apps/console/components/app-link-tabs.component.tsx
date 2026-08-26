@@ -145,19 +145,42 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
         }
       }
 
-      // Re-align whenever the strip resizes rather than after a fixed number
-      // of frames: MUI does its own one-shot scroll in this commit, and the
-      // plugin-contributed tabs and their icons keep changing the strip's
-      // width for several frames afterwards — each shift pushes a deep tab
-      // back out of view. Observing converges instead of guessing; `align`
-      // is a no-op once the tab is fully visible.
+      // Effects run after the DOM is written and before paint, so what
+      // `align` measures here is already the geometry about to be painted.
+      // This call, and the visibility listener below, are what make the bar
+      // work AT ALL in a tab that is not in front.
+      //
+      // `requestAnimationFrame` and `ResizeObserver` are both driven by the
+      // rendering pipeline, and a background tab does not run one. That is
+      // easy to read as "delayed" and is not: measured on the host bar, the
+      // effect ran seven times, every frame callback was cancelled by the
+      // next re-render before it could fire, and the scroller's width went
+      // from 1652 to 1599 with the observer delivering ZERO callbacks. A
+      // console opened with a middle-click or restored with the window
+      // therefore never aligned once, and switching to it did not help —
+      // nothing resizes at that point, so the observer has nothing to report
+      // and the bar stays parked wherever it mounted.
+      align()
+
+      // The frame callback still earns its place in front, where a paint can
+      // move things after the effect: MUI does its own one-shot scroll in
+      // this commit, and the plugin-contributed tabs and their icons keep
+      // changing widths for several frames afterwards.
       const frame = requestAnimationFrame(align)
       const observer = new ResizeObserver(align)
       observer.observe(strip)
       observer.observe(scroller)
+
+      // Coming to the front is a layout event in its own right: it is the
+      // first moment a tab that mounted hidden has a settled strip AND a
+      // rendering pipeline to measure it against.
+      const doc = root?.ownerDocument
+      doc?.addEventListener('visibilitychange', align)
+
       return () => {
         cancelAnimationFrame(frame)
         observer.disconnect()
+        doc?.removeEventListener('visibilitychange', align)
       }
     }, [tabValue, itemCount])
 
