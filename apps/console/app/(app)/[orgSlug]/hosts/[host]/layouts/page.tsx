@@ -581,7 +581,27 @@ function Layouts(props) {
             <ArtifactTable
               rowHeight={TABLE_ROW_HEIGHT}
               columns={columns}
-              noRowsLabel="No layouts"
+              noRowsLabel="No layouts yet"
+              /*
+                THE WAY OUT, not just the picture (AGL-1152). This list drew
+                the illustration and offered nothing to do about it, while the
+                screens list offered buttons and drew no illustration. Same
+                omission from two sides.
+              */
+              noRowsDescription="Layouts are the chrome your screens render inside — headers, footers, sidebars. Create one, or start from a template."
+              noRowsAction={
+                <Stack direction="row" spacing={1}>
+                  <Button variant="contained" onClick={handleFormOpen}>
+                    {'Create your first layout'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setTemplatesOpen(true)}
+                  >
+                    {'Browse templates'}
+                  </Button>
+                </Stack>
+              }
               rows={layouts}
               onOpen={(id) =>
                 router.push(

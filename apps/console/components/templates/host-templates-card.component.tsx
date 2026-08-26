@@ -48,7 +48,12 @@ import {
   useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
-import { Chip, Stack, Tooltip } from '@mui/material'
+import {
+  Button,
+  Chip,
+  Stack,
+  Tooltip,
+} from '@mui/material'
 import DocumentPresenceChips from '../document-presence-chips.component'
 import usePresenceSummary from '../../hooks/use-presence-summary'
 import {
@@ -138,8 +143,17 @@ export interface TemplateQuotaReadout {
 export function HostTemplatesCard({
   hostId,
   onQuota,
+  onCreate,
 }: {
   hostId: string
+  /**
+   * The empty state's way OUT (AGL-1152). The card owns the list, the PAGE
+   * owns the create drawer — so the button comes down rather than being
+   * rebuilt here against a second drawer that knows nothing about the quota
+   * check. Optional: without it the empty state is the illustration and the
+   * sentence, which is what this list showed before.
+   */
+  onCreate?: () => void
   /**
    * Publishes the template count and cap so the PAGE can render the readout in
    * its header. The card keeps ownership of the numbers because it owns the
@@ -791,7 +805,15 @@ export function HostTemplatesCard({
         // is one row keyed by its group, so this list keeps its own row id.
         getRowId={(row) => row.key}
         columns={columns}
-        noRowsLabel="No templates yet — use Create template above, save one from a screen, or install one from the marketplace"
+        noRowsLabel="No templates yet"
+        noRowsDescription="A template is a saved starting point for a screen or layout. Create one, save one from a screen you have already built, or install one from the marketplace."
+        noRowsAction={
+          onCreate ? (
+            <Button variant="contained" onClick={onCreate}>
+              {'Create your first template'}
+            </Button>
+          ) : null
+        }
         rows={rows}
         onOpen={(_id, row) =>
           router.push(

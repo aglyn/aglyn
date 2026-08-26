@@ -28,6 +28,10 @@ import {
   ICON_VARIANT_MODIFY_DRAG,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+// Subpath, not the barrel: `empty-state.component` is deliberately kept out
+// of `@aglyn/shared-ui-jsx`'s index (nothing in the tenant page graph shows an
+// empty state, and the barrel rule is enforced in CI).
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import {
   DndContext,
   DragOverlay,
@@ -647,20 +651,28 @@ export function ScreensHierarchyTableComponent(
             {!loading && !visibleRows.length && (
               <TableRow>
                 <TableCell colSpan={COLUMN_COUNT} align="center">
-                  <Stack
-                    spacing={1}
-                    sx={{ alignItems: 'center', py: 4 }}
-                  >
-                    <Typography variant="subtitle1">
-                      {'No screens yet — this site is a blank canvas.'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {'Create your first screen or start from a template ' +
-                        'using the buttons above, then open it with the ' +
-                        'besigner to design your page.'}
-                    </Typography>
-                    {emptyAction ?? null}
-                  </Stack>
+                  {/*
+                    THE SHARED EMPTY STATE, illustration and all (AGL-1152).
+                    This was a hand-rolled Stack: the only list in the console
+                    with a create flow and the only one WITHOUT the
+                    illustration, while layouts/components/templates had the
+                    illustration and no way out. Both halves were the same
+                    omission seen from opposite sides, and `EmptyStateComponent`
+                    has drawn label + description + action since AGL-693 — the
+                    grid simply never passed the last two, and this table never
+                    called it at all.
+
+                    Not `compact`: this cell has the vertical room, and
+                    matching the other three lists is the entire point.
+                  */}
+                  <EmptyStateComponent
+                    label={'No screens yet — this site is a blank canvas.'}
+                    description={
+                      'Create your first screen or start from a template, ' +
+                      'then open it with the besigner to design your page.'
+                    }
+                    action={emptyAction ?? null}
+                  />
                 </TableCell>
               </TableRow>
             )}
@@ -716,6 +728,20 @@ export function ScreensHierarchyTableComponent(
       */}
       <TablePagination
         component="div"
+        /*
+          MATCH THE GRID'S FOOTER CHROME (AGL-1152). The other three lists are
+          MUI DataGrids, whose `.MuiDataGrid-footerContainer` carries a top
+          divider and a 52px min-height; this is a bare `TablePagination`, so
+          it sat at the default toolbar height with no rule above it and read
+          as a different component in a screenshot beside them. The COUNT stays
+          different on purpose — see the note above — but the chrome should
+          not be.
+        */
+        sx={{
+          borderTop: 1,
+          borderColor: 'divider',
+          '& .MuiTablePagination-toolbar': { minHeight: 52 },
+        }}
         count={rootCount}
         page={page}
         onPageChange={(_event, next) => setPage(next)}

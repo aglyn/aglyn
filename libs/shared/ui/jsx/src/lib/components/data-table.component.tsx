@@ -29,7 +29,7 @@ import {
   GridOverlay,
   type GridOverlayProps,
 } from '@mui/x-data-grid'
-import { forwardRef } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { EmptyStateComponent } from './empty-state.component'
 import { HelpTip } from './help-tip.component'
 
@@ -41,11 +41,19 @@ import { HelpTip } from './help-tip.component'
  * other list had a picture and a sentence. `EmptyStateComponent` owns it now
  * and both render the same thing.
  */
-const noRowsOverlay = (label: string) =>
+const noRowsOverlay = (
+  label: string,
+  description?: ReactNode,
+  action?: ReactNode,
+) =>
   (function NoRowsOverlay(props: GridOverlayProps) {
     return (
       <GridOverlay {...props}>
-        <EmptyStateComponent label={label ?? 'No Items'} />
+        <EmptyStateComponent
+          label={label ?? 'No Items'}
+          description={description}
+          action={action}
+        />
       </GridOverlay>
     )
   })
@@ -71,6 +79,19 @@ export interface DataTableProps extends Partial<MuiDataGridProps> {
   RootBoxProps?: Partial<BoxProps>
   LoadingOverlayViewProps?: LoadingOverlayViewProps
   noRowsLabel?: string
+  /**
+   * The empty state's second line and its way OUT (AGL-1152).
+   *
+   * `EmptyStateComponent` has drawn a description and an action since AGL-693;
+   * this grid only ever handed it a label, so every list built on it — layouts,
+   * components, templates — showed an illustration and a dead end, while the
+   * screens list (which is not a grid) grew its own empty state WITH buttons
+   * and no illustration. Same product, same moment, two different answers, and
+   * neither one complete.
+   */
+  noRowsDescription?: ReactNode
+  /** The create button an empty list should offer. */
+  noRowsAction?: ReactNode
   children?: JSX.Children
 }
 
@@ -114,6 +135,8 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
       loading,
       RootBoxProps,
       noRowsLabel,
+      noRowsDescription,
+      noRowsAction,
       LoadingOverlayViewProps,
       children,
       sx,
@@ -190,7 +213,11 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
           columns={withColumnHelp(columns)}
           loading={loading}
           slots={{
-            noRowsOverlay: noRowsOverlay(noRowsLabel),
+            noRowsOverlay: noRowsOverlay(
+              noRowsLabel,
+              noRowsDescription,
+              noRowsAction,
+            ),
             loadingOverlay: AppLoaderOverlayView(LoadingOverlayViewProps),
             ...slots,
           }}

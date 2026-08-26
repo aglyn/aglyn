@@ -164,7 +164,13 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
       }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <HostTemplatesCard hostId={hostId} onQuota={setQuota} />
+        <HostTemplatesCard
+          hostId={hostId}
+          onQuota={setQuota}
+          // The header's own create action, so the empty state opens the
+          // page's drawer rather than a second one.
+          onCreate={() => setCreateOpen(true)}
+        />
       </Container>
     </DashboardLayout>
   )
