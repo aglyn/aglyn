@@ -323,17 +323,59 @@ describe('the selection outline is pink, as a carve-out (AGL-1221)', () => {
   })
 })
 
+/**
+ * Stand-in class names, so a rule KEY taken out of the source can be
+ * evaluated as a real CSS selector rather than matched as text. Which names
+ * these are does not matter — `generateComponentClassKeys` picks the real
+ * ones at runtime — only that each state gets a distinct one.
+ */
+const RULE_CLASSES: Record<string, string> = {
+  root: 'root',
+  hoveringSelf: 'hovering',
+  selectedSelf: 'selected',
+  draggingSelf: 'dragging',
+  draggingOver: 'drop-target',
+}
+
+/** One `styled` rule key, rewritten into a selector jsdom can match. */
+const asSelector = (template: string) =>
+  template
+    .slice(1, -1)
+    .replace(/\$\{classKeys\.(\w+)}/g, (_, key) => RULE_CLASSES[key])
+    .replace(/&/g, '')
+
+/** An element carrying exactly the states named. */
+const nodeIn = (...states: string[]) => {
+  const element = document.createElement('div')
+  element.className = states.map((state) => RULE_CLASSES[state]).join(' ')
+  return element
+}
+
 describe('the hover outline is the blue primary, as a carve-out (AGL-2486)', () => {
   const outline = () => read(HOVER_ACCENT_EXCEPTION.file)
 
-  /** The hover rule: its selector, and everything it declares. */
-  const hoverRule = () => {
+  /**
+   * The three rules this file is about, each as its selector template and the
+   * properties it declares. Hover is TWO rules on purpose — see the wash /
+   * border split below — so they are picked out by their keys rather than by
+   * position.
+   */
+  const rules = () => {
     const source = outline()
-    const start = source.indexOf('`&.${classKeys.hoveringSelf}')
-    const open = source.indexOf(']: {', start) + 3
+    const at = (key: string) => {
+      const start = source.indexOf(key)
+      if (start < 0) throw new Error('no rule keyed ' + key)
+      const open = source.indexOf(']: {', start) + 3
+      return {
+        selector: source.slice(start, source.indexOf(']: {', start)),
+        body: source.slice(open, source.indexOf('},', open)),
+        start,
+      }
+    }
     return {
-      selector: source.slice(start, open),
-      body: source.slice(open, source.indexOf('},', open)),
+      selected: at('`&.${classKeys.selectedSelf}`'),
+      wash: at('`&.${classKeys.hoveringSelf}`'),
+      hoverBorder: at('`&.${classKeys.hoveringSelf}:not('),
     }
   }
 
@@ -344,46 +386,80 @@ describe('the hover outline is the blue primary, as a carve-out (AGL-2486)', () 
     }
   })
 
-  it('spends it on the hover rule and nothing else', () => {
-    const { body } = hoverRule()
-    expect(body).toContain('outlineColor: hoverAccent,')
-    expect(body).toContain('hoverAccentChannel')
-    expect(body).not.toContain('selectionAccent')
-    // Every use is the declaration plus this rule; a third would mean the
+  it('spends it on the two hover rules and nothing else', () => {
+    const { wash, hoverBorder } = rules()
+    expect(hoverBorder.body).toContain('outlineColor: hoverAccent,')
+    expect(wash.body).toContain('hoverAccentChannel')
+    expect(wash.body).not.toContain('selectionAccent')
+    expect(hoverBorder.body).not.toContain('selectionAccent')
+    // Every use is the declaration plus its one rule; a third would mean the
     // blue had leaked onto a state it does not name.
     const source = outline()
     expect([...source.matchAll(/\bhoverAccent\b/g)]).toHaveLength(2)
     expect([...source.matchAll(/\bhoverAccentChannel\b/g)]).toHaveLength(2)
   })
 
+  it('splits the wash from the border, and scopes only the border', () => {
+    // The wash answers "where is the pointer" and the border answers "what
+    // is selected". One rule cannot carry both questions: scoping them
+    // together silences the pointer on the selected node.
+    const { wash, hoverBorder } = rules()
+    expect(wash.body).toContain('backgroundColor:')
+    expect(wash.body).not.toContain('outlineColor')
+    expect(hoverBorder.body).toContain('outlineColor:')
+    expect(hoverBorder.body).not.toContain('backgroundColor')
+  })
+
+  it('gives a selected node the blue wash and keeps its pink border', () => {
+    // The case that was silently wrong: hovering the selected element left
+    // it with no pointer feedback at all. Read as real selectors rather than
+    // as text, so the `:not()` is evaluated the way a browser evaluates it.
+    const { selected, wash, hoverBorder } = rules()
+    const selectedAndHovered = nodeIn('selectedSelf', 'hoveringSelf')
+    expect(selectedAndHovered.matches(asSelector(wash.selector))).toBe(true)
+    expect(selectedAndHovered.matches(asSelector(hoverBorder.selector))).toBe(
+      false,
+    )
+    expect(selectedAndHovered.matches(asSelector(selected.selector))).toBe(true)
+    // ...while an unselected node under the pointer still gets both.
+    const hoveredOnly = nodeIn('hoveringSelf')
+    expect(hoveredOnly.matches(asSelector(wash.selector))).toBe(true)
+    expect(hoveredOnly.matches(asSelector(hoverBorder.selector))).toBe(true)
+  })
+
+  it('needs the guard, because the hover border is declared second', () => {
+    // Equal specificity, so the later rule would win outright. That ordering
+    // is what the `:not()` exists to survive, and asserting it here means the
+    // guard cannot be dropped as redundant after someone reorders the block.
+    const { selected, hoverBorder } = rules()
+    expect(hoverBorder.start).toBeGreaterThan(selected.start)
+    expect(hoverBorder.selector).toContain(':not(.${classKeys.selectedSelf})')
+  })
+
+  it('leaves the selection rule nothing that could cancel the wash', () => {
+    // A fill on the selected rule would paint over the hover wash on exactly
+    // the node the split above exists to serve.
+    expect(rules().selected.body).not.toContain('backgroundColor')
+  })
+
   it('stays subordinate to selection by weight and style', () => {
-    // The root is 1px dashed and the hover rule overrides neither, so the
+    // The root is 1px dashed and neither hover rule overrides that, so the
     // blue can only ever be the lighter of the two treatments against the
     // selection's 2px solid.
-    const { body } = hoverRule()
-    expect(body).not.toContain('outlineWidth')
-    expect(body).not.toContain('outlineStyle')
+    const { wash, hoverBorder } = rules()
+    for (const { body } of [wash, hoverBorder]) {
+      expect(body).not.toContain('outlineWidth')
+      expect(body).not.toContain('outlineStyle')
+    }
     expect(outline()).toContain("outlineStyle: 'dashed',")
   })
 
-  it('stands down on the selected node rather than overpainting it', () => {
-    // The two rules have equal specificity and hover is declared second, so
-    // without this exclusion the blue would repaint the pink outline of
-    // whichever element the pointer is resting on — which is most of the
-    // time, since selecting an element means hovering it first.
-    const { selector } = hoverRule()
-    expect(selector).toContain(':not(.${classKeys.selectedSelf})')
-  })
-
-  it('corrects the wash and the border in one declaration', () => {
+  it('decides the wash and the border in one file', () => {
     // The overlay component measures geometry and renders this outline once
     // per line fragment; it declares no colour of its own. That is why the
-    // translucent wash over a hovered node and the border around it are the
-    // same two properties of the same rule, not two places to keep in sync.
+    // translucent wash over a hovered node and the border around it are two
+    // rules of one styled block, not two places to keep in sync.
     expect(paletteLines(read('node-overlay.tsx'))).toEqual([])
-    const { body } = hoverRule()
-    expect(body).toContain('outlineColor:')
-    expect(body).toContain('backgroundColor:')
   })
 
   it('keeps the wash the faintest fill on the canvas', () => {
@@ -394,7 +470,7 @@ describe('the hover outline is the blue primary, as a carve-out (AGL-2486)', () 
       (match) => Number(match[1]),
     )
     expect(Math.min(...alphas)).toBe(0.08)
-    expect(hoverRule().body).toContain('/ 0.08)')
+    expect(rules().wash.body).toContain('/ 0.08)')
   })
 })
 
@@ -405,81 +481,6 @@ describe('the hover outline is the blue primary, as a carve-out (AGL-2486)', () 
  */
 const BLUE = '#00B0FF' // palette.primary.main
 const PINK = '#E040FB' // palette.secondary.main
-
-describe('the hover outline is the blue primary, as a carve-out (AGL-2486)', () => {
-  const outline = () => read(HOVER_ACCENT_EXCEPTION.file)
-
-  /** The hover rule: its selector, and everything it declares. */
-  const hoverRule = () => {
-    const source = outline()
-    const start = source.indexOf('`&.${classKeys.hoveringSelf}')
-    const open = source.indexOf(']: {', start) + 3
-    return {
-      selector: source.slice(start, open),
-      body: source.slice(open, source.indexOf('},', open)),
-    }
-  }
-
-  it('declares the accent once per member, from `primary`', () => {
-    const lines = outline().split('\n')
-    for (const pattern of HOVER_ACCENT_EXCEPTION.declarations) {
-      expect(lines.filter((line) => pattern.test(line))).toHaveLength(1)
-    }
-  })
-
-  it('spends it on the hover rule and nothing else', () => {
-    const { body } = hoverRule()
-    expect(body).toContain('outlineColor: hoverAccent,')
-    expect(body).toContain('hoverAccentChannel')
-    expect(body).not.toContain('selectionAccent')
-    // Every use is the declaration plus this rule; a third would mean the
-    // blue had leaked onto a state it does not name.
-    const source = outline()
-    expect([...source.matchAll(/\bhoverAccent\b/g)]).toHaveLength(2)
-    expect([...source.matchAll(/\bhoverAccentChannel\b/g)]).toHaveLength(2)
-  })
-
-  it('stays subordinate to selection by weight and style', () => {
-    // The root is 1px dashed and the hover rule overrides neither, so the
-    // blue can only ever be the lighter of the two treatments against the
-    // selection's 2px solid.
-    const { body } = hoverRule()
-    expect(body).not.toContain('outlineWidth')
-    expect(body).not.toContain('outlineStyle')
-    expect(outline()).toContain("outlineStyle: 'dashed',")
-  })
-
-  it('stands down on the selected node rather than overpainting it', () => {
-    // The two rules have equal specificity and hover is declared second, so
-    // without this exclusion the blue would repaint the pink outline of
-    // whichever element the pointer is resting on — which is most of the
-    // time, since selecting an element means hovering it first.
-    const { selector } = hoverRule()
-    expect(selector).toContain(':not(.${classKeys.selectedSelf})')
-  })
-
-  it('corrects the wash and the border in one declaration', () => {
-    // The overlay component measures geometry and renders this outline once
-    // per line fragment; it declares no colour of its own. That is why the
-    // translucent wash over a hovered node and the border around it are the
-    // same two properties of the same rule, not two places to keep in sync.
-    expect(paletteLines(read('node-overlay.tsx'))).toEqual([])
-    const { body } = hoverRule()
-    expect(body).toContain('outlineColor:')
-    expect(body).toContain('backgroundColor:')
-  })
-
-  it('keeps the wash the faintest fill on the canvas', () => {
-    // Hover 0.08 < node-in-flight 0.12 < drop target 0.16. Hover is the
-    // state you are in most of the time, so it is the one that must not
-    // tint the design being edited.
-    const alphas = [...outline().matchAll(/rgba\(\$\{\w+} \/ (0\.\d+)\)/g)].map(
-      (match) => Number(match[1]),
-    )
-    expect(Math.min(...alphas)).toBe(0.08)
-    expect(hoverRule().body).toContain('/ 0.08)')
-  })
-})
 
 describe('the selection outline reads against the canvas, in both schemes', () => {
   // `viewport-frame.component.tsx` paints the artboard `background.paper`

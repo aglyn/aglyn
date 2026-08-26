@@ -292,8 +292,17 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
       }}
       {...rest}
     >
-      <NodeOverlay data-aglyn="overlay:selected" variant="selected" />
+      {/* Document order is the only thing separating these two. Each
+          overlay root is a fixed-position popper and therefore its own
+          stacking context, so a z-index declared inside one cannot lift it
+          past the other — the roots paint in the order they are rendered.
+          The overlay carrying the action strip goes LAST so its buttons stay
+          above the other overlay's outline, which draws the SELECTED
+          treatment whenever the pointer is resting on the selected node,
+          i.e. whenever someone is reaching for those buttons. The canvas
+          chrome rendered after them keeps painting above both. */}
       <NodeOverlay data-aglyn="overlay:hovered" variant="hovered" />
+      <NodeOverlay data-aglyn="overlay:selected" variant="selected" />
       <CanvasDropIndicator />
       <InlineTextEditorComponent />
       <InlineMarkdownEditorComponent />

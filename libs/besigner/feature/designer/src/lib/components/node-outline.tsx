@@ -80,24 +80,30 @@ const NodeOutlineRoot = styled('div', {
     // of an affordance rather than a live one. It carries `primary`, which
     // is the same one hue in both schemes.
     //
-    // Selection stays the stronger of the two by weight, by style and by
-    // exclusivity: 2px solid against 1px dashed, and hover stands down
-    // entirely on the selected node. The `:not()` is load-bearing — these
-    // two rules have equal specificity and hover is declared second, so
-    // without it the blue would repaint the pink outline of whichever
-    // element the pointer happens to rest on.
+    // Selection stays the stronger of the two by weight and by style: 2px
+    // solid against the 1px dashed the root sets. It claims the border and
+    // nothing else, so it never cancels the wash underneath it.
     [`&.${classKeys.selectedSelf}`]: {
       outlineWidth: 2,
       outlineStyle: 'solid',
       outlineColor: selectionAccent,
     },
-    // One declaration covers both hover affordances: this element IS the
-    // border and the translucent wash the canvas draws over a hovered node,
-    // so `outlineColor` and `backgroundColor` here are the only two places a
-    // hover colour is decided.
+    // The two hover affordances answer different questions, so they are
+    // scoped differently.
+    //
+    // The WASH tracks the POINTER, so it is unconditional: the pointer is
+    // over this node whether or not the node is also the selected one, and a
+    // selected node that loses its wash gives the pointer no feedback at all.
+    [`&.${classKeys.hoveringSelf}`]: {
+      backgroundColor: `rgba(${hoverAccentChannel} / 0.08)`,
+    },
+    // The OUTLINE is the one that defers, because selection already owns
+    // that border and says something stronger with it. The `:not()` is
+    // load-bearing — this rule and the selected rule have equal specificity
+    // and this one is declared second, so without it the blue would repaint
+    // the pink outline of whichever element the pointer happens to rest on.
     [`&.${classKeys.hoveringSelf}:not(.${classKeys.selectedSelf})`]: {
       outlineColor: hoverAccent,
-      backgroundColor: `rgba(${hoverAccentChannel} / 0.08)`,
     },
     [`&.${classKeys.draggingSelf}`]: {
       outlineColor: 'transparent',
