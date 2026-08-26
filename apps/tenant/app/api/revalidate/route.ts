@@ -111,7 +111,12 @@ export async function POST(request: Request): Promise<Response> {
     return unauthorized()
   }
 
-  let payload: { host?: unknown; hostId?: unknown; paths?: unknown }
+  let payload: {
+    host?: unknown
+    hostId?: unknown
+    paths?: unknown
+    aliases?: unknown
+  }
   try {
     payload = (await request.json()) as typeof payload
   } catch {
@@ -123,8 +128,27 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'missing or invalid host' }, { status: 400 })
   }
 
+  /**
+   * EXTRA alias-cache keys to expire, beyond the one `host` names.
+   *
+   * A detach or a subdomain rename changes what a name RESOLVES TO, and that
+   * is the one fact neither a path drop nor the `tenant-data:{hostId}` tag can
+   * express — both of them describe the doc behind an alias, not the alias.
+   * While the alias cache lived for 60s that gap closed itself; now that it is
+   * held for an hour (see `HOST_ALIAS_TTL_SECONDS`) it has to be closed here,
+   * or a disconnected domain keeps resolving to the host that just released it.
+   *
+   * Such a call has no paths to send by nature, so the "no paths" guard has to
+   * admit it — but only when it actually carries aliases, so a caller that
+   * simply forgot its paths still gets told.
+   */
+  const aliases = Array.isArray(payload.aliases)
+    ? payload.aliases
+        .map((alias) => String(alias ?? '').trim())
+        .filter((alias) => alias && !alias.includes('/'))
+    : []
   const paths = Array.isArray(payload.paths) ? payload.paths : []
-  if (!paths.length) {
+  if (!paths.length && !aliases.length) {
     return Response.json({ error: 'no paths' }, { status: 400 })
   }
 
@@ -136,12 +160,13 @@ export async function POST(request: Request): Promise<Response> {
   // busted BEFORE the paths so the regeneration each `revalidatePath`
   // triggers cannot race a still-warm doc cache. `hostId` is optional for
   // one deploy window's worth of backward compatibility: an old console
-  // build that omits it degrades to the 60s doc TTL, never to an error.
+  // build that omits it degrades to the doc TTL, never to an error.
   // The alias tag keyed by subdomain is busted too — it covers the
-  // alias→hostId resolution for `{host}.aglyn.app` requests (the custom
-  // domain's `cname--` alias entry only expires by TTL, which is fine: a
-  // publish never changes what a domain resolves TO, only the doc behind
-  // it, and that doc's tag covers every alias at once).
+  // alias→hostId resolution for `{host}.aglyn.app` requests. A publish never
+  // changes what a domain resolves TO, only the doc behind it, and that doc's
+  // tag covers every alias at once — so a publish still has no reason to name
+  // the custom domain's `cname--` entry. The events that DO change resolution
+  // (detach, rename) now send it in `aliases` rather than waiting out a TTL.
   // `'max'` = expire the tag immediately (Next 16 made the profile argument
   // required; `'max'` is the legacy single-argument behavior).
   const hostId = String(payload.hostId ?? '').trim()
@@ -152,6 +177,10 @@ export async function POST(request: Request): Promise<Response> {
   }
   revalidateTag(tenantHostAliasTag(host), 'max')
   revalidatedTags.push(tenantHostAliasTag(host))
+  for (const alias of aliases) {
+    revalidateTag(tenantHostAliasTag(alias), 'max')
+    revalidatedTags.push(tenantHostAliasTag(alias))
+  }
 
   // Say when the cap bites (AGL-1161). `slice` silently discarded the
   // overflow: a caller sending 80 paths got `count: 50` back and nothing to

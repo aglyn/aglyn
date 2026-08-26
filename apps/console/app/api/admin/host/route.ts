@@ -28,6 +28,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 
 /**
  * Staff host management (AGL-390): retarget a host's subdomain (validated,
@@ -157,6 +158,16 @@ async function handler(request: Request): Promise<Response> {
       after: { subdomain },
       at: FieldValue.serverTimestamp(),
     })
+    // Same as the owner-facing rename: the label this host answered to a
+    // moment ago must stop resolving now, not when the TTL happens to lapse.
+    if (before) {
+      await revalidateHostAliases({
+        subdomain,
+        hostId,
+        aliases: [String(before)],
+      })
+    }
+
     return Response.json({ ok: true, subdomain }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

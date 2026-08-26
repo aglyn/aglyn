@@ -236,6 +236,79 @@ export interface WholeHostRevalidateResult extends TenantRevalidateResult {
  * in which already-cached HTML still shows the old answer. It never throws;
  * callers report the result rather than failing the operation that triggered it.
  */
+/**
+ * Expire the alias→hostId cache for every name a host answered to.
+ *
+ * The alias cache is the tenant's single most amplified read — the middleware
+ * resolves it on EVERY request, including ones an ISR-cached page then serves
+ * without touching Firestore again. It used to be held 60s, which meant the
+ * entry expired between one uptime check and the next and was therefore paid
+ * for in full, forever, by traffic that never changed anything.
+ *
+ * It is held for an hour now, and this is the other half of that trade. Two of
+ * the three events that change what a name resolves to have to say so:
+ *
+ *  - DETACH, and a rename of the subdomain. Both leave a stale POSITIVE — the
+ *    old name still resolving to the host that just released it. That is the
+ *    security-relevant one, and at 60s it was already wrong for up to a minute;
+ *    busting here closes the window rather than widening it.
+ *  - ATTACH needs nothing: `get-host` stores only non-null results, so a name
+ *    that did not resolve before has no entry to go stale, and a newly
+ *    connected domain is live on the next request. It is sent anyway, because a
+ *    re-attach onto a DIFFERENT host is an attach that follows a detach, and
+ *    paying one request to not depend on that ordering is worth it.
+ *
+ * Best-effort by design, exactly like `postTenantRevalidate`: a failure here
+ * degrades to the TTL, which is the behavior this replaced.
+ */
+export async function revalidateHostAliases(options: {
+  /** Bare subdomain label (`demo`), which is what `normalizeHostAlias` yields. */
+  subdomain: string
+  /** Required, or no `tenant-data:{hostId}` tag is busted alongside. */
+  hostId: string
+  /** The custom domain being connected or released, when there is one. */
+  cname?: string
+  /**
+   * Any OTHER alias this host has stopped answering to — in practice the
+   * PREVIOUS subdomain after a rename. Pass bare labels, the form
+   * `normalizeHostAlias` yields; `cname--` sentinels are built from `cname`.
+   */
+  aliases?: string[]
+}): Promise<boolean> {
+  const { subdomain, hostId } = options
+  const secret = process.env['REVALIDATE_SECRET']
+  if (!secret || !subdomain) return false
+
+  // The subdomain form is expired by `host`; the `cname--` sentinel is a
+  // SEPARATE cache entry and has to be named explicitly — it is the one a
+  // detached domain would otherwise keep resolving through.
+  const aliases = Array.from(
+    new Set(
+      [cnameCacheHost(options.cname), ...(options.aliases ?? [])]
+        .map((alias) => (alias ?? '').trim().toLowerCase())
+        // The URL host is expired by `host`; re-sending it would be a no-op
+        // that still costs a tag write.
+        .filter((alias) => alias && alias !== subdomain.toLowerCase()),
+    ),
+  )
+
+  try {
+    const response = await fetch(
+      `https://${subdomain}.${TENANT_APEX}/api/revalidate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-revalidate-secret': secret },
+        body: JSON.stringify({ host: subdomain, hostId, paths: [], aliases }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      },
+    )
+    return response.ok
+  } catch (error) {
+    console.error('AGL-1152:alias-revalidate-failed', error)
+    return false
+  }
+}
+
 export async function revalidateEntireHost(
   firestore: Firestore,
   hostId: string,

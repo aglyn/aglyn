@@ -1,3 +1,4 @@
+import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 /**
  * @license
  * Copyright 2026 Aglyn LLC
@@ -161,6 +162,13 @@ async function handler(request: Request): Promise<Response> {
         at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
       .catch(() => undefined)
+
+    // The OLD label still resolves to this host until its alias entry is
+    // expired, and at an hour's TTL that is an hour of a name the owner has
+    // given up still serving their site.
+    if (previous) {
+      await revalidateHostAliases({ subdomain, hostId, aliases: [previous] })
+    }
 
     return Response.json({ ok: true, subdomain }, { status: 200 })
   } catch (error) {
