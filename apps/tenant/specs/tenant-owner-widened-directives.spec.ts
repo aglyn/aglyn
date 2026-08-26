@@ -21,6 +21,9 @@
  */
 
 const {
+  GOOGLE_CCTLD_ORIGINS,
+  MEASUREMENT_CONNECT_ORIGINS,
+  tenantConnectSrcDirective,
   tenantFontSrcDirective,
   tenantFormActionDirective,
   tenantMediaSrcDirective,
@@ -32,7 +35,7 @@ const {
 const SITE = ['demo.aglyn.app', 'example.com']
 
 /**
- * The three directives an owner can widen from the Security tab (AGL-1152).
+ * The directives an owner can widen from the Security tab (AGL-1152).
  *
  * They enforce rather than report, which is only defensible because each
  * fallback below was MEASURED against what our own code emits rather than
@@ -72,6 +75,57 @@ describe('owner-widened tenant CSP directives (AGL-1152)', () => {
       expect(value).toContain('https://demo.aglyn.app')
       expect(value).toContain('https://example.com')
     }
+    // `connect-src` takes the measurement flag between the list and the
+    // origins, so it is built here rather than in the loop above.
+    const connect = tenantConnectSrcDirective(true, [], false, SITE)
+    expect(connect).toContain('https://demo.aglyn.app')
+    expect(connect).toContain('https://example.com')
+  })
+
+  it('pins Stripe for connect, so a card submit still reaches the API', () => {
+    // `storefront-payment-element.tsx` mounts Stripe's `CheckoutProvider`,
+    // whose session and confirm calls go to `api.stripe.com` from the top
+    // document. Dropping the pin fails a purchase at its last step.
+    expect(tenantConnectSrcDirective(true, [], false, SITE)).toContain(
+      'https://api.stripe.com',
+    )
+  })
+
+  it('admits a connection the owner approved, and refuses one it was not given', () => {
+    // The widest of the owner lists in effect: a `srcdoc` iframe inherits
+    // `connect-src`, so the Custom HTML block's Embed mode fetches under it.
+    const value = tenantConnectSrcDirective(true, ['api.example.net'], false, SITE)
+    expect(value).toContain('https://api.example.net')
+    expect(tenantConnectSrcDirective(true, [], false, SITE)).not.toContain(
+      'api.example.net',
+    )
+  })
+
+  it('grants an analytics endpoint only to a site that runs measurement', () => {
+    // A site with no analytics has no reason to permit an ad network's
+    // endpoint; one that permits it anyway describes our convenience.
+    const without = tenantConnectSrcDirective(true, [], false, SITE)
+    const with_ = tenantConnectSrcDirective(true, [], true, SITE)
+    // Measured on production: a load of `https://aglyn.com/pricing` recorded
+    // `fetch https://www.google-analytics.com/g/collect?v=2&tid=G-…`.
+    expect(with_).toContain('https://www.google-analytics.com')
+    expect(without).not.toContain('google-analytics.com')
+    for (const origin of MEASUREMENT_CONNECT_ORIGINS) {
+      expect(with_).toContain(origin)
+    }
+  })
+
+  it('keeps the ~190 Google country domains OUT of connect-src', () => {
+    // They exist for one `<img>` remarketing beacon, so they buy nothing for a
+    // fetch and would put ~4.8 KB of header on every response of every
+    // measuring site. `www.google.com` is kept deliberately and is excluded
+    // from this check.
+    const value = tenantConnectSrcDirective(true, [], true, SITE)
+    for (const origin of GOOGLE_CCTLD_ORIGINS) {
+      if (origin === 'https://www.google.com') continue
+      expect(value).not.toContain(origin)
+    }
+    expect(value).toContain('https://www.google.com')
   })
 
   it('admits what the owner approved, and nothing it was not given', () => {
@@ -97,5 +151,13 @@ describe('owner-widened tenant CSP directives (AGL-1152)', () => {
       expect(build(true, [], SITE)).not.toContain('localhost')
       expect(build(false, [], SITE)).toContain('http://localhost:*')
     }
+    expect(tenantConnectSrcDirective(true, [], false, SITE)).not.toContain(
+      'localhost',
+    )
+    // `ws:` as well as `http:`, because a source expression matches by scheme
+    // group — `http://localhost:*` does not admit the dev server's HMR socket.
+    const dev = tenantConnectSrcDirective(false, [], false, SITE)
+    expect(dev).toContain('http://localhost:*')
+    expect(dev).toContain('ws://localhost:*')
   })
 })

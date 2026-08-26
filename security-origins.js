@@ -908,6 +908,139 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   ...GOOGLE_CCTLD_ORIGINS,
 ]
 
+/**
+ * The same vendors for `connect-src`, minus the country domains (AGL-1152).
+ *
+ * The measurement tags do not only fetch pixels — GA4's pageview hit is an
+ * ordinary `fetch`, and it was measured as one: a production load of
+ * `https://aglyn.com/pricing` recorded
+ * `fetch https://www.google-analytics.com/g/collect?v=2&tid=G-…` alongside the
+ * `www.googletagmanager.com/gtag/js` script. Enforcing `connect-src` without
+ * these would leave the tag loaded and every hit refused, which is the worst
+ * shape a measurement failure can have: the site looks fine, the reports go
+ * quiet, and nothing says why.
+ *
+ * Derived from the image list rather than retyped, so a vendor added for one
+ * directive cannot go missing from the other. The ~190 country domains are the
+ * one deliberate subtraction: they exist for a single `<img>` remarketing
+ * beacon on `www.google.<tld>/ads/ga-audiences`, so they buy nothing here and
+ * would put ~4.8 KB of header on every response for a request shape that never
+ * arrives. `https://www.google.com` is kept — it is the vendor's primary host
+ * and is the first entry of the country list only by accident of how that list
+ * is built, so dropping it would single one entry out of the curated set with
+ * no evidence behind the cut.
+ */
+const MEASUREMENT_CONNECT_ORIGINS = ['https://www.google.com'].concat(
+  MEASUREMENT_IMAGE_ORIGINS.filter(
+    (origin) => !GOOGLE_CCTLD_ORIGINS.includes(origin),
+  ),
+)
+
+/**
+ * An origin this deployment was CONFIGURED with, or undefined (AGL-1152).
+ *
+ * The same defensive shape `operatorDomains` uses above, and for the same
+ * reason: an unset or malformed value must contribute NOTHING. An empty string
+ * concatenated into a source list becomes a bare `https://`, which is a
+ * scheme-only source matching every https origin on the internet — the one
+ * outcome worse than a missing entry.
+ *
+ * Returns the ORIGIN rather than the hostname, because these feed directives
+ * where a port is meaningful (`http://localhost:4200` is a real console origin
+ * in development).
+ */
+function configuredOrigin(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return undefined
+  try {
+    const url = new URL(value.includes('://') ? value : `https://${value}`)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(
+      url.hostname,
+    )) {
+      return undefined
+    }
+    return url.origin
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Where a published site's own runtime fetches from (AGL-1152).
+ *
+ * ⚠️ EVERY ENTRY IS A MEASURED REQUEST, not a plausible one. This directive
+ * decides whether an injected script can post a visitor's session or a
+ * shopper's card details to an address of its choosing, and every origin named
+ * here is one it may post to instead.
+ *
+ * `NEXT_PUBLIC_PLUGIN_ORIGIN` is the only cross-origin fetch our own client
+ * code makes on an ordinary page, and it was read off production rather than
+ * out of the source: a load of `https://aglyn.com/` recorded
+ * `fetch https://plugins.aglyn.com/artifacts/{listingId}/{version}/{sha}.bundle`.
+ * That is `loadRealmPlugins` pulling an installed marketplace bundle
+ * (`libs/aglyn/src/lib/plugin-manager/realm-plugins.ts`). Without it every site
+ * with a realm plugin installed loses that plugin, and loses it silently — the
+ * loader catches and logs, so the page renders with the feature simply absent.
+ *
+ * `api.stripe.com` is the storefront Payment Element. `storefront-payment-
+ * element.tsx` mounts Stripe's `CheckoutProvider`, whose session and confirm
+ * calls go to that host from the top document — the payment iframes are a
+ * separate `frame-src` question. Without it a shopper's card submit fails at
+ * the last step of a purchase, which is the most expensive moment on the site
+ * to break.
+ *
+ * ⚠️ WHAT THIS ALSO REACHES, and it is easy to miss: a `srcdoc` iframe
+ * INHERITS this policy. Measured against a real browser — a sandboxed
+ * `srcdoc` child under `connect-src https://example.invalid` reported
+ * `connect-src <- http://127.0.0.1:4522/x.json` and its fetch was refused. The
+ * Custom HTML block's Embed mode is exactly that shape, so an author's pasted
+ * third-party widget fetches under THIS directive, not under a policy of its
+ * own. That is what the owner list is for, and why the card copy talks about
+ * embeds rather than about our runtime.
+ *
+ * What is NOT here, because it was measured absent: Firebase. The tenant runs
+ * no client Firestore, Auth or App Check — every read is server-side through
+ * the Admin SDK — so a published page never opens a `*.googleapis.com`
+ * connection, and naming one would authorise an egress that does not exist.
+ */
+const TENANT_CONNECT_ORIGINS = ['https://api.stripe.com']
+
+function tenantConnectSrcDirective(
+  isProduction,
+  approvedConnectHosts,
+  runsMeasurement,
+  siteOrigins,
+) {
+  // `ws:` alongside `http:` because a source expression matches by scheme
+  // group — `http://localhost:*` does not admit `ws://localhost:3000` — and
+  // the dev server's HMR socket is the one connection a developer cannot see
+  // fail without also losing every reload.
+  const development = isProduction
+    ? []
+    : [
+        'http://localhost:*',
+        'http://127.0.0.1:*',
+        'ws://localhost:*',
+        'ws://127.0.0.1:*',
+      ]
+  const pluginOrigin = configuredOrigin(process.env.NEXT_PUBLIC_PLUGIN_ORIGIN)
+  const sources = ["'self'"]
+    // The site's own addresses, for the same reason `img-src` carries them: a
+    // site with a custom domain attached has two origins and `'self'` is only
+    // the one this page was served from.
+    .concat(approvedImageHostSources(siteOrigins))
+    .concat(TENANT_CONNECT_ORIGINS)
+    .concat(pluginOrigin ? [pluginOrigin] : [])
+    // Gated exactly as `img-src` gates the same vendors: a site with no
+    // analytics has no reason to permit an ad network's endpoint, and one that
+    // permits it anyway is describing our convenience instead of the site.
+    .concat(runsMeasurement ? MEASUREMENT_CONNECT_ORIGINS : [])
+    .concat(approvedImageHostSources(approvedConnectHosts))
+    .concat(development)
+  return `connect-src ${sources.join(' ')}`
+}
+
 const APPROVED_IMAGE_HOSTS_MAX = 50
 
 /**
@@ -1145,5 +1278,8 @@ module.exports = {
   normalizeApprovedImageHost,
   APPROVED_IMAGE_HOSTS_MAX,
   MEASUREMENT_IMAGE_ORIGINS,
+  MEASUREMENT_CONNECT_ORIGINS,
   GOOGLE_CCTLD_ORIGINS,
+  TENANT_CONNECT_ORIGINS,
+  tenantConnectSrcDirective,
 }

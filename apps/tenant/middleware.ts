@@ -27,6 +27,7 @@ import {
   isSecureTransport,
   reportingDirectives,
   reportingEndpointsHeader,
+  tenantConnectSrcDirective,
   tenantFontSrcDirective,
   tenantFormActionDirective,
   tenantImgSrcDirective,
@@ -202,6 +203,7 @@ const lockdownVerdicts = new Map<
     approvedMediaHosts: string[]
     approvedFontHosts: string[]
     approvedFormActions: string[]
+    approvedConnectHosts: string[]
     runsMeasurement: boolean
     siteOrigins: string[]
   }
@@ -232,6 +234,7 @@ async function hostVerdict(
   approvedMediaHosts: string[]
   approvedFontHosts: string[]
   approvedFormActions: string[]
+  approvedConnectHosts: string[]
   runsMeasurement: boolean
   siteOrigins: string[]
 }> {
@@ -245,6 +248,7 @@ async function hostVerdict(
       approvedMediaHosts: cached.approvedMediaHosts,
       approvedFontHosts: cached.approvedFontHosts,
       approvedFormActions: cached.approvedFormActions,
+      approvedConnectHosts: cached.approvedConnectHosts,
       runsMeasurement: cached.runsMeasurement,
       siteOrigins: cached.siteOrigins,
     }
@@ -301,6 +305,11 @@ async function hostVerdict(
   let approvedMediaHosts: string[] = cached?.approvedMediaHosts ?? []
   let approvedFontHosts: string[] = cached?.approvedFontHosts ?? []
   let approvedFormActions: string[] = cached?.approvedFormActions ?? []
+  // Stale-retentive with the four beside it, and the one whose loss is
+  // quietest: a `srcdoc` iframe inherits `connect-src`, so an emptied list
+  // during a verdict outage would break an author's embedded widget rather
+  // than anything of ours.
+  let approvedConnectHosts: string[] = cached?.approvedConnectHosts ?? []
   // Stale-retentive for the same reason as the list beside it: losing this to
   // an outage would blank a site's analytics beacons rather than its images,
   // which is quieter and therefore worse.
@@ -323,6 +332,7 @@ async function hostVerdict(
         approvedMediaHosts?: unknown
         approvedFontHosts?: unknown
         approvedFormActions?: unknown
+        approvedConnectHosts?: unknown
         runsMeasurement?: boolean
         siteOrigins?: unknown
       } | null
@@ -345,6 +355,9 @@ async function hostVerdict(
       }
       if (Array.isArray(data?.approvedFormActions)) {
         approvedFormActions = strings(data.approvedFormActions)
+      }
+      if (Array.isArray(data?.approvedConnectHosts)) {
+        approvedConnectHosts = strings(data.approvedConnectHosts)
       }
       if (Array.isArray(data?.approvedImageHosts)) {
         approvedImageHosts = data.approvedImageHosts.filter(
@@ -372,6 +385,7 @@ async function hostVerdict(
     approvedMediaHosts,
     approvedFontHosts,
     approvedFormActions,
+    approvedConnectHosts,
     runsMeasurement,
     siteOrigins,
   })
@@ -383,6 +397,7 @@ async function hostVerdict(
     approvedMediaHosts,
     approvedFontHosts,
     approvedFormActions,
+    approvedConnectHosts,
     runsMeasurement,
     siteOrigins,
   }
@@ -744,6 +759,26 @@ export const middleware: NextMiddleware = async (req, event) => {
    * The reporting tail rides the ENFORCING policy on purpose: after the flip a
    * violation is an image that did NOT load, which is the most urgent thing the
    * log can carry.
+   *
+   * ## `connect-src` joins it (AGL-1152)
+   *
+   * The policy carries no `default-src`, so until now a published page could
+   * open a connection to any origin at all. That is the directive an injected
+   * script wants most: it is how what a visitor typed, or a shopper's card
+   * details, leave the page for an address of the attacker's choosing.
+   *
+   * ENFORCED rather than reported for the reason `img-src` is, and with the
+   * same three parts — our own measured fetches, the vendor set gated on
+   * whether the site runs measurement at all, and the owner's list for
+   * everything a customer's site may legitimately do that no reading of our
+   * repo would reveal. What each pinned origin buys, and the production
+   * request that named it, lives with `tenantConnectSrcDirective`.
+   *
+   * ⚠️ It reaches further than our runtime: a `srcdoc` iframe inherits the
+   * document's policy, which was measured rather than assumed, so the Custom
+   * HTML block's Embed mode fetches under this directive too. An owner
+   * embedding a third-party widget approves its host in the Security tab; that
+   * is the control, and it is why the flip does not revoke the capability.
    */
   // Computed here rather than beside `Reporting-Endpoints` below, because the
   // policy itself now carries the reporting tail and needs the answer first.
@@ -766,6 +801,11 @@ export const middleware: NextMiddleware = async (req, event) => {
     )}; ${tenantFormActionDirective(
       process.env.NODE_ENV === 'production',
       verdict.approvedFormActions,
+      verdict.siteOrigins,
+    )}; ${tenantConnectSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedConnectHosts,
+      verdict.runsMeasurement,
       verdict.siteOrigins,
     )}; ${reportingDirectives(secureTransport)}`,
   )

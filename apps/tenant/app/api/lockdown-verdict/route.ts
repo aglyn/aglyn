@@ -112,6 +112,7 @@ function lockedVerdict(
     approvedMediaHosts?: string[]
     approvedFontHosts?: string[]
     approvedFormActions?: string[]
+    approvedConnectHosts?: string[]
     runsMeasurement?: boolean
     siteOrigins?: string[]
   },
@@ -127,6 +128,7 @@ function lockedVerdict(
       approvedMediaHosts: facts.approvedMediaHosts ?? [],
       approvedFontHosts: facts.approvedFontHosts ?? [],
       approvedFormActions: facts.approvedFormActions ?? [],
+      approvedConnectHosts: facts.approvedConnectHosts ?? [],
       runsMeasurement: facts.runsMeasurement ?? false,
       siteOrigins: facts.siteOrigins ?? [],
       mode: lockdownMode(state),
@@ -187,6 +189,7 @@ export async function GET(request: Request): Promise<Response> {
             approvedMediaHosts: [],
             approvedFontHosts: [],
             approvedFormActions: [],
+            approvedConnectHosts: [],
           },
           { status: 200 },
         )
@@ -198,6 +201,7 @@ export async function GET(request: Request): Promise<Response> {
         approvedMediaHosts: [],
         approvedFontHosts: [],
         approvedFormActions: [],
+        approvedConnectHosts: [],
       })
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
@@ -252,6 +256,17 @@ export async function GET(request: Request): Promise<Response> {
     )
     const approvedFormActions = stringList(
       (hostRes.host as { approvedFormActions?: unknown }).approvedFormActions,
+    )
+    /**
+     * Where the site's own scripts — and an author's embedded widget — may
+     * open a connection (AGL-1152). Same disclosure posture as the four above.
+     *
+     * Widest in effect of the owner lists, because a `srcdoc` iframe inherits
+     * the document's `connect-src`: the Custom HTML block's Embed mode runs
+     * under this list rather than under a policy of its own.
+     */
+    const approvedConnectHosts = stringList(
+      (hostRes.host as { approvedConnectHosts?: unknown }).approvedConnectHosts,
     )
     /**
      * Does this site run measurement tags (AGL-1152)?
@@ -315,6 +330,7 @@ export async function GET(request: Request): Promise<Response> {
           approvedMediaHosts,
           approvedFontHosts,
           approvedFormActions,
+          approvedConnectHosts,
           runsMeasurement,
           siteOrigins,
         },
@@ -328,6 +344,7 @@ export async function GET(request: Request): Promise<Response> {
       approvedMediaHosts,
       approvedFontHosts,
       approvedFormActions,
+      approvedConnectHosts,
       runsMeasurement,
       siteOrigins,
     })
@@ -359,6 +376,10 @@ export async function GET(request: Request): Promise<Response> {
         approvedMediaHosts: null,
         approvedFontHosts: null,
         approvedFormActions: null,
+        // Stale-retentive with the rest, and the loudest of them if it were
+        // not: an empty list during a verdict outage would refuse the fetches
+        // an author's embedded widget makes, on every site that has one.
+        approvedConnectHosts: null,
       },
       { status: 200 },
     )
