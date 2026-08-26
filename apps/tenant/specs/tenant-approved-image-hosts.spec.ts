@@ -41,7 +41,9 @@ const {
   approvedImageHostSources,
   APPROVED_IMAGE_HOSTS_MAX,
   GOOGLE_CCTLD_ORIGINS,
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // Root-level CommonJS, outside the nx graph, because `next.config.js` must
+  // `require` it (AGL-523) — the console specs read it the same way.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @nx/enforce-module-boundaries
 } = require('../../../security-origins.js')
 
 describe('approved image hosts — the parse is the security boundary (AGL-1152)', () => {
@@ -275,6 +277,7 @@ import { ADVERTISING_VENDORS } from '@aglyn/aglyn/app-utils/advertising-tags'
 describe('advertising vendors are covered by the CSP (AGL-1152)', () => {
   const measurement: string[] = [
     ...(
+      // eslint-disable-next-line @nx/enforce-module-boundaries
       require('../../../security-origins.js') as {
         MEASUREMENT_IMAGE_ORIGINS: string[]
       }
