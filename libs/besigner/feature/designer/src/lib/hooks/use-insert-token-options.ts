@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { useContext, useMemo } from 'react'
+import { useContext, useEffect, useMemo } from 'react'
 
 import {
   BindingPickerContext,
@@ -86,8 +86,28 @@ export function useInsertTokenOptions(
       datasetFields: dataset
         ? entityOptions.datasetFields?.[dataset.id] ?? []
         : [],
+      // Carried out of the walk so the effect below can ask for the dataset
+      // list without repeating it.
+      repeatDatasetKey,
     }
   }, [node, entityOptions.datasets, entityOptions.datasetFields])
+
+  /**
+   * Ask for the dataset list, and only when this node is inside a repeat
+   * bound to one (AGL-703).
+   *
+   * This hook runs on every selection — the props form and the inline text
+   * editor both call it — so requesting unconditionally would put the
+   * provider back to reading datasets on every click. `repeatDatasetKey` is
+   * the precise condition: without it there is no dataset to name and the
+   * token menu offers none.
+   */
+  const requestEntities = entityOptions.request
+  useEffect(() => {
+    if (requestEntities && insertContext.repeatDatasetKey) {
+      requestEntities('datasets')
+    }
+  }, [requestEntities, insertContext.repeatDatasetKey])
 
   const options = useMemo(() => {
     const assembled: BindingOption[] = [...(bindingOptions ?? [])]

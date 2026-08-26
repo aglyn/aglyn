@@ -639,6 +639,50 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
   ]
 }
 
+/**
+ * Which entity lists a node's attributes will need (AGL-703).
+ *
+ * The provider that owns those lists reads them from Firestore, and it used
+ * to read all four the moment the besigner opened — up to 300 products, 200
+ * catalog collections, 200 categories and 200 datasets — for pickers most
+ * editing sessions never open. This is the demand signal that replaced that:
+ * a node whose schema declares the picker.
+ *
+ * `DATASET_FIELD_SELECT` asks for `datasets` and not for some list of its
+ * own, which is the one mapping worth stating: its options are the model
+ * fields of the dataset an ANCESTOR chose, so it cannot resolve one without
+ * the dataset list to resolve it against.
+ *
+ * Exported for the test that pins the mapping — a picker silently missing
+ * from this switch renders as a permanently empty dropdown, which looks
+ * exactly like a site with no products.
+ */
+export function entityKindsForAttributes(
+  attributes: readonly Aglyn.AglynAttributeSchema[] | undefined,
+): Aglyn.EntityPickerKind[] {
+  const kinds = new Set<Aglyn.EntityPickerKind>()
+  for (const field of attributes ?? []) {
+    switch (field.component) {
+      case Aglyn.FieldComponentType.PRODUCT_SELECT:
+        kinds.add('products')
+        break
+      case Aglyn.FieldComponentType.COLLECTION_SELECT:
+        kinds.add('collections')
+        break
+      case Aglyn.FieldComponentType.CATEGORY_SELECT:
+        kinds.add('categories')
+        break
+      case Aglyn.FieldComponentType.DATASET_SELECT:
+      case Aglyn.FieldComponentType.DATASET_FIELD_SELECT:
+        kinds.add('datasets')
+        break
+      default:
+        break
+    }
+  }
+  return [...kinds]
+}
+
 const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
   (props, ref) => {
     const { node, ...rest } = props
@@ -652,6 +696,29 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // pickers (AGL-343/344) resolve the same way from EntityPickerContext.
     const { screens, labels } = useContext(Aglyn.ScreenLinkContext)
     const entityOptions = useContext(Aglyn.EntityPickerContext)
+    /**
+     * Ask for the entity lists this node's pickers will actually show
+     * (AGL-703).
+     *
+     * The provider used to read all four collections when the besigner
+     * opened — up to 900 documents on a site with a catalog — for pickers
+     * most editing sessions never open. Moving a heading does not need the
+     * product list.
+     *
+     * The demand signal is the node's own schema, which is already scanned
+     * twice below for exactly this kind of question (`wantsNodes`,
+     * `hasDatasetFieldSelect`). `DATASET_FIELD_SELECT` asks for `datasets`
+     * too: its options come from the chosen dataset's model, so it cannot
+     * resolve one without the list.
+     */
+    const requestEntities = entityOptions.request
+    useEffect(() => {
+      if (!requestEntities) return
+      for (const kind of entityKindsForAttributes(rawAttributes)) {
+        requestEntities(kind)
+      }
+    }, [rawAttributes, requestEntities])
+
     // Canvas-node options for NODE_SELECT attributes (AGL-557): every
     // other element on the canvas, labeled by component name + a text
     // snippet, with a short id suffix to tell repeats apart. The edited
