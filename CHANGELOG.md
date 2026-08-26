@@ -9,6 +9,39 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.24 — 2026-08-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/29892ba1d...v1.0.0-beta.24)
+
+### Added
+
+- **tenant:** img-src is enforced on published sites (AGL-1152, closes AGL-1726) ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1726](https://linear.app/aglyn/issue/AGL-1726), [AGL-2195](https://linear.app/aglyn/issue/AGL-2195), [AGL-523](https://linear.app/aglyn/issue/AGL-523))
+- **tenant:** measurement beacons survive img-src enforcement ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1726](https://linear.app/aglyn/issue/AGL-1726), [AGL-1671](https://linear.app/aglyn/issue/AGL-1671))
+- **tools:** seed each site's approved image hosts from what it already loads ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1726](https://linear.app/aglyn/issue/AGL-1726), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725), [AGL-518](https://linear.app/aglyn/issue/AGL-518))
+- **besigner:** the editor warns before an unapproved image host is published ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-247](https://linear.app/aglyn/issue/AGL-247))
+- **console:** a site owner can say which external hosts its images come from ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1726](https://linear.app/aglyn/issue/AGL-1726))
+- **tenant:** the img-src allowlist becomes the site owner's, per site ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1726](https://linear.app/aglyn/issue/AGL-1726), [AGL-1228](https://linear.app/aglyn/issue/AGL-1228))
+
+### Fixed
+
+- **tenant,console,docs:** isolate the origin with COOP ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1228](https://linear.app/aglyn/issue/AGL-1228), [AGL-523](https://linear.app/aglyn/issue/AGL-523))
+- **console:** a publish never dropped a custom domain's cached pages ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** the screens empty state matches the other three ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** one empty state across the four artifact lists ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the org Data page rendered a completely blank body ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-2080](https://linear.app/aglyn/issue/AGL-2080), [AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+- **tools,aglyn:** two guards my own change tripped ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-2195](https://linear.app/aglyn/issue/AGL-2195), [AGL-1014](https://linear.app/aglyn/issue/AGL-1014))
+- **tenant:** the measurement gate missed the field ad pixels actually use ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** the staff org list shows the plan an org reads as ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **docs:** docs.aglyn.com ships with no CSP and no nosniff at all ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-523](https://linear.app/aglyn/issue/AGL-523), [AGL-1788](https://linear.app/aglyn/issue/AGL-1788), [AGL-1799](https://linear.app/aglyn/issue/AGL-1799), [AGL-1228](https://linear.app/aglyn/issue/AGL-1228))
+- **console:** a stale tab stops being stuck on an expired-token error ([AGL-1200](https://linear.app/aglyn/issue/AGL-1200), [AGL-1066](https://linear.app/aglyn/issue/AGL-1066), [AGL-1471](https://linear.app/aglyn/issue/AGL-1471))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **aglyn:** prune the self-host allowlist row org-lockdown no longer needs ([AGL-2195](https://linear.app/aglyn/issue/AGL-2195))
+
+</details>
+
 ## v1.0.0-beta.23 — 2026-08-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.22...v1.0.0-beta.23)
