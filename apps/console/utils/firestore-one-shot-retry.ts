@@ -56,6 +56,36 @@ export async function firestoreOneShotRetry<T>(
     } catch (error) {
       const code = (error as { code?: string })?.code
       if (code !== 'permission-denied') throw error
+
+      /**
+       * CIRCUIT BREAKER (AGL-1440, again). Every caller retried six times
+       * regardless of what the last caller had already learned, so a dead
+       * session did not cost one wasted read per attempted read — it cost
+       * SIX, against a server that had already refused every collection asked
+       * of it. Measured 2026-08-26: 49,842 denied aggregation queries in a
+       * day, 42,148 of them inside a single hour (~700/min).
+       *
+       * `staleSession` is the evidence this module is already gathering and
+       * already trusts enough to tell the user to sign in again — two distinct
+       * collections denied inside a minute. Once that verdict stands, a retry
+       * cannot come back any differently: the credential is what is refused,
+       * not the read. So spend one attempt and report, rather than six.
+       *
+       * This cannot fire on the post-sign-in race it exists for. That race
+       * resolves in well under two seconds, where reaching `reportDeniedRead`
+       * at all takes MAX_RETRIES × RETRY_DELAY_MS — so a racing read has
+       * succeeded and cleared the evidence long before a second collection
+       * could be recorded against it.
+       *
+       * Re-arms itself: `reportSuccessfulRead` clears the evidence the moment
+       * one read gets through, so recovery restores the full backoff without
+       * anything having to reset it.
+       */
+      if (getSessionHealth().staleSession) {
+        reportDeniedRead(collection)
+        throw error
+      }
+
       if (attempt >= MAX_RETRIES) {
         /**
          * Surviving every retry means this is NOT the post-sign-in race
