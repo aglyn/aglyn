@@ -353,12 +353,14 @@ export const InlineTextEditorComponent = observer(
       /**
        * Collected first, WRITTEN LAST (AGL-2486).
        *
-       * it was being undone a moment later. Ending the edit restores the
-       * element's original child nodes — deliberately, by reference, so
-       * React's fibers keep pointing at live nodes — and that restore used
-       * to run in the effect cleanup, i.e. AFTER `updateNodeProps` had
-       * already told React to re-render the leaf. React painted the new
-       * text, then the parked ORIGINAL nodes went back over the top of it.
+       * The markup this computes is correct; the hazard is that it can be
+       * undone a moment later. Ending the edit restores the element's
+       * original child nodes — deliberately, by reference, so React's fibers
+       * keep pointing at live nodes — and that restore must not run in the
+       * effect cleanup, i.e. AFTER `updateNodeProps` has already told React
+       * to re-render the leaf. In that order React paints the new text and
+       * the parked ORIGINAL nodes then go back over the top of it, so an
+       * edit reads as never having taken.
        *
        * Worst for formatted text, which is how it was found: a node with
        * `html` renders through `dangerouslySetInnerHTML`, so React does not

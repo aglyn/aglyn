@@ -54,11 +54,11 @@ export function selectionOf(element: Node): Selection | null {
 /**
  * Turns the canvas leaf ITSELF into the editing surface (AGL-2486).
  *
- * fallback existed: an overlay is a rectangle, the thing it stands in for is
- * a flow of line boxes, and those two geometries can always disagree. Every
- * bug in this area — the surface wrapping before the element did, the
- * reserved space not growing, an inline run overflowing onto its sibling —
- * is one instance of that disagreement.
+ * A boxed editing overlay is a rectangle; the thing it stands in for is a
+ * flow of line boxes, and those two geometries always end up disagreeing.
+ * Every bug in this area — the surface wrapping before the element does, the
+ * reserved space not growing, an inline run overflowing onto its sibling — is
+ * one instance of that disagreement.
  *
  * Editing the element directly does not solve the geometry problem; it
  * deletes it. There is no second rectangle to keep in sync, so the text

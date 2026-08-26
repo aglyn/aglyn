@@ -145,16 +145,14 @@ const NodeOverlay = observer(
      * The selection chrome stands down while this node is being edited in
      * place (AGL-2486).
      *
-     * outline doesn't wrap the text on the new line unless you are
-     * editing it"*. Both are this overlay. It paints a translucent FILL
-     * behind the node as well as an outline (`node-outline.tsx`), and while
-     * the author is typing that tint is the one thing standing between the
-     * in-place surface and its whole promise — that the text looks exactly
-     * as it renders. It is also redundant: the caret and the toolbar
-     * already say which element is being edited.
+     * This overlay paints a translucent FILL behind the node as well as an
+     * outline (`node-outline.tsx`). While the author is typing, that tint is
+     * the one thing standing between the in-place surface and its whole
+     * promise — that the text looks exactly as it renders, on the background
+     * it renders on. It is redundant during an edit anyway: the caret and the
+     * toolbar already say which element is being edited.
      *
-     * Suppressing it here also took the wrong geometry out of the edited
-     * node's way while the geometry was still wrong. It no longer is: the
+     * The geometry is no longer a second reason to suppress it: the
      * chrome below is drawn from `getClientRects()`, one outline per line
      * fragment, so a SELECTED wrapped inline run is outlined correctly too.
      * Standing the fill down during an edit remains right for its own
@@ -173,10 +171,11 @@ const NodeOverlay = observer(
       /**
        * The element's REAL shape, not its bounding box (AGL-2486).
        *
-       * fragments and one rectangle cannot describe it — see
-       * `getElementFragmentRects` for why the union is not merely imprecise
-       * but a different shape. A block yields one fragment that IS the
-       * bounding rect, so nothing about block geometry changes.
+       * A wrapped inline run is a set of line fragments, and one rectangle
+       * cannot describe it — see `getElementFragmentRects` for why the union
+       * is not merely imprecise but a different shape, and why an outline
+       * drawn from it misses the text on the new line. A block yields one
+       * fragment that IS the bounding rect, so block geometry is unaffected.
        */
       let committed = ''
       const update = () => {

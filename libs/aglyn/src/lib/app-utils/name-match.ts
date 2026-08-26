@@ -28,11 +28,10 @@
  *
  * ## The defect this closes
  *
- * and separately the matcher itself was wrong for humans. Search was a
- * Firestore PREFIX range over `nameLower`, anchored at the start of the whole
- * string — so it finds "Main Layout" when you type `main` and never when you
- * type `layout`. The old footer said so, which was honest, but
- * "honest about being unusable" is not the goal.
+ * A Firestore PREFIX range over `nameLower` is anchored at the start of the
+ * whole string, so it finds "Main Layout" when you type `main` and never when
+ * you type `layout`. A footer that admits as much is honest and still
+ * unusable.
  *
  * ## Why the matching moved to the client, which is not a cop-out
  *

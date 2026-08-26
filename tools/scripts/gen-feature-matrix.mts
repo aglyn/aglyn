@@ -18,11 +18,11 @@
 /**
  * THE FEATURE MATRIX, GENERATED (AGL-1152).
  *
- * PRICES — list prices, transaction ladders, metered unit rates — and a
- * feature matrix is a different object that nothing owned. The visible cost:
- * `mediaCdn` was gated to paid tiers, the row was published on `/pricing` and
- * in Figma, and no document anywhere in Pricing & Packaging said so. There was
- * nothing to reconcile the live table against.
+ * The pricing docs track PRICES — list prices, transaction ladders, metered
+ * unit rates. A feature matrix is a different object, and without this nothing
+ * owns it: `mediaCdn` could be gated to paid tiers, with the row published on
+ * `/pricing` and in Figma, and no document anywhere in Pricing & Packaging
+ * saying so. There was nothing to reconcile the live table against.
  *
  * Generated rather than written, because a hand-kept matrix of 8 plans x 34
  * features drifts on the first change nobody remembers to mirror — which is

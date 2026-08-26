@@ -20,9 +20,10 @@
  *
  * Two reasons this is not inline in the component.
  *
- * puzzle. A swatch that is painted with the *same* declaration as the region
- * it names needs no decoding — so the diagram and the legend both read their
- * fills from here, and the two cannot drift.
+ * **The legend has to be readable.** Four abstract swatches beside a textured
+ * diagram is a puzzle. A swatch painted with the *same* declaration as the
+ * region it names needs no decoding — so the diagram and the legend both read
+ * their fills from here, and the two cannot drift.
  *
  * **Dark mode has to come from the theme.** Every value below is a palette
  * TOKEN or a channel form of one, never a literal, so the console's

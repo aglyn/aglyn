@@ -466,9 +466,11 @@ export function useBesignerDocument<TData = unknown>(
     // Somebody else's write. Whether it is a CONFLICT is a different
     // question from whether the document moved (AGL-2486).
     //
-    // their changes reached this canvas node by node before they pressed
-    // Save, so this session usually already holds what they stored and its
-    // own write is a superset of it. `incorporatesStoredNodes` is the
+    // Everyone collaborating should be able to save as they go, and the
+    // mirror is what makes that safe: their changes reached this canvas node
+    // by node before they pressed Save, so this session usually already holds
+    // what they stored and its own write is a superset of it.
+    // `incorporatesStoredNodes` is the
     // evidence for that — never an assumption that co-editing is healthy —
     // and a session that has fallen behind cannot satisfy it, which is the
     // case the guard exists for and still refuses.

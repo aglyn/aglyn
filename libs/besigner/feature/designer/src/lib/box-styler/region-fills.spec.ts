@@ -22,10 +22,11 @@ import { regionFills, type RegionFills } from './region-fills'
 /**
  * The box diagram's dark mode (AGL-2486).
  *
- * `colorSchemeSelector: 'class'` — measured in the running app, `:root,
- * .light` and `.dark` each redefine `--mui-palette-*` — so a fill built
- * only from palette VARIABLES re-resolves when the class flips, with no
- * mode branch of its own.
+ * The console runs MUI with CSS variables and `colorSchemeSelector: 'class'` —
+ * measured in the running app, `:root, .light` and `.dark` each redefine
+ * `--mui-palette-*` — so a fill built only from palette VARIABLES re-resolves
+ * when the class flips, with no mode branch of its own. A fill built any other
+ * way stays at its light-scheme value and paints too bright on dark.
  *
  * That is the whole contract, and it holds only while every value is a
  * variable reference. One `#fff` and that region stops flipping, silently,

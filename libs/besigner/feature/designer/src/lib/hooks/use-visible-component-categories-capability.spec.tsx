@@ -32,15 +32,15 @@ jest.mock('./use-aglyn-besigner-flag', () => ({
  * The Members blocks follow the per-site USER ACCOUNTS capability, not the
  * bundle that happens to ship them (AGL-2486).
  *
- * Password recovery, Member sign-in and Member sign-up on a site whose
- * `/signin`, `/signup` and `/recover` now 404.
+ * With memberships off, a site's `/signin`, `/signup` and `/recover` all 404 —
+ * while the Elements panel keeps offering Password recovery, Member sign-in
+ * and Member sign-up.
  *
- * The two halves contradicted each other because they are gated by different
- * things. The routes read the new `accounts` capability; the drawer reads
- * `item.pluginId`, and these three blocks are registered by the COMMERCE
- * bundle, so a site with commerce on kept being offered sign-in blocks it
- * could not serve. An author could drop one on a page, publish, and learn
- * from a visitor.
+ * The two halves disagree because they are gated by different things. The
+ * routes read the `accounts` capability; the drawer reads `item.pluginId`, and
+ * these three blocks are registered by the COMMERCE bundle, so a site with
+ * commerce on is offered sign-in blocks it cannot serve. An author drops one
+ * on a page, publishes, and learns from a visitor.
  *
  * Attribution by CATEGORY rather than by re-registering the components under
  * another bundle: re-registering would move where they load from and change

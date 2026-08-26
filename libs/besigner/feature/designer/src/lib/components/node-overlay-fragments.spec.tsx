@@ -41,8 +41,8 @@ jest.mock('../hooks/use-add-element-drawer-callback', () => ({
 /**
  * AGL-2486 — the selection and hover chrome is drawn per LINE FRAGMENT.
  *
- * `getBoundingClientRect()`, which cannot describe an inline run that has
- * wrapped.
+ * A single `getBoundingClientRect()` cannot describe an inline run that has
+ * wrapped, so an outline drawn from one skips the text on the new line.
  *
  * jsdom does no layout, so the elements below state their own boxes. That is
  * the honest level for this file: what is under test is whether the overlay

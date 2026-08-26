@@ -55,10 +55,10 @@ jest.mock('@aglyn/aglyn', () => {
  * What the crash net may and may not do once a document is shared
  * (AGL-2486).
  *
- * is a whole-map replace which the co-edit mirror publishes verbatim, so on
- * the running editor a peer's freshly created node was deleted on the peer's
- * own screen, and a stale restore reverted a colleague's SAVED work in a way
- * that survived the reload the conflict banner asks for.
+ * Restoring is a whole-map replace, and the co-edit mirror publishes it
+ * verbatim. In a shared room that deletes a peer's freshly created node on
+ * the peer's own screen, and a stale restore reverts a colleague's SAVED work
+ * in a way that survives the reload the conflict banner asks for.
  *
  * The shared unsaved state is the mirror; this draft is the private one. So
  * the offer stands only while restoring is a private act.

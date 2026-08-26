@@ -22,9 +22,10 @@ import isEqual from 'lodash-es/isEqual'
 /**
  * Interaction-state style slices for the Styles panel (AGL-2486 item 39).
  *
- * the document — the JSS tab's own caption advertises nested selectors — but
- * the only way to reach it was to type raw sx, which most of the audience
- * cannot do.
+ * Hover, focus and active states are reachable in the document already — the
+ * JSS tab's own caption advertises nested selectors — but only by typing raw
+ * sx, which most of this panel's audience cannot do. These slices are the
+ * picker for the same capability.
  *
  * ## What is stored is the REAL selector
  *
