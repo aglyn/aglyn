@@ -41,9 +41,37 @@ import {
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
-export interface ApprovedImageHostsCardProps {
+/**
+ * Which `host` array this card edits. One directive per field, and the tenant
+ * reads the same names off the verdict — a new one is added in BOTH places or
+ * it is a control that stores a value nothing enforces.
+ */
+export type ApprovedHostsField =
+  | 'approvedImageHosts'
+  | 'approvedMediaHosts'
+  | 'approvedFontHosts'
+  | 'approvedFormActions'
+
+export interface ApprovedHostsCardProps {
   hostId: string
+  /** Defaults to images, which is what this card was before it was shared. */
+  field?: ApprovedHostsField
+  header?: string
+  /** Sentence under the header: what this list governs, in the owner's terms. */
+  description?: string
+  /** Shown instead of the chip row when the list is empty. */
+  emptyHint?: string
+  /** Placeholder for the entry field; the validator is the same either way. */
+  placeholder?: string
+  /**
+   * The privacy consequence of approving a host. Every one of these leaks the
+   * visitor's IP to whoever is listed, because the BROWSER fetches directly —
+   * the wording differs only in what is being fetched.
+   */
+  privacyNote?: string
 }
+
+export type ApprovedImageHostsCardProps = ApprovedHostsCardProps
 
 /**
  * Which external hosts this site's images may come from (AGL-1152).
@@ -66,21 +94,29 @@ export interface ApprovedImageHostsCardProps {
  * copy of the hostname rules here is how the promise and the policy drift, and
  * the visible symptom would be an entry that looks accepted and never works.
  */
-export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
-  const { hostId } = props
+export function ApprovedImageHostsCard(props: ApprovedHostsCardProps) {
+  const {
+    hostId,
+    field = 'approvedImageHosts',
+    header = 'Approved image hosts',
+    description = 'Images your pages load from somewhere other than this site. Your own uploads always work — this is only for images you point at by URL.',
+    emptyHint = 'No external hosts approved. Pages can still show every image you upload here.',
+    placeholder = 'cdn.example.com',
+    privacyNote = 'Every host here can see the IP address of anyone who visits your site, because their browser fetches the image directly.',
+  } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
 
   const { data: host } = useFirestoreDoc<{
-    approvedImageHosts?: string[]
+    [key: string]: unknown
   }>(() => doc(firestore, 'hosts', hostId), [firestore, hostId], {
     idField: '$id',
   })
 
   const approved = useMemo(
-    () => (Array.isArray(host?.approvedImageHosts) ? host.approvedImageHosts : []),
+    () => (Array.isArray(host?.[field]) ? (host[field] as string[]) : []),
     [host],
   )
 
@@ -99,7 +135,11 @@ export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
         ? 'Enter the host only, without https:// — for example cdn.example.com'
         : 'Not a valid host. Use a domain like cdn.example.com, or *.example.com to allow its subdomains.'
     }
-    if (approved.some((entry) => entry.trim().toLowerCase() === value.toLowerCase())) {
+    if (
+      approved.some(
+        (entry) => entry.trim().toLowerCase() === value.toLowerCase(),
+      )
+    ) {
       return 'Already approved.'
     }
     if (approved.length >= APPROVED_IMAGE_HOSTS_MAX) {
@@ -114,10 +154,13 @@ export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
     setBusy(true)
     try {
       await updateDoc(doc(firestore, 'hosts', hostId), {
-        approvedImageHosts: arrayUnion(value),
+        [field]: arrayUnion(value),
       })
       setDraft('')
-      enqueueSnackbar(`${value} approved`, { variant: 'success', persist: false })
+      enqueueSnackbar(`${value} approved`, {
+        variant: 'success',
+        persist: false,
+      })
     } finally {
       setBusy(false)
     }
@@ -128,9 +171,12 @@ export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
       setBusy(true)
       try {
         await updateDoc(doc(firestore, 'hosts', hostId), {
-          approvedImageHosts: arrayRemove(value),
+          [field]: arrayRemove(value),
         })
-        enqueueSnackbar(`${value} removed`, { variant: 'success', persist: false })
+        enqueueSnackbar(`${value} removed`, {
+          variant: 'success',
+          persist: false,
+        })
       } finally {
         setBusy(false)
       }
@@ -140,30 +186,27 @@ export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
 
   return (
     <CardDisplay
-      header="Approved image hosts"
+      header={header}
       help={docsHelp('media', {
-        title: 'Approved image hosts',
+        title: header,
         excerpt:
           'Images loaded from another site are blocked unless you approve the host here. Your own uploads always work.',
         // The renamed tooltip has to open the SECTION, not the top of a page
         // about the media library generally (AGL-1918).
+        // Every one of these cards points at the same docs section: there is
+        // one page about approving hosts, and inventing per-directive anchors
+        // that do not exist would open the docs at the top instead (AGL-1918).
         anchor: '#approved-image-hosts',
       })}
       contentGutterX
       contentGutterY
     >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {
-          'Images your pages load from somewhere other than this site. Your own uploads always work — this is only for images you point at by URL.'
-        }
+        {description}
       </Typography>
       <Stack spacing={2}>
         {approved.length === 0 ? (
-          <Alert severity="info">
-            {
-              'No external hosts approved. Pages can still show every image you upload here.'
-            }
-          </Alert>
+          <Alert severity="info">{emptyHint}</Alert>
         ) : (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             {approved.map((entry) => (
@@ -181,7 +224,7 @@ export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
             size="small"
             fullWidth
             label="Add a host"
-            placeholder="cdn.example.com"
+            placeholder={placeholder}
             value={draft}
             error={Boolean(draftError)}
             helperText={
@@ -207,9 +250,7 @@ export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
           </Button>
         </Stack>
         <Typography variant="caption" color="text.secondary">
-          {
-            'Every host here can see the IP address of anyone who visits your site, because their browser fetches the image directly.'
-          }
+          {privacyNote}
         </Typography>
       </Stack>
     </CardDisplay>

@@ -27,7 +27,10 @@ import {
   isSecureTransport,
   reportingDirectives,
   reportingEndpointsHeader,
+  tenantFontSrcDirective,
+  tenantFormActionDirective,
   tenantImgSrcDirective,
+  tenantMediaSrcDirective,
 } from '../../security-origins'
 
 /**
@@ -196,6 +199,9 @@ const lockdownVerdicts = new Map<
     attribution: boolean
     overQuota: boolean
     approvedImageHosts: string[]
+    approvedMediaHosts: string[]
+    approvedFontHosts: string[]
+    approvedFormActions: string[]
     runsMeasurement: boolean
     siteOrigins: string[]
   }
@@ -223,6 +229,9 @@ async function hostVerdict(
   attribution: boolean
   overQuota: boolean
   approvedImageHosts: string[]
+  approvedMediaHosts: string[]
+  approvedFontHosts: string[]
+  approvedFormActions: string[]
   runsMeasurement: boolean
   siteOrigins: string[]
 }> {
@@ -233,6 +242,9 @@ async function hostVerdict(
       attribution: cached.attribution,
       overQuota: cached.overQuota,
       approvedImageHosts: cached.approvedImageHosts,
+      approvedMediaHosts: cached.approvedMediaHosts,
+      approvedFontHosts: cached.approvedFontHosts,
+      approvedFormActions: cached.approvedFormActions,
       runsMeasurement: cached.runsMeasurement,
       siteOrigins: cached.siteOrigins,
     }
@@ -284,6 +296,11 @@ async function hostVerdict(
    * different facts and must not share an encoding.
    */
   let approvedImageHosts: string[] = cached?.approvedImageHosts ?? []
+  // Stale-retentive exactly like images above: a verdict outage must not read
+  // as "the owner approved nothing".
+  let approvedMediaHosts: string[] = cached?.approvedMediaHosts ?? []
+  let approvedFontHosts: string[] = cached?.approvedFontHosts ?? []
+  let approvedFormActions: string[] = cached?.approvedFormActions ?? []
   // Stale-retentive for the same reason as the list beside it: losing this to
   // an outage would blank a site's analytics beacons rather than its images,
   // which is quieter and therefore worse.
@@ -303,6 +320,9 @@ async function hostVerdict(
         attribution?: boolean
         overQuota?: boolean
         approvedImageHosts?: unknown
+        approvedMediaHosts?: unknown
+        approvedFontHosts?: unknown
+        approvedFormActions?: unknown
         runsMeasurement?: boolean
         siteOrigins?: unknown
       } | null
@@ -313,6 +333,19 @@ async function hostVerdict(
       // could not read the host doc, and an older deployment that predates
       // this field sends nothing at all — both must keep the last known good
       // list rather than silently narrowing the policy.
+      const strings = (value: unknown): string[] =>
+        (value as unknown[]).filter(
+          (entry): entry is string => typeof entry === 'string',
+        )
+      if (Array.isArray(data?.approvedMediaHosts)) {
+        approvedMediaHosts = strings(data.approvedMediaHosts)
+      }
+      if (Array.isArray(data?.approvedFontHosts)) {
+        approvedFontHosts = strings(data.approvedFontHosts)
+      }
+      if (Array.isArray(data?.approvedFormActions)) {
+        approvedFormActions = strings(data.approvedFormActions)
+      }
       if (Array.isArray(data?.approvedImageHosts)) {
         approvedImageHosts = data.approvedImageHosts.filter(
           (entry): entry is string => typeof entry === 'string',
@@ -336,6 +369,9 @@ async function hostVerdict(
     attribution,
     overQuota,
     approvedImageHosts,
+    approvedMediaHosts,
+    approvedFontHosts,
+    approvedFormActions,
     runsMeasurement,
     siteOrigins,
   })
@@ -344,6 +380,9 @@ async function hostVerdict(
     attribution,
     overQuota,
     approvedImageHosts,
+    approvedMediaHosts,
+    approvedFontHosts,
+    approvedFormActions,
     runsMeasurement,
     siteOrigins,
   }
@@ -519,7 +558,12 @@ export const middleware: NextMiddleware = async (req, event) => {
       // resolves it via host.cname (unknown domains 404 there). Only
       // host-shaped names proceed; garbage still bounces to the console.
       const hostname = reqHost.split(':')[0].toLowerCase()
-      if (IS_DEPLOYED && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
+      if (
+        IS_DEPLOYED &&
+        /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(
+          hostname,
+        )
+      ) {
         console.debug('Tenant Host Switch=', 'cname', 'hostname=', hostname)
         tenantHost = `cname--${hostname}`
         break
@@ -711,6 +755,18 @@ export const middleware: NextMiddleware = async (req, event) => {
       verdict.approvedImageHosts,
       verdict.runsMeasurement,
       verdict.siteOrigins,
+    )}; ${tenantMediaSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedMediaHosts,
+      verdict.siteOrigins,
+    )}; ${tenantFontSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedFontHosts,
+      verdict.siteOrigins,
+    )}; ${tenantFormActionDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedFormActions,
+      verdict.siteOrigins,
     )}; ${reportingDirectives(secureTransport)}`,
   )
   // A REPORT-ONLY `img-src`, and its reporting endpoint (AGL-1703). What the
@@ -761,10 +817,7 @@ export const middleware: NextMiddleware = async (req, event) => {
    * closes and never signs anyone in. `allow-popups` keeps that direction
    * working while still isolating this document from a hostile opener.
    */
-  response.headers.set(
-    'Cross-Origin-Opener-Policy',
-    'same-origin-allow-popups',
-  )
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
   const endpoints = reportingEndpointsHeader(secureTransport)
   if (endpoints) response.headers.set('Reporting-Endpoints', endpoints)
   /*

@@ -50,7 +50,10 @@ import CardDisplayFormTemplate, {
 import { useFormApi } from '@aglyn/shared-ui-jsx-forms'
 import useTabParam from '../../../../../../hooks/use-tab-param'
 import { Grid } from '@mui/material'
-import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
+import {
+  useHostId,
+  useHostSubdomain,
+} from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
@@ -908,11 +911,11 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       breadcrumbItems={[
         {
           children: <HostDisplayNameComponent hostId={hostId} />,
-          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
         },
         {
           children: 'Setup',
-          href: buildRoute(Route.HOST_SETUP, { orgSlug,  host }),
+          href: buildRoute(Route.HOST_SETUP, { orgSlug, host }),
         },
       ]}
       help="gettingStarted"
@@ -1110,19 +1113,47 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         <SiteBrandingBadgeCard />
                       </Stack>
                     </TabPanel>
-                    <TabPanel
-                      value={SECURITY_TAB_ID}
-                      sx={{ padding: 'unset' }}
-                    >
-                      <ApprovedImageHostsCard hostId={hostId} />
+                    <TabPanel value={SECURITY_TAB_ID} sx={{ padding: 'unset' }}>
+                      <Stack spacing={3}>
+                        <ApprovedImageHostsCard hostId={hostId} />
+                        {/* One card per CSP directive an owner can widen.
+                            Each stores its own `host` array and the tenant
+                            reads the same names off the lockdown verdict — a
+                            control whose field the middleware does not read
+                            is a switch wired to nothing. */}
+                        <ApprovedImageHostsCard
+                          hostId={hostId}
+                          field="approvedMediaHosts"
+                          header="Approved media hosts"
+                          description="Video and audio your pages play from somewhere other than this site. Your own uploads always work — this is only for media you point at by URL."
+                          emptyHint="No external hosts approved. Pages can still play every file you upload here."
+                          placeholder="videos.example.com"
+                          privacyNote="Every host here can see the IP address of anyone who visits your site, because their browser fetches the media directly."
+                        />
+                        <ApprovedImageHostsCard
+                          hostId={hostId}
+                          field="approvedFontHosts"
+                          header="Approved font hosts"
+                          description="Web fonts your pages load from somewhere other than this site. Fonts you upload always work — this is only for fonts served by another host."
+                          emptyHint="No external hosts approved. Pages can still use every font you upload here."
+                          placeholder="fonts.gstatic.com"
+                          privacyNote="Every host here can see the IP address of anyone who visits your site, because their browser fetches the font directly — which is why a self-hosted font is the private option."
+                        />
+                        <ApprovedImageHostsCard
+                          hostId={hostId}
+                          field="approvedFormActions"
+                          header="Approved form destinations"
+                          description="Where your forms may submit to. Forms handled by this site always work — this is only for forms that post to another service."
+                          emptyHint="No external destinations approved. Forms can still post to this site."
+                          placeholder="forms.example.com"
+                          privacyNote="A form posts whatever the visitor typed. Approving a destination sends that data to it directly, so add one only if you intend it to receive submissions."
+                        />
+                      </Stack>
                     </TabPanel>
                     <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
                       <SiteEmailsCard />
                     </TabPanel>
-                    <TabPanel
-                      value={ACTIVITY_TAB_ID}
-                      sx={{ padding: 'unset' }}
-                    >
+                    <TabPanel value={ACTIVITY_TAB_ID} sx={{ padding: 'unset' }}>
                       <HostActivityTable hostId={hostId} />
                     </TabPanel>
                   </>

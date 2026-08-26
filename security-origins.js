@@ -349,6 +349,105 @@ function imgSrcDirective(isProduction) {
 }
 
 /**
+ * The other three owner-widenable directives (AGL-1152): media, fonts, and
+ * where a form may post.
+ *
+ * Same shape as `tenantImgSrcDirective` and the same reasoning, so read that
+ * first. What differs is only what each one is allowed to fall back to, and
+ * these are REPORT-ONLY at the time of writing — see the middleware. That is
+ * not timidity, it is the doctrine this file keeps: our own code can be
+ * measured, a published customer site cannot. A site embedding a Vimeo player
+ * or a Google font is doing something legitimate that no amount of reading our
+ * repo would reveal, so the browser names them first and the flip to enforcing
+ * comes after the reports are quiet.
+ *
+ * The owner's list is live either way — it is what the eventual enforcing
+ * header will carry, so approving a host now is not wasted work.
+ */
+function tenantOwnerWidenedDirective(
+  directive,
+  isProduction,
+  approvedHosts,
+  siteOrigins,
+  extraSources = [],
+) {
+  const development = isProduction
+    ? []
+    : ['http://localhost:*', 'http://127.0.0.1:*']
+  const sources = ["'self'"]
+    .concat(extraSources)
+    // The site's own addresses, always — a custom domain gives a site TWO
+    // origins and `'self'` is only the one it was served from.
+    .concat(approvedImageHostSources(siteOrigins))
+    .concat(approvedImageHostSources(approvedHosts))
+    .concat(development)
+  return `${directive} ${sources.join(' ')}`
+}
+
+/**
+ * Video and audio. `data:`/`blob:` because an uploaded clip may be either,
+ * and `TENANT_IMAGE_ORIGINS` because an upload is an upload — a free-tier org
+ * without the paid `mediaCdn` entitlement stores an absolute
+ * `firebasestorage.googleapis.com` URL for a video exactly as it does for an
+ * image. Pinned for the same reason and not owner-removable: dropping it would
+ * blank a free-tier site's own uploads.
+ */
+function tenantMediaSrcDirective(isProduction, approvedMediaHosts, siteOrigins) {
+  return tenantOwnerWidenedDirective(
+    'media-src',
+    isProduction,
+    approvedMediaHosts,
+    siteOrigins,
+    ['data:', 'blob:'].concat(TENANT_IMAGE_ORIGINS),
+  )
+}
+
+/**
+ * Web fonts. `data:` covers a font inlined into a stylesheet.
+ *
+ * `fonts.gstatic.com` is PINNED, and this is measurement rather than
+ * generosity: `host-theme.ts` builds a `fonts.googleapis.com/css2` link for
+ * any theme that names Google families, and `app/[host]/layout.tsx`
+ * preconnects to `fonts.gstatic.com` — which is where the font FILES come
+ * from, and so the origin this directive decides on. Enforcing without it
+ * would strip the typeface from every themed site on the platform, for a
+ * choice its owner made in our own theme editor.
+ *
+ * (The stylesheet at `fonts.googleapis.com` is a `style-src` question, not a
+ * `font-src` one. That directive is still unconstrained and is a separate,
+ * harder problem — emotion injects inline styles, so it cannot be enforced
+ * without hashes.)
+ */
+const TENANT_FONT_ORIGINS = ['https://fonts.gstatic.com']
+function tenantFontSrcDirective(isProduction, approvedFontHosts, siteOrigins) {
+  return tenantOwnerWidenedDirective(
+    'font-src',
+    isProduction,
+    approvedFontHosts,
+    siteOrigins,
+    ['data:'].concat(TENANT_FONT_ORIGINS),
+  )
+}
+
+/**
+ * Where a form may POST. No `data:`/`blob:` — a form submitting to either is
+ * not a thing a site does on purpose, and this is the directive that decides
+ * whether an injected form can carry what a visitor typed off-site.
+ */
+function tenantFormActionDirective(
+  isProduction,
+  approvedFormActions,
+  siteOrigins,
+) {
+  return tenantOwnerWidenedDirective(
+    'form-action',
+    isProduction,
+    approvedFormActions,
+    siteOrigins,
+  )
+}
+
+/**
  * Third-party hosts the console legitimately loads SCRIPTS from (AGL-1785).
  *
  * Read out of the code that injects each one, on the same rule `IMAGE_ORIGINS`
@@ -1038,6 +1137,10 @@ module.exports = {
   reportingEndpointsHeader,
   scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
+  TENANT_FONT_ORIGINS,
+  tenantMediaSrcDirective,
+  tenantFontSrcDirective,
+  tenantFormActionDirective,
   approvedImageHostSources,
   normalizeApprovedImageHost,
   APPROVED_IMAGE_HOSTS_MAX,

@@ -82,7 +82,10 @@ import {
 // documents, and the same fix: reach past the barrel to the module that
 // declares it.
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
-import { getDomainLockdown, getPlatformLockdown } from '@aglyn/tenant-data-admin'
+import {
+  getDomainLockdown,
+  getPlatformLockdown,
+} from '@aglyn/tenant-data-admin'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
@@ -106,6 +109,9 @@ function lockedVerdict(
     attribution: boolean
     overQuota: boolean
     approvedImageHosts?: string[]
+    approvedMediaHosts?: string[]
+    approvedFontHosts?: string[]
+    approvedFormActions?: string[]
     runsMeasurement?: boolean
     siteOrigins?: string[]
   },
@@ -118,6 +124,9 @@ function lockedVerdict(
       attribution: facts.attribution,
       overQuota: facts.overQuota,
       approvedImageHosts: facts.approvedImageHosts ?? [],
+      approvedMediaHosts: facts.approvedMediaHosts ?? [],
+      approvedFontHosts: facts.approvedFontHosts ?? [],
+      approvedFormActions: facts.approvedFormActions ?? [],
       runsMeasurement: facts.runsMeasurement ?? false,
       siteOrigins: facts.siteOrigins ?? [],
       mode: lockdownMode(state),
@@ -175,6 +184,9 @@ export async function GET(request: Request): Promise<Response> {
             attribution: false,
             overQuota: false,
             approvedImageHosts: [],
+            approvedMediaHosts: [],
+            approvedFontHosts: [],
+            approvedFormActions: [],
           },
           { status: 200 },
         )
@@ -183,6 +195,9 @@ export async function GET(request: Request): Promise<Response> {
         attribution: false,
         overQuota: false,
         approvedImageHosts: [],
+        approvedMediaHosts: [],
+        approvedFontHosts: [],
+        approvedFormActions: [],
       })
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
@@ -216,10 +231,28 @@ export async function GET(request: Request): Promise<Response> {
      * owner typed, describing hosts their own public pages already load. It
      * says nothing a visitor could not learn by viewing source.
      */
-    const stored = hostRes.host.approvedImageHosts
-    const approvedImageHosts = Array.isArray(stored)
-      ? stored.filter((entry): entry is string => typeof entry === 'string')
-      : []
+    const stringList = (value: unknown): string[] =>
+      Array.isArray(value)
+        ? value.filter((entry): entry is string => typeof entry === 'string')
+        : []
+    const approvedImageHosts = stringList(hostRes.host.approvedImageHosts)
+    /**
+     * The other three owner-widenable directives (AGL-1152). Same disclosure
+     * posture as images: a list the owner typed, describing hosts their own
+     * public pages already load, so it says nothing a visitor could not learn
+     * by viewing source. Sent even while the directives they feed are
+     * report-only — the header has to carry the owner's list from the first
+     * report, or the reports describe a policy nobody is going to ship.
+     */
+    const approvedMediaHosts = stringList(
+      (hostRes.host as { approvedMediaHosts?: unknown }).approvedMediaHosts,
+    )
+    const approvedFontHosts = stringList(
+      (hostRes.host as { approvedFontHosts?: unknown }).approvedFontHosts,
+    )
+    const approvedFormActions = stringList(
+      (hostRes.host as { approvedFormActions?: unknown }).approvedFormActions,
+    )
     /**
      * Does this site run measurement tags (AGL-1152)?
      *
@@ -254,14 +287,14 @@ export async function GET(request: Request): Promise<Response> {
     const analytics = hostRes.host.analytics
     const runsMeasurement = Boolean(
       analytics?.gaMeasurementId ||
-        analytics?.gtmContainerId ||
-        // `adTags` is how an ad pixel is ACTUALLY configured — a vendor id →
-        // account id map, and the field `aglyn-marketing` carries its Meta
-        // pixel in. Omitting it was a real defect for the narrow case that
-        // matters most: a site running an ad pixel and NO analytics id would
-        // have had `runsMeasurement: false`, and the very beacon this gate
-        // exists to permit would have been the one thing refused.
-        Object.keys(analytics?.adTags ?? {}).length > 0,
+      analytics?.gtmContainerId ||
+      // `adTags` is how an ad pixel is ACTUALLY configured — a vendor id →
+      // account id map, and the field `aglyn-marketing` carries its Meta
+      // pixel in. Omitting it was a real defect for the narrow case that
+      // matters most: a site running an ad pixel and NO analytics id would
+      // have had `runsMeasurement: false`, and the very beacon this gate
+      // exists to permit would have been the one thing refused.
+      Object.keys(analytics?.adTags ?? {}).length > 0,
     )
     const state = resolveLockdown(
       {
@@ -279,6 +312,9 @@ export async function GET(request: Request): Promise<Response> {
           attribution,
           overQuota,
           approvedImageHosts,
+          approvedMediaHosts,
+          approvedFontHosts,
+          approvedFormActions,
           runsMeasurement,
           siteOrigins,
         },
@@ -289,6 +325,9 @@ export async function GET(request: Request): Promise<Response> {
       attribution,
       overQuota,
       approvedImageHosts,
+      approvedMediaHosts,
+      approvedFontHosts,
+      approvedFormActions,
       runsMeasurement,
       siteOrigins,
     })
@@ -314,6 +353,12 @@ export async function GET(request: Request): Promise<Response> {
         // list for the second. An empty list here would blank every approved
         // host's images across the platform during a verdict outage.
         approvedImageHosts: null,
+        // Same stale-retentive null for the three that joined it: an empty
+        // list would look like "the owner approved nothing" and blank a
+        // site's media and fonts during a verdict outage.
+        approvedMediaHosts: null,
+        approvedFontHosts: null,
+        approvedFormActions: null,
       },
       { status: 200 },
     )
