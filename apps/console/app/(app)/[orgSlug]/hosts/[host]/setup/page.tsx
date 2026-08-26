@@ -67,6 +67,7 @@ import SocialImageCard from '../../../../../../components/social-image-card.comp
 import BusinessDetailsCard from '../../../../../../components/business-details-card.component'
 import LogoCard from '../../../../../../components/logo-card.component'
 import ErrorScreensCard from '../../../../../../components/error-screens-card.component'
+import ApprovedImageHostsCard from '../../../../../../components/approved-image-hosts-card.component'
 import LanguagesCard from '../../../../../../components/languages-card.component'
 import SiteBackupCard from '../../../../../../components/site-backup-card.component'
 import SiteTemplateCard from '../../../../../../components/site-template-card.component'
@@ -1012,6 +1013,15 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                             </div>
                             <div style={{ marginTop: 24 }}>
                               <ErrorScreensCard hostId={hostId} />
+                            </div>
+                            {/* Which external hosts this site's images may come
+                                from (AGL-1152). Sits with the other site-wide
+                                policy cards rather than under Media, because it
+                                governs what visitors' BROWSERS may fetch — the
+                                same class of decision as the error pages and
+                                the consent banner beside it. */}
+                            <div style={{ marginTop: 24 }}>
+                              <ApprovedImageHostsCard hostId={hostId} />
                             </div>
                             {/* Designable auth screens (AGL-553). */}
                             <div style={{ marginTop: 24 }}>
