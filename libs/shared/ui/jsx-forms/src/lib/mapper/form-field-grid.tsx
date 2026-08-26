@@ -49,28 +49,38 @@ const classes = {
   muted: `${PREFIX}-muted`,
 }
 
+/**
+ * How a row whose declaration is switched off reads.
+ *
+ * It has to say "set, but not applying" and never "unset" — that distinction
+ * is the whole point of switching a declaration off rather than deleting it.
+ * So the VALUE is struck through and the control fades, while the corner
+ * buttons stay at full strength: they are the way back, and must not look
+ * disabled themselves.
+ *
+ * Exported as a plain sx object because a mute can sit on surfaces that are
+ * not grid-wrapped fields — the inline toggle rows, the box editor's sides,
+ * the custom-CSS builder — and all of them have to read the same.
+ */
+export const FIELD_MUTED_STYLES = {
+  [[
+    `& .${formControlClasses.root}`,
+    `& .${formLabelClasses.root}`,
+    `& .${typographyClasses.root}`,
+    `& .${toggleButtonGroupClasses.root}`,
+  ].join(',')]: {
+    opacity: 0.5,
+  },
+  [`& .${inputBaseClasses.input}`]: {
+    textDecoration: 'line-through',
+  },
+}
+
 const StyledGrid = styled(Grid)({
   [`&.${classes.grid}`]: {
     position: 'relative',
   },
-  // A muted field has to read as "set but not applying", never as unset —
-  // that distinction is the whole point of switching a declaration off
-  // rather than deleting it. So the VALUE is struck through and the control
-  // fades, while the corner buttons stay at full strength: they are the way
-  // back and must not look disabled themselves.
-  [`&.${classes.muted}`]: {
-    [[
-      `& .${formControlClasses.root}`,
-      `& .${formLabelClasses.root}`,
-      `& .${typographyClasses.root}`,
-      `& .${toggleButtonGroupClasses.root}`,
-    ].join(',')]: {
-      opacity: 0.5,
-    },
-    [`& .${inputBaseClasses.input}`]: {
-      textDecoration: 'line-through',
-    },
-  },
+  [`&.${classes.muted}`]: FIELD_MUTED_STYLES,
 })
 
 /**
@@ -147,6 +157,55 @@ export interface FieldMuteAction {
   onToggle: () => void
 }
 
+/**
+ * The eye itself, so every surface that can carry a mute renders the same
+ * control: the grid-wrapped fields, the inline toggle rows, the box editor's
+ * sides and the custom-CSS builder. `offset` places it in a corner where one
+ * is free.
+ */
+export const FieldMuteButton = ({
+  mute,
+  offset,
+  sx,
+}: {
+  mute?: FieldMuteAction
+  offset?: number
+  sx?: object
+}) =>
+  mute ? (
+    <Tooltip title={mute.label}>
+      <IconButton
+        size="small"
+        aria-label={mute.label}
+        aria-pressed={!!mute.muted}
+        onClick={mute.onToggle}
+        sx={{
+          p: 0.25,
+          fontSize: '0.85rem',
+          lineHeight: 1,
+          color: mute.muted ? 'secondary.main' : 'text.secondary',
+          ...(offset === undefined
+            ? {}
+            : { position: 'absolute', top: -8, right: offset, zIndex: 1 }),
+          ...sx,
+        }}
+      >
+        <MdiIcon
+          fontSize="inherit"
+          path={
+            mute.muted
+              ? ICON_VARIANT_VISIBILITY_HIDDEN.path
+              : ICON_VARIANT_VISIBILITY_SHOWN.path
+          }
+        />
+      </IconButton>
+    </Tooltip>
+  ) : null
+FieldMuteButton.displayName = 'AglynFieldMuteButton'
+
+/** Class marking a row whose declaration is switched off. */
+export const FIELD_MUTED_CLASS = classes.muted
+
 export interface FormFieldGridProps extends Omit<GridProps, 'size'> {
   children?: ReactNode
   className?: string
@@ -174,37 +233,12 @@ export const FormFieldGrid = ({
     {...props}
   >
     {children}
-    {mute && (
-      <Tooltip title={mute.label}>
-        <IconButton
-          size="small"
-          aria-label={mute.label}
-          aria-pressed={!!mute.muted}
-          onClick={mute.onToggle}
-          sx={{
-            position: 'absolute',
-            top: -8,
-            // Outermost of the corner controls, so adding it never moves the
-            // help tip or the clear button an author has learned the place of.
-            right: (help ? 22 : 0) + (clear && !clear.hidden ? 22 : 0),
-            zIndex: 1,
-            p: 0.25,
-            fontSize: '0.85rem',
-            lineHeight: 1,
-            color: mute.muted ? 'secondary.main' : 'text.secondary',
-          }}
-        >
-          <MdiIcon
-            fontSize="inherit"
-            path={
-              mute.muted
-                ? ICON_VARIANT_VISIBILITY_HIDDEN.path
-                : ICON_VARIANT_VISIBILITY_SHOWN.path
-            }
-          />
-        </IconButton>
-      </Tooltip>
-    )}
+    <FieldMuteButton
+      mute={mute}
+      // Outermost of the corner controls, so adding it never moves the help
+      // tip or the clear button an author has learned the place of.
+      offset={(help ? 22 : 0) + (clear && !clear.hidden ? 22 : 0)}
+    />
     {clear && !clear.hidden && (
       <Tooltip title={clear.label}>
         {/* Sits beside the help tip rather than under it — both are pinned

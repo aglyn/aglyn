@@ -74,6 +74,9 @@ export {
   type FieldArrayProps,
 } from './field-array'
 export {
+  FIELD_MUTED_CLASS,
+  FIELD_MUTED_STYLES,
+  FieldMuteButton,
   type FieldMuteAction,
   default as FormFieldGrid,
   type FormFieldGridProps,

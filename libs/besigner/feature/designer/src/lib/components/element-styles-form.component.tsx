@@ -57,6 +57,9 @@ import {
 } from '@aglyn/shared-svg-icons'
 import {
   componentMapper,
+  type FieldMuteAction,
+  FIELD_MUTED_STYLES,
+  FieldMuteButton,
   FormRenderer,
   type FormRendererProps,
 } from '@aglyn/shared-ui-jsx-forms'
@@ -93,7 +96,11 @@ import {
 } from 'react'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
-import { toggleMutedStyle, withStyleMuteControls } from '../utils/muted-styles'
+import {
+  buildStyleMute,
+  toggleMutedStyle,
+  withStyleMuteControls,
+} from '../utils/muted-styles'
 import {
   deriveStateSlice,
   readStateSlice,
@@ -526,6 +533,8 @@ const FLEXBOX_TOGGLES: ButtonGroupFormControl[] = [
 const TextAlignToggleButtonGroup = (props: {
   onChange: (e: SyntheticEvent, value: string) => void
   value: string
+  /** Switch this declaration off without losing it (AGL-2486). */
+  mute?: FieldMuteAction
   field: {
     component?: FieldComponentType
     name: string
@@ -535,13 +544,14 @@ const TextAlignToggleButtonGroup = (props: {
     description?: string
   }
 }) => {
-  const { onChange, value, field } = props
+  const { onChange, value, mute, field } = props
 
   return (
-    <FormControl fullWidth>
-      <FormLabel htmlFor={field.name} sx={{ marginBottom: 1 }}>
-        {field.label}
-      </FormLabel>
+    <FormControl fullWidth sx={mute?.muted ? FIELD_MUTED_STYLES : undefined}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+        <FormLabel htmlFor={field.name}>{field.label}</FormLabel>
+        <FieldMuteButton mute={mute} />
+      </Box>
       <div>
         <ToggleButtonGroup
           id={field.name}
@@ -923,6 +933,27 @@ const ElementStylesForm = observer(
         activeScheme,
       )
     }, [nodeSx, activeState, activeBreakpoint, activeScheme])
+
+    const styleMute = useCallback(
+      (name: string, label?: unknown) =>
+        buildStyleMute(name, label, {
+          nodeId: node?.$id,
+          state: activeState,
+          breakpoint: activeBreakpoint,
+          scopeValues,
+          mutedStyles,
+          onToggle: (muteTarget) =>
+            setMutedStyles((current) => toggleMutedStyle(current, muteTarget)),
+        }),
+      [
+        node,
+        activeState,
+        activeBreakpoint,
+        scopeValues,
+        mutedStyles,
+        setMutedStyles,
+      ],
+    )
 
     const withStyleMutes = useCallback(
       (fields: any[]) =>
@@ -1414,6 +1445,10 @@ const ElementStylesForm = observer(
               spacingSteps={themeScales.spacing}
               border={boxBorder}
               onChange={handleBoxStylerChange}
+              // One eye per SIDE, resolved when a side is opened: the box
+              // editor shows one side's value at a time, and each side is
+              // its own declaration.
+              muteForSide={styleMute}
             />
           </Container>
         ) : null}
@@ -1422,6 +1457,7 @@ const ElementStylesForm = observer(
             <TextAlignToggleButtonGroup
               onChange={handleTextAlignChange}
               value={effectiveValues['textAlign']}
+              mute={styleMute('textAlign', 'Text Alignment')}
               field={{
                 component: FieldComponentType.TOGGLE_BUTTON,
                 name: 'textAlign',
@@ -1492,6 +1528,7 @@ const ElementStylesForm = observer(
                 key={schema.name}
                 onChange={handleFlexboxChange(schema.name as string)}
                 schema={schema}
+                mute={styleMute(schema.name as string, schema.label)}
                 value={effectiveValues[schema.name as string] ?? ''}
               />
             ))}
@@ -1516,7 +1553,9 @@ const ElementStylesForm = observer(
                   styleGroupFieldNames(visibleFlexGridGroup),
                   effectiveValues,
                 )}
-                schema={{ fields: visibleFlexGridGroup.fields }}
+                schema={{
+                  fields: withStyleMutes(visibleFlexGridGroup.fields),
+                }}
               />
             ) : null}
           </Accordion>
