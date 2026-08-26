@@ -60,10 +60,7 @@ export function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
               borderBottomWidth: `1px`,
               borderBottomStyle: 'solid',
               borderBottomColor: 'divider',
-              // `xs`, not `sx`: the latter is not a breakpoint, so the
-              // small-screen value was never applied and the gutter fell back
-              // to the Toolbar default.
-              paddingLeft: { xs: 1, sm: 2 },
+              paddingLeft: { sx: 1, sm: 2 },
             }}
           >
             {tabBarTitle && (
