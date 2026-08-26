@@ -16,6 +16,7 @@
  */
 
 export * from './lib/drafts/besigner-draft-store'
+export * from './lib/drafts/besigner-server-draft'
 
 export * from './lib/constants/sample-data'
 export * from './lib/constants/shared'

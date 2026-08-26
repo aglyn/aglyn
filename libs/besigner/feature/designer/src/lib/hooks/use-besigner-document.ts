@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { Firestore } from 'firebase/firestore'
 import * as Aglyn from '@aglyn/aglyn'
 import isEqual from 'lodash-es/isEqual'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -130,6 +131,13 @@ export interface UseBesignerDocumentOptions<TData = unknown>
    * override of the same key produce the same string.
    */
   draft?: BesignerDraftIds
+  /**
+   * Enables the SHARED working draft — the one `Save draft` writes and
+   * `Save & publish` clears. Omit and the editor keeps the local crash net
+   * alone, which is what a document with no versions to hang a draft off
+   * should do.
+   */
+  firestore?: Firestore
   /**
    * Other live editing sessions in this document's room, or null while
    * presence has not settled — see `recoverableRoomSessions` (AGL-2486).
@@ -505,6 +513,9 @@ export function useBesignerDocument<TData = unknown>(
   // else has saved since".
   const draft = useBesignerDraft({
     ids: draftIds,
+    // Given one, the shared working draft joins the local crash net and wins
+    // when both exist (AGL-1152).
+    firestore: options.firestore,
     loaded: Aglyn.canvas.didSetInitial,
     dirty: saveAvailable,
     storedStamp: Aglyn.versionStamp(updatedAt),

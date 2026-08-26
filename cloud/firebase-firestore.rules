@@ -1475,6 +1475,33 @@ service cloud.firestore {
                          'publishSchedule', 'deletedAt'])));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+        // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
+        //
+        // Zach: a draft is "the working document" now — you save into it as you
+        // work and publish when you are done — and there is exactly ONE per
+        // target. The fixed document id is what enforces that: there is no
+        // second name to create.
+        //
+        // It needs its own rule because the recursive matcher below allows
+        // `create` only to staff, so an author's FIRST save of a draft — the
+        // one that brings the document into existence — would be refused while
+        // every save after it succeeded. Rules are OR'd across matching paths,
+        // so this grants that create without loosening anything below.
+        //
+        // Deleting is deliberately open to the same role that writes: clearing
+        // a draft is what PUBLISHING it does, and it is not a publish act. The
+        // version document itself is untouched by this pattern — a path must
+        // end in `/draft/{id}` to match here, so the delete protection the
+        // matcher below puts on `versions` is intact.
+        //
+        // Frozen writes still freeze it. A draft is authoring, and a freeze
+        // stops authoring.
+        match /versions/{versionId}/draft/{draftId} {
+          allow read: if isStaff() || isHostAdmin(hostId);
+          allow create, update, delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+        }
+
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
@@ -1508,6 +1535,33 @@ service cloud.firestore {
                 .hasAny(['versionId', 'publishSchedule'])));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+        // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
+        //
+        // Zach: a draft is "the working document" now — you save into it as you
+        // work and publish when you are done — and there is exactly ONE per
+        // target. The fixed document id is what enforces that: there is no
+        // second name to create.
+        //
+        // It needs its own rule because the recursive matcher below allows
+        // `create` only to staff, so an author's FIRST save of a draft — the
+        // one that brings the document into existence — would be refused while
+        // every save after it succeeded. Rules are OR'd across matching paths,
+        // so this grants that create without loosening anything below.
+        //
+        // Deleting is deliberately open to the same role that writes: clearing
+        // a draft is what PUBLISHING it does, and it is not a publish act. The
+        // version document itself is untouched by this pattern — a path must
+        // end in `/draft/{id}` to match here, so the delete protection the
+        // matcher below puts on `versions` is intact.
+        //
+        // Frozen writes still freeze it. A draft is authoring, and a freeze
+        // stops authoring.
+        match /versions/{versionId}/draft/{draftId} {
+          allow read: if isStaff() || isHostAdmin(hostId);
+          allow create, update, delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+        }
+
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
@@ -1547,6 +1601,33 @@ service cloud.firestore {
                 .hasAny(['versionId', 'publishSchedule'])));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+        // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
+        //
+        // Zach: a draft is "the working document" now — you save into it as you
+        // work and publish when you are done — and there is exactly ONE per
+        // target. The fixed document id is what enforces that: there is no
+        // second name to create.
+        //
+        // It needs its own rule because the recursive matcher below allows
+        // `create` only to staff, so an author's FIRST save of a draft — the
+        // one that brings the document into existence — would be refused while
+        // every save after it succeeded. Rules are OR'd across matching paths,
+        // so this grants that create without loosening anything below.
+        //
+        // Deleting is deliberately open to the same role that writes: clearing
+        // a draft is what PUBLISHING it does, and it is not a publish act. The
+        // version document itself is untouched by this pattern — a path must
+        // end in `/draft/{id}` to match here, so the delete protection the
+        // matcher below puts on `versions` is intact.
+        //
+        // Frozen writes still freeze it. A draft is authoring, and a freeze
+        // stops authoring.
+        match /versions/{versionId}/draft/{draftId} {
+          allow read: if isStaff() || isHostAdmin(hostId);
+          allow create, update, delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+        }
+
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();

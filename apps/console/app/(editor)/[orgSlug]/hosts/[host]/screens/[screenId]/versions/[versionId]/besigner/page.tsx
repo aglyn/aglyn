@@ -41,6 +41,8 @@ import {
   type BesignerSaveBaseline,
   type ComponentPropagationChange,
   type WorkspaceEditorComponentProps,
+  clearServerDraft,
+  writeServerDraft,
 } from '@aglyn/besigner-ui'
 // import '@aglyn/foundation-feature-singleton'
 import {
@@ -78,7 +80,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { collection, deleteField, doc, getDoc, limit, query } from 'firebase/firestore'
+import {
+  collection,
+  deleteField,
+  doc,
+  getDoc,
+  limit,
+  query,
+} from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
@@ -108,7 +117,10 @@ import {
   previewWindowName,
   writePreviewState,
 } from '../../../../../../../../../../constants/preview-state'
-import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
+import {
+  buildRoute,
+  Route,
+} from '../../../../../../../../../../constants/route-links'
 import {
   useHostId,
   useHostSubdomain,
@@ -135,7 +147,6 @@ import CollaboratorOverlays from '../../../../../../../../../../components/colla
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
-
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
     import('@aglyn/besigner-ui').then((mod) => mod.WorkspaceEditorComponent),
@@ -143,31 +154,30 @@ const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
 )
 const ViewportRootComponent = dynamic<WorkspaceEditorComponentProps>(
   () => import('@aglyn/besigner-ui').then((mod) => mod.ViewportRootComponent),
-  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
+  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
 const ViewportCanvasComponent = dynamic<WorkspaceEditorComponentProps>(
   () => import('@aglyn/besigner-ui').then((mod) => mod.ViewportCanvasComponent),
-  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
+  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
 const JsonEditor = dynamic<JsonEditorProps>(
-  () =>
-    import('@aglyn/shared-ui-json-editor').then((mod) => mod.JsonEditor),
-  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
+  () => import('@aglyn/shared-ui-json-editor').then((mod) => mod.JsonEditor),
+  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
 
 function BesignerPage(props) {
   const params = useParams<{
-    host: string,
-    screenId: string,
+    host: string
+    screenId: string
     versionId: string
   }>()
   const hostId = useHostId()
   const screenId = params?.screenId as string
   const versionId = params?.versionId as string
-  const {enqueueSnackbar} = useSnackbar()
+  const { enqueueSnackbar } = useSnackbar()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const {queueLoading} = useLoading()
+  const { queueLoading } = useLoading()
   const logActivity = useHostActivityLogger(hostId)
   // The `author` host role edits content and may NOT publish it (AGL-2334).
   // Disabled with a reason rather than hidden, so the console says no instead
@@ -225,8 +235,8 @@ function BesignerPage(props) {
     versionId: versionId as string,
   })
   const { data: user } = useUser()
-  const {doc: hostResult} = useHost({ hostId: hostId as string })
-  const {doc: screenResult, setDoc: updateScreenDoc} = useScreen({
+  const { doc: hostResult } = useHost({ hostId: hostId as string })
+  const { doc: screenResult, setDoc: updateScreenDoc } = useScreen({
     hostId,
     screenId,
   })
@@ -234,12 +244,27 @@ function BesignerPage(props) {
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(screenId, screenResult?.data?.displayName)
   const layoutId = screenResult?.data?.layoutId
-  const {doc: layoutResult} = useLayout({
+  const firestore = useFirestore()
+  /**
+   * Is the version being edited the one the site is SERVING?
+   *
+   * Zach: "versions should not have a draft, only the current live version
+   * should be able to have a draft." That is the whole gate. A non-live
+   * version is already a place to work without touching the live site — that
+   * is what versions are for — so a draft there would be a second answer to a
+   * question that already has one, offering a distinction with nothing behind
+   * it. On the live version there is no other way to work without publishing,
+   * which is exactly why the draft belongs here and only here.
+   */
+  const editingLiveVersion = Boolean(
+    versionId && versionId === screenResult?.data?.versionId,
+  )
+  const { doc: layoutResult } = useLayout({
     hostId,
     layoutId: layoutId ?? '-no-layout-',
   })
   const layoutVersionId = layoutResult?.data?.versionId
-  const {doc: layoutVersionResult} = useLayoutVersion({
+  const { doc: layoutVersionResult } = useLayoutVersion({
     hostId,
     layoutId: layoutId ?? '-no-layout-',
     versionId: layoutVersionId ?? '-no-version-',
@@ -257,7 +282,7 @@ function BesignerPage(props) {
       : undefined,
     componentDefinitions,
   )
-  const {doc: result} = useScreenVersion({
+  const { doc: result } = useScreenVersion({
     hostId: hostId as string,
     screenId: screenId as string,
     versionId: versionId as string,
@@ -366,6 +391,11 @@ function BesignerPage(props) {
       docId: screenId,
       versionId,
     },
+    // Turns on the SHARED working draft beside the local crash net: it is what
+    // `handleSaveDraft` writes, and what the restore prompt now prefers.
+    // Undefined off the live version, so that editor keeps the local crash net
+    // alone and never offers a draft that should not exist there.
+    firestore: editingLiveVersion ? firestore : undefined,
     // The crash-recovery prompt is withheld while anyone else is in this
     // room (AGL-2486): the mirror already has the unsaved work, so there is
     // nothing to recover and both of its buttons could only take something
@@ -459,16 +489,12 @@ function BesignerPage(props) {
     () => getGoogleFontsUrl(hostTheme?.fonts),
     [hostTheme?.fonts],
   )
-  const firestore = useFirestore()
   const { data: layoutOptions } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'layouts'), limit(50)),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const chromeContextValue = useMemo(
-    () => ({ chromeCanvas }),
-    [chromeCanvas],
-  )
+  const chromeContextValue = useMemo(() => ({ chromeCanvas }), [chromeCanvas])
 
   const handleProtectionSave = useCallback(async () => {
     if (protectPassword == null) return
@@ -579,10 +605,10 @@ function BesignerPage(props) {
         layoutId: nextLayoutId ?? (deleteField() as any),
       } as any)
         .then(() => {
-          enqueueSnackbar(
-            nextLayoutId ? 'Layout assigned' : 'Layout removed',
-            { variant: 'success', persist: false },
-          )
+          enqueueSnackbar(nextLayoutId ? 'Layout assigned' : 'Layout removed', {
+            variant: 'success',
+            persist: false,
+          })
         })
         .catch((e) => {
           enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -618,8 +644,7 @@ function BesignerPage(props) {
     return map
   }, [screenDocs])
   const routingMap = hostResult?.data?.screens as
-    | Record<string, string>
-    | undefined
+    Record<string, string> | undefined
 
   const isCollectionTemplate = templateScreenIds.has(screenId)
   const templateRoutes = collectionTemplateRoutesSummary(
@@ -629,8 +654,7 @@ function BesignerPage(props) {
   const publishedPath = routingMap?.[screenId]
   const parentId = screenResult?.data?.parentId
   const [slugInput, setSlugInput] = useState<string | null>(null)
-  const slugValue =
-    slugInput ?? screenResult?.data?.slug ?? publishedPath ?? ''
+  const slugValue = slugInput ?? screenResult?.data?.slug ?? publishedPath ?? ''
   const normalizedSlug = Aglyn.normalizeScreenSlug(slugValue)
   // Candidate map with the pending slug applied, so the composed path and
   // conflict check reflect what Publish would write.
@@ -670,6 +694,71 @@ function BesignerPage(props) {
 
   /** Did the last save actually land? See `onSaved`. */
   const savedLandedRef = useRef(false)
+  /**
+   * A draft has been saved and NOT yet published.
+   *
+   * The app bar's three states describe the LIVE SITE, not the canvas, which
+   * is the correction Zach asked for the first time round — "Is up to date
+   * accurate if they saved the draft but they did not save and publish?".
+   * It was not, and it would be wrong again here for a new reason: on the live
+   * version `versionId === screens/{id}.versionId` is true by definition, so
+   * the pointer alone reports "Up to date" while a draft sits unpublished
+   * beside it. The draft is the thing that makes the site out of date.
+   */
+  const [draftPending, setDraftPending] = useState(false)
+
+  /**
+   * SAVE THE WORKING DRAFT (AGL-1152).
+   *
+   * Zach: "Save draft seemed to save and publish at the same time for screens,
+   * we need both". It did, and the menu said the opposite — "Keeps your work;
+   * the live site is unchanged" — while the toast said the live page was
+   * refreshing. Both were describing the same call.
+   *
+   * The cause was not the wiring but the target: on the version a screen is
+   * SERVING, the document an author edits IS the live one, so any write to it
+   * is a publish. There is no honest way to save that document without
+   * publishing it, which is why the draft now goes somewhere else entirely —
+   * its own document beside the version, never read by the tenant.
+   *
+   * The mirror is cleared for the same reason a real save clears it: Firestore
+   * is authoritative again, and replaying in-flight keystrokes over a draft
+   * that already contains them would re-apply them.
+   */
+  const handleSaveDraft = useCallback(async () => {
+    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
+    const wrote = await writeServerDraft(
+      firestore,
+      { scope: hostId, kind: 'screen', docId: screenId, versionId },
+      {
+        nodes,
+        baseStamp: Aglyn.versionStamp(screenResult?.data?.updatedAt),
+        updatedByUid: user?.uid ?? null,
+        updatedByEmail: user?.email ?? null,
+      },
+    ).catch(() => false)
+    if (!wrote) {
+      enqueueSnackbar('Could not save the draft — your work is still here.', {
+        variant: 'error',
+        persist: false,
+      })
+      return
+    }
+    clearMirrorRef.current?.()
+    setDraftPending(true)
+    enqueueSnackbar('Draft saved — the live site is unchanged.', {
+      variant: 'success',
+      persist: false,
+    })
+  }, [
+    firestore,
+    hostId,
+    screenId,
+    versionId,
+    screenResult?.data?.updatedAt,
+    user,
+    enqueueSnackbar,
+  ])
 
   /**
    * SAVE, THEN MAKE THIS VERSION THE LIVE ONE (AGL-1152).
@@ -696,6 +785,16 @@ function BesignerPage(props) {
     // Not awaited: the writes above have already succeeded, and a cache hint
     // that fails must never make a completed publish look failed.
     void revalidateLivePages({ user, hostId, screenId })
+    // The draft has been published, so it must stop being offered — otherwise
+    // the next open invites the author to restore the state they just moved
+    // past. Best effort, like the cache drop above.
+    void clearServerDraft(firestore, {
+      scope: hostId,
+      kind: 'screen',
+      docId: screenId,
+      versionId,
+    })
+    setDraftPending(false)
     enqueueSnackbar(
       livePointer === versionId
         ? 'Saved and published — the live pages are refreshing now.'
@@ -863,7 +962,8 @@ function BesignerPage(props) {
       enqueueSnackbar(
         collectionTemplatePublishMessage(routesByScreenId.get(screenId), {
           isTemplateScreen: isCollectionTemplate,
-        }) ?? `Published at ${Aglyn.screenRoutePathToUrl(composedPath as string)}`,
+        }) ??
+          `Published at ${Aglyn.screenRoutePathToUrl(composedPath as string)}`,
         { variant: 'success', persist: false },
       )
     } catch (e) {
@@ -982,7 +1082,13 @@ function BesignerPage(props) {
         seen.add(String(parentId))
         try {
           const layoutSnapshot = await getDoc(
-            doc(firestore, 'hosts', hostId as string, 'layouts', String(parentId)),
+            doc(
+              firestore,
+              'hosts',
+              hostId as string,
+              'layouts',
+              String(parentId),
+            ),
           )
           const parentVersionId = layoutSnapshot.get('versionId')
           if (!parentVersionId) break
@@ -1060,15 +1166,13 @@ function BesignerPage(props) {
     [linkableRoutes, screensById],
   )
 
-
   useEffect(() => {
     if (hasError) {
       enqueueSnackbar(`Error: ${error?.message}`, {
         variant: 'error',
         allowDuplicate: true,
       })
-    }
-    else if (notFound) {
+    } else if (notFound) {
       enqueueSnackbar('404: Screen not found', {
         variant: 'error',
         allowDuplicate: true,
@@ -1078,492 +1182,543 @@ function BesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
-    <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
-    <EntityPickerProvider hostId={hostId}>
-    <ReusableComponentsProvider hostId={hostId}>
-    <BindingPickerProvider hostId={hostId}>
-            <BesignerDraftAlertComponent
-              draft={draft}
-              noun="screen"
-              remoteChanged={remoteChanged}
-            />
-    {/* Email documents run no client JS (AGL-587): disable interaction
+      <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+        <EntityPickerProvider hostId={hostId}>
+          <ReusableComponentsProvider hostId={hostId}>
+            <BindingPickerProvider hostId={hostId}>
+              <BesignerDraftAlertComponent
+                draft={draft}
+                noun="screen"
+                remoteChanged={remoteChanged}
+              />
+              {/* Email documents run no client JS (AGL-587): disable interaction
         capabilities so the attributes panel never offers the section. */}
-    <InteractionsProvider
-      hostId={hostId}
-      screenId={screenId}
-      disabled={screenKind === 'email'}
-    >
-    <BesignerMediaPickerProvider hostId={hostId}>
-      {hostFontsHref ? (
-        <>
-          <link
-            key="host-fonts-preconnect"
-            rel="preconnect"
-            href="https://fonts.gstatic.com"
-            crossOrigin="anonymous"
-          />
-          <link key="host-fonts" rel="stylesheet" href={hostFontsHref} />
-        </>
-      ) : null}
-      <MainLayout
-        enableAppBarElevation
-        besigner
-        centerPrefix={
-          <BesignerDocumentSwitcherComponent
-            hostId={hostId}
-            current={{ kind: 'screen', id: screenId }}
-          />
-        }
-        // appBarSuffix={'Besigner'}
-        actionsPrefix={
-          <>
-          <Tooltip
-            title={
-              !canPublish
-                ? publishBlock
-                : publishedPath && isCollectionTemplate
-                ? templateRoutes
-                  ? `Live — this template renders ${templateRoutes}`
-                  : 'Live as a collection template — no path of its own'
-                : publishedPath
-                  ? `Live at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
-                  : 'Publish this version to your site'
-            }
-          >
-            <span>
-            <Button
-              size="small"
-              variant={publishedPath ? 'outlined' : 'contained'}
-              color="primary"
-              disabled={!canPublish}
-              onClick={handleTogglePublish}
-              sx={{ mr: 1, whiteSpace: 'nowrap', flexShrink: 0 }}
-            >
-              {publishedPath ? 'Unpublish' : 'Publish'}
-            </Button>
-            </span>
-          </Tooltip>
-          <BesignerFunctionsButton hostId={hostId} />
-          <BesignerVersionsComponent
-            hostId={hostId}
-            parent={{ kind: 'screen', id: screenId }}
-            versionId={versionId}
-            publishedVersionId={screenResult?.data?.versionId}
-            actionsRef={versionsActions}
-          />
-          </>
-        }
-        backButton={
-          {
-            component: AppLink,
-            componentVariant: 'naked',
-            href: detailUrl,
-          } as any
-        }
-        centerNavigationItems={[
-          // {
-          //   id: 'center-nav-site-picker',
-          //   children: ,
-          // },
-          {
-            id: 'center-nav-file',
-            children: 'File',
-            // href: '/besigner',
-            items: [
-              {
-                id: 'center-nav-file-save',
-                icon: saveAvailable
-                  ? {path: ICON_VARIANT_MODIFY_SAVE.path}
-                  : {path: ICON_VARIANT_SYMBOL_CONFIRMED.path},
-                children: saveAvailable ? 'Save' : 'Up to Date',
-                onClick: handleSave,
-              },
-              {
-                id: 'center-nav-file-close',
-                children: 'Close',
-                href: detailUrl,
-                component: AppLink,
-                componentVariant: 'naked',
-                ListItemTextProps: {inset: true},
-              },
-              {
-                type: 'divider',
-              },
-              {
-                id: 'center-nav-file-new-version',
-                children: 'New version',
-                // Deferred to the versions panel (AGL-1218): it owns the
-                // `versioning` entitlement check, the refusal to snapshot a
-                // dirty canvas, and the name dialog. Read at click time, so
-                // the mount order of the app bar does not matter.
-                onClick: () => versionsActions.current?.createVersion(),
-                ListItemTextProps: {inset: true},
-              },
-              {
-                type: 'divider',
-              },
-              {
-                id: 'center-nav-edit-properties',
-                icon: {
-                  path: ICON_VARIANT_APP_SETTINGS.path,
-                },
-                children: 'Screen Properties',
-                onClick: () => setScreenDialog(true),
-              },
-            ],
-          },
-          {
-            id: 'center-nav-edit',
-            children: 'Edit',
-            // href: '/besigner',
-            items: [
-              {
-                id: 'center-nav-edit-undo',
-                children: 'Undo',
-                onClick: () => Aglyn.canvas.undo(),
-                disabled: !Aglyn.canvas.canUndo,
-                ListItemTextProps: {inset: true},
-              },
-              {
-                id: 'center-nav-edit-redo',
-                children: 'Redo',
-                onClick: () => Aglyn.canvas.redo(),
-                disabled: !Aglyn.canvas.canRedo,
-                ListItemTextProps: {inset: true},
-              },
-              {
-                type: 'divider',
-              },
-              {
-                id: 'center-nav-edit-rawjson',
-                children: 'Raw JSON',
-                onClick: () => openJsonEditor(),
-                ListItemTextProps: {inset: true},
-              },
-            ],
-          },
-          {
-            id: 'center-nav-insert',
-            children: 'Insert',
-            // href: '/besigner',
-            items: [
-              {
-                id: 'center-nav-insert-element',
-                icon: {
-                  path: ICON_VARIANT_MODIFY_ADD.path,
-                },
-                children: 'New Element',
-                // Capture the current selection as the insert target when
-                // the picker opens. Passing the callback directly handed the
-                // menu click event in as `parent`, which both detached the
-                // created node from the tree and broke placement-constraint
-                // validation (AGL-537).
-                onClick: () =>
-                  handleAddElementClick(Besigner.focus.getLastSelected()),
-              },
-            ],
-          },
-        ]}
-      >
-        {/* `hasError`, not the raw `error` (AGL-1066): a refused read that
+              <InteractionsProvider
+                hostId={hostId}
+                screenId={screenId}
+                disabled={screenKind === 'email'}
+              >
+                <BesignerMediaPickerProvider hostId={hostId}>
+                  {hostFontsHref ? (
+                    <>
+                      <link
+                        key="host-fonts-preconnect"
+                        rel="preconnect"
+                        href="https://fonts.gstatic.com"
+                        crossOrigin="anonymous"
+                      />
+                      <link
+                        key="host-fonts"
+                        rel="stylesheet"
+                        href={hostFontsHref}
+                      />
+                    </>
+                  ) : null}
+                  <MainLayout
+                    enableAppBarElevation
+                    besigner
+                    centerPrefix={
+                      <BesignerDocumentSwitcherComponent
+                        hostId={hostId}
+                        current={{ kind: 'screen', id: screenId }}
+                      />
+                    }
+                    // appBarSuffix={'Besigner'}
+                    actionsPrefix={
+                      <>
+                        <Tooltip
+                          title={
+                            !canPublish
+                              ? publishBlock
+                              : publishedPath && isCollectionTemplate
+                                ? templateRoutes
+                                  ? `Live — this template renders ${templateRoutes}`
+                                  : 'Live as a collection template — no path of its own'
+                                : publishedPath
+                                  ? `Live at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                                  : 'Publish this version to your site'
+                          }
+                        >
+                          <span>
+                            <Button
+                              size="small"
+                              variant={publishedPath ? 'outlined' : 'contained'}
+                              color="primary"
+                              disabled={!canPublish}
+                              onClick={handleTogglePublish}
+                              sx={{
+                                mr: 1,
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {publishedPath ? 'Unpublish' : 'Publish'}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <BesignerFunctionsButton hostId={hostId} />
+                        <BesignerVersionsComponent
+                          hostId={hostId}
+                          parent={{ kind: 'screen', id: screenId }}
+                          versionId={versionId}
+                          publishedVersionId={screenResult?.data?.versionId}
+                          actionsRef={versionsActions}
+                        />
+                      </>
+                    }
+                    backButton={
+                      {
+                        component: AppLink,
+                        componentVariant: 'naked',
+                        href: detailUrl,
+                      } as any
+                    }
+                    centerNavigationItems={[
+                      // {
+                      //   id: 'center-nav-site-picker',
+                      //   children: ,
+                      // },
+                      {
+                        id: 'center-nav-file',
+                        children: 'File',
+                        // href: '/besigner',
+                        items: [
+                          {
+                            id: 'center-nav-file-save',
+                            icon: saveAvailable
+                              ? { path: ICON_VARIANT_MODIFY_SAVE.path }
+                              : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
+                            children: saveAvailable ? 'Save' : 'Up to Date',
+                            onClick: handleSave,
+                          },
+                          {
+                            id: 'center-nav-file-close',
+                            children: 'Close',
+                            href: detailUrl,
+                            component: AppLink,
+                            componentVariant: 'naked',
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-file-new-version',
+                            children: 'New version',
+                            // Deferred to the versions panel (AGL-1218): it owns the
+                            // `versioning` entitlement check, the refusal to snapshot a
+                            // dirty canvas, and the name dialog. Read at click time, so
+                            // the mount order of the app bar does not matter.
+                            onClick: () =>
+                              versionsActions.current?.createVersion(),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-properties',
+                            icon: {
+                              path: ICON_VARIANT_APP_SETTINGS.path,
+                            },
+                            children: 'Screen Properties',
+                            onClick: () => setScreenDialog(true),
+                          },
+                        ],
+                      },
+                      {
+                        id: 'center-nav-edit',
+                        children: 'Edit',
+                        // href: '/besigner',
+                        items: [
+                          {
+                            id: 'center-nav-edit-undo',
+                            children: 'Undo',
+                            onClick: () => Aglyn.canvas.undo(),
+                            disabled: !Aglyn.canvas.canUndo,
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-redo',
+                            children: 'Redo',
+                            onClick: () => Aglyn.canvas.redo(),
+                            disabled: !Aglyn.canvas.canRedo,
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-rawjson',
+                            children: 'Raw JSON',
+                            onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                        ],
+                      },
+                      {
+                        id: 'center-nav-insert',
+                        children: 'Insert',
+                        // href: '/besigner',
+                        items: [
+                          {
+                            id: 'center-nav-insert-element',
+                            icon: {
+                              path: ICON_VARIANT_MODIFY_ADD.path,
+                            },
+                            children: 'New Element',
+                            // Capture the current selection as the insert target when
+                            // the picker opens. Passing the callback directly handed the
+                            // menu click event in as `parent`, which both detached the
+                            // created node from the tree and broke placement-constraint
+                            // validation (AGL-537).
+                            onClick: () =>
+                              handleAddElementClick(
+                                Besigner.focus.getLastSelected(),
+                              ),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    {/* `hasError`, not the raw `error` (AGL-1066): a refused read that
             still has the screen cached must keep rendering the canvas rather
             than replace an author's open document with "Not found". */}
-        {hasError || notFound ? (
-          <Stack
-            sx={{
-              alignItems: "center",
-              justifyContent: "center"
-            }}>
-            <Typography>{'Not found'}</Typography>
-          </Stack>
-        ) : status === 'loading' ? (
-          LOADING_OVERLAY_ELEMENT
-        ) : (
-          <>
-            <CollaboratorOverlays entries={presence.entries} />
-            <BesignerAppBarComponent
-              detailsUrl={detailUrl}
-              presence={<PresenceAvatars presence={presence} />}
-              onSave={handleSave}
-              onSaveAndPublish={handleSaveAndPublish}
-              // Live only when the parent's pointer names THIS version.
-              livePublished={screenResult?.data?.versionId === versionId}
-              onPreview={handlePreview}
-              liveUrl={liveUrl}
-              liveUnavailableReason={liveUnavailableReason}
-              onPropertiesEdit={() => setScreenDialog(true)}
-              saveAvailable={saveAvailable}
-            />
-            {/* Surfaced as soon as their save lands, not on Save — finding
+                    {hasError || notFound ? (
+                      <Stack
+                        sx={{
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Typography>{'Not found'}</Typography>
+                      </Stack>
+                    ) : status === 'loading' ? (
+                      LOADING_OVERLAY_ELEMENT
+                    ) : (
+                      <>
+                        <CollaboratorOverlays entries={presence.entries} />
+                        <BesignerAppBarComponent
+                          detailsUrl={detailUrl}
+                          presence={<PresenceAvatars presence={presence} />}
+                          onSave={
+                            editingLiveVersion ? handleSaveDraft : handleSave
+                          }
+                          onSaveAndPublish={handleSaveAndPublish}
+                          // Live only when the parent's pointer names THIS version.
+                          livePublished={
+                            screenResult?.data?.versionId === versionId &&
+                            // A draft found on OPEN counts too, not just one saved in this
+                            // session — otherwise reopening the tab reports the site as up
+                            // to date while yesterday's draft is still waiting.
+                            !draftPending &&
+                            !draft.available
+                          }
+                          onPreview={handlePreview}
+                          liveUrl={liveUrl}
+                          liveUnavailableReason={liveUnavailableReason}
+                          onPropertiesEdit={() => setScreenDialog(true)}
+                          saveAvailable={saveAvailable}
+                        />
+                        {/* Surfaced as soon as their save lands, not on Save — finding
                 out after twenty more minutes of editing is the bad
                 version of this (AGL-674). */}
-            {remoteChanged && !draft.available ? (
-              <BesignerConflictAlertComponent noun="screen" />
-            ) : null}
-            {layoutId ? (
-              <Alert
-                severity="info"
-                sx={{
-                  borderRadius: 0,
-                  // Stack above the canvas selection overlays.
-                  position: 'relative',
-                  zIndex: 'appBar',
-                }}
-                action={
-                  <Button
-                    color="inherit"
-                    size="small"
-                    component={AppLink}
-                    componentVariant="naked"
-                    nativeButton={false}
-                    disabled={!layoutVersionId}
-                    href={
-                      layoutVersionId
-                        ? buildRoute(Route.LAYOUT_BESIGNER, { orgSlug, 
-                            host,
-                            layoutId,
-                            versionId: layoutVersionId,
-                          })
-                        : undefined
-                    }
+                        {remoteChanged && !draft.available ? (
+                          <BesignerConflictAlertComponent noun="screen" />
+                        ) : null}
+                        {layoutId ? (
+                          <Alert
+                            severity="info"
+                            sx={{
+                              borderRadius: 0,
+                              // Stack above the canvas selection overlays.
+                              position: 'relative',
+                              zIndex: 'appBar',
+                            }}
+                            action={
+                              <Button
+                                color="inherit"
+                                size="small"
+                                component={AppLink}
+                                componentVariant="naked"
+                                nativeButton={false}
+                                disabled={!layoutVersionId}
+                                href={
+                                  layoutVersionId
+                                    ? buildRoute(Route.LAYOUT_BESIGNER, {
+                                        orgSlug,
+                                        host,
+                                        layoutId,
+                                        versionId: layoutVersionId,
+                                      })
+                                    : undefined
+                                }
+                              >
+                                {'Edit layout'}
+                              </Button>
+                            }
+                          >
+                            {`Shared layout "${
+                              layoutResult?.data?.displayName ?? layoutId
+                            }" frames this screen — its elements are locked here.`}
+                          </Alert>
+                        ) : null}
+                        <LayoutChromeContext.Provider
+                          value={chromeContextValue}
+                        >
+                          <WorkspaceEditorComponent>
+                            <ViewportRootComponent>
+                              <ViewportCanvasComponent />
+                            </ViewportRootComponent>
+                          </WorkspaceEditorComponent>
+                        </LayoutChromeContext.Provider>
+                      </>
+                    )}
+                  </MainLayout>
+                  <PropertiesDialogComponent
+                    open={screenDialog}
+                    onClose={() => {
+                      setScreenDialog(false)
+                    }}
+                    onActionClick={async () => {
+                      await handleSave()
+                      setScreenDialog(false)
+                    }}
                   >
-                    {'Edit layout'}
-                  </Button>
-                }
-              >
-                {`Shared layout "${
-                  layoutResult?.data?.displayName ?? layoutId
-                }" frames this screen — its elements are locked here.`}
-              </Alert>
-            ) : null}
-            <LayoutChromeContext.Provider value={chromeContextValue}>
-              <WorkspaceEditorComponent>
-                <ViewportRootComponent>
-                  <ViewportCanvasComponent />
-                </ViewportRootComponent>
-              </WorkspaceEditorComponent>
-            </LayoutChromeContext.Provider>
-          </>
-        )}
-      </MainLayout>
-      <PropertiesDialogComponent
-        open={screenDialog}
-        onClose={() => {
-          setScreenDialog(false)
-        }}
-        onActionClick={async () => {
-          await handleSave()
-          setScreenDialog(false)
-        }}
-      >
-        <Stack spacing={1} sx={{ px: 3, pb: 3 }}>
-          <Typography variant="subtitle2">{'Publishing'}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {'The slug is this screen\'s own path segment; nesting under a parent screen composes the full path (parent "company" + slug "about" → /company/about). Use "/" for the home page. Clearing the slug and pressing Unpublish removes the screen (and unroutes its children) from the site.'}
-          </Typography>
-          <TextField
-            select
-            size="small"
-            label="Parent screen"
-            value={parentId ?? '__none__'}
-            onChange={handleParentChange}
-          >
-            <MenuItem value="__none__">{'None (top level)'}</MenuItem>
-            {(screenDocs ?? [])
-              .filter(
-                (screen) =>
-                  screen.$id !== screenId &&
-                  !Aglyn.wouldCreateScreenCycle(
-                    screenId,
-                    screen.$id,
-                    screensById,
-                  ),
-              )
-              .map((screen) => (
-                <MenuItem key={screen.$id} value={screen.$id}>
-                  {screen.displayName ?? screen.$id}
-                </MenuItem>
-              ))}
-          </TextField>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-            <TextField
-              size="small"
-              label="Slug"
-              fullWidth
-              value={slugValue}
-              onChange={(e) => setSlugInput(e.target.value)}
-              error={Boolean(
-                slugConflict || unpublishedAncestor || reservedSegment,
-              )}
-              helperText={
-                slugConflict
-                  ? 'Another screen already uses this path'
-                  : reservedSegment
-                    ? Aglyn.reservedScreenRouteMessage(reservedSegment)
-                    : unpublishedAncestor
-                      ? 'A parent screen has no slug yet — publish the parent first'
-                      : isCollectionTemplate
-                        ? templateRoutes
-                          ? `A collection template — renders ${templateRoutes}, not this path`
-                          : 'A collection template — not served at a path of its own'
-                        : composedPath
-                          ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
-                          : publishedPath
-                            ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
-                            : 'Not published'
-              }
-            />
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={handlePublish}
-              disabled={Boolean(
-                slugConflict ||
-                  unpublishedAncestor ||
-                  reservedSegment ||
-                  (!normalizedSlug && !publishedPath),
-              )}
-              sx={{ mt: 0.5, flexShrink: 0 }}
-            >
-              {normalizedSlug ? 'Publish' : 'Unpublish'}
-            </Button>
-          </Stack>
-          <Typography variant="subtitle2">
-            {'Shared layout'}
-            {/* AGL-2167 — binding a layout is the one control here whose
+                    <Stack spacing={1} sx={{ px: 3, pb: 3 }}>
+                      <Typography variant="subtitle2">
+                        {'Publishing'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {
+                          'The slug is this screen\'s own path segment; nesting under a parent screen composes the full path (parent "company" + slug "about" → /company/about). Use "/" for the home page. Clearing the slug and pressing Unpublish removes the screen (and unroutes its children) from the site.'
+                        }
+                      </Typography>
+                      <TextField
+                        select
+                        size="small"
+                        label="Parent screen"
+                        value={parentId ?? '__none__'}
+                        onChange={handleParentChange}
+                      >
+                        <MenuItem value="__none__">
+                          {'None (top level)'}
+                        </MenuItem>
+                        {(screenDocs ?? [])
+                          .filter(
+                            (screen) =>
+                              screen.$id !== screenId &&
+                              !Aglyn.wouldCreateScreenCycle(
+                                screenId,
+                                screen.$id,
+                                screensById,
+                              ),
+                          )
+                          .map((screen) => (
+                            <MenuItem key={screen.$id} value={screen.$id}>
+                              {screen.displayName ?? screen.$id}
+                            </MenuItem>
+                          ))}
+                      </TextField>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'flex-start' }}
+                      >
+                        <TextField
+                          size="small"
+                          label="Slug"
+                          fullWidth
+                          value={slugValue}
+                          onChange={(e) => setSlugInput(e.target.value)}
+                          error={Boolean(
+                            slugConflict ||
+                            unpublishedAncestor ||
+                            reservedSegment,
+                          )}
+                          helperText={
+                            slugConflict
+                              ? 'Another screen already uses this path'
+                              : reservedSegment
+                                ? Aglyn.reservedScreenRouteMessage(
+                                    reservedSegment,
+                                  )
+                                : unpublishedAncestor
+                                  ? 'A parent screen has no slug yet — publish the parent first'
+                                  : isCollectionTemplate
+                                    ? templateRoutes
+                                      ? `A collection template — renders ${templateRoutes}, not this path`
+                                      : 'A collection template — not served at a path of its own'
+                                    : composedPath
+                                      ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                                      : publishedPath
+                                        ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                                        : 'Not published'
+                          }
+                        />
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={handlePublish}
+                          disabled={Boolean(
+                            slugConflict ||
+                            unpublishedAncestor ||
+                            reservedSegment ||
+                            (!normalizedSlug && !publishedPath),
+                          )}
+                          sx={{ mt: 0.5, flexShrink: 0 }}
+                        >
+                          {normalizedSlug ? 'Publish' : 'Unpublish'}
+                        </Button>
+                      </Stack>
+                      <Typography variant="subtitle2">
+                        {'Shared layout'}
+                        {/* AGL-2167 — binding a layout is the one control here whose
                 effect is invisible on this screen's own canvas until it is
                 set, and nesting rules are not guessable from a picker. */}
-            <HelpTip
-              title="Screens & layouts"
-              excerpt="A layout wraps this screen in shared chrome — appbar, footer — maintained once. Layouts can nest; the screen renders in the innermost slot."
-              href={besignerDocsUrl('layouts', '#what-a-layout-is')}
-              sx={{ ml: 0.25, fontSize: '0.9em' }}
-            />
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {'Wraps this screen in chrome (appbar, footer, …) maintained once for every bound screen. Saved immediately.'}
-          </Typography>
-          <TextField
-            select
-            size="small"
-            label="Layout"
-            value={layoutId ?? '__none__'}
-            onChange={handleLayoutChange}
-          >
-            <MenuItem value="__none__">{'None'}</MenuItem>
-            {(layoutOptions ?? []).map((layout) => (
-              <MenuItem key={layout.$id} value={layout.$id}>
-                {layout.displayName ?? layout.$id}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Typography variant="subtitle2">
-            {'SEO'}
-            {/* AGL-2167 — these three fields are per-screen overrides of
+                        <HelpTip
+                          title="Screens & layouts"
+                          excerpt="A layout wraps this screen in shared chrome — appbar, footer — maintained once. Layouts can nest; the screen renders in the innermost slot."
+                          href={besignerDocsUrl('layouts', '#what-a-layout-is')}
+                          sx={{ ml: 0.25, fontSize: '0.9em' }}
+                        />
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {
+                          'Wraps this screen in chrome (appbar, footer, …) maintained once for every bound screen. Saved immediately.'
+                        }
+                      </Typography>
+                      <TextField
+                        select
+                        size="small"
+                        label="Layout"
+                        value={layoutId ?? '__none__'}
+                        onChange={handleLayoutChange}
+                      >
+                        <MenuItem value="__none__">{'None'}</MenuItem>
+                        {(layoutOptions ?? []).map((layout) => (
+                          <MenuItem key={layout.$id} value={layout.$id}>
+                            {layout.displayName ?? layout.$id}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <Typography variant="subtitle2">
+                        {'SEO'}
+                        {/* AGL-2167 — these three fields are per-screen overrides of
                 site-wide defaults, and nothing on this panel says so or
                 says where the defaults live. */}
-            <HelpTip
-              title="SEO"
-              excerpt="Per-screen overrides of the site's SEO defaults. Left empty, a screen falls back to the site-wide title pattern and social card."
-              href={besignerDocsUrl('seo', '#per-screen-seo')}
-              sx={{ ml: 0.25, fontSize: '0.9em' }}
-            />
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {'Search and social metadata for this screen. Saved separately ' +
-              'from the canvas.'}
-          </Typography>
-          <TextField
-            size="small"
-            label="Search title"
-            value={seoTitle ?? (screenResult?.data as any)?.seo?.title ?? ''}
-            onChange={(e) => setSeoTitle(e.target.value)}
-            helperText="The whole tab/search title, published verbatim (≤60 chars works best)"
-          />
-          <TextField
-            size="small"
-            label="Search description"
-            multiline
-            minRows={2}
-            value={
-              seoDescription ??
-              (screenResult?.data as any)?.seo?.description ??
-              ''
-            }
-            onChange={(e) => setSeoDescription(e.target.value)}
-            helperText="Search snippet / social share text (≤160 chars works best)"
-          />
-          {/* Social image (AGL-1337), shared with the screen detail page's
+                        <HelpTip
+                          title="SEO"
+                          excerpt="Per-screen overrides of the site's SEO defaults. Left empty, a screen falls back to the site-wide title pattern and social card."
+                          href={besignerDocsUrl('seo', '#per-screen-seo')}
+                          sx={{ ml: 0.25, fontSize: '0.9em' }}
+                        />
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {'Search and social metadata for this screen. Saved separately ' +
+                          'from the canvas.'}
+                      </Typography>
+                      <TextField
+                        size="small"
+                        label="Search title"
+                        value={
+                          seoTitle ??
+                          (screenResult?.data as any)?.seo?.title ??
+                          ''
+                        }
+                        onChange={(e) => setSeoTitle(e.target.value)}
+                        helperText="The whole tab/search title, published verbatim (≤60 chars works best)"
+                      />
+                      <TextField
+                        size="small"
+                        label="Search description"
+                        multiline
+                        minRows={2}
+                        value={
+                          seoDescription ??
+                          (screenResult?.data as any)?.seo?.description ??
+                          ''
+                        }
+                        onChange={(e) => setSeoDescription(e.target.value)}
+                        helperText="Search snippet / social share text (≤160 chars works best)"
+                      />
+                      {/* Social image (AGL-1337), shared with the screen detail page's
               SEO card so the two surfaces cannot drift (AGL-1368). */}
-          <ScreenSocialImageField
-            hostId={hostId}
-            saved={screenResult?.data?.seo?.image}
-            // See the twin on the screen detail page (AGL-2417).
-            savedAlt={screenResult?.data?.seo?.imageAlt}
-            savedWidth={screenResult?.data?.seo?.imageWidth}
-            savedHeight={screenResult?.data?.seo?.imageHeight}
-            value={seoImage}
-            onChange={setSeoImage}
-          />
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleSeoSave}
-            disabled={
-              seoTitle == null && seoDescription == null && seoImage == null
-            }
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            {'Save SEO'}
-          </Button>
-          <Typography variant="subtitle2">{'Password protection'}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {(screenResult?.data as any)?.protection?.passwordHash
-              ? 'This screen is password-protected. Enter a new password to ' +
-                'change it, or save empty to remove protection.'
-              : 'Visitors must enter this password to view the published ' +
-                'screen. Leave empty for public.'}
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TextField
-              size="small"
-              type="password"
-              label="Password"
-              value={protectPassword ?? ''}
-              onChange={(e) => setProtectPassword(e.target.value)}
-              sx={{ flex: 1 }}
-            />
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={handleProtectionSave}
-              disabled={protectPassword == null}
-            >
-              {'Save'}
-            </Button>
-          </Stack>
-        </Stack>
-      </PropertiesDialogComponent>
-      {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
-        <JsonEditor
-          open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
-          onClose={closeJsonEditor}
-          onSave={handleJsonSave}
-          defaultValue={Aglyn.canvas.nestedNodes as any}
-        />
-      )}
-    </BesignerMediaPickerProvider>
-    </InteractionsProvider>
-    </BindingPickerProvider>
-    </ReusableComponentsProvider>
-    </EntityPickerProvider>
-    </Aglyn.ScreenLinkContext.Provider>
+                      <ScreenSocialImageField
+                        hostId={hostId}
+                        saved={screenResult?.data?.seo?.image}
+                        // See the twin on the screen detail page (AGL-2417).
+                        savedAlt={screenResult?.data?.seo?.imageAlt}
+                        savedWidth={screenResult?.data?.seo?.imageWidth}
+                        savedHeight={screenResult?.data?.seo?.imageHeight}
+                        value={seoImage}
+                        onChange={setSeoImage}
+                      />
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={handleSeoSave}
+                        disabled={
+                          seoTitle == null &&
+                          seoDescription == null &&
+                          seoImage == null
+                        }
+                        sx={{ alignSelf: 'flex-start' }}
+                      >
+                        {'Save SEO'}
+                      </Button>
+                      <Typography variant="subtitle2">
+                        {'Password protection'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {(screenResult?.data as any)?.protection?.passwordHash
+                          ? 'This screen is password-protected. Enter a new password to ' +
+                            'change it, or save empty to remove protection.'
+                          : 'Visitors must enter this password to view the published ' +
+                            'screen. Leave empty for public.'}
+                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <TextField
+                          size="small"
+                          type="password"
+                          label="Password"
+                          value={protectPassword ?? ''}
+                          onChange={(e) => setProtectPassword(e.target.value)}
+                          sx={{ flex: 1 }}
+                        />
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={handleProtectionSave}
+                          disabled={protectPassword == null}
+                        >
+                          {'Save'}
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </PropertiesDialogComponent>
+                  {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+                    <JsonEditor
+                      open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+                      onClose={closeJsonEditor}
+                      onSave={handleJsonSave}
+                      defaultValue={Aglyn.canvas.nestedNodes as any}
+                    />
+                  )}
+                </BesignerMediaPickerProvider>
+              </InteractionsProvider>
+            </BindingPickerProvider>
+          </ReusableComponentsProvider>
+        </EntityPickerProvider>
+      </Aglyn.ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
-  );
+  )
 }
 
 BesignerPage.displayName = 'Page:Besigner'
 
 export default withSitePlugins(withBesignerContext(observer(BesignerPage)))
-

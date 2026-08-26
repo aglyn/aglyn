@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import type { Firestore } from 'firebase/firestore'
 import { autorun } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -27,6 +28,10 @@ import {
   readBesignerDraft,
   writeBesignerDraft,
 } from '../drafts/besigner-draft-store'
+import {
+  clearServerDraft,
+  readServerDraft,
+} from '../drafts/besigner-server-draft'
 import { useDebouncedCommit } from './use-debounced-commit'
 
 /**
@@ -128,6 +133,17 @@ export interface UseBesignerDraftOptions {
   /** Omit to disable drafts for this document. */
   ids?: BesignerDraftIds
   /**
+   * Omit to use the local crash net alone (AGL-1152).
+   *
+   * Given one, the SHARED working draft is consulted too and PREFERRED when
+   * both exist. That ordering is the point rather than a tie-break: a local
+   * draft is residue from a browser that stopped, while a server draft is work
+   * somebody deliberately saved — possibly a colleague, possibly this person
+   * on another machine. Offering the crash residue over it would hand back the
+   * older of the two and look like data loss.
+   */
+  firestore?: Firestore
+  /**
    * True once the stored document has been pushed into the canvas. Nothing
    * is read or written before this: writing earlier would snapshot an empty
    * canvas over a real draft, and reading earlier could not tell "no draft"
@@ -195,7 +211,7 @@ export interface UseBesignerDraftOptions {
 export function useBesignerDraft(
   options: UseBesignerDraftOptions,
 ): BesignerDraftState {
-  const { ids, loaded, dirty, storedStamp } = options
+  const { ids, loaded, dirty, storedStamp, firestore } = options
   // `??` would fold null into 0 and lose the distinction the whole rule
   // rests on: null is "presence has not answered yet", 0 is "it answered,
   // and you are alone".
@@ -250,7 +266,28 @@ export function useBesignerDraft(
     readKeyRef.current = key
     pruneBesignerDrafts()
     setOffer(readBesignerDraft(currentIds))
-  }, [key, loaded])
+    // The shared draft answers late, and wins when it answers. `readKeyRef`
+    // has already latched, so a slow reply cannot re-offer a draft the author
+    // has meanwhile restored or discarded — the guard covers both reads.
+    if (!firestore) return undefined
+    let live = true
+    void readServerDraft(firestore, currentIds)
+      .then((server) => {
+        if (!live || !server) return
+        setOffer({
+          nodes: server.nodes,
+          baseStamp: server.baseStamp,
+          // The shared draft stamps with `serverTimestamp`; the offer only
+          // needs an age for the local store's expiry rules, which do not
+          // apply to it. "Now" keeps it out of the aged-out branch.
+          updatedAt: Date.now(),
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [key, loaded, firestore])
 
   // Snapshot on canvas change. `autorun` re-runs whenever anything the
   // tracked read touched changes, and `toJSON()` touches every node — which
@@ -280,6 +317,9 @@ export function useBesignerDraft(
     // never existed.
     flush()
     clearBesignerDraft(currentIds)
+    // Discarding has to reach the SHARED draft too, or the next open — or the
+    // next colleague to join — is offered the very thing just declined.
+    if (firestore) void clearServerDraft(firestore, currentIds)
     wroteRef.current = false
   }, [key, loaded, dirty, flush])
 
