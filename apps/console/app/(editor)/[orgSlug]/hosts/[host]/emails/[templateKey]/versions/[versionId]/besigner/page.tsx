@@ -147,6 +147,8 @@ function HostEmailBesignerPage() {
   const definition = getTenantEmail(templateKey)
   const editable = Boolean(definition && isTenantEmailEditable(definition))
 
+  const savedLandedRef = useRef(false)
+  const [draftPending, setDraftPending] = useState(false)
   const [propertiesOpen, setPropertiesOpen] = useState(false)
   const [subjectInput, setSubjectInput] = useState<string | null>(null)
   const [preheaderInput, setPreheaderInput] = useState<string | null>(null)
@@ -168,6 +170,14 @@ function HostEmailBesignerPage() {
         : null,
     [firestore, hostId, templateKey, editable],
   )
+  /**
+   * The version a send currently resolves to. `hostEmailTemplate` reads this
+   * pointer off the template document, so it — not the version being edited —
+   * decides which email a recipient receives.
+   */
+  const livePointer = (template as { versionId?: string } | undefined)?.versionId
+  const editingLiveVersion = Boolean(versionId && versionId === livePointer)
+
   const {
     data: version,
     status,
@@ -214,18 +224,31 @@ function HostEmailBesignerPage() {
         { templateKey, nodes: nextNodes, updatedAt: stamp },
         baseline,
       )
-      await setDoc(
-        doc(firestore, 'hosts', hostId, TENANT_EMAIL_COLLECTION, templateKey),
-        {
-          versionId,
-          updatedAt: stamp,
-          updatedByEmail: (user as { email?: string } | undefined)?.email ?? '',
-        },
-        { merge: true },
-      )
     },
-    [firestore, hostId, templateKey, versionId, user],
+    [firestore, hostId, templateKey, versionId],
   )
+
+  /**
+   * Points the template at this version, which is what a send reads.
+   *
+   * `hostEmailTemplate` resolves a send by taking `templateKey.versionId` and
+   * loading that version's nodes, so this pointer — not the version write — is
+   * what changes the mail a recipient receives. Nothing else propagates it:
+   * an email has no cached page to drop, so there is no revalidation step
+   * behind this the way there is for a screen.
+   */
+  const publishVersion = useCallback(async () => {
+    if (!hostId) return
+    await setDoc(
+      doc(firestore, 'hosts', hostId, TENANT_EMAIL_COLLECTION, templateKey),
+      {
+        versionId,
+        updatedAt: Timestamp.now(),
+        updatedByEmail: (user as { email?: string } | undefined)?.email ?? '',
+      },
+      { merge: true },
+    )
+  }, [firestore, hostId, templateKey, versionId, user])
 
   // Who else is in this document (AGL-675) and live co-editing (AGL-677) —
   // adopted from the screen editor (AGL-1301). This editor HAS a host, so
@@ -287,12 +310,45 @@ function HostEmailBesignerPage() {
     notify: enqueueSnackbar,
     queueLoading,
     onSaved: () => {
+      // Records that the write LANDED. `handleSave` resolves whether or not it
+      // wrote — a size guard, a concurrent edit or nothing-to-save all return
+      // early — and `saveAvailable` is React state that is still stale in the
+      // same tick, so publishing on either would move the pointer to a version
+      // that never received the bytes.
+      savedLandedRef.current = true
       // A save makes Firestore authoritative again, so the live mirror of
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document (AGL-677).
       clearMirrorRef.current?.()
     },
   })
+
+  /**
+   * Saves the version, then points the template at it.
+   *
+   * A send resolves through `templateKey.versionId`, so saving a version an
+   * author is not on changes nothing a recipient receives — the pointer is the
+   * only thing that does.
+   */
+  const handleSaveAndPublish = useCallback(async () => {
+    savedLandedRef.current = false
+    await handleSave()
+    if (!savedLandedRef.current) return
+    if (livePointer !== versionId) await publishVersion()
+    setDraftPending(false)
+    enqueueSnackbar(
+      livePointer === versionId
+        ? 'Saved and published — this is the email that sends now.'
+        : 'Published this version — it is the email that sends now.',
+      { variant: 'success', persist: false },
+    )
+  }, [
+    handleSave,
+    livePointer,
+    versionId,
+    publishVersion,
+    enqueueSnackbar,
+  ])
 
   // Live co-editing (AGL-677). Rides the presence session's authenticated
   // RTDB app rather than brokering a second token.
@@ -514,6 +570,8 @@ function HostEmailBesignerPage() {
                 detailsUrl={listUrl}
                 presence={<PresenceAvatars presence={presence} />}
                 onSave={handleSave}
+                onSaveAndPublish={handleSaveAndPublish}
+                livePublished={editingLiveVersion && !draftPending}
                 saveAvailable={saveAvailable}
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
