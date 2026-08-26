@@ -253,12 +253,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
   },
   {
-    file: 'apps/console/utils/server/org-lockdown.ts',
-    count: 1,
-    reason:
-      'Server-side reader of NEXT_PUBLIC_TENANT_DOMAIN, same default.',
-  },
-  {
     file: 'apps/console/utils/tenant-dns.ts',
     count: 1,
     reason:
