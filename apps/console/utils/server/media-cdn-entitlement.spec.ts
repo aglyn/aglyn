@@ -65,26 +65,34 @@ const isDeleteSentinel = (value: unknown) =>
 
 describe('mediaCdnPathUpdate — the mediaCdn entitlement gate', () => {
   describe('refuses an org without the entitlement', () => {
-    it('mints no path for a free-tier org', () => {
-      // `free` is the only plan whose features.mediaCdn is false.
-      expect(isDeleteSentinel(update({ plan: 'free' }))).toBe(true)
+    it('MINTS a path for a free-tier org (AGL-1152)', () => {
+      // Inverted 2026-08-26 with the packaging. `free` used to be the only
+      // plan whose `features.mediaCdn` was false, and gating it had the
+      // economics backwards: without a path the site serves the FULL-SIZE
+      // original from Storage egress with no shared edge cache, which costs
+      // Aglyn more per visitor than the CDN the gate was withholding.
+      expect(isDeleteSentinel(update({ plan: 'free' }))).toBe(false)
     })
 
-    it('mints no path for an org with no plan at all', () => {
-      // Missing/unknown plans resolve as free (AGL-247).
-      expect(isDeleteSentinel(update({}))).toBe(true)
-      expect(isDeleteSentinel(update(undefined))).toBe(true)
-      expect(isDeleteSentinel(update({ plan: 'not-a-plan' }))).toBe(true)
+    it('mints a path for an org with no plan at all', () => {
+      // Missing/unknown plans resolve as free (AGL-247), and free now has it.
+      // The invariant worth keeping is the RESOLUTION, not the answer: a
+      // plan-less org must be treated as free rather than skipping the gate.
+      expect(isDeleteSentinel(update({}))).toBe(false)
+      expect(isDeleteSentinel(update(undefined))).toBe(false)
+      expect(isDeleteSentinel(update({ plan: 'not-a-plan' }))).toBe(false)
     })
 
-    it('mints no path for a paid plan whose subscription is dead', () => {
-      // The downgrade path: plan fields alone are not entitlement, so a
-      // canceled subscription must stop minting NEW paths even though the
-      // org doc still says `business`.
+    it('still mints a path for a paid plan whose subscription is dead', () => {
+      // Also inverted, and deliberately so. A canceled subscription drops the
+      // org to FREE, and free now carries `mediaCdn` — so the lapsed
+      // customer's images keep loading, over the delivery path that is cheaper
+      // for us than the fallback. Billing status still gates everything free
+      // does not include; it simply no longer gates this.
       for (const status of ['canceled', 'unpaid', 'incomplete']) {
         expect(
           isDeleteSentinel(update({ plan: 'business', billingStatus: status })),
-        ).toBe(true)
+        ).toBe(false)
       }
     })
 

@@ -424,18 +424,25 @@ describe('the finalize still only pays for what it can use (AGL-1476)', () => {
     )
   })
 
-  it('gives a free org its dimensions and uploader without generating variants', async () => {
-    // `mediaCdn` is Starter+. A free workspace serves raw storage URLs, so
-    // generating WebP it can never serve would be bytes nobody reads — but
-    // `width`/`height`/`uploadedBy` are not CDN features and must still land.
+  it('generates variants for a free org too, now that it can serve them', async () => {
+    // Inverted 2026-08-26 (AGL-1152). This asserted `variants: []` while
+    // `mediaCdn` was Starter+, on the sound reasoning that WebP a free
+    // workspace could never serve is bytes nobody reads. The premise is gone:
+    // free serves over the CDN now, so the variants ARE read.
+    //
+    // The trade is worth naming, because it is a real cost moving and not a
+    // free win: we pay transcode compute ONCE per upload, and stop paying
+    // full-size Storage egress on EVERY visit. The old path was the expensive
+    // one precisely because it skipped this work.
     mockState.org = { plan: 'free' }
     mockState.contentType = 'image/png'
     mockState.source = await sourcePng()
     await finalize()
-    expect(writtenDocument()['variants']).toEqual([])
+    expect(writtenDocument()['variants'].length).toBeGreaterThan(0)
+    // Unchanged and still the point of the rest of this test: these are not
+    // CDN features and must land regardless of plan.
     expect(writtenDocument()['width']).toBe(1200)
     expect(writtenDocument()['uploadedBy']).toBe('user-9')
-    expect(mockFullDownloads).toEqual([])
   })
 })
 

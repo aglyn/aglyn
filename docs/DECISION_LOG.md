@@ -92,6 +92,34 @@ introduce a price or an entitlement that Zach has not chosen.
 
 ---
 
+## 2026-08-26 — CDN delivery moves to every plan; the feature matrix becomes a tracked, generated document
+
+- **Decided by:** Zach, 2026-08-26, asking *"Isn't the cdn offered on all plans because that's what saves us money right or?"* and *"We need to be tracking the feature matrix in these docs as well! idk why that was overlooked"*.
+- **Scope:** packaging
+- **Evidence:** `PLAN_ENTITLEMENTS.free.features.mediaCdn`; `docs/feature-matrix.md` (generated); `npm run check:feature-matrix`; full reasoning in Drive → Pricing & Packaging → 05-Pricing-Decision-Log
+
+**No charged price moves.** A feature moves DOWN into Free.
+
+The gate had the economics backwards, because "no CDN" is not an absent feature
+— it is a **different, more expensive delivery path**. Without the entitlement a
+site serves absolute `firebasestorage.googleapis.com` URLs, so every visitor
+pulls the **full-size original** from Storage egress with **no shared edge
+cache**; the same entitlement covers responsive variants, so the ungated path
+lost on bytes-per-request *and* origin-requests-per-byte at once. The free tier
+was the most expensive tier we run, and the gate was what made it so.
+
+⚠️ **The counterweight is real and was accepted, not missed:** this removes a
+rung from the paid ladder. What paid tiers keep selling is storage quota, large
+video uploads and the higher bands — not the delivery path.
+
+**The matrix half.** These documents tracked prices; nothing owned the feature
+matrix, which is why `mediaCdn` could be gated, published on `/pricing`, drawn
+in Figma, and recorded in no pricing document at all. It is now generated from
+`PLAN_ENTITLEMENTS` and CI-checked, because a hand-kept 8×34 table drifts on
+the first change nobody mirrors — the exact failure being fixed.
+
+---
+
 ## 2026-08-24 — Aglyn **is** a marketplace facilitator; commerce and plugin selling ship Sept 1
 
 - **Decided by:** Zach, 2026-08-24, asked directly and answered *"we are a marketplace facilitator, do whatever you need but yes it is shipping sept 1, including the marketplace selling features for plugins and commerce etc."* He was offered gating storefront payments off for the beta and **rejected** it; do not re-propose.

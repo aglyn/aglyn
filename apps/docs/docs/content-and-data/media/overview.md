@@ -21,8 +21,8 @@ flowchart LR
 ```
 
 :::info Plan availability
-**Free** with storage quotas. **CDN delivery** with WebP variants is a **paid-tier**
-feature; large video uploads and higher storage are gated by plan.
+**Free** with storage quotas. **CDN delivery** with WebP variants is on **every
+plan**, free included; large video uploads and higher storage are gated by plan.
 :::
 
 ## Organize
@@ -237,7 +237,7 @@ Two things you may see:
 
 ## Deliver over CDN
 
-Paid tiers serve media via a **CDN** with automatic **WebP variants**, so images load fast
+Every plan serves media via a **CDN** with automatic **WebP variants**, so images load fast
 and cache well.
 
 ### URLs are stable

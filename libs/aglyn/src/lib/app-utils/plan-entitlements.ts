@@ -204,7 +204,25 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       eventCalendar: false,
       redirects: false,
       screenAnalytics: false,
-      mediaCdn: false,
+      /**
+       * ON for FREE (AGL-1152). Zach: "Isn't the cdn offered on all plans
+       * because that's what saves us money right or?" — it is, and gating it
+       * had the economics backwards.
+       *
+       * A site without this entitlement does not simply lose a nicety: it
+       * falls back to absolute `firebasestorage.googleapis.com` URLs, so every
+       * visitor pulls the FULL-SIZE ORIGINAL straight from Storage egress with
+       * no shared edge cache. The entitlement covers responsive images too, so
+       * the ungated path was the most expensive one we have on both axes —
+       * bytes per request and origin requests per byte. The CDN path is
+       * edge-cacheable and serves a resized variant, which is cheaper for us
+       * per visitor than the fallback it was protecting.
+       *
+       * The counterweight, recorded rather than hidden: this removes a rung
+       * from the paid ladder, which is the shape of a free feature
+       * cannibalising a paid one. Zach made that call knowing it.
+       */
+      mediaCdn: true,
       marketingOverlays: false,
       commerce: false,
       pos: false,

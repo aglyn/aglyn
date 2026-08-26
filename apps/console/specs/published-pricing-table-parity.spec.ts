@@ -460,7 +460,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
 
     it.each([
       ['Announcement bar & popups', 'marketingOverlays', 1],
-      ['CDN & responsive images', 'mediaCdn', 1],
+      // Column 0 = Free as of 2026-08-26 (AGL-1152). This row is the reason
+      // the feature matrix is now a tracked document: it was published here
+      // and drawn in Figma while no pricing document recorded the gate at all.
+      ['CDN & responsive images', 'mediaCdn', 0],
       ['AI assist', 'aiAssist', 2],
       ['Per-screen analytics', 'screenAnalytics', 2],
       ['Sell on the marketplace', 'marketplaceSelling', 2],

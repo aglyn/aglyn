@@ -206,8 +206,14 @@ describe('plan entitlements', () => {
     expect(PLAN_ENTITLEMENTS.starter.features.dataStore).toBe(true)
     expect(PLAN_ENTITLEMENTS.pro.functionsPerHost).toBe(50)
     expect(PLAN_ENTITLEMENTS.business.recordsPerDataset).toBe(100000)
-    // CDN media delivery (AGL-175): paid tiers only; free serves raw URLs.
-    expect(PLAN_ENTITLEMENTS.free.features.mediaCdn).toBe(false)
+    // CDN media delivery: EVERY plan, free included (AGL-1152).
+    //
+    // This asserted "paid tiers only" from AGL-175 until the economics were
+    // read the other way round: without it a site falls back to absolute
+    // Storage URLs, so a free visitor pulls the full-size original from
+    // egress with no shared edge cache. The gate was protecting the more
+    // expensive path, not the cheaper one.
+    expect(PLAN_ENTITLEMENTS.free.features.mediaCdn).toBe(true)
     expect(PLAN_ENTITLEMENTS.starter.features.mediaCdn).toBe(true)
     expect(PLAN_ENTITLEMENTS.business.features.mediaCdn).toBe(true)
   })
@@ -684,8 +690,9 @@ describe('plan entitlements', () => {
     // routes used to gate as `if (org.plan && !checkEntitlement(...))`, which
     // skipped the gate entirely for these plan-less orgs. The invariant those
     // routes now rely on: a plan-less org resolves as `free` and is denied.
-    // Regression guard for the five leaked paths (siteExport, videoMedia,
-    // mediaCdn, marketplaceSelling, storage quota).
+    // Regression guard for the leaked paths (siteExport, videoMedia,
+    // marketplaceSelling, storage quota). `mediaCdn` was one of the five and
+    // is now ungated on every plan, so it guards the opposite direction here.
     const created = { name: 'Acme', slug: 'acme', ownerUid: 'u1', hosts: {} } as any
 
     // Sanity: this is the plan-less shape, resolving as free.
@@ -696,8 +703,11 @@ describe('plan entitlements', () => {
     expect(checkEntitlement(created, 'siteExport')).toBe(false)
     // media/upload + media/upload-url
     expect(checkEntitlement(created, 'videoMedia')).toBe(false)
-    // media/upload + media/replace
-    expect(checkEntitlement(created, 'mediaCdn')).toBe(false)
+    // `mediaCdn` is deliberately NOT in this list any more: it is on every
+    // plan, so a plan-less org resolving as free gets it like anyone else.
+    // The invariant this test guards — plan-less resolves as free rather than
+    // skipping the gate — is unchanged and still covered by the four below.
+    expect(checkEntitlement(created, 'mediaCdn')).toBe(true)
     // marketplace publish / publish-plugin / publish-template
     expect(checkEntitlement(created, 'marketplaceSelling')).toBe(false)
 
