@@ -457,7 +457,7 @@ function tenantFormActionDirective(
  *
  * Two are path-scoped. `www.google.com` and `www.gstatic.com` are shared
  * Google hosts serving far more than reCAPTCHA, and a bare host entry for
- * either would authorise all of it — which is the `https:` mistake in
+ * either would authorize all of it — which is the `https:` mistake in
  * miniature. A source expression with a path matches by path PREFIX, so
  * `/recaptcha/` admits the loader and its versioned release bundle and nothing
  * else on those hosts. The known limitation is that CSP drops the path
@@ -534,7 +534,7 @@ const SCRIPT_ORIGINS = [
  * carry an old one, so all 33 scripts violated on every load. That cannot
  * happen here, and the proof is the ENFORCING policy rather than an argument
  * about caching. Console responses carry the same per-request nonce in an
- * enforcing `script-src`, and an inline script can be authorised by nothing but
+ * enforcing `script-src`, and an inline script can be authorized by nothing but
  * its nonce — so any drift between header and bytes would already be a total
  * console outage, not a report flood. This directive reuses that same `nonce`
  * string, so it is exactly as correct as the policy already load-bearing.
@@ -599,7 +599,7 @@ function scriptSrcReportOnlyDirective(nonce, isProduction) {
  * that product page was served from a different origin than the one baked into
  * its stored URL. Fixing this belongs to the commerce sinks (AGL-1725), not to
  * a new entry here — an `*.aglyn.app` wildcard would let one customer's site
- * authorise another's.
+ * authorize another's.
  */
 const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
 
@@ -624,7 +624,7 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * `'self'` is the primitive that handles both, and it handles them exactly:
  * the browser resolves it against the document, so it means `acme.com` on the
  * custom domain and `acme.aglyn.app` on the subdomain, with no list to
- * maintain and no way for one customer's origin to authorise another's.
+ * maintain and no way for one customer's origin to authorize another's.
  *
  * ## What this will report, and what must NOT be done about it
  *
