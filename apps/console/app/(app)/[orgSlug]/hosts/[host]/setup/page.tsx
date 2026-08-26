@@ -455,6 +455,17 @@ const DOMAIN_TAB_ID = 'domain'
 const ACTIVITY_TAB_ID = 'activity'
 /** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
 const EMAILS_TAB_ID = 'emails'
+/**
+ * Security tab id (AGL-1152); `/setup?tab=security` deep links here.
+ *
+ * Home for the owner-controlled halves of this site's Content-Security-Policy.
+ * Approved image hosts used to sit under Basic details, which was the right
+ * call while it was the only one — a lone card does not earn a tab. It stops
+ * being right the moment there are several, because "what may this site load,
+ * and from where" is a question an owner comes here to answer deliberately,
+ * not something to meet while scrolling past the site title.
+ */
+const SECURITY_TAB_ID = 'security'
 
 /**
  * Every tab id this page renders, in nav order (AGL-2486).
@@ -476,6 +487,7 @@ export const SETUP_TAB_IDS = [
   trackingSchema.id,
   THEME_TAB_ID,
   DOMAIN_TAB_ID,
+  SECURITY_TAB_ID,
   EMAILS_TAB_ID,
   ACTIVITY_TAB_ID,
 ] as const
@@ -949,6 +961,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                       ))}
                       <Tab value={THEME_TAB_ID} label={'Theme'} />
                       <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
+                      <Tab value={SECURITY_TAB_ID} label={'Security'} />
                       <Tab value={EMAILS_TAB_ID} label={'Emails'} />
                       <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
                     </TabList>
@@ -1013,15 +1026,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                             </div>
                             <div style={{ marginTop: 24 }}>
                               <ErrorScreensCard hostId={hostId} />
-                            </div>
-                            {/* Which external hosts this site's images may come
-                                from (AGL-1152). Sits with the other site-wide
-                                policy cards rather than under Media, because it
-                                governs what visitors' BROWSERS may fetch — the
-                                same class of decision as the error pages and
-                                the consent banner beside it. */}
-                            <div style={{ marginTop: 24 }}>
-                              <ApprovedImageHostsCard hostId={hostId} />
                             </div>
                             {/* Designable auth screens (AGL-553). */}
                             <div style={{ marginTop: 24 }}>
@@ -1105,6 +1109,12 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                             answerable nowhere in the console. */}
                         <SiteBrandingBadgeCard />
                       </Stack>
+                    </TabPanel>
+                    <TabPanel
+                      value={SECURITY_TAB_ID}
+                      sx={{ padding: 'unset' }}
+                    >
+                      <ApprovedImageHostsCard hostId={hostId} />
                     </TabPanel>
                     <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
                       <SiteEmailsCard />
