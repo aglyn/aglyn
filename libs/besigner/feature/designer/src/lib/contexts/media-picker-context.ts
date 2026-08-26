@@ -44,6 +44,21 @@ export interface MediaPickerContextValue {
   onPickMedia?: (
     onPick: (value: string, asset?: { alt?: string }) => void,
   ) => void
+  /**
+   * External image hosts this site's owner has approved (AGL-1152).
+   *
+   * Carried here rather than fetched by the field, because the designer must
+   * not read Firestore: it renders inside a plugin sandbox and the host doc is
+   * the console's to know. The provider that already takes `hostId` supplies
+   * it.
+   *
+   * ABSENT means "not known", NOT "nothing approved" — a field that cannot see
+   * the list must warn about nothing rather than warn about everything. The
+   * warning exists to tell an author something true before they publish; one
+   * that fires on every external URL because the list failed to load teaches
+   * them to ignore it, which is worse than silence.
+   */
+  approvedImageHosts?: readonly string[]
 }
 
 export const MediaPickerContext = createContext<MediaPickerContextValue>({})

@@ -30,25 +30,9 @@ import {
   InputAdornment,
   TextField as MuiTextField,
 } from '@mui/material'
-import {
-  forwardRef,
-  memo,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ClipboardEvent,
-  type FocusEvent,
-  type FormEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  type MutableRefObject,
-  type ReactNode,
-} from 'react'
+import { useContext, forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type FocusEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type MutableRefObject, type ReactNode } from 'react'
 
+import MediaPickerContext from '../contexts/media-picker-context'
 import type { BindingOption } from '../contexts/binding-picker-context'
 import {
   readTokenSegmentsFromDom,
@@ -547,6 +531,10 @@ export const TokenTextField = (props: TokenTextFieldProps) => {
     ...rest
   } = useFieldApi(props as never) as Record<string, any>
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
+  // The site's approved image hosts, for the media warning below. Read from
+  // the SAME context that supplies "Browse media", so a designer mounted
+  // without a media provider simply has no list and warns about nothing.
+  const { approvedImageHosts } = useContext(MediaPickerContext)
 
   const handleRef = useRef<TokenEditableHandle | null>(null)
   // Ref so the frozen editable children read fresh labels at render time
@@ -617,6 +605,57 @@ export const TokenTextField = (props: TokenTextFieldProps) => {
     setPillMenu(null)
   }, [pillMenu])
 
+  /**
+   * "This image will be blocked on the published page" (AGL-1152).
+   *
+   * The published site's `img-src` is built from the owner's approved-host
+   * list, so an external URL from a host they have not approved renders as a
+   * broken image for every visitor — and the author is the last person who
+   * would find out, because the besigner canvas has no such policy. Saying it
+   * HERE, at the moment the URL is typed, is the whole reason enforcing the
+   * policy is safe to do at all.
+   *
+   * Deliberately a WARNING, not a validation error: the value is legitimate,
+   * the author may be about to approve the host, and refusing the keystroke
+   * would make the picker unusable while they do. It also never fires on:
+   *
+   *   - a non-media field (`onBrowseMedia` is the discriminator the panel
+   *     already uses for "this attribute holds media");
+   *   - a relative path, a `media:` reference, a `data:`/`blob:` URL, or
+   *     anything unparseable — none of those reach an external host;
+   *   - a token-bearing value, because `{{...}}` resolves at render and the
+   *     host is not knowable here;
+   *   - ANY value when the list is not known (see the context docs), because a
+   *     warning that fires on everything is one authors learn to ignore.
+   */
+  const externalHostWarning = useMemo(() => {
+    if (!onBrowseMedia) return null
+    if (!approvedImageHosts) return null
+    const raw = typeof value === 'string' ? value.trim() : ''
+    if (!raw || raw.includes('{{')) return null
+    if (!/^https?:\/\//i.test(raw)) return null
+    let hostname = ''
+    try {
+      hostname = new URL(raw).hostname.toLowerCase()
+    } catch {
+      return null
+    }
+    if (!hostname) return null
+    // Same-origin and the pinned Storage host are always served.
+    if (hostname === 'firebasestorage.googleapis.com') return null
+    const approved = approvedImageHosts.some((entry) => {
+      const candidate = String(entry ?? '').trim().toLowerCase()
+      if (!candidate) return false
+      if (candidate.startsWith('*.')) {
+        const suffix = candidate.slice(1) // ".example.com"
+        return hostname.endsWith(suffix)
+      }
+      return hostname === candidate
+    })
+    if (approved) return null
+    return `${hostname} is not an approved image host for this site, so this image will not load for visitors. Add it under Setup → Approved image hosts.`
+  }, [onBrowseMedia, approvedImageHosts, value])
+
   return (
     <FormFieldGrid {...FormFieldGridProps}>
       <MuiTextField
@@ -625,6 +664,7 @@ export const TokenTextField = (props: TokenTextFieldProps) => {
         helperText={
           invalid ||
           ((meta.touched || validateOnMount) && meta.warning) ||
+          externalHostWarning ||
           helperText ||
           description
         }

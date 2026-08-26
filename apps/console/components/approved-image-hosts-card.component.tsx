@@ -145,6 +145,9 @@ export function ApprovedImageHostsCard(props: ApprovedImageHostsCardProps) {
         title: 'Approved image hosts',
         excerpt:
           'Images loaded from another site are blocked unless you approve the host here. Your own uploads always work.',
+        // The renamed tooltip has to open the SECTION, not the top of a page
+        // about the media library generally (AGL-1918).
+        anchor: '#approved-image-hosts',
       })}
       contentGutterX
       contentGutterY
