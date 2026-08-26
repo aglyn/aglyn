@@ -40,6 +40,7 @@ import {
   hostConsentRequired,
   isAnalyticsAllowed,
   resolveGaMeasurementId,
+  resolveGtmContainerId,
   type VisitorConsentHost,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
 import AdvertisingTags from './advertising-tags'
@@ -267,6 +268,9 @@ export default function SiteAnalytics({
   // Strict format check — the id lands inside an inline script (AGL-138).
   // The shared resolver applies GA_MEASUREMENT_ID_PATTERN.
   const gaMeasurementId = resolveGaMeasurementId(host)
+  // Same strict format check, same reason (AGL-138/AGL-2486): the container id
+  // lands inside an inline script.
+  const gtmContainerId = resolveGtmContainerId(host)
   // Visitor consent (AGL-1498). Evaluated CLIENT-SIDE only — these pages are
   // ISR-cached, so the HTML must never vary by region or consent state; the
   // server and first client render agree on "nothing yet", and the visitor's
@@ -471,6 +475,53 @@ export default function SiteAnalytics({
             id="ga-src"
             strategy="afterInteractive"
             src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
+          />
+        </>
+      ) : null}
+      {/* GOOGLE TAG MANAGER (AGL-2486), under the same gate as the pair
+          above and never a looser one.
+
+          A container is not a tag — it is a LOADER, and what it loads is
+          decided in Google's UI by whoever owns it, not here. That is exactly
+          why it cannot have a weaker gate than GA: this codebase's position is
+          that analytics may run on implied consent outside the EU/EEA/UK while
+          ADVERTISING is opt-in everywhere, and a container is the likeliest
+          thing on a page to carry an advertising tag. So it loads only from a
+          granting analytics state, and `consentGatedCategories` counts a
+          container as a gated feature so a container-only site still gets the
+          banner rather than none.
+
+          CONSENT MODE V2 comes first, in the same script, before `gtm.js` is
+          requested. Order is the whole of its correctness: defaults set after
+          the container has loaded are defaults its tags have already run past.
+          `ad_storage`/`ad_user_data`/`ad_personalization` stay denied unless
+          the visitor granted advertising, which is what makes a container
+          holding ad tags safe to load at all.
+
+          NO `<noscript>` IFRAME, deliberately, and it is the one piece of
+          Google's standard snippet omitted. That iframe fires the container
+          with no JavaScript — so no consent defaults, no gate, nothing to
+          suppress it — and these pages are ISR-cached, so it would sit in
+          shared HTML identical for every visitor and every region. It is a
+          consent bypass with a fallback's reputation. A visitor with
+          JavaScript off gets no container, which is the correct answer.
+      */}
+      {gtmContainerId && analyticsAllowed && analyticsMayEmit() ? (
+        <>
+          <Script id="gtm-init" strategy="afterInteractive">
+            {'window.dataLayer=window.dataLayer||[];' +
+              'function gtag(){dataLayer.push(arguments);}' +
+              (consentRequired
+                ? advertisingAllowed
+                  ? GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET
+                  : GA_CONSENT_DEFAULT_SNIPPET
+                : '') +
+              "dataLayer.push({'gtm.start':new Date().getTime(),event:'gtm.js'});"}
+          </Script>
+          <Script
+            id="gtm-src"
+            strategy="afterInteractive"
+            src={`https://www.googletagmanager.com/gtm.js?id=${gtmContainerId}`}
           />
         </>
       ) : null}

@@ -75,6 +75,8 @@
 export interface VisitorConsentHost {
   analytics?: {
     gaMeasurementId?: string
+    /** GTM container (AGL-2486) — gated exactly as the GA id is. */
+    gtmContainerId?: string
   } | null
   consent?: {
     /**
@@ -259,6 +261,41 @@ export function resolveGaMeasurementId(
   return GA_MEASUREMENT_ID_PATTERN.test(candidate) ? candidate : null
 }
 
+/**
+ * A Google Tag Manager container id — `GTM-` and 5–10 upper-case
+ * alphanumerics.
+ *
+ * Format-checked for the same reason the GA id is: it lands inside an INLINE
+ * SCRIPT on a published page, so anything that is not this shape must never
+ * reach it (AGL-138).
+ */
+export const GTM_CONTAINER_ID_PATTERN = /^GTM-[A-Z0-9]{5,10}$/
+
+/** The configured GTM container when it is well-formed, else null. */
+export function resolveGtmContainerId(
+  host: VisitorConsentHost | null | undefined,
+): string | null {
+  const candidate = String(host?.analytics?.gtmContainerId ?? '')
+  return GTM_CONTAINER_ID_PATTERN.test(candidate) ? candidate : null
+}
+
+/**
+ * Whether the site loads ANY Google tag — a GA property, a GTM container, or
+ * both (AGL-2486).
+ *
+ * The one predicate both consent questions are asked through, because the
+ * alternative is two places that each remember only one of the two. A site
+ * with a container and no GA id is a site that tracks: it was the shape that
+ * would have had `consentGatedCategories` return `[]`, no banner rendered, and
+ * the container loading ungated — which for GTM is worse than for GA, since a
+ * container is exactly the thing that can carry advertising tags.
+ */
+export function hostHasGoogleTag(
+  host: VisitorConsentHost | null | undefined,
+): boolean {
+  return !!resolveGaMeasurementId(host) || !!resolveGtmContainerId(host)
+}
+
 /** Host opt-out of the tool. Absent means ACTIVE — the safe default. */
 export function isConsentToolDisabled(
   host: VisitorConsentHost | null | undefined,
@@ -281,7 +318,10 @@ export function resolveHostConsentMode(
 export function consentGatedCategories(
   host: VisitorConsentHost | null | undefined,
 ): VisitorConsentCategory[] {
-  if (!resolveGaMeasurementId(host)) return []
+  // A GTM CONTAINER counts (AGL-2486). Read as `resolveGaMeasurementId` alone,
+  // a site running only a container had no gated category, so no banner
+  // rendered and the container loaded ungated — see `hostHasGoogleTag`.
+  if (!hostHasGoogleTag(host)) return []
   return hostAsksAboutAdvertising(host)
     ? ['analytics', 'advertising']
     : ['analytics']
@@ -299,7 +339,10 @@ export function consentGatedCategories(
 export function hostAsksAboutAdvertising(
   host: VisitorConsentHost | null | undefined,
 ): boolean {
-  return host?.consent?.advertising === true && !!resolveGaMeasurementId(host)
+  // Either tag qualifies (AGL-2486): `ad_storage` is what a GA property reads
+  // and what a GTM container's advertising tags read, and a container is the
+  // likelier of the two to carry them.
+  return host?.consent?.advertising === true && hostHasGoogleTag(host)
 }
 
 /**

@@ -34,7 +34,9 @@ import {
   VISITOR_CONSENT_CHANGED_EVENT,
   VISITOR_ID_STORAGE_KEY,
   visitorConsentStorageKey,
-} from './visitor-consent'
+  resolveGtmContainerId,
+  hostHasGoogleTag,
+  hostAsksAboutAdvertising,} from './visitor-consent'
 
 const GA_HOST = { analytics: { gaMeasurementId: 'G-ABCD1234' } }
 
@@ -240,5 +242,70 @@ describe('visitor consent model (AGL-1498)', () => {
         'session',
       )
     })
+  })
+})
+
+/**
+ * A GTM container is a gated feature (AGL-2486).
+ *
+ * `consentGatedCategories` asked `resolveGaMeasurementId` alone, so a site
+ * running only a container had NO gated category — which meant
+ * `hostConsentRequired` was false, no banner rendered, and the container
+ * loaded for every visitor in every region. For GTM that is worse than it
+ * would be for GA: a container is a LOADER, and the tags it carries are
+ * chosen in Google's UI by whoever owns it. Advertising is opt-in worldwide
+ * here, and this was the path that could have made it opt-out by accident.
+ */
+describe('a GTM container counts as tracking (AGL-2486)', () => {
+  const gtmHost = { analytics: { gtmContainerId: 'GTM-ABCDE12' } }
+  const gaHost = { analytics: { gaMeasurementId: 'G-TEST1234' } }
+
+  it('accepts a well-formed container id and refuses anything else', () => {
+    expect(resolveGtmContainerId(gtmHost)).toBe('GTM-ABCDE12')
+    for (const bad of [
+      'GTM-abc',            // lower case
+      'GTM-ABC',            // too short
+      'GTM-ABCDEFGHIJKL',   // too long
+      'G-TEST1234',         // a GA id
+      "GTM-'+alert(1)+'",   // the reason this is checked at all
+      '',
+    ]) {
+      expect(resolveGtmContainerId({ analytics: { gtmContainerId: bad } })).toBeNull()
+    }
+  })
+
+  it('THE HOLE: a container-only site is consent-gated', () => {
+    expect(hostHasGoogleTag(gtmHost)).toBe(true)
+    expect(consentGatedCategories(gtmHost)).toEqual(['analytics'])
+    expect(hostConsentRequired(gtmHost)).toBe(true)
+  })
+
+  it('a MALFORMED container is not a tag, and gates nothing', () => {
+    // Nothing loads, so there is nothing to consent to — a banner with no
+    // question behind it is decoration that trains visitors to click banners.
+    const broken = { analytics: { gtmContainerId: 'nope' } }
+    expect(hostHasGoogleTag(broken)).toBe(false)
+    expect(consentGatedCategories(broken)).toEqual([])
+    expect(hostConsentRequired(broken)).toBe(false)
+  })
+
+  it('lets a container-only site ask the advertising question', () => {
+    // The host opt-in still decides WHETHER it is asked; this only stops the
+    // question being impossible to ask on a site whose only tag is the one
+    // most likely to carry ad tags.
+    expect(
+      hostAsksAboutAdvertising({ ...gtmHost, consent: { advertising: true } }),
+    ).toBe(true)
+    expect(consentGatedCategories({ ...gtmHost, consent: { advertising: true } }))
+      .toEqual(['analytics', 'advertising'])
+    // Off by default, for every site that exists.
+    expect(hostAsksAboutAdvertising(gtmHost)).toBe(false)
+  })
+
+  it('changes nothing for a GA-only site', () => {
+    expect(hostHasGoogleTag(gaHost)).toBe(true)
+    expect(consentGatedCategories(gaHost)).toEqual(['analytics'])
+    expect(hostHasGoogleTag({ analytics: {} })).toBe(false)
+    expect(consentGatedCategories({})).toEqual([])
   })
 })

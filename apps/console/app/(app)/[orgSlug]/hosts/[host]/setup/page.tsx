@@ -142,6 +142,101 @@ const basicSchema: FormSchema = {
   ],
 }
 
+/**
+ * Tracking (AGL-2486) — its own tab, and not part of SEO.
+ *
+ * Zach: *"GTAG code can be in its own card, it is not SEO it is tracking"*,
+ * then *"We also need the support for Google tag manager there too not just
+ * google analytics, maybe move GA and GTM to its own tracking tab."*
+ *
+ * He is right about the category. A measurement id is not a search-engine
+ * setting; it shares a tab with titles and structured data only because it was
+ * the first `analytics.*` field anyone added and the SEO form was the nearest
+ * form. Moving it changes no stored data — both fields are still `analytics.*`
+ * on the host document, and this tab saves through the same handler.
+ *
+ * BOTH IDS ARE FORMAT-VALIDATED HERE, not merely hinted. They land inside an
+ * inline script on the published site, so the tenant refuses anything that is
+ * not the exact shape (`GA_MEASUREMENT_ID_PATTERN`,
+ * `GTM_CONTAINER_ID_PATTERN`) — which without this would read as "I saved it
+ * and nothing happened". The console rejects it at the field instead, with the
+ * same two patterns rather than a second guess at them.
+ */
+const trackingSchema: FormSchema = {
+  id: 'hostTracking',
+  title: 'Tracking',
+  CardDisplayProps: {
+    /*
+      The consent statement belongs to the CARD, not to a field — it is true
+      of both ids and of anything either of them loads. As a `subheader`
+      rather than a `plain-text` field because `simpleComponentMapper` has no
+      such component; a schema is not the place to discover that.
+    */
+    subheader:
+      'Both of these load ONLY after a visitor’s consent state allows ' +
+      'analytics — set the posture under SEO → Cookie consent. Advertising ' +
+      'stays denied unless the visitor grants it, wherever they are.',
+    help: docsHelp('analytics', {
+      anchor: '#google-analytics',
+      excerpt:
+        'Send your site’s traffic to Google Analytics or a Tag Manager ' +
+        'container. Visitors are asked for consent first.',
+    }),
+  },
+  fields: [
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.gaMeasurementId',
+      label: 'Google Analytics measurement ID',
+      helperText:
+        'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site. Visitors ' +
+        'are asked for consent first.',
+      help: docsHelp('analytics', {
+        anchor: '#google-analytics',
+        excerpt:
+          'Track your site in Google Analytics alongside the built-in ' +
+          'pageview analytics.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          // `.source`, not the RegExp: the form stack's pattern validator
+          // takes the expression as a STRING and silently validates nothing
+          // when handed the object.
+          pattern: Aglyn.GA_MEASUREMENT_ID_PATTERN.source,
+          message: 'Looks like G-XXXXXXXXXX — that is the shape GA uses',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.gtmContainerId',
+      label: 'Google Tag Manager container ID',
+      helperText:
+        'Optional — e.g. GTM-XXXXXXX. A container is a LOADER: whatever ' +
+        'tags it carries load with it, so it waits for the same consent, and ' +
+        'advertising tags stay denied unless the visitor grants advertising.',
+      help: docsHelp('analytics', {
+        anchor: '#google-analytics',
+        excerpt:
+          'Load a Google Tag Manager container on your site. Consent Mode ' +
+          'signals are set before the container loads.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.GTM_CONTAINER_ID_PATTERN.source,
+          message: 'Looks like GTM-XXXXXXX — that is the shape GTM uses',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+  ],
+}
+
 const seoSchema: FormSchema = {
   id: 'hostSeo',
   title: 'SEO',
@@ -153,27 +248,6 @@ const seoSchema: FormSchema = {
     }),
   },
   fields: [
-    {
-      component: FieldComponentType.TEXT_FIELD,
-      name: 'analytics.gaMeasurementId',
-      label: 'Google Analytics measurement ID',
-      helperText:
-        'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site. Visitors ' +
-        'are asked for consent first (see the Cookie consent card below).',
-      help: docsHelp('analytics', {
-        anchor: '#google-analytics',
-        excerpt:
-          'Track your site in Google Analytics alongside the built-in ' +
-          'pageview analytics.',
-      }),
-      type: 'text',
-      FormFieldGridProps: {
-        size: {
-          xs: 12,
-          sm: 6,
-        },
-      },
-    },
     {
       component: FieldComponentType.TEXT_FIELD,
       name: 'seo.title',
@@ -724,6 +798,11 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
     },
     {
       schema: seoSchema,
+      initialValues: data,
+      onSubmit: handleBasicSave,
+    },
+    {
+      schema: trackingSchema,
       initialValues: data,
       onSubmit: handleBasicSave,
     },
