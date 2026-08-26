@@ -26,6 +26,7 @@ const {
   tenantConnectSrcDirective,
   tenantFontSrcDirective,
   tenantFormActionDirective,
+  tenantFrameSrcDirective,
   tenantMediaSrcDirective,
   // Root-level CommonJS, outside the nx graph, because `next.config.js` must
   // `require` it (AGL-523) — the console specs read it the same way.
@@ -113,6 +114,58 @@ describe('owner-widened tenant CSP directives (AGL-1152)', () => {
     for (const origin of MEASUREMENT_CONNECT_ORIGINS) {
       expect(with_).toContain(origin)
     }
+  })
+
+  it('pins the two players the Video block can actually build', () => {
+    // `parseVideoEmbedSrc` rebuilds the address from a parsed video id, so
+    // these two strings are the ONLY ones it can produce — the author's raw
+    // URL never reaches the element. Dropping either takes the Video block to
+    // an empty box on every site that uses one.
+    const value = tenantFrameSrcDirective(true, [], SITE)
+    expect(value).toContain('https://www.youtube-nocookie.com')
+    expect(value).toContain('https://player.vimeo.com')
+  })
+
+  it('pins the payment frames, so in-page checkout still renders a card field', () => {
+    // Measured against a real mount: `elements.create('payment')` put three
+    // iframes on the page, all on `js.stripe.com`. `hooks.stripe.com` is the
+    // 3-D Secure challenge — `csp-stripe-payment-element.spec.ts` demands both
+    // of any `frame-src` this surface ever grows.
+    const value = tenantFrameSrcDirective(true, [], SITE)
+    expect(value).toContain('https://js.stripe.com')
+    expect(value).toContain('https://hooks.stripe.com')
+  })
+
+  it("spells out 'self' and the site's own addresses, which frame-src needs", () => {
+    // Measured: `frame-src` has NO implicit fallback to same-origin. Under
+    // `frame-src https://example.invalid` a same-origin child reported
+    // `frame-src <- …/denied.html`, so without `'self'` the platform's own
+    // frames are refused on their own page.
+    const value = tenantFrameSrcDirective(true, [], SITE)
+    expect(value.startsWith("frame-src 'self' ")).toBe(true)
+    expect(value).toContain('https://demo.aglyn.app')
+    expect(value).toContain('https://example.com')
+  })
+
+  it('admits an embed the owner approved, and refuses one it was not given', () => {
+    const value = tenantFrameSrcDirective(true, ['maps.example.net'], SITE)
+    expect(value).toContain('https://maps.example.net')
+    expect(tenantFrameSrcDirective(true, [], SITE)).not.toContain(
+      'maps.example.net',
+    )
+  })
+
+  it('never turns frame-src into a wildcard, whatever it is handed', () => {
+    // The refusal that matters most on this directive: a bare `*` would let an
+    // injected iframe load a pixel-perfect login form from anywhere.
+    const value = tenantFrameSrcDirective(
+      true,
+      ['*', '', 'evil.com; frame-src *', 'https://ok.example.com'],
+      SITE,
+    )
+    expect(value).not.toContain('*')
+    expect(value).not.toContain(';')
+    expect(value).not.toContain('evil.com')
   })
 
   it('keeps the ~190 Google country domains OUT of connect-src', () => {

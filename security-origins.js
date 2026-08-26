@@ -1002,7 +1002,7 @@ function configuredOrigin(raw) {
  * What is NOT here, because it was measured absent: Firebase. The tenant runs
  * no client Firestore, Auth or App Check — every read is server-side through
  * the Admin SDK — so a published page never opens a `*.googleapis.com`
- * connection, and naming one would authorise an egress that does not exist.
+ * connection, and naming one would authorize an egress that does not exist.
  */
 const TENANT_CONNECT_ORIGINS = ['https://api.stripe.com']
 
@@ -1039,6 +1039,92 @@ function tenantConnectSrcDirective(
     .concat(approvedImageHostSources(approvedConnectHosts))
     .concat(development)
   return `connect-src ${sources.join(' ')}`
+}
+
+/**
+ * The players and payment frames a published site embeds (AGL-1152).
+ *
+ * ⛔ `frame-ancestors` is NOT this, and confusing the two reads as "already
+ * allowed": that directive says who may frame US, this one says whom WE may
+ * frame. The tenant has shipped the first since AGL-518 and never the second.
+ *
+ * Every entry is read out of the code that CONSTRUCTS the `src`, which for the
+ * two players means the whole set is closed rather than merely observed:
+ * `parseVideoEmbedSrc` (`libs/plugins/mui/src/lib/components/blocks.tsx`)
+ * takes an author's YouTube or Vimeo URL, extracts the video ID and rebuilds
+ * the address itself, so the only two strings it can ever produce are
+ * `https://www.youtube-nocookie.com/embed/{id}` and
+ * `https://player.vimeo.com/video/{id}`. The raw author URL never reaches the
+ * element. Drop either origin and the Video block goes to an empty box on
+ * every site that uses one.
+ *
+ * Stripe is the storefront Payment Element. Measured against a real mount:
+ * `elements.create('payment')` put THREE iframes on the page, all on
+ * `https://js.stripe.com`. `hooks.stripe.com` is the 3-D Secure challenge and
+ * is required by `csp-stripe-payment-element.spec.ts`, which was written
+ * against AGL-1944 precisely so that the day this directive appeared it would
+ * fail rather than take checkout down quietly.
+ *
+ * ## What is NOT governed here, measured rather than assumed
+ *
+ * A `srcdoc` iframe is not checked against `frame-src` at all. Measured in a
+ * real browser under `frame-src https://example.invalid`: a `srcdoc` child
+ * rendered its content with ZERO violations, while a same-origin `src` frame
+ * on the same page reported `frame-src <- …/denied.html`. So the Custom HTML
+ * block's Embed mode keeps working untouched — and, in the same measurement, a
+ * frame NESTED inside that srcdoc child IS refused, because the child inherits
+ * this policy. An author embedding a third-party iframe approves its host.
+ *
+ * That second result is also why `'self'` is spelled out. `frame-src` has no
+ * implicit fallback to same-origin: without it the platform's own frames are
+ * refused on their own page.
+ */
+const TENANT_FRAME_ORIGINS = [
+  'https://www.youtube-nocookie.com',
+  'https://player.vimeo.com',
+  'https://js.stripe.com',
+  'https://hooks.stripe.com',
+]
+
+/**
+ * The console, for the admin bar's silent edit-access probe.
+ *
+ * `admin-bar.tsx` frames `${consoleOrigin}/edit-access?…&silent=1` to ask
+ * whether this visitor may edit the site; without the origin here the probe
+ * frame is refused and the bar never appears for anyone.
+ *
+ * Mirrors `admin-bar-slot.tsx`'s own expression so the policy and the code
+ * cannot name different consoles — EXCEPT on a self-host container, which gets
+ * only what its operator configured. The reasoning is AGL-2446's, applied to
+ * the other direction of framing: an operator's published pages should not
+ * carry a policy naming a console Aglyn runs, and a container that configured
+ * no console has nothing for the bar to reach anyway.
+ */
+function tenantConsoleFrameOrigin() {
+  const configured = configuredOrigin(process.env.NEXT_PUBLIC_CONSOLE_URL)
+  if (configured) return configured
+  return process.env.AGLYN_STANDALONE === '1' ? undefined : 'https://app.aglyn.com'
+}
+
+function tenantFrameSrcDirective(isProduction, approvedFrameHosts, siteOrigins) {
+  const development = isProduction
+    ? []
+    : ['http://localhost:*', 'http://127.0.0.1:*']
+  const pluginOrigin = configuredOrigin(process.env.NEXT_PUBLIC_PLUGIN_ORIGIN)
+  const consoleFrame = tenantConsoleFrameOrigin()
+  const sources = ["'self'"]
+    // The site's own addresses, for the reason `img-src` carries them: a site
+    // on a custom domain has two origins and `'self'` is only one of them.
+    .concat(approvedImageHostSources(siteOrigins))
+    .concat(TENANT_FRAME_ORIGINS)
+    // The marketplace sandbox. `PluginFrame` points an iframe at this origin
+    // for every installed executable plugin, and the cross-origin boundary IS
+    // the sandbox — without the entry the plugin renders as nothing at all.
+    .concat(pluginOrigin ? [pluginOrigin] : [])
+    .concat(consoleFrame ? [consoleFrame] : [])
+    .concat(approvedImageHostSources(approvedFrameHosts))
+    .concat(development)
+  return `frame-src ${sources.join(' ')}`
 }
 
 const APPROVED_IMAGE_HOSTS_MAX = 50
@@ -1282,4 +1368,6 @@ module.exports = {
   GOOGLE_CCTLD_ORIGINS,
   TENANT_CONNECT_ORIGINS,
   tenantConnectSrcDirective,
+  TENANT_FRAME_ORIGINS,
+  tenantFrameSrcDirective,
 }

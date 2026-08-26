@@ -113,6 +113,7 @@ function lockedVerdict(
     approvedFontHosts?: string[]
     approvedFormActions?: string[]
     approvedConnectHosts?: string[]
+    approvedFrameHosts?: string[]
     runsMeasurement?: boolean
     siteOrigins?: string[]
   },
@@ -129,6 +130,7 @@ function lockedVerdict(
       approvedFontHosts: facts.approvedFontHosts ?? [],
       approvedFormActions: facts.approvedFormActions ?? [],
       approvedConnectHosts: facts.approvedConnectHosts ?? [],
+      approvedFrameHosts: facts.approvedFrameHosts ?? [],
       runsMeasurement: facts.runsMeasurement ?? false,
       siteOrigins: facts.siteOrigins ?? [],
       mode: lockdownMode(state),
@@ -190,6 +192,7 @@ export async function GET(request: Request): Promise<Response> {
             approvedFontHosts: [],
             approvedFormActions: [],
             approvedConnectHosts: [],
+            approvedFrameHosts: [],
           },
           { status: 200 },
         )
@@ -202,6 +205,7 @@ export async function GET(request: Request): Promise<Response> {
         approvedFontHosts: [],
         approvedFormActions: [],
         approvedConnectHosts: [],
+        approvedFrameHosts: [],
       })
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
@@ -269,6 +273,16 @@ export async function GET(request: Request): Promise<Response> {
       (hostRes.host as { approvedConnectHosts?: unknown }).approvedConnectHosts,
     )
     /**
+     * What this site's pages may EMBED (AGL-1152) — a player, a map, a booking
+     * widget. `frame-ancestors` is a different question and is not this one.
+     *
+     * Same disclosure posture as the lists beside it: an embed is visible in
+     * the page's own source to anyone who looks.
+     */
+    const approvedFrameHosts = stringList(
+      (hostRes.host as { approvedFrameHosts?: unknown }).approvedFrameHosts,
+    )
+    /**
      * Does this site run measurement tags (AGL-1152)?
      *
      * Decides whether `img-src` admits the analytics and ad-network beacons.
@@ -331,6 +345,7 @@ export async function GET(request: Request): Promise<Response> {
           approvedFontHosts,
           approvedFormActions,
           approvedConnectHosts,
+          approvedFrameHosts,
           runsMeasurement,
           siteOrigins,
         },
@@ -345,6 +360,7 @@ export async function GET(request: Request): Promise<Response> {
       approvedFontHosts,
       approvedFormActions,
       approvedConnectHosts,
+      approvedFrameHosts,
       runsMeasurement,
       siteOrigins,
     })
@@ -380,6 +396,10 @@ export async function GET(request: Request): Promise<Response> {
         // not: an empty list during a verdict outage would refuse the fetches
         // an author's embedded widget makes, on every site that has one.
         approvedConnectHosts: null,
+        // Stale-retentive with the rest: an empty list would read as "the
+        // owner approved nothing" and blank a site's embedded video, map or
+        // booking widget for the length of a verdict outage.
+        approvedFrameHosts: null,
       },
       { status: 200 },
     )

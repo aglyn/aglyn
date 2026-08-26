@@ -30,6 +30,7 @@ import {
   tenantConnectSrcDirective,
   tenantFontSrcDirective,
   tenantFormActionDirective,
+  tenantFrameSrcDirective,
   tenantImgSrcDirective,
   tenantMediaSrcDirective,
 } from '../../security-origins'
@@ -204,6 +205,7 @@ const lockdownVerdicts = new Map<
     approvedFontHosts: string[]
     approvedFormActions: string[]
     approvedConnectHosts: string[]
+    approvedFrameHosts: string[]
     runsMeasurement: boolean
     siteOrigins: string[]
   }
@@ -235,6 +237,7 @@ async function hostVerdict(
   approvedFontHosts: string[]
   approvedFormActions: string[]
   approvedConnectHosts: string[]
+  approvedFrameHosts: string[]
   runsMeasurement: boolean
   siteOrigins: string[]
 }> {
@@ -249,6 +252,7 @@ async function hostVerdict(
       approvedFontHosts: cached.approvedFontHosts,
       approvedFormActions: cached.approvedFormActions,
       approvedConnectHosts: cached.approvedConnectHosts,
+      approvedFrameHosts: cached.approvedFrameHosts,
       runsMeasurement: cached.runsMeasurement,
       siteOrigins: cached.siteOrigins,
     }
@@ -310,6 +314,9 @@ async function hostVerdict(
   // during a verdict outage would break an author's embedded widget rather
   // than anything of ours.
   let approvedConnectHosts: string[] = cached?.approvedConnectHosts ?? []
+  // Stale-retentive with the rest: a site's embedded video or booking widget
+  // must not go to an empty box because a verdict fetch failed.
+  let approvedFrameHosts: string[] = cached?.approvedFrameHosts ?? []
   // Stale-retentive for the same reason as the list beside it: losing this to
   // an outage would blank a site's analytics beacons rather than its images,
   // which is quieter and therefore worse.
@@ -333,6 +340,7 @@ async function hostVerdict(
         approvedFontHosts?: unknown
         approvedFormActions?: unknown
         approvedConnectHosts?: unknown
+        approvedFrameHosts?: unknown
         runsMeasurement?: boolean
         siteOrigins?: unknown
       } | null
@@ -358,6 +366,9 @@ async function hostVerdict(
       }
       if (Array.isArray(data?.approvedConnectHosts)) {
         approvedConnectHosts = strings(data.approvedConnectHosts)
+      }
+      if (Array.isArray(data?.approvedFrameHosts)) {
+        approvedFrameHosts = strings(data.approvedFrameHosts)
       }
       if (Array.isArray(data?.approvedImageHosts)) {
         approvedImageHosts = data.approvedImageHosts.filter(
@@ -386,6 +397,7 @@ async function hostVerdict(
     approvedFontHosts,
     approvedFormActions,
     approvedConnectHosts,
+    approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
   })
@@ -398,6 +410,7 @@ async function hostVerdict(
     approvedFontHosts,
     approvedFormActions,
     approvedConnectHosts,
+    approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
   }
@@ -779,6 +792,20 @@ export const middleware: NextMiddleware = async (req, event) => {
    * HTML block's Embed mode fetches under this directive too. An owner
    * embedding a third-party widget approves its host in the Security tab; that
    * is the control, and it is why the flip does not revoke the capability.
+   *
+   * ## `frame-src` joins it too (AGL-1152)
+   *
+   * ⛔ NOT `frame-ancestors`, which has been here since AGL-518 and answers the
+   * opposite question. That one says who may frame US; this one says whom WE
+   * may frame, and until now nothing at this layer constrained where a frame on
+   * a published page could point — an injected `<iframe>` could load a
+   * pixel-perfect login form from anywhere.
+   *
+   * The platform's own embeds are a short, closed set — the two video players
+   * the Video block can construct, the marketplace plugin sandbox, the payment
+   * frames, the admin bar's edit-access probe — so what remains is what a
+   * customer's site legitimately embeds, which is the owner's list. Both halves
+   * live with `tenantFrameSrcDirective`.
    */
   // Computed here rather than beside `Reporting-Endpoints` below, because the
   // policy itself now carries the reporting tail and needs the answer first.
@@ -806,6 +833,10 @@ export const middleware: NextMiddleware = async (req, event) => {
       process.env.NODE_ENV === 'production',
       verdict.approvedConnectHosts,
       verdict.runsMeasurement,
+      verdict.siteOrigins,
+    )}; ${tenantFrameSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedFrameHosts,
       verdict.siteOrigins,
     )}; ${reportingDirectives(secureTransport)}`,
   )
