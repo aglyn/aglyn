@@ -27,8 +27,10 @@ import SiteStatusScreen from './site-status-screen.component'
 /**
  * The body of a tenant 404 (AGL-2342).
  *
- * navigable fallback; this answers it with the site's OWN page — the screen its
- * author designed, with the header, nav and footer they put on it.
+ * A 404 with no way to navigate away strands the visitor. AGL-2187 answered
+ * that with a navigable fallback; this answers it with the site's OWN page —
+ * the screen its author designed, with the header, nav and footer they put on
+ * it.
  *
  * ## Why the screen is fetched instead of rendered with the page
  *

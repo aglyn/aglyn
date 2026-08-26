@@ -242,8 +242,8 @@ export function CollectionEntriesPage() {
   /**
    * Creating a collection is a DRAWER, like every other artifact (AGL-2498).
    *
-   * drawer itself states is older than that: *"creating is a drawer, picking
-   * is a dialog"* (AGL-699). This was the one create still in a modal.
+   * The house rule the drawer itself states: creating is a drawer, picking is
+   * a dialog (AGL-699). Screens, layouts and components all create this way.
    *
    * So the fields live in the drawer's schema and this component keeps only
    * what the drawer cannot: the error to show, because uniqueness is a
@@ -256,9 +256,9 @@ export function CollectionEntriesPage() {
    * The rest of what a collection IS, as drawer fields (AGL-2498).
    *
    * A collection is defined by four things — its name, the ADDRESS it serves,
-   * and the two screens that render its list and its entries. Three of them
-   * were settings-only, so every new collection was created and then
-   * immediately reopened to finish defining it.
+   * and the two screens that render its list and its entries. Offering only
+   * the name here means every new collection is created and then immediately
+   * reopened in settings to finish defining it.
    *
    * The address is the one that mattered: it is a live URL, it was silently
    * derived from the name with no way to say otherwise, and changing it later

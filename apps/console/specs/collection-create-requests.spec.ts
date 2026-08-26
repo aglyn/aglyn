@@ -18,10 +18,10 @@
 /**
  * What creating a collection sends (AGL-2498).
  *
- * collection is defined by four things — its name, the ADDRESS it serves, and
- * the two screens that render its list and its entries. Every one of the other
- * three was settings-only, so a new collection was created and then
- * immediately reopened to finish defining it.
+ * A collection is defined by four things — its name, the ADDRESS it serves,
+ * and the two screens that render its list and its entries. Leave three of
+ * them to settings and every new collection is created and then immediately
+ * reopened to finish defining it.
  *
  * Those four do not travel in one request, which is the thing worth pinning:
  * `/api/hosts/collections` accepts `displayName` and `slug` on `create` and

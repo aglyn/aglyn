@@ -251,8 +251,10 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   })
 
   /**
-   * so they are asserted post-markup — the form the published page states and
-   * the form a customer can check. `published-pricing-table-parity.spec.ts`
+   * The Sept-1 locked rate set: $0.0338/GB-mo, $0.13/1k page views, $0.065/1k
+   * form submissions. Those are the CUSTOMER-facing figures, so they are
+   * asserted post-markup — the form the published page states and the form a
+   * customer can check. `published-pricing-table-parity.spec.ts`
    * pins the same three figures from the other direction, as transcribed off
    * the live page on 2026-08-19; this one pins them against the COGS table, so
    * neither a code-side drift nor a half-applied rate correction can move what

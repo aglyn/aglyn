@@ -137,9 +137,10 @@ export type PresenceStatus =
 /**
  * What the reader should DO about it (AGL-2486).
  *
- * `Failed at: broker (500)` — a stage name and a status code, in front of a
- * customer. `stage` and `code` are still carried, because whoever debugs this
- * next needs them; they are just no longer the message.
+ * A fault has to name a course of action. `Failed at: broker (500)` is a stage
+ * name and a status code in front of a customer who can act on neither.
+ * `stage` and `code` are still carried, because whoever debugs this next needs
+ * them; they are simply not the message.
  *
  * The kind is what selects the words. Four, because there are exactly four
  * different things the reader can do: nothing (it was never set up), sign in
@@ -316,14 +317,15 @@ export const TAB_SESSION_ID =
 /**
  * A colour per SESSION, not per person (AGL-2486).
  *
- * one account draw the same face in two different colours, and — because the
- * colour is WRITTEN INTO the room entry by the session it belongs to —
- * everyone else sees that session in that same colour too, including the
+ * Seeding on `uid:sessionId` is what makes a per-session colour work: two
+ * windows of one account draw the same face in two different colours, and —
+ * because the colour is WRITTEN INTO the room entry by the session it belongs
+ * to — everyone else sees that session in that same colour too, including the
  * cursor and the selection box the overlays draw from `entry.colour`.
  *
- * Seeding on the uid alone, which is what this did, made every one of a
- * person's sessions identical: indistinguishable avatars, and two cursors in
- * one colour fighting over the canvas.
+ * Seeding on the uid alone makes every one of a person's sessions identical:
+ * indistinguishable avatars, and two cursors in one colour fighting over the
+ * canvas.
  */
 function colourFor(seed: string): string {
   return avatarColourFor(seed)
@@ -338,15 +340,15 @@ function colourIndexFor(key: string): number {
  * Is the pointer ACTUALLY over the canvas, or is something drawn on top of it?
  * (AGL-2486)
  *
- * ## The bug
+ * ## The bug a geometric test cannot see
  *
- * session typing into the Assist panel kept broadcasting a canvas position, so
- * a colleague saw a cursor implying attention on the document while the person
- * was somewhere else entirely.
+ * A session typing into the Assist drawer keeps broadcasting a canvas
+ * position, so a colleague sees a cursor implying attention on the document
+ * while that person is somewhere else entirely.
  *
- * The old test was purely GEOMETRIC — normalise the pointer against the canvas
- * box and publish if it lands in 0..1. A panel drawn over the canvas does not
- * move the canvas, so the box still contains the pointer and the position
+ * A purely GEOMETRIC test — normalise the pointer against the canvas box and
+ * publish if it lands in 0..1 — cannot catch it. A panel drawn over the canvas
+ * does not move the canvas, so the box still contains the pointer and the position
  * still looks valid. Measured with Assist open: a point over the visibly
  * exposed canvas hit-tests to `MuiBackdrop-root`, while the canvas's bounding
  * box still covers it. The box cannot see what is in front of it; only a hit

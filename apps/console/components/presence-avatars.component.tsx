@@ -367,17 +367,14 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
 /**
  * What the tooltip says about ONE session (AGL-2486).
  *
- * ## Why this no longer says "saves are not merged"
+ * ## Why it does not say "saves are not merged"
  *
- * collaborating should be able to save as they all go along and make
- * changes... there should be no problem with this"*.
- *
- * The old copy described the STORAGE and presented it as the experience.
- * The unit of live collaboration is a node (`use-coediting`, AGL-677), so
- * two people on different elements both keep their work; and the save guard
- * now asks whether this document INCORPORATES what is stored rather than
- * whether the stored version moved, so in a converged room either of you
- * can save, in any order, as often as you like.
+ * That describes the STORAGE and presents it as the experience. The unit of
+ * live collaboration is a node (`use-coediting`, AGL-677), so two people on
+ * different elements both keep their work; and the save guard asks whether
+ * this document INCORPORATES what is stored rather than whether the stored
+ * version moved, so in a converged room either of you can save, in any order,
+ * as often as you like.
  *
  * ## What it still has to admit
  *

@@ -74,10 +74,10 @@ const kindLabels = (brand: string): Record<string, string> => ({
 /**
  * Concrete cases, because the boundary is NOT "platform versus content".
  *
- * specific — an agency builds a site, their client signs in, finds their own
- * page wrong, and files it with us. A legalistic disclaimer does not sort
- * that; three real sentences do, and the third one matters most because it
- * looks like a content problem and is ours.
+ * The failure mode is specific: an agency builds a site, their client signs
+ * in, finds their own page wrong, and files it with Aglyn. A legalistic
+ * disclaimer does not sort that; three real examples do, and the third one
+ * matters most because it looks like a content problem and is ours.
  */
 const EXAMPLES: readonly { case: string; verdict: string; ours: boolean }[] = [
   {
@@ -168,9 +168,11 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
    * fallback is right for an action and wrong for a claim — and the org
    * stamped onto a bug report is a claim about where the reporter was.
    *
-   * `/admin/media-quarantine` as the route and `Test Org` as the
-   * organization, a workspace that page has nothing to do with. A triager
-   * reading that goes looking in the wrong tenant's data.
+   * A report filed from the staff console shows it: with the fallback in
+   * play, a report carries `/admin/media-quarantine` as the route and some
+   * unrelated workspace as the organization (AGL-2485). A triager reading
+   * that goes looking in the wrong tenant's data. On a page that is not about
+   * a workspace, the org context is nothing.
    */
   const urlNamesWorkspace = useUrlNamesOrg()
   const orgId = urlNamesWorkspace ? scopedOrgId : undefined

@@ -48,12 +48,11 @@ import {
 /**
  * The org's own USAGE BUDGET — set it, see it, clear it (AGL-1528).
  *
- * the lens this route exists to satisfy: "*Always make sure features are
- * available in the console and not just that the capability exists.*"
- *
- * A budget the customer cannot SET and SEE is not a feature. The cron can
- * evaluate a budget with no console surface at all — and would then be
- * alerting on a number nobody could ever have chosen.
+ * A monthly alert threshold on metered spend, in the shape cloud providers
+ * use — and reachable from the console, which is the point of this route. A
+ * capability with no surface is not a feature: the cron can evaluate a budget
+ * that has no form behind it, and would then be alerting on a number nobody
+ * could ever have chosen.
  *
  *   `get`      → the budget in force, this month's spend against it, and the
  *                bounds the form must respect

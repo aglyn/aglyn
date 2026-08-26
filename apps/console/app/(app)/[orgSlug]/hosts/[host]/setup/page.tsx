@@ -150,14 +150,12 @@ const basicSchema: FormSchema = {
 /**
  * Tracking (AGL-2486) — its own tab, and not part of SEO.
  *
- * then *"We also need the support for Google tag manager there too not just
- * google analytics, maybe move GA and GTM to its own tracking tab."*
+ * Google Analytics and Google Tag Manager live here, together.
  *
- * He is right about the category. A measurement id is not a search-engine
- * setting; it shares a tab with titles and structured data only because it was
- * the first `analytics.*` field anyone added and the SEO form was the nearest
- * form. Moving it changes no stored data — both fields are still `analytics.*`
- * on the host document, and this tab saves through the same handler.
+ * A measurement id is not a search-engine setting: it is measurement, and it
+ * shares nothing with titles and structured data except a form. Both fields
+ * are `analytics.*` on the host document either way, and this tab saves
+ * through the same handler, so the tab is presentation only.
  *
  * BOTH IDS ARE FORMAT-VALIDATED HERE, not merely hinted. They land inside an
  * inline script on the published site, so the tenant refuses anything that is

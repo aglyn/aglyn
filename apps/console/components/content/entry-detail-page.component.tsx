@@ -865,9 +865,9 @@ export function EntryDetailPage() {
   /**
    * Everything recorded ABOUT the entry, in one list (AGL-2498).
    *
-   * four timestamps were stored and none were readable on the page that writes
-   * them — an author could set a published date in a dialog and then had
-   * nowhere to read it back.
+   * Created, published, scheduled and updated are all stored on the entry, and
+   * all four belong on the page that writes them: an author who sets a
+   * published date in a dialog otherwise has nowhere to read it back.
    *
    * `publishAt` appears only while the entry is SCHEDULED. Showing it always
    * would put a stale future instant beside a published post, one letter away

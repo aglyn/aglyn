@@ -23,9 +23,10 @@
 /**
  * The console's budget surface (AGL-1528).
  *
- * evaluate a budget with no route at all — and would then be alerting on a
- * number no customer could ever have chosen. This suite is the proof that a
- * customer can set one, see one, and remove one.
+ * A capability with no console surface is not a feature. The cron can evaluate
+ * a budget with no route at all — and would then be alerting on a number no
+ * customer could ever have chosen. This suite is the proof that a customer can
+ * set one, see one, and remove one.
  *
  * The Firestore double models the semantics that actually bite here, not a
  * convenient approximation:

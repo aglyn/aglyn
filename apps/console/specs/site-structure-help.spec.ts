@@ -18,10 +18,10 @@
 /**
  * The four site-structure surfaces each explain a different thing (AGL-2486).
  *
- * did. `/hosts/{host}/screens` and `/hosts/{host}/layouts` both resolved to
- * the one combined "Screens & Layouts" docs page, so both `?` tips opened with
- * the same title and the same body. Two surfaces, one answer, and the reader
- * cannot tell which half of the page was meant for them.
+ * Screens and layouts share a docs page, and pointing both `?` tips at it
+ * makes them open the same title and the same body: two surfaces, one answer,
+ * and no way for the reader to tell which half of the page was meant for
+ * them.
  *
  * Counting help props does not catch that — `help-coverage.spec.ts` was happy,
  * because both surfaces HAD help. It is the AGL-1074 shape: presence is not

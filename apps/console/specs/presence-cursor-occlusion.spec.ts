@@ -25,8 +25,9 @@ import { pointerIsOnCanvas } from '../hooks/use-presence'
  * A cursor is only broadcast when the pointer is really ON the canvas
  * (AGL-2486).
  *
- * session typing into the Assist panel was publishing a canvas position, so a
- * colleague saw a cursor implying attention that was not there.
+ * Without this, a session typing into the Assist drawer keeps publishing a
+ * canvas position, and a colleague sees a cursor implying attention that is
+ * not there.
  *
  * The DOM here is built to the real shape rather than mocked, because the real
  * shape is the whole difficulty: the besigner canvas lives in a CLOSED shadow

@@ -169,10 +169,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   /**
    * The readout the page header renders (AGL-693).
    *
-   * BOOLEAN entitlement, so there is no denominator to print — which was the
-   * wrong conclusion from a true premise. The denominator is exactly what a
-   * boolean says: a plan that grants it caps nothing (`∞`, which is what
-   * layouts and screens already print on this plan), and a plan that does not
+   * `reusableComponents` is a BOOLEAN entitlement, which looks like a reason
+   * to print no denominator at all. It is not: the denominator is exactly what
+   * the boolean says. A plan that grants it caps nothing (`∞`, which is what
+   * layouts and screens already print on that plan), and a plan that does not
    * grant it allows none.
    *
    * So `0/0 components on your plan` on Free is not a missing number, it is

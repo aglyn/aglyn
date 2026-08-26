@@ -145,11 +145,10 @@ describe('publish-time token normalization over stored nodes', () => {
  * What the publish is allowed to READ before it knows there is anything to
  * rewrite (AGL-703).
  *
- * EVERY variable and EVERY function on the site — two `limit(1000)` gets —
- * and only then looked at the version. Almost no version needs either: AGL-188
- * migrated the corpus and the picker has written id-form tokens ever since, so
- * the common publish paid up to 2000 document reads to learn there was nothing
- * to do.
+ * Fetching EVERY variable and EVERY function on the site — two `limit(1000)`
+ * gets — before looking at the version costs up to 2000 document reads to
+ * learn there is nothing to do. Almost no version needs either: AGL-188
+ * migrated the corpus and the picker has written id-form tokens ever since.
  *
  * The storage-form trap is the same one the block above exists for, and it is
  * sharper here: a needs-check that did not decode would find no `{{` in a

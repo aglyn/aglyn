@@ -24,15 +24,13 @@ import type { ReactNode } from 'react'
  * A media control that can be its own card OR a section inside someone else's
  * (AGL-2486).
  *
- * be moved up into the SEO part and not its own card."*
- *
- * The favicon, the entity logo and the social image are all `seo.*` fields —
- * they belong to the SEO form and always did. They are separate components
- * only because a media pick needs state and a picker dialog, and because a
- * CLEARED value has to reach Firestore as `''` rather than being dropped by
- * the form stack (AGL-1191), which the schema-driven form cannot do. That is
- * an implementation reason, and it had been showing through as three
- * free-floating cards between the fields they belong to.
+ * The favicon, the entity logo and the social image are all `seo.*` fields:
+ * they belong to the SEO form. They are separate components only because a
+ * media pick needs state and a picker dialog, and because a CLEARED value has
+ * to reach Firestore as `''` rather than being dropped by the form stack
+ * (AGL-1191), which the schema-driven form cannot do. Given a card each, that
+ * implementation detail surfaces as three free-floating cards sitting between
+ * the fields they belong to.
  *
  * So the components keep their own state and their own writes, and this
  * decides only whether they are drawn with a card around them. `embedded`

@@ -19,11 +19,11 @@
  * What console search can answer, and the words it uses to promise it
  * (AGL-2179, widened and corrected under AGL-2486).
  *
- * ## What was wrong, measured rather than reasoned
+ * ## The failure this shape exists to avoid, measured rather than reasoned
  *
- * against the seeded emulator, the palette does this: opening it lists four
- * rows — a site and three pages, one of them literally named **Home** — and
- * typing `home` returns **zero**.
+ * Driven against the seeded emulator, a `nameLower` prefix query does this:
+ * opening the palette lists four rows — a site and three pages, one of them
+ * literally named **Home** — and typing `home` returns **zero**.
  *
  * The reason is not the matcher being strict. It is that the search mode of
  * `useSwitcherCollection` is `orderBy('nameLower')`, and **Firestore omits

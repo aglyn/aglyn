@@ -18,8 +18,9 @@
 /**
  * What size to upload, said BEFORE the upload (AGL-2486).
  *
- * about the picture already chosen — the current file's dimensions, which is
- * a different sentence from "here is what to bring".
+ * Every upload surface states a recommended size before a file is picked.
+ * Reporting the dimensions of the picture already chosen is a different
+ * sentence entirely, and it arrives too late to change anything.
  *
  * Every number here is a REQUIREMENT SOMEBODY ELSE PUBLISHES, not a taste
  * call, and each says whose. That is the difference between guidance an

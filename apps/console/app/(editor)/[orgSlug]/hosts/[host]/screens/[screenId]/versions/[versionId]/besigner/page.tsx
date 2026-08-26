@@ -248,10 +248,11 @@ function BesignerPage(props) {
   /**
    * Is the version being edited the one the site is SERVING?
    *
-   * version is already a place to work without touching the live site — that
-   * is what versions are for — so a draft there would be a second answer to a
-   * question that already has one, offering a distinction with nothing behind
-   * it. On the live version there is no other way to work without publishing,
+   * Only the live version offers a draft, and this flag is that gate. A
+   * non-live version is ALREADY a place to work without touching the live
+   * site — that is what versions are for — so a draft there is a second answer
+   * to a question that already has one, a distinction with nothing behind it.
+   * On the live version there is no other way to work without publishing,
    * which is exactly why the draft belongs here and only here.
    */
   const editingLiveVersion = Boolean(

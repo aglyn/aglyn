@@ -21,15 +21,15 @@ import type { PresenceEntry } from '../hooks/use-presence'
 /**
  * What a presence chip promises about collaborating (AGL-2486).
  *
- * and presented it as the user's experience, which predicted a fight that
- * does not happen in the common case: the mirror carries unsaved work per
- * NODE, so two people on different elements both keep theirs.
+ * Copy that describes the STORAGE — one whole-document write — and presents it
+ * as the user's experience predicts a fight that does not happen in the common
+ * case: the mirror carries unsaved work per NODE, so two people on different
+ * elements both keep theirs.
  *
  * Asserted here rather than off a screenshot because the failure mode is a
- * sentence, not a pixel: an over-corrected "everything merges" is as wrong
- * as the claim it replaced, and only a test that reads BOTH directions
- * catches that. Each case therefore checks something is said AND something
- * is not.
+ * sentence, not a pixel: an over-corrected "everything merges" is as wrong as
+ * the claim it replaces, and only a test that reads BOTH directions catches
+ * that. Each case therefore checks something is said AND something is not.
  */
 const entry = (over: Partial<PresenceEntry> = {}): PresenceEntry =>
   ({

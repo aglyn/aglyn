@@ -24,9 +24,11 @@
 /**
  * The published 404 screen is what a missing URL serves (AGL-2342).
  *
- * platform's built-in status screen — 0 `<header>`, 0 `<footer>`, 0 occurrences
- * of the site's nav words — while the host's published *"Not found (404)"*
- * screen sat unserved.
+ * An error page has to carry the site's own nav and footer, or the visitor has
+ * no way to navigate away. Measured on production, `/no-such-page` served the
+ * platform's built-in status screen — 0 `<header>`, 0 `<footer>`, 0
+ * occurrences of the site's nav words — while the host's own published
+ * *"Not found (404)"* screen sat unserved.
  *
  * ## Both halves, because each alone is satisfiable by the bug
  *

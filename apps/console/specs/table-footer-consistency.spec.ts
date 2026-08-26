@@ -18,11 +18,11 @@
 /**
  * ONE table footer, and no call site may re-decide it (AGL-693).
  *
- * at a time, components and templates 10, the team list 10, the screens tree
- * 25, and the size menu was labelled three different ways. Nothing was wrong
- * with any single one; they were written at different times and each picked
- * its own numbers, which is what a shared control looks like when nothing
- * holds it together.
+ * Left to themselves the lists disagree: layouts page 5 at a time, components
+ * and templates 10, the team list 10, the screens tree 25, with the size menu
+ * labeled three different ways. Nothing is wrong with any single one — they
+ * are written at different times and each picks its own numbers, which is what
+ * a shared control looks like when nothing holds it together.
  *
  * A constant alone would not hold it: the next list added to the console can
  * type `[5, 10, 15]` and nothing objects. So this reads the SOURCE of every

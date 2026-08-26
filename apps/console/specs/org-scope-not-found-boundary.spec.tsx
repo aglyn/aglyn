@@ -18,15 +18,15 @@
 /**
  * The URL stays authoritative on the NOT-FOUND boundary (AGL-2486).
  *
- * bar `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV`, switcher chip
- * "Sale Test".
+ * One workspace in the address bar, a different one in the switcher chip —
+ * on a URL like `/<org>/hosts/<host>/screens/<id>`, which matches no route.
  *
  * The precedence in `useOrgScope` is right and is NOT what these tests
- * change. The defect is that its top candidate reads the URL through
+ * change. The hazard is that its top candidate reads the URL through
  * `useParams()`, and a not-found boundary is not a matched route: it has no
  * dynamic segments, so the params bag is EMPTY even though the pathname still
- * plainly says `aglyn-org`. Every URL-derived candidate missed and the chain
- * fell through to the remembered selection.
+ * plainly names the workspace. Every URL-derived candidate misses and the
+ * chain falls through to the remembered selection.
  *
  * `usePathname()` survives the boundary, and `resolveNavSection` already
  * encodes which leading segments are workspaces (`/admin` and `/manage` are

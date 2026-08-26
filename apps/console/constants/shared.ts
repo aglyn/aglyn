@@ -34,11 +34,12 @@ export const TABLE_HEAD_HEIGHT = 48
 /**
  * ONE table footer for the whole console (AGL-693).
  *
- * a time, components and templates 10, the team list and the screens tree 25,
- * and the labels ranged from `Rows per page` to `Top-level screens per page`.
- * Three of those footers are MUI X `DataGrid`, two are a hand-rolled
- * `TablePagination`, and each had picked its own numbers — so the same control
- * offered a different menu depending on which list you were standing in.
+ * Left to themselves the console's lists disagree: layouts page 5 at a time,
+ * components and templates 10, the team list and the screens tree 25, with
+ * labels ranging from `Rows per page` to `Top-level screens per page`. Three
+ * of those footers are MUI X `DataGrid` and two are a hand-rolled
+ * `TablePagination`, so without one source the same control offers a different
+ * menu depending on which list a reader is standing in.
  *
  * The options are the same everywhere BECAUSE they are arbitrary: nothing about
  * layouts makes 5 the right first page and 10 wrong. What is not arbitrary is
@@ -49,8 +50,9 @@ export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50]
 /**
  * The default page size: THE SMALLEST OPTION, always.
  *
- * than written as a number, so the rule survives the options changing — a
- * hardcoded default is how the console ended up with five different ones.
+ * Every paginated list in the console starts at the minimum count. Derived
+ * from the options rather than written as a number, so the rule survives the
+ * options changing — a hardcoded default is how five different ones appear.
  *
  * It is also the cheaper default, and not only in pixels. A list whose
  * listener is bounded by its page size — layouts is one, `limit(pageSize)` —

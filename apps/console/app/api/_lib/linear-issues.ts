@@ -119,10 +119,12 @@ export interface ReportField {
 /**
  * What each kind of report asks for (AGL-2486).
  *
- * Nothing here asks for a fact the server can observe for itself: the route,
- * org, host, role, plan, app version, build id, browser, viewport and release
- * flags are all attached automatically and are more reliable than what
- * somebody would type. These are only the things ONLY the human knows.
+ * Asking for detail is deliberate friction — it raises the quality of what
+ * arrives and moderates the volume — but it is aimed, not sprayed. Nothing
+ * here asks for a fact the server can observe for itself: the route, org,
+ * host, role, plan, app version, build id, browser, viewport and release flags
+ * are all attached automatically and are more reliable than anything typed.
+ * These fields are only the things ONLY the human knows.
  */
 export const REPORT_FIELDS: Readonly<
   Record<ReportKind, readonly ReportField[]>

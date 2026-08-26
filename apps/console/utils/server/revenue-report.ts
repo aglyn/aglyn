@@ -25,9 +25,10 @@ import {
 /**
  * Staff revenue reporting on TWO bases at once (AGL-2486).
  *
- * what customers have contracted to pay, answered "Both, side by side" — so
- * this module computes both and, more importantly, computes the GAP between
- * them as a first-class figure with named causes. Two numbers and a reader
+ * Revenue means two things at once — the cash Stripe settled, and the value of
+ * what customers have contracted to pay — so this module computes both and,
+ * more importantly, computes the GAP between them as a first-class figure with
+ * named causes. Two numbers and a reader
  * left to subtract is the failure mode this exists to avoid: the difference
  * is dunning, failed cards, trials and comps, and each of those is an action
  * someone can take, not a rounding artifact.
@@ -840,9 +841,9 @@ export interface OrgAttribution {
 /**
  * Who produced the numbers (AGL-2486).
  *
- * traced to a customer is a page nobody can act on — the point of seeing a gap
- * is knowing whose card to chase, and "Comped / staff override: 2" is useless
- * until it names the two.
+ * A staff revenue page whose totals cannot be traced to a customer is a page
+ * nobody can act on — the point of seeing a gap is knowing whose card to
+ * chase, and "Comped / staff override: 2" is useless until it names the two.
  *
  * ## The rows must RECONCILE to the totals
  *

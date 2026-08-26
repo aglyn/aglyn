@@ -24,10 +24,11 @@ import { assignRoomColours, projectRoom } from '../hooks/use-presence'
 /**
  * Two sessions are told apart on sight (AGL-2486).
  *
- * Both are failures of the same promise — an avatar per session, each
- * identifiable — and both were invisible to the suite that shipped them,
- * because the colour was picked per session in isolation and the avatar was
- * rendered from whatever the room happened to contain.
+ * Two sessions of one account sharing a colour, and a chip drawing a question
+ * mark, are failures of the same promise: an avatar per session, each
+ * identifiable. Both are invisible to a suite that picks a colour per session
+ * in isolation and renders an avatar from whatever the room happens to
+ * contain, which is why the cases below work over a whole room.
  */
 
 const entry = (over: Record<string, unknown> = {}) => ({

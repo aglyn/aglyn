@@ -244,20 +244,15 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // varies, and dashed means "one of your own other sessions"
               // (AGL-2486).
               //
-              // This settled after three rounds of getting it wrong, and the
-              // history is worth keeping because each step removed a real
-              // defect. It began dashed in the WARNING colour, which said
-              // "you" in a second colour that competed with the identity
-              // colour. It became dashed in the session colour. Then solid
-              // everywhere, on the reasoning that the monitor badge already
-              // says "this is you" and a second signal was noise.
-              //
-              // The canvas draws a DASHED outline around what your other
-              // session has selected, so making the chip solid did not remove
-              // a redundant signal — it made two surfaces disagree about how
-              // the same session looks. The redundancy is the point: the chip
-              // and the outline are the same person, and they now say so the
-              // same way.
+              // Two nearby alternatives are both wrong. A dashed ring in the
+              // WARNING colour says "you" in a second colour that competes
+              // with the identity colour the session already owns. A solid
+              // ring everywhere, on the argument that the monitor badge
+              // already says "this is you", breaks the tie with the canvas:
+              // the canvas draws a DASHED outline around what your other
+              // session has selected, so the chip and the outline would
+              // describe one session two different ways. The redundancy is
+              // the point — same session, same form, on both surfaces.
               //
               // SIZE PARITY IS UNAFFECTED, deliberately. Dashed and solid are
               // both `2px`, and `outline` does not participate in layout

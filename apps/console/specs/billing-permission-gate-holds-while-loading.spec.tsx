@@ -24,11 +24,12 @@
  * The billing page must not PAINT the ledger before it knows who is reading
  * it (AGL-243 gate, this file).
  *
- * ## The observation
+ * ## What a member without `billing.view` sees
  *
- * The refusal is correct. What is wrong is that the plan, the subscription
- * status, the price and the renewal date are on screen first, for as long as
- * the permission read takes — a screenshot or a screen recording keeps them.
+ * The refusal itself is correct. What is wrong is that the plan, the
+ * subscription status, the price and the renewal date paint first and stay on
+ * screen for as long as the permission read takes — long enough for a
+ * screenshot or a screen recording to keep them.
  *
  * ## The shape
  *
