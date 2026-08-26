@@ -1595,6 +1595,17 @@ function ScreenDetails() {
                 ),
               },
               {
+                // Per-screen traffic (AGL-152), ABOVE Page Activity — Zach: "Screen
+                // traffic should be above page activity". What the page is
+                // DOING outranks who touched it, and the activity feed is a
+                // long list that pushed the chart off the screen entirely.
+                // `Raw JSON` still sits below both.
+                size: { xs: 12 },
+                children: (
+                  <ScreenAnalyticsCard hostId={hostId} screenId={screenId} />
+                ),
+              },
+              {
                 size: { xs: 12 },
                 // FULL WIDTH, in a band of its own below the columns — Zach:
                 // "make activity full". `masonry` gives every full-width item
@@ -1612,17 +1623,6 @@ function ScreenDetails() {
                     targetId={screenId}
                     header={'Page Activity'}
                   />
-                ),
-              },
-              {
-                // Per-screen traffic (AGL-152). Pulled into the same flow as
-                // the cards above so that `Raw JSON` can sit BELOW it \u2014 Zach
-                // wanted the JSON last, and it used to be rendered above this
-                // card by virtue of being the last grid item. Full width: it
-                // is a chart, and it earns the row.
-                size: { xs: 12 },
-                children: (
-                  <ScreenAnalyticsCard hostId={hostId} screenId={screenId} />
                 ),
               },
               {

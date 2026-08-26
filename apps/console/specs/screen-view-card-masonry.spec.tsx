@@ -99,8 +99,12 @@ const EXPECTED: Array<[string, string]> = [
   ['Used by', 'CARD_NARROW'],
   ['SEO', 'CARD_WIDE'],
   ['Versions', 'CARD_WIDE'],
-  ['Page Activity', '{ xs: 12 }'],
+  // Traffic leads the full-width band (Zach, 2026-08-26): "Screen traffic
+  // should be above page activity". What the page is DOING outranks who
+  // touched it, and the activity feed is long enough to push the chart off
+  // the screen entirely.
   ['Screen traffic', '{ xs: 12 }'],
+  ['Page Activity', '{ xs: 12 }'],
   ['Raw JSON', '{ xs: 12 }'],
 ]
 
