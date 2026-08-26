@@ -37,7 +37,6 @@ import { join } from 'path'
 const CANVAS_CHROME = [
   'node-outline.tsx',
   'node-quick-actions.tsx',
-  'node-pinned-actions.tsx',
   'token-pill.component.tsx',
   'inline-text-editor.component.tsx',
   'dnd/drop-indicator.tsx',
