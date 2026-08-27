@@ -60,6 +60,32 @@ one dialog without leaving the besigner:
 Saved interactions are **enabled immediately** and appear on the element's
 Interactions list with edit (✎), enable/disable, and remove controls.
 
+## Interactions belong to the page they are on
+
+An interaction is stored **on the element**, inside the screen, layout,
+component or template that holds it. That is what makes the obvious things
+true:
+
+- it **publishes and rolls back with the page** — restoring an earlier
+  version restores the interactions that version had;
+- it **travels with the element** — duplicate a section, copy a component to
+  another site, or package a template, and the choreography arrives with it,
+  bound to the copy rather than the original;
+- it **is removed with the element** — deleting a button takes its click
+  behaviour with it, leaving nothing pointing at something that is gone;
+- it is **unsaved work until you save**, like any other edit, rather than
+  going live the moment the dialog closes.
+
+**Workflows → Actions is a different list.** Actions are things the *site*
+does — an order was placed, a form was submitted — so they are site-wide and
+live outside any one page. Interactions are things an *element* does, and
+they are edited only here, on the element.
+
+:::note Interactions you set up earlier
+Interactions created before this change are still listed on their element and
+still run. They are being moved onto their elements; nothing you need to do.
+:::
+
 ## Plan availability
 
 Interactions come in two tiers, and the field editor labels the steps that

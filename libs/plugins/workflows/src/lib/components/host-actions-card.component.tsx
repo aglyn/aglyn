@@ -149,6 +149,9 @@ function defaultStep(type: HostActionStepType): HostActionStep {
   }
 }
 
+/** A trigger bound to one element, which makes the row an interaction. */
+const LEAF_SELECTOR = /^\[data-aglyn="leaf:.+"\]$/
+
 /**
  * Actions builder (AGL-148): HubSpot-style enrollment — trigger event →
  * optional filter → ordered steps (run workflow, site alert, custom
@@ -250,8 +253,30 @@ export function HostActionsCard(props: {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const actions = [...(actionDocs ?? [])]
-    .filter((action: any) => !action.deletedAt)
+  const liveActions = [...(actionDocs ?? [])].filter(
+    (action: any) => !action.deletedAt,
+  )
+  /**
+   * Element interactions are not listed here (AGL-1478).
+   *
+   * An ACTION is something the SITE does — an order was placed, a form was
+   * submitted. An INTERACTION is something an ELEMENT does, and it belongs to
+   * the document that holds the element: it publishes and rolls back with it,
+   * travels with it, and is deleted with it. This page is the site's
+   * automation list, and a nav menu's hover timing sitting in it beside "when
+   * an order is placed" was the tell that the two had been conflated.
+   *
+   * These rows are the ones written BEFORE the move, still bound by selector.
+   * They keep running and stay editable — on their element, in the besigner,
+   * which is now the only place they appear. Counted rather than hidden
+   * outright, so the page can say where they went instead of appearing to
+   * have lost them.
+   */
+  const elementScoped = liveActions.filter((action: any) =>
+    LEAF_SELECTOR.test(String(action?.trigger?.selector ?? '')),
+  )
+  const actions = liveActions
+    .filter((action: any) => !elementScoped.includes(action))
     .sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
@@ -683,6 +708,19 @@ export function HostActionsCard(props: {
         >
           {'Add action'}
         </Button>
+        {/* Says where they went (AGL-1478). A list that silently drops rows
+            a reader saw last week is a list they stop trusting; this is the
+            one sentence that makes the absence deliberate. */}
+        {elementScoped.length ? (
+          <Typography variant="caption" color="text.secondary">
+            {elementScoped.length === 1
+              ? '1 interaction is set up on its own element — '
+              : `${elementScoped.length} interactions are set up on their own elements — `}
+            {'open the element in the besigner to edit it. Interactions ' +
+              'belong to the page they are on, so they publish and roll back ' +
+              'with it.'}
+          </Typography>
+        ) : null}
       </Stack>
 
       <Dialog
