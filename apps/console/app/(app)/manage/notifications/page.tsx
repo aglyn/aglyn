@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn'
 import { mdiBellOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
@@ -62,7 +63,10 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../constants/shared'
 import useNotificationAlertPrefs from '../../../../hooks/use-notification-prefs'
 import useHostIndexEntries from '../../../../hooks/use-host-index-entries'
 import useOrgHosts from '../../../../hooks/use-org-hosts'
@@ -78,7 +82,6 @@ import {
   resolveNotificationOrgSlug,
 } from '../../../../utils/notification-links'
 
-const PAGE_SIZE = 25
 
 /**
  * Notifications page (AGL-260): the full, cursor-paginated feed behind
@@ -161,6 +164,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   }, [alertPrefs.desktop, setAlertPrefs])
   const { hosts } = useOrgHosts(firestore, uid, currentOrg?.$id ?? undefined)
   const [rows, setRows] = useState<any[]>([])
+  // The console's shared default and shared menu (AGL-693); this list used to
+  // pick 25 for itself and offer no way to change it.
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   // `hostIndex` carries the owning org alongside the subdomain, so a
   // notification resolves its OWN workspace rather than the open one
   // (AGL-1773).
@@ -182,12 +188,12 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
             collection(firestore, 'users', uid, 'notifications'),
             orderBy('createdAt', 'desc'),
             ...(cursor ? [startAfter(cursor)] : []),
-            limit(PAGE_SIZE + 1),
+            limit(pageSize + 1),
           ),
         )
-        const docs = snapshot.docs.slice(0, PAGE_SIZE)
+        const docs = snapshot.docs.slice(0, pageSize)
         setRows(docs.map((entry) => ({ $id: entry.id, ...entry.data() })))
-        setHasMore(snapshot.docs.length > PAGE_SIZE)
+        setHasMore(snapshot.docs.length > pageSize)
         setPage(targetPage)
         setCursors((previous) => {
           const next = previous.slice(0, targetPage)
@@ -201,7 +207,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         setLoading(false)
       }
     },
-    [firestore, uid],
+    [firestore, uid, pageSize],
   )
 
   useEffect(() => {
@@ -495,27 +501,21 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                 </TableBody>
               </Table>
             )}
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <Button
-                size="small"
-                color="primary"
-                disabled={loading || page === 0}
-                onClick={() => loadPage(page - 1, cursors[page - 2])}
-              >
-                {'Previous'}
-              </Button>
-              <Typography variant="caption" color="text.secondary">
-                {`Page ${page + 1}`}
-              </Typography>
-              <Button
-                size="small"
-                color="primary"
-                disabled={loading || !hasMore}
-                onClick={() => loadPage(page + 1, cursors[page])}
-              >
-                {'Next'}
-              </Button>
-            </Stack>
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={rows.length}
+              hasMore={hasMore}
+              disabled={loading}
+              onPageChange={(next) => {
+                if (next === page) return
+                void loadPage(
+                  next,
+                  next > page ? cursors[page] : cursors[next - 1],
+                )
+              }}
+              onPageSizeChange={setPageSize}
+            />
           </Stack>
         </CardDisplay>
       </Container>

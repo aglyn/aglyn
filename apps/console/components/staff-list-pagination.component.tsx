@@ -16,8 +16,14 @@
  */
 'use client'
 
-import { Button, Stack, Typography } from '@mui/material'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { StaffListPagination } from '../hooks/use-staff-list-pagination'
+
+/**
+ * What the staff list ROUTES page at. Not a choice this control makes — it
+ * mirrors `PAGE_SIZE` in `/api/admin/orgs` so the count line adds up.
+ */
+const STAFF_ROUTE_PAGE_SIZE = 25
 
 export interface StaffListPaginationControlsProps<TRow> {
   /** The value returned by `useStaffListPagination`. */
@@ -33,13 +39,20 @@ export interface StaffListPaginationControlsProps<TRow> {
 }
 
 /**
- * PREVIOUS / `Page n · m shown` / NEXT for a staff list (AGL-2486).
+ * The staff lists' footer — the console's shared one (AGL-693).
  *
- * Extracted from the Organizations list so the Users list is the same
- * control and not a second one that looks like it. Rendered whenever the
- * page has rows — including on a single page — because a control that
- * appears only once there is more than one page is a control staff cannot
- * learn.
+ * Extracted from the Organizations list so the Users list is the same control
+ * and not a second one that looks like it; it is now the same control as
+ * every OTHER list too, rather than a third grammar that merely resembled
+ * them. Rendered whenever the page has rows — including on a single page —
+ * because a control that appears only once there is more than one page is a
+ * control staff cannot learn.
+ *
+ * ⚠️ No size menu yet, and that is a property of what is behind it: the page
+ * size is fixed by the ROUTE (`/api/admin/orgs` pages 25, the Users list pages
+ * through Firebase Auth), so offering the menu would offer a choice the
+ * request cannot carry. Passing `onPageSizeChange` is all this needs once
+ * those routes take a size.
  */
 export default function StaffListPaginationControls<TRow>({
   pagination,
@@ -49,26 +62,19 @@ export default function StaffListPaginationControls<TRow>({
   const count = shown === undefined ? (rows?.length ?? 0) : shown
   if (!rows?.length) return null
   return (
-    <Stack direction="row" spacing={1.5} sx={{ mt: 1, alignItems: 'center' }}>
-      <Button
-        size="small"
-        variant="outlined"
-        disabled={loading || pageIndex === 0}
-        onClick={() => void loadPage(pageIndex - 1)}
-      >
-        {'Previous'}
-      </Button>
-      <Typography variant="caption" color="text.secondary">
-        {`Page ${pageIndex + 1} · ${count} shown`}
-      </Typography>
-      <Button
-        size="small"
-        variant="outlined"
-        disabled={loading || !hasMore}
-        onClick={() => void loadPage(pageIndex + 1)}
-      >
-        {'Next'}
-      </Button>
-    </Stack>
+    <ListPagination
+      page={pageIndex}
+      // The size the routes actually serve. Stated rather than guessed: the
+      // count line is arithmetic over it, so a wrong number here would read
+      // as a wrong total.
+      pageSize={STAFF_ROUTE_PAGE_SIZE}
+      rowCount={count}
+      hasMore={hasMore}
+      disabled={loading}
+      onPageChange={(next) => {
+        if (next === pageIndex) return
+        void loadPage(next)
+      }}
+    />
   )
 }

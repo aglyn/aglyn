@@ -32,49 +32,19 @@ export const TABLE_ROW_HEIGHT = 48
 export const TABLE_HEAD_HEIGHT = 48
 
 /**
- * ONE table footer for the whole console (AGL-693).
+ * The console's table-footer constants, which now live in the shared library
+ * (see `@aglyn/shared-ui-jsx/const/table-pagination`).
  *
- * Left to themselves the console's lists disagree: layouts page 5 at a time,
- * components and templates 10, the team list and the screens tree 25, with
- * labels ranging from `Rows per page` to `Top-level screens per page`. Three
- * of those footers are MUI X `DataGrid` and two are a hand-rolled
- * `TablePagination`, so without one source the same control offers a different
- * menu depending on which list a reader is standing in.
- *
- * The options are the same everywhere BECAUSE they are arbitrary: nothing about
- * layouts makes 5 the right first page and 10 wrong. What is not arbitrary is
- * that a reader learns the control once.
+ * Re-exported rather than moved outright: the console's lists are not the only
+ * ones any more — plugin console cards render their own, and a library cannot
+ * import from an app. Keeping the console's import path working is what let
+ * that move happen without touching every call site.
  */
-export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50]
-
-/**
- * The default page size: THE SMALLEST OPTION, always.
- *
- * Every paginated list in the console starts at the minimum count. Derived
- * from the options rather than written as a number, so the rule survives the
- * options changing — a hardcoded default is how five different ones appear.
- *
- * It is also the cheaper default, and not only in pixels. A list whose
- * listener is bounded by its page size — layouts is one, `limit(pageSize)` —
- * reads exactly this many DOCUMENTS on load, so the smallest page is the
- * smallest bill (AGL-703). A reader who wants more says so once.
- *
- * ⚠️ The screens tree pages TOP-LEVEL screens and drag-to-reorder cannot cross
- * a page boundary — dnd-kit only knows about mounted rows. A smaller default
- * makes that limit reachable on a smaller site; see the pagination block in
- * `screens-hierarchy-table.component.tsx`.
- */
-export const TABLE_PAGE_SIZE_DEFAULT = TABLE_PAGE_SIZE_OPTIONS[0]
-
-/**
- * The label beside the size menu, on every list.
- *
- * Deliberately the generic noun even on the screens tree, which pages
- * TOP-LEVEL screens and carries each one's subtree along with it: that
- * distinction belongs in the count — see `labelDisplayedRows` there — and a
- * different label in the same slot reads as a different control.
- */
-export const TABLE_ROWS_PER_PAGE_LABEL = 'Rows per page:'
+export {
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_PAGE_SIZE_OPTIONS,
+  TABLE_ROWS_PER_PAGE_LABEL,
+} from '@aglyn/shared-ui-jsx/const/table-pagination'
 
 /**
  * Canonical, published legal documents. These are hosted on the production

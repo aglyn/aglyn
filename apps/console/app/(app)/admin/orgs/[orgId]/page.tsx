@@ -2258,7 +2258,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       // on the day it published three pages, because the org
                       // collection holds only invites, roles and billing.
                       orgWide
-                      pageSize={50}
                     />
                   ),
                 },

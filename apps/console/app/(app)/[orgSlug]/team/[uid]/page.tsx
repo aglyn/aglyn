@@ -520,7 +520,6 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
               orgId={currentOrg.$id}
               targetId={uid}
               header={'Changes to this member'}
-              pageSize={30}
             />
           ) : null}
           {currentOrg?.$id ? (

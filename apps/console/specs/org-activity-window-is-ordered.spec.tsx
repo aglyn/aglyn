@@ -109,6 +109,7 @@ jest.mock('firebase/firestore', () => {
 })
 
 import OrgActivityCard from '../components/org-activity-card.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
 beforeEach(() => {
   fetches = []
@@ -243,10 +244,25 @@ describe('the feed pages (AGL-2292 follow-up)', () => {
     }
   })
 
-  it('asks for a bounded page rather than a 200-row window', async () => {
-    render(<OrgActivityCard orgId="org-1" pageSize={20} />)
+  it('offers the shared page-size menu, not a bare Next button', async () => {
+    // The control a reader learns once. Two of the console's four pagination
+    // grammars offered no way to change the page size at all, and this feed
+    // was one of them.
+    const view = render(<OrgActivityCard orgId="org-1" />)
+    await waitFor(() =>
+      expect(view.container.textContent).toContain('Newest action'),
+    )
+    expect(view.getByText('Rows per page:')).toBeTruthy()
+  })
+
+  it('asks for the console-wide default page, not a 200-row window', async () => {
+    // The size is not this card's to pick. Every list in the console starts
+    // at the smallest shared option, which on a feed bounded by its page size
+    // is also the smallest read (AGL-693/AGL-703) — the staff org page was
+    // asking for fifty rows to fill a card nobody had scrolled.
+    render(<OrgActivityCard orgId="org-1" />)
     await waitFor(() => expect(fetches.length).toBeGreaterThan(0))
-    expect(fetches[0].url).toContain('pageSize=20')
+    expect(fetches[0].url).toContain(`pageSize=${TABLE_PAGE_SIZE_DEFAULT}`)
   })
 
   it('walks forward, sending the cursor the route handed back', async () => {
@@ -254,7 +270,7 @@ describe('the feed pages (AGL-2292 follow-up)', () => {
     await waitFor(() =>
       expect(view.container.textContent).toContain('Newest action'),
     )
-    fireEvent.click(view.getByText('Next'))
+    fireEvent.click(view.getByLabelText(/go to next page/i))
     await waitFor(() =>
       expect(view.container.textContent).toContain('Older action'),
     )
@@ -262,7 +278,6 @@ describe('the feed pages (AGL-2292 follow-up)', () => {
     // Rows 21+ were fetched and never rendered before this; reaching them
     // is the whole point.
     expect(view.container.textContent).not.toContain('Newest action')
-    expect(view.container.textContent).toContain('Page 2')
   })
 
   it('walks back to the page it came from', async () => {
@@ -270,15 +285,14 @@ describe('the feed pages (AGL-2292 follow-up)', () => {
     await waitFor(() =>
       expect(view.container.textContent).toContain('Newest action'),
     )
-    fireEvent.click(view.getByText('Next'))
+    fireEvent.click(view.getByLabelText(/go to next page/i))
     await waitFor(() =>
       expect(view.container.textContent).toContain('Older action'),
     )
-    fireEvent.click(view.getByText('Previous'))
+    fireEvent.click(view.getByLabelText(/go to previous page/i))
     await waitFor(() =>
       expect(view.container.textContent).toContain('Newest action'),
     )
-    expect(view.container.textContent).toContain('Page 1')
   })
 
   it('offers no pager when the whole feed fits on one page', async () => {
@@ -289,7 +303,7 @@ describe('the feed pages (AGL-2292 follow-up)', () => {
     await waitFor(() =>
       expect(view.container.textContent).toContain('Only action'),
     )
-    expect(view.queryByText('Next')).toBeNull()
+    expect(view.queryByLabelText(/go to next page/i)).toBeNull()
   })
 })
 

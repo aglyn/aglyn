@@ -17,6 +17,7 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   Alert,
   Button,
@@ -36,12 +37,11 @@ import {
   activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
 
 export interface OrgActivityCardProps {
   orgId: string
-  /** Rows per page. */
-  pageSize?: number
   header?: string
   /** Show only entries whose target is this id — changes made TO a
    * member/host/screen (AGL-389). Applied by the route, not here. */
@@ -98,13 +98,7 @@ export interface OrgActivityCardProps {
  * rows and still call itself the page.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
-  const {
-    orgId,
-    pageSize = 20,
-    header = 'Recent Activity',
-    targetId,
-    orgWide,
-  } = props
+  const { orgId, header = 'Recent Activity', targetId, orgWide } = props
   const { orgSlug } = useParams<{ orgSlug: string }>()
   const { data: user } = useUser()
   // The user object's IDENTITY changes on every render of the provider above,
@@ -118,8 +112,23 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   const [entries, setEntries] = useState<any[] | null>(null)
   const [cursors, setCursors] = useState<Array<string | null>>([null])
   const [page, setPage] = useState(0)
+  /*
+   * The console's shared default, not a number this card picked. Every list
+   * starts at the smallest option — it is what a reader learns once, and on a
+   * feed whose query is bounded by it, the smallest page is also the smallest
+   * bill (AGL-693/AGL-703). The staff org page asked for fifty at a time,
+   * which is fifty documents read to fill a card nobody had scrolled yet.
+   */
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  /*
+   * Only the newest request may write. Two page clicks in quick succession,
+   * or a page change racing the reload a size change triggers, otherwise land
+   * in whatever order the network returns them — and the loser overwrites the
+   * winner, leaving the footer on one page and the rows on another.
+   */
+  const requestRef = useRef(0)
   /*
    * "Could not look" is not "found nothing" (AGL-2486). A denial IS a real
    * answer — this member's role does not carry `org.auditLog` — and reads as
@@ -145,6 +154,8 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
    *=========================================*/
   const loadPage = useCallback(
     async (targetPage: number, cursor: string | null) => {
+      const request = (requestRef.current += 1)
+      const current = () => requestRef.current === request
       setLoading(true)
       try {
         const idToken = await (
@@ -167,6 +178,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         if (!response.ok) {
           // 403 is the permission answering, and the honest render of it is
           // an empty feed. Anything else means the read broke.
+          if (!current()) return
           setUnreadable(response.status !== 403)
           setEntries([])
           setNextCursor(null)
@@ -176,16 +188,18 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
           entries?: any[]
           nextCursor?: string | null
         }
+        if (!current()) return
         setUnreadable(false)
         setEntries(payload?.entries ?? [])
         setNextCursor(payload?.nextCursor ?? null)
         setPage(targetPage)
       } catch {
+        if (!current()) return
         setUnreadable(true)
         setEntries([])
         setNextCursor(null)
       } finally {
-        setLoading(false)
+        if (current()) setLoading(false)
       }
     },
     [orgId, orgWide, pageSize, targetId],
@@ -328,35 +342,33 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
           </List>
         )}
         {paged ? (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Button
-              size="small"
-              color="primary"
-              disabled={loading || page === 0}
-              onClick={() => {
-                const previous = cursors[page - 1] ?? null
-                setCursors((current) => current.slice(0, page))
-                void loadPage(page - 1, previous)
-              }}
-            >
-              {'Previous'}
-            </Button>
-            <Typography variant="caption" color="text.secondary">
-              {loading ? 'Loading…' : `Page ${page + 1}`}
-            </Typography>
-            <Button
-              size="small"
-              color="primary"
-              disabled={loading || !nextCursor}
-              onClick={() => {
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={items.length}
+            hasMore={Boolean(nextCursor)}
+            disabled={loading}
+            onPageChange={(next) => {
+              if (next === page) return
+              if (next > page) {
                 const cursor = nextCursor
-                setCursors((current) => [...current, cursor])
-                void loadPage(page + 1, cursor)
-              }}
-            >
-              {'Next'}
-            </Button>
-          </Stack>
+                setCursors((current) => {
+                  const grown = [...current]
+                  grown[next] = cursor
+                  return grown
+                })
+                void loadPage(next, cursor)
+                return
+              }
+              const previous = cursors[next] ?? null
+              setCursors((current) => current.slice(0, next + 1))
+              void loadPage(next, previous)
+            }}
+            // The reload runs from the effect, which keys on `loadPage` and
+            // so on the size — setting it here and loading there keeps one
+            // path into the query rather than two that can disagree.
+            onPageSizeChange={setPageSize}
+          />
         ) : null}
       </Stack>
     </CardDisplay>

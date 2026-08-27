@@ -17,6 +17,7 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   Alert,
   Button,
@@ -45,11 +46,11 @@ import {
   activityTargetLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import { formatStaffTimestamp } from '../utils/staff-timestamps'
 
 export interface HostActivityTableProps {
   hostId: string
-  pageSize?: number
 }
 
 /**
@@ -58,7 +59,7 @@ export interface HostActivityTableProps {
  * the dashboard card's bounded window.
  */
 export function HostActivityTable(props: HostActivityTableProps) {
-  const { hostId, pageSize = 25 } = props
+  const { hostId } = props
   /*
    * The link context is the CUSTOMER route's params, and this table also
    * mounts on the staff host page (AGL-1488), whose route has neither. A
@@ -69,6 +70,9 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const { orgSlug, host } = useParams<{ orgSlug?: string; host?: string }>()
   const firestore = useFirestore()
   const [rows, setRows] = useState<any[]>([])
+  // The console's shared default and the console's shared menu, so this feed
+  // is the same control as every other list (AGL-693).
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
@@ -192,27 +196,20 @@ export function HostActivityTable(props: HostActivityTableProps) {
             </TableBody>
           </Table>
         )}
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <Button
-            size="small"
-            color="primary"
-            disabled={loading || page === 0}
-            onClick={() => loadPage(page - 1, cursors[page - 2])}
-          >
-            {'Previous'}
-          </Button>
-          <Typography variant="caption" color="text.secondary">
-            {`Page ${page + 1}`}
-          </Typography>
-          <Button
-            size="small"
-            color="primary"
-            disabled={loading || !hasMore}
-            onClick={() => loadPage(page + 1, cursors[page])}
-          >
-            {'Next'}
-          </Button>
-        </Stack>
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={rows.length}
+          hasMore={hasMore}
+          disabled={loading}
+          onPageChange={(next) => {
+            if (next === page) return
+            // `cursors[i]` is the LAST row of page i, so page i+1 resumes
+            // after `cursors[i]` and page i resumes after `cursors[i - 1]`.
+            void loadPage(next, next > page ? cursors[page] : cursors[next - 1])
+          }}
+          onPageSizeChange={setPageSize}
+        />
       </Stack>
     </CardDisplay>
   )

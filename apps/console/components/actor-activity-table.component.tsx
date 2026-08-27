@@ -18,10 +18,10 @@
 
 import { activityTargetLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
-  Button,
   Chip,
   Stack,
   Table,
@@ -33,6 +33,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
 export interface ActorActivityEntry {
   $id: string
@@ -52,7 +53,6 @@ export interface ActorActivityTableProps {
   description?: string
   /** Site name by host id, so a row can say where rather than which id. */
   scopeNames?: Record<string, string | undefined>
-  pageSize?: number
 }
 
 /**
@@ -70,13 +70,15 @@ export interface ActorActivityTableProps {
  * audit log is a lie with a clean-looking face.
  */
 export function ActorActivityTable(props: ActorActivityTableProps) {
-  const { endpoint, header, help, description, scopeNames, pageSize = 25 } = props
+  const { endpoint, header, help, description, scopeNames } = props
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
   const uid = (user as { uid?: string } | undefined)?.uid ?? null
 
   const [rows, setRows] = useState<ActorActivityEntry[]>([])
+  // Shared default, shared menu (AGL-693).
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [cursors, setCursors] = useState<Array<string | null>>([null])
   const [page, setPage] = useState(0)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -185,37 +187,26 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
             </TableBody>
           </Table>
         )}
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', pt: 0.5 }}
-        >
-          <Button
-            size="small"
-            disabled={loading || page === 0}
-            onClick={() => {
-              const previous = cursors[page - 1] ?? null
-              setCursors((current) => current.slice(0, page))
-              void loadPage(page - 1, previous)
-            }}
-          >
-            {'Previous'}
-          </Button>
-          <Button
-            size="small"
-            disabled={loading || !nextCursor}
-            onClick={() => {
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={rows.length}
+          hasMore={Boolean(nextCursor)}
+          disabled={loading}
+          onPageChange={(next) => {
+            if (next === page) return
+            if (next > page) {
               const cursor = nextCursor
               setCursors((current) => [...current, cursor])
-              void loadPage(page + 1, cursor)
-            }}
-          >
-            {'Next'}
-          </Button>
-          <Typography variant="caption" color="text.secondary">
-            {loading ? 'Loading…' : `Page ${page + 1}`}
-          </Typography>
-        </Stack>
+              void loadPage(next, cursor)
+              return
+            }
+            const previous = cursors[next] ?? null
+            setCursors((current) => current.slice(0, next + 1))
+            void loadPage(next, previous)
+          }}
+          onPageSizeChange={setPageSize}
+        />
       </Stack>
     </CardDisplay>
   )
