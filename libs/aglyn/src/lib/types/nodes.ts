@@ -410,6 +410,32 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    */
   interactions?: NodeInteraction[]
   /**
+   * Hidden by the author (AGL-1479) — the eye on the element's hierarchy row.
+   *
+   * Renders `display: none` on the canvas AND on the published site. It is
+   * the plain "I do not want this on the page" switch: no runtime, no
+   * interaction, nothing reveals it. Showing it again is the same eye.
+   *
+   * ## Why a FIELD and not a style
+   *
+   * Because it has to override the element's own display rather than replace
+   * it. An author who toggles the eye on a Stack laid out with
+   * `display: flex` must get that flex back when they toggle it off, and
+   * writing `display: none` into `node.sx` destroys the value it overwrote —
+   * there is nothing left to restore. Composed LAST in `Leaf` instead, so it
+   * wins on the cascade and the stored style is never touched.
+   *
+   * ## Not {@link ELEMENT_HIDDEN_CLASS}
+   *
+   * `aglyn-hidden` is a different thing wearing a similar name: it means
+   * "starts hidden, and an interaction shows it" — a mega-menu panel, a
+   * drawer. That class is part of a runtime contract (the show/hide steps
+   * toggle it, and the canvas reveals it for designing), and it is bespoke to
+   * that job. A visibility toggle that wrote it would enrol every hidden
+   * element in a choreography it is not part of.
+   */
+  hidden?: boolean
+  /**
    * The computed node parent (only for type completion)
    */
   readonly parent?: NodeSchema<any> | null

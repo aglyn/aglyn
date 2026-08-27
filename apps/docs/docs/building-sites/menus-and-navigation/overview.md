@@ -152,23 +152,26 @@ Three patterns cover most menus:
 
 :::tip Start hidden
 To make a show-target start hidden, open its **⋮** menu — on its
-**Hierarchy** row or on the canvas toolbar — and choose **Hide on
-published site**. The live site hides it from the very first paint, and
-so does the canvas, so you are designing what a visitor sees. The same
-menu says **Show on published site** to undo it.
+**Hierarchy** row or on the canvas — and choose **Start hidden until an
+interaction shows it**. The live site hides it from the very first
+paint, and so does the canvas, so you are designing what a visitor
+sees.
 
-Its row in the **Hierarchy** then shows an eye: click it to show the
-element on the canvas while you work on it, and click again to put it
-back. That switch is yours alone — it is never saved and never changes
-what the published site does. Selecting the element, or anything
-alongside it inside its container, opens it for as long as it is
-selected, and hiding an element leaves it showing so you do not lose
-what you were working on.
+Selecting the element, or anything alongside it inside its container,
+opens it on the canvas for as long as it is selected, so you can work on
+it. That is a canvas-only preview: it is never saved and never changes
+what the published site does.
 
 Under the hood this is the `aglyn-hidden` class, which you will see on
 the element's chip list under **Styles → Classes & custom CSS** — useful
 to know if you are targeting it from theme styles or a class action, but
 you never have to type it.
+
+**This is not the same as the eye** on the Hierarchy row. The eye hides
+an element outright — `display: none`, in the besigner and on the
+published site, with nothing that reveals it. Use the eye to take
+something off the page; use **Start hidden** for a panel an interaction
+opens.
 :::
 
 ## Responsive visibility

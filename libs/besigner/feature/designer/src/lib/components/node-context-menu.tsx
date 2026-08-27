@@ -202,19 +202,20 @@ export const NodeContextMenu = observer(
     const clipboardLabels = Besigner.clipboard.getLabels()
 
     /**
-     * Start hidden on the published site (AGL-1476).
+     * Start hidden until an interaction shows it (AGL-592).
      *
-     * The hidden class had no control that SET it. The eye on a hierarchy row
-     * only appears once an element already carries the class, and it is
-     * canvas-only — so the single way to author a mega-menu panel, a drawer,
-     * or anything else an interaction reveals at runtime was to know the
-     * literal string `aglyn-hidden` and type it into the Classes box. An
-     * element property with no picker is a missing feature, not a
-     * power-user path.
+     * A DIFFERENT switch from the eye on the hierarchy row, and the naming is
+     * the whole point. The eye hides an element outright — `display: none`,
+     * nothing reveals it. This one enrols the element in a runtime contract:
+     * it starts hidden, an interaction's show step reveals it, and the canvas
+     * opens it while it is being designed. A mega-menu panel, a drawer, an
+     * announcement that appears on scroll.
      *
-     * The class stays the storage: the published site's stylesheet, the
-     * interaction builder's show/hide steps and the canvas reveal all key off
-     * it. This writes it, which is the part that was missing.
+     * `aglyn-hidden` is the storage — the published stylesheet, the show/hide
+     * steps and the canvas reveal all key off it — and until this existed the
+     * only way to set it was to know the literal string and type it into the
+     * Classes box. An element property with no picker is a missing feature,
+     * not a power-user path.
      */
     const [, setRevealedNodeIds] = useAglynBesignerFlag('revealedNodeIds')
     const hiddenOnSite = isNodeHiddenOnSite(node as never)
@@ -244,6 +245,38 @@ export const NodeContextMenu = observer(
         )
       }
     }, [node, isRootNode, multi, hiddenOnSite, onAction, setRevealedNodeIds])
+
+    /**
+     * Copy and paste a LOOK (AGL-1480).
+     *
+     * `node.sx` — the Styles panel's whole output, including its responsive,
+     * `@scheme` and state slices, which are keys inside that object. Classes
+     * are deliberately not carried: a class is a name pointing at rules the
+     * element does not own, and two of them carry behaviour rather than
+     * appearance, so moving them under a label that promises looks would move
+     * behaviour with it.
+     *
+     * Paste REPLACES. Merging makes the result depend on what the target
+     * already had, so the same look pasted onto two elements could produce
+     * two different ones — and there would be no way to paste "no styles".
+     */
+    const copiedStyleLabel = Besigner.styleClipboard.getStyleLabel()
+    const canPasteStyles = Besigner.styleClipboard.hasStyles()
+    const handleCopyStyles = useCallback(() => {
+      if (isRootNode) return
+      onAction?.()
+      Besigner.styleClipboard.copyStyles(node)
+    }, [node, isRootNode, onAction])
+    const handlePasteStyles = useCallback(() => {
+      if (isRootNode) return
+      onAction?.()
+      const targets = multi ? Besigner.focus.getSelected() : [node]
+      for (const target of targets) {
+        if (target && !Aglyn.canvas.isRootNode(target)) {
+          Besigner.styleClipboard.pasteStyles(target)
+        }
+      }
+    }, [node, isRootNode, multi, onAction])
 
     const deleteElementCallback = useDeleteElementCallback()
     const deleteElementsCallback = useDeleteElementsCallback()
@@ -383,12 +416,14 @@ export const NodeContextMenu = observer(
             <ListItemText
               secondary={
                 hiddenOnSite
-                  ? 'Visitors see it from the first paint'
-                  : 'The eye on its Hierarchy row does the same'
+                  ? 'It will be on the page from the first paint'
+                  : 'For a menu panel or drawer. To hide it outright, use the eye on its Hierarchy row'
               }
               slotProps={{ secondary: { sx: { whiteSpace: 'normal' } } }}
             >
-              {hiddenOnSite ? 'Show on published site' : 'Hide on published site'}
+              {hiddenOnSite
+                ? 'Do not start hidden'
+                : 'Start hidden until an interaction shows it'}
             </ListItemText>
           </MenuItem>
           <Divider />
@@ -398,6 +433,42 @@ export const NodeContextMenu = observer(
             </ListItemIcon>
             <ListItemText>{multi ? 'Copy selection' : 'Copy'}</ListItemText>
           </MenuItem>
+          <MenuItem disabled={isRootNode} onClick={handleCopyStyles}>
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_COPY.path}
+              />
+            </ListItemIcon>
+            <ListItemText>{'Copy styles'}</ListItemText>
+          </MenuItem>
+          <MenuItem
+            disabled={isRootNode || !canPasteStyles}
+            onClick={handlePasteStyles}
+          >
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_PASTE.path}
+              />
+            </ListItemIcon>
+            <ListItemText
+              slotProps={{
+                primary: {
+                  sx: {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                },
+              }}
+            >
+              {copiedStyleLabel
+                ? `Paste styles from ${copiedStyleLabel}`
+                : 'Paste styles'}
+            </ListItemText>
+          </MenuItem>
+          <Divider />
           <MenuItem disabled={!canPaste} onClick={handlePasteClick}>
             <ListItemIcon>
               <MdiIcon

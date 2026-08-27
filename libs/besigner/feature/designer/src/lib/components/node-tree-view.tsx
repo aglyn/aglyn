@@ -64,14 +64,12 @@ import {
   useMemo,
   useState,
 } from 'react'
-import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
 import {
-  isAncestorHiddenOnSite,
+  isAncestorHidden,
+  isNodeHiddenByAuthor,
   isNodeHiddenOnSite,
-  nodePropsWithHiddenOnSite,
-  toggleRevealedNodeId,
 } from '../utils/canvas-reveal'
 import ComponentIconComponent from './component-icon.component'
 import NodeContextMenu from './node-context-menu'
@@ -342,38 +340,35 @@ const NodeTreeItem = observer(
     const dragDisabled = Boolean(isRootNode || !dragAllowed)
 
     /**
-     * The row's eye: this element's VISIBILITY (AGL-592).
+     * The row's eye: this element's VISIBILITY (AGL-1479).
      *
-     * It used to toggle a canvas-only reveal, and it appeared only on a row
-     * that was already hidden — so it could report a state but never reach
-     * one, and the single way to hide an element was to know the literal
-     * class `aglyn-hidden` and type it into the Styles panel. The eye now
-     * does what an eye in a layer tree does everywhere else: it hides the
-     * element, on the canvas and on the published site, and shows it again.
+     * `display: none`, on the canvas and on the published site, and nothing
+     * reveals it. The plain "I do not want this on the page" switch every
+     * layer tree has — and, because it is a node FIELD composed last rather
+     * than a style, hiding a Stack laid out with `display: flex` gives that
+     * flex back the moment it is shown again.
      *
-     * The class is still the storage — the published stylesheet, the
-     * interaction builder's show/hide steps and the canvas reveal all key
-     * off it — so nothing about the rendered result changes; the eye is the
-     * control it never had. The ⋮ menu carries the same action by name for
-     * anyone looking for it there.
-     *
-     * ⌥-click is the second gesture, and it is the one the eye used to be:
-     * show a hidden element ON THE CANVAS ONLY, so a mega-menu panel can be
-     * designed with the page around it and the published site keeps hiding
-     * it. Selecting a hidden element (or anything alongside it in its
-     * container) already does this for as long as the selection lasts —
-     * ⌥-click is how it stays open while you work somewhere else.
+     * It does NOT write `aglyn-hidden`. That class means something else that
+     * looks the same from outside — "starts hidden, and an interaction shows
+     * it", for a mega-menu panel or a drawer — and it is part of a runtime
+     * contract that the show/hide steps and the canvas reveal both read. A
+     * visibility toggle that wrote it would enrol every hidden element in a
+     * choreography it is not part of. That switch is on the ⋮ menu, named
+     * for what it does.
      */
-    const [revealedNodeIds, setRevealedNodeIds] =
-      useAglynBesignerFlag('revealedNodeIds')
+    const authorHidden = isNodeHiddenByAuthor(node)
     const hiddenOnSite = isNodeHiddenOnSite(node)
-    // Only the OUTERMOST hidden layer draws the dim. CSS opacity multiplies
-    // through nesting, so a panel inside a hidden drawer would fade to 0.2
-    // if every hidden level applied its own.
-    const dimsSubtree = hiddenOnSite && !isAncestorHiddenOnSite(node)
-    const revealedOnCanvas = Boolean(
-      revealedNodeIds?.some((id) => id === nodeId),
-    )
+    /**
+     * Dimmed for either reason. Both mean the element is not on the page,
+     * and a reader scanning the tree is asking that question, not which
+     * mechanism answered it.
+     *
+     * Only the OUTERMOST hidden layer draws it: CSS opacity multiplies
+     * through nesting, so a panel inside a hidden drawer would fade to 0.2
+     * if every hidden level applied its own.
+     */
+    const dimsSubtree =
+      (authorHidden || hiddenOnSite) && !isAncestorHidden(node)
     const toggleVisibility = useCallback(
       (e: any) => {
         // The row is a button and a drop target; without this the click
@@ -381,32 +376,11 @@ const NodeTreeItem = observer(
         e.stopPropagation()
         e.preventDefault()
         if (isRootNode) return
-        if (e.altKey) {
-          setRevealedNodeIds((current) => toggleRevealedNodeId(current, nodeId))
-          return
-        }
-        const props = nodePropsWithHiddenOnSite(node, !hiddenOnSite)
-        if (!props) return
         action(() => {
-          node.props = props as never
+          node.hidden = !authorHidden
         })()
-        // Un-hiding retires the canvas reveal with it: the element is on the
-        // page now, and leaving the flag set would keep a stale entry that
-        // does nothing until someone hides it again and is surprised.
-        if (hiddenOnSite && revealedOnCanvas) {
-          setRevealedNodeIds((current) =>
-            (current ?? []).filter((id) => id !== nodeId),
-          )
-        }
       },
-      [
-        node,
-        nodeId,
-        isRootNode,
-        hiddenOnSite,
-        revealedOnCanvas,
-        setRevealedNodeIds,
-      ],
+      [node, isRootNode, authorHidden],
     )
 
     const {
@@ -637,34 +611,34 @@ const NodeTreeItem = observer(
           {!isRootNode && (
             <Tooltip
               title={
-                hiddenOnSite
-                  ? revealedOnCanvas
-                    ? 'Hidden on the published site, shown here while you design it. Click to show it everywhere; ⌥-click to stop showing it here.'
-                    : 'Hidden on the published site. Click to show it; ⌥-click to show it here only, while you design it.'
-                  : 'Visible. Click to hide it — on the canvas and on the published site.'
+                authorHidden
+                  ? 'Hidden. Click to show it.'
+                  : hiddenOnSite
+                    ? 'Starts hidden until an interaction shows it. Click to hide it outright.'
+                    : 'Visible. Click to hide it — here and on the published site.'
               }
             >
               <IconButton
                 aria-label={
-                  hiddenOnSite ? `Show ${nodeLabel}` : `Hide ${nodeLabel}`
+                  authorHidden ? `Show ${nodeLabel}` : `Hide ${nodeLabel}`
                 }
-                aria-pressed={hiddenOnSite}
+                aria-pressed={authorHidden}
                 className={classKey.visibilityButton}
-                color={revealedOnCanvas ? 'secondary' : 'default'}
+                color="default"
                 onClick={toggleVisibility}
                 size="small"
                 sx={{
                   alignSelf: 'center',
                   flexShrink: 0,
                   padding: '2px',
-                  color: revealedOnCanvas ? 'secondary.main' : 'text.disabled',
+                  color: 'text.disabled',
                   // Quiet on a visible element and permanent on a hidden one:
                   // an eye on every row at full strength turns the hierarchy
                   // into a column of icons, and the state worth seeing at a
                   // glance is which elements the site does NOT ship. Focus
                   // brings it back, so it is reachable by keyboard on a row
                   // the pointer never touches.
-                  opacity: hiddenOnSite ? 1 : 0,
+                  opacity: authorHidden ? 1 : 0,
                   transition: 'opacity 120ms',
                   '&:focus-visible': { opacity: 1 },
                   [`.${classKey.treeListItem}:hover &`]: { opacity: 1 },
@@ -673,7 +647,7 @@ const NodeTreeItem = observer(
                 <MdiIcon
                   fontSize="inherit"
                   path={
-                    hiddenOnSite
+                    authorHidden
                       ? ICON_VARIANT_VISIBILITY_HIDDEN.path
                       : ICON_VARIANT_VISIBILITY_SHOWN.path
                   }

@@ -41,6 +41,7 @@ import * as Besigner from '@aglyn/besigner'
 type RevealNode = {
   $id?: string
   className?: string
+  hidden?: boolean
   props?: Record<string, unknown>
   parent?: RevealNode
 } | null
@@ -149,6 +150,37 @@ export function isAncestorHiddenOnSite(node: RevealNode): boolean {
   let current = node?.parent
   while (current) {
     if (isNodeHiddenOnSite(current)) return true
+    current = current.parent
+  }
+  return false
+}
+
+
+/**
+ * Whether the AUTHOR has hidden this element (AGL-1479).
+ *
+ * The plain switch behind the eye on the hierarchy row: `display: none` on
+ * the canvas and on the published site, with nothing that reveals it.
+ * Deliberately not {@link isNodeHiddenOnSite}, which asks a different
+ * question — "does this start hidden for an interaction to show" — about a
+ * class that is part of a runtime contract.
+ */
+export function isNodeHiddenByAuthor(node: RevealNode): boolean {
+  return Boolean(node?.hidden)
+}
+
+/**
+ * Whether an ANCESTOR is hidden, by either switch, so the published site
+ * never renders this node whatever its own state says.
+ *
+ * Replaces the class-only walk: an element inside a container the author hid
+ * is exactly as absent as one inside a container that starts hidden, and the
+ * hierarchy dims both the same way.
+ */
+export function isAncestorHidden(node: RevealNode): boolean {
+  let current = node?.parent
+  while (current) {
+    if (isNodeHiddenByAuthor(current) || isNodeHiddenOnSite(current)) return true
     current = current.parent
   }
   return false

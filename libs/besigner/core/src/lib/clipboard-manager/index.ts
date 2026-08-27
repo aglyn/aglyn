@@ -22,3 +22,10 @@ export {
   type ClipboardEntry,
   type PasteResult,
 } from './clipboard-manager'
+
+export * as styleClipboard from './style-clipboard'
+export {
+  STYLE_CLIPBOARD_FORMAT_VERSION,
+  STYLE_CLIPBOARD_STORAGE_KEY,
+  type StyleClipboardEntry,
+} from './style-clipboard'
