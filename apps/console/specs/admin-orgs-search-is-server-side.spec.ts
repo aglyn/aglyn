@@ -43,6 +43,8 @@
 /** Everything the query builder was asked for, in order. */
 let ordering: string[] = []
 let wheres: Array<[string, string, unknown]> = []
+let startAt: string | null = null
+let endAt: string | null = null
 let startedAfter: string | null = null
 let capped: number | null = null
 
@@ -74,6 +76,16 @@ function orgQuery(): any {
     },
     where: (field: string, op: string, value: unknown) => {
       wheres.push([field, op, value])
+      return orgQuery()
+    },
+    // The range operators (`startsWith`, `endsWith`) build on these; without
+    // them the handler throws and every assertion reads as a 500.
+    startAt: (value: string) => {
+      startAt = value
+      return orgQuery()
+    },
+    endAt: (value: string) => {
+      endAt = value
       return orgQuery()
     },
     startAfter: (cursor: { id?: string }) => {
@@ -155,6 +167,8 @@ const get = (params: Record<string, string> = {}) => {
 beforeEach(() => {
   ordering = []
   wheres = []
+  startAt = null
+  endAt = null
   startedAfter = null
   capped = null
   orgs = [
@@ -248,5 +262,78 @@ describe('the staff organization list searches the COLLECTION', () => {
     expect(capped).toBe(11)
     await get({ pageSize: '10', search: 'acme' })
     expect(capped).toBe(11)
+  })
+})
+
+/**
+ * The column filter panel, answered by the query.
+ *
+ * `filterMode="server"` stops the grid applying anything itself, so an
+ * operator the route does not answer is a control that silently does nothing.
+ * These cases pin which operators reach a real predicate — and the last one
+ * pins that an unanswerable operator falls back to the unfiltered list rather
+ * than to an empty one, because "no results" is the wrong answer to "this
+ * console cannot do that".
+ */
+describe('the column filter reaches the query', () => {
+  const filterFor = (field: string, op: string, value: string) =>
+    get({ filterField: field, filterOp: op, filterValue: value })
+
+  it('name · contains → array-contains over the word tokens', async () => {
+    expect((await filterFor('name', 'contains', 'Coffee')).status).toBe(200)
+    expect(wheres).toEqual([['nameTokens', 'array-contains', 'coffee']])
+  })
+
+  it('name · equals → equality on the normalized key', async () => {
+    expect((await filterFor('name', 'equals', '  Acme Coffee ')).status).toBe(200)
+    expect(wheres).toEqual([['nameLower', '==', 'acme coffee']])
+  })
+
+  it('name · startsWith → a range over nameLower', async () => {
+    expect((await filterFor('name', 'startsWith', 'Acme')).status).toBe(200)
+    expect(ordering).toEqual(['nameLower'])
+    expect(startAt).toBe('acme')
+    expect(wheres).toEqual([])
+  })
+
+  it('name · endsWith → the same range, read backwards', async () => {
+    // Firestore anchors a range at the FRONT of the stored value, so "ends
+    // with" is only answerable against a reversed copy of the key.
+    expect((await filterFor('name', 'endsWith', 'Coffee')).status).toBe(200)
+    expect(ordering).toEqual(['nameReversed'])
+    // "coffee" reversed — the stored key is reversed too, so the end of the
+    // name is at the front of the index.
+    expect(startAt).toBe('eeffoc')
+  })
+
+  it('plan · isAnyOf → `in`, and never more than Firestore allows', async () => {
+    expect((await filterFor('plan', 'isAnyOf', 'free, business')).status).toBe(200)
+    expect(wheres).toEqual([['plan', 'in', ['free', 'business']]])
+
+    // Cleared, because `wheres` accumulates across calls inside one test and
+    // `wheres[0]` would still be the two-value query above.
+    wheres = []
+    const many = Array.from({ length: 40 }, (_, i) => `p${i}`).join(',')
+    expect((await filterFor('plan', 'isAnyOf', many)).status).toBe(200)
+    expect((wheres[0][2] as string[]).length).toBe(30)
+  })
+
+  it('subscription · equals reaches the nested status field', async () => {
+    expect((await filterFor('subscription', 'equals', 'canceled')).status).toBe(200)
+    expect(wheres).toEqual([['subscription.status', '==', 'canceled']])
+  })
+
+  it('an unanswerable operator lists everything rather than nothing', async () => {
+    // `doesNotContain` has no Firestore predicate. The panel does not offer
+    // it, but a hand-built request must not read as "no such organization".
+    expect((await filterFor('name', 'doesNotContain', 'acme')).status).toBe(200)
+    expect(ordering).toEqual(['__name__'])
+    expect(wheres).toEqual([])
+  })
+
+  it('a blank filter value is not a filter', async () => {
+    expect((await filterFor('name', 'equals', '   ')).status).toBe(200)
+    expect(ordering).toEqual(['__name__'])
+    expect(wheres).toEqual([])
   })
 })

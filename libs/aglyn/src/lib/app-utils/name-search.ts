@@ -103,3 +103,23 @@ export function nameSearchToken(query: string | null | undefined): string {
   if (!key) return ''
   return (key.split(' ')[0] ?? '').slice(0, NAME_TOKEN_MAX_PREFIX)
 }
+
+/**
+ * The normalized name, reversed, so "ends with" becomes a prefix range.
+ *
+ * Firestore has one string operator that is not equality: the range. That
+ * gives "starts with" directly — `>= q` and `<= q + ''` over
+ * `nameLower` — and gives "ends with" nothing at all, because a range is
+ * anchored at the front of the stored value.
+ *
+ * Reversing the stored key moves the end to the front. "Acme Coffee" is
+ * stored as "eeffoc emca", and a search for names ending "coffee" becomes a
+ * prefix range for "eeffoc" — the same query, on the same kind of index.
+ *
+ * Reversed by CODEPOINT (`[...key]`), not by UTF-16 unit: `split('')` cuts
+ * surrogate pairs in half, so an emoji or a non-BMP character in a workspace
+ * name would reverse into two lone surrogates and never match anything.
+ */
+export function nameSearchReversed(name: string | null | undefined): string {
+  return [...nameSearchKey(name)].reverse().join('')
+}

@@ -109,6 +109,10 @@ const nameSearchKey = (name) =>
 // the library's: twelve characters per prefix, 120 tokens per document.
 const NAME_TOKEN_MAX_PREFIX = 12
 const NAME_TOKEN_LIMIT = 120
+// MUST match `nameSearchReversed`. Codepoint-wise, so a surrogate pair is
+// never cut in half.
+const nameSearchReversed = (name) => [...nameSearchKey(name)].reverse().join('')
+
 const nameSearchTokens = (name) => {
   const key = nameSearchKey(name)
   if (!key) return []
@@ -211,7 +215,7 @@ let orgsChanged = 0
 if (!ONLY_HOST) {
   const orgSnap = await firestore
     .collection('orgs')
-    .select('name', 'nameLower', 'nameTokens')
+    .select('name', 'nameLower', 'nameTokens', 'nameReversed')
     .get()
   for (const orgDoc of orgSnap.docs) {
     orgsScanned += 1
@@ -231,9 +235,17 @@ if (!ONLY_HOST) {
       !haveTokens ||
       haveTokens.length !== wantTokens.length ||
       wantTokens.some((token, index) => haveTokens[index] !== token)
-    if (org.nameLower !== want || tokensDiffer) {
+    const wantReversed = nameSearchReversed(org.name)
+    if (
+      org.nameLower !== want ||
+      tokensDiffer ||
+      org.nameReversed !== wantReversed
+    ) {
       orgsChanged += 1
-      await stamp(orgDoc.ref, want, { nameTokens: wantTokens })
+      await stamp(orgDoc.ref, want, {
+        nameTokens: wantTokens,
+        nameReversed: wantReversed,
+      })
     }
   }
 }

@@ -44,6 +44,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   nameSearchKey,
+  nameSearchReversed,
   nameSearchTokens,
 } from '@aglyn/aglyn/app-utils/name-search'
 // LEAF MODULE, NOT THE BARREL (AGL-1289). This file is itself reachable
@@ -287,6 +288,9 @@ export async function createOrganization(
       // Word-prefix tokens, so the staff search can answer "contains a word
       // starting with X" rather than only "starts with X" (AGL-693).
       nameTokens: nameSearchTokens(name),
+      // Reversed, so the list's "ends with" filter is a prefix range like
+      // every other string operator Firestore can answer.
+      nameReversed: nameSearchReversed(name),
       slug,
       ownerUid,
       // Stamped once and never mutated — `transferOrgOwnership` moves

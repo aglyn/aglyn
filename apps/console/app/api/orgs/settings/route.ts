@@ -23,6 +23,7 @@ import { assessOwnershipTransferLockout } from '../../_lib/sso-transfer-lockout'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   nameSearchKey,
+  nameSearchReversed,
   nameSearchTokens,
 } from '@aglyn/aglyn/app-utils/name-search'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
@@ -147,6 +148,7 @@ async function handler(request: Request): Promise<Response> {
             nameLower: nameSearchKey(name),
             // Kept in step with `name` for the same reason (AGL-693).
             nameTokens: nameSearchTokens(name),
+            nameReversed: nameSearchReversed(name),
             updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true },

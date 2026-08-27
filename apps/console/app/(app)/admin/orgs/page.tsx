@@ -39,7 +39,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { GridColDef } from '@mui/x-data-grid'
+import { getGridStringOperators, type GridColDef } from '@mui/x-data-grid'
 import { mdiChartLine } from '@aglyn/shared-data-mdi'
 import {
   ListTable,
@@ -88,6 +88,19 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // route's (`PAGE_SIZE`, 25), not the screen's; nothing here decides it.
   /** The debounced term the toolbar's quick filter last settled on. */
   const [search, setSearch] = useState('')
+  /**
+   * The one column filter the query is currently answering.
+   *
+   * One, not a list: Firestore composes a second predicate only with an
+   * index built for that exact pair, so offering two filters would mean
+   * either a combinatorial index set or a panel where some combinations
+   * quietly return nothing.
+   */
+  const [filter, setFilter] = useState<{
+    field: string
+    op: string
+    value: string
+  } | null>(null)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   /*
    * Debounced, because each settled term is a Firestore query and a fast
@@ -112,6 +125,11 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
       const url = new URL('/api/admin/orgs', window.location.origin)
       url.searchParams.set('pageSize', String(pageSize))
       if (search) url.searchParams.set('search', search)
+      if (filter) {
+        url.searchParams.set('filterField', filter.field)
+        url.searchParams.set('filterOp', filter.op)
+        url.searchParams.set('filterValue', filter.value)
+      }
       if (cursor) url.searchParams.set('after', cursor)
       const response = await fetch(url.toString(), {
         headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
@@ -124,7 +142,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         nextCursor: payload.nextCursor ?? null,
       }
     },
-    [user, search],
+    [user, search, filter],
   )
   const reportOrgsError = useCallback(() => {
     enqueueSnackbar('Could not load organizations', { variant: 'error' })
@@ -191,6 +209,27 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // actions without this page and that one drifting apart.
 
   /*
+   * Only the operators the QUERY can answer reach the panel.
+   *
+   * MUI offers `contains`, `equals`, `startsWith`, `endsWith`, `isEmpty`,
+   * `isNotEmpty`, `isAnyOf` and `doesNotContain` on a string column. The
+   * route answers the first four plus `isAnyOf`; the rest need either a
+   * mid-string match or a negation, and no Firestore index answers those.
+   *
+   * Offering them anyway would put the funnel back in the state this whole
+   * change was fixing — a control that sets something nobody honours. So the
+   * menu is trimmed to what works, and a reader who opens it sees the real
+   * capability rather than discovering the gap one empty result at a time.
+   */
+  const serverOperators = useMemo(
+    () => (allowed: string[]) =>
+      getGridStringOperators().filter((operator) =>
+        allowed.includes(operator.value),
+      ),
+    [],
+  )
+
+  /*
    * One row grammar, the console's (AGL-693).
    *
    * `valueGetter` on every column that is not already a plain string: the
@@ -205,6 +244,12 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Organization',
         flex: 1.4,
         minWidth: 200,
+        filterOperators: serverOperators([
+          'contains',
+          'equals',
+          'startsWith',
+          'endsWith',
+        ]),
         valueGetter: (_value, row: any) => String(row.name ?? row.$id),
         renderCell: ({ row }: any) => (
           /*
@@ -251,6 +296,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Plan',
         flex: 1,
         minWidth: 180,
+        filterOperators: serverOperators(['equals', 'isAnyOf']),
         valueGetter: (_value, row: any) =>
           isEnterpriseOrg(row as never)
             ? PLAN_LABELS.enterprise
@@ -310,6 +356,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Subscription',
         flex: 0.8,
         minWidth: 130,
+        filterOperators: serverOperators(['equals']),
         valueGetter: (_value, row: any) => row.subscription?.status ?? '--',
       },
       {
@@ -317,6 +364,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Site limit',
         flex: 0.8,
         minWidth: 130,
+        // A derived entitlement, not a stored field — there is nothing for a
+        // query to filter on.
+        filterable: false,
         // An UNLIMITED quota is Number.POSITIVE_INFINITY, which renders as
         // the literal "Infinity" (AGL-1118).
         valueGetter: (_value, row: any) =>
@@ -352,6 +402,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Created',
         flex: 0.7,
         minWidth: 120,
+        // Date range filtering would need its own predicate and index; not
+        // offered rather than offered and ignored.
+        filterable: false,
         valueGetter: (_value, row: any) => row.createdAt?.seconds ?? 0,
         renderCell: ({ row }: any) => (
           <Typography variant="caption" color="text.secondary">
@@ -395,7 +448,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         { width: 120 },
       ),
     ],
-    [refresh, handleShowUsage, usageLoading],
+    [refresh, handleShowUsage, usageLoading, serverOperators],
   )
 
   return (
@@ -455,29 +508,26 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                    * against whatever a column happens to render.
                    */
                   filterMode="server"
-                  onFilterModelChange={(model) =>
+                  onFilterModelChange={(model) => {
                     onQuickFilter((model.quickFilterValues ?? []).join(' '))
-                  }
-                  /*
-                   * The per-column filter panel is OFF, because on this list
-                   * it cannot work.
-                   *
-                   * `filterMode="server"` hands the whole filter model to the
-                   * handler above and stops the grid applying anything
-                   * itself. That handler answers the quick search — a
-                   * Firestore prefix range — and nothing else, so a funnel
-                   * offering "Plan is business" would have set a filter the
-                   * query never received and the grid no longer applied:
-                   * a control that silently does nothing.
-                   *
-                   * Turning it back on means giving each filterable column a
-                   * server predicate, which Firestore can do for equality on
-                   * an indexed field (plan, subscription status) and cannot
-                   * do for the operators the panel offers by default. Better
-                   * absent than dead — an inert control teaches a reader the
-                   * list is broken.
-                   */
-                  disableColumnFilter
+                    const item = (model.items ?? []).find(
+                      (entry) =>
+                        entry.value !== undefined &&
+                        entry.value !== null &&
+                        String(entry.value).trim() !== '',
+                    )
+                    setFilter(
+                      item
+                        ? {
+                            field: String(item.field),
+                            op: String(item.operator),
+                            value: Array.isArray(item.value)
+                              ? item.value.join(',')
+                              : String(item.value),
+                          }
+                        : null,
+                    )
+                  }}
                   // The row IS the way in, on every list in the console.
                   onOpen={(id) =>
                     router.push(
