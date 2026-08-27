@@ -530,12 +530,24 @@ export function evaluateRule(expectedRule, liveRule) {
 
     for (const required of expectedRule.conditions) {
       const satisfied = conditions.some((actual) => conditionSatisfies(required, actual))
-      if (!satisfied) {
-        findings.push(
-          `${label}${where} NO LONGER REQUIRES ${describeCondition(required)} — ` +
-            'the bypass has widened; groups are OR\'d, so every group must carry every condition',
-        )
-      }
+      if (satisfied) continue
+      /*
+       * Name what the offending group ACTUALLY matches.
+       *
+       * Without it the finding says only what is missing, which reads as "the
+       * path condition was dropped" — and the reader goes looking for an open
+       * door. The common reality is narrower and duller: one appended group
+       * bypassing one undeclared path, often a route that has since been
+       * deleted. It still widens the rule, so it is still a finding; naming
+       * the path is what turns it into a one-minute fix instead of an
+       * investigation against the live API.
+       */
+      const matches = conditions.map((actual) => describeCondition(actual)).join(' AND ')
+      findings.push(
+        `${label}${where} NO LONGER REQUIRES ${describeCondition(required)} — ` +
+          'the bypass has widened; groups are OR\'d, so every group must carry ' +
+          `every condition. That group bypasses: ${matches || '(nothing — it matches every request)'}`,
+      )
     }
   })
 
