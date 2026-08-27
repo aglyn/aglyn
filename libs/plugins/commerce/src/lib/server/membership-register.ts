@@ -16,6 +16,7 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import { memberNameSearchFields } from './member-name-search'
 import {
   checkVisitorRecordCeiling,
   HOST_TOKENS,
@@ -125,7 +126,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       if (verdict.exceeded) return { duplicate: false, ceiling: verdict.ceiling }
       tx.create(memberRef, {
         email,
-        ...(displayName ? { displayName } : {}),
+        ...(displayName ? memberNameSearchFields(displayName) : {}),
         passwordScrypt: hashMemberPassword(password),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })

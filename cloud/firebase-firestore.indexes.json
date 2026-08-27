@@ -819,6 +819,20 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "siteMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "displayNameTokens",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "displayNameLower",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

@@ -171,6 +171,24 @@ const stamp = async (ref, value, fields = undefined) => {
   }
 }
 
+/**
+ * The same buffered write, for a document whose search key is not called
+ * `nameLower`. Site members key on `displayName`, so `stamp` — which always
+ * writes `nameLower` — would leave the field the query reads untouched while
+ * reporting the document as migrated.
+ */
+const stampFields = async (ref, fields) => {
+  written += 1
+  if (!COMMIT) return
+  batch.update(ref, fields)
+  if ((buffered += 1) >= 400) {
+    const full = batch
+    batch = firestore.batch()
+    buffered = 0
+    await full.commit()
+  }
+}
+
 let hostsScanned = 0
 let hostsChanged = 0
 let screensScanned = 0
@@ -250,9 +268,52 @@ if (!ONLY_HOST) {
   }
 }
 
+/*
+ * Site members — the console's Site users card searches these on the server.
+ *
+ * A collection-group read so one pass covers every host. `email` needs no key
+ * of its own: the register path lower-cases it before storing, so the stored
+ * value already IS its own normalized key.
+ */
+let membersScanned = 0
+let membersChanged = 0
+if (!ONLY_HOST) {
+  const memberSnap = await firestore
+    .collectionGroup('siteMembers')
+    .select('displayName', 'displayNameLower', 'displayNameTokens')
+    .get()
+  for (const memberDoc of memberSnap.docs) {
+    membersScanned += 1
+    const member = memberDoc.data()
+    // A member with no display name has nothing to key on. Skipped rather
+    // than stamped with an empty string, which `orderBy` would sort to the
+    // front of every prefix range it does not belong to.
+    if (typeof member.displayName !== 'string' || !member.displayName.trim()) {
+      continue
+    }
+    const want = nameSearchKey(member.displayName)
+    const wantTokens = nameSearchTokens(member.displayName)
+    const haveTokens = Array.isArray(member.displayNameTokens)
+      ? member.displayNameTokens
+      : null
+    const tokensDiffer =
+      !haveTokens ||
+      haveTokens.length !== wantTokens.length ||
+      wantTokens.some((token, index) => haveTokens[index] !== token)
+    if (member.displayNameLower !== want || tokensDiffer) {
+      membersChanged += 1
+      await stampFields(memberDoc.ref, {
+        displayNameLower: want,
+        displayNameTokens: wantTokens,
+      })
+    }
+  }
+}
+
 if (COMMIT && buffered > 0) await batch.commit()
 
 console.log(`hosts:   scanned=${hostsScanned} changed=${hostsChanged}`)
+console.log(`members: scanned=${membersScanned} changed=${membersChanged}`)
 console.log(`screens: scanned=${screensScanned} changed=${screensChanged}`)
 console.log(
   ONLY_HOST

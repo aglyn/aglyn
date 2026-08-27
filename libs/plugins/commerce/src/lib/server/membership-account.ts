@@ -16,6 +16,7 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import { memberNameSearchFields } from './member-name-search'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -73,7 +74,7 @@ export const membershipAccountHandler: PluginApiHandler = async (req, res) => {
         : undefined
       await memberRef.set(
         {
-          ...(displayName ? { displayName } : {}),
+          ...(displayName ? memberNameSearchFields(displayName) : {}),
           ...(addresses ? { addresses } : {}),
         },
         { merge: true },

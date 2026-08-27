@@ -234,3 +234,48 @@ export const ACTIVITY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
   },
 ]
+
+/*
+ * Site members (`hosts/{hostId}/siteMembers`) — the site's AUDIENCE.
+ *
+ * Not console users and not Firebase Auth accounts: a site member is a
+ * Firestore document with its own scrypt hash and its own per-host session
+ * cookie, which is why this list is a plain collection query while the staff
+ * account list has to walk Auth pools.
+ *
+ * ⛔ `suspended` is not filterable. It is written only when a member IS
+ * suspended, so `is false` would return nothing rather than everyone else — a
+ * filter that lies in exactly one direction. Offering it needs the writers to
+ * store `false` explicitly, and a backfill for the documents that predate it.
+ */
+export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
+  {
+    // The register path lower-cases before storing, so the stored value IS
+    // its own normalized key and needs no twin.
+    column: 'email',
+    kind: 'text',
+    path: 'email',
+    lowerPath: 'email',
+    presence: 'always',
+  },
+  {
+    column: 'displayName',
+    kind: 'text',
+    path: 'displayName',
+    lowerPath: 'displayNameLower',
+    tokensPath: 'displayNameTokens',
+  },
+  {
+    column: 'createdAt',
+    kind: 'date',
+    path: 'createdAt',
+    presence: 'always',
+  },
+]
+
+/** Headers for member fields that are filterable without being columns. */
+export const SITE_MEMBER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> =
+  {
+    displayName: 'Name',
+    createdAt: 'Joined',
+  }

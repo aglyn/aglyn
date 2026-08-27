@@ -18,30 +18,29 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
-  Button,
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material'
-import {
-  collection,
-  limit,
-  orderBy,
-  query,
-} from 'firebase/firestore'
+  gridFilterRequest,
+  hiddenFilterColumns,
+  hiddenFilterVisibility,
+  listFilterColumn,
+  type ListFilterRequest,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import { Chip, Stack, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
+import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import {
+  listFilterConstraints,
   useFirestore,
   usePagedCollection,
 } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import {
+  SITE_MEMBER_LIST_FILTER_FIELDS,
+  SITE_MEMBER_LIST_FILTER_HEADERS,
+} from '../utils/list-filters'
+import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 import SiteMemberDrawer from './site-member-drawer.component'
 
@@ -55,10 +54,16 @@ import SiteMemberDrawer from './site-member-drawer.component'
  * field nothing writes, so totals moved to the drawer where they are
  * computed from the order docs.
  */
+/**
+ * The filterable fields that get a column. The rest of
+ * `SITE_MEMBER_LIST_FILTER_FIELDS` still reaches the filter panel, hidden.
+ */
+const MEMBER_FILTER_COLUMNS = ['email', 'displayName', 'createdAt']
+
 export function SiteAccountsCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
-  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<ListFilterRequest | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
    * The console's shared paging (AGL-693). "Load more" decided there was more
@@ -74,29 +79,104 @@ export function SiteAccountsCard(props: { hostId: string }) {
     pageSize,
     setPageSize,
   } = usePagedCollection<any>(
-    (pageLimit) =>
-      query(
+    (pageLimit) => {
+      /*
+       * THE FILTER IS THE QUERY (AGL-693).
+       *
+       * This card narrowed the rows it had fetched — ten by default — so a
+       * name that sat on page four answered "no site users match", which
+       * reads as the member not existing rather than as the search not
+       * reaching them. The predicate goes into the query instead, so it
+       * covers the whole collection.
+       *
+       * No `fixedOrderBy`: the window here is a growing `limit`, not a
+       * document cursor, so a filter that needs its own ordering can have
+       * one — nothing is holding a position in the old sort. Unfiltered, the
+       * card keeps its newest-first order.
+       */
+      const constraints = listFilterConstraints(
+        SITE_MEMBER_LIST_FILTER_FIELDS,
+        filter,
+      )
+      return query(
         collection(firestore, 'hosts', hostId, 'siteMembers'),
-        orderBy('createdAt', 'desc'),
+        ...(constraints ?? [orderBy('createdAt', 'desc')]),
         limit(pageLimit),
-      ),
-    [firestore, hostId],
+      )
+    },
+    [firestore, hostId, filter],
     { idField: '$id' },
   )
 
-  const visible = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    if (!term) return memberDocs
-    return memberDocs.filter(
-      (member: any) =>
-        String(member.email ?? '')
-          .toLowerCase()
-          .includes(term) ||
-        String(member.displayName ?? member.name ?? '')
-          .toLowerCase()
-          .includes(term),
-    )
-  }, [memberDocs, search])
+  const visible = memberDocs
+
+  /* One row grammar, the console's (AGL-693) — the same table everywhere. */
+  const memberColumns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'email',
+        headerName: 'Email',
+        flex: 1.4,
+        minWidth: 220,
+        ...listFilterColumn(SITE_MEMBER_LIST_FILTER_FIELDS, 'email'),
+        valueGetter: (_value, row: any) => String(row.email ?? row.$id),
+      },
+      {
+        field: 'displayName',
+        headerName: 'Name',
+        flex: 1,
+        minWidth: 160,
+        ...listFilterColumn(SITE_MEMBER_LIST_FILTER_FIELDS, 'displayName'),
+        valueGetter: (_value, row: any) =>
+          String(row.displayName ?? row.name ?? ''),
+        renderCell: ({ row }: any) => row.displayName ?? row.name ?? '—',
+      },
+      {
+        field: 'createdAt',
+        headerName: 'Joined',
+        flex: 0.8,
+        minWidth: 130,
+        // `type: 'date'` is what gives the panel a date PICKER rather than a
+        // free-text box for a value the query reads as a day.
+        type: 'date',
+        ...listFilterColumn(SITE_MEMBER_LIST_FILTER_FIELDS, 'createdAt'),
+        valueGetter: (_value, row: any) => row.createdAt?.toDate?.() ?? null,
+        renderCell: ({ row }: any) =>
+          row.createdAt?.toDate?.()
+            ? row.createdAt.toDate().toLocaleDateString()
+            : '—',
+      },
+      {
+        field: 'suspended',
+        headerName: 'Status',
+        flex: 0.6,
+        minWidth: 110,
+        align: 'right',
+        headerAlign: 'right',
+        /*
+         * Not filterable, and not an oversight. `suspended` is written only
+         * when a member IS suspended, so `is false` would return nothing
+         * rather than everyone else — a filter that lies in exactly one
+         * direction. It needs the writers to store `false` explicitly first.
+         */
+        filterable: false,
+        valueGetter: (_value, row: any) =>
+          row.suspended === true ? 'Suspended' : 'Active',
+        renderCell: ({ row }: any) =>
+          row.suspended === true ? (
+            <Chip label="Suspended" size="small" color="error" />
+          ) : (
+            <Chip label="Active" size="small" variant="outlined" />
+          ),
+      },
+      ...hiddenFilterColumns(
+        SITE_MEMBER_LIST_FILTER_FIELDS,
+        MEMBER_FILTER_COLUMNS,
+        SITE_MEMBER_LIST_FILTER_HEADERS,
+      ),
+    ],
+    [],
+  )
 
   // Resolved from the live docs so the drawer reflects rule-side updates.
   const selectedMember =
@@ -113,56 +193,33 @@ export function SiteAccountsCard(props: { hostId: string }) {
       })}
       contentGutterX
       contentGutterY
-      HeaderProps={{
-        action: (
-          <TextField
-            size="small"
-            placeholder="Search email or name…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        ),
-      }}
     >
       {visible.length ? (
         <Stack spacing={1}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Email'}</TableCell>
-                <TableCell>{'Name'}</TableCell>
-                <TableCell>{'Joined'}</TableCell>
-                <TableCell align="right">{'Status'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visible.map((member: any) => (
-                <TableRow
-                  key={member.$id}
-                  hover
-                  onClick={() => setSelectedId(member.$id)}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  <TableCell>{member.email ?? member.$id}</TableCell>
-                  <TableCell>
-                    {member.displayName ?? member.name ?? '—'}
-                  </TableCell>
-                  <TableCell>
-                    {member.createdAt?.toDate?.()
-                      ? member.createdAt.toDate().toLocaleDateString()
-                      : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {member.suspended === true ? (
-                      <Chip label="Suspended" size="small" color="error" />
-                    ) : (
-                      <Chip label="Active" size="small" variant="outlined" />
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListTable
+            rows={visible}
+            columns={memberColumns}
+            onOpen={(id) => setSelectedId(id)}
+            /*
+             * The grid must NOT also filter. The query answers it, so a
+             * second client-side pass could only drop rows that already
+             * matched — it compares what a column DRAWS, and the query
+             * compares what the document stores.
+             */
+            filterMode="server"
+            onFilterModelChange={(model) => setFilter(gridFilterRequest(model))}
+            // Paged by the footer below, so the grid must not also slice.
+            hideFooter
+            rowHeight={TABLE_ROW_HEIGHT}
+            initialState={{
+              columns: {
+                columnVisibilityModel: hiddenFilterVisibility(
+                  SITE_MEMBER_LIST_FILTER_FIELDS,
+                  MEMBER_FILTER_COLUMNS,
+                ),
+              },
+            }}
+          />
           <ListPagination
             page={page}
             pageSize={pageSize}
@@ -174,8 +231,8 @@ export function SiteAccountsCard(props: { hostId: string }) {
         </Stack>
       ) : (
         <Typography variant="body2" color="text.secondary">
-          {search
-            ? 'No site users match the search.'
+          {filter
+            ? 'No site users match the filter.'
             : 'No site accounts yet — they appear when visitors sign up ' +
               'on your site.'}
         </Typography>
