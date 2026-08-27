@@ -384,7 +384,7 @@ describe('the media-storage alert sees the org library (AGL-1473)', () => {
  * That is a guard that could not fail, on a plan where it could never be
  * asked. These cases ask it on `pro`.
  *
- * Zach's condition on billing these bytes from today was, verbatim: "also give
+ * the condition on billing these bytes from today was, verbatim: "also give
  * overage protection and usage alerts, so customers don't get a surprise
  * bill." An alert that is structurally unable to fire is not an alert.
  */

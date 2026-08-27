@@ -42,6 +42,14 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
+// LEAF MODULE, NOT THE BARREL (AGL-1289). This file is itself reachable
+// through `@aglyn/aglyn/server`, and the verdict route proved this week that a
+// constant pulled from that barrel inside the cycle typechecks and then
+// resolves `undefined` at runtime.
+import {
+  ORG_BILLING_DOC_ID,
+  ORG_BILLING_SUBCOLLECTION,
+} from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { FieldValue } from 'firebase-admin/firestore'
 import { cache } from 'react'
 import { findUserByUidAcrossPools } from './auth-pools'
@@ -228,6 +236,33 @@ export async function createOrganization(
       })
     }
     tx.set(db.collection('orgSlugs').doc(slug), { orgId })
+    /*
+     * THE BILLING DOCUMENT EXISTS FROM BIRTH (AGL-1152).
+     *
+     * `readOrgBilling` reads `orgs/{id}/billing/stripe` and falls back to the
+     * org doc when it is absent — and Firestore BILLS a read for a document
+     * that does not exist. An org created without one therefore pays a
+     * NOT_FOUND plus the fallback lookup on every read, forever, on the
+     * tenant's hot path behind a deliberately short TTL.
+     *
+     * Measured before this: 14,498 NOT_FOUND reads/day on production, 15% of
+     * all Firestore reads, from four orgs that had never had a document. The
+     * `--seed-empty` pass in `backfill-org-billing.mjs` repaired those; this is
+     * what stops the next org recreating the problem.
+     *
+     * EMPTY IS THE HONEST VALUE, not a placeholder: a new org has no Stripe
+     * relationship, and `readOrgBilling`'s fallback returned `{}` for exactly
+     * this case anyway. `writeOrgBilling` merge-sets, so the first real
+     * subscription composes with this rather than racing it.
+     */
+    tx.set(
+      db
+        .collection('orgs')
+        .doc(orgId)
+        .collection(ORG_BILLING_SUBCOLLECTION)
+        .doc(ORG_BILLING_DOC_ID),
+      {},
+    )
     tx.set(db.collection('orgs').doc(orgId), {
       name,
       slug,

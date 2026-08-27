@@ -52,7 +52,16 @@ const StyledAccordion = styled(MuiAccordion)(({ theme }) => {
 
   '& .MuiAccordionSummary-root': {
     textTransform: 'uppercase',
-    backgroundColor: tv.palette.surface.main,
+    /*
+     * `surface` is an AGLYN palette extension, not a MUI one, so it is absent
+     * from any theme that did not come from `console.theme.ts` — a
+     * self-hosted deployment with its own palette, and every test that mounts
+     * a component containing this one under a bare `createTheme()`. Reading
+     * it unguarded did not degrade there, it THREW, which turns "this
+     * accordion is the wrong grey" into "the panel does not render".
+     */
+    backgroundColor:
+      tv.palette.surface?.main ?? tv.palette.background?.paper ?? undefined,
     flexDirection: 'row-reverse',
     minHeight: 38,
     fontSize: theme.typography.pxToRem(14),

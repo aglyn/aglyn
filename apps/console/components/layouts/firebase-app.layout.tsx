@@ -55,6 +55,7 @@ import {
   reportSuccessfulRead,
 } from '../../utils/session-health'
 import { watchSessionHeal } from '../../utils/session-heal'
+import useCrossTabSessionHeal from '../../hooks/use-cross-tab-session-heal'
 import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
@@ -112,6 +113,14 @@ function AnalyticsGlobalEvents({ children }) {
   // Cross-subdomain session cookie sync (AGL-236). NOT analytics, and it must
   // run whether or not Firebase Analytics came up — so it stays out here.
   useSessionCookie()
+  /*
+   * The sibling tab's heal (AGL-2486). Component scope rather than module
+   * scope, unlike `watchSessionHeal` above, and for the opposite reason: this
+   * watches a tab that is NOT re-authenticating, so the tree it lives in is
+   * exactly the one that stays mounted throughout. It needs an `Auth`
+   * instance, which module scope has none of.
+   */
+  useCrossTabSessionHeal()
   const analytics = useAnalytics()
 
   // ONE gate for every Firebase Analytics binding in this app (AGL-1979).

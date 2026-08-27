@@ -21,18 +21,15 @@ import type { PresenceEntry } from '../hooks/use-presence'
 /**
  * What a presence chip promises about collaborating (AGL-2486).
  *
- * Zach: *"Why are saves not merged? Isn't this the point of being able to
- * collaborate together and build a page alongside someone at the same
- * time"*. The old copy described the storage — one whole-document write —
- * and presented it as the user's experience, which predicted a fight that
- * does not happen in the common case: the mirror carries unsaved work per
- * NODE, so two people on different elements both keep theirs.
+ * Copy that describes the STORAGE — one whole-document write — and presents it
+ * as the user's experience predicts a fight that does not happen in the common
+ * case: the mirror carries unsaved work per NODE, so two people on different
+ * elements both keep theirs.
  *
  * Asserted here rather than off a screenshot because the failure mode is a
- * sentence, not a pixel: an over-corrected "everything merges" is as wrong
- * as the claim it replaced, and only a test that reads BOTH directions
- * catches that. Each case therefore checks something is said AND something
- * is not.
+ * sentence, not a pixel: an over-corrected "everything merges" is as wrong as
+ * the claim it replaces, and only a test that reads BOTH directions catches
+ * that. Each case therefore checks something is said AND something is not.
  */
 const entry = (over: Partial<PresenceEntry> = {}): PresenceEntry =>
   ({
@@ -61,8 +58,8 @@ describe('presence chip copy (AGL-2486)', () => {
 
     it('says either of you can save, which is the point of the guard fix', () => {
       expect(text.toLowerCase()).toContain('either of you can save')
-      // The old promise was the opposite, and it is the sentence Zach was
-      // reading while the editor refused his save.
+      // The opposite promise — that co-editing pauses on a conflict — is the
+      // one an author would be reading while the editor refuses their save.
       expect(text.toLowerCase()).not.toContain('pauses')
     })
 

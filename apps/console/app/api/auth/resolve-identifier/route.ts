@@ -50,7 +50,7 @@ import { normalizeAccountEmail } from '@aglyn/aglyn/app-utils/account-emails'
  * The alternative designs and why they were not taken:
  *
  *  - **Return nothing and drop alias sign-in.** Costs the feature its main
- *    convenience, which is the half Zach asked for by name.
+ *    convenience, which is the half the requirement was for by name.
  *  - **Take the password here and verify it server-side**, returning a custom
  *    token instead of an address. Leaks nothing — but it routes every
  *    password through our own Next.js route, where Firebase's client SDK

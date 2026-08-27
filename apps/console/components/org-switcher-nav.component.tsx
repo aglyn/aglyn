@@ -198,21 +198,19 @@ export function OrgSwitcherNav() {
   /**
    * Whether the URL names a workspace but not THIS one (AGL-2486).
    *
-   * Zach: "even though the url has a different org in it, it still chose to
-   * use a different org in the switcher" — `/aglyn-org/…` in the address bar,
-   * "Sale Test · Free" here. The gate above had already passed, because it
-   * asks whether the route is about SOME workspace; it was the NAME that was
-   * wrong, taken from a scope that had fallen through to a remembered
+   * One workspace can be in the address bar while this switcher names another
+   * with its plan badge beside it. The gate above passes either way, because
+   * it asks only whether the route is about SOME workspace; what goes wrong is
+   * the NAME, taken from a scope that has fallen through to a remembered
    * selection.
    *
    * Naming nothing at all is not the answer here the way it is on the picker:
    * this route IS about a workspace, and whoever is on it is most likely
    * looking at a 404 they need to escape, so removing their switcher strands
    * them. The control stays and stops ASSERTING instead — no name, no plan
-   * badge, no Upgrade CTA for a workspace the page has nothing to do with,
-   * which was the whole of AGL-1130's complaint — while still opening the
-   * menu below. That is exactly the "pick a workspace to get back on track"
-   * the not-found body advises.
+   * badge, no Upgrade CTA for a workspace the page has nothing to do with
+   * (AGL-1130) — while still opening the menu below. That is exactly the
+   * "pick a workspace to get back on track" the not-found body advises.
    */
   const unclaimed = !urlNamedOrg
   // The pill is the BILLING TIER. Falling back to the member's role meant a

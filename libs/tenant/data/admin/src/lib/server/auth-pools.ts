@@ -109,7 +109,7 @@ export function identityStrength(record: UserRecord): number {
 /**
  * Collapse rows sharing a uid to ONE row apiece (AGL-2005).
  *
- * **Zach, 2026-08-18:** "We still have two users list in this list with the
+ * **decided:** "We still have two users list in this list with the
  * same uid but one without an email attached, this needs fixed we should only
  * see one user, even if they are sso."
  *

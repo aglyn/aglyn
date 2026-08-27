@@ -17,7 +17,7 @@
 
 /**
  * Several email addresses per account (AGL-2486) — GitHub's model, adopted
- * verbatim because Zach's answer to "how should a secondary address interact
+ * verbatim because the answer to "how should a secondary address interact
  * with an SSO domain claim?" was "do whatever github does to handle this".
  *
  * ## The one rule everything else here exists to serve

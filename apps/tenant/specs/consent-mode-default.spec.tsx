@@ -18,7 +18,7 @@
 /**
  * The consent-mode `default`, and the line it must never cross (AGL-1622).
  *
- * Zach's decision, 2026-08-14: load-then-restrict is approved for the UNITED
+ * the decision, 2026-08-14: load-then-restrict is approved for the UNITED
  * STATES — GA may load under the existing implied-consent posture, and the
  * consent-mode signals restrict the tag that is legitimately resident. EU and
  * UK are left "as legally implied", i.e. as the law requires: the prior-consent

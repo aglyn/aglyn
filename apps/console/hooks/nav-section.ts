@@ -76,9 +76,9 @@ export function resolveNavSection(pathname: string | null): NavSection {
  * selection and then to the user's first org, because org-less pages still
  * need an org to ACT on (Manage Account browses that org's media library, the
  * menu's Billing row has to land somewhere). That fallback is fine for an
- * action and wrong for a label: on `/manage/user` and `/admin/*` it chromed
- * the page "Zach Gover Personal · Starter" — a workspace the page has nothing
- * to do with, complete with its plan badge and an Upgrade CTA for it.
+ * action and wrong for a label: on `/manage/user` and `/admin/*` that fallback
+ * chromes the page with some workspace's name, plan badge and Upgrade CTA —
+ * a workspace the page has nothing to do with.
  *
  * AGL-1937 added a third reading to "claim" and "act": **committing** the
  * session to a workspace. Loading an org's plugin bundles and bucketing its

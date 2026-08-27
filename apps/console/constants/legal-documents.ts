@@ -48,9 +48,9 @@
  *
  * TO PUBLISH A CHANGE, BEFORE LAUNCH: publish first, re-capture from the live
  * page, and update the hashes here — LEAVING `LEGAL_DOCUMENT_VERSION` AT `v1`.
- * Zach, 2026-08-24: no v2 exists until Aglyn has released. See the 2026-08-24
- * entry in the changelog below for the full reasoning; the short form is that
- * a version can only supersede a version somebody accepted, and nobody has.
+ * No v2 exists until Aglyn has released. See the 2026-08-24 entry in the
+ * changelog below for the full reasoning; the short form is that a version can
+ * only supersede a version somebody accepted, and nobody has.
  * Archive the re-captured bytes over `Acceptance-Snapshots/v1/<key>.txt` in
  * the same pass — the archive is resolved by the CURRENT version folder, so a
  * moved hash and an unmoved archive is the one combination that breaks.
@@ -135,11 +135,10 @@ export interface LegalDocumentManifestEntry {
  *
  * ⚠️ §7's licence for "internal business OR PERSONAL purposes" is DELIBERATE
  * and MUST NOT BE "FIXED". Consumers — solo founders and pre-entity
- * individuals starting a business — are an intended ICP (Zach, 2026-08-14),
- * so §7 correctly describes the market. An earlier pass on the same day
- * recommended deleting "or personal" and scoping the beta to business use;
- * that recommendation is REVERSED and must not be quietly re-reversed. It was
- * never an escape anyway: Texas DTPA §17.45(4) counts businesses under $25M
+ * individuals starting a business — are an intended ICP, so §7 correctly
+ * describes the market. Deleting "or personal" to scope the beta to business
+ * use would misdescribe who Aglyn sells to, and it buys nothing: Texas DTPA
+ * §17.45(4) counts businesses under $25M
  * in assets as consumers, so the entire ICP — agencies included — sits inside
  * the statute either way. §19.12 and §18.2 were what misdescribed the market;
  * §7 was not.
@@ -317,7 +316,7 @@ export interface LegalDocumentManifestEntry {
  *     "commission", though AGL-1987 named "commission" as must-survive. The
  *     Terms define the fee at §4.3 and have never used "commission"; an
  *     undefined synonym for a defined money term is how a dispute over which
- *     one governs starts. Zach's call, recorded on the issue.
+ *     one governs starts. The defined term wins; see the issue for the record.
  *
  *     ⚠️ NOT ESTABLISHED, and it is a real limitation: no Stripe dispute has
  *     been exercised end to end. `transfer.amount === charge.amount` is
@@ -363,9 +362,6 @@ export interface LegalDocumentManifestEntry {
  * assert a version history that never happened, and the re-acceptance
  * interstitial it forces would be shown for a document nobody has ever
  * accepted. `v1` is not a claim that the text never changed — it is a claim
- * that nothing has been agreed to yet. Zach, 2026-08-24: "Legal documents
- * should all still be v1, we have not released yet so a v2 should not exist
- * yet. Everything is being updated in the v1."
  *
  * ⚠️ THE HASHES BELOW MOVED WITHOUT THE LABEL, and that is what "updated in
  * the v1" MEANS. `v1` must pin the text that is actually live. Holding the
@@ -389,7 +385,7 @@ export interface LegalDocumentManifestEntry {
  * why, and the answer expires at the first acceptance.
  *
  * WHAT THE 2026-08-24 PUBLISH CHANGED: Aglyn ACCEPTS marketplace-facilitator
- * status for US sales tax (Zach, 2026-08-24), and the Terms are aligned to it.
+ * status for US sales tax, and the Terms are aligned to it.
  * This is the decision the v5 note above recorded as deliberately unmade — the
  * ⚠️ paragraph saying §10.3 was "UNTOUCHED for the same reason" no longer
  * states current policy: changing it was correctly identified there as "a tax
@@ -425,16 +421,15 @@ export interface LegalDocumentManifestEntry {
  *     (Tex. Bus. & Com. Code §17.565). The clause now also yields to any longer
  *     non-shortenable statutory period and says outright that it does not
  *     shorten a consumer-protection limitations period.
- *   - §18.2 and §18.6 venue: Williamson County -> TRAVIS County (Zach,
- *     2026-08-24). Williamson entered from the former Jarrell residential
- *     address; every published Aglyn address is 5900 Balcones Dr STE 100,
- *     Austin, TX 78731, which is Travis. AGL-1917's checklist line asking to
- *     "confirm the Williamson County venue is your preference" is ANSWERED: it
- *     is not. The same correction landed in MPA §13.3 and the internal
+ *   - §18.2 and §18.6 venue: Williamson County -> TRAVIS County. Williamson
+ *     entered from a former residential address; every published Aglyn address
+ *     is 5900 Balcones Dr STE 100, Austin, TX 78731, which is Travis. AGL-1917
+ *     carried a checklist line asking whether Williamson was intended: it was
+ *     not. The same correction landed in MPA §13.3 and the internal
  *     Legal/README index, so no straggler contradicts the corrected clause.
  *
  * §18 is otherwise UNTOUCHED and must stay that way: AAA Consumer Clause
- * Registry registration is DEFERRED on cost (Zach, 2026-08-24), and the
+ * Registry registration is DEFERRED on cost, and the
  * decision was explicitly to keep naming AAA and to keep both the consumer
  * arbitration clause and the class-action waiver. What changed in §18 are
  * defects that are wrong on their own merits, not the structure.

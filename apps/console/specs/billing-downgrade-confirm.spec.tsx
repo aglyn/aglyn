@@ -22,7 +22,7 @@
 
 /**
  * The asymmetric-friction confirm gate, DRIVEN (AGL-2233, under AGL-1862 /
- * AGL-1859 §2 — Zach's twice-given directive: upgrading is frictionless,
+ * AGL-1859 §2 — the twice-given directive: upgrading is frictionless,
  * downgrading is deliberate).
  *
  * The SERVER half of "a downgrade waits for the period end" is thoroughly

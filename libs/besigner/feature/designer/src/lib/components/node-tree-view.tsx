@@ -22,6 +22,8 @@ import {
   ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_MODIFY_DRAG,
   ICON_VARIANT_SHOW_MORE_VERTICAL,
+  ICON_VARIANT_VISIBILITY_HIDDEN,
+  ICON_VARIANT_VISIBILITY_SHOWN,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
@@ -45,9 +47,11 @@ import {
   type ListProps as MuiListProps,
   Popper,
   Stack,
+  Tooltip,
 } from '@mui/material'
 import clsx from 'clsx'
 import uniq from 'lodash-es/uniq'
+import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import type { ComponentProps } from 'react'
 import {
@@ -56,11 +60,18 @@ import {
   forwardRef,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
+import {
+  isAncestorHidden,
+  isNodeHiddenByAuthor,
+  isNodeHiddenOnSite,
+} from '../utils/canvas-reveal'
 import ComponentIconComponent from './component-icon.component'
 import NodeContextMenu from './node-context-menu'
 
@@ -71,6 +82,7 @@ const classKey = generateComponentClassKeys('TreeView', [
   'treeListItem',
   'dragHandle',
   'moreButton',
+  'visibilityButton',
   'itemSelected',
   'itemHovered',
   'itemIsDragging',
@@ -328,6 +340,50 @@ const NodeTreeItem = observer(
     const isHovered = Besigner.focus.isNodeHovered(node)
     const dragDisabled = Boolean(isRootNode || !dragAllowed)
 
+    /**
+     * The row's eye: this element's VISIBILITY (AGL-1479).
+     *
+     * `display: none`, on the canvas and on the published site, and nothing
+     * reveals it. The plain "I do not want this on the page" switch every
+     * layer tree has — and, because it is a node FIELD composed last rather
+     * than a style, hiding a Stack laid out with `display: flex` gives that
+     * flex back the moment it is shown again.
+     *
+     * It does NOT write `aglyn-hidden`. That class means something else that
+     * looks the same from outside — "starts hidden, and an interaction shows
+     * it", for a mega-menu panel or a drawer — and it is part of a runtime
+     * contract that the show/hide steps and the canvas reveal both read. A
+     * visibility toggle that wrote it would enrol every hidden element in a
+     * choreography it is not part of. That switch is on the ⋮ menu, named
+     * for what it does.
+     */
+    const authorHidden = isNodeHiddenByAuthor(node)
+    const hiddenOnSite = isNodeHiddenOnSite(node)
+    /**
+     * Dimmed for either reason. Both mean the element is not on the page,
+     * and a reader scanning the tree is asking that question, not which
+     * mechanism answered it.
+     *
+     * Only the OUTERMOST hidden layer draws it: CSS opacity multiplies
+     * through nesting, so a panel inside a hidden drawer would fade to 0.2
+     * if every hidden level applied its own.
+     */
+    const dimsSubtree =
+      (authorHidden || hiddenOnSite) && !isAncestorHidden(node)
+    const toggleVisibility = useCallback(
+      (e: any) => {
+        // The row is a button and a drop target; without this the click
+        // also selects the row under the control.
+        e.stopPropagation()
+        e.preventDefault()
+        if (isRootNode) return
+        // Through the canvas so it records an undo step and reaches the node
+        // the MAP holds — see `updateNodeFields`.
+        Aglyn.canvas.updateNodeFields(node, { hidden: !authorHidden })
+      },
+      [node, isRootNode, authorHidden],
+    )
+
     const {
       attributes: dragAttributes,
       transform,
@@ -356,17 +412,140 @@ const NodeTreeItem = observer(
      * moving, has no overlay and no way to reach any action at all. The
      * hierarchy is the one surface that shows a node the page doesn't.
      */
-    const [menuButton, setMenuButton] = useState<HTMLButtonElement | null>(null)
-    const menuOpen = Boolean(menuButton)
-    const closeMenu = useCallback(() => setMenuButton(null), [])
-    const toggleMenu = useCallback((e: any) => {
-      // The row is a button and the tree item is a drop target; without this
-      // the click also selects and re-focuses the row underneath the menu.
-      e.stopPropagation()
-      e.preventDefault()
-      const target = e.currentTarget
-      setMenuButton((open) => (open ? null : target))
+    /**
+     * The anchor the row's ⋮ menu hangs off, and the flag that it is open.
+     *
+     * A VIRTUAL anchor: the panel's right edge, at the height the pointer was.
+     *
+     * Neither of the two obvious choices works. The pointer alone opens the
+     * menu wherever in the panel the cursor happened to be, on top of the
+     * layer list. The row alone opens it at the row's top — which for a tall
+     * menu near the bottom of a long tree gets slid up by `preventOverflow`
+     * until it has visibly nothing to do with the row that was clicked.
+     *
+     * Taking one coordinate from each gives both: the menu always starts at
+     * the panel's edge and spills into the canvas, and it always starts level
+     * with the click.
+     */
+    type MenuAnchor = { getBoundingClientRect(): DOMRect }
+    const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null)
+    /** The open menu, so its own scrolling can be told from the page's. */
+    const menuRef = useRef<HTMLElement | null>(null)
+    const menuOpen = Boolean(menuAnchor)
+    const closeMenu = useCallback(() => setMenuAnchor(null), [])
+    /**
+     * The anchor for one pointer event: the row's right edge, the pointer's
+     * height. Read once, at the moment of the click — a fixed rect, so the
+     * menu cannot drift while it is open.
+     */
+    const anchorFor = useCallback((e: any): MenuAnchor | null => {
+      const row = ((e.currentTarget as HTMLElement)?.closest(
+        `.${classKey.treeListItem}`,
+      ) ?? e.currentTarget) as HTMLElement | null
+      const rect = row?.getBoundingClientRect()
+      if (!rect) return null
+      /**
+       * The PANEL's edge, not the row's.
+       *
+       * A deep row is wider than the panel — the hierarchy scrolls
+       * horizontally, and indentation is what makes it — so `row.right` is a
+       * coordinate off the side of the visible panel, and a menu placed
+       * there opens in the middle of the canvas with a gap behind it. The
+       * nearest ancestor that actually scrolls is the panel, and its right
+       * edge is the boundary the menu should start from.
+       *
+       * Falls back to the row when nothing above it scrolls, which is the
+       * case the row's own edge is the right answer for.
+       */
+      let scroller: HTMLElement | null = row
+      while (scroller && scroller.scrollWidth <= scroller.clientWidth) {
+        scroller = scroller.parentElement
+      }
+      const bound = scroller?.getBoundingClientRect()
+      const x = Math.min(rect.right, bound?.right ?? rect.right)
+      const y = e.clientY || rect.top + rect.height / 2
+      return { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) }
     }, [])
+    const toggleMenu = useCallback(
+      (e: any) => {
+        // The row is a button and the tree item is a drop target; without this
+        // the click also selects and re-focuses the row underneath the menu.
+        e.stopPropagation()
+        e.preventDefault()
+        const next = anchorFor(e)
+        setMenuAnchor((open) => (open ? null : next))
+      },
+      [anchorFor],
+    )
+    /**
+     * Right-click opens the same menu at the pointer. The row already carries
+     * every action a node has, and a layer tree that does not answer a
+     * right-click is one people assume is broken — they find the ⋮ eventually
+     * and read it as a workaround.
+     *
+     * `preventDefault` suppresses the browser's own menu, which is the whole
+     * point; nothing is lost, since the row holds no text to copy and no link
+     * to open.
+     */
+    // Escape as well as a click outside. A menu opened by a right-click is
+    // dismissed with Escape everywhere else, and the keyboard is the only way
+    // out for anyone not using a pointer. On the document rather than the
+    // Paper: the menu does not take focus when it opens, so a handler on it
+    // would never see the key.
+    useEffect(() => {
+      if (!menuOpen) return
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') closeMenu()
+      }
+      /**
+       * Scrolling dismisses it, which is what every native context menu does.
+       * The alternative is worse than it sounds: the menu is anchored to a
+       * point on screen, so scrolling the hierarchy slides the row out from
+       * under a menu that stays put — leaving a menu for an element the
+       * reader can no longer see, hanging over the canvas.
+       *
+       * Capture phase: the hierarchy scrolls inside its own container, and a
+       * scroll event from an element does not bubble to the document.
+       */
+      const onScroll = (event: Event) => {
+        // Not the menu's own scroll. The Paper caps its height and scrolls,
+        // so a long menu is scrolled the same way anything else is — and
+        // dismissing it for that is dismissing it for being used.
+        const target = event.target as Node | null
+        if (target && menuRef.current?.contains(target)) return
+        closeMenu()
+      }
+      document.addEventListener('keydown', onKeyDown)
+      document.addEventListener('scroll', onScroll, true)
+      return () => {
+        document.removeEventListener('keydown', onKeyDown)
+        document.removeEventListener('scroll', onScroll, true)
+      }
+    }, [menuOpen, closeMenu])
+
+    /**
+     * Right-click anywhere on the row opens the same menu. The row already
+     * carries every action a node has, and a layer tree that does not answer
+     * a right-click is one people assume is broken — they find the ⋮
+     * eventually and read it as a workaround.
+     *
+     * Anchored to the ROW rather than the pointer, which is the usual desktop
+     * convention and is wrong here: a menu at the cursor opens wherever in
+     * the panel the pointer happened to be, on top of the layer list. Off the
+     * row it always starts at the panel's edge and spills into the canvas.
+     *
+     * `preventDefault` suppresses the browser's own menu, which is the whole
+     * point; nothing is lost, since the row holds no text to copy and no link
+     * to open.
+     */
+    const openMenuOnRow = useCallback(
+      (e: any) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setMenuAnchor(anchorFor(e))
+      },
+      [anchorFor],
+    )
 
     if (!node) return <>'Invalid node'</>
     return (
@@ -386,6 +565,28 @@ const NodeTreeItem = observer(
         })}
         disablePadding
         style={style}
+        sx={
+          dimsSubtree
+            ? {
+                // A hidden layer reads as hidden at a glance, without being
+                // selected or hovered — the row is the only place it is
+                // always on screen, because on the canvas it is by
+                // definition the thing you cannot see.
+                //
+                // On the TreeItem rather than the row, so the dim carries to
+                // every layer underneath: a container that does not ship
+                // takes its contents with it, and a full-strength child row
+                // inside a dimmed parent reads as "this one still ships".
+                //
+                // Held at 0.45 rather than hidden outright so names stay
+                // legible, and nothing here changes what the rows DO — a
+                // hidden element is still one you select, drag, rename and
+                // style.
+                opacity: 0.45,
+                fontStyle: 'italic',
+              }
+            : undefined
+        }
         {...rest}
       >
         <Stack
@@ -395,6 +596,7 @@ const NodeTreeItem = observer(
           }}
           className={classKey.treeListItem}
           direction="row"
+          onContextMenu={openMenuOnRow}
         >
           {!isRootNode && (
             <MuiListItemIcon
@@ -470,11 +672,62 @@ const NodeTreeItem = observer(
               slotProps={{
                 primary: {
                   noWrap: true,
-                  sx: { maxWidth: '180px', width: 'fit-content', textOverflow: 'ellipsis' },
+                  sx: {
+                    maxWidth: '180px',
+                    width: 'fit-content',
+                    textOverflow: 'ellipsis',
+                  },
                 },
               }}
             />
           </MuiListItemButton>
+          {!isRootNode && (
+            <Tooltip
+              title={
+                authorHidden
+                  ? 'Hidden. Click to show it.'
+                  : hiddenOnSite
+                    ? 'Starts hidden until an interaction shows it. Click to hide it outright.'
+                    : 'Visible. Click to hide it — here and on the published site.'
+              }
+            >
+              <IconButton
+                aria-label={
+                  authorHidden ? `Show ${nodeLabel}` : `Hide ${nodeLabel}`
+                }
+                aria-pressed={authorHidden}
+                className={classKey.visibilityButton}
+                color="default"
+                onClick={toggleVisibility}
+                size="small"
+                sx={{
+                  alignSelf: 'center',
+                  flexShrink: 0,
+                  padding: '2px',
+                  color: 'text.disabled',
+                  // Quiet on a visible element and permanent on a hidden one:
+                  // an eye on every row at full strength turns the hierarchy
+                  // into a column of icons, and the state worth seeing at a
+                  // glance is which elements the site does NOT ship. Focus
+                  // brings it back, so it is reachable by keyboard on a row
+                  // the pointer never touches.
+                  opacity: authorHidden ? 1 : 0,
+                  transition: 'opacity 120ms',
+                  '&:focus-visible': { opacity: 1 },
+                  [`.${classKey.treeListItem}:hover &`]: { opacity: 1 },
+                }}
+              >
+                <MdiIcon
+                  fontSize="inherit"
+                  path={
+                    authorHidden
+                      ? ICON_VARIANT_VISIBILITY_HIDDEN.path
+                      : ICON_VARIANT_VISIBILITY_SHOWN.path
+                  }
+                />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton
             aria-label={`Actions for ${nodeLabel}`}
             aria-expanded={menuOpen}
@@ -492,9 +745,59 @@ const NodeTreeItem = observer(
           </IconButton>
           {menuOpen && (
             <Popper
-              anchorEl={menuButton}
+              anchorEl={menuAnchor as never}
               open
-              placement="bottom-end"
+              /**
+               * Opens SIDEWAYS, into the canvas (AGL-1405).
+               *
+               * Below the row it covered the hierarchy — including the layer
+               * being acted on, which is the one thing you want to keep
+               * looking at while you read the menu, and it left almost no
+               * panel to click on to dismiss it. To the right there is a
+               * whole canvas to spill over, and it belongs to no control.
+               *
+               * The fallbacks matter for the narrow-window case: `left-*`
+               * only wins when the canvas edge is closer than the menu is
+               * wide, and `bottom-start` is the last resort.
+               */
+              placement="right-start"
+              /**
+               * Kept inside the viewport. Without these the menu was laid
+               * out beside its anchor whatever room was left, so a row near
+               * the bottom of a long hierarchy pushed a 500px menu off the
+               * bottom of the document — and the PAGE grew a scrollbar to
+               * contain it, which moves the editor's own chrome under the
+               * reader.
+               *
+               * `flip` picks another side when this one does not fit;
+               * `preventOverflow` on the cross axis slides it up so a menu
+               * anchored near the bottom edge still lands fully on screen.
+               * The Paper caps its own height and scrolls, so a menu taller
+               * than the window is reachable rather than clipped.
+               */
+              modifiers={[
+                {
+                  name: 'flip',
+                  enabled: true,
+                  options: {
+                    fallbackPlacements: [
+                      'right-end',
+                      'left-start',
+                      'left-end',
+                      'bottom-start',
+                    ],
+                    padding: 8,
+                  },
+                },
+                {
+                  name: 'preventOverflow',
+                  enabled: true,
+                  options: { altAxis: true, padding: 8 },
+                },
+                // Clear of the row it belongs to, so the layer's name and
+                // its eye stay readable beside the open menu.
+                { name: 'offset', options: { offset: [0, 6] } },
+              ]}
               // Above the panel, below dialogs and drawers — the same band
               // the canvas overlay's copy of this menu sits in.
               sx={{ zIndex: (theme) => theme.zIndex.modal - 1 }}
@@ -503,7 +806,11 @@ const NodeTreeItem = observer(
                   the rest, so it is a valid ClickAwayListener child on its
                   own — no wrapper element to disturb the Popper's layout. */}
               <ClickAwayListener onClickAway={closeMenu}>
-                <NodeContextMenu node={node} onAction={closeMenu} />
+                <NodeContextMenu
+                  ref={menuRef}
+                  node={node}
+                  onAction={closeMenu}
+                />
               </ClickAwayListener>
             </Popper>
           )}

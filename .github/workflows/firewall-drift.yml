@@ -37,7 +37,7 @@ name: Firewall posture drift
 #
 # Same reasoning as legal-drift.yml. This job cannot run without a
 # `VERCEL_TOKEN` repo secret, and that secret DOES NOT EXIST YET — creating it
-# is Zach's action, not a code change. Wiring this to `push` today would turn
+# is the action, not a code change. Wiring this to `push` today would turn
 # every merge in the repo red for something no engineer can fix, and the
 # remedy for that is always "add continue-on-error", which would leave a guard
 # that cannot fail. So it gates nothing and blocks nobody; it is loud instead.

@@ -32,21 +32,19 @@ import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
 /**
- * PresetChoice (AGL-2486, Zach 2026-08-22): a named-preset picker with a
- * raw escape hatch, for the properties whose honest answer is "pick one of
- * these five" but whose CSS is a grammar.
+ * PresetChoice (AGL-2486): a named-preset picker with a raw escape hatch, for
+ * the properties whose honest answer is "pick one of these five" but whose CSS
+ * is a grammar.
  *
- * Three fields in the styles panel had the same shape and the same problem.
- * Corner Radius was a text box whose helper said `8px, 50%, or a theme
- * spacing number` — three different value systems in one sentence. Shadow
- * was a select of presets whose helper told the author to *"type any CSS
- * box-shadow under Classes & custom CSS"*, i.e. it advertised its own
- * inadequacy and sent them somewhere else. Font Family was free text with
- * the advice *"Prefer theme typography when possible"* and no way to act on
- * it.
+ * Three fields in the styles panel have that shape. Corner Radius as a text
+ * box can only offer `8px, 50%, or a theme spacing number` — three value
+ * systems in one helper line. A Shadow select with no escape hatch has to send
+ * the author to the custom-CSS section for anything off the list. Font Family
+ * as free text can advise "prefer theme typography" and give no way to act
+ * on it.
  *
- * All three are now: **the theme's own answers first, then a short list of
- * plain-English presets, then Custom…** — and the preset shows you what it
+ * All three are built here as: **the theme's own answers first, then a short
+ * list of plain-English presets, then Custom…** — and the preset shows what it
  * looks like rather than what to type.
  *
  * **The persisted value is whatever the property already stored** — a

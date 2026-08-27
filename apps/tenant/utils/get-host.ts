@@ -103,8 +103,34 @@ export function normalizeHostAlias(host: string | null | undefined): string {
  * now a projection, then the doc get); a hit costs zero. Negative results are
  * never stored — an unknown host keeps exactly today's behavior.
  */
-const HOST_ALIAS_TTL_SECONDS = 60
-const HOST_DOC_TTL_SECONDS = 60
+/**
+ * Both of these were 60s, and 60s was the one value that guaranteed they never
+ * helped (AGL-1152). The uptime checks that make up most of this account's
+ * traffic arrive every 300s, so every entry had always expired by the time the
+ * next request could have used it: the cache was paid for on every request and
+ * returned on none. Firestore's own numbers said so — `RunQuery` was the
+ * account's largest billed source at ~18k calls a day against a site nobody
+ * had published to in hours, and the alias lookup is the query the middleware
+ * runs on EVERY request, including the ones an ISR-cached page then serves
+ * without touching Firestore again.
+ *
+ * An hour is safe because neither layer relies on the TTL for correctness:
+ *
+ *  - the DOC is expired by `tenantDataTag(hostId)`, which every publish busts.
+ *  - the ALIAS is expired by `tenantHostAliasTag`, which publishes bust for
+ *    the subdomain form, and which detach and both rename routes now bust
+ *    explicitly — see `revalidateHostAliases`. Those are the only events that
+ *    can leave a stale POSITIVE; an attach cannot, because `store` below keeps
+ *    non-null results only, so a name that did not resolve has no entry to go
+ *    stale and a newly connected domain is live on the very next request.
+ *
+ * The TTL is now what it should always have been: a backstop for a bust that
+ * failed to arrive, not the mechanism. Shortening it again without removing
+ * those busts would be safe; lengthening it further would not, and an hour is
+ * already past the point of diminishing returns.
+ */
+const HOST_ALIAS_TTL_SECONDS = 3600
+const HOST_DOC_TTL_SECONDS = 3600
 
 async function queryHostIdByAlias(host: string): Promise<string | null> {
   const firestore = firebaseAdmin.app().firestore()

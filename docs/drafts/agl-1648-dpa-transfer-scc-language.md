@@ -161,14 +161,14 @@ this list.
 
 ---
 
-## 4. Decision needed from Zach
+## 4. Decision needed from the account owner
 
 | # | Decision | Blocked on |
 | --- | --- | --- |
 | R1 | Appoint the Art. 27 rep, **or** approve the interim disclosure sentence | AGL-1619 |
-| R2 | `privacy@` or `support@` as the single objection route — recommend `privacy@` | Zach |
-| R3 | Approve the termination-on-objection remedy as drafted | Zach |
-| R4 | Approve the three-branch Annex A.C, or leave as-is | Zach (low) |
+| R2 | `privacy@` or `support@` as the single objection route — recommend `privacy@` | the account owner |
+| R3 | Approve the termination-on-objection remedy as drafted | the account owner |
+| R4 | Approve the three-branch Annex A.C, or leave as-is | the account owner (low) |
 
 R1–R3 are one Doc edit and one besigner publish between them. The DPA is **not**
 clickwrapped in `apps/console/constants/legal/` (only Terms and Privacy are), so none of

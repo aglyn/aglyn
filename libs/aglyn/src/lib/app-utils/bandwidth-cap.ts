@@ -18,12 +18,10 @@
 /**
  * The free plan's BANDWIDTH HARD CAP (AGL-1967 / AGL-2070 / AGL-2155).
  *
- * ZACH, 2026-08-19, choosing between "enforce now", "enforce with a raised
- * ceiling" and "leave it off through launch": **enforce now** — "before
- * public signups arrive, so the cap is proven under real traffic while the
- * cohort is small and a mistake is cheap." His standing requirement is the
- * one this module exists to make true: *"the free/hobby tier does hard cap so
- * it always actually stays free."*
+ * Enforced from before public signups, so the cap is proven under real
+ * traffic while the cohort is small and a mistake is cheap. The requirement
+ * this module exists to make true: the free/hobby tier hard-caps, so that it
+ * always actually stays free.
  *
  * Until this shipped, bandwidth was the ONE billable dimension with no
  * runtime refusal anywhere. Media ingress, forms, contacts, datasets, API and
@@ -60,9 +58,9 @@
  * The beacon is the one that matters, and it exists because the sweep alone
  * was not a cap at all: it skips every org with no `plan` field, and
  * `createOrganization` writes none — so for the whole never-subscribed free
- * tier the marker had never once been written. ZACH's rule, and the general
- * lesson: **a cap that lives only in a scheduled sweep stops existing the
- * moment the sweep does not run.** Every other free dimension refuses at the
+ * tier the marker had never once been written. The general lesson: **a cap
+ * that lives only in a scheduled sweep stops existing the moment the sweep
+ * does not run.** Every other free dimension refuses at the
  * point of use; this one now does too.
  *
  * ### The latency, stated plainly

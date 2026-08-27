@@ -23,7 +23,7 @@
  * this gate, browsing the marketing site while building, or clicking through a
  * preview URL, produced genuine visitor hits in the live Platform property.
  *
- * This is the half of Zach's 2026-08-18 ask that needs nobody's click: the
+ * This is the half of the 2026-08-18 ask that needs nobody's click: the
  * `traffic_type` stamp only separates our traffic once the GA4 data filter
  * exists, and a filter is not retroactive, while a tag that was never mounted
  * sends nothing today.

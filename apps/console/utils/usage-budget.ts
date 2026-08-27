@@ -18,7 +18,7 @@
 /**
  * Per-org USAGE BUDGETS, modelled on a Google Cloud billing budget (AGL-1528).
  *
- * ## Zach's directive, 2026-08-18, verbatim
+ * ## the directive, 2026-08-18, verbatim
  *
  *   "*our usage metering, usage alerts, budgets for usage alerts, similar to
  *   how google cloud charges*"
@@ -50,7 +50,7 @@
  *
  * `utils/storage-overage.ts` owns the customer's optional **hard cap**: past
  * it uploads are refused. That is a wall, it is off by default, and it exists
- * because Zach asked for a control "*by the end user*".
+ * because the requirement was for a control "*by the end user*".
  *
  * A budget is the OTHER half and the softer one — it never refuses anything.
  * The distinction is load-bearing in both directions: a budget that quietly
@@ -341,7 +341,7 @@ export function orgMonthlySpend(input: {
 }
 
 /**
- * The MARGIN GUARD (the other half of Zach's ask, and the live half).
+ * The MARGIN GUARD (the other half of the ask, and the live half).
  *
  * A customer budget protects the customer. This protects us, from the one
  * meter on the platform whose unit cost is real money paid to a third party

@@ -23,7 +23,7 @@
 /**
  * The switcher's one-shot read reports to the session detector (AGL-2486).
  *
- * Zach's production report was a Sites list reading "Your sites could not be
+ * the production report was a Sites list reading "Your sites could not be
  * loaded" — and the switcher that renders it fetched with `getDocs`, caught
  * the refusal, set `error` and told nobody. So the ONE read the user could
  * see failing contributed no evidence at all toward "your session is the

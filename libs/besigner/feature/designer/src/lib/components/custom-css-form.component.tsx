@@ -23,6 +23,7 @@ import {
   isAtomicSxValue,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { FIELD_MUTED_STYLES, FieldMuteButton } from '@aglyn/shared-ui-jsx-forms'
 import {
   Autocomplete,
   Button,
@@ -35,6 +36,8 @@ import {
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import { buildStyleMute, toggleMutedStyle } from '../utils/muted-styles'
 import type { SxBreakpoint } from '../utils/responsive-sx'
 import { readSxValue } from '../utils/responsive-sx'
 import { applyStylePartialToSx } from '../utils/style-field-groups'
@@ -45,12 +48,61 @@ import { getNodeStyleTarget } from '../utils/style-target'
  * (freeSolo, so any CSS/sx property still works).
  */
 const CSS_PROPERTY_SUGGESTIONS: Array<{ group: string; name: string }> = [
-  ...['width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', 'overflow', 'position', 'top', 'right', 'bottom', 'left', 'zIndex'].map((name) => ({ group: 'Layout', name })),
-  ...['margin', 'padding', 'gap', 'rowGap', 'columnGap'].map((name) => ({ group: 'Spacing', name })),
-  ...['fontSize', 'fontWeight', 'fontFamily', 'lineHeight', 'letterSpacing', 'textTransform', 'textDecoration', 'whiteSpace'].map((name) => ({ group: 'Typography', name })),
-  ...['color', 'backgroundColor', 'background', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'opacity'].map((name) => ({ group: 'Background & color', name })),
-  ...['border', 'borderRadius', 'borderColor', 'borderWidth', 'borderStyle', 'outline'].map((name) => ({ group: 'Border', name })),
-  ...['boxShadow', 'transform', 'transition', 'filter', 'cursor', 'objectFit', 'aspectRatio'].map((name) => ({ group: 'Effects', name })),
+  ...[
+    'width',
+    'height',
+    'minWidth',
+    'maxWidth',
+    'minHeight',
+    'maxHeight',
+    'overflow',
+    'position',
+    'top',
+    'right',
+    'bottom',
+    'left',
+    'zIndex',
+  ].map((name) => ({ group: 'Layout', name })),
+  ...['margin', 'padding', 'gap', 'rowGap', 'columnGap'].map((name) => ({
+    group: 'Spacing',
+    name,
+  })),
+  ...[
+    'fontSize',
+    'fontWeight',
+    'fontFamily',
+    'lineHeight',
+    'letterSpacing',
+    'textTransform',
+    'textDecoration',
+    'whiteSpace',
+  ].map((name) => ({ group: 'Typography', name })),
+  ...[
+    'color',
+    'backgroundColor',
+    'background',
+    'backgroundImage',
+    'backgroundSize',
+    'backgroundPosition',
+    'opacity',
+  ].map((name) => ({ group: 'Background & color', name })),
+  ...[
+    'border',
+    'borderRadius',
+    'borderColor',
+    'borderWidth',
+    'borderStyle',
+    'outline',
+  ].map((name) => ({ group: 'Border', name })),
+  ...[
+    'boxShadow',
+    'transform',
+    'transition',
+    'filter',
+    'cursor',
+    'objectFit',
+    'aspectRatio',
+  ].map((name) => ({ group: 'Effects', name })),
 ]
 
 const kebabToCamel = (name: string) =>
@@ -288,7 +340,31 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(nodeSx), breakpoint],
   )
-  const [draftRow, setDraftRow] = useState<BuilderRow>({ property: '', value: '' })
+  const [draftRow, setDraftRow] = useState<BuilderRow>({
+    property: '',
+    value: '',
+  })
+
+  // Declarations switched off for comparison (AGL-2486). Canvas only, and
+  // the same flag every other row in the panel writes, so a property muted
+  // here and the same property muted from its typed field are one state.
+  // The builder lists BASE scalar declarations only — a state slice is a
+  // nested object it skips — so these mutes carry no state scope.
+  const [mutedStyles, setMutedStyles] = useAglynBesignerFlag('mutedStyles')
+  const rowMute = useCallback(
+    (property: string) =>
+      buildStyleMute(property, property, {
+        nodeId: node?.$id,
+        state: null,
+        breakpoint,
+        // Every row the builder lists is, by construction, declared.
+        scopeValues: { [property]: true },
+        mutedStyles,
+        onToggle: (target) =>
+          setMutedStyles((current) => toggleMutedStyle(current, target)),
+      }),
+    [node, breakpoint, mutedStyles, setMutedStyles],
+  )
 
   const nodeId = node?.$id ?? ''
   /** What the STORED document says, in each tab's spelling. */
@@ -323,8 +399,12 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     // point of keeping it. `!== undefined` rather than a truthiness test:
     // `''` is a legitimate buffer the author emptied on purpose, and with
     // `strictNullChecks` off `if (!pending)` would silently discard it.
-    const pendingCss = pendingDrafts.get(draftKey(nodeId, target.overrideKey, 'css'))
-    const pendingJson = pendingDrafts.get(draftKey(nodeId, target.overrideKey, 'json'))
+    const pendingCss = pendingDrafts.get(
+      draftKey(nodeId, target.overrideKey, 'css'),
+    )
+    const pendingJson = pendingDrafts.get(
+      draftKey(nodeId, target.overrideKey, 'json'),
+    )
     setCssDraft(pendingCss !== undefined ? pendingCss : storedCss)
     setJsonDraft(pendingJson !== undefined ? pendingJson : storedJson)
     setError(null)
@@ -354,7 +434,8 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
   // this form commits (an attribute panel edit commits on blur, and that
   // behavior is load-bearing).
   const thirdPartyHosts = useMemo<string[]>(() => {
-    if (mode === 'css') return Aglyn.collectThirdPartyAuthorCssUrlHosts(cssDraft)
+    if (mode === 'css')
+      return Aglyn.collectThirdPartyAuthorCssUrlHosts(cssDraft)
     if (mode === 'json') {
       try {
         return Aglyn.collectThirdPartyAuthorSxUrlHosts(
@@ -469,36 +550,46 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
 
       {mode === 'builder' ? (
         <Stack spacing={1}>
-          {rows.map((row) => (
-            <Stack
-              key={row.property}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
-              <TextField
-                size="small"
-                value={row.property}
-                disabled
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                size="small"
-                value={row.value}
-                onChange={(event) =>
-                  writeProperty(row.property, event.target.value)
-                }
-                sx={{ flex: 1 }}
-              />
-              <IconButton
-                size="small"
-                aria-label={`Remove ${row.property}`}
-                onClick={() => writeProperty(row.property, undefined)}
+          {rows.map((row) => {
+            const mute = rowMute(row.property)
+            return (
+              <Stack
+                key={row.property}
+                direction="row"
+                spacing={1}
+                sx={[
+                  { alignItems: 'center' },
+                  mute?.muted ? FIELD_MUTED_STYLES : null,
+                ]}
               >
-                <MdiIcon path={mdiClose.path} size={0.7} />
-              </IconButton>
-            </Stack>
-          ))}
+                <TextField
+                  size="small"
+                  value={row.property}
+                  disabled
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  size="small"
+                  value={row.value}
+                  onChange={(event) =>
+                    writeProperty(row.property, event.target.value)
+                  }
+                  sx={{ flex: 1 }}
+                />
+                {/* The eye stops the declaration applying and keeps its
+                    value; the ✕ beside it is still the only thing that
+                    takes the declaration off the element. */}
+                <FieldMuteButton mute={mute} />
+                <IconButton
+                  size="small"
+                  aria-label={`Remove ${row.property}`}
+                  onClick={() => writeProperty(row.property, undefined)}
+                >
+                  <MdiIcon path={mdiClose.path} size={0.7} />
+                </IconButton>
+              </Stack>
+            )
+          })}
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Autocomplete
               freeSolo
@@ -556,7 +647,9 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
               setCssDraft(event.target.value)
               rememberDraft('css', event.target.value, storedCss)
             }}
-            placeholder={'border-radius: 8px;\nbox-shadow: 0 2px 8px rgba(0,0,0,0.2);'}
+            placeholder={
+              'border-radius: 8px;\nbox-shadow: 0 2px 8px rgba(0,0,0,0.2);'
+            }
             slotProps={{
               htmlInput: {
                 style: { fontFamily: 'monospace', fontSize: 12 },

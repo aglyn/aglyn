@@ -78,7 +78,7 @@ import DashboardLayout from '../layouts/dashboard.layout'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
-} from '../row-actions-menu.component'
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
@@ -128,11 +128,11 @@ const TOOLBAR_CONTROL_HEIGHT = 40
  * The collections list and one collection's entries (AGL-2498).
  *
  * Its OWN route component, served at both `…/content` and
- * `…/content/{collectionSlug}`. It used to be one branch of a component that
- * also rendered the entry editor, which is what produced the flash Zach
- * reported: on a cold load of an entry URL that component had nothing else to
- * show while the entry arrived, so it showed this. It cannot any more — this
- * file does not know the entry editor exists.
+ * `…/content/{collectionSlug}`. Sharing a component with the entry editor
+ * flashes the wrong screen: on a cold load of an entry URL, a component that
+ * renders both has nothing else to show while the entry arrives, so it paints
+ * the list first. This file cannot do that — it does not know the entry
+ * editor exists.
  *
  * Everything it reads comes from `useContentScope()`, resolved in the layout
  * above both routes, so the split did not duplicate the data layer.
@@ -242,10 +242,8 @@ export function CollectionEntriesPage() {
   /**
    * Creating a collection is a DRAWER, like every other artifact (AGL-2498).
    *
-   * Zach: *"The create content collection should be using the drawer approach
-   * just like the screens, layouts, components etc."* — and the rule the
-   * drawer itself states is older than that: *"creating is a drawer, picking
-   * is a dialog"* (AGL-699). This was the one create still in a modal.
+   * The house rule the drawer itself states: creating is a drawer, picking is
+   * a dialog (AGL-699). Screens, layouts and components all create this way.
    *
    * So the fields live in the drawer's schema and this component keeps only
    * what the drawer cannot: the error to show, because uniqueness is a
@@ -258,9 +256,9 @@ export function CollectionEntriesPage() {
    * The rest of what a collection IS, as drawer fields (AGL-2498).
    *
    * A collection is defined by four things — its name, the ADDRESS it serves,
-   * and the two screens that render its list and its entries. Three of them
-   * were settings-only, so every new collection was created and then
-   * immediately reopened to finish defining it.
+   * and the two screens that render its list and its entries. Offering only
+   * the name here means every new collection is created and then immediately
+   * reopened in settings to finish defining it.
    *
    * The address is the one that mattered: it is a live URL, it was silently
    * derived from the name with no way to say otherwise, and changing it later
@@ -443,16 +441,15 @@ export function CollectionEntriesPage() {
   /**
    * EDITING a collection (AGL-2498).
    *
-   * Zach: *"We seem to be missing the ability to edit the content
-   * collections."*
+   * A collection's name and slug are editable from this page, and that is the
+   * only place they are editable from.
    *
-   * It was missing from the CONSOLE only — `/api/hosts/collections` has
-   * answered `action: 'update'` since AGL-978, with `displayName` and `slug`
-   * on its allow-list and the same transactional slug claim the create uses.
-   * The route's own docblock says "Collection create/RENAME". Nothing ever
-   * called the rename half, so a collection created as "Blg" stayed "Blg"
-   * forever and the only way to fix a slug was to delete the collection and
-   * every entry under it.
+   * The server half has existed since AGL-978: `/api/hosts/collections`
+   * answers `action: 'update'` with `displayName` and `slug` on its allow-list
+   * and the same transactional slug claim the create uses — its own docblock
+   * says "Collection create/RENAME". With nothing calling the rename half, a
+   * collection created as "Blg" stays "Blg" forever, and the only way to fix a
+   * slug is to delete the collection and every entry under it.
    *
    * Through the API rather than `updateDoc`, and that is the substantive part:
    * the slug is the collection's public address, and two collections at
@@ -613,7 +610,7 @@ export function CollectionEntriesPage() {
     setDeleteBusy(true)
     try {
       const idToken = await (user as any)?.getIdToken?.()
-      // recursiveDelete is Admin-SDK-only and the rules deny a client delete of
+      // RecursiveDelete is Admin-SDK-only and the rules deny a client delete of
       // a collection doc (AGL-947), so this goes through the shared erase route
       // — never a hand-rolled loop over `entries`.
       const response = await fetch('/api/resources/erase', {

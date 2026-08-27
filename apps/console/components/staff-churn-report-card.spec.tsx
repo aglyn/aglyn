@@ -25,7 +25,7 @@
  *
  * The route is only half the fix. `orgs/{orgId}/retention` was write-only
  * because nothing read it, and a route nobody renders is the same condition
- * with an extra file in it — Zach's AGL-1900 rule: a capability is not a
+ * with an extra file in it — the AGL-1900 rule: a capability is not a
  * feature until the console exposes it. So the first assertion here is not a
  * behaviour, it is that the card is MOUNTED, read off the page source.
  */

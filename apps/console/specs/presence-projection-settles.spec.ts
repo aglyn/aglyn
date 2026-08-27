@@ -34,8 +34,9 @@ import {
 /**
  * The presence projection has to SETTLE (AGL-2486).
  *
- * Zach hit `Maximum update depth exceeded` in the besigner on 2026-08-24 —
- * React bailing out, not warning. The stack read, innermost first:
+ * Without the guard this file pins, the besigner takes a
+ * `Maximum update depth exceeded` — React bailing out, not warning. The stack,
+ * innermost first:
  *
  *   at usePresence.useEffect.project      (setEntries)
  *   at usePresence.useEffect.unsubscribe  (the room onValue callback)
@@ -120,7 +121,7 @@ describe('a write of our own must not commit a projection', () => {
   })
 
   it('does not commit when our own cursor is WITHDRAWN', () => {
-    // `clearCursor` is the frame in Zach's stack, and it is the one path in
+    // `clearCursor` is the frame in the stack, and it is the one path in
     // `onMove` that never stamps the throttle — so it can fire on every
     // single pointermove.
     const { project, commits } = projector()

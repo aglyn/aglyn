@@ -295,8 +295,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   })
 
   it('fails when a DECLARED-stale row is fixed on the page', () => {
-    // The direction that matters most: the moment Zach corrects the published
-    // page and the copy is re-extracted, the declaration has to come out. A
+    // The direction that matters most: the moment the published page is
+    // corrected and the copy re-extracted, the declaration has to come out. A
     // guard that only fired on regressions would leave the exemption behind to
     // pre-excuse the next one.
     resetFixtures()
@@ -331,8 +331,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   })
 
   it('publishes the LOCKED metered rates, to four decimals where needed', () => {
-    // Zach locked "$0.0338/GB-mo · $0.13/1k page views · $0.065/1k form
-    // submissions" on 2026-08-18. Asserted on the generator's OUTPUT rather
+    // locked $0.0338/GB-mo · $0.13/1k page views · $0.065/1k form
+    // submissions on 2026-08-18. Asserted on the generator's OUTPUT rather
     // than on the constants, because two-decimal formatting would round the
     // cost and the +30% columns into agreement and publish a table that looks
     // internally consistent while stating neither figure.

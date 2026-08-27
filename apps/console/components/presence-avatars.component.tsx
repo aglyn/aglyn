@@ -59,10 +59,10 @@ export function initialsFor(displayName: string): string {
  * in the app bar of a single-player session is noise, and this must never
  * read as a status indicator that is "working" but showing zero.
  *
- * It does render when presence is BROKEN, which is the whole difference.
- * "Nobody else is here" and "presence never started" used to be the same
- * picture: an empty app bar. Zach opened two browsers, saw no sign of the
- * other, and had no way to tell which of those two things he was looking at.
+ * It does render when presence is BROKEN, which is the whole difference. Both
+ * "nobody else is here" and "presence never started" otherwise draw the same
+ * picture — an empty app bar — and the reader cannot tell which one they are
+ * looking at, so a fault gets a badge where a quiet room gets nothing.
  *
  * Deliberately NOT a lock, and the tooltip says so. Seeing a face makes
  * people coordinate socially, which avoids most collisions; but the thing
@@ -85,18 +85,15 @@ export function PresenceAvatars({ presence }: { presence: PresenceState }) {
 /**
  * Presence is off, and says what to do about it (AGL-2486).
  *
- * ## What changed, and why
+ * ## What the reader sees first
  *
- * This badge previously led with `Failed at: broker (500)`. Zach: "what does
- * this mean? It gives the users no course of action on how to fix it." A
- * stage name and an HTTP status are the two things a customer can do least
- * with, and they were the whole sentence.
+ * The lead is what happened in the reader's terms and what they can do about
+ * it. A stage name and an HTTP status — `Failed at: broker (500)` — are the
+ * two things a customer can act on least, so they are not the sentence.
  *
- * So the order is inverted. The lead is what happened in the reader's terms
- * and what they can do about it; the caution Zach kept — an empty stack is
- * NOT proof you are alone — stays on every branch; and stage/code/message
- * move behind a details affordance, still one click away for whoever is
- * debugging this, no longer in the way of whoever is not.
+ * The caution stays on every branch: an empty stack is NOT proof you are
+ * alone. Stage, code and message move behind a details affordance, one click
+ * away for whoever is debugging this and out of the way of whoever is not.
  *
  * ## Why the detail is not just a longer tooltip
  *
@@ -204,31 +201,28 @@ function PresenceFaultBadge({ presence }: { presence: PresenceState }) {
  *
  * Six, not four: with one avatar PER SESSION rather than per person, a pair
  * working in two windows each already fills four slots, and collapsing at
- * that point would hide exactly the thing Zach asked to be able to see.
+ * that point would collapse the stack before it has shown a single second
+ * person.
  */
 const MAX_VISIBLE_SESSIONS = 6
 
 /**
  * One avatar per open SESSION (AGL-2486).
  *
- * Zach: "We should also see the same avatar repeated for each of its active
- * sessions all with a different presence color not just consolidated into
- * one." So the same face appears once per window that has this document
- * open — yours and everyone else's alike — each in the colour that session
- * draws its cursor and its selection box in. The stack and the canvas are
- * then readable against each other: the orange caret belongs to the orange
- * avatar.
+ * Sessions are not consolidated per person: the same face appears once per
+ * window that has this document open — yours and everyone else's alike — each
+ * in the colour that session draws its cursor and its selection box in. The
+ * stack and the canvas are then readable against each other: the orange caret
+ * belongs to the orange avatar.
  *
  * ## Spacing
  *
- * OVERLAPPED, and the rings hug the circle (AGL-2486). An earlier pass read
- * "weird spacing" as ring collision and answered it with a gap; Zach meant
- * the opposite — "We also need to make them overlap, that wasn't what I meant
- * by there is a weird spacing issue, I meant the orange border that seemed to
- * have padding."
+ * OVERLAPPED, and the rings hug the circle (AGL-2486). The ring sits ON the
+ * circle's edge rather than 2px off it, and the chips overlap the way a
+ * stacked avatar group does. `outlineOffset: 0` is the load-bearing half: an
+ * offset ring reads as padding between the face and its colour rather than as
+ * a border on it.
  *
- * So the ring sits ON the circle's edge rather than 2px off it — that gap was
- * the "padding" — and the chips overlap the way a stacked avatar group does.
  * Overlapping is only legible because every session carries its OWN ring
  * colour: two sessions of one person are the same face, and the ring is what
  * tells them apart, so it has to be the part that stays visible. The earlier
@@ -240,8 +234,6 @@ const MAX_VISIBLE_SESSIONS = 6
  * children's margins and outranks `sx` — measured, `mr: 1.5` computed to
  * `0px` while the left spacing came from the parent rather than from this
  * component at all. Padding is untouched by that rule, so it is the one that
- * holds, and it is symmetric: Zach saw "the enormous right margin and very
- * small left margin".
  */
 function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
   const visible = entries.slice(0, MAX_VISIBLE_SESSIONS)
@@ -278,9 +270,6 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               data-aglyn-presence-session={entry.key}
               data-aglyn-presence-self={entry.isSelf ? '' : undefined}
               // DASHED for your own other sessions, in that session's own
-              // colour, to match the canvas (AGL-2486). Zach: "go ahead and
-              // go back to the dashed border on the avatars when it is you in
-              // the other tabs so it matches what appears in the canvas."
               //
               // `collaborator-overlays` draws the selection outline for the
               // same session dashed, from the same `entry.colour`, so the
@@ -331,11 +320,11 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               color: 'text.secondary',
               // The overflow chip is in the row too, so it has to be the same
               // SIZE as the row (AGL-2486). A ring paints 2px outside the
-              // circle, so without one this chip sat 4px smaller than every
-              // session beside it — the same unevenness Zach reported, on the
-              // one chip that is not a `MemberAvatar` and so was not fixed by
-              // fixing that component. Found by measuring the live stack; the
-              // unit test for the avatar could not have seen it.
+              // circle, so without one this chip paints 4px smaller than every
+              // session beside it. It is the one chip in the row that is not a
+              // `MemberAvatar`, so sizing that component correctly does
+              // nothing for it, and a unit test on that component cannot see
+              // it — only measuring the whole stack can.
               //
               // In its OWN background colour, because it represents no session
               // and has no identity colour to show. It reads as a plain disc,
@@ -378,20 +367,14 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
 /**
  * What the tooltip says about ONE session (AGL-2486).
  *
- * ## Why this no longer says "saves are not merged"
+ * ## Why it does not say "saves are not merged"
  *
- * Zach: *"Why are saves not merged? Isn't this the point of being able to
- * collaborate together and build a page alongside someone at the same
- * time"* — and again, on the guard that stopped him: *"any user
- * collaborating should be able to save as they all go along and make
- * changes... there should be no problem with this"*.
- *
- * The old copy described the STORAGE and presented it as the experience.
- * The unit of live collaboration is a node (`use-coediting`, AGL-677), so
- * two people on different elements both keep their work; and the save guard
- * now asks whether this document INCORPORATES what is stored rather than
- * whether the stored version moved, so in a converged room either of you
- * can save, in any order, as often as you like.
+ * That describes the STORAGE and presents it as the experience. The unit of
+ * live collaboration is a node (`use-coediting`, AGL-677), so two people on
+ * different elements both keep their work; and the save guard asks whether
+ * this document INCORPORATES what is stored rather than whether the stored
+ * version moved, so in a converged room either of you can save, in any order,
+ * as often as you like.
  *
  * ## What it still has to admit
  *

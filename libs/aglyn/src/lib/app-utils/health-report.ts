@@ -1789,14 +1789,28 @@ export interface ScheduledJob {
  * budget reads (AGL-2219). Either can stop without the other, and folding
  * them into one row would hide exactly that.
  */
+/*
+ * ⚠️ GRACE IS A PROPERTY OF THE RUNNER, not of the job.
+ *
+ * The five daily console jobs carried a SIX-HOUR grace because GitHub
+ * Actions dispatches scheduled workflows on a best-effort basis and routinely
+ * drifted by an hour or two. That grace bought tolerance and paid for it in
+ * blindness: on 2026-08-27 GitHub dropped the whole day, and three of these
+ * were thirty hours silent before anything said so.
+ *
+ * They run on Cloud Scheduler now, which has been punctual to the minute
+ * since AGL-1617, and each function's own ceiling is 540 seconds. Ninety
+ * minutes is therefore ten times the longest a healthy run can take and still
+ * catches a dead job inside the working day, instead of most of a day later.
+ */
 export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
   {
     id: 'report-usage',
     label: 'Metered usage rollup (closed month)',
     cron: '0 2 * * *',
-    runner: 'github-actions',
+    runner: 'cloud-scheduler',
     target: '/api/billing/report-usage',
-    graceMinutes: 360,
+    graceMinutes: 90,
     drives:
       'The only run that meters a closed month into Stripe. If it stops, customers are not billed for what they used.',
   },
@@ -1804,9 +1818,9 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     id: 'audit-archive',
     label: 'Audit archive',
     cron: '0 3 * * *',
-    runner: 'github-actions',
+    runner: 'cloud-scheduler',
     target: '/api/admin/audit-archive',
-    graceMinutes: 360,
+    graceMinutes: 90,
     drives:
       'Moves adminAudit rows past the 90-day window into Storage and deletes them from Firestore. If it stops, the retention promise is not being kept.',
   },
@@ -1814,9 +1828,9 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     id: 'run-erasures',
     label: 'GDPR erasure runner',
     cron: '0 4 * * *',
-    runner: 'github-actions',
+    runner: 'cloud-scheduler',
     target: '/api/admin/run-erasures',
-    graceMinutes: 360,
+    graceMinutes: 90,
     drives:
       'Executes accepted erasure requests. If it stops, personal data a customer asked us to delete is still here, and the clock on that request is still running.',
   },
@@ -1824,9 +1838,9 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     id: 'report-usage-current',
     label: 'Metered usage rollup (current month)',
     cron: '0 7 * * *',
-    runner: 'github-actions',
+    runner: 'cloud-scheduler',
     target: '/api/billing/report-usage?month=current',
-    graceMinutes: 360,
+    graceMinutes: 90,
     drives:
       'Writes the in-progress month figure (AGL-2219). If it stops, every usage budget on the platform is structurally unable to fire and the Billing card stops totalling.',
   },
@@ -1834,9 +1848,9 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     id: 'usage-alerts',
     label: 'Usage budget alerts',
     cron: '0 8 * * *',
-    runner: 'github-actions',
+    runner: 'cloud-scheduler',
     target: '/api/billing/usage-alerts',
-    graceMinutes: 360,
+    graceMinutes: 90,
     drives:
       'Evaluates usage budgets and notifies. If it stops, an org sails past its budget with no warning and finds out on the invoice.',
   },

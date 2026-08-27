@@ -24,12 +24,11 @@
 /**
  * The published 404 screen is what a missing URL serves (AGL-2342).
  *
- * Zach: *"our error pages need to include the shared nav and footer, once they
- * reach a 404 page currently there is no ability to navigate away that is
- * horrible UX."* Measured on production 2026-08-19, `/no-such-page` served the
- * platform's built-in status screen — 0 `<header>`, 0 `<footer>`, 0 occurrences
- * of the site's nav words — while the host's published *"Not found (404)"*
- * screen sat unserved.
+ * An error page has to carry the site's own nav and footer, or the visitor has
+ * no way to navigate away. Measured on production, `/no-such-page` served the
+ * platform's built-in status screen — 0 `<header>`, 0 `<footer>`, 0
+ * occurrences of the site's nav words — while the host's own published
+ * *"Not found (404)"* screen sat unserved.
  *
  * ## Both halves, because each alone is satisfiable by the bug
  *
@@ -305,8 +304,9 @@ describe('half 1 — an unmatched path is a 404 AND resolves the screen', () => 
 
     expect(props?.nodes).toEqual(DESIGNED_NODES)
     expect((props?.data.screen?.data as any)?.$id).toBe('notFoundScreen')
-    // Not the platform's ~11KB status page: a real composed screen carries the
-    // site's own chrome, which is the whole of Zach's complaint.
+    // Not the platform's ~11KB status page: a real composed screen carries
+    // the site's own nav and footer, so a visitor who mistypes a URL stays
+    // inside the site rather than landing on Aglyn's chrome.
     expect(Object.keys(props?.nodes ?? {})).toEqual(
       expect.arrayContaining(['nav', 'foot']),
     )

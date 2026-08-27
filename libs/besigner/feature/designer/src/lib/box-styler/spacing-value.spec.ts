@@ -182,7 +182,7 @@ describe('every unit is explained and linked (AGL-2486)', () => {
     }
   })
 
-  it('gives the units Zach named a section of their own, not the fallback', () => {
+  it('gives each documented unit a section of its own, not the fallback', () => {
     expect(unitDocsAnchor(CssUnit.PIXELS)).toBe('#unit-px')
     expect(unitDocsAnchor(CssUnit.REM)).toBe('#unit-rem')
     expect(unitDocsAnchor(CssUnit.EM)).toBe('#unit-em')

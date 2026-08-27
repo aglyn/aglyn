@@ -150,13 +150,30 @@ export const Leaf = observer(
     // input by identity when nothing is refused, so the overwhelmingly
     // common case (no `url()` at all) costs one walk and no new object.
     const authorSx = Aglyn.sanitizeAuthorSx(node?.sx)
-    const mergedSx = resolvePaletteVarsSx(
+    const composedSx = resolvePaletteVarsSx(
       resolveSchemeSx(
         mergeSxProps(sx as any, propsSx as any, authorSx as any),
         activeScheme,
       ),
       theme?.palette,
     )
+    /**
+     * Author visibility (AGL-1479) — the eye on the hierarchy row.
+     *
+     * LAST, and deliberately so. It has to override the element's own
+     * display, not replace it: an author who hides a Stack laid out with
+     * `display: flex` gets that flex back the moment they show it again,
+     * because the stored style was never touched. Writing `display: none`
+     * into `node.sx` would have destroyed the value it overwrote, and there
+     * would be nothing left to restore.
+     *
+     * The same rule on both surfaces. A hidden element is absent from the
+     * published page and from the canvas — "hidden" that still renders in the
+     * editor is a preview of a page nobody will ever see.
+     */
+    const mergedSx = node?.hidden
+      ? mergeSxProps(composedSx as any, { display: 'none' } as any)
+      : composedSx
 
     // Shared leaf attributes; self-closing components must receive NO
     // children at all (AGL-579) — a separate element expression keeps the

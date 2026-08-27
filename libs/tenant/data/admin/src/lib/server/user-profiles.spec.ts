@@ -119,9 +119,9 @@ describe('seedUserProfile', () => {
   })
 
   it('never overwrites a name the user has edited', async () => {
-    // The regression this guards: an IdP whose assertion still says "Zachary
-    // Gover" re-asserting it over the "Zach" typed in Basic info, on every
-    // single sign-in.
+    // The regression this guards: an IdP whose assertion still carries the
+    // name the user has since replaced in Basic info, re-asserting the stale
+    // one over their edit on every single sign-in.
     const firestore = fakeFirestore({ firstName: 'Zach', lastName: 'Gover' })
     const result = await seedUserProfile('uid-1', {
       displayName: 'Zachary Gover-Smith',

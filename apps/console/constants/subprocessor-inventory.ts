@@ -65,17 +65,14 @@
  *
  * ## ⚠️ NO NOTICE-PERIOD ARITHMETIC LIVES HERE, AND THAT IS DELIBERATE
  *
- * An earlier design for this registry asserted
- * `mayBeginProcessingOn === publishedOn + 30 days`. Do not build it.
+ * Do not assert `mayBeginProcessingOn === publishedOn + 30 days`, or any other
+ * notice window, anywhere in this registry.
  *
- * On 2026-08-24 Zach deleted the 30-day advance-notice obligation from DPA
- * §7.2 and from the Subprocessors intro outright — the softer option (notice
- * with no fixed period, preserving the objection right) was offered and
- * explicitly rejected. His reasoning, verbatim: *"no 30 day notice needed
- * because it is still v1 and we have no real customers"*. With zero customers,
- * nobody is owed notice. Code that computes a notice window would be
- * reasserting a commitment the legal text no longer makes, and a guard that
- * enforces a promise the DPA does not contain is a liability, not a control.
+ * DPA §7.2 and the Subprocessors intro carry NO advance-notice obligation —
+ * not thirty days, and not an unfixed period either. Code that computed a
+ * notice window would reassert a commitment the legal text does not make, and
+ * a guard that enforces a promise the DPA does not contain is a liability
+ * rather than a control.
  *
  * **That reasoning expires the moment the first customer signs.** From the
  * first signature, any subsequent subprocessor addition needs a real

@@ -16,6 +16,14 @@
  */
 
 import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import {
+  isImageUploadContentType,
+  normalizeImageContentType,
+} from '@aglyn/aglyn/app-utils/image-upload-types'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '@aglyn/aglyn/app-utils/sanitize-svg'
 import { inspectUploadBytes, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
@@ -132,9 +140,14 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json({ url: providedUrl })
     }
 
-    const contentType = String(req.body?.contentType ?? '')
+    const contentType = normalizeImageContentType(req.body?.contentType)
     const data = String(req.body?.data ?? '')
-    if (!contentType.startsWith('image/')) {
+    // An ALLOWLIST rather than the `image/` prefix (AGL-1476), for the same
+    // reason as the DAM routes: the prefix tested a caller-supplied string,
+    // so an unrecognised `image/…` label reached storage AND skipped the
+    // signature check below, which can only compare bytes against a type it
+    // knows.
+    if (!isImageUploadContentType(contentType)) {
       return res
         .status(415)
         .json({ error: 'Only image uploads are supported' })
@@ -171,8 +184,26 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
       return res.status(415).json({ error: refusal.message, code: refusal.code })
     }
 
+    /**
+     * SVG sanitization (AGL-1476). Structural inspection cannot do this: an
+     * SVG is text, it has no magic number, and a `<script>` in one is a
+     * perfectly well-formed document.
+     *
+     * It matters more here than on the DAM routes, not less. Those serve
+     * through `serveMediaCdn`, which stamps `nosniff` and a `sandbox` CSP on
+     * every response and so contains a scripted SVG even if it is stored. The
+     * URL this mints points straight at `firebasestorage.googleapis.com` and
+     * gets neither header — and it is the `og:image` an unauthenticated
+     * unfurler fetches and the picture on the cross-org browse grid, so the
+     * audience is every other publisher's browser rather than the uploader's
+     * own.
+     */
+    const bytes = isSvgUploadType(contentType)
+      ? sanitizeSvgBuffer(buffer).buffer
+      : buffer
+
     const token = randomUUID()
-    await file.save(buffer, {
+    await file.save(bytes, {
       contentType,
       metadata: { metadata: { firebaseStorageDownloadTokens: token } },
     })

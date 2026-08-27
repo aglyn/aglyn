@@ -18,7 +18,7 @@
 /**
  * What this deployment calls itself (AGL-2153).
  *
- * Zach's rule for the self-host path: *"the self hosted owner should not have
+ * the rule for the self-host path: *"the self hosted owner should not have
  * to edit the source to update aglyn branded items urls or personal
  * identification items, should move these to env vars"*. AGL-2016 did that for
  * the values where getting it wrong misroutes a legal notice. This is the

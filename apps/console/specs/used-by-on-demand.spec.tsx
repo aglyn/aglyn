@@ -18,14 +18,11 @@
 /**
  * "Used by" costs money, so it runs when ASKED (AGL-703).
  *
- * Zach, looking at a layout whose card reported 53 dependents: *"Make sure the
- * used by does not produce 53 reads, that will get expensive, let's do it on
- * demand like we do the DAM files."*
- *
  * The scan reads every screen, every layout and — for a component — every
- * component definition, decoding published node trees as it goes. That is
- * hundreds of document reads, and it was firing on mount: opening a detail
- * page to rename it billed the same as deciding whether to delete it.
+ * component definition, decoding published node trees as it goes. On a site
+ * with a widely used layout that is hundreds of document reads. Fired on
+ * mount, opening a detail page to rename something bills the same as deciding
+ * whether to delete it.
  *
  * The media library settled this in AGL-845 and says so in its own comment:
  * *"scanning every published screen, layout, and content entry for this

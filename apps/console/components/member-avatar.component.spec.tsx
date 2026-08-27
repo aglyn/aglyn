@@ -96,8 +96,9 @@ const cssFor = (container: HTMLElement, selector = '.MuiAvatar-root'): string =>
  * `getBoundingClientRect`, and that is the whole point: `outline` does NOT
  * participate in layout, so a ringed and an unringed chip have IDENTICAL
  * bounding boxes — measured in the browser, 28x28 for both while one painted
- * 32px and the other 28px. A test that compared boxes would have been green on
- * the build Zach was looking at when he said they were different sizes.
+ * 32px and the other 28px. A test that compared boxes would be green on a row
+ * that is visibly uneven, which is the only defect these assertions exist to
+ * catch.
  */
 /** `paintedExtent` for one already-selected chip, for whole-row assertions. */
 function paintedExtentOf(chip: HTMLElement): number {
@@ -195,8 +196,6 @@ describe('MemberAvatar (AGL-1683)', () => {
   it('rings a PHOTO avatar in the identity colour (AGL-2486)', () => {
     // A photo covers the background completely, so on exactly the sessions
     // that have a picture the one signal tying the avatar to its cursor and
-    // its selection box was invisible. Zach: "right now only those without an
-    // image can you tell because it uses the background."
     const { container } = render(
       <MemberAvatar
         photoURL="https://lh3.googleusercontent.com/a/ada"
@@ -210,12 +209,9 @@ describe('MemberAvatar (AGL-1683)', () => {
   })
 
   it('rings an INITIALS avatar too, so the row is not lumpy (AGL-2486)', () => {
-    // This REPLACES an earlier assertion that an initials chip is left
-    // unringed. That reasoning — the background already carries the colour, so
-    // a same-colour ring adds no information — was correct and incomplete.
-    // Zach: "I know we are using the background color on the avatars with no
-    // picture, but it should still have a border, because now they are
-    // different sizes." A ring is geometry as well as information.
+    // On an initials chip the ring carries no colour information: the fill is
+    // already the session colour. It is painted anyway because the ring takes
+    // space, and a chip without one sits 4px narrower than its neighbours.
     const { container } = render(
       <MemberAvatar colour="#9334e6" name="Ada Lovelace" />,
     )
@@ -223,9 +219,9 @@ describe('MemberAvatar (AGL-1683)', () => {
   })
 
   it('gives a photo chip and an initials chip the SAME painted size', () => {
-    // Zach's acceptance test, stated as he stated it: every chip in the stack
-    // occupies the same space. Asserted on painted extent, because the
-    // bounding boxes are equal either way — see `paintedExtent`.
+    // The acceptance condition: every chip in the stack occupies the same
+    // space. Asserted on painted extent, because the bounding boxes are equal
+    // either way — see `paintedExtent`.
     const photo = render(
       <MemberAvatar
         photoURL="https://lh3.googleusercontent.com/a/ada"
@@ -300,9 +296,6 @@ describe('memberInitials', () => {
  *
  * The ring is dashed because the CANVAS is. `collaborator-overlays` draws a
  * dashed outline around whatever your other session has selected, from the
- * same `entry.colour`. Zach: "go ahead and go back to the dashed border on the
- * avatars when it is you in the other tabs so it matches what appears in the
- * canvas." So the two signals are not redundant with each other — they are one
  * statement made consistently across two SURFACES. Making the chip solid did
  * not delete a duplicate; it made the app contradict itself.
  *
@@ -353,11 +346,10 @@ describe('a presence chip distinguishes your own session (AGL-2486)', () => {
   })
 
   it('gives EVERY chip in a stack the same painted size, overflow included', () => {
-    // Zach's acceptance test in his own terms: "they are different sizes".
-    // Over the whole rendered row, not one component in isolation — the `+N`
-    // overflow chip is not a `MemberAvatar`, so fixing that component left it
-    // 4px smaller than everything beside it. That gap was found by measuring
-    // the live stack, and this is what would have found it here.
+    // Measured over the whole rendered row, not one component in isolation.
+    // The `+N` overflow chip is not a `MemberAvatar`, so sizing that component
+    // correctly still leaves the row uneven if the overflow chip is missed —
+    // it paints 4px smaller than everything beside it.
     const many = Array.from({ length: 9 }, (unused, index) =>
       entry({
         uid: `u${index}`,
@@ -413,8 +405,9 @@ describe('a presence chip distinguishes your own session (AGL-2486)', () => {
   })
 
   it('keeps the ring in the SESSION colour, dashed or solid', () => {
-    // The form varies; the colour never does. A dashed ring in some other
-    // colour is the first version of this that Zach rejected.
+    // The form varies; the colour never does. A dashed ring painted in some
+    // other colour breaks the tie between a chip and the canvas outline that
+    // carries the same session's colour.
     const mine = render(
       <PresenceAvatars
         presence={state([entry({ isSelf: true, colour: '#9334e6' })])}

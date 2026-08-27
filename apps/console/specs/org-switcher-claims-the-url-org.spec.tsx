@@ -18,10 +18,10 @@
 /**
  * The switcher names the workspace the URL names, or names none (AGL-2486).
  *
- * Zach: "We have access to both orgs but even though the url has a different
- * org in it, it still chose to use a different org in the switcher."
+ * One workspace in the address bar and a different one in the switcher is the
+ * failure this rules out.
  *
- * `use-org-scope` no longer misses on the not-found boundary, so this is the
+ * `use-org-scope` does not miss on the not-found boundary, so this is the
  * GUARD rather than the fix, and it is worth having on its own: the scope
  * still falls back whenever its URL-derived candidates miss — a mistyped
  * `/gibberish` parses as a leading segment that names no workspace — and the

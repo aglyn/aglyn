@@ -34,17 +34,14 @@ import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
 /**
- * CssBorder (AGL-2486, Zach 2026-08-22): a thickness box plus a line-style
- * picker for anything holding a CSS border shorthand.
+ * CssBorder (AGL-2486): a thickness box plus a line-style picker for anything
+ * holding a CSS border shorthand.
  *
- * Zach, looking at BORDERS & SHADOWS: *"This is not very friendly for
- * someone who does not know code."* Every control in that group was a raw
- * shorthand text box — `Border` wanted you to type `1px solid`, the four
- * per-side fields wanted the same, and `Outline` wanted `2px solid`. A
- * border is two obvious choices (how thick, what kind of line) plus a
- * colour, and the panel was asking a mom-and-pop shop owner — one of
- * Aglyn's three stated ICPs — to memorise CSS shorthand grammar to make
- * them.
+ * The alternative is a raw shorthand text box — `Border` and the four per-side
+ * fields each wanting `1px solid`, `Outline` wanting `2px solid`. A border is
+ * two obvious choices (how thick, what kind of line) plus a colour, and a text
+ * box turns them into a grammar exercise for an author who does not write CSS.
+ * A mom-and-pop shop owner is one of Aglyn's three stated ICPs.
  *
  * **The persisted value is unchanged: still one CSS shorthand string**
  * (`"1px solid"`, `"2px dashed"`, `"none"`, `""`). This is purely an input
@@ -312,7 +309,7 @@ export const CssBorderField = (props: CssBorderProps) => {
             : selected
               ? CSS_BORDER_STYLE_SHORT_LABELS[selected as CssBorderStyle]
               : // An unset picker is one em-dash wide, exactly like the unit
-                // picker on a length field. The words "line style" here read
+                // Picker on a length field. The words "line style" here read
                 // as help but behave as layout: they push the adornment over
                 // the field's own label on every per-side border.
                 '—'
@@ -392,21 +389,21 @@ export const CssBorderField = (props: CssBorderProps) => {
         slotProps={{
           /**
            * The label is ALWAYS pinned above the box, never floating
-           * inside it (AGL-2486, Zach 2026-08-22).
+           * inside it (AGL-2486).
            *
            * Two reasons, and they point the same way. `Border Bottom` is
            * thirteen characters and the box is a half column with a
            * picker parked in its right-hand end, so an un-shrunk label
-           * runs straight into the adornment — the overlap Zach reported
-           * on the old panel, reappearing on the new control. And "No
-           * line" is shown through the PLACEHOLDER, which MUI hides
+           * runs straight into the adornment and the two print on top of
+           * each other. And "No line" is shown through the PLACEHOLDER,
+           * which MUI hides
            * behind CSS while the label is un-shrunk, so the field would
            * print its label over an empty box on a node that demonstrably
            * has a value.
            *
            * It also settles the group's rhythm: Border Color, Corner
            * Radius and Shadow all sit under a pinned label, so the six
-           * border editors doing something different was the odd one out.
+           * border editors match the group they are in.
            */
           inputLabel: { shrink: true },
           input: {

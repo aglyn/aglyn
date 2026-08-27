@@ -18,5 +18,22 @@
 export * from './lib/constants/bundle-common'
 export * from './lib/model'
 export * from './lib/plugin'
-// Console cards consumed directly by the app (e.g. inbox Orders tab).
-export { default as HostOrdersCard } from './lib/components/console/host-orders-card.component'
+/**
+ * ⛔ No console surface may be re-exported here (AGL-1151).
+ *
+ * The tenant's generated loader activates the site half of this plugin with
+ * `import('@aglyn/plugins-commerce')` — this file. Anything this barrel names
+ * statically is therefore in the chunk a PUBLISHED site downloads, evaluates
+ * and hydrates, whether or not the page has a storefront on it.
+ *
+ * The console cards are the expensive case: they carry `firebase/firestore`
+ * and `@aglyn/tenant-feature-instance`, so one re-export line put roughly
+ * 700 KB of database and identity client onto every visitor's first paint to
+ * render markup that queries nothing. It is the shape `compress()` already
+ * carries a note about, one level up — a VALUE re-export, for a component the
+ * site half never renders.
+ *
+ * Console consumers deep-import the component they need
+ * (`@aglyn/plugins-commerce/components/console/...`), which reaches the same
+ * module without routing it through the site half's entry point.
+ */

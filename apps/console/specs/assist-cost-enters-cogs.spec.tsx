@@ -20,7 +20,7 @@
  *
  * `assist-usage.ts` writes `orgs/{id}/assistUsage/{month}.estCostUsd` and says
  * out loud, in its own header, why: *"cost visibility per org from day one so
- * the paid gate and caps can be tuned with data — Zach's 'must not eat
+ * the paid gate and caps can be tuned with data — the 'must not eat
  * margins' constraint."* Five writers put a real provider bill on that
  * document. Two readers took it back off: the budget-alert cron and the
  * billing card. Neither of them is the discount guardrail.

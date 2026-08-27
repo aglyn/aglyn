@@ -26,7 +26,7 @@ import {
  * Presence is scoped to a VERSION, and to the SAME version the mirror is
  * (AGL-2486).
  *
- * Zach's decision: you should only see people editing the version you are
+ * the decision: you should only see people editing the version you are
  * editing. Presence was keyed per document while the co-edit mirror was keyed
  * per version, so two people on different versions of one screen appeared to
  * each other as collaborators while not one of their edits reached the other.

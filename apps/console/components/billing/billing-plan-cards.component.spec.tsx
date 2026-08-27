@@ -16,8 +16,7 @@
  */
 
 /**
- * In-console tier visibility (AGL-1864, under AGL-1859 §1 — Zach's
- * twice-given directive: "hide or de-emphasize the lower subscription tiers …
+ * In-console tier visibility (AGL-1864, under AGL-1859 §1 — the * twice-given directive: "hide or de-emphasize the lower subscription tiers …
  * upgrade paths prominent and one-click").
  *
  * This shipped with NO test at all. Nothing in `apps/console/specs` touched
@@ -375,7 +374,7 @@ describe('the billing page hands the grid a defaulted plan (AGL-2156)', () => {
 
 describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
   /**
-   * Zach caught this on the live Agency card: "∞ contacts (+$0.2/1k over)".
+   * Observed on the live Agency card: ∞ contacts (+$0.2/1k over).
    *
    * `UNLIMITED` is `Number.POSITIVE_INFINITY`, and the card interpolated it
    * raw. `Infinity.toLocaleString()` is `'∞'` and `` `${Infinity}` `` is

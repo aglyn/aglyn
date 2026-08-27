@@ -36,7 +36,7 @@
 //    pre-AGL-1755 reservations whose session email was never stored);
 //  - buyers with no contact row: CREATING one is band-gated on the live
 //    path (`checkContactQuota`), and whether historical restoration is
-//    exempt from the audience band is Zach's call — so creation only
+//    exempt from the audience band is the call — so creation only
 //    happens under the separate `--create-missing` flag, and the dry run
 //    prints the org's plan beside the would-create count;
 //  - subscriptions with no recorded opening amount (run AGL-1745 first);

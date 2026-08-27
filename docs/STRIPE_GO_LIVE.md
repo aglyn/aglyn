@@ -381,12 +381,12 @@ subscription product, Stripe records them and charges no one.
    today changes **no org's bill by a single cent**, which makes now the
    cheapest moment it will ever be to turn on.
 
-   ### Zach's decision, 2026-08-17 (AGL-1886) — and its condition
+   ### the decision, 2026-08-17 (AGL-1886) — and its condition
 
-   Asked which date this should carry, Zach chose **immediately**, and added a
-   condition in his own words: *"also give overage protection and usage
-   alerts, so customers don't get a surprise bill."* The condition is not
-   garnish — billing turns on only when the protection ships with it.
+   The start date is **immediate**, and it carries a condition: overage
+   protection and usage alerts ship with it, so that no customer meets a
+   surprise bill. The condition is not garnish — billing turns on only when the
+   protection is in place.
 
    **Shipped (AGL-1886), all of it before this variable is set:**
 
@@ -410,15 +410,14 @@ subscription product, Stripe records them and charges no one.
    - The rollup records `orgLibraryBilledFrom` verbatim beside
      `orgLibraryBilled`, so a month's audit document says why it billed.
 
-   ### Zach's correction, 2026-08-18 — the opt-in became a cap
+   ### the correction, 2026-08-18 — the opt-in became a cap
 
    The shape above shipped as a **soft cap with an acknowledged opt-in**: past
    the band, a metered org was REFUSED until a manager accepted metered
-   storage in Billing. Zach reversed it the next day, verbatim:
-
-   > *"don't let it make us lose revenue or cost us money, it should be a
-   > control by the end user, to prevent overage or usage alerts rather, we
-   > just want to minimize churn"*
+   storage in Billing. That was reversed the next day: the ceiling is the end
+   user's control, set by them if they want one, and the platform neither
+   loses revenue nor blocks a paying customer to protect them from a bill they
+   have already agreed to pay.
 
    The opt-in gate cost revenue and blocked customers without preventing any
    bill. `/api/billing/storage-overage` had **no caller at all** until
@@ -453,7 +452,7 @@ subscription product, Stripe records them and charges no one.
    runtime gate at all** — nothing refuses a page view — so it rests on the
    structural zero alone.
 
-   **THE REMAINING STEP IS ZACH'S**, because setting it starts real invoices:
+   **THE REMAINING STEP IS THE ACCOUNT OWNER'S**, because setting it starts real invoices:
 
    ```
    vercel env add BILL_ORG_LIBRARY_STORAGE_FROM production   # value: 2026-08

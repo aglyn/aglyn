@@ -34,7 +34,6 @@ import {
   type UseFieldApiComponentConfig,
 } from '@data-driven-forms/react-form-renderer'
 import {
-  Box,
   Button,
   ClickAwayListener,
   type FormControlProps as MuiFormControlProps,
@@ -80,14 +79,28 @@ interface TextFieldColorSwatchProps extends Partial<InputAdornmentProps> {
   IconButtonProps?: Partial<IconButtonProps>
 }
 
+/**
+ * Solid swatch for a literal colour, geometrically identical to
+ * {@link TokenSwatch}: same box, same hairline ring, so a field showing a
+ * token, a field showing a hex and an EMPTY field differ only in what fills
+ * the circle. The ring is the element's own border rather than a wrapper's,
+ * which is what keeps it concentric — a wrapper sized by its content rounds
+ * its radius against its own padded box and reads as an off-centre ellipse
+ * at this size.
+ *
+ * An unset field paints nothing and is the ring alone; `transparent` spells
+ * that out so the declaration is never emitted with an empty value.
+ */
 const Swatch = styled('span', {
   shouldForwardProp: (propName) => propName !== 'color',
 })<{ color: string }>(({ theme, color }) => ({
   width: 22,
   height: 22,
-  display: 'flex',
-  backgroundColor: color,
+  flexShrink: 0,
+  display: 'inline-flex',
+  backgroundColor: color || 'transparent',
   borderRadius: '50%',
+  border: `1px solid ${theme.palette.divider}`,
 }))
 
 const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
@@ -97,26 +110,18 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
     return (
       <InputAdornment ref={ref} position={'start'} {...rest}>
         <IconButton ref={ref} edge="start" {...IconButtonProps}>
-          <Box
-            sx={{
-              padding: 0.35,
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: "50%"
-            }}>
-            {token ? (
-              <TokenSwatch
-                light={token.light}
-                dark={token.dark}
-                alpha={tokenAlpha}
-              />
-            ) : (
-              <Swatch color={color} />
-            )}
-          </Box>
+          {token ? (
+            <TokenSwatch
+              light={token.light}
+              dark={token.dark}
+              alpha={tokenAlpha}
+            />
+          ) : (
+            <Swatch color={color} />
+          )}
         </IconButton>
       </InputAdornment>
-    );
+    )
   },
 )
 TextFieldColorSwatch.displayName = 'AglynTextFieldColorSwatch'
@@ -254,7 +259,10 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
       stage ??
       (!tokenOptions.length || (value && !activeToken) ? 'custom' : 'tokens')
 
-    const handleClickAway = useCallback((e: MouseEvent | TouchEvent) => setOpen(false), [])
+    const handleClickAway = useCallback(
+      (e: MouseEvent | TouchEvent) => setOpen(false),
+      [],
+    )
     const handleFocus = useCallback(
       (e: FocusEvent<HTMLInputElement>) => {
         setStage(undefined)
@@ -318,7 +326,12 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     })
 
     return (
-      <FormFieldGrid ref={ref} help={help} clear={clear} {...FormFieldGridProps}>
+      <FormFieldGrid
+        ref={ref}
+        help={help}
+        clear={clear}
+        {...FormFieldGridProps}
+      >
         <ClickAwayListener onClickAway={handleClickAway}>
           <div>
             <MuiTextField
@@ -398,7 +411,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
                     // with the token's resolved color instead.
                     color={
                       activeToken
-                        ? activeToken.light ?? activeToken.dark ?? ''
+                        ? (activeToken.light ?? activeToken.dark ?? '')
                         : value
                     }
                     onChange={handleColorChange}

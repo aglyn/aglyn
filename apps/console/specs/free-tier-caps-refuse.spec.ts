@@ -19,8 +19,7 @@
  * EVERY free quota REFUSES at its cap, and refuses BECAUSE of that cap
  * (AGL-1529).
  *
- * ZACH, 2026-08-18, verbatim: **"We also need to make sure the free/hobby tier
- * does hard cap so it always actually stays free"**.
+ * The free/hobby tier hard-caps, so that it always actually stays free.
  *
  * ## The gap this closes, in the words of the guard that has it
  *
@@ -35,8 +34,8 @@
  * free org's invoice is zero however far past a band it goes. It deliberately
  * assumes no gate at all, so it cannot say whether one exists.
  *
- * Neither answers the question Zach actually asked, which is about the BRACES
- * and is per-dimension: *at the cap, is the operation refused?* This file is
+ * Neither answers the question about the BRACES, which is per-dimension:
+ * *at the cap, is the operation refused?* This file is
  * that answer, and it is DERIVED from `PLAN_ENTITLEMENTS.free` so a quota
  * added tomorrow is red until somebody classifies it.
  *
@@ -551,7 +550,7 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
    * `entries`: *"uncapped Firestore documents and write volume behind a $0
    * subscription"*.
    *
-   * ## Zach's decision, 2026-08-23, verbatim
+   * ## the decision, 2026-08-23, verbatim
    *
    * > A platform-wide ceiling — **not a plan dimension**, so "unlimited
    * > member accounts on every plan" stays true, because **an abuse control
@@ -567,7 +566,8 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
    *
    * ## Why a FLAT constant and not the `*_ABUSE_CEILING_MULTIPLE` shape
    *
-   * The two ceilings Zach named are both `max(floor, included × 10)`, which
+   * The two ceilings that shape is named for are both
+   * `max(floor, included × 10)`, which
    * needs an included band to multiply. Members and leads have none by
    * construction — that is the point of AGL-889 — so a multiple would have to
    * invent the plan dimension the decision forbids. The flat family those
@@ -683,7 +683,7 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
   })
 
   it('the sign-up refusal is visible to the HOST and opaque to the VISITOR', () => {
-    // Zach's standing rule: a control that exists but is not visible in the
+    // the standing rule: a control that exists but is not visible in the
     // console did not ship. The handler must record the trip, and the inbox
     // console page — where the members and leads lists already live — must
     // read it back.

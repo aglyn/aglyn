@@ -738,7 +738,7 @@ async function handler(request: Request): Promise<Response> {
     // ── The keyless degrade ───────────────────────────────────────────────
     //
     // It used to refuse outright from here, and that was the second half of
-    // what Zach hit: one answered question, then "Assist is not configured on
+    // what was hit: one answered question, then "Assist is not configured on
     // this deployment" for everything after it. The self-host charter asks
     // every Aglyn-operated dependency to degrade CLEANLY, and a deployment
     // holding its key is the ordinary case — every self-hosted install on day

@@ -25,7 +25,7 @@
  * Moving a heading does not need the product list, and most editing sessions
  * never open a picker at all.
  *
- * Same rule Zach set for "Used by" (*"that will get expensive"*), with one
+ * Same rule set for Used by (*"that will get expensive"*), with one
  * difference worth stating: there is no button here, because a picker
  * APPEARING is already a user action — it takes selecting a node that has
  * one. The demand signal is the panel, not a click.

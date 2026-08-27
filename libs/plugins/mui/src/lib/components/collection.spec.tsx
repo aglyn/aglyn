@@ -636,7 +636,7 @@ describe('Collection entries search — suggestions (AGL-1525)', () => {
   })
 
   it('offers the mode as a select, gated behind the search switch', () => {
-    // Zach's rule: a capability that only exists in code is not shipped. The
+    // the rule: a capability that only exists in code is not shipped. The
     // author reaches this by clicking, in the Attributes panel.
     const attribute = (collectionEntriesSchema.attributes ?? []).find(
       (item) => item.name === 'searchMode',

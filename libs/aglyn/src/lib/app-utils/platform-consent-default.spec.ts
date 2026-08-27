@@ -58,7 +58,7 @@ const PRIOR_CONSENT_SAMPLES = [
   ['IS', 'Iceland — EEA/EFTA'],
   ['LI', 'Liechtenstein — EEA/EFTA'],
   ['GF', 'French Guiana — EU outermost region'],
-  ['CH', 'Switzerland — Zach 2026-08-20'],
+  ['CH', 'Switzerland — stricter than the tenant set, on purpose'],
 ] as const
 
 /** Implied-consent regions: analytics must be GRANTED by default. */
@@ -116,9 +116,9 @@ describe('the platform analytics consent default (AGL-1597)', () => {
     })
 
     it('are denied in the implied-consent branch TOO', () => {
-      // Zach decided analytics and only analytics. A default-on analytics
-      // posture that quietly widened to ads would be the decision nobody
-      // made, on the surface where nothing gates it.
+      // These surfaces run analytics and only analytics. A default-on
+      // analytics posture that quietly widened to ads would be a decision
+      // nobody made, on the surface where nothing gates it.
       const signals = resolvePlatformConsentDefault('US')
       expect(signals.ad_storage).toBe('denied')
       expect(signals.ad_user_data).toBe('denied')

@@ -21,6 +21,7 @@ import {
   CardDisplay,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -46,7 +47,11 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  usePagedCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
@@ -57,9 +62,6 @@ import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import useOrgPermissions from '../hooks/use-org-permissions'
-
-/** Site collaborators shown per page before "Load more" (AGL-1124). */
-const MEMBER_PAGE_SIZE = 25
 
 /**
  * Site-collaborator roles, weakest first.
@@ -118,32 +120,33 @@ export function HostMembersCard(props: HostMembersCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  // Paging (AGL-1124). This used to be a bare `limit(100)` with nothing
-  // saying so, which is the worst of both: a site with 120 collaborators
-  // showed 100 and looked complete. The window grows a page at a time and
-  // over-fetches by one, so "there are more" is a fact rather than a guess
-  // from `length === limit` (which is wrong exactly when the count is a
-  // multiple of the page size).
-  const [pageSize, setPageSize] = useState(MEMBER_PAGE_SIZE)
-  const { data: memberDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'members'),
-        limit(pageSize + 1),
-      ),
-    [firestore, hostId, pageSize],
+  /*
+   * Paging (AGL-1124), now the console's shared one (AGL-693). This used to
+   * be a bare `limit(100)` with nothing saying so, which is the worst of
+   * both: a site with 120 collaborators showed 100 and looked complete. Then
+   * it grew a page at a time behind a "Load more", which is a third control
+   * where the console already had too many — and one that can only ever go
+   * forward.
+   */
+  const {
+    rows: memberDocs,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      query(collection(firestore, 'hosts', hostId, 'members'), limit(pageLimit)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const hasMore = (memberDocs?.length ?? 0) > pageSize
   const members = useMemo(
     () =>
-      [...(memberDocs ?? [])]
-        // Drop the over-fetched probe row before rendering.
-        .slice(0, pageSize)
-        .sort((a, b) =>
-          String(a.email ?? '').localeCompare(String(b.email ?? '')),
-        ),
-    [memberDocs, pageSize],
+      [...memberDocs].sort((a, b) =>
+        String(a.email ?? '').localeCompare(String(b.email ?? '')),
+      ),
+    [memberDocs],
   )
   /**
    * SEATS USED is a server aggregate, not the length of the page window
@@ -243,28 +246,48 @@ export function HostMembersCard(props: HostMembersCardProps) {
             .map((member) => member.uid as string | undefined)
             .filter((uid): uid is string => Boolean(uid)),
         ),
-      ).slice(0, 30),
+      ),
     [members],
   )
-  const { data: orgMemberDocs } = useFirestoreCollection<any>(
-    () =>
-      orgId && memberUids.length
-        ? query(
-            collection(firestore, 'orgs', orgId, 'members'),
-            where(documentId(), 'in', memberUids),
-          )
-        : null,
-    [firestore, orgId, memberUids.join(',')],
+  /*
+   * Firestore allows 30 values in an `in`, and a page can hold 50.
+   *
+   * This was one query over `uids.slice(0, 30)`, which was exactly right
+   * while the page was 25 and silently wrong the moment a reader chose a
+   * larger one: members past the thirtieth kept their row and lost their
+   * face, with nothing to say why. Two fixed queries cover the largest page
+   * the size menu offers. Fixed, not mapped — a hook count that changed with
+   * the roster would change between renders.
+   */
+  const uidChunks = useMemo(
+    () => [memberUids.slice(0, 30), memberUids.slice(30, 60)],
+    [memberUids],
+  )
+  const orgMembersIn = (chunk: string[]) =>
+    orgId && chunk.length
+      ? query(
+          collection(firestore, 'orgs', orgId, 'members'),
+          where(documentId(), 'in', chunk),
+        )
+      : null
+  const { data: orgMemberDocsA } = useFirestoreCollection<any>(
+    () => orgMembersIn(uidChunks[0]),
+    [firestore, orgId, uidChunks[0].join(',')],
+    { idField: '$id' },
+  )
+  const { data: orgMemberDocsB } = useFirestoreCollection<any>(
+    () => orgMembersIn(uidChunks[1]),
+    [firestore, orgId, uidChunks[1].join(',')],
     { idField: '$id' },
   )
   const photoByUid = useMemo(() => {
     const map = new Map<string, string>()
-    for (const doc of orgMemberDocs ?? []) {
+    for (const doc of [...(orgMemberDocsA ?? []), ...(orgMemberDocsB ?? [])]) {
       const photo = doc?.photoURL as string | undefined
       if (photo) map.set(doc.$id as string, photo)
     }
     return map
-  }, [orgMemberDocs])
+  }, [orgMemberDocsA, orgMemberDocsB])
 
   const request = useCallback(
     async (method: string, body: Record<string, unknown>) => {
@@ -598,15 +621,14 @@ export function HostMembersCard(props: HostMembersCardProps) {
             ))}
           </TableBody>
         </Table>
-        {hasMore ? (
-          <Button
-            size="small"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={() => setPageSize((size) => size + MEMBER_PAGE_SIZE)}
-          >
-            {'Load more'}
-          </Button>
-        ) : null}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={members.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
         <Typography variant="caption" color="text.secondary">
           {'Admins get full console access to this site. An Author can edit ' +
             'every kind of content and cannot publish any of it — no route, ' +

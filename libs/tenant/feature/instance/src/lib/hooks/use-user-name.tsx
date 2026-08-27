@@ -24,21 +24,19 @@ import { useFirestoreDoc } from './use-firestore-doc'
  *
  * ## The defect this closes
  *
- * `user.displayName` is empty for every SSO account. Measured on production
- * against tenant `aglyn-org-y5v14`: `zach@aglyn.com` has
- * `displayName: undefined`, `photoURL: undefined`, and one provider entry for
- * `saml.aglyn-workspace`. The account menu read that field alone and fell
- * through to the email, so it rendered `zach@aglyn.com` as the person's NAME
- * and again underneath as their address, and `memberInitials` — given an
- * address with no space in it — produced the single letter `Z` while the
- * presence stack beside it showed `ZG`.
+ * `user.displayName` is empty for every SSO account: a SAML identity arrives
+ * with `displayName: undefined`, `photoURL: undefined` and a single provider
+ * entry for the SAML provider, because GCIP leaves the assertion's mapped
+ * attributes under `firebase.sign_in_attributes`. A surface that reads that
+ * field alone falls through to the email, so it renders the address as the
+ * person's NAME and again underneath as their address — and `memberInitials`,
+ * given an address with no space in it, yields a single letter where the
+ * presence stack beside it shows two.
  *
- * The name was never missing. `users/{uid}` holds `firstName: "Zach"`,
- * `lastName: "Gover"` for that account (and for the Google one), the org
- * member doc holds `displayName: "Zach Gover"`, and presence had already
- * worked around the gap by reading the ID token's IdP claims. Three surfaces,
- * three different answers to "what is this person called", and the one the
- * account menu happened to use was the only one that is blank for the
+ * The name is not actually missing. `users/{uid}` holds `firstName` and
+ * `lastName`, the org member doc holds a `displayName`, and presence reads the
+ * ID token's IdP claims. Three surfaces, three answers to "what is this person
+ * called", and the auth record is the only one that is blank for the
  * enterprise tier.
  *
  * ## Why here, and why this order

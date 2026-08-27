@@ -137,7 +137,7 @@ const NodeOverlay = observer(
     const node = Aglyn.canvas.getNode($id)
 
     const elementRef = Besigner.refs.get($id)
-    // node.index throws for parentless nodes (the root, or a node whose
+    // Node.index throws for parentless nodes (the root, or a node whose
     // parent isn't loaded) — selecting the root via the breadcrumbs must not
     // crash the overlay.
     const nodeIndex = node?.parent ? node.index : null
@@ -145,17 +145,14 @@ const NodeOverlay = observer(
      * The selection chrome stands down while this node is being edited in
      * place (AGL-2486).
      *
-     * Zach: *"background becomes white in when editing"* and *"the element
-     * outline doesn't wrap the text on the new line unless you are
-     * editing it"*. Both are this overlay. It paints a translucent FILL
-     * behind the node as well as an outline (`node-outline.tsx`), and while
-     * the author is typing that tint is the one thing standing between the
-     * in-place surface and its whole promise — that the text looks exactly
-     * as it renders. It is also redundant: the caret and the toolbar
-     * already say which element is being edited.
+     * This overlay paints a translucent FILL behind the node as well as an
+     * outline (`node-outline.tsx`). While the author is typing, that tint is
+     * the one thing standing between the in-place surface and its whole
+     * promise — that the text looks exactly as it renders, on the background
+     * it renders on. It is redundant during an edit anyway: the caret and the
+     * toolbar already say which element is being edited.
      *
-     * Suppressing it here also took the wrong geometry out of the edited
-     * node's way while the geometry was still wrong. It no longer is: the
+     * The geometry is no longer a second reason to suppress it: the
      * chrome below is drawn from `getClientRects()`, one outline per line
      * fragment, so a SELECTED wrapped inline run is outlined correctly too.
      * Standing the fill down during an edit remains right for its own
@@ -174,12 +171,11 @@ const NodeOverlay = observer(
       /**
        * The element's REAL shape, not its bounding box (AGL-2486).
        *
-       * Zach: *"the element outline doesn't wrap the text on the new line
-       * unless you are editing it"*. A wrapped inline run is a set of line
-       * fragments and one rectangle cannot describe it — see
-       * `getElementFragmentRects` for why the union is not merely imprecise
-       * but a different shape. A block yields one fragment that IS the
-       * bounding rect, so nothing about block geometry changes.
+       * A wrapped inline run is a set of line fragments, and one rectangle
+       * cannot describe it — see `getElementFragmentRects` for why the union
+       * is not merely imprecise but a different shape, and why an outline
+       * drawn from it misses the text on the new line. A block yields one
+       * fragment that IS the bounding rect, so block geometry is unaffected.
        */
       let committed = ''
       const update = () => {
@@ -215,7 +211,7 @@ const NodeOverlay = observer(
         window.removeEventListener('resize', update)
         window.removeEventListener('scroll', update, { capture: true })
       }
-      // node?.index changes when the node is reordered among siblings (e.g.
+      // Node?.index changes when the node is reordered among siblings (e.g.
       // "shift up"/"shift down"). Reordering moves the same DOM element to a
       // new position without resizing it, so ResizeObserver won't catch it —
       // this dependency forces a rect recompute when sibling order changes.
@@ -269,7 +265,7 @@ const NodeOverlay = observer(
         // portal) keeps them inside the viewport's stacking context, so the
         // designer chrome (app bars, breadcrumbs) always paints above them.
         disablePortal
-        // transition
+        // Transition
         {...rest}
       >
         <div>
@@ -303,7 +299,7 @@ const NodeOverlay = observer(
             modifiers={innerModifiers}
             popperOptions={{ strategy: 'fixed' }}
             disablePortal
-            // keepMounted
+            // KeepMounted
             // transition
             sx={{
               ['&[data-popper-placement^=top] #aglyn\\:element-overlay-label']:

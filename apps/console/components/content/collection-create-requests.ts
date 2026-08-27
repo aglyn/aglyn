@@ -18,10 +18,10 @@
 /**
  * What creating a collection actually SENDS (AGL-2498).
  *
- * Zach: *"New collections need more details to define when creating the
- * collection."* The dialog asked for a name; a collection is defined by four
- * things — name, the address it serves, and the two screens that render its
- * list and its entries.
+ * A collection is defined by four things — its name, the address it serves,
+ * and the two screens that render its list and its entries. A create dialog
+ * that asks only for a name leaves the other three to be found later, in three
+ * different places.
  *
  * Those four do not travel together. `/api/hosts/collections` accepts
  * `displayName` and `slug` on `create` and writes the template pointers under
@@ -45,7 +45,7 @@ export interface CollectionCreateInput {
 export type CollectionCreateBody = Record<string, unknown>
 
 /** The create request, always sent first — nothing can point at a document
- * that does not exist yet. */
+ * That does not exist yet. */
 export function collectionCreateBody(
   input: CollectionCreateInput,
 ): CollectionCreateBody {

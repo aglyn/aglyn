@@ -57,6 +57,8 @@ import {
   mdiFileTree,
   mdiFilter,
   mdiEmailOutline,
+  mdiEyeOffOutline,
+  mdiEyeOutline,
   mdiFlagVariant,
   mdiFormatAlignCenter,
   mdiFormatAlignJustify,
@@ -84,6 +86,7 @@ import {
   mdiMonitorSmall,
   mdiOpenInNew,
   mdiPageNextOutline,
+  mdiGestureTapHold,
   mdiPaletteOutline,
   mdiPencil,
   mdiPlus,
@@ -143,6 +146,10 @@ export const ICON_VARIANT_DOCK_LEFT_TOGGLE = mdiDockLeft
 export const ICON_VARIANT_DOCK_RIGHT_TOGGLE = mdiDockRight
 export const ICON_VARIANT_FILTER = mdiFilter
 export const ICON_VARIANT_LEFT = mdiArrowLeft
+// A true chevron, not `mdiMenuDown`'s small filled triangle. A split-button
+// affordance needs a mark that reads at 16-18px beside a text label, and the
+// triangle disappears there (AGL-1152).
+export const ICON_VARIANT_CHEVRON_DOWN = mdiChevronDown
 export const ICON_VARIANT_MENU_DOWN = mdiMenuDown
 export const ICON_VARIANT_MODIFY_ADD = mdiPlus
 export const ICON_VARIANT_MODIFY_COPY = mdiContentCopy
@@ -183,10 +190,17 @@ export const ICON_VARIANT_USER_SETTINGS = mdiAccountSettings
 export const ICON_VARIANT_HOST_GROUP = mdiWebBox
 export const ICON_VARIANT_HOST = mdiWeb
 
+// Canvas visibility (AGL-592): whether an element is shown while it is being
+// designed. Distinct from whether the published site shows it — the eye
+// reports and toggles the CANVAS, never the document.
+export const ICON_VARIANT_VISIBILITY_SHOWN = mdiEyeOutline
+export const ICON_VARIANT_VISIBILITY_HIDDEN = mdiEyeOffOutline
+
 // Views + Panels
 export const ICON_VARIANT_ELEMENT_BROWSE = mdiGroup
 export const ICON_VARIANT_ELEMENT_DETAILS = mdiInformationVariant
 export const ICON_VARIANT_ELEMENT_PROPERTIES = mdiFormDropdown
+export const ICON_VARIANT_ELEMENT_INTERACTIONS = mdiGestureTapHold
 export const ICON_VARIANT_ELEMENT_STYLES = mdiPaletteOutline
 export const ICON_VARIANT_ELEMENT_TREE_VIEW = mdiFileTree
 

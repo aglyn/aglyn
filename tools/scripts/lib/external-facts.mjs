@@ -68,8 +68,9 @@
 // A `confirm:` block states a fact only a human can read — a filing number, a
 // Workspace setting, a registrar field. It NEVER passes on its own; it reports
 // PENDING until a human writes the evidence into `confirmed:` in the issue
-// body. Filling that line is the act that converts "Zach saw the filing" into
-// "the board knows", which is precisely the nine-day gap on the Form 401. The
+// body. Filling that line is the act that converts "one person saw the filing"
+// into "the record holds it", which is precisely the nine-day gap that opened
+// on the Form 401. The
 // checker's job is to keep the unconfirmed ones on a list that something reads
 // every day, and to broadcast the moment one is filled in.
 

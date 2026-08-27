@@ -86,10 +86,9 @@ export interface SiteStatusScreenProps {
  *
  * ## Navigation (AGL-2187)
  *
- * Zach, on the live 404: *"there is no ability to navigate away that is
- * horrible UX"*. He is right, and the previous version of this file answered
- * him by pointing at the designed-screen path — true, and no help at all to a
- * visitor on one of the sites that has designated nothing.
+ * A visitor who lands here needs a way off the page. Pointing at the
+ * designed-screen path is true and no help at all to a visitor on one of the
+ * sites that has designated nothing.
  *
  * What this can and cannot offer is decided by where the data lives:
  *

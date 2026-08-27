@@ -81,8 +81,6 @@ export function hasConcurrentWrite(
  * the stamp, this session usually already holds what they stored, and its
  * own write is a SUPERSET of it rather than a clobber. Refusing it protects
  * nothing and blocks the ordinary rhythm of two people building a page —
- * Zach: *"one user may save their edits then the other user may click save
- * as well, there should be no problem with this"*.
  *
  * So the question becomes "does my document contain theirs", and this
  * answers it from evidence rather than from an assumption that the mirror

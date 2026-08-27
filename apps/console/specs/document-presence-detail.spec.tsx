@@ -22,13 +22,12 @@ import { presenceChipTooltip } from '../components/document-presence-chips.compo
 /**
  * A detail page reports the room WITHOUT joining it (AGL-2486).
  *
- * Zach: "identify who is currently in the document already before joining."
- * The word doing the work there is BEFORE. An affordance that announces the
- * person reading it has destroyed the thing it was built to report: once a
- * detail page joins, everybody browsing a site is listed as editing, and the
- * chips stop meaning anything. So "does not join" is not an optimisation
- * here, it is the feature's correctness condition, and it is asserted rather
- * than assumed.
+ * The page answers "who is in this document already", BEFORE anyone opens the
+ * editor. An affordance that announces the person reading it destroys the
+ * thing it was built to report: once a detail page joins, everybody browsing a
+ * site is listed as editing and the chips stop meaning anything. So "does not
+ * join" is not an optimization here, it is the feature's correctness
+ * condition, and it is asserted rather than assumed.
  */
 
 const mockUsePresence = jest.fn()

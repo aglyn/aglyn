@@ -40,7 +40,13 @@ import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Stack, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
 import HostActivityTable from '../../../../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -50,7 +56,10 @@ import CardDisplayFormTemplate, {
 import { useFormApi } from '@aglyn/shared-ui-jsx-forms'
 import useTabParam from '../../../../../../hooks/use-tab-param'
 import { Grid } from '@mui/material'
-import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
+import {
+  useHostId,
+  useHostSubdomain,
+} from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
@@ -147,15 +156,12 @@ const basicSchema: FormSchema = {
 /**
  * Tracking (AGL-2486) — its own tab, and not part of SEO.
  *
- * Zach: *"GTAG code can be in its own card, it is not SEO it is tracking"*,
- * then *"We also need the support for Google tag manager there too not just
- * google analytics, maybe move GA and GTM to its own tracking tab."*
+ * Google Analytics and Google Tag Manager live here, together.
  *
- * He is right about the category. A measurement id is not a search-engine
- * setting; it shares a tab with titles and structured data only because it was
- * the first `analytics.*` field anyone added and the SEO form was the nearest
- * form. Moving it changes no stored data — both fields are still `analytics.*`
- * on the host document, and this tab saves through the same handler.
+ * A measurement id is not a search-engine setting: it is measurement, and it
+ * shares nothing with titles and structured data except a form. Both fields
+ * are `analytics.*` on the host document either way, and this tab saves
+ * through the same handler, so the tab is presentation only.
  *
  * BOTH IDS ARE FORMAT-VALIDATED HERE, not merely hinted. They land inside an
  * inline script on the published site, so the tenant refuses anything that is
@@ -363,14 +369,14 @@ const seoSchema: FormSchema = {
       ],
     },
     /*
-      NO raw favicon box here (AGL-2486). `seo.favicon` had two editors on
-      this one tab — this text field and the Favicon card below — and the
-      text one showed the stored value as what it literally is, a
-      `media:org:…` reference, which is not something anybody can read or
-      type. Zach: *"we also have two separate favicon fields."*
+      NO raw favicon box here (AGL-2486). `seo.favicon` is edited by the
+      Favicon card further down this tab and by nothing else. A text field for
+      it would be a second editor for one value, and it could only show what
+      the field literally holds — a `media:org:…` reference, which nobody can
+      read or type.
 
-      The card is the editor now, and it grew the URL box this field was
-      carrying, so an externally hosted icon is still reachable.
+      The card carries the URL box too, so an externally hosted icon is still
+      reachable.
     */
     {
       component: FieldComponentType.SUB_FORM,
@@ -449,12 +455,26 @@ SeoFormBody.displayName = 'SeoFormBody'
 
 /** Theme tab id (AGL-114); `/setup?tab=theme` deep links land here. */
 const THEME_TAB_ID = 'theme'
-/** Custom domain tab id (AGL-122); `/setup?tab=domain` deep links. */
-const DOMAIN_TAB_ID = 'domain'
-/** Activity tab id (AGL-249); `/setup?tab=activity` deep links. */
-const ACTIVITY_TAB_ID = 'activity'
 /** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
 const EMAILS_TAB_ID = 'emails'
+
+/**
+ * The three tabs that moved to ADMIN (AGL-1485), kept here only to redirect.
+ *
+ * Setup answers "what is this site, and how does it behave for a visitor".
+ * Admin answers "what governs it as an object" — its address, its
+ * permissions, its history, its existence. Custom domain is ownership and
+ * infrastructure; Activity is an audit log; and Security is the one that was
+ * not a taste call, because all six approved-host fields are admin-only in
+ * the Firestore rules and an editor was being shown controls they could not
+ * write.
+ *
+ * They keep their ids, so a bookmarked `/setup?tab=security` still means
+ * exactly what it meant — it just arrives at the page that now holds it,
+ * rather than falling back to Basic details with nothing to say a link was
+ * ever valid.
+ */
+const MOVED_TO_ADMIN_TAB_IDS = ['domain', 'security', 'activity'] as const
 
 /**
  * Every tab id this page renders, in nav order (AGL-2486).
@@ -463,10 +483,9 @@ const EMAILS_TAB_ID = 'emails'
  * the four constants above — so there is no second spelling to fall out of
  * date. The deep-link resolver reads this list and nothing else.
  *
- * It replaces a hand-maintained condition that was already wrong: the
- * Tracking tab was added minutes before Zach followed
- * `/setup?tab=hostTracking` and landed on Basic details, because the new id
- * was not in it. `setup-tab-deep-links.spec.ts` derives the rendered tabs
+ * A tab missing from this list is not reachable by deep link: `/setup?tab=<id>`
+ * finds no match and falls back to Basic details, with nothing to signal that
+ * the link was valid. `setup-tab-deep-links.spec.ts` derives the rendered tabs
  * from this file and fails if the two disagree, so the next tab is either on
  * this list or red — never silently unreachable.
  */
@@ -475,9 +494,7 @@ export const SETUP_TAB_IDS = [
   seoSchema.id,
   trackingSchema.id,
   THEME_TAB_ID,
-  DOMAIN_TAB_ID,
   EMAILS_TAB_ID,
-  ACTIVITY_TAB_ID,
 ] as const
 
 const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
@@ -485,14 +502,25 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { queueLoading } = useLoading()
 
   const searchParams = useSearchParams()
+  const orgSlugForTabs = useOrgSlug()
+  const hostForTabs = useHostSubdomain()
+  /** Where each moved tab lives now, or nothing until the route resolves. */
+  const adminTabDestinations = useMemo(() => {
+    if (!orgSlugForTabs || !hostForTabs) return undefined
+    const admin = buildRoute(Route.HOST_ADMIN, {
+      orgSlug: orgSlugForTabs,
+      host: hostForTabs,
+    })
+    return Object.fromEntries(MOVED_TO_ADMIN_TAB_IDS.map((id) => [id, admin]))
+  }, [orgSlugForTabs, hostForTabs])
   /*
     Every tab this page has, DERIVED (AGL-2486).
 
-    This was a hand-maintained list of ids, and it was already wrong: the
-    Tracking tab was added minutes before Zach followed
-    `/setup?tab=hostTracking` and landed on Basic details, because the new id
-    was not on it. A list that has to be edited in a second place every time a
-    tab is added is a list that will be wrong again.
+    The ids come from `SETUP_TAB_IDS`, which is built out of the same schema
+    ids and constants the tabs render with, rather than being spelled a second
+    time here. A hand-kept copy has to be edited every time a tab is added, and
+    the cost of forgetting is silent: the new tab's deep link resolves to
+    nothing and drops the visitor on Basic details.
 
     `SETUP_TAB_IDS` is module scope and `setup-tab-deep-links.spec.ts` derives
     the rendered tabs from this file's source and fails if the two disagree —
@@ -501,6 +529,8 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { tab, onTabChange } = useTabParam({
     ids: SETUP_TAB_IDS,
     fallback: basicSchema.id,
+    // The three that moved to Admin keep their links (AGL-1485).
+    movedTo: adminTabDestinations,
     onChange: (value) => {
       const form = forms.find(({ schema }) => schema.id === value)
       // `analytics` is undefined whenever Firebase Analytics failed to
@@ -522,6 +552,8 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const router = useRouter()
+
+
   const pathname = usePathname()
   const {
     doc: {
@@ -755,7 +787,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
         .then(() => {
           enqueueSnackbar('Saved!', { variant: 'success' })
           logActivity('Updated host settings', { type: 'host', id: hostId })
-          // displayName is a client write to the host doc, so it bypasses the
+          // DisplayName is a client write to the host doc, so it bypasses the
           // membership funnel — ping the server to re-fan the new name into
           // every member's hostMemberships row (AGL-844). Fire-and-forget: a
           // miss self-heals on the next membership change or backfill.
@@ -896,11 +928,11 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       breadcrumbItems={[
         {
           children: <HostDisplayNameComponent hostId={hostId} />,
-          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
         },
         {
           children: 'Setup',
-          href: buildRoute(Route.HOST_SETUP, { orgSlug,  host }),
+          href: buildRoute(Route.HOST_SETUP, { orgSlug, host }),
         },
       ]}
       help="gettingStarted"
@@ -948,9 +980,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         />
                       ))}
                       <Tab value={THEME_TAB_ID} label={'Theme'} />
-                      <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
                       <Tab value={EMAILS_TAB_ID} label={'Emails'} />
-                      <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
                     </TabList>
                   </CardDisplay>
                 ),
@@ -971,20 +1001,18 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         <FormRenderer
                           /*
                             The SEO tab renders its media controls INSIDE its
-                            own card (AGL-2486). Zach: *"You removed the field
-                            from entity you need to move the other fields too
-                            otherwise it looks separated"* and *"Social image
-                            could be moved up into the SEO part and not its
-                            own card."*
+                            own card (AGL-2486), which is why this one tab gets
+                            `SeoFormTemplate` instead of the shared
+                            `CardDisplayFormTemplate`.
 
-                            They are `seo.*` fields and always were; they are
-                            separate components only because a media pick needs
-                            a picker dialog and because a CLEARED value has to
-                            reach Firestore as `''` rather than being dropped
-                            by the form stack (AGL-1191) — implementation
-                            reasons that had been showing through as
-                            free-floating cards between the fields they belong
-                            to.
+                            The favicon and social image are `seo.*` fields like
+                            the rest of the tab. They are separate components
+                            only because a media pick needs a picker dialog and
+                            because a CLEARED value has to reach Firestore as
+                            `''` rather than being dropped by the form stack
+                            (AGL-1191). Rendered by the default template those
+                            implementation details surface as free-floating
+                            cards sitting between the fields they belong to.
                           */
                           FormTemplate={
                             schema.id === 'hostSeo'
@@ -1013,15 +1041,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                             </div>
                             <div style={{ marginTop: 24 }}>
                               <ErrorScreensCard hostId={hostId} />
-                            </div>
-                            {/* Which external hosts this site's images may come
-                                from (AGL-1152). Sits with the other site-wide
-                                policy cards rather than under Media, because it
-                                governs what visitors' BROWSERS may fetch — the
-                                same class of decision as the error pages and
-                                the consent banner beside it. */}
-                            <div style={{ marginTop: 24 }}>
-                              <ApprovedImageHostsCard hostId={hostId} />
                             </div>
                             {/* Designable auth screens (AGL-553). */}
                             <div style={{ marginTop: 24 }}>
@@ -1093,27 +1112,8 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         </>
                       ) : null}
                     </TabPanel>
-                    <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
-                      <Stack spacing={2}>
-                        <CustomDomainCard hostId={hostId} />
-                        {/* The badge is a fact about the PUBLISHED site, so
-                            it belongs beside the domain it is published on
-                            (AGL-2081). There is nothing to toggle — the
-                            entitlement is the switch — but "do my sites show
-                            the Aglyn badge" is a question an owner should be
-                            able to answer somewhere, and until now it was
-                            answerable nowhere in the console. */}
-                        <SiteBrandingBadgeCard />
-                      </Stack>
-                    </TabPanel>
                     <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
                       <SiteEmailsCard />
-                    </TabPanel>
-                    <TabPanel
-                      value={ACTIVITY_TAB_ID}
-                      sx={{ padding: 'unset' }}
-                    >
-                      <HostActivityTable hostId={hostId} />
                     </TabPanel>
                   </>
                 ),

@@ -385,7 +385,7 @@ export default function SiteAnalytics({
           loaded; the render condition here is unchanged.
 
           THE CONSENT-MODE DEFAULT (AGL-1622) is declared INSIDE this block,
-          which is the whole of its safety argument. Zach's decision of
+          which is the whole of its safety argument. the decision of
           2026-08-14 approves load-then-restrict for the UNITED STATES, where
           the implied-consent posture already permits the load; EU and UK are
           unchanged, because loading an analytics tag before consent is the

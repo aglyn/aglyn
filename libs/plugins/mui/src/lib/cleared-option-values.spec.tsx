@@ -67,7 +67,19 @@ import { MUI_BUNDLE } from './plugin'
  */
 
 /** A prop no component reads, but every one of them spreads to the DOM. */
-const PROBE = 'data-cleared-probe'
+/**
+ * A plain unknown attribute, NOT a `data-` one (AGL-1476).
+ *
+ * `dropClearedProps` exempts `data-*` and `aria-*`, because those are not
+ * authored attributes — the renderer stamps them, and it writes its flags
+ * presence-based, so `''` means "on" rather than "cleared". A probe named
+ * `data-…` is therefore a prop the guard is documented NOT to govern, and
+ * every component under test would report as passing it through.
+ *
+ * React forwards an unknown lowercase attribute to the DOM unchanged, so this
+ * lands exactly as the old probe did while being a prop the guard governs.
+ */
+const PROBE = 'clearedprobe'
 
 type GuardVerdict = 'drops' | 'passes-through' | 'inconclusive'
 

@@ -41,6 +41,7 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type React from 'react'
 import type { ComponentClass, ComponentProps } from 'react'
 import type { NODE_ROOT_ID } from '../canvas-manager'
+import type { NodeInteraction } from '../app-utils/node-interactions'
 
 import type { FEATURE_FLAG, FieldComponentType } from '../foundation'
 import type { PluginId } from '../plugin-manager'
@@ -264,13 +265,19 @@ export interface PresetSchema<P = JSX.AnyProps> extends PresetII {
   data: NodeSchemaNested<P>
   /**
    * Interaction templates wired when the preset is inserted (AGL-589):
-   * the host app persists one `hosts/{hostId}/actions` doc per entry,
-   * with each `presetRef` marker resolved to the freshly minted node's
-   * `[data-aglyn="leaf:<id>"]` selector. Presets that need hover
-   * choreography (a primitive dropdown panel) ship working out of the
-   * box instead of asking the user to author the interactions by hand.
+   * the host app resolves each `presetRef` marker to a freshly minted node
+   * and persists the result. Presets that need hover choreography (a
+   * primitive dropdown panel) ship working out of the box instead of asking
+   * the user to author the interactions by hand.
+   *
+   * TEMPLATES, and named so (AGL-1478). These are not interactions: they are
+   * unresolved, they reference nodes that do not exist yet, and they are
+   * consumed at insert time and never stored. What they resolve INTO lives
+   * on the node as {@link NodeSchema.interactions}, and a `PresetSchema` is
+   * assignable to a `NodeSchema` — so while the two shared a name, one of
+   * them had to be wrong wherever a preset was passed as a node.
    */
-  interactions?: PresetInteractionSchema[]
+  interactionTemplates?: PresetInteractionSchema[]
 }
 
 /**
@@ -368,6 +375,66 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    * beats the component's own default.
    */
   attrOverrides?: Record<string, Record<string, unknown>>
+  /**
+   * Interactions this element carries (AGL-1478) — the click, hover and
+   * scroll-into-view choreography authored on it in the besigner.
+   *
+   * ## Why they live on the NODE
+   *
+   * They used to be rows in `hosts/{hostId}/actions`, bound to an element by
+   * a `[data-aglyn="leaf:<id>"]` selector — the same collection the Workflows
+   * page lists. An interaction is not a site-wide automation, and storing it
+   * as one had four consequences, every one of them a thing an author would
+   * expect to work:
+   *
+   * - it was not versioned with the document, so it neither published nor
+   *   rolled back with the screen it belongs to;
+   * - it did not travel with a component copied to another site, or packaged
+   *   into a template or a plugin — the element arrived inert;
+   * - deleting the element left the action behind, pointing at a selector
+   *   nothing resolves;
+   * - and a nav's hover choreography sat in the site's automation list
+   *   beside "when an order is placed", which is a different kind of thing.
+   *
+   * Host actions remain, and remain the right home for a genuine site event.
+   * The split is the concept: an ACTION is something the site does, an
+   * INTERACTION is something an element does.
+   *
+   * ## Shape
+   *
+   * Deliberately the same `HostAction` the automations engine already takes,
+   * so nothing about the runtime changes: the selector is stamped from this
+   * node's own id when the page is composed, and the compiled result is the
+   * shape the client engine has always consumed. `trigger.selector` is
+   * therefore ignored here — the node IS the selector.
+   */
+  interactions?: NodeInteraction[]
+  /**
+   * Hidden by the author (AGL-1479) — the eye on the element's hierarchy row.
+   *
+   * Renders `display: none` on the canvas AND on the published site. It is
+   * the plain "I do not want this on the page" switch: no runtime, no
+   * interaction, nothing reveals it. Showing it again is the same eye.
+   *
+   * ## Why a FIELD and not a style
+   *
+   * Because it has to override the element's own display rather than replace
+   * it. An author who toggles the eye on a Stack laid out with
+   * `display: flex` must get that flex back when they toggle it off, and
+   * writing `display: none` into `node.sx` destroys the value it overwrote —
+   * there is nothing left to restore. Composed LAST in `Leaf` instead, so it
+   * wins on the cascade and the stored style is never touched.
+   *
+   * ## Not {@link ELEMENT_HIDDEN_CLASS}
+   *
+   * `aglyn-hidden` is a different thing wearing a similar name: it means
+   * "starts hidden, and an interaction shows it" — a mega-menu panel, a
+   * drawer. That class is part of a runtime contract (the show/hide steps
+   * toggle it, and the canvas reveals it for designing), and it is bespoke to
+   * that job. A visibility toggle that wrote it would enrol every hidden
+   * element in a choreography it is not part of.
+   */
+  hidden?: boolean
   /**
    * The computed node parent (only for type completion)
    */

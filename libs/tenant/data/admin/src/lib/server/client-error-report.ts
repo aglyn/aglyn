@@ -453,7 +453,7 @@ export async function reportServerError(
  *
  * DELIBERATELY NOT `client-errors`. The `Client error beacon` alert policy is
  * a log-match on `logName="…/client-errors" AND severity>=ERROR`, so a
- * heartbeat written there would page Zach on every probe — building the
+ * heartbeat written there would page the on-call owner on every probe — building the
  * alert-fatigue mechanism the heartbeat exists to protect against. A separate
  * log id at INFO keeps the two streams from ever being confused, and keeps
  * the payload out of Error Reporting (which ingests on the

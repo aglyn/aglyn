@@ -39,6 +39,7 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
+const SEED_EMPTY = process.argv.includes('--seed-empty')
 const APPLY = process.argv.includes('--apply')
 
 const projectId = process.env.FIREBASE_PROJECT_ID
@@ -71,7 +72,9 @@ const stats = {
   customerIndexWritten: 0,
   alreadyMigrated: 0,
   noBillingData: 0,
-}
+
+  emptySeeded: 0,
+  emptyAlreadyPresent: 0,}
 
 const orgsSnapshot = await db.collection('orgs').get()
 stats.orgs = orgsSnapshot.size
@@ -101,6 +104,42 @@ for (const orgDoc of orgsSnapshot.docs) {
   }
   if (!Object.keys(fields).length) {
     stats.noBillingData += 1
+    /*
+     * AN ORG WITH NO BILLING RELATIONSHIP STILL NEEDS THE DOCUMENT TO EXIST
+     * (AGL-1152), and skipping it is what made this expensive.
+     *
+     * `readOrgBilling` reads `orgs/{id}/billing/stripe` first and falls back to
+     * the org doc when it is absent. Firestore BILLS a read for a document that
+     * does not exist, so an org that will never have Stripe data pays a
+     * NOT_FOUND plus the fallback lookup on every single read, forever — and
+     * the read is on the tenant's hot path, behind a deliberately short TTL
+     * because that TTL is what propagates a plan change.
+     *
+     * Measured on production 2026-08-26: 14,498 NOT_FOUND reads/day, 15% of all
+     * Firestore reads and the difference between sitting under the free tier
+     * and over it. Four of seven orgs had no document.
+     *
+     * Writing an EMPTY one is behaviour-identical — `readOrgBilling`'s fallback
+     * produced `{}` for these orgs anyway, because they have no inline fields
+     * to pick up — and turns two billed reads into one. It is not a marker or a
+     * sentinel: the absence of Stripe keys IS this org's billing state, and now
+     * it is written down rather than inferred from a miss.
+     *
+     * `merge: true` so a later real write through `writeOrgBilling` composes
+     * with it rather than racing it.
+     */
+    if (SEED_EMPTY) {
+      const emptyRef = orgDoc.ref
+        .collection(ORG_BILLING_SUBCOLLECTION)
+        .doc(ORG_BILLING_DOC_ID)
+      const already = await emptyRef.get()
+      if (already.exists) {
+        stats.emptyAlreadyPresent += 1
+      } else {
+        stats.emptySeeded += 1
+        if (APPLY) await emptyRef.set({}, { merge: true })
+      }
+    }
     continue
   }
   stats.withBilling += 1
@@ -142,7 +181,11 @@ await flush()
 console.log(APPLY ? 'APPLIED' : 'DRY RUN — nothing written (pass --apply)')
 console.log(`  orgs scanned              ${stats.orgs}`)
 console.log(`  with billing data         ${stats.withBilling}`)
-console.log(`  no billing data (skipped) ${stats.noBillingData}`)
+console.log(`  no billing data          ${stats.noBillingData}`)
+if (SEED_EMPTY) {
+  console.log(`    empty doc seeded       ${stats.emptySeeded}`)
+  console.log(`    empty doc already there ${stats.emptyAlreadyPresent}`)
+}
 console.log(`  billing docs written      ${stats.billingDocsWritten}`)
 console.log(`  billingStatus mirrored    ${stats.statusMirrored}`)
 console.log(`  customer index entries    ${stats.customerIndexWritten}`)

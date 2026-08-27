@@ -34,6 +34,7 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
@@ -2235,6 +2236,29 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         )}
                       </Stack>
                     </CardDisplay>
+                  ),
+                },
+                {
+                  children: (
+                    /*
+                     * The organization's own activity log (AGL-1488).
+                     *
+                     * Staff had the audit of what STAFF did to this org and
+                     * no view of what the org itself did — the invites, the
+                     * role changes, the billing edits its own members made.
+                     * `/api/orgs/activity` already answers a staff caller,
+                     * so this is the same feed the owner reads, on the page
+                     * staff are already on.
+                     */
+                    <OrgActivityCard
+                      orgId={orgId}
+                      header={'Organization activity'}
+                      // The org's SITES too (AGL-1490). Without it a
+                      // brand-new organization reads as having done nothing
+                      // on the day it published three pages, because the org
+                      // collection holds only invites, roles and billing.
+                      orgWide
+                    />
                   ),
                 },
               ]}

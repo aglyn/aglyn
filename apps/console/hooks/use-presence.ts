@@ -60,11 +60,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 /**
  * One entry per editing SESSION currently in a document.
  *
- * A session, not a person (AGL-2486). Zach's call: "we should see co-editing
- * regardless anyways if we are in the same account or not". A cursor and a
- * selection belong to a tab, so collapsing two tabs into one entry threw away
- * exactly the thing the overlays draw — and it made your own second window
- * invisible, which is the case that loses work most often.
+ * A session, not a person (AGL-2486). A cursor and a selection belong to a
+ * TAB, so collapsing two tabs of one account into a single entry discards
+ * exactly what the overlays draw, and it hides your own second window — the
+ * case that loses work most often, because both sides believe they are alone.
  *
  * `people` on `PresenceState` is the collapsed view, for the avatar stack.
  */
@@ -138,11 +137,10 @@ export type PresenceStatus =
 /**
  * What the reader should DO about it (AGL-2486).
  *
- * Zach, on the first version of this: "what does this mean? It gives the
- * users no course of action on how to fix it." The old tooltip ended at
- * `Failed at: broker (500)` — a stage name and a status code, in front of a
- * customer. `stage` and `code` are still carried, because whoever debugs this
- * next needs them; they are just no longer the message.
+ * A fault has to name a course of action. `Failed at: broker (500)` is a stage
+ * name and a status code in front of a customer who can act on neither.
+ * `stage` and `code` are still carried, because whoever debugs this next needs
+ * them; they are simply not the message.
  *
  * The kind is what selects the words. Four, because there are exactly four
  * different things the reader can do: nothing (it was never set up), sign in
@@ -201,8 +199,8 @@ export function presenceFaultNotice(fault: PresenceFault | null): PresenceNotice
     ? `${fault.stage} (${fault.code}) — ${fault.message}`
     : ''
   // Said on every branch, in the same words, because it is true on every
-  // branch. The first half is the warning Zach kept; the second is the one
-  // that stops a cosmetic failure from reading as data loss.
+  // branch. The first half stops an empty stack from reading as proof of
+  // solitude; the second stops a cosmetic failure from reading as data loss.
   const caution =
     'An empty stack does NOT mean you are alone — someone else may be ' +
     'editing this screen without appearing here. Your own editing is ' +
@@ -319,17 +317,15 @@ export const TAB_SESSION_ID =
 /**
  * A colour per SESSION, not per person (AGL-2486).
  *
- * Zach: "We should also see the same avatar repeated for each of its active
- * sessions all with a different presence color not just consolidated into
- * one." Seeding on `uid:sessionId` is what makes that work: two windows of
- * one account draw the same face in two different colours, and — because the
- * colour is WRITTEN INTO the room entry by the session it belongs to —
- * everyone else sees that session in that same colour too, including the
+ * Seeding on `uid:sessionId` is what makes a per-session colour work: two
+ * windows of one account draw the same face in two different colours, and —
+ * because the colour is WRITTEN INTO the room entry by the session it belongs
+ * to — everyone else sees that session in that same colour too, including the
  * cursor and the selection box the overlays draw from `entry.colour`.
  *
- * Seeding on the uid alone, which is what this did, made every one of a
- * person's sessions identical: indistinguishable avatars, and two cursors in
- * one colour fighting over the canvas.
+ * Seeding on the uid alone makes every one of a person's sessions identical:
+ * indistinguishable avatars, and two cursors in one colour fighting over the
+ * canvas.
  */
 function colourFor(seed: string): string {
   return avatarColourFor(seed)
@@ -344,17 +340,15 @@ function colourIndexFor(key: string): number {
  * Is the pointer ACTUALLY over the canvas, or is something drawn on top of it?
  * (AGL-2486)
  *
- * ## The bug
+ * ## The bug a geometric test cannot see
  *
- * Zach: "even though the canvas does not have focus because of the
- * drawer/dialog for aglyn assist the presence does still report cursor". A
- * session typing into the Assist panel kept broadcasting a canvas position, so
- * a colleague saw a cursor implying attention on the document while the person
- * was somewhere else entirely.
+ * A session typing into the Assist drawer keeps broadcasting a canvas
+ * position, so a colleague sees a cursor implying attention on the document
+ * while that person is somewhere else entirely.
  *
- * The old test was purely GEOMETRIC — normalise the pointer against the canvas
- * box and publish if it lands in 0..1. A panel drawn over the canvas does not
- * move the canvas, so the box still contains the pointer and the position
+ * A purely GEOMETRIC test — normalise the pointer against the canvas box and
+ * publish if it lands in 0..1 — cannot catch it. A panel drawn over the canvas
+ * does not move the canvas, so the box still contains the pointer and the position
  * still looks valid. Measured with Assist open: a point over the visibly
  * exposed canvas hit-tests to `MuiBackdrop-root`, while the canvas's bounding
  * box still covers it. The box cannot see what is in front of it; only a hit
@@ -422,12 +416,12 @@ export const PRESENCE_CURRENT_VERSION = 'current'
 /**
  * The room a session belongs in — PER VERSION, not per document (AGL-2486).
  *
- * Zach's call, after seeing the trade-off: you should only see people editing
- * the version you are editing. Presence used to be keyed per document while
- * the co-edit mirror was keyed per version, so two people on different
- * versions of one screen appeared to each other as collaborators while not one
- * of their edits reached the other — an avatar promising a collaboration that
- * could not happen, which is the same family of lie as a phantom cursor.
+ * You see only the people editing the version you are editing, because the
+ * co-edit mirror is keyed per version too. Keying presence per DOCUMENT
+ * instead would put two people on different versions of one screen in the same
+ * room, showing each other as collaborators while not one of their edits
+ * crosses over — an avatar promising a collaboration that cannot happen, which
+ * is the same family of lie as a phantom cursor.
  *
  * The `v` segment is a literal, and it is what makes the transition safe: it
  * sits beside the LEGACY `$uid` wildcard in the rules rather than replacing
@@ -499,7 +493,6 @@ function report(
  * Each session used to pick its own colour by hashing `uid:sessionId` into a
  * six-entry palette and writing the result into its own RTDB row. Independent
  * picks from a six-wide palette collide about one time in six, which is
- * exactly what Zach saw: "sometimes our same user gets the same color" — two
  * discs purple in one screenshot, purple and orange in the next. Nothing was
  * wrong with the input's uniqueness; the OUTPUT space was small and nobody
  * was reconciling it. Two sessions sharing a colour defeats the entire point
@@ -586,12 +579,13 @@ export function projectRoom(
    *
    * Both halves of that are load-bearing.
    *
-   * LIVE, because this used to be every row in the room. A room accumulates
-   * reaped rows between sweeps — Zach's held 15 against a palette of 6 — and
-   * once six colours are taken the allocator has nowhere left to probe, so
-   * everything after falls back to its raw hash and collides. The sessions
-   * actually drawn were a subset of that spoiled pool: two `ZG` chips, one
-   * red ring. Dead rows are not on screen and must not hold a colour.
+   * LIVE, not every row in the room. A room accumulates rows awaiting the next
+   * reap — 15 of them against a palette of 6 is ordinary — and once six colours
+   * are taken the allocator has nowhere left to probe, so every session after
+   * that falls back to its raw hash and collides with whatever shares it. The
+   * sessions actually on screen are a subset of that pool, so they inherit the
+   * collisions without ever having caused them. Dead rows must not hold a
+   * colour.
    *
    * INCLUDING THIS TAB, because every viewer has to compute the same
    * allocation. Each viewer draws a different subset — its own tab is left
@@ -631,10 +625,9 @@ export function projectRoom(
       // rules refuse a session node without one, and the client's own
       // fallback chain ends at 'Someone', so an entry lacking it is not an
       // entry. It is a stray field under a malformed uid node, or a fixture
-      // somebody left behind (an agent wrote two `zzTESTCOLLAB` rows into
-      // PRODUCTION on 2026-08-22, one of them into Zach's own org). Rendered,
-      // those became the `?` discs Zach reported: `String(undefined ?? '')`
-      // is empty, and empty initials draw a question mark.
+      // row left behind in the database. Rendered, such a row draws a `?`
+      // disc: `String(undefined ?? '')` is empty, and empty initials fall
+      // through to a question mark.
       //
       // Skipped rather than defaulted, because a phantom collaborator is
       // worse than a missing one — it draws a cursor and a selection box over
@@ -703,8 +696,8 @@ export type RoomProjection = ReturnType<typeof projectRoom>
  *
  * ## The runaway this exists to stop
  *
- * Zach, 2026-08-24, in the besigner on a marketing screen — not a warning, a
- * React bail-out:
+ * Unguarded, this hook takes the besigner down with a React bail-out rather
+ * than a warning:
  *
  *   Maximum update depth exceeded.
  *     at usePresence.useEffect.project      (use-presence.ts, setEntries)
@@ -1017,8 +1010,8 @@ function presenceAuth(app: FirebaseApp): Auth {
  * A SAML user has `displayName: undefined`, `photoURL: undefined` and an
  * empty `providerData` — GCIP puts the assertion's mapped attributes under
  * `firebase.sign_in_attributes` and never promotes them to top-level claims.
- * So presence listed an SSO colleague by their email address while listing
- * everyone else by name, which is how Zach spotted it.
+ * Without this, presence lists an SSO colleague by email address while listing
+ * everyone else by name.
  *
  * The claims are already in hand: effect 1 fetches an ID token to call the
  * broker. Decoding it locally costs nothing and needs no round trip. Only
@@ -1125,11 +1118,11 @@ export function usePresence(options: {
    * WATCH the room without joining it (AGL-2486).
    *
    * For the surfaces that report presence without being an editing session —
-   * a document's detail page, where Zach's ask is to "identify who is
-   * currently in the document already BEFORE joining". Reading someone's
-   * answer to that question must not change it: if merely opening a detail
-   * page announced you, then everybody browsing would be reported as editing,
-   * and the signal the page exists to give would be the thing it destroys.
+   * a document's detail page, which answers "who is in this document already"
+   * before anyone opens the editor. Reading that answer must not change it: if
+   * opening a detail page announced you, everybody merely browsing would be
+   * reported as editing, and the page would destroy the signal it exists to
+   * give.
    *
    * It suppresses every WRITE — the announce, the `onDisconnect` arm, the
    * heartbeat, the selection and cursor broadcasts, and the removal on
@@ -1382,17 +1375,16 @@ export function usePresence(options: {
         // it with a token scoped to ITS OWN org. The newest sign-in silently
         // took over every other tab.
         //
-        // Reproduced deterministically on 2026-08-22: with a test-org screen
-        // open and an aglyn-org screen opened after it, the first tab's room
-        // read was refused —
+        // With a persistent app the failure is deterministic: open a screen in
+        // one org, then a screen in another, and the first tab's room read is
+        // refused —
         //   `presence/hz_KgetqSq/screen/4L_o499p_p: permission_denied`
         //   `[presence token is scoped to org jWmGooWE3L ...]`
-        // — the diagnostic below prints exactly that. This is what Zach saw
-        // as presence "going away after a period of not editing" and the
-        // error coming back: nothing to do with idling, everything to do with
-        // whichever tab last re-minted. Two accounts in two windows made it
-        // constant, and it also explains why a single tab, or two tabs on the
-        // SAME org, looked perfectly healthy in testing.
+        // — which is exactly what the diagnostic below prints. It reads from
+        // the outside like presence dropping out after a period of not
+        // editing, but idling has nothing to do with it: the trigger is
+        // whichever tab last re-minted. A single tab, or two tabs on the SAME
+        // org, stays healthy and hides the whole thing.
         //
         // ## Why ephemeral is right, not just a workaround
         //
@@ -1488,9 +1480,8 @@ export function usePresence(options: {
      *
      * ## `onDisconnect` is a ONE-SHOT, which is the whole leak
      *
-     * This used to `set()` the row and register `onDisconnect().remove()`
-     * once, unsequenced, at mount. Read in the SDK
-     * (`@firebase/database/dist/index.node.cjs.js`):
+     * Registering `onDisconnect().remove()` once at mount is not enough. Read
+     * in the SDK (`@firebase/database/dist/index.node.cjs.js`):
      * `repoRunOnDisconnectEvents` applies the pending tree when the socket
      * drops and then does `repo.onDisconnect_ = newSparseSnapshotTree()`,
      * while `restoreState_` on reconnect only replays
@@ -1499,13 +1490,13 @@ export function usePresence(options: {
      * re-sent.
      *
      * So the very first blip — a sleeping laptop, a dropped wifi packet, a
-     * frozen background tab — spent the handler. Two things followed, and
-     * they are the two bugs Zach reported as separate complaints:
+     * frozen background tab — spends the handler, and two failures follow from
+     * that one fact:
      *
-     *  - the server removed the row while the tab was still open, and nothing
-     *    re-announced it, so presence "went away" and never came back;
-     *  - the NEXT close had no handler at all, so the row leaked. Measured on
-     *    production 2026-08-22: ~20 dead rows, the oldest four hours old.
+     *  - the server removes the row while the tab is still open, and nothing
+     *    re-announces it, so presence disappears and never comes back;
+     *  - the NEXT close has no handler at all, so the row leaks. On production
+     *    that accumulates around 20 dead rows, the oldest hours old.
      *
      * ## Why `.info/connected`
      *
@@ -1521,8 +1512,8 @@ export function usePresence(options: {
      * ## Why the handler is armed FIRST
      *
      * `onDisconnect().remove()` resolves when the SERVER has recorded it.
-     * Writing the row first left a window in which the row existed and its
-     * cleanup did not — close the tab inside that window and it leaks. The
+     * Writing the row first opens a window in which the row exists and its
+     * cleanup does not — close the tab inside that window and it leaks. The
      * write is chained onto the arm so the ordering is a fact, not a race.
      */
     const announce = () =>

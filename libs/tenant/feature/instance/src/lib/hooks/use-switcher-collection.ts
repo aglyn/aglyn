@@ -364,7 +364,7 @@ export function useSwitcherCollection<T = DocumentData>(
         setError(true)
         setLoading(false)
         // …and tell the session detector, which this read used to keep to
-        // itself (AGL-2486). Zach's production report was a Sites list that
+        // itself (AGL-2486). the production report was a Sites list that
         // "could not be loaded" while the console had no idea the session
         // was the reason: the switcher is one of the first reads on the
         // page and it contributed ZERO evidence toward the stale verdict,

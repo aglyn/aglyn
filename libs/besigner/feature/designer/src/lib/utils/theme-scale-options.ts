@@ -90,14 +90,13 @@ const FONT_SIZE_VARIANTS: ReadonlyArray<{ key: string; label: string }> = [
 ]
 
 /**
- * Every variant the theme defines, not just the ones MUI ships (Zach
- * 2026-08-25).
+ * Every variant the theme defines, not just the ones MUI ships (AGL-2486).
  *
  * The list above names MUI's own variants in reading order; a host that adds
  * rungs of its own — Aglyn's theme carries `lede`, `bodyCompact` and `micro`
- * for the 17/13/11px steps MUI has no name for — had no way to offer them,
- * so pages reached for the pixels instead. Discovering the extras keeps the
- * curated order for the familiar ones and appends whatever else the host
+ * for the 17/13/11px steps MUI has no name for — is unreachable from a fixed
+ * list, which leaves an author typing the pixels. Discovering the extras keeps
+ * the curated order for the familiar ones and appends whatever else the host
  * defined, sorted small to large so the ramp still reads.
  *
  * A variant is anything under `theme.typography` that is an OBJECT carrying a
@@ -150,13 +149,13 @@ export function buildFontSizeScaleOptions(
  * theme-following answer is the one in reach.
  */
 /**
- * Weight tokens are DISCOVERED, not listed (Zach 2026-08-25).
+ * Weight tokens are DISCOVERED, not listed (AGL-2486).
  *
- * This was the four MUI defaults hardcoded, which meant a host that added a
- * weight to its ramp — Aglyn's own theme carries SemiBold 600, ExtraBold 800
- * and Black 900 — got a picker that could not offer it, and the only way to
- * reach the brand's own weight was to type a raw number. Reading the keys off
- * `theme.typography` instead means any host's ramp shows up with no edit here.
+ * Hardcoding MUI's four defaults would hide every weight a host adds to its
+ * own ramp — Aglyn's theme carries SemiBold 600, ExtraBold 800 and Black 900 —
+ * leaving a raw number as the only way to reach the brand's own weight.
+ * Reading the keys off `theme.typography` means any host's ramp shows up with
+ * no edit here.
  *
  * Ordered by the weight each resolves to, so the menu reads light → heavy
  * rather than in whatever order the theme object happened to be written.
@@ -338,9 +337,9 @@ export interface StyleThemeScales {
   shadow: PresetChoiceOption[]
   /** The theme's own faces, then web-safe stacks (AGL-2486). */
   fontFamily: PresetChoiceOption[]
-  /** Whole typography variants — `typography: 'h2'` (Zach 2026-08-25). */
+  /** Whole typography variants — `typography: 'h2'` (AGL-2486). */
   typographyVariant: PresetChoiceOption[]
-  /** Grid/flex gaps on the theme's spacing ladder (Zach 2026-08-25). */
+  /** Grid/flex gaps on the theme's spacing ladder (AGL-2486). */
   gap: PresetChoiceOption[]
 }
 
@@ -387,13 +386,13 @@ function shapeRadiusUnit(theme: ThemeScaleSource | undefined): number {
 
 /**
  * The rounding ladder, named the way an author describes a shape rather
- * than the way CSS spells one (AGL-2486, Zach 2026-08-22).
+ * than the way CSS spells one (AGL-2486).
  *
- * Corner Radius was a text box whose helper offered "8px, 50%, or a theme
- * spacing number" — three value systems in one sentence, two of which are
- * wrong (it is the SHAPE scale, not the spacing scale). Every rung here is
- * a theme multiple except the two that cannot be: a pill needs a radius
- * larger than the box can ever be, and a circle is a percentage.
+ * A text box for corner radius invites three value systems at once — a pixel
+ * length, a percentage, or a theme multiple — and two of them are wrong,
+ * because the theme scale behind this property is SHAPE, not spacing. Every
+ * rung here is a theme multiple except the two that cannot be: a pill needs a
+ * radius larger than the box can ever be, and a circle is a percentage.
  */
 const RADIUS_STEPS: ReadonlyArray<{ step: number; label: string }> = [
   { step: 0, label: 'Square' },
@@ -438,22 +437,18 @@ export function buildCornerRadiusChoices(
 /**
  * Drop-shadow presets named by what they LOOK like (AGL-2486).
  *
- * The old select offered `Subtle` / `Medium` / `Large` and a helper telling
- * the author to *"type any CSS box-shadow under Classes & custom CSS"* —
- * a control advertising its own inadequacy and sending them to a different
- * section. The presets now say what they do, `No shadow` is offered as the
+ * The labels say what the shadow looks like, `No shadow` is offered as the
  * real value it is (a component or the theme may be drawing one), and the
- * escape hatch is a `Custom…` entry in this very control.
+ * escape hatch is a `Custom…` entry in this very control rather than a helper
+ * pointing at the custom-CSS section.
  *
- * The menu is SHORT but the values are theme ELEVATIONS (Zach 2026-08-25).
+ * ## The menu is SHORT but the values are theme ELEVATIONS
  *
- * An earlier pass wrote literal CSS here on the reasoning that MUI's ladder
- * is "25 near-identical Material elevations, a worse menu than four shadows
- * that visibly differ". The menu half of that is right and is kept — nobody
- * should scroll 25 rows. The value half was not: a literal shadow is a
- * bespoke value that ignores `theme.shadows`, so a host that retunes its
- * elevations leaves every stored shadow behind, and the four we shipped
- * matched no token in any theme.
+ * Two constraints pull apart here. MUI's ladder is 25 near-identical Material
+ * elevations, which is a worse menu than a handful of shadows that visibly
+ * differ — nobody should scroll 25 rows. But a literal CSS shadow is a bespoke
+ * value that ignores `theme.shadows`, so a host that retunes its elevations
+ * leaves every stored shadow behind.
  *
  * Both hold at once by curating INDICES: six rungs off the host's own
  * ladder, each stored as the number `boxShadow` already resolves through
@@ -473,9 +468,9 @@ const SHADOW_STEPS: ReadonlyArray<{ elevation: number; label: string }> = [
 ]
 
 /**
- * The literal presets shipped before the ladder existed. Only reached when a
- * theme carries no usable `shadows` array, so the control never degrades to
- * an empty menu on a host with an unusual theme.
+ * Literal CSS shadows, reached only when a theme carries no usable `shadows`
+ * array, so the control never degrades to an empty menu on a host with an
+ * unusual theme.
  */
 const FALLBACK_SHADOWS: ReadonlyArray<{ value: string; label: string }> = [
   { value: '0 1px 3px rgba(0,0,0,0.2)', label: 'Soft — sits on the page' },
@@ -557,8 +552,6 @@ function firstFamily(stack: string): string {
 
 /**
  * Font-family choices: the SITE THEME's own faces first, then web-safe
- * stacks (AGL-2486, Zach 2026-08-23 — *"font family should be a selection
- * and then option for custom"*).
  *
  * The old field was free text carrying the advice *"Prefer theme typography
  * when possible"* — advice with no way to act on it. Leading with the
@@ -601,18 +594,18 @@ export function buildFontFamilyChoices(
 /* ── Typography variant ───────────────────────────────────────────────── */
 
 /**
- * Whole text styles from `theme.typography` (Zach 2026-08-25).
+ * Whole text styles from `theme.typography` (AGL-2486).
  *
- * Every other control in this group sets ONE property, which means matching
- * a heading to the theme took five correct picks in a row — face, size,
- * weight, line height, letter spacing — and getting any of them wrong left
- * text that looked almost right. `typography: 'h2'` is a single sx key that
- * applies all of them at once, and it is the key MUI itself reaches for.
+ * Every other control in this group sets ONE property, so matching a heading
+ * to the theme takes five correct picks in a row — face, size, weight, line
+ * height, letter spacing — and getting any of them wrong leaves text that
+ * looks almost right. `typography: 'h2'` is a single sx key that applies all
+ * of them at once, and it is the key MUI itself reaches for.
  *
- * This is the control whose absence let the press page ship eleven headings
- * at the MUI default `h2` — Light 300 at 60px — while every panel in the
- * besigner reported nothing wrong: there was no field that said "this is a
- * Heading 2", only fields that said "this is 60px" once someone typed it.
+ * Without this control a page can carry eleven headings at MUI's default `h2`
+ * — Light 300 at 60px — while every panel in the besigner reports nothing
+ * wrong: no field says "this is a Heading 2", only fields that say "this is
+ * 60px" once somebody types it.
  *
  * The hint names what the variant resolves to in THIS theme rather than in
  * the abstract, because "Heading 2" means nothing until you know the host
@@ -639,17 +632,17 @@ export function buildTypographyVariantChoices(
 /* ── Gap ──────────────────────────────────────────────────────────────── */
 
 /**
- * Grid and flex gaps on the theme's spacing ladder (Zach 2026-08-25).
+ * Grid and flex gaps on the theme's spacing ladder (AGL-2486).
  *
- * `gap`, `rowGap` and `columnGap` were free-text boxes, which reads as a
- * CSS length question and gets answered with one — but MUI runs all three
- * through `createUnaryUnit(theme, 'spacing', …)`, exactly like margin and
- * padding. So `gap: 2` is a theme multiple that follows a host retuning its
- * unit, and `gap: '16px'` is a bespoke value that does not.
+ * A free-text box for `gap`, `rowGap` or `columnGap` reads as a CSS length
+ * question and gets answered with one — but MUI runs all three through
+ * `createUnaryUnit(theme, 'spacing', …)`, exactly like margin and padding. So
+ * `gap: 2` is a theme multiple that follows a host retuning its unit, and
+ * `gap: '16px'` is a bespoke value that does not.
  *
- * The box styler has offered this ladder for margin and padding since
- * AGL-2486; gaps sit in the Grid and Flex groups, which is why they were
- * missed. Same rungs, same labels, so the two controls agree.
+ * These are the same rungs and the same labels the box styler offers for
+ * margin and padding, so the two controls agree; gaps only sit apart because
+ * they live in the Grid and Flex groups.
  *
  * A `PresetChoiceOption` rather than a `ThemeScaleOption` because the value
  * STORED is a number and that interface is string-only — the same reason

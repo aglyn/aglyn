@@ -176,16 +176,14 @@ type EntryEditorState = {
   id: string | null
   title: string
   /**
-   * The entry's own address segment (AGL-2498).
+   * The entry's own address segment (AGL-2498), overridable by the author.
    *
-   * Zach: *"We are missing the ability to override the default slug."*
-   *
-   * It was never a field. `handleSaveEntry` wrote `slug: slugify(title)` on
-   * EVERY save, which is two problems wearing one coat: there was no way to
-   * choose an address, and — worse — retitling a published post silently
-   * MOVED it. `/blog/our-launch` became `/blog/our-launch-2026` because
-   * somebody tightened a headline, and every inbound link, share and search
-   * result pointed at a 404 that nothing in the console mentioned.
+   * Deriving it — `slug: slugify(title)` on EVERY save — is two problems
+   * wearing one coat: there is no way to choose an address, and, worse,
+   * retitling a published post silently MOVES it. `/blog/our-launch` becomes
+   * `/blog/our-launch-2026` because somebody tightened a headline, and every
+   * inbound link, share and search result points at a 404 that nothing in the
+   * console mentions.
    *
    * Held slugified-on-save rather than slugified-on-keystroke, so typing a
    * space in the middle of a slug does not eat the cursor.
@@ -289,14 +287,12 @@ const isEditorDirty = (
 /**
  * ONE entry — its own route, its own component (AGL-2498).
  *
- * Zach: *"The content collection page flashes before the content detail page
- * appears, that mean they are not separate pages."*
- *
- * They are now. This renders at
- * `…/content/{collectionSlug}/entries/{entryId}` and cannot render the list at
- * all — which is the whole fix. While the entry is still arriving it shows its
- * OWN loading state inside its own chrome, so the address and the page agree
- * from the first paint.
+ * This renders at `…/content/{collectionSlug}/entries/{entryId}` and cannot
+ * render the list at all — which is the point. A component that renders both
+ * paints the list first on a cold load, because that is the only thing it can
+ * paint while the entry is arriving. Here, the entry's own loading state shows
+ * inside its own chrome, so the address and the page agree from the first
+ * paint.
  *
  * The collection, the entries listener, the categories, the authors and the
  * screens come from `useContentScope()` — resolved once in the layout above
@@ -868,10 +864,9 @@ export function EntryDetailPage() {
   /**
    * Everything recorded ABOUT the entry, in one list (AGL-2498).
    *
-   * Zach: *"created at dates, published at dates, scheduled dates, etc."* All
-   * four timestamps were stored and none were readable on the page that writes
-   * them — an author could set a published date in a dialog and then had
-   * nowhere to read it back.
+   * Created, published, scheduled and updated are all stored on the entry, and
+   * all four belong on the page that writes them: an author who sets a
+   * published date in a dialog otherwise has nowhere to read it back.
    *
    * `publishAt` appears only while the entry is SCHEDULED. Showing it always
    * would put a stale future instant beside a published post, one letter away
@@ -1152,14 +1147,14 @@ export function EntryDetailPage() {
                         autoFocus
                       />
                       {/*
-                        The slug is a FIELD now (AGL-2498) — Zach: "We are
-                        missing the ability to override the default slug."
+                        The slug is an editable FIELD, not a derivation
+                        (AGL-2498). It seeds from the title, but once
+                        `slugTouched` is set the title stops driving it.
 
-                        Two separate wrongs it fixes. There was no way to
-                        choose an address at all; and `slug: slugify(title)` on
-                        every save meant retitling a published post silently
-                        MOVED it, 404-ing every inbound link with nothing in
-                        the console to say so.
+                        Deriving it on every save would mean a published entry
+                        MOVES whenever it is retitled, 404-ing every inbound
+                        link, with nothing on this page to say the address had
+                        changed.
                       */}
                       <TextField
                         label="Slug"
@@ -1462,14 +1457,13 @@ export function EntryDetailPage() {
                     contentBordered="all"
                   >
                     {/*
-                      Publication controls, where the writing happens
-                      (AGL-2498). Zach: "We are also missing the ability
-                      schedule publishing on the content collections, only via
-                      the expanded menu on the list."
+                      Publication controls, on the page where the writing
+                      happens rather than only in the list row's menu
+                      (AGL-2498).
 
                       They are the SAME actions the row menu runs — shared
                       through the scope rather than copied — so there is one
-                      behaviour with two doors. Deliberately NOT folded into
+                      behavior with two doors. Deliberately NOT folded into
                       Save: publishing is an explicit act, and a Save that also
                       published would make every typo fix a publication event.
 

@@ -31,6 +31,8 @@ import {
   withBesignerContext,
   type BesignerSaveBaseline,
   type WorkspaceEditorComponentProps,
+  clearServerDraft,
+  writeServerDraft,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_MODIFY_ADD,
@@ -80,11 +82,17 @@ import ReusableComponentsProvider from '../../../../../../../../../../components
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
-import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
+import {
+  buildRoute,
+  Route,
+} from '../../../../../../../../../../constants/route-links'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
 import useScreenLinkRoutes from '../../../../../../../../../../hooks/use-screen-link-routes'
-import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
+import {
+  useHostId,
+  useHostSubdomain,
+} from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
@@ -94,7 +102,6 @@ import PresenceAvatars from '../../../../../../../../../../components/presence-a
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
-
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
@@ -141,7 +148,7 @@ function ComponentBesignerPage(props) {
   // layout at all, and the picker there had no installs to offer.
   usePluginDrawerRegistration(hostId)
   const handleAddElementClick = useAddElementDrawerCallback()
-  const listUrl = buildRoute(Route.HOST_COMPONENTS, { orgSlug,  host })
+  const listUrl = buildRoute(Route.HOST_COMPONENTS, { orgSlug, host })
   const { doc: hostResult } = useHost({ hostId })
   const { doc: componentResult } = useComponent({ hostId, componentId })
   // The browser tab names THIS document, not just its site (AGL-2486).
@@ -149,9 +156,47 @@ function ComponentBesignerPage(props) {
   useDeclareDocumentSubject(componentId, componentResult?.data?.displayName)
   const { data: user } = useUser()
   const publishedVersionId = componentResult?.data?.versionId
+  /**
+   * Did the last save actually LAND? (AGL-1152)
+   *
+   * `handleSave` resolves `void` whether it wrote or refused — a size guard, a
+   * concurrent edit, or nothing-to-save all return early — and `saveAvailable`
+   * is React state that is still stale in the same tick. `onSaved` fires only
+   * on a real write, so this is the one signal `Save & publish` can trust
+   * before promoting. Promoting after a refused save would push the canvas
+   * live without it having been stored.
+   */
+  const savedLandedRef = useRef(false)
+
+  /**
+   * Has this version been SAVED since it was last promoted? (AGL-1152)
+   *
+   * `publishedVersionId === versionId` only says the parent was promoted from
+   * this version at some point — a later save writes the VERSION document and
+   * leaves the PARENT, which is what the tenant actually renders, behind. So
+   * the pointer alone cannot answer "is the live site current". This can, for
+   * the session that did the saving, which is the author who needs the answer.
+   *
+   * Starts false: on arrival the parent holds whatever the last publish left,
+   * and nothing in this session has moved past it.
+   */
+  const [savedSincePublish, setSavedSincePublish] = useState(false)
   // Id-based screen links: a component can contain a link, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
+  /**
+   * Only the LIVE version has a draft (AGL-1152).
+   *
+   * A component's test is NOT `publishedVersionId === versionId` alone, for
+   * the same reason the save button's is not: that says the parent was
+   * promoted from this version once, not that it still matches. A save writes
+   * the version and leaves the parent — which is what the tenant renders —
+   * behind. `savedSincePublish` is the other half, and both are needed here.
+   */
+  const editingLiveVersion = Boolean(
+    versionId && versionId === publishedVersionId,
+  )
+  const [draftPending, setDraftPending] = useState(false)
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
     [firestore, hostId],
@@ -163,9 +208,7 @@ function ComponentBesignerPage(props) {
   const collectionTemplates = useCollectionTemplates(hostId)
   const linkableRoutes = useScreenLinkRoutes({
     templates: collectionTemplates,
-    routingMap: hostResult?.data?.screens as
-      | Record<string, string>
-      | undefined,
+    routingMap: hostResult?.data?.screens as Record<string, string> | undefined,
     screens: screenDocs,
   })
   const screenLinks = useMemo(
@@ -228,8 +271,8 @@ function ComponentBesignerPage(props) {
       await saveNodesGuarded(
         componentVersionRef,
         {
-          nodes: nextNodes as unknown as
-            Aglyn.AglynHostComponentVersion['nodes'],
+          nodes:
+            nextNodes as unknown as Aglyn.AglynHostComponentVersion['nodes'],
         },
         baseline,
       )
@@ -286,6 +329,8 @@ function ComponentBesignerPage(props) {
       docId: componentId,
       versionId,
     },
+    // The SHARED working draft, live version only.
+    firestore: editingLiveVersion ? firestore : undefined,
     // The crash-recovery prompt is withheld while anyone else is in this
     // room (AGL-2486): the mirror already has the unsaved work, so there is
     // nothing to recover and both of its buttons could only take something
@@ -305,7 +350,13 @@ function ComponentBesignerPage(props) {
     // honest answer is the one action that makes it appear. Unconditional
     // because it is true of every component save, on the published version
     // or a draft one.
-    savedMessage: 'Component saved. Publish to update the live pages.',
+    // Suppressed on the live version: `handleSaveToSites` owns the message
+    // there, and it can only be written once the promote has resolved —
+    // "saved" followed by "published" is two toasts for one action.
+    savedMessage:
+      publishedVersionId === versionId
+        ? undefined
+        : 'Component saved to this version. Publish it to update the live pages.',
     queueLoading,
     // A definition's root is the promoted node, not the canvas root, so it
     // has to be wrapped or the canvas has no root and renders nothing
@@ -316,6 +367,16 @@ function ComponentBesignerPage(props) {
         nodes: storedNodes as Record<string, unknown>,
       }) as Aglyn.ProcessableNodes,
     onSaved: () => {
+      // Records that the write LANDED (AGL-1152). `handleSave` resolves
+      // `void` whether it wrote or refused — a size guard, a concurrent edit,
+      // or nothing to save all return early — and `saveAvailable` is React
+      // state that is still stale in the same tick. Promoting after a refused
+      // save would push the canvas live without it having been stored, which
+      // is the one outcome worse than not promoting at all.
+      savedLandedRef.current = true
+      // The version moved; the parent did not. Until a publish the live site
+      // is behind, and the button should say so rather than "Up to date".
+      setSavedSincePublish(true)
       // A save makes Firestore authoritative again, so the live mirror of
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document (AGL-677).
@@ -338,7 +399,7 @@ function ComponentBesignerPage(props) {
       // (up to `SCAN_LIMIT` screens + layouts + components, WITH version
       // bodies) plus a cache drop per dependent path, on every save of a live
       // component — the most frequent event in the editor. The fan-out now
-      // rides `handlePublish` instead: once per deliberate publish, on the
+      // rides `handleSaveAndPublish` instead: once per deliberate publish, on the
       // one write that actually moves the bytes.
       return logActivity('Saved the component', {
         type: 'component',
@@ -394,14 +455,16 @@ function ComponentBesignerPage(props) {
     },
     [updateComponentVersion, markOwnWrite, enqueueSnackbar],
   )
-  const handlePublish = useCallback(async () => {
-    if (publishing) return
-    if (saveAvailable) {
-      return enqueueSnackbar('Save your changes before publishing', {
-        variant: 'warning',
-        persist: false,
-      })
-    }
+  /**
+   * Promote the canvas onto the parent document — the thing the tenant renders.
+   *
+   * SPLIT FROM ITS GUARD (AGL-1152) so a save can reuse it. The guard below
+   * refuses while `saveAvailable`, which is right for a deliberate Publish and
+   * wrong for the save that has just finished: `saveAvailable` is React state
+   * and is still true in the same tick, so a save chaining into the guarded
+   * function would always refuse itself.
+   */
+  const promoteToSites = useCallback(async () => {
     setPublishing(true)
     try {
       // Unwrap the synthetic canvas root: the tenant runtime grafts from
@@ -425,13 +488,17 @@ function ComponentBesignerPage(props) {
       // unresolved on the live site while the editor looked correct.
       const declaredProps = (data as { props?: Aglyn.ReusableComponentProp[] })
         ?.props
-      await updateDoc(doc(firestore, 'hosts', hostId, 'components', componentId), {
-        nodes: publishedNodes,
-        ...(rootId ? { rootId } : {}),
-        props: declaredProps ?? [],
-        versionId,
-        updatedAt: Timestamp.now(),
-      })
+      await updateDoc(
+        doc(firestore, 'hosts', hostId, 'components', componentId),
+        {
+          nodes: publishedNodes,
+          ...(rootId ? { rootId } : {}),
+          props: declaredProps ?? [],
+          versionId,
+          updatedAt: Timestamp.now(),
+        },
+      )
+      setSavedSincePublish(false)
       enqueueSnackbar(
         'Published. Every screen using this component is refreshing now — ' +
           'you do not need to republish them.',
@@ -474,8 +541,6 @@ function ComponentBesignerPage(props) {
       setPublishing(false)
     }
   }, [
-    publishing,
-    saveAvailable,
     firestore,
     hostId,
     componentId,
@@ -486,6 +551,144 @@ function ComponentBesignerPage(props) {
     // The revalidate route authenticates with the caller's ID token, so the
     // signed-in user is a real input to publishing now (AGL-2486).
     user,
+  ])
+
+  /**
+   * SAVE, THEN MAKE IT LIVE — one action (AGL-1152).
+   *
+   * The editor's Save writes the VERSION document, and the tenant renders the
+   * PARENT: `getComponents` reads every component's tree in one query rather
+   * than a version subdoc per component, which is what keeps composing a page
+   * to a single read. So a component save has never changed the live site, and
+   * an author who saved and watched nothing happen had done nothing wrong.
+   *
+   * That asymmetry is real and worth keeping — it is a read optimisation on
+   * the hottest path — so the fix is to maintain the parent copy from the
+   * WRITE side rather than to make every render pay for it.
+   *
+   * Promotes ONLY if the save actually landed. `handleSave` resolves `void`
+   * either way, so `savedLandedRef` is the signal; pushing the canvas live
+   * after a refused save is the one outcome worse than not pushing at all.
+   */
+  /**
+   * Saves the working draft rather than the component the sites are serving.
+   * A component republish pushes into every page that uses it, so the gap
+   * between "saved" and "published" is widest here — which is exactly the gap
+   * a draft is for.
+   */
+  const handleSaveDraft = useCallback(async () => {
+    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
+    const wrote = await writeServerDraft(
+      firestore,
+      { scope: hostId, kind: 'component', docId: componentId, versionId },
+      {
+        nodes,
+        baseStamp: Aglyn.versionStamp(componentResult?.data?.updatedAt),
+        updatedByUid: user?.uid ?? null,
+        updatedByEmail: user?.email ?? null,
+      },
+    ).catch(() => 'failed' as const)
+    if (wrote === 'failed') {
+      enqueueSnackbar('Could not save the draft — your work is still here.', {
+        variant: 'error',
+        persist: false,
+      })
+      return
+    }
+    // Nothing new to store, and saying so is the point (AGL-1483). The
+    // control stays clickable on purpose — a disabled Save is a dead control
+    // the one time it matters (AGL-1262) — so the answer has to come from
+    // the click, and "Draft saved" four times over an untouched document is
+    // how a reader stops believing the message.
+    if (wrote === 'unchanged') {
+      enqueueSnackbar('Already saved — the draft is up to date.', {
+        variant: 'info',
+        persist: false,
+      })
+      return
+    }
+    clearMirrorRef.current?.()
+    setDraftPending(true)
+    enqueueSnackbar('Draft saved — the live sites are unchanged.', {
+      variant: 'success',
+      persist: false,
+    })
+  }, [
+    firestore,
+    hostId,
+    componentId,
+    versionId,
+    componentResult?.data?.updatedAt,
+    user,
+    enqueueSnackbar,
+  ])
+
+  /**
+   * Do the live sites already match this version?
+   *
+   * A component is live only once its tree has been promoted onto the PARENT
+   * document — the pointer alone is not enough, which is the asymmetry with
+   * screens. An unpublished draft makes the sites out of date just as surely
+   * as an unpromoted save does.
+   *
+   * Hoisted out of the button's props (AGL-1483) because the HANDLER needs
+   * the same answer: it is the difference between "nothing to publish" and
+   * "saved, but the live site is still behind".
+   */
+  const livePublished =
+    publishedVersionId === versionId &&
+    !savedSincePublish &&
+    !draftPending &&
+    !draft.available
+
+  const handleSaveAndPublish = useCallback(async () => {
+    if (publishing) return
+    savedLandedRef.current = false
+    await handleSave()
+    /**
+     * A save that did not write is not a reason to stop (AGL-1483).
+     *
+     * It used to be: the guard returned unless the write landed, so a version
+     * that was already saved but not yet promoted could not be published at
+     * all — the button said Publish and silently did nothing, which is the
+     * state the split label exists to name.
+     *
+     * Two different "did not write" cases, and only one of them should stop
+     * here. A REFUSAL — a size guard, a concurrent edit — has already told
+     * the author why, and promoting past it would push a canvas the document
+     * does not hold. NOTHING TO SAVE is not a refusal: the document already
+     * has the tree, so the promote is exactly the step that is left.
+     *  is what tells them apart, and it is also what makes a
+     * second click on an up-to-date document say so instead of republishing.
+     */
+    if (!savedLandedRef.current) {
+      if (livePublished) {
+        return enqueueSnackbar('Already published — the live sites match this version.', {
+          variant: 'info',
+          persist: false,
+        })
+      }
+      if (remoteChanged) return
+    }
+    await promoteToSites()
+    void clearServerDraft(firestore, {
+      scope: hostId,
+      kind: 'component',
+      docId: componentId,
+      versionId,
+    })
+    setDraftPending(false)
+  }, [
+    publishing,
+    handleSave,
+    promoteToSites,
+    livePublished,
+    remoteChanged,
+    enqueueSnackbar,
+    firestore,
+    hostId,
+    componentId,
+    versionId,
   ])
 
   // The site's theme with this site's overrides resolved over it
@@ -535,209 +738,243 @@ function ComponentBesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
-    <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
-    <EntityPickerProvider hostId={hostId}>
-    <ReusableComponentsProvider hostId={hostId}>
-    <BindingPickerProvider hostId={hostId}>
-    <InteractionsProvider hostId={hostId}>
-    <BesignerMediaPickerProvider hostId={hostId}>
-      {hostFontsHref ? (
-        <>
-          <link
-            key="host-fonts-preconnect"
-            rel="preconnect"
-            href="https://fonts.gstatic.com"
-            crossOrigin="anonymous"
-          />
-          <link key="host-fonts" rel="stylesheet" href={hostFontsHref} />
-        </>
-      ) : null}
-      <MainLayout
-        enableAppBarElevation
-        besigner
-        actionsPrefix={
-          <>
-            <BesignerFunctionsButton hostId={hostId} />
-            <BesignerVersionsComponent
-              hostId={hostId}
-              parent={{ kind: 'component', id: componentId }}
-              versionId={versionId}
-              publishedVersionId={publishedVersionId}
-            />
-          </>
-        }
-        backButton={
-          {
-            component: AppLink,
-            componentVariant: 'naked',
-            href: listUrl,
-          } as any
-        }
-        centerNavigationItems={[
-          {
-            id: 'center-nav-file',
-            children: 'File',
-            items: [
-              {
-                id: 'center-nav-file-save',
-                icon: saveAvailable
-                  ? { path: ICON_VARIANT_MODIFY_SAVE.path }
-                  : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
-                children: saveAvailable ? 'Save' : 'Up to Date',
-                onClick: handleSave,
-              },
-              {
-                // Saving records history; publishing is what live sites
-                // actually render (AGL-679).
-                id: 'center-nav-file-publish',
-                disabled: publishing || saveAvailable || !canPublish,
-                children:
-                  publishedVersionId === versionId
-                    ? 'Publish again'
-                    : 'Publish to sites',
-                // A disabled menu item with no reason reads as a bug. The
-                // secondary line says which of the three reasons it is.
-                ...(canPublish
-                  ? {}
-                  : { ListItemTextProps: { secondary: publishBlock } }),
-                onClick: handlePublish,
-              },
-              {
-                // Declared props (AGL-1247): what this component lets each
-                // page vary. Sits with Save/Publish because it is part of
-                // the component's contract, not of the selected element.
-                id: 'center-nav-file-properties',
-                children: 'Properties…',
-                onClick: () => setPropsDialogOpen(true),
-                ListItemTextProps: { inset: true },
-              },
-              {
-                id: 'center-nav-file-close',
-                children: 'Close',
-                href: listUrl,
-                component: AppLink,
-                componentVariant: 'naked',
-                ListItemTextProps: { inset: true },
-              },
-            ],
-          },
-          {
-            id: 'center-nav-edit',
-            children: 'Edit',
-            items: [
-              {
-                id: 'center-nav-edit-undo',
-                children: 'Undo',
-                onClick: () => Aglyn.canvas.undo(),
-                disabled: !Aglyn.canvas.canUndo,
-                ListItemTextProps: { inset: true },
-              },
-              {
-                id: 'center-nav-edit-redo',
-                children: 'Redo',
-                onClick: () => Aglyn.canvas.redo(),
-                disabled: !Aglyn.canvas.canRedo,
-                ListItemTextProps: { inset: true },
-              },
-              {
-                type: 'divider',
-              },
-              {
-                id: 'center-nav-edit-rawjson',
-                children: 'Raw JSON',
-                onClick: () => openJsonEditor(),
-                ListItemTextProps: { inset: true },
-              },
-            ],
-          },
-          {
-            id: 'center-nav-insert',
-            children: 'Insert',
-            items: [
-              {
-                id: 'center-nav-insert-element',
-                icon: {
-                  path: ICON_VARIANT_MODIFY_ADD.path,
-                },
-                children: 'New Element',
-                // Capture the current selection as the insert target when
-                // the picker opens. Passing the callback directly handed the
-                // menu click event in as `parent`, which both detached the
-                // created node from the tree and broke placement-constraint
-                // validation (AGL-537).
-                onClick: () =>
-                  handleAddElementClick(Besigner.focus.getLastSelected()),
-              },
-            ],
-          },
-        ]}
-      >
-        {/* `hasError`, not the raw `error` — see the screens besigner
+      <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+        <EntityPickerProvider hostId={hostId}>
+          <ReusableComponentsProvider hostId={hostId}>
+            <BindingPickerProvider hostId={hostId}>
+              <InteractionsProvider hostId={hostId}>
+                <BesignerMediaPickerProvider hostId={hostId}>
+                  {hostFontsHref ? (
+                    <>
+                      <link
+                        key="host-fonts-preconnect"
+                        rel="preconnect"
+                        href="https://fonts.gstatic.com"
+                        crossOrigin="anonymous"
+                      />
+                      <link
+                        key="host-fonts"
+                        rel="stylesheet"
+                        href={hostFontsHref}
+                      />
+                    </>
+                  ) : null}
+                  <MainLayout
+                    enableAppBarElevation
+                    besigner
+                    centerPrefix={
+                      <BesignerDocumentSwitcherComponent
+                        hostId={hostId}
+                        current={{ kind: 'component', id: componentId }}
+                      />
+                    }
+                    actionsPrefix={
+                      <>
+                        <BesignerFunctionsButton hostId={hostId} />
+                        <BesignerVersionsComponent
+                          hostId={hostId}
+                          parent={{ kind: 'component', id: componentId }}
+                          versionId={versionId}
+                          publishedVersionId={publishedVersionId}
+                        />
+                      </>
+                    }
+                    backButton={
+                      {
+                        component: AppLink,
+                        componentVariant: 'naked',
+                        href: listUrl,
+                      } as any
+                    }
+                    centerNavigationItems={[
+                      {
+                        id: 'center-nav-file',
+                        children: 'File',
+                        items: [
+                          {
+                            id: 'center-nav-file-save',
+                            icon: saveAvailable
+                              ? { path: ICON_VARIANT_MODIFY_SAVE.path }
+                              : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
+                            children: saveAvailable
+                              ? 'Save draft'
+                              : 'Up to Date',
+                            onClick: handleSave,
+                          },
+                          {
+                            /*
+                  `Publish again` IS GONE (AGL-1152). It was the second half of
+                  an action that reads as one, it sat in a menu an author had to
+                  go looking for, and on the live version its name described
+                  doing something twice for a change that had never gone out
+                  once. `Save & publish` replaces it AND `Publish to sites`:
+                  saving a draft version and promoting it are the same two
+                  writes in the same order, whichever version you are on.
+                */
+                            id: 'center-nav-file-save-publish',
+                            disabled: publishing || !canPublish,
+                            children: 'Save & publish',
+                            // A disabled menu item with no reason reads as a bug. The
+                            // secondary line says which of the reasons it is.
+                            ...(canPublish
+                              ? {}
+                              : {
+                                  ListItemTextProps: {
+                                    secondary: publishBlock,
+                                  },
+                                }),
+                            onClick: handleSaveAndPublish,
+                          },
+                          {
+                            // Declared props (AGL-1247): what this component lets each
+                            // page vary. Sits with Save/Publish because it is part of
+                            // the component's contract, not of the selected element.
+                            id: 'center-nav-file-properties',
+                            children: 'Properties…',
+                            onClick: () => setPropsDialogOpen(true),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-file-close',
+                            children: 'Close',
+                            href: listUrl,
+                            component: AppLink,
+                            componentVariant: 'naked',
+                            ListItemTextProps: { inset: true },
+                          },
+                        ],
+                      },
+                      {
+                        id: 'center-nav-edit',
+                        children: 'Edit',
+                        items: [
+                          {
+                            id: 'center-nav-edit-undo',
+                            children: 'Undo',
+                            onClick: () => Aglyn.canvas.undo(),
+                            disabled: !Aglyn.canvas.canUndo,
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            id: 'center-nav-edit-redo',
+                            children: 'Redo',
+                            onClick: () => Aglyn.canvas.redo(),
+                            disabled: !Aglyn.canvas.canRedo,
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
+                            type: 'divider',
+                          },
+                          {
+                            id: 'center-nav-edit-rawjson',
+                            children: 'Raw JSON',
+                            onClick: () => openJsonEditor(),
+                            ListItemTextProps: { inset: true },
+                          },
+                        ],
+                      },
+                      {
+                        id: 'center-nav-insert',
+                        children: 'Insert',
+                        items: [
+                          {
+                            id: 'center-nav-insert-element',
+                            icon: {
+                              path: ICON_VARIANT_MODIFY_ADD.path,
+                            },
+                            children: 'New Element',
+                            // Capture the current selection as the insert target when
+                            // the picker opens. Passing the callback directly handed the
+                            // menu click event in as `parent`, which both detached the
+                            // created node from the tree and broke placement-constraint
+                            // validation (AGL-537).
+                            onClick: () =>
+                              handleAddElementClick(
+                                Besigner.focus.getLastSelected(),
+                              ),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    {/* `hasError`, not the raw `error` — see the screens besigner
             (AGL-1066). */}
-        {hasError || notFound ? (
-          <Stack
-            sx={{
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Typography>{'Not found'}</Typography>
-          </Stack>
-        ) : status === 'loading' ? (
-          LOADING_OVERLAY_ELEMENT
-        ) : (
-          <>
-            <CollaboratorOverlays entries={presence.entries} />
-            <BesignerAppBarComponent
-              onPreview={handlePreview}
-              detailsUrl={listUrl}
-              presence={<PresenceAvatars presence={presence} />}
-              onSave={handleSave}
-              saveAvailable={saveAvailable}
-            />
-            <BesignerDraftAlertComponent
-              draft={draft}
-              noun="component"
-              remoteChanged={remoteChanged}
-            />
-            {/* Shown as soon as their save lands, not on Save — finding out
+                    {hasError || notFound ? (
+                      <Stack
+                        sx={{
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Typography>{'Not found'}</Typography>
+                      </Stack>
+                    ) : status === 'loading' ? (
+                      LOADING_OVERLAY_ELEMENT
+                    ) : (
+                      <>
+                        <CollaboratorOverlays entries={presence.entries} />
+                        <BesignerAppBarComponent
+                          onPreview={handlePreview}
+                          detailsUrl={listUrl}
+                          presence={<PresenceAvatars presence={presence} />}
+                          onSave={
+                            editingLiveVersion ? handleSaveDraft : handleSave
+                          }
+                          onSaveAndPublish={handleSaveAndPublish}
+                          // A component is live only once its tree has been promoted onto
+                          // the PARENT document — the pointer alone is not enough, which
+                          // is the asymmetry with screens this whole change is about.
+                          livePublished={livePublished}
+                          publishBlockedReason={
+                            canPublish ? undefined : publishBlock
+                          }
+                          saveAvailable={saveAvailable}
+                        />
+                        <BesignerDraftAlertComponent
+                          draft={draft}
+                          noun="component"
+                          remoteChanged={remoteChanged}
+                        />
+                        {/* Shown as soon as their save lands, not on Save — finding out
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
-            {remoteChanged && !draft.available ? (
-              <BesignerConflictAlertComponent noun="component" />
-            ) : null}
-            <WorkspaceEditorComponent>
-              <ViewportRootComponent>
-                <ViewportCanvasComponent />
-              </ViewportRootComponent>
-            </WorkspaceEditorComponent>
-          </>
-        )}
-      </MainLayout>
-      {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
-        <JsonEditor
-          open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
-          onClose={closeJsonEditor}
-          onSave={handleJsonSave}
-          defaultValue={Aglyn.canvas.nestedNodes as any}
-        />
-      )}
-      <ComponentPropsDialog
-        open={propsDialogOpen}
-        value={declaredProps}
-        onClose={() => setPropsDialogOpen(false)}
-        onSave={handleSaveDeclaredProps}
-      />
-    </BesignerMediaPickerProvider>
-    </InteractionsProvider>
-    </BindingPickerProvider>
-    </ReusableComponentsProvider>
-    </EntityPickerProvider>
-    </Aglyn.ScreenLinkContext.Provider>
+                        {remoteChanged && !draft.available ? (
+                          <BesignerConflictAlertComponent noun="component" />
+                        ) : null}
+                        <WorkspaceEditorComponent>
+                          <ViewportRootComponent>
+                            <ViewportCanvasComponent />
+                          </ViewportRootComponent>
+                        </WorkspaceEditorComponent>
+                      </>
+                    )}
+                  </MainLayout>
+                  {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+                    <JsonEditor
+                      open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+                      onClose={closeJsonEditor}
+                      onSave={handleJsonSave}
+                      defaultValue={Aglyn.canvas.nestedNodes as any}
+                    />
+                  )}
+                  <ComponentPropsDialog
+                    open={propsDialogOpen}
+                    value={declaredProps}
+                    onClose={() => setPropsDialogOpen(false)}
+                    onSave={handleSaveDeclaredProps}
+                  />
+                </BesignerMediaPickerProvider>
+              </InteractionsProvider>
+            </BindingPickerProvider>
+          </ReusableComponentsProvider>
+        </EntityPickerProvider>
+      </Aglyn.ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )
 }
 
 ComponentBesignerPage.displayName = 'Page:LayoutBesigner'
 
-export default withSitePlugins(withBesignerContext(observer(ComponentBesignerPage)))
+export default withSitePlugins(
+  withBesignerContext(observer(ComponentBesignerPage)),
+)

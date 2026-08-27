@@ -25,7 +25,7 @@
  *
  * The two components each have their own unit spec, and each one passing
  * proves only its own half: the watcher writes a store, the dialog reads
- * one. What Zach asked for is the JOIN — "just automatically show the sign
+ * one. What what was asked for is the JOIN — "just automatically show the sign
  * in again dialog" — and a join is exactly the kind of thing that can be
  * written and never read (`feedback_written_but_never_read`). So this
  * mounts the pair the way `AuthenticatedLayout` does and looks at the

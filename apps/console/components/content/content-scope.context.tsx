@@ -68,19 +68,15 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
  * The content manager was one component rendering either a list or an entry
  * editor, and AGL-2498's first pass gave it three addresses by aliasing three
  * `page.tsx` files at the same component. That kept the data layer single —
- * which was the point — and bought a defect with it:
+ * which was the point — and bought a defect with it: the collection page
+ * flashes before the entry page appears.
  *
- * Zach: *"The content collection page flashes before the content detail page
- * appears, that mean they are not separate pages, they need to be actual
- * separate files and routes in the app directory just like any other page in
- * the console."*
- *
- * He is right, and the flash is structural rather than cosmetic. One component
+ * That flash is structural rather than cosmetic. One component
  * cannot render the detail until its buffer is seeded, and the buffer is
  * seeded from the entries LISTENER — so on a cold load of an entry URL the
  * component renders the only thing it can render meanwhile, which is the list.
- * The address said "entry" and the page said "collection", for as long as
- * Firestore took. No amount of care inside that component removes it; the two
+ * The address says "entry" and the page says "collection", for as long as
+ * Firestore takes. No amount of care inside that component removes it; the two
  * screens have to be two components.
  *
  * ## What that would have cost, and why it does not

@@ -70,7 +70,10 @@ import {
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
 } from './media-upload-limits'
-import { isSvgUploadType, sanitizeSvgBuffer } from './sanitize-svg'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '@aglyn/aglyn/app-utils/sanitize-svg'
 import { resolveOrgMediaBand } from './server/media-storage-band'
 import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
 import {

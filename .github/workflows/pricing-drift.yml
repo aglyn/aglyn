@@ -17,8 +17,8 @@ name: Pricing drift
 # ⛔ The source-of-truth DOC leg only runs where Google Drive is mounted (a
 # developer's machine), so CI checks code ↔ pin ↔ Stripe. That is deliberate
 # and is not a silent gap: the pin was verified line-by-line against the doc
-# when Zach locked the price set on 2026-08-18, and re-verifying the doc is a
-# local `npm run check:pricing-drift`.
+# the price set was locked, and re-verifying the doc is a local
+# `npm run check:pricing-drift`.
 
 on:
   schedule:

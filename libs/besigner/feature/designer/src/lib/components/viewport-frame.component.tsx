@@ -45,6 +45,9 @@ import {
   useCallback,
   useMemo,
 } from 'react'
+import CanvasRevealContext, {
+  CanvasMutedClassesContext,
+} from '../contexts/canvas-reveal-context'
 import { useLayoutChromeContext } from '../contexts/layout-chrome-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import {
@@ -52,6 +55,7 @@ import {
   devicePreviewWidth,
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
+import { applyMutedStyles } from '../utils/muted-styles'
 import { hoistStateSx } from '../utils/state-sx'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
@@ -125,17 +129,16 @@ const ViewportGlobalStyles = (
         all: 'initial',
       },
       // Canvas-sense for aglyn-hidden elements (AGL-592): start closed
-      // like the live site, but reveal while the panel's DIRECT PARENT
-      // carries the selected-within stamp — i.e. the selection is on the
-      // wrapper, the trigger, the panel, or anything inside it. The
-      // direct-child combinator is load-bearing: the stamp cascades up
-      // to the root leaf, so a descendant combinator would reveal every
-      // hidden element whenever anything on the page is selected.
+      // like the live site, and stay closed unless the leaf itself is
+      // flagged as revealed. `node-leaf` decides that from the reveal
+      // toggle and the selection and stamps the flag on the hidden
+      // element — the same element this rule hides — so no wrapper a
+      // component renders around its children can separate the two.
       // Expressed as a :not() guard (not hide-then-revert) so a revealed
-      // panel keeps its natural display; :where() keeps specificity at a
-      // single class. Injected into the closed shadow root via the
-      // shadow-scoped emotion cache — the live tenant is untouched.
-      '.aglyn-hidden:not(:where([data-aglyn-selected-within] > *))': {
+      // panel keeps its natural display. Injected into the closed shadow
+      // root via the shadow-scoped emotion cache — the live tenant is
+      // untouched.
+      '.aglyn-hidden:not([data-aglyn-revealed])': {
         display: 'none !important',
       },
     }}
@@ -180,23 +183,43 @@ const ThemedElementContainer = ({ children }) => {
   // the width transform at the top level.
   const [heldState] = useAglynBesignerFlag('heldState')
   const [heldStateNodeId] = useAglynBesignerFlag('heldStateNodeId')
+  // Declarations switched off for comparison (AGL-2486). Third rider on the
+  // same canvas-only transform, and it runs FIRST: a muted base declaration
+  // has to be gone before a held state's slice is folded over it, and a muted
+  // slice declaration has to leave the slice so the base shows through.
+  const [mutedStyles] = useAglynBesignerFlag('mutedStyles')
   const sxTransform = useMemo(() => {
     const held = heldState && heldStateNodeId ? heldState : null
-    if (deviceWidth == null && !held) return undefined
+    const muted = mutedStyles?.length ? mutedStyles : null
+    if (deviceWidth == null && !held && !muted) return undefined
     return (sx: unknown, nodeId?: string) => {
+      const unmuted = muted ? applyMutedStyles(sx, nodeId, muted) : sx
       const scoped =
-        held && nodeId === heldStateNodeId ? hoistStateSx(sx, held) : sx
+        held && nodeId === heldStateNodeId
+          ? hoistStateSx(unmuted, held)
+          : unmuted
       return deviceWidth == null
         ? scoped
         : resolveSxForDeviceWidth(scoped, deviceWidth)
     }
-  }, [deviceWidth, heldState, heldStateNodeId])
+  }, [deviceWidth, heldState, heldStateNodeId, mutedStyles])
+  // Elements the author opened up for designing (AGL-592). Subscribed once
+  // here, exactly like the held state above, and handed down by context so a
+  // canvas of several hundred leaves carries one subscription rather than one
+  // per element.
+  const [revealedNodeIds] = useAglynBesignerFlag('revealedNodeIds')
+  // Classes switched off for comparison (AGL-2486), subscribed the same way.
+  const [mutedClasses] = useAglynBesignerFlag('mutedClasses')
   return (
     <ThemeProvider theme={canvasTheme}>
       <CssBaseline />
-      <LeafSxTransformContext.Provider value={sxTransform}>
-        {children}
-      </LeafSxTransformContext.Provider>
+      <CanvasRevealContext.Provider value={revealedNodeIds}>
+        <CanvasMutedClassesContext.Provider value={mutedClasses}>
+          <LeafSxTransformContext.Provider value={sxTransform}>
+            {children}
+          </LeafSxTransformContext.Provider>
+        </CanvasMutedClassesContext.Provider>
+      </CanvasRevealContext.Provider>
     </ThemeProvider>
   )
 }
@@ -292,8 +315,17 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
       }}
       {...rest}
     >
-      <NodeOverlay data-aglyn="overlay:selected" variant="selected" />
+      {/* Document order is the only thing separating these two. Each
+          overlay root is a fixed-position popper and therefore its own
+          stacking context, so a z-index declared inside one cannot lift it
+          past the other — the roots paint in the order they are rendered.
+          The overlay carrying the action strip goes LAST so its buttons stay
+          above the other overlay's outline, which draws the SELECTED
+          treatment whenever the pointer is resting on the selected node,
+          i.e. whenever someone is reaching for those buttons. The canvas
+          chrome rendered after them keeps painting above both. */}
       <NodeOverlay data-aglyn="overlay:hovered" variant="hovered" />
+      <NodeOverlay data-aglyn="overlay:selected" variant="selected" />
       <CanvasDropIndicator />
       <InlineTextEditorComponent />
       <InlineMarkdownEditorComponent />
@@ -301,8 +333,9 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
   )
 })
 
-export interface ViewportFrameComponentProps
-  extends ComponentProps<typeof ViewportFrame> {}
+export interface ViewportFrameComponentProps extends ComponentProps<
+  typeof ViewportFrame
+> {}
 
 export const ViewportFrameComponent = forwardRef<
   any,

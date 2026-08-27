@@ -460,7 +460,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
 
     it.each([
       ['Announcement bar & popups', 'marketingOverlays', 1],
-      ['CDN & responsive images', 'mediaCdn', 1],
+      // Column 0 = Free as of 2026-08-26 (AGL-1152). This row is the reason
+      // the feature matrix is now a tracked document: it was published here
+      // and drawn in Figma while no pricing document recorded the gate at all.
+      ['CDN & responsive images', 'mediaCdn', 0],
       ['AI assist', 'aiAssist', 2],
       ['Per-screen analytics', 'screenAnalytics', 2],
       ['Sell on the marketplace', 'marketplaceSelling', 2],
@@ -567,12 +570,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
 
     it('Contacts per 1,000 over band — $1 · $0.75 · $0.50 · $0.40 · $0.25 · —', () => {
       // Agency is NULL, and the em dash on the published page is the whole
-      // point (AGL-2482, decided by Zach 2026-08-21). Its `contactsPerHost`
-      // is UNLIMITED, so an overage rate there advertises a fee that cannot
-      // be charged: `checkContactQuota` computes `Math.max(0, used -
-      // Infinity)`, which is 0 at every usage level. No charged price moved
-      // — the $0.20 was unreachable — so this is the published page catching
-      // up with what the code always did.
+      // point (AGL-2482). Its `contactsPerHost` is UNLIMITED, so an overage
+      // rate there advertises a fee that cannot be charged:
+      // `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is
+      // 0 at every usage level. No charged price moves either way — the rate
+      // was unreachable — so this is the published page agreeing with what
+      // the code does.
       expect(PAID.map((p) => PLAN_PRICING[p].extraContactsUsdPer1k)).toEqual([
         1, 0.75, 0.5, 0.4, 0.25, null,
       ])

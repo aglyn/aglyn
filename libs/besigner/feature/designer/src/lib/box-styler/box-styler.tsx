@@ -16,6 +16,11 @@
  */
 
 import {
+  type FieldMuteAction,
+  FIELD_MUTED_STYLES,
+  FieldMuteButton,
+} from '@aglyn/shared-ui-jsx-forms'
+import {
   Box,
   Collapse,
   Stack,
@@ -94,16 +99,30 @@ export interface BoxStylerProps {
   /** The element's border shorthand, drawn in the diagram for context. */
   border?: string
   onChange?: (measurements?: Measurements) => void
+  /**
+   * The mute control for one side, resolved when that side is opened
+   * (AGL-2486). Each side is its own declaration, and the editor shows one
+   * at a time, so the eye belongs beside the side's own caption.
+   */
+  muteForSide?: (side: string, label?: unknown) => FieldMuteAction | undefined
 }
 
 export const BoxStyler = forwardRef<any, BoxStylerProps>(
-  ({ measurements, spacingSteps, border, onChange }: BoxStylerProps, ref) => {
+  (
+    {
+      measurements,
+      spacingSteps,
+      border,
+      onChange,
+      muteForSide,
+    }: BoxStylerProps,
+    ref,
+  ) => {
     const [scope, setScope] = useState<BoxScope>('each')
     const [editing, setEditing] = useState<keyof Measurements | null>(null)
 
     /**
-     * The side the collapsing panel keeps showing on the way OUT
-     * (AGL-2486, Zach 2026-08-23).
+     * The side the collapsing panel keeps showing on the way OUT (AGL-2486).
      *
      * `<Collapse in={...}>{editing ? <Editor/> : null}</Collapse>` opens
      * with an animation and closes with none: the moment `editing` goes
@@ -119,6 +138,11 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
       if (editing) lastEditing.current = editing
     }, [editing])
     const shown = editing ?? lastEditing.current
+    // Each side is its own sx declaration, so the mute is resolved for the
+    // side on screen rather than for the box as a whole.
+    const sideMute = shown
+      ? muteForSide?.(shown as string, SIDE_LABELS[shown])
+      : undefined
 
     const handleSelect = useCallback(
       (key: keyof Measurements) =>
@@ -189,11 +213,16 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
 
         <Collapse in={Boolean(editing)} unmountOnExit>
           {shown ? (
-            <Stack sx={{ mt: 1 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                {SIDE_LABELS[shown]}
-                {scope && scope !== 'each' ? ` (${scope})` : ''}
-              </Typography>
+            <Stack
+              sx={[{ mt: 1 }, sideMute?.muted ? FIELD_MUTED_STYLES : null]}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                  {SIDE_LABELS[shown]}
+                  {scope && scope !== 'each' ? ` (${scope})` : ''}
+                </Typography>
+                <FieldMuteButton mute={sideMute} />
+              </Box>
               <SpacingEditor
                 // Keyed by side so moving between sides remounts the
                 // editor rather than carrying the previous one's custom
@@ -214,11 +243,10 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
           ) : null}
         </Collapse>
 
-        {/* The legend stays. Removing it was part of a redraw Zach did not
-            ask for — he liked this control as it was, and the key belongs
-            to the treatment he liked. It gains the border swatch, because
-            the diagram now has a border region for the BORDER label to
-            sit on. */}
+        {/* The legend is the key to the diagram's textures, and it carries a
+            swatch for every region the diagram paints — the border ring
+            included, since that is where the BORDER label sits. Drop a row
+            and the matching texture becomes unexplained. */}
         <Legend
           direction="row"
           spacing={1}

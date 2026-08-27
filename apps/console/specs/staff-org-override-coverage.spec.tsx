@@ -21,15 +21,15 @@ import { PLAN_ENTITLEMENTS, RELEASE_FLAGS } from '@aglyn/aglyn'
 /**
  * Coverage of the staff override surface (AGL-1635).
  *
- * Zach reported the admin bar missing from the org override dialog. The
- * cause was not one forgotten flag — it was that the dialog's field lists
- * could silently fall behind their sources:
+ * A field the dialog does not list is a grant staff cannot make, and the
+ * dialog's lists fall behind their sources silently. Three separate ways, all
+ * of which this file makes loud:
  *
- *  - `FLAG_FIELDS` was derived (AGL-549) and was complete;
- *  - `QUOTA_FIELDS` was hand-written and had drifted EIGHT keys behind the
- *    plan model, including all three transaction-fee percentages;
- *  - release flags had no per-org override at ALL, which is why
- *    `release_edit_bar` could not be granted to one customer.
+ *  - `FLAG_FIELDS` is derived (AGL-549), so it stays complete on its own;
+ *  - a hand-written `QUOTA_FIELDS` drifts — eight keys behind the plan model,
+ *    including all three transaction-fee percentages;
+ *  - a release flag with no per-org override cannot be granted to one
+ *    customer at all, whatever the dialog shows.
  *
  * These are drift guards, not example tests: each compares the rendered
  * surface against its SOURCE OF TRUTH, so a key added later is covered

@@ -23,7 +23,7 @@
 /**
  * AGL-2092: a designed error screen does not spend the plan's screen allowance.
  *
- * Zach's decision, 2026-08-18, against the rule `count-billable-screens.ts`
+ * the decision, 2026-08-18, against the rule `count-billable-screens.ts`
  * already states — `screenClaimsToBeAPage`, which asks whether the screen
  * occupies a URL OF ITS OWN. A collection's entry template does not and is
  * excluded (AGL-1173); its LIST template does (`/{collectionSlug}` renders that

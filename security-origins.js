@@ -180,7 +180,30 @@ function baseCspDirectives(isProduction) {
   // by anyone. `'self'` is the strict reading of an empty allowlist and is
   // never wrong: a page may always frame itself (AGL-2446).
   const ancestors = safe.length ? safe.join(' ') : "'self'"
-  return `object-src 'none'; base-uri 'self'; frame-ancestors ${ancestors}`
+  /**
+   * `worker-src` and `manifest-src` (AGL-1152). Both were unconstrained, and
+   * because this policy carries NO `default-src` there was nothing for them to
+   * fall back to — an injected script could start a worker from any origin it
+   * liked, and a worker is the most useful thing an injection can get: it keeps
+   * running after the page moves on, and it is out of sight of anything
+   * watching the document.
+   *
+   * Safe to ENFORCE rather than report first, which the rest of this file
+   * rightly defaults to, because both were checked against real usage instead
+   * of assumed: there is no `new Worker`, `new SharedWorker` or
+   * `serviceWorker.register` anywhere in apps/ or libs/, and the only manifest
+   * is `/manifest.webmanifest`, which the tenant middleware rewrites to its own
+   * `/api/manifest` — same origin either way.
+   *
+   * `blob:` is allowed for workers and not for the manifest: a bundler or a
+   * library may legitimately mint a worker from a blob, and blocking the
+   * REMOTE origin is what closes the exfiltration path. A manifest has no such
+   * pattern, so it gets the tighter `'self'`.
+   */
+  return (
+    `object-src 'none'; base-uri 'self'; frame-ancestors ${ancestors}; ` +
+    `worker-src 'self' blob:; manifest-src 'self'`
+  )
 }
 
 /**
@@ -326,6 +349,105 @@ function imgSrcDirective(isProduction) {
 }
 
 /**
+ * The other three owner-widenable directives (AGL-1152): media, fonts, and
+ * where a form may post.
+ *
+ * Same shape as `tenantImgSrcDirective` and the same reasoning, so read that
+ * first. What differs is only what each one is allowed to fall back to, and
+ * these are REPORT-ONLY at the time of writing — see the middleware. That is
+ * not timidity, it is the doctrine this file keeps: our own code can be
+ * measured, a published customer site cannot. A site embedding a Vimeo player
+ * or a Google font is doing something legitimate that no amount of reading our
+ * repo would reveal, so the browser names them first and the flip to enforcing
+ * comes after the reports are quiet.
+ *
+ * The owner's list is live either way — it is what the eventual enforcing
+ * header will carry, so approving a host now is not wasted work.
+ */
+function tenantOwnerWidenedDirective(
+  directive,
+  isProduction,
+  approvedHosts,
+  siteOrigins,
+  extraSources = [],
+) {
+  const development = isProduction
+    ? []
+    : ['http://localhost:*', 'http://127.0.0.1:*']
+  const sources = ["'self'"]
+    .concat(extraSources)
+    // The site's own addresses, always — a custom domain gives a site TWO
+    // origins and `'self'` is only the one it was served from.
+    .concat(approvedImageHostSources(siteOrigins))
+    .concat(approvedImageHostSources(approvedHosts))
+    .concat(development)
+  return `${directive} ${sources.join(' ')}`
+}
+
+/**
+ * Video and audio. `data:`/`blob:` because an uploaded clip may be either,
+ * and `TENANT_IMAGE_ORIGINS` because an upload is an upload — a free-tier org
+ * without the paid `mediaCdn` entitlement stores an absolute
+ * `firebasestorage.googleapis.com` URL for a video exactly as it does for an
+ * image. Pinned for the same reason and not owner-removable: dropping it would
+ * blank a free-tier site's own uploads.
+ */
+function tenantMediaSrcDirective(isProduction, approvedMediaHosts, siteOrigins) {
+  return tenantOwnerWidenedDirective(
+    'media-src',
+    isProduction,
+    approvedMediaHosts,
+    siteOrigins,
+    ['data:', 'blob:'].concat(TENANT_IMAGE_ORIGINS),
+  )
+}
+
+/**
+ * Web fonts. `data:` covers a font inlined into a stylesheet.
+ *
+ * `fonts.gstatic.com` is PINNED, and this is measurement rather than
+ * generosity: `host-theme.ts` builds a `fonts.googleapis.com/css2` link for
+ * any theme that names Google families, and `app/[host]/layout.tsx`
+ * preconnects to `fonts.gstatic.com` — which is where the font FILES come
+ * from, and so the origin this directive decides on. Enforcing without it
+ * would strip the typeface from every themed site on the platform, for a
+ * choice its owner made in our own theme editor.
+ *
+ * (The stylesheet at `fonts.googleapis.com` is a `style-src` question, not a
+ * `font-src` one. That directive is still unconstrained and is a separate,
+ * harder problem — emotion injects inline styles, so it cannot be enforced
+ * without hashes.)
+ */
+const TENANT_FONT_ORIGINS = ['https://fonts.gstatic.com']
+function tenantFontSrcDirective(isProduction, approvedFontHosts, siteOrigins) {
+  return tenantOwnerWidenedDirective(
+    'font-src',
+    isProduction,
+    approvedFontHosts,
+    siteOrigins,
+    ['data:'].concat(TENANT_FONT_ORIGINS),
+  )
+}
+
+/**
+ * Where a form may POST. No `data:`/`blob:` — a form submitting to either is
+ * not a thing a site does on purpose, and this is the directive that decides
+ * whether an injected form can carry what a visitor typed off-site.
+ */
+function tenantFormActionDirective(
+  isProduction,
+  approvedFormActions,
+  siteOrigins,
+) {
+  return tenantOwnerWidenedDirective(
+    'form-action',
+    isProduction,
+    approvedFormActions,
+    siteOrigins,
+  )
+}
+
+/**
  * Third-party hosts the console legitimately loads SCRIPTS from (AGL-1785).
  *
  * Read out of the code that injects each one, on the same rule `IMAGE_ORIGINS`
@@ -335,7 +457,7 @@ function imgSrcDirective(isProduction) {
  *
  * Two are path-scoped. `www.google.com` and `www.gstatic.com` are shared
  * Google hosts serving far more than reCAPTCHA, and a bare host entry for
- * either would authorise all of it — which is the `https:` mistake in
+ * either would authorize all of it — which is the `https:` mistake in
  * miniature. A source expression with a path matches by path PREFIX, so
  * `/recaptcha/` admits the loader and its versioned release bundle and nothing
  * else on those hosts. The known limitation is that CSP drops the path
@@ -412,7 +534,7 @@ const SCRIPT_ORIGINS = [
  * carry an old one, so all 33 scripts violated on every load. That cannot
  * happen here, and the proof is the ENFORCING policy rather than an argument
  * about caching. Console responses carry the same per-request nonce in an
- * enforcing `script-src`, and an inline script can be authorised by nothing but
+ * enforcing `script-src`, and an inline script can be authorized by nothing but
  * its nonce — so any drift between header and bytes would already be a total
  * console outage, not a report flood. This directive reuses that same `nonce`
  * string, so it is exactly as correct as the policy already load-bearing.
@@ -477,7 +599,7 @@ function scriptSrcReportOnlyDirective(nonce, isProduction) {
  * that product page was served from a different origin than the one baked into
  * its stored URL. Fixing this belongs to the commerce sinks (AGL-1725), not to
  * a new entry here — an `*.aglyn.app` wildcard would let one customer's site
- * authorise another's.
+ * authorize another's.
  */
 const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
 
@@ -502,7 +624,7 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * `'self'` is the primitive that handles both, and it handles them exactly:
  * the browser resolves it against the document, so it means `acme.com` on the
  * custom domain and `acme.aglyn.app` on the subdomain, with no list to
- * maintain and no way for one customer's origin to authorise another's.
+ * maintain and no way for one customer's origin to authorize another's.
  *
  * ## What this will report, and what must NOT be done about it
  *
@@ -786,6 +908,225 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   ...GOOGLE_CCTLD_ORIGINS,
 ]
 
+/**
+ * The same vendors for `connect-src`, minus the country domains (AGL-1152).
+ *
+ * The measurement tags do not only fetch pixels — GA4's pageview hit is an
+ * ordinary `fetch`, and it was measured as one: a production load of
+ * `https://aglyn.com/pricing` recorded
+ * `fetch https://www.google-analytics.com/g/collect?v=2&tid=G-…` alongside the
+ * `www.googletagmanager.com/gtag/js` script. Enforcing `connect-src` without
+ * these would leave the tag loaded and every hit refused, which is the worst
+ * shape a measurement failure can have: the site looks fine, the reports go
+ * quiet, and nothing says why.
+ *
+ * Derived from the image list rather than retyped, so a vendor added for one
+ * directive cannot go missing from the other. The ~190 country domains are the
+ * one deliberate subtraction: they exist for a single `<img>` remarketing
+ * beacon on `www.google.<tld>/ads/ga-audiences`, so they buy nothing here and
+ * would put ~4.8 KB of header on every response for a request shape that never
+ * arrives. `https://www.google.com` is kept — it is the vendor's primary host
+ * and is the first entry of the country list only by accident of how that list
+ * is built, so dropping it would single one entry out of the curated set with
+ * no evidence behind the cut.
+ */
+const MEASUREMENT_CONNECT_ORIGINS = ['https://www.google.com'].concat(
+  MEASUREMENT_IMAGE_ORIGINS.filter(
+    (origin) => !GOOGLE_CCTLD_ORIGINS.includes(origin),
+  ),
+)
+
+/**
+ * An origin this deployment was CONFIGURED with, or undefined (AGL-1152).
+ *
+ * The same defensive shape `operatorDomains` uses above, and for the same
+ * reason: an unset or malformed value must contribute NOTHING. An empty string
+ * concatenated into a source list becomes a bare `https://`, which is a
+ * scheme-only source matching every https origin on the internet — the one
+ * outcome worse than a missing entry.
+ *
+ * Returns the ORIGIN rather than the hostname, because these feed directives
+ * where a port is meaningful (`http://localhost:4200` is a real console origin
+ * in development).
+ */
+function configuredOrigin(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return undefined
+  try {
+    const url = new URL(value.includes('://') ? value : `https://${value}`)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/.test(
+      url.hostname,
+    )) {
+      return undefined
+    }
+    return url.origin
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Where a published site's own runtime fetches from (AGL-1152).
+ *
+ * ⚠️ EVERY ENTRY IS A MEASURED REQUEST, not a plausible one. This directive
+ * decides whether an injected script can post a visitor's session or a
+ * shopper's card details to an address of its choosing, and every origin named
+ * here is one it may post to instead.
+ *
+ * `NEXT_PUBLIC_PLUGIN_ORIGIN` is the only cross-origin fetch our own client
+ * code makes on an ordinary page, and it was read off production rather than
+ * out of the source: a load of `https://aglyn.com/` recorded
+ * `fetch https://plugins.aglyn.com/artifacts/{listingId}/{version}/{sha}.bundle`.
+ * That is `loadRealmPlugins` pulling an installed marketplace bundle
+ * (`libs/aglyn/src/lib/plugin-manager/realm-plugins.ts`). Without it every site
+ * with a realm plugin installed loses that plugin, and loses it silently — the
+ * loader catches and logs, so the page renders with the feature simply absent.
+ *
+ * `api.stripe.com` is the storefront Payment Element. `storefront-payment-
+ * element.tsx` mounts Stripe's `CheckoutProvider`, whose session and confirm
+ * calls go to that host from the top document — the payment iframes are a
+ * separate `frame-src` question. Without it a shopper's card submit fails at
+ * the last step of a purchase, which is the most expensive moment on the site
+ * to break.
+ *
+ * ⚠️ WHAT THIS ALSO REACHES, and it is easy to miss: a `srcdoc` iframe
+ * INHERITS this policy. Measured against a real browser — a sandboxed
+ * `srcdoc` child under `connect-src https://example.invalid` reported
+ * `connect-src <- http://127.0.0.1:4522/x.json` and its fetch was refused. The
+ * Custom HTML block's Embed mode is exactly that shape, so an author's pasted
+ * third-party widget fetches under THIS directive, not under a policy of its
+ * own. That is what the owner list is for, and why the card copy talks about
+ * embeds rather than about our runtime.
+ *
+ * What is NOT here, because it was measured absent: Firebase. The tenant runs
+ * no client Firestore, Auth or App Check — every read is server-side through
+ * the Admin SDK — so a published page never opens a `*.googleapis.com`
+ * connection, and naming one would authorize an egress that does not exist.
+ */
+const TENANT_CONNECT_ORIGINS = ['https://api.stripe.com']
+
+function tenantConnectSrcDirective(
+  isProduction,
+  approvedConnectHosts,
+  runsMeasurement,
+  siteOrigins,
+) {
+  // `ws:` alongside `http:` because a source expression matches by scheme
+  // group — `http://localhost:*` does not admit `ws://localhost:3000` — and
+  // the dev server's HMR socket is the one connection a developer cannot see
+  // fail without also losing every reload.
+  const development = isProduction
+    ? []
+    : [
+        'http://localhost:*',
+        'http://127.0.0.1:*',
+        'ws://localhost:*',
+        'ws://127.0.0.1:*',
+      ]
+  const pluginOrigin = configuredOrigin(process.env.NEXT_PUBLIC_PLUGIN_ORIGIN)
+  const sources = ["'self'"]
+    // The site's own addresses, for the same reason `img-src` carries them: a
+    // site with a custom domain attached has two origins and `'self'` is only
+    // the one this page was served from.
+    .concat(approvedImageHostSources(siteOrigins))
+    .concat(TENANT_CONNECT_ORIGINS)
+    .concat(pluginOrigin ? [pluginOrigin] : [])
+    // Gated exactly as `img-src` gates the same vendors: a site with no
+    // analytics has no reason to permit an ad network's endpoint, and one that
+    // permits it anyway is describing our convenience instead of the site.
+    .concat(runsMeasurement ? MEASUREMENT_CONNECT_ORIGINS : [])
+    .concat(approvedImageHostSources(approvedConnectHosts))
+    .concat(development)
+  return `connect-src ${sources.join(' ')}`
+}
+
+/**
+ * The players and payment frames a published site embeds (AGL-1152).
+ *
+ * ⛔ `frame-ancestors` is NOT this, and confusing the two reads as "already
+ * allowed": that directive says who may frame US, this one says whom WE may
+ * frame. The tenant has shipped the first since AGL-518 and never the second.
+ *
+ * Every entry is read out of the code that CONSTRUCTS the `src`, which for the
+ * two players means the whole set is closed rather than merely observed:
+ * `parseVideoEmbedSrc` (`libs/plugins/mui/src/lib/components/blocks.tsx`)
+ * takes an author's YouTube or Vimeo URL, extracts the video ID and rebuilds
+ * the address itself, so the only two strings it can ever produce are
+ * `https://www.youtube-nocookie.com/embed/{id}` and
+ * `https://player.vimeo.com/video/{id}`. The raw author URL never reaches the
+ * element. Drop either origin and the Video block goes to an empty box on
+ * every site that uses one.
+ *
+ * Stripe is the storefront Payment Element. Measured against a real mount:
+ * `elements.create('payment')` put THREE iframes on the page, all on
+ * `https://js.stripe.com`. `hooks.stripe.com` is the 3-D Secure challenge and
+ * is required by `csp-stripe-payment-element.spec.ts`, which was written
+ * against AGL-1944 precisely so that the day this directive appeared it would
+ * fail rather than take checkout down quietly.
+ *
+ * ## What is NOT governed here, measured rather than assumed
+ *
+ * A `srcdoc` iframe is not checked against `frame-src` at all. Measured in a
+ * real browser under `frame-src https://example.invalid`: a `srcdoc` child
+ * rendered its content with ZERO violations, while a same-origin `src` frame
+ * on the same page reported `frame-src <- …/denied.html`. So the Custom HTML
+ * block's Embed mode keeps working untouched — and, in the same measurement, a
+ * frame NESTED inside that srcdoc child IS refused, because the child inherits
+ * this policy. An author embedding a third-party iframe approves its host.
+ *
+ * That second result is also why `'self'` is spelled out. `frame-src` has no
+ * implicit fallback to same-origin: without it the platform's own frames are
+ * refused on their own page.
+ */
+const TENANT_FRAME_ORIGINS = [
+  'https://www.youtube-nocookie.com',
+  'https://player.vimeo.com',
+  'https://js.stripe.com',
+  'https://hooks.stripe.com',
+]
+
+/**
+ * The console, for the admin bar's silent edit-access probe.
+ *
+ * `admin-bar.tsx` frames `${consoleOrigin}/edit-access?…&silent=1` to ask
+ * whether this visitor may edit the site; without the origin here the probe
+ * frame is refused and the bar never appears for anyone.
+ *
+ * Mirrors `admin-bar-slot.tsx`'s own expression so the policy and the code
+ * cannot name different consoles — EXCEPT on a self-host container, which gets
+ * only what its operator configured. The reasoning is AGL-2446's, applied to
+ * the other direction of framing: an operator's published pages should not
+ * carry a policy naming a console Aglyn runs, and a container that configured
+ * no console has nothing for the bar to reach anyway.
+ */
+function tenantConsoleFrameOrigin() {
+  const configured = configuredOrigin(process.env.NEXT_PUBLIC_CONSOLE_URL)
+  if (configured) return configured
+  return process.env.AGLYN_STANDALONE === '1' ? undefined : 'https://app.aglyn.com'
+}
+
+function tenantFrameSrcDirective(isProduction, approvedFrameHosts, siteOrigins) {
+  const development = isProduction
+    ? []
+    : ['http://localhost:*', 'http://127.0.0.1:*']
+  const pluginOrigin = configuredOrigin(process.env.NEXT_PUBLIC_PLUGIN_ORIGIN)
+  const consoleFrame = tenantConsoleFrameOrigin()
+  const sources = ["'self'"]
+    // The site's own addresses, for the reason `img-src` carries them: a site
+    // on a custom domain has two origins and `'self'` is only one of them.
+    .concat(approvedImageHostSources(siteOrigins))
+    .concat(TENANT_FRAME_ORIGINS)
+    // The marketplace sandbox. `PluginFrame` points an iframe at this origin
+    // for every installed executable plugin, and the cross-origin boundary IS
+    // the sandbox — without the entry the plugin renders as nothing at all.
+    .concat(pluginOrigin ? [pluginOrigin] : [])
+    .concat(consoleFrame ? [consoleFrame] : [])
+    .concat(approvedImageHostSources(approvedFrameHosts))
+    .concat(development)
+  return `frame-src ${sources.join(' ')}`
+}
+
 const APPROVED_IMAGE_HOSTS_MAX = 50
 
 /**
@@ -1015,9 +1356,18 @@ module.exports = {
   reportingEndpointsHeader,
   scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
+  TENANT_FONT_ORIGINS,
+  tenantMediaSrcDirective,
+  tenantFontSrcDirective,
+  tenantFormActionDirective,
   approvedImageHostSources,
   normalizeApprovedImageHost,
   APPROVED_IMAGE_HOSTS_MAX,
   MEASUREMENT_IMAGE_ORIGINS,
+  MEASUREMENT_CONNECT_ORIGINS,
   GOOGLE_CCTLD_ORIGINS,
+  TENANT_CONNECT_ORIGINS,
+  tenantConnectSrcDirective,
+  TENANT_FRAME_ORIGINS,
+  tenantFrameSrcDirective,
 }

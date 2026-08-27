@@ -22,7 +22,7 @@
  * AGL-1886 opt-in could not be given by anybody and every metered org was
  * held at a hard cap it was told to escape via a screen that did not exist.
  *
- * The card that fixed that was a CONSENT switch. Zach's 2026-08-18 correction
+ * The card that fixed that was a CONSENT switch. the 2026-08-18 correction
  * turned it into an optional CAP: storage past the band bills by default, the
  * alerts prevent the surprise, and this card exists only for a customer who
  * would rather uploads stopped than be billed.
@@ -271,7 +271,7 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
     // A free org has no overage for a cap to bound. Offering the control would
     // earn a 409 from the route and teach the customer that Billing controls
     // do not work — and it says plainly that free is never charged, which is
-    // the property Zach asked to be true and visible.
+    // the property the requirement was to be true and visible.
     global.fetch = jest.fn(async () =>
       jsonResponse({
         ...UNCAPPED,

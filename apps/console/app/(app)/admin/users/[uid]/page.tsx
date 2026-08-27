@@ -60,6 +60,8 @@ import { useImpersonationReason } from '../../../../../components/staff-imperson
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import ActorActivityTable from '../../../../../components/actor-activity-table.component'
+import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 
 interface UserDetail {
   user: {
@@ -417,9 +419,11 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 {`Providers: ${detail.user.providers.join(', ') || '—'}`}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {`Created ${detail.user.createdAt ?? '—'} · last sign-in ${
-                                  detail.user.lastSignInAt ?? '—'
-                                }`}
+                                {`Created ${formatStaffTimestamp(
+                                  detail.user.createdAt,
+                                )} · last sign-in ${formatStaffTimestamp(
+                                  detail.user.lastSignInAt,
+                                )}`}
                               </Typography>
                               {/* Phone + do-not-contact (AGL-1569). The number is
                                   collected under Privacy Policy v4 §11 for upsell and
@@ -872,6 +876,35 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       </Stack>
                     )}
                   </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * What this ACCOUNT did, everywhere (AGL-1488).
+                   *
+                   * The card above is the log of STAFF actions taken against
+                   * the account — a different log answering a different
+                   * question, and the only one this page had. Whenever this
+                   * page is open for a reason, "what did they do" is the
+                   * question being asked, and nothing here could answer it.
+                   * Every org, every site, newest first.
+                   */
+                  <ActorActivityTable
+                    endpoint={`/api/admin/user-activity?uid=${encodeURIComponent(uid)}`}
+                    header="Activity by this account"
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt:
+                        'Everything this account has done, across every organization and site — as distinct from the staff actions taken against it.',
+                    })}
+                    description={
+                      'Everything this account has done, across every ' +
+                      'organization and site. Not the same as the staff ' +
+                      'actions above, which were done TO it.'
+                    }
+                  />
                 ),
               },
               {

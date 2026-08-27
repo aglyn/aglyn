@@ -87,7 +87,7 @@ export interface SpacingEditorProps {
   /** Accessible name for the pair, e.g. `Space inside — top`. */
   label: string
   /**
-   * Whether `auto` belongs in the list for this side (Zach, 2026-08-23:
+   * Whether `auto` belongs in the list for this side (decided:
    * "let's add the auto to this option list as well instead of only in
    * the custom amount").
    *

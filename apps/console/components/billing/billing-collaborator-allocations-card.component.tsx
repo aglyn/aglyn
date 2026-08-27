@@ -120,7 +120,7 @@ function plural(count: number, one: string, many: string): string {
 /**
  * Assign purchased COLLABORATOR seats to sites (AGL-2439).
  *
- * `seatAddons.members` is an org-level POOL since Zach's 2026-08-19 decision:
+ * `seatAddons.members` is an org-level POOL since the 2026-08-19 decision:
  * one extra collaborator seat buys one site's worth of capacity, not one per
  * site. `/api/billing/collaborator-allocations` is the only writer of
  * `org.collaboratorAllocations`, and this card is its only caller — shipped in
@@ -135,7 +135,7 @@ function plural(count: number, one: string, many: string): string {
  * The corrected cap binds NEW collaborators only. A site already above its cap
  * keeps everyone on it — nothing in this product removes a collaborator for
  * being over a cap — and is merely refused the next add. That is the whole of
- * Zach's migration posture, and this card says it in words rather than leaving
+ * the migration posture, and this card says it in words rather than leaving
  * an admin to infer it from a site row that reads "3 over the limit".
  *
  * ## Why the server decides over-allocation

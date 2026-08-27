@@ -64,12 +64,11 @@ import {
  *      billing pages beautifully and answers a question nobody asked. The
  *      conversation is the missing half and only the model has it.
  *
- *      This gate USED TO BE "no prior turn", full stop, and that was wrong in
- *      a way nobody saw until Zach hit it (AGL-2486). Not every follow-up
- *      leans on the transcript: the second question in a thread is very often
- *      a fresh, complete question that happens to be asked second. Refusing
- *      all of them meant a thread answered its first question from the docs
- *      and then escalated forever — and on a deployment with no
+ *      The gate is NOT "no prior turn" (AGL-2486). Not every follow-up leans
+ *      on the transcript: the second question in a thread is very often a
+ *      fresh, complete question that happens to be asked second. Refusing all
+ *      of them means a thread answers its first question from the docs and
+ *      then escalates forever — and on a deployment with no
  *      `ANTHROPIC_API_KEY` that reads as "Aglyn Assist is not configured",
  *      one question in, to a user who just watched it work. A product that
  *      answers exactly once per thread is worse than one that never answers,
@@ -220,7 +219,7 @@ const STRONG_PAGE_MARGIN = 3
  * one where the page is right whatever came before — may be answered without
  * reading the conversation.
  *
- * The calibration case is Zach's own second question, "how do I add an
+ * The calibration case is the second question, "how do I add an
  * element to my page": top score 7.9, and the winning page beats its rival by
  * 1.80 with a coming-soon LAUNCH GUIDE, because that guide happens to say
  * "add", "element" and "page". As a first question that is retrieval doing
@@ -560,14 +559,12 @@ export function deflectToDocs(
  * bare URLs into links and renders everything else literally, under
  * `whiteSpace: 'pre-wrap'`. That is a deliberate phase-1 decision, not a gap.
  *
- * This template shipped once with the heading wrapped in `**…**`, and Zach's
- * besigner drawer duly showed `**Drag-and-drop hierarchy — Moving an element
+ * This template shipped once with the heading wrapped in `**…**`, and the * besigner drawer duly showed `**Drag-and-drop hierarchy — Moving an element
  * without dragging**`, asterisks and all. The lesson is not "escape the
  * asterisks" — it is that the composer has to know what renders it.
  *
  * So the heading is a bare `[label](url)` on its own line — a LINK, which is
- * the one markup the panel speaks, and which is why the title in Zach's
- * screenshot was correctly clickable even while the asterisks around it were
+ * the one markup the panel speaks, and which is why the title in the * screenshot was correctly clickable even while the asterisks around it were
  * not. Everything else is carried by NEWLINES, which `pre-wrap` renders,
  * rather than by markup, which it does not.
  *
@@ -616,12 +613,11 @@ const MAX_LINKED_SECTIONS = 4
  *
  * A deployment with no `ANTHROPIC_API_KEY` — which includes every self-hosted
  * one on the day it comes up, and Aglyn's own production today — can answer
- * only what retrieval is confident about. Everything else used to return a
- * bare 501, which the panel printed as "Assist is not configured on this
- * deployment". Zach met that on the SECOND question of a thread whose first
- * question had just been answered in full, and read it as the product being
- * broken. He was not wrong to: a capability refusal arriving after a working
- * answer looks like a fault, not a limit.
+ * only what retrieval is confident about. A bare 501 for everything else
+ * reaches the panel as "Assist is not configured on this deployment" — and it
+ * can arrive on the SECOND question of a thread whose first question was just
+ * answered in full. A capability refusal that lands after a working answer
+ * reads as a fault, not a limit.
  *
  * The self-host charter says every Aglyn-operated dependency must be
  * configurable AND degrade cleanly. "Degrades cleanly" cannot mean "answers

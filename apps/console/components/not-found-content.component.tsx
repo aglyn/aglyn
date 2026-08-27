@@ -38,12 +38,12 @@ export function NotFoundContent() {
    *
    * The single description below blamed three unrelated things at once — a
    * stale link, a workspace you can't open, a site you can't open — and on the
-   * commonest 404 of all it blamed the wrong one. Zach's
-   * `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV` names a workspace he
-   * owns and a site that exists; the only thing wrong with it is that
+   * commonest 404 of all it blamed the wrong one.
+   * `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV` names a workspace the
+   * reader owns and a site that exists; the only thing wrong with it is that
    * `/screens/[screenId]` is not a route (the editor lives at
-   * `…/screens/[screenId]/versions/[versionId]/…`). Telling him the workspace
-   * might not be his sends him hunting for a permissions problem that isn't
+   * `…/screens/[screenId]/versions/[versionId]/…`). Saying the workspace might
+   * not be theirs sends them hunting for a permissions problem that is not
    * there.
    *
    * Resolving to a membership is exactly the distinction worth drawing, and it

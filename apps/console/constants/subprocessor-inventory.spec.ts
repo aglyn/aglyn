@@ -365,7 +365,7 @@ describe('the registry is the source for the published list (AGL-1648)', () => {
 describe('no notice-period arithmetic was reintroduced (AGL-1648)', () => {
   /**
    * The 30-day advance-notice obligation was DELETED from DPA 7.2 on
-   * 2026-08-24 by Zach's explicit decision, the softer option having been
+   * 2026-08-24 by the explicit decision, the softer option having been
    * offered and rejected. An earlier design for this registry computed
    * `mayBeginProcessingOn = publishedOn + 30 days`; building it would have the
    * code assert a commitment the legal text no longer makes.

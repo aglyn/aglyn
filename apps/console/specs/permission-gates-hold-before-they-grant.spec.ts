@@ -18,10 +18,10 @@
 /**
  * A permission gate must HOLD while it is still loading — never grant.
  *
- * `billing-permission-gate-holds-while-loading.spec.tsx` drives the one page
- * Zach caught, by rendering it. This file is the sweep: the same defect was on
- * four surfaces, each written independently, and a behavioural spec per page
- * would only ever cover the pages somebody thought to write one for.
+ * `billing-permission-gate-holds-while-loading.spec.tsx` drives one page by
+ * rendering it. This file is the sweep: the same defect appears on four
+ * surfaces, each written independently, and a behavioural spec per page only
+ * ever covers the pages somebody thought to write one for.
  *
  * ## The shape
  *

@@ -25,12 +25,12 @@
  *
  * `useSwitcherCollection` deliberately keeps the previous rows when a fetch
  * fails, so a flaky network never blanks an open menu. That is right, and it
- * stays. What it did NOT do was record that the fetch failed at all — the
- * catch dropped straight to `setLoading(false)` — and on the one occasion
- * there are no previous rows to keep (a cold load, or the first fetch after a
- * scope change) the result is `{ items: [], loading: false }`. Every switcher
- * reads that pair as a settled, empty collection, which is how the site
- * switcher printed **"No sites yet."** during the session failure Zach hit.
+ * stays. What it must ALSO do is record that the fetch failed: a catch that
+ * drops straight to `setLoading(false)` returns `{ items: [], loading: false }`
+ * whenever there are no previous rows to keep — a cold load, or the first
+ * fetch after a scope change. Every switcher reads that pair as a settled,
+ * empty collection, so a refused read prints **"No sites yet."** to an owner
+ * whose sites are all still there.
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react'

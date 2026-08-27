@@ -353,14 +353,14 @@ export const InlineTextEditorComponent = observer(
       /**
        * Collected first, WRITTEN LAST (AGL-2486).
        *
-       * Zach: *"the line break persists regardless if you remove it or not
-       * once you click out"*. The markup this computes was always correct;
-       * it was being undone a moment later. Ending the edit restores the
-       * element's original child nodes — deliberately, by reference, so
-       * React's fibers keep pointing at live nodes — and that restore used
-       * to run in the effect cleanup, i.e. AFTER `updateNodeProps` had
-       * already told React to re-render the leaf. React painted the new
-       * text, then the parked ORIGINAL nodes went back over the top of it.
+       * The markup this computes is correct; the hazard is that it can be
+       * undone a moment later. Ending the edit restores the element's
+       * original child nodes — deliberately, by reference, so React's fibers
+       * keep pointing at live nodes — and that restore must not run in the
+       * effect cleanup, i.e. AFTER `updateNodeProps` has already told React
+       * to re-render the leaf. In that order React paints the new text and
+       * the parked ORIGINAL nodes then go back over the top of it, so an
+       * edit reads as never having taken.
        *
        * Worst for formatted text, which is how it was found: a node with
        * `html` renders through `dangerouslySetInnerHTML`, so React does not
@@ -375,7 +375,7 @@ export const InlineTextEditorComponent = observer(
        */
       let nextWrite: Record<string, unknown> | undefined
       if (current && seededRef.current) {
-        // updateNodeProps REPLACES the props object — spread the existing
+        // UpdateNodeProps REPLACES the props object — spread the existing
         // props so variant/component/etc. survive the text edit.
         const surface = activeEditable()
         if (rich && surface) {
@@ -639,7 +639,7 @@ export const InlineTextEditorComponent = observer(
 
     const exec = useCallback(
       (command: string) => () => {
-        // execCommand is deprecated but universally supported and keeps this
+        // ExecCommand is deprecated but universally supported and keeps this
         // dependency-free; the output is normalized by the sanitizer anyway.
         document.execCommand(command)
         activeEditable()?.focus()

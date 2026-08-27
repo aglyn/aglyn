@@ -51,7 +51,7 @@ export interface ConsentBannerCardProps {
  * visitors before loading the analytics its owner configured. Sits directly
  * under the GA field it governs, so configuring tracking and choosing the
  * consent posture happen in the same glance (the posture is the host's
- * ACTIVE choice, per Zach 2026-08-13 — not a platform default buried in a
+ * ACTIVE choice, by decision — not a platform default buried in a
  * doc).
  *
  * The tool is active by default and self-scoping — consent UI only ever

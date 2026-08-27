@@ -158,7 +158,7 @@ export function surfaceDelta(base, head) {
  *
  *     ## 2026-08-19 — Free tier hard-caps at 3 workspaces per person
  *
- *     - **Decided by:** Zach, 2026-08-19 …
+ *     - **Decided by:** decided …
  *     - **Scope:** packaging
  *     - **Evidence:** `81c432500`, AGL-2265
  *

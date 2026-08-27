@@ -44,7 +44,7 @@ import type { ReactNode } from 'react'
 import HostActivityCard from './host-activity-card.component'
 
 const HOST_ID = 'DXnRbPH4CQ'
-/** The screen Zach opened: changed that morning, reported as having nothing. */
+/** A screen with recent entries whose ids all sort past the window. */
 const BUSY_SCREEN = 'coOm073Tai'
 /** A screen that genuinely has never been touched. */
 const UNTOUCHED_SCREEN = 'never-touched'
@@ -190,7 +190,7 @@ describe('Page Activity — the window it asks for', () => {
         header="Page Activity"
       />,
     )
-    // The entry Zach made that morning, which the shipped card could not see.
+    // An entry whose id sorts past a host-wide window's boundary.
     expect(
       screen.getByText('Updated SEO — Press — Entry Template'),
     ).not.toBeNull()

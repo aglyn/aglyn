@@ -31,7 +31,7 @@ to. Probe the custom domain, never the canonical one.
 
 `www-aglyn-io` still exists as a Vercel project but serves **no domain**, and none of its 25 newest
 production deployments is Ready — every one is Canceled. The `apps/www` app it deployed was deleted
-from the repo entirely (AGL-1676); deleting the Vercel project itself is a console action for Zach.
+from the repo entirely (AGL-1676); deleting the Vercel project itself is a console action for the account owner.
 
 ## Only the `production` branch deploys (AGL-522)
 

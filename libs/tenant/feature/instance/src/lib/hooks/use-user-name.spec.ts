@@ -20,20 +20,17 @@ import { resolveUserName } from './use-user-name'
 /**
  * What the signed-in user is CALLED (AGL-2486).
  *
- * Zach: the account menu showed a single `Z` where the presence stack two
- * inches away showed `ZG`, and its header printed `zach@aglyn.com` as both
- * the name and the address.
+ * A surface that resolves `user.displayName || user.email` prints an address
+ * as the person's name, and draws one initial from it where the presence
+ * stack beside it draws two.
  *
- * The name was never missing — the menu was reading the one source that is
- * blank for the enterprise tier. Measured on production: the SSO account
- * `zach@aglyn.com` (tenant `aglyn-org-y5v14`) has `displayName: undefined` on
- * its auth record, while `users/IHumyGGhGxZKjVV26qCRx5Okf573` holds
- * `firstName: "Zach"`, `lastName: "Gover"`. Presence had already worked around
- * the same gap by reading the ID token's IdP claims, which is why the two
- * surfaces disagreed.
+ * The name is not missing; that surface is reading the one source that is
+ * blank for the enterprise tier. An SSO account's auth record carries
+ * `displayName: undefined`, while its `users/{uid}` document holds a first and
+ * last name — and presence reads the ID token's IdP claims, which is a third
+ * answer again.
  *
- * The first case below fails against the pre-fix menu, which resolved
- * `user.displayName || user.email`.
+ * The first case below fails against that `displayName || email` resolution.
  */
 describe('the SSO account, whose auth record carries no name', () => {
   it('is named from its profile document, not its email address', () => {

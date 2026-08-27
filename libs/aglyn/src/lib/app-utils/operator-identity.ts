@@ -18,7 +18,7 @@
 /**
  * Who runs *this* deployment, and where its notices go (AGL-2016).
  *
- * Zach's rule for the self-host path: *"the self hosted owner should probably
+ * the rule for the self-host path: *"the self hosted owner should probably
  * not have to edit the source to update aglyn branded items urls or personal
  * identification items, should probably move these to env vars"*. This module
  * is that, for the one class of value where getting it wrong is not cosmetic —

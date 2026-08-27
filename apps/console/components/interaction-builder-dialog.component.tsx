@@ -72,6 +72,18 @@ export interface InteractionBuilderDialogProps {
    * forgets is a guard that is off while looking present.
    */
   existingFromCache: boolean
+  /**
+   * Where the save goes, when it is not the `actions` collection (AGL-1478).
+   *
+   * An interaction authored on an element belongs to the DOCUMENT that holds
+   * the element, so the provider hands the dialog a writer that puts it on
+   * the node. Everything above this line is unchanged — the same fields, the
+   * same validation, the same `candidate`. Only the destination moves.
+   *
+   * Returning false leaves the dialog open with every step as configured,
+   * which is what a refused Firestore write already does.
+   */
+  onSave?: (candidate: unknown, id: string) => Promise<boolean> | boolean
   onClose: () => void
 }
 
@@ -200,7 +212,7 @@ function TargetPicker(props: {
  * class steps against the live canvas DOM.
  */
 export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
-  const { hostId, state, existing, existingFromCache, onClose } = props
+  const { hostId, state, existing, existingFromCache, onSave, onClose } = props
   const firestore = useFirestore()
   // Action creation is server-owned since AGL-2266 (the cap); every other
   // action write on this surface stays client-direct.
@@ -425,6 +437,40 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     if (problem) return
     const id = state.id ?? Aglyn.createResourceUid()
     /**
+     * Node-scoped save (AGL-1478). Takes the whole Firestore path below with
+     * it — the server-side create, the staleness guard, the merge-set — and
+     * none of that is a loss:
+     *
+     * - There is no document to create. The interaction is a field on a node
+     *   in a document that already exists, so the `ACTIONS_MAX_PER_HOST`
+     *   ceiling the create route enforces is not the cap that applies; the
+     *   per-element one is, and `upsertNodeInteraction` holds it.
+     * - There is nothing stale to guard. `writeGuardedBySeed` exists because
+     *   this dialog seeds its fields from a Firestore LISTENER that
+     *   `persistentLocalCache` keeps serving after a session goes stale
+     *   (AGL-1066). A node interaction is seeded from the canvas — the same
+     *   in-memory document the editor is already writing — so the seed and
+     *   the target are one object and cannot disagree.
+     */
+    if (onSave) {
+      let ok = false
+      try {
+        ok = await onSave(candidate, id)
+      } catch (error) {
+        console.error(error)
+      }
+      if (!ok) {
+        return void enqueueSnackbar('Could not save the interaction', {
+          variant: 'error',
+        })
+      }
+      enqueueSnackbar('Interaction saved and enabled', {
+        variant: 'success',
+        persist: false,
+      })
+      return void onClose()
+    }
+    /**
      * Never write an interaction seeded from a read we cannot trust
      * (AGL-1066, AGL-1358). Every field of this dialog is seeded from
      * `existing`, which comes from the provider's `hosts/{h}/actions`
@@ -517,6 +563,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     firestore,
     createResource,
     hostId,
+    onSave,
     enqueueSnackbar,
     onClose,
     existing,

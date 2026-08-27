@@ -784,7 +784,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         {/* One linked upsell for both locked selectors (AGL-2080). The
             helper text under each control names the plan, but a disabled
             MenuItem is only visible with the menu open and neither is a
-            path anywhere — Zach's retention directive wants the upgrade
+            path anywhere — the retention directive wants the upgrade
             prominent and one-click, so the link lives here, beside the
             controls it unlocks. */}
         {subsLocked || giftsLocked ? (

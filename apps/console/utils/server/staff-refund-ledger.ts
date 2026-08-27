@@ -35,8 +35,8 @@ import { createHash } from 'crypto'
  *
  *  - The quantity is a SUM OF CENTS, not a count. Sixty $1 refunds and one
  *    $60 refund are the same exposure and a call counter cannot see that.
- *  - It FAILS CLOSED. Zach declined a second approver, so the cap is the only
- *    control on the largest staff action there is; a store outage that
+ *  - It FAILS CLOSED. There is no second approver on a refund, so the cap is
+ *    the only control on the largest staff action there is; a store outage that
  *    silently lifted it would be an unbounded window nobody could see. A
  *    refused refund during a Firestore outage costs one escalation. The
  *    inverse costs whatever someone refunds.

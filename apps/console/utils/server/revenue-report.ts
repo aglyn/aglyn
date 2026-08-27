@@ -25,13 +25,13 @@ import {
 /**
  * Staff revenue reporting on TWO bases at once (AGL-2486).
  *
- * Zach, asked whether "revenue" meant the cash Stripe settled or the value of
- * what customers have contracted to pay, answered "Both, side by side" — so
- * this module computes both and, more importantly, computes the GAP between
- * them as a first-class figure with named causes. Two numbers and a reader
- * left to subtract is the failure mode this exists to avoid: the difference
- * is dunning, failed cards, trials and comps, and each of those is an action
- * someone can take, not a rounding artifact.
+ * Revenue means two things at once — the cash Stripe settled, and the value of
+ * what customers have contracted to pay — so this module computes both and,
+ * more importantly, computes the GAP between them as a first-class figure with
+ * named causes. Two numbers and a reader left to subtract is the failure mode
+ * this exists to avoid: the difference is dunning, failed cards, trials and
+ * comps, and each of those is an action someone can take, not a rounding
+ * artifact.
  *
  * ## The trap this module is built around
  *
@@ -767,7 +767,7 @@ export interface RevenueReport {
   gap: RevenueGap
   attention: {
     /** `platformRevenue` rows with no readable `paidAt` — invisible to the
-     * period range query, so the settled figure is a lower bound by them. */
+     * Period range query, so the settled figure is a lower bound by them. */
     rowsOutsideEveryPeriod: number
     /** The commerce sweep hit its cap. */
     commerceTruncated: boolean
@@ -841,11 +841,9 @@ export interface OrgAttribution {
 /**
  * Who produced the numbers (AGL-2486).
  *
- * Zach: *"We need to also list the sources of these numbers in a more visual
- * way, show which orgs did what"*. A staff revenue page whose totals cannot be
- * traced to a customer is a page nobody can act on — the point of seeing a gap
- * is knowing whose card to chase, and "Comped / staff override: 2" is useless
- * until it names the two.
+ * A staff revenue page whose totals cannot be traced to a customer is a page
+ * nobody can act on — the point of seeing a gap is knowing whose card to
+ * chase, and "Comped / staff override: 2" is useless until it names the two.
  *
  * ## The rows must RECONCILE to the totals
  *
@@ -967,9 +965,8 @@ export function orgAttribution(
  *
  * MARK - Attribution by source (AGL-2486)
  *
- * Zach: *"We need to see the source of all breakdowns including which org and
- * which plugin and which host etc contributed to what revenue gain or revenue
- * loss."*
+ * Every breakdown names its source — which org, which plugin, which host
+ * produced the gain or the loss.
  *
  * The right DIMENSION differs per source, which is why this is three groupings
  * and not one table with a spare column:

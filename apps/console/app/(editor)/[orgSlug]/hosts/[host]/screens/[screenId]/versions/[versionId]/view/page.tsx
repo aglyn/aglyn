@@ -131,7 +131,7 @@ import { useDeclareDocumentSubject } from '../../../../../../../../../../compone
 const whiteSpace = '--'
 
 /** Visibility options (page permissions, AGL-113). Members/password rows
- * explain where enforcement lives so the select never overpromises.
+ * Explain where enforcement lives so the select never overpromises.
  *
  * Every hint now says what the choice does to SEARCH (AGL-1263), because it
  * always did and nothing said so. `Public` is the only indexable value — the
@@ -172,33 +172,27 @@ const SCREEN_LOAD_OVERLAY_MAX_MS = 12000
  * The two card widths in the detail band, as `GridItems masonry` reads them
  * (AGL-2486).
  *
- * Three columns at `lg`, and NOT three equal ones — Zach: "I like that this
- * before had 3 columns, we just don't need to make all of 3 columns, some
- * could be 2 columns and 1". `masonry` buckets items by their `size`, so these
- * two values ARE the arrangement: every `CARD_WIDE` card stacks in one column
- * two thirds across, every `CARD_NARROW` card stacks in the other. Each column
- * is a flex stack at natural heights, which is what stops a short card from
- * being stretched to a tall neighbour — the defect this replaced.
+ * The band is three columns wide at `lg` and the two columns are NOT equal.
+ * `masonry` buckets items by their `size`, so these two values ARE the
+ * arrangement: every `CARD_WIDE` card stacks in one column two thirds across,
+ * every `CARD_NARROW` card stacks in the other. Each column is a flex stack at
+ * natural heights, so a short card is never stretched to match a tall
+ * neighbor.
  *
- * ## The assignment is Zach's, and it is deliberately not the packing optimum
+ * ## The assignment favors legibility over packing, on purpose
  *
- * "the basic details probably needs to be the smaller column like it was
- * originally, page access can be 1 of 3 columns … seo 2 of 3", then "the
- * publishing card can move just below basic details and be 1 of 3 columns",
- * then "Swap page activity and versions. make activity full".
+ * `Basic Details`, `Publishing` and `Page Access` are narrow, in that order;
+ * `SEO` and `Versions` are wide; `Page Activity` is full width in a band of
+ * its own.
  *
- * So: `Basic Details`, `Publishing`, `Page Access` narrow, in that order;
- * `SEO` and `Versions` wide; `Page Activity` full width in a band of its own.
- *
- * On packing alone that is the wrong way round, and the number is recorded
- * here so nobody "corrects" it back by measuring. `SEO` gets TALLER as it
- * widens — measured on this page in Chrome, 738px at a 354px column, 764px at
- * 480px, 857px at 732px, 989px at 984px — because it is dominated by a
- * fixed-aspect social-image preview that scales with the card. Putting it in
- * the wide column therefore costs band height. Zach looked at both and chose
- * this one anyway: a cramped image preview and truncated form fields read
- * worse than a shorter band does. Legibility beat packing; that is his call
- * and it is not a defect to fix.
+ * On packing alone that is the wrong way round, and the measurements are
+ * recorded here so nobody "corrects" it back with a tape measure. `SEO` gets
+ * TALLER as it widens — measured on this page in Chrome, 738px at a 354px
+ * column, 764px at 480px, 857px at 732px, 989px at 984px — because it is
+ * dominated by a fixed-aspect social-image preview that scales with the card,
+ * so putting it in the wide column costs band height. It stays wide anyway: a
+ * cramped image preview and truncated form fields read worse than a taller
+ * band does. Shortening the band by narrowing `SEO` is not a fix.
  *
  * ORDER inside a bucket is source order, so the authored order of the three
  * narrow items IS the rendered column order. Moving one changes the layout.
@@ -840,9 +834,7 @@ function ScreenDetails() {
   const [seoImage, setSeoImage] = useState<ScreenSocialImageDraft | null>(null)
 
   /**
-   * `Raw JSON` starts CLOSED (AGL-2486). Zach: "Raw JSON can be the very last
-   * card and it should probably be collapsed by default". It is a developer
-   * view of the stored document — useful, but it was several hundred pixels of
+   * View of the stored document — useful, but it was several hundred pixels of
    * machine text sitting between the reader and the bottom of the page.
    *
    * Deliberately NOT persisted. Nothing else in the console remembers a card's
@@ -1008,8 +1000,6 @@ function ScreenDetails() {
           icon: { path: ICON_VARIANT_PAGES.path },
         }}
         // Presence leads the actions, beside the button that would join the
-        // room (AGL-2486). Zach: "identify who is currently in the document
-        // already before joining" — so it belongs where the joining decision
         // is made. This page WATCHES without announcing: a detail page that
         // joined on arrival would report everybody browsing as an editor and
         // destroy the signal it exists to give.
@@ -1087,18 +1077,17 @@ function ScreenDetails() {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* MASONRY (AGL-2486). Zach: "card masonry needs fixed". Without
-              `masonry` this is a twelve-column flex ROW, in which every item
-              is as tall as the tallest one beside it — measured here, `Page
-              Activity` sat in a 741px row cell carrying a 278px card, a 463px
-              hole, and the two rows together wasted 898px. With it, each
-              width becomes a COLUMN that stacks its own cards at their
-              natural heights, and a short card beside a tall one costs
-              nothing.
+          {/* MASONRY (AGL-2486). Without `masonry` this is a twelve-column
+              flex ROW, in which every item is as tall as the tallest one
+              beside it — measured here, `Page Activity` sits in a 741px row
+              cell carrying a 278px card, a 463px hole, and the two rows
+              together waste 898px. With it, each width becomes a COLUMN that
+              stacks its own cards at their natural heights, and a short card
+              beside a tall one costs nothing.
 
               `CARD_WIDE`/`CARD_NARROW` above are the whole arrangement: two
               thirds and one third of a three-column band, with the widths
-              chosen from measured card behaviour. `Versions` and `Raw JSON`
+              chosen from measured card behavior. `Versions` and `Raw JSON`
               declare a full width, which `masonry` gives a band of its own —
               so they stay full width BELOW the band rather than being pulled
               into a column, and the authored reading order survives. */}
@@ -1595,11 +1584,22 @@ function ScreenDetails() {
                 ),
               },
               {
+                // Per-screen traffic (AGL-152), deliberately ABOVE Page
+                // Activity: what the page is DOING outranks who touched it,
+                // and the activity feed is an unbounded list that pushes the
+                // chart off the screen when it comes first. `Raw JSON` sits
+                // below both.
                 size: { xs: 12 },
-                // FULL WIDTH, in a band of its own below the columns — Zach:
-                // "make activity full". `masonry` gives every full-width item
-                // its own band, so this is what puts the activity feed under
-                // the two columns rather than inside one.
+                children: (
+                  <ScreenAnalyticsCard hostId={hostId} screenId={screenId} />
+                ),
+              },
+              {
+                size: { xs: 12 },
+                // FULL WIDTH, in a band of its own below the columns.
+                // `masonry` gives every full-width item its own band, so this
+                // size is what puts the activity feed under the two columns
+                // rather than inside one of them.
                 //
                 // The slot renders an empty fragment when no activity plugin
                 // is entitled, and `GridItems masonry` drops the item wrapper
@@ -1612,17 +1612,6 @@ function ScreenDetails() {
                     targetId={screenId}
                     header={'Page Activity'}
                   />
-                ),
-              },
-              {
-                // Per-screen traffic (AGL-152). Pulled into the same flow as
-                // the cards above so that `Raw JSON` can sit BELOW it \u2014 Zach
-                // wanted the JSON last, and it used to be rendered above this
-                // card by virtue of being the last grid item. Full width: it
-                // is a chart, and it earns the row.
-                size: { xs: 12 },
-                children: (
-                  <ScreenAnalyticsCard hostId={hostId} screenId={screenId} />
                 ),
               },
               {

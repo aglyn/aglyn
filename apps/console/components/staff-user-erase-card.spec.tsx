@@ -19,7 +19,7 @@
  * The staff erasure SURFACE (AGL-1977).
  *
  * `eraseUser` was implemented, guarded, audited and spec-covered, and no
- * console surface called it — which is precisely the failure Zach's AGL-1900
+ * console surface called it — which is precisely the failure the AGL-1900
  * rule names: a capability that exists only as a route is not shipped. So the
  * first thing this file asserts is not a behaviour at all, it is that the card
  * is MOUNTED, read off the page source. A component spec for a component

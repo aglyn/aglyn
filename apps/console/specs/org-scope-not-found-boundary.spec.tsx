@@ -18,17 +18,15 @@
 /**
  * The URL stays authoritative on the NOT-FOUND boundary (AGL-2486).
  *
- * Zach: "We have access to both orgs but even though the url has a different
- * org in it, it still chose to use a different org in the switcher." Address
- * bar `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV`, switcher chip
- * "Sale Test".
+ * One workspace in the address bar, a different one in the switcher chip —
+ * on a URL like `/<org>/hosts/<host>/screens/<id>`, which matches no route.
  *
  * The precedence in `useOrgScope` is right and is NOT what these tests
- * change. The defect is that its top candidate reads the URL through
+ * change. The hazard is that its top candidate reads the URL through
  * `useParams()`, and a not-found boundary is not a matched route: it has no
  * dynamic segments, so the params bag is EMPTY even though the pathname still
- * plainly says `aglyn-org`. Every URL-derived candidate missed and the chain
- * fell through to the remembered selection.
+ * plainly names the workspace. Every URL-derived candidate misses and the
+ * chain falls through to the remembered selection.
  *
  * `usePathname()` survives the boundary, and `resolveNavSection` already
  * encodes which leading segments are workspaces (`/admin` and `/manage` are
@@ -143,9 +141,10 @@ describe('the org scope on a route with no matched [orgSlug] (AGL-2486)', () => 
   })
 
   it('resolves the workspace the URL NAMES on the not-found boundary', () => {
-    // Zach's exact URL. `/screens/[screenId]` is not a route — the editor
-    // lives at `/screens/[screenId]/versions/[versionId]/…` — so this renders
-    // the not-found boundary with an empty params bag.
+    // A URL that names a workspace and matches no route:
+    // `/screens/[screenId]` is not one — the editor lives at
+    // `/screens/[screenId]/versions/[versionId]/…` — so this renders the
+    // not-found boundary with an empty params bag.
     openAt('/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV')
     expect(resolvedOrg()).toBe('Aglyn LLC')
     expect(screen.getByTestId('path-slug').textContent).toBe('aglyn-org')

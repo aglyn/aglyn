@@ -40,6 +40,10 @@ import { forwardRef, useCallback, useState } from 'react'
 import { Else, If, Then } from 'react-if'
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import ComponentIconComponent from './component-icon.component'
+import {
+  clearCanvasContextMenu,
+  isCanvasContextMenuRequested,
+} from '../utils/canvas-context-menu'
 import NodeContextMenu from './node-context-menu'
 
 interface LabelActionProps extends Omit<TooltipProps, 'children'> {
@@ -96,7 +100,20 @@ export const NodeQuickActions = observer(
     // tooltip stays open behind (or above) dialogs its actions launch.
     const [moreOpen, setMoreOpen] = useState(false)
     const openMore = useCallback(() => setMoreOpen(true), [])
-    const closeMore = useCallback(() => setMoreOpen(false), [])
+    /**
+     * Right-click on the canvas opens this menu (AGL-1405). The leaf records
+     * the request and selects the node, which is what mounts this overlay —
+     * so the request is read on the first render rather than needing the
+     * component to already exist when the click happened.
+     */
+    const requested = isCanvasContextMenuRequested(node?.$id)
+    const closeMore = useCallback(() => {
+      setMoreOpen(false)
+      // Unconditionally: a request left standing re-opens the menu the next
+      // time this node's overlay mounts, which reads as the menu opening by
+      // itself.
+      clearCanvasContextMenu()
+    }, [])
     return (
       <Stack
         ref={ref}
@@ -198,7 +215,7 @@ export const NodeQuickActions = observer(
                 icon={{ path: ICON_VARIANT_SHOW_MORE_VERTICAL.path }}
                 enterDelay={200}
                 leaveDelay={500}
-                open={moreOpen}
+                open={moreOpen || requested}
                 onOpen={openMore}
                 onClose={closeMore}
                 slotProps={{
@@ -206,15 +223,26 @@ export const NodeQuickActions = observer(
                     disablePortal: false,
                     // Below dialogs/drawers the menu actions open.
                     sx: { zIndex: (theme) => theme.zIndex.modal - 1 },
+                    /**
+                     * Kept inside the WINDOW, not the document (AGL-1405).
+                     * `rootBoundary: 'document'` let the menu be placed
+                     * below the fold — the document is as tall as whatever
+                     * you put in it, so nothing ever "overflowed" it — and
+                     * the page grew a scrollbar around the menu, which moves
+                     * the editor's own chrome under the reader. The Paper
+                     * caps its height and scrolls, so a menu taller than the
+                     * window is still fully reachable.
+                     *
+                     * The 100px padding went with it: it was reserving a
+                     * margin against a boundary that was never binding, and
+                     * against the real one it would refuse placements that
+                     * fit perfectly well.
+                     */
                     modifiers: [
                       {
                         name: 'flip',
                         enabled: true,
-                        options: {
-                          altBoundary: true,
-                          rootBoundary: 'document',
-                          padding: 100,
-                        },
+                        options: { altBoundary: true, padding: 8 },
                       },
                       {
                         name: 'preventOverflow',
@@ -222,9 +250,8 @@ export const NodeQuickActions = observer(
                         options: {
                           altAxis: true,
                           altBoundary: true,
-                          tether: true,
-                          rootBoundary: 'document',
-                          padding: 100,
+                          tether: false,
+                          padding: 8,
                         },
                       },
                       {

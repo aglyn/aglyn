@@ -40,7 +40,7 @@ import type {
  *
  * ## The three controls, and what each one is worth
  *
- * Zach asked for search over roughly a dozen collections and in the same
+ * the requirement was for search over roughly a dozen collections and in the same
  * breath asked that it not cost too many reads. Those pull against each other
  * only if the reads are per keystroke, which is the naive shape and the one
  * this deliberately is not.
@@ -130,7 +130,7 @@ export const SEARCH_WINDOW = 30
  *
  * ## Why escalate rather than just raise the window
  *
- * Zach's constraint on this feature was that it not cost too many reads, and a
+ * the constraint on this feature was that it not cost too many reads, and a
  * flat window is charged to EVERY entitled group on every mount where somebody
  * types. Raising it from 30 to 300 multiplies the common case by ten to fix an
  * uncommon one.

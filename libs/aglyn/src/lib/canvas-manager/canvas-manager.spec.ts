@@ -1109,6 +1109,147 @@ describe('Aglyn: Screen Manager', () => {
     })
   })
 
+  /**
+   * `updateNodeFields` is what every panel that used to assign to a node
+   * directly should have been calling. Both halves matter, and both were
+   * missing wherever a field was written by hand.
+   */
+  describe('updateNodeFields (AGL-1480)', () => {
+    const seed = {
+      [NODE_ROOT_ID]: {
+        $id: NODE_ROOT_ID,
+        type: NodeType.NODE,
+        componentId: 'div',
+        nodes: ['a'],
+      },
+      a: {
+        $id: 'a',
+        type: NodeType.NODE,
+        parentId: NODE_ROOT_ID,
+        componentId: 'div',
+        sx: { display: 'flex', gap: 2 },
+        nodes: [],
+      },
+    } as unknown as Record<NodeId, NodeSchema>
+
+    it('records an undo step, so the edit can be taken back', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(seed as any)
+      canvas.updateNodeFields(canvas.getNode('a')!, { hidden: true })
+      expect(canvas.getNode('a')?.hidden).toBe(true)
+
+      canvas.undo()
+      expect(canvas.getNode('a')?.hidden).toBeFalsy()
+      canvas.redo()
+      expect(canvas.getNode('a')?.hidden).toBe(true)
+    })
+
+    /**
+     * A caller can be holding an instance the map has since replaced — an
+     * undo, a redo, a draft restore all build fresh ones. Writing to that
+     * orphan is silent: no error, no dirty state, and the edit is gone.
+     */
+    it('writes to the node the MAP holds, not the caller reference', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(seed as any)
+      const stale = canvas.getNode('a')!
+      // Replace the map wholesale, the way a restore does.
+      canvas.setNodes(seed as any)
+      expect(canvas.getNode('a')).not.toBe(stale)
+
+      canvas.updateNodeFields(stale, { hidden: true })
+      expect(canvas.getNode('a')?.hidden).toBe(true)
+    })
+
+    it('touches only the keys the patch names', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(seed as any)
+      canvas.updateNodeFields(canvas.getNode('a')!, { hidden: true })
+      expect(canvas.getNode('a')?.sx).toEqual({ display: 'flex', gap: 2 })
+      expect(canvas.getNode('a')?.componentId).toBe('div')
+    })
+  })
+
+  /**
+   * The constructor assigns BY NAME and `toJSON` emits by name, so a field
+   * declared on `NodeSchema` and nowhere else survives in memory and dies on
+   * the first save — which is the shape both of these were in when they
+   * shipped. Pinned as a round trip rather than a field list, because that is
+   * the property that matters: what the editor holds is what reaches storage.
+   */
+  describe('interactions and hidden round-trip (AGL-1478, AGL-1479)', () => {
+    const map = {
+      [NODE_ROOT_ID]: {
+        $id: NODE_ROOT_ID,
+        type: NodeType.NODE,
+        componentId: 'div',
+        nodes: ['panel', 'plain'],
+      },
+      panel: {
+        $id: 'panel',
+        type: NodeType.NODE,
+        parentId: NODE_ROOT_ID,
+        componentId: 'div',
+        hidden: true,
+        interactions: [
+          {
+            id: 'open',
+            name: 'Open on hover',
+            trigger: { event: 'elementHoverEnter', everyTime: true },
+            steps: [{ type: 'openMenu' }],
+          },
+        ],
+        nodes: [],
+      },
+      plain: {
+        $id: 'plain',
+        type: NodeType.NODE,
+        parentId: NODE_ROOT_ID,
+        componentId: 'div',
+        nodes: [],
+      },
+    } as unknown as Record<NodeId, NodeSchema>
+
+    it('survives setNodes → toJSON, and a reload of that', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(map as any)
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      expect(serialized['panel'].interactions).toEqual(
+        (map['panel'] as any).interactions,
+      )
+      expect(serialized['panel'].hidden).toBe(true)
+
+      const reloaded = new CanvasManager(undefined as any)
+      reloaded.setNodes(serialized as any)
+      const again = reloaded.toJSON().nodes as Record<string, any>
+      expect(again['panel'].interactions).toEqual(
+        (map['panel'] as any).interactions,
+      )
+      expect(again['panel'].hidden).toBe(true)
+    })
+
+    it('writes neither key on a node that has neither', () => {
+      // A field on every node in the document is bytes on every save and
+      // every page, and `false` says nothing `absent` does not.
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(map as any)
+      const plain = (canvas.toJSON().nodes as Record<string, any>)['plain']
+      expect('interactions' in plain).toBe(false)
+      expect('hidden' in plain).toBe(false)
+    })
+
+    it('emits nothing for an empty interaction list or a false hidden', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes({
+        ...map,
+        panel: { ...(map['panel'] as any), interactions: [], hidden: false },
+      } as any)
+      const panel = (canvas.toJSON().nodes as Record<string, any>)['panel']
+      expect('interactions' in panel).toBe(false)
+      expect('hidden' in panel).toBe(false)
+    })
+  })
+
   describe('instance styleOverrides round-trip (AGL-1306)', () => {
     // The constructor assigns fields BY NAME, so an unlisted key dies on
     // the first setNodes — this is the save→reload survival proof for the

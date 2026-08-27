@@ -18,33 +18,32 @@
  */
 
 /**
- * AGL-2486 — two defects Zach reported from the consent preview, which turn
- * out to be independent.
+ * AGL-2486 — two independent defects in the consent preview.
  *
- * **1. "the dropdown is appearing behind the select box."** The region picker
+ * **1. The picker's menu paints behind the panel that owns it.** The region
+ * picker
  * lives in a fixed panel the preview pins at `z-index: 2147483500` — a number
  * that high because the panel floats over a previewed PUBLISHED page, where
  * the consent banner (2147483400) and the privacy pill (2147483390) already
  * sit near the ceiling so they can beat arbitrary customer content. MUI
  * portals the select's menu to `<body>` with `theme.zIndex.modal`, i.e. 1300,
- * so the menu lost to the panel that owns it. Measured in the browser before
- * the fix: menu 1300, panel 2147483500, both direct children of `<body>` —
- * the same stacking context, so the comparison is real and raising the menu
- * actually works (in a different context it would not have).
+ * so the menu loses to its own panel. Measured in the browser: menu 1300,
+ * panel 2147483500, both direct children of `<body>` — the same stacking
+ * context, so the comparison is real and raising the menu actually works (in
+ * a different context it would not have).
  *
  * The assertion reads `document.styleSheets` rather than `style` attributes or
  * `innerHTML`, because emotion injects through `insertRule` under jest and a
  * spec that greps markup goes green against a build with no rule at all.
  *
- * **2. "we seem to be missing the retargeting advertising option, I only see
- * GA."** Nothing was missing from the platform: `ConsentBannerUi` has taken an
- * `advertising` prop since AGL-1649, and its own doc comment says it is
- * "resolved by the caller from the host document, because this component is
- * also mounted by the console preview against a simulated host". The tenant
- * passes it (`site-analytics.tsx`). The console preview — the exact caller
- * that comment was written for — did not, so the preview rendered the
- * analytics-only banner on every site, including sites that have the
- * advertising question switched ON.
+ * **2. The preview shows the analytics-only banner, never the advertising
+ * question.** Nothing is missing from the platform: `ConsentBannerUi` has
+ * taken an `advertising` prop since AGL-1649, resolved by the caller from the
+ * host document precisely because the console preview mounts the same
+ * component against a simulated host. The tenant passes it
+ * (`site-analytics.tsx`); a preview that does not renders the analytics-only
+ * banner on every site, including sites with the advertising question
+ * switched ON.
  *
  * That is why this drives the REAL `ConsentBannerUi` through the REAL preview
  * component instead of asserting the prop is present in the source: a test
@@ -248,7 +247,7 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     await simulateRegion('EU visitor')
     fireEvent.click(await screen.findByRole('button', { name: 'Preferences' }))
 
-    // This is the surface in Zach's screenshot: he saw the analytics row and
+    // This is the surface in the screenshot: he saw the analytics row and
     // nothing else.
     expect(screen.queryByText(/Analytics \(Google Analytics\)/)).not.toBeNull()
     expect(screen.queryByText(/Advertising — personalized ads/)).not.toBeNull()

@@ -393,7 +393,7 @@ describe('/api/billing/retention — survey (AGL-1863)', () => {
   it('the free text carries an expiry, and the SURVEY does not', async () => {
     // The separation, asserted in both directions (AGL-1978). An expiry on
     // the survey would reap the `reason` breakdown the retention funnel
-    // exists to produce — Zach's twice-given directive — and a survey with
+    // exists to produce — the twice-given directive — and a survey with
     // no expiry on its free text is the gap this closes. Testing only one
     // side would pass while the other silently regressed.
     const post = loadRoute(ROUTE)

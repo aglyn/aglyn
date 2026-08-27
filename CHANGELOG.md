@@ -9,6 +9,122 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.26 — 2026-08-27
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/7efa6db49...v1.0.0-beta.26)
+
+### Added
+
+- **cloud:** the console's daily crons get a punctual runner ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **console:** the organization feed includes its sites ([AGL-1490](https://linear.app/aglyn/issue/AGL-1490), [AGL-1993](https://linear.app/aglyn/issue/AGL-1993))
+- **console:** activity by person, and the logs the staff pages were missing ([AGL-1488](https://linear.app/aglyn/issue/AGL-1488))
+- **cloud:** index activity by actor across the whole platform ([AGL-1488](https://linear.app/aglyn/issue/AGL-1488))
+- **besigner,docs:** interactions get their own panel tab, and Info folds in ([AGL-1486](https://linear.app/aglyn/issue/AGL-1486))
+- **besigner:** the hierarchy eye is display:none, not the hidden class ([AGL-1479](https://linear.app/aglyn/issue/AGL-1479), [AGL-1480](https://linear.app/aglyn/issue/AGL-1480), [AGL-1478](https://linear.app/aglyn/issue/AGL-1478))
+- **tools,workflows,docs:** retire element-scoped actions into their nodes ([AGL-1478](https://linear.app/aglyn/issue/AGL-1478))
+- **console,besigner:** the besigner writes an interaction onto its element ([AGL-1478](https://linear.app/aglyn/issue/AGL-1478), [AGL-1066](https://linear.app/aglyn/issue/AGL-1066), [AGL-1476](https://linear.app/aglyn/issue/AGL-1476))
+- **aglyn,marketing:** a published page runs the interactions on its own nodes ([AGL-1478](https://linear.app/aglyn/issue/AGL-1478), [AGL-659](https://linear.app/aglyn/issue/AGL-659))
+- **aglyn,tenant:** keep the abuse-report control on the page ([AGL-1477](https://linear.app/aglyn/issue/AGL-1477))
+- **besigner:** the hierarchy eye hides a layer ([AGL-592](https://linear.app/aglyn/issue/AGL-592), [AGL-1405](https://linear.app/aglyn/issue/AGL-1405))
+- **besigner,docs:** hide an element from the published site without typing a class ([AGL-592](https://linear.app/aglyn/issue/AGL-592))
+- **besigner,docs:** switch a class off on the canvas without removing it ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **besigner,shared:** carry the style switch across every panel control ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** owner controls for the embed and connection allowlists ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **tenant:** frame-src is enforced on published sites ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-518](https://linear.app/aglyn/issue/AGL-518), [AGL-1944](https://linear.app/aglyn/issue/AGL-1944))
+- **tenant:** connect-src is enforced on published sites ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **besigner,shared,docs:** switch one style off without losing its value ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **besigner,docs:** show a hidden element on the canvas from its hierarchy row ([AGL-592](https://linear.app/aglyn/issue/AGL-592))
+- **docs,console:** the CDN moves to every plan, and the feature matrix becomes tracked ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** layouts and components get the working draft too ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** a draft save writes a draft, not the live page ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **tenant,console:** owner controls for media, fonts and form destinations ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** a Security tab on host setup ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** the document switcher covers components too ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** traffic leads the screen view, and activity pages for free ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **tenant,console,docs:** constrain workers and the manifest ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** the save button names the next action, on every editor that has one ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** the save button splits into Save draft and Save & publish ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+
+### Fixed
+
+- **console:** the two lint errors holding the gate red
+- **tenant:** a workspace subdomain IS the console, so the edit hint may return to it ([AGL-627](https://linear.app/aglyn/issue/AGL-627))
+- **tools:** the three red gate guards, and the declaration one of them asked for ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** re-auth stops sending you back to sign in, and the other tab heals ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1062](https://linear.app/aglyn/issue/AGL-1062), [AGL-664](https://linear.app/aglyn/issue/AGL-664))
+- **cloud,console:** the daily crons leave GitHub's scheduler ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **console:** the org-wide feed pages, and the reaper reads its claims safely ([AGL-1490](https://linear.app/aglyn/issue/AGL-1490), [AGL-942](https://linear.app/aglyn/issue/AGL-942))
+- **console:** an idle staff tab stops talking itself into a 404 ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **commerce,tenant:** commerce lists page, and the liability is a real total ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-2292](https://linear.app/aglyn/issue/AGL-2292), [AGL-1767](https://linear.app/aglyn/issue/AGL-1767))
+- **console:** the activity feed pages, and its rows carry their date ([AGL-2292](https://linear.app/aglyn/issue/AGL-2292), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **plugins-mui:** a subtitle is not a heading ([AGL-1487](https://linear.app/aglyn/issue/AGL-1487))
+- **besigner,console:** saving an unchanged document says so instead of writing ([AGL-1483](https://linear.app/aglyn/issue/AGL-1483), [AGL-1262](https://linear.app/aglyn/issue/AGL-1262))
+- **console:** staff timestamps carry the time, in the reader's own zone ([AGL-1482](https://linear.app/aglyn/issue/AGL-1482))
+- **besigner:** the row menu opens at the panel edge, not the row's ([AGL-1481](https://linear.app/aglyn/issue/AGL-1481))
+- **besigner,console:** node edits record an undo step and reach the map ([AGL-1480](https://linear.app/aglyn/issue/AGL-1480), [AGL-1481](https://linear.app/aglyn/issue/AGL-1481))
+- **aglyn,console,marketplace,tenant:** close the image/* prefix and the fifth ingress ([AGL-1476](https://linear.app/aglyn/issue/AGL-1476), [AGL-1474](https://linear.app/aglyn/issue/AGL-1474))
+- **console:** the nav bar aligns its active tab in a background tab too ([AGL-649](https://linear.app/aglyn/issue/AGL-649))
+- **plugins-mui:** a presence flag is not a cleared attribute ([AGL-592](https://linear.app/aglyn/issue/AGL-592))
+- **console:** narrow the tab strip's scroll arrows
+- **console:** put the secondary bar's first tab back to its stock metrics
+- **console:** a flat screens list pays for no toggle slot and no indent ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** expanding a screen holds the columns still and slides its children in ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** row actions are anchors and the quick action is named in the menu ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the secondary bar's first tab hung a gutter right of every other bar
+- **tools:** emit browser source maps so client error reports name a file
+- **console:** saving an email version no longer changes which email sends
+- **shared:** the styles panel colour swatch drew a wedge out of its circle
+- **besigner:** hovering a selected node lost its wash and clipped its controls ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **besigner:** the hover outline and its wash were slate, not the accent ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** a dead session cost six denied reads per read, not one ([AGL-1440](https://linear.app/aglyn/issue/AGL-1440), [AGL-216](https://linear.app/aglyn/issue/AGL-216))
+- **console:** the installed app icon had a translucent seam along its bottom edge ([AGL-1058](https://linear.app/aglyn/issue/AGL-1058))
+- **tenant,console:** the host caches expired between requests, so they never hit ([AGL-1302](https://linear.app/aglyn/issue/AGL-1302))
+- **billing:** an org with no billing document paid two reads on every lookup ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1289](https://linear.app/aglyn/issue/AGL-1289))
+
+### Performance
+
+- **shared:** the log level decides whether a debug line reaches the console
+- **plugins,shared:** a published page no longer ships the Firebase client SDK
+
+### Reverted
+
+- **console:** undo the secondary app bar spacing changes
+
+### Changed
+
+- **console:** the site activity log joins the shared table ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1488](https://linear.app/aglyn/issue/AGL-1488))
+- **console:** the staff users list joins the shared table ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122), [AGL-2005](https://linear.app/aglyn/issue/AGL-2005), [AGL-360](https://linear.app/aglyn/issue/AGL-360), [AGL-1962](https://linear.app/aglyn/issue/AGL-1962))
+- **console,shared-ui-jsx:** the list table becomes shared, and staff orgs adopt it ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1151](https://linear.app/aglyn/issue/AGL-1151), [AGL-1895](https://linear.app/aglyn/issue/AGL-1895))
+- **console,commerce:** every list pages, and none of them grows ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122))
+- **console,shared-ui-jsx:** one pagination footer, on every list ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-703](https://linear.app/aglyn/issue/AGL-703), [AGL-1895](https://linear.app/aglyn/issue/AGL-1895))
+- **console:** custom domain, security and activity move to Admin ([AGL-1484](https://linear.app/aglyn/issue/AGL-1484), [AGL-1485](https://linear.app/aglyn/issue/AGL-1485))
+- **besigner:** drop the element toolbar the canvas stopped rendering
+
+### Documentation
+
+- **tenant:** record why script-src and style-src stay off this surface ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152), [AGL-1228](https://linear.app/aglyn/issue/AGL-1228))
+- replace transcript openers with the constraint they introduced
+- **besigner,shared,tools:** restore comment blocks cut off mid-sentence
+- **console,tenant:** restore comment blocks cut off mid-sentence
+- name roles, not people, in runbooks and guards
+- **aglyn,plugins,tenant:** rewrite library comments to explain the code
+- **console:** rewrite spec and legal-constant comments to explain the code
+- **console:** rewrite api and component comments to explain the code
+- **besigner,shared:** rewrite style-panel comments to explain the code
+- **console,besigner,tenant:** rewrite comments to explain the code
+- **aglyn:** rewrite plan-entitlements comments to explain the code
+
+<details>
+<summary>Also in this release: 1 test, 4 chore, 1 style</summary>
+
+- **tenant:** pick up the generated root-params types reference
+- **besigner:** cover the hidden-element reveal through the rendered tree ([AGL-592](https://linear.app/aglyn/issue/AGL-592))
+- american spelling in the policy builder's comments
+- remove the message text itself, not just the attribution
+- finish removing quoted messages and genericise owner-role references
+- remove quoted owner messages from code comments and docs
+
+</details>
+
 ## v1.0.0-beta.25 — 2026-08-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.24...v1.0.0-beta.25)
@@ -277,7 +393,7 @@ content on the marketing site and is written separately.
 - **crons:** the two frequent sweeps move to the punctual runner ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617), [AGL-2010](https://linear.app/aglyn/issue/AGL-2010), [AGL-2176](https://linear.app/aglyn/issue/AGL-2176), [AGL-786](https://linear.app/aglyn/issue/AGL-786), [AGL-1955](https://linear.app/aglyn/issue/AGL-1955))
 - **redirects:** only a publisher may route a live site off-platform ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334), [AGL-2372](https://linear.app/aglyn/issue/AGL-2372))
 - **guards:** the facilitator charge shape is an exit code, not a comment ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
-- **console:** the screen version view takes Zach's card spans, and Raw JSON collapses ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** the screen version view takes the card spans, and Raw JSON collapses ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
 - **console:** the page activity card asks for the newest entries, not a random 200 ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-2292](https://linear.app/aglyn/issue/AGL-2292))
 - **docs:** a bare {date} placeholder is MDX, and it broke the whole docs build ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498))
 - **guards:** a ratchet's own output names the row that clears it ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
@@ -1076,8 +1192,8 @@ content on the marketing site and is written separately.
 ### Documentation
 
 - **analytics:** the page_title dimension, both defects and what is left ([AGL-2060](https://linear.app/aglyn/issue/AGL-2060))
-- **handoff:** close 2026-08-18 — Zach's decisions, the restated mandate, six agents in flight
-- **claude:** /release carries Zach's 2026-08-18 restated mandate verbatim
+- **handoff:** close 2026-08-18 — the decisions, the restated mandate, six agents in flight
+- **claude:** /release carries the 2026-08-18 restated mandate verbatim
 
 <details>
 <summary>Also in this release: 4 test, 1 ci</summary>

@@ -100,8 +100,9 @@ is the same result assembled from **primitives** — insert it and you get:
 - a wrapper **Stack** (`position: relative`) holding
 - a trigger **Button**, and
 - a **panel Stack** positioned under the trigger, three link columns
-  inside, carrying the `aglyn-hidden` class so it starts closed on the
-  live site (the canvas still shows it for editing).
+  inside, already set to **Hide on published site** so it starts closed
+  on the live site (the canvas starts it closed too — open it with the
+  eye on its hierarchy row when you want to design it).
 
 The difference from hand-building: **the hover choreography arrives
 pre-wired.** Inserting the preset creates two real interactions on the
@@ -150,9 +151,27 @@ Three patterns cover most menus:
   Open/close a drawer* (or *a menu*).
 
 :::tip Start hidden
-To make a show-target start hidden, add the `aglyn-hidden` class under
-**Styles → Classes & custom CSS**. The live site hides it from the very
-first paint; the canvas keeps it visible so you can keep editing it.
+To make a show-target start hidden, open its **⋮** menu — on its
+**Hierarchy** row or on the canvas — and choose **Start hidden until an
+interaction shows it**. The live site hides it from the very first
+paint, and so does the canvas, so you are designing what a visitor
+sees.
+
+Selecting the element, or anything alongside it inside its container,
+opens it on the canvas for as long as it is selected, so you can work on
+it. That is a canvas-only preview: it is never saved and never changes
+what the published site does.
+
+Under the hood this is the `aglyn-hidden` class, which you will see on
+the element's chip list under **Styles → Classes & custom CSS** — useful
+to know if you are targeting it from theme styles or a class action, but
+you never have to type it.
+
+**This is not the same as the eye** on the Hierarchy row. The eye hides
+an element outright — `display: none`, in the besigner and on the
+published site, with nothing that reveals it. Use the eye to take
+something off the page; use **Start hidden** for a panel an interaction
+opens.
 :::
 
 ## Responsive visibility

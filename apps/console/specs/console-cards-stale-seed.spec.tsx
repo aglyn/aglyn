@@ -133,8 +133,21 @@ jest.mock('../components/host-id-provider', () => ({
   useHostSubdomain: () => 'acme',
   useHostId: () => 'host-1',
 }))
+/*
+ * `usePathname` too, because the REAL `AppLink` renders here now.
+ *
+ * The shared list table used to reach `AppLink` through the
+ * `@aglyn/shared-ui-jsx` barrel, which this file stubs. Since the table moved
+ * into that library it imports the module directly — as a library module
+ * should, rather than round-tripping its own barrel — so the stub no longer
+ * stands in front of it. Mocking the router hook it needs is the honest fix;
+ * re-stubbing the link would only hide which component is really rendering.
+ */
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => '/acme/hosts/host-1/components',
+  useSearchParams: () => new URLSearchParams(),
+  useParams: () => ({ orgSlug: 'acme', host: 'host-1' }),
 }))
 
 jest.mock('firebase/firestore', () => ({

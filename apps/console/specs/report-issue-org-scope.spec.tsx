@@ -18,12 +18,8 @@
 /**
  * A report names the workspace the reporter was IN, or names none (AGL-2486).
  *
- * Zach, 2026-08-22, filing from the staff console: "I was in the staff console
- * and therefore was not viewing an org but those fields said there was an org
- * attached to it. If we are not viewing an org the org context should be
- * nothing."
- *
- * AGL-2485 is the evidence: it recorded `/admin/media-quarantine` as the route
+ * A page that is not about a workspace must stamp no workspace on the report
+ * it files. AGL-2485 is the evidence of the alternative: it recorded `/admin/media-quarantine` as the route
  * and `Test Org` as the organization — a workspace that page has nothing to do
  * with. `useCurrentOrg()` resolves through `useOrgScope().currentOrg`, which
  * falls back to a remembered selection and then the user's FIRST org so that

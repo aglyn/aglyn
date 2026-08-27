@@ -163,8 +163,9 @@ const TOPIC_SURFACES: Record<string, { file: string; marker: string }> = {
     file: `${DESIGNER}/element-detail.component.tsx`,
     marker: "{'Learn more'}",
   },
+  // Its own panel tab since AGL-1486, out of the bottom of Attributes.
   interactions: {
-    file: `${DESIGNER}/element-props-form.component.tsx`,
+    file: `${DESIGNER}/element-interactions-form.component.tsx`,
     marker: "{'Interactions'}",
   },
   layouts: { file: SCREEN_EDITOR, marker: "{'Shared layout'}" },

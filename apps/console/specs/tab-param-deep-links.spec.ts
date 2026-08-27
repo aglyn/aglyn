@@ -16,17 +16,14 @@
  */
 
 /**
- * A `?tab=` link opens the tab it names (AGL-2486).
+ * A `?tab=` link opens the tab it names (AGL-2486), on every surface with
+ * vertical tabs.
  *
- * Zach: *"tab param did not automatically navigate the vertical tabs, fix this
- * and make it fixed everywhere that uses the vertical tabs and tab param."*
- *
- * Host Setup validated the incoming id against a hand-written condition, and
- * it was ALREADY WRONG when he found it: the Tracking tab had been added
- * minutes earlier, its id was not in the condition, and
- * `/setup?tab=hostTracking` silently opened Basic details. Nothing failed —
- * the page rendered a perfectly good panel, just not the one the URL asked
- * for, which is the kind of wrong nobody files a bug about twice.
+ * Validating the incoming id against a hand-written condition goes wrong
+ * quietly: a tab added after the condition was written is not in it, so
+ * `/setup?tab=<newTab>` opens Basic details instead. Nothing fails — the page
+ * renders a perfectly good panel, just not the one the URL asked for, which is
+ * the kind of wrong nobody files a bug about twice.
  *
  * `useTabParam` fixed the mechanism. This is what stops the LIST going stale
  * again: the rendered tabs are derived from the page's own source and compared
@@ -75,10 +72,15 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
   })
 
   it('lists every FIXED tab the page renders', () => {
-    // Derived from the JSX rather than hand-listed here, so a fifth fixed tab
+    // Derived from the JSX rather than hand-listed here, so the next fixed tab
     // fails this instead of being quietly unreachable.
+    //
+    // The floor is a canary on the EXTRACTION, not a claim about how many
+    // tabs Setup ought to have: it is what stops a regex that has stopped
+    // matching from passing this test by finding nothing at all. Two, since
+    // AGL-1485 moved Custom domain, Security and Activity to Admin.
     const constants = renderedTabConstants(SETUP)
-    expect(constants.length).toBeGreaterThanOrEqual(4)
+    expect(constants.length).toBeGreaterThanOrEqual(2)
     for (const constant of constants) {
       const declared = SETUP.match(
         new RegExp(`const ${constant} = '([a-z-]+)'`),

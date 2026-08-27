@@ -96,16 +96,16 @@ export function EntityLogoCard(props: EntityLogoCardProps) {
   /**
    * A PERSON does not have a logo (AGL-2486).
    *
-   * Zach: *"it also doesn't reflect copy when the entity is a person."* Every
-   * word here said logo, publisher's mark, the organization publishing this
-   * site — while the Type select one field up may say Person, and a site run
-   * by one человек is the common case for a portfolio or a consultancy.
+   * The Type select one field up may say Person — a site run by one person is
+   * the common case for a portfolio or a consultancy — so this card's copy
+   * cannot talk about a logo, a publisher's mark or the organization behind
+   * the site.
    *
    * It is not only wording. `schema.org` gives `logo` to an Organization and
-   * `image` to a Person, and the tenant emitted `logo` for both until this
-   * issue — so for a Person the value was published under a property its own
-   * `@type` does not define. `hostSeoEntityImageJsonLd` now picks the right
-   * one, and this copy describes what actually gets published.
+   * `image` to a Person, so publishing `logo` for a Person puts the value
+   * under a property that `@type` does not define.
+   * `hostSeoEntityImageJsonLd` picks the right one, and the copy below
+   * describes what actually gets published.
    */
   const isPerson =
     Aglyn.contentAuthorSchemaType(data?.seo?.entity?.type) === 'Person'

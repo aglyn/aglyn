@@ -309,7 +309,7 @@ async function exportDocAsText(docId, token, mimeType = 'text/plain') {
       status: res.status,
       detail,
       // The Drive API being off is a different one-time click than sharing,
-      // and conflating them sends Zach to the wrong screen.
+      // and conflating them sends the operator to the wrong screen.
       apiDisabled: /has not been used in project|it is disabled/i.test(detail),
     }
   }

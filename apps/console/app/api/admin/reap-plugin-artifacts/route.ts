@@ -49,6 +49,24 @@ const MIN_AGE_DAYS = 7
 /** Ceiling on permanent deletions per run. */
 const MAX_DELETES = 200
 
+/** Claim documents read per query while walking the collection group. */
+const CLAIM_SCAN_PAGE = 500
+
+/**
+ * The most claims one run will walk before refusing to reap at all.
+ *
+ * Not a page cap — the walk below is exhaustive by construction. This is the
+ * ceiling past which the run declines to draw a conclusion, because the ONE
+ * unsafe outcome here is an incomplete claim set: every object this job
+ * deletes is deleted precisely because nothing claimed it, and a claim the
+ * scan never reached looks exactly like a claim that does not exist. The
+ * bucket has no object versioning, so that mistake is permanent.
+ *
+ * Refusing is therefore the safe answer, and it is loud: the run reports the
+ * ceiling it hit rather than reaping what it managed to see.
+ */
+const MAX_CLAIMS_SCANNED = 100_000
+
 /**
  * Scheduled orphan reaping for the plugin-artifacts bucket (AGL-942).
  * Same invocation contract as the other scheduled routes: POST with
@@ -145,18 +163,66 @@ async function handler(request: Request): Promise<Response> {
       size: Number(file.metadata?.size ?? 0),
     }))
 
-    // Every claim in the platform, in one collection-group read. The version
-    // doc is the ONLY thing that keeps bytes alive — see the module comment
-    // on why install pins deliberately do not enter this decision.
-    const versions = await firestore.collectionGroup('pluginVersions').get()
+    /*
+     * Every claim in the platform. The version doc is the ONLY thing that
+     * keeps bytes alive — see the module comment on why install pins
+     * deliberately do not enter this decision.
+     *
+     * ## Why this is walked in pages, and why it still must be COMPLETE
+     *
+     * It was one unbounded `.get()` over the whole collection group, which
+     * materialises every version document on the platform in memory at once
+     * and grows with the marketplace rather than with anything this run does.
+     * That fails eventually, and it fails on a scheduled job nobody is
+     * watching.
+     *
+     * Paging fixes the memory and the query timeout. It must not be mistaken
+     * for making the scan optional: a claim the walk never reached is
+     * indistinguishable from a claim that does not exist, and this job
+     * deletes exactly the objects nothing claims. So the loop runs to
+     * exhaustion, a throw anywhere in it aborts the whole request before a
+     * single delete, and passing `MAX_CLAIMS_SCANNED` refuses the run instead
+     * of reaping against a partial set.
+     *
+     * `select('sha256')` because that and the document path are all the join
+     * reads. It does not reduce the number of documents billed — Firestore
+     * charges per document — but a version document carries its manifest, and
+     * none of that needs to cross the wire.
+     */
     const claimed = new Set<string>()
     const listingIds = new Set<string>()
-    for (const doc of versions.docs) {
-      const listingId = doc.ref.parent.parent?.id
-      const sha256 = doc.get('sha256')
-      if (!listingId || typeof sha256 !== 'string' || !sha256) continue
-      claimed.add(artifactClaimKey(listingId, doc.id, sha256))
-      listingIds.add(listingId)
+    let claimsScanned = 0
+    let claimCursor: FirebaseFirestore.QueryDocumentSnapshot | null = null
+    for (;;) {
+      const base = firestore
+        .collectionGroup('pluginVersions')
+        .orderBy('__name__')
+        .select('sha256')
+        .limit(CLAIM_SCAN_PAGE)
+      const page = await (claimCursor ? base.startAfter(claimCursor) : base).get()
+      if (page.empty) break
+      for (const doc of page.docs) {
+        claimsScanned += 1
+        const listingId = doc.ref.parent.parent?.id
+        const sha256 = doc.get('sha256')
+        if (!listingId || typeof sha256 !== 'string' || !sha256) continue
+        claimed.add(artifactClaimKey(listingId, doc.id, sha256))
+        listingIds.add(listingId)
+      }
+      if (claimsScanned > MAX_CLAIMS_SCANNED) {
+        return Response.json(
+          {
+            error:
+              `Refusing to reap: more than ${MAX_CLAIMS_SCANNED} plugin ` +
+              'version claims. Deleting against a claim set this run could ' +
+              'not finish reading would delete live artifacts permanently.',
+            claimsScanned,
+          },
+          { status: 507 },
+        )
+      }
+      claimCursor = page.docs[page.docs.length - 1] ?? null
+      if (page.docs.length < CLAIM_SCAN_PAGE) break
     }
 
     // Which of those listings still exist — an orphaned subcollection is

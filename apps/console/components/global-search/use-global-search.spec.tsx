@@ -22,7 +22,7 @@
 /**
  * AGL-2486: what console search COSTS, and what it refuses to read.
  *
- * Zach asked for search across roughly a dozen collections and in the same
+ * the requirement was for search across roughly a dozen collections and in the same
  * breath asked that it not cost too many reads. Those only pull against each
  * other if the reads are per keystroke, so the assertions here are about
  * WHEN a read is issued rather than about the rows that come back — that is
@@ -464,7 +464,7 @@ describe('when the window was not big enough', () => {
   })
 
   /**
-   * The cost control. Zach's constraint was that a dozen groups not cost too
+   * The cost control. the constraint was that a dozen groups not cost too
    * many reads, and the escalation is only affordable because a group that
    * already answered never pays for it.
    */

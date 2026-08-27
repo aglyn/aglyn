@@ -16,8 +16,8 @@
  * limitations under the License.
  */
 
-// Fail when the launch-day runbook tells Zach to run something that is not
-// there (AGL-1533).
+// Fail when the launch-day runbook tells its reader to run something that is
+// not there (AGL-1533).
 //
 //   npm run check:runbook-commands
 //   npm run check:runbook-commands -- --list      # every reference and its verdict

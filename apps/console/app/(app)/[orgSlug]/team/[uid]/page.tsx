@@ -44,6 +44,7 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import MemberAvatar from '../../../../../components/member-avatar.component'
+import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
@@ -519,15 +520,39 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
               orgId={currentOrg.$id}
               targetId={uid}
               header={'Changes to this member'}
-              max={30}
             />
           ) : null}
           {currentOrg?.$id ? (
-            <OrgActivityCard
-              orgId={currentOrg.$id}
-              actorId={uid}
+            /*
+             * Everything this member has done in THIS organization
+             * (AGL-1488) — its own sites included, not just the org-level
+             * events.
+             *
+             * `OrgActivityCard` filtered the org's own feed client-side, so
+             * it could only ever show what happened at org level: an invite,
+             * a role change, a billing edit. Most of what a member actually
+             * does happens on a SITE and lands in that site's activity
+             * collection, which that card never read — the card was headed
+             * "Activity by this member" and answered a much smaller question.
+             *
+             * Same `org.auditLog` permission, and scoped to this org's own
+             * sites, so it cannot become a cross-organization view of someone
+             * who is also a member elsewhere.
+             */
+            <ActorActivityTable
+              endpoint={`/api/orgs/activity?orgId=${encodeURIComponent(
+                currentOrg.$id,
+              )}&actorId=${encodeURIComponent(uid)}`}
               header={'Activity by this member'}
-              max={30}
+              help={{
+                title: 'Activity by this member',
+                excerpt:
+                  'Everything this person has done in this organization — on its sites as well as at organization level. Requires the org.auditLog permission.',
+              }}
+              description={
+                'Everything they have done in this organization, on its ' +
+                'sites as well as at organization level.'
+              }
             />
           ) : null}
         </Stack>

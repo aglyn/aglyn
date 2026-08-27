@@ -43,7 +43,22 @@ name: Scheduled console crons
 
 on:
   schedule:
-    - cron: '0 2 * * *' # report-usage   — daily 02:00 UTC
+    # ⚠️ The five DAILY schedules are gone from here and live on Cloud
+    # Scheduler (`consoleDailyCron` in cloud/functions/src/index.ts).
+    #
+    # GitHub dropped a whole day of them on 2026-08-27: the 02:00 and 03:00
+    # entries did not fire until 12:25 and 13:56, and 04:00, 07:00 and 08:00
+    # did not fire at all. Every run that DID fire succeeded — only the
+    # dispatch failed, which is the part GitHub documents as best-effort.
+    #
+    # ⛔ Do not re-add them. These routes must be scheduled in EXACTLY ONE
+    # place: `report-usage` meters a closed month into Stripe, so a day on
+    # which both runners fired is a day customers were billed twice.
+    # `scheduled-crons-wiring.spec.ts` fails the build if a schedule here and
+    # a `cloud-scheduler` row in `SCHEDULED_JOBS` ever name the same job.
+    #
+    # They remain in the `workflow_dispatch` list below — a manual re-run is
+    # exactly what the dropped day needed, and dispatch is not a schedule.
     # A POST with no body ARCHIVES AND DELETES; a GET only reports the plan
     # (AGL-2084). This route moves `adminAudit` rows past the 90-day window
     # into Storage and then deletes them from Firestore, and until AGL-2084 a
@@ -51,8 +66,6 @@ on:
     # below had already been given a guard against. `isCronDryRun` keys the
     # default on the METHOD precisely so the bodyless POST this job sends is
     # still a real run.
-    - cron: '0 3 * * *' # audit-archive  — daily 03:00 UTC
-    - cron: '0 4 * * *' # run-erasures   — daily 04:00 UTC
     # The IN-PROGRESS month (AGL-2219), an hour ahead of usage-alerts so the
     # budget evaluation reads a figure computed today rather than yesterday.
     #
@@ -73,8 +86,6 @@ on:
     # The route refuses to meter or stamp `reportedAt` for a month that has
     # not ended, so this schedule cannot bill anybody early however it is
     # invoked — see `monthIsClosed`.
-    - cron: '0 7 * * *' # report-usage (current month, no metering) — daily 07:00 UTC
-    - cron: '0 8 * * *' # usage-alerts   — daily 08:00 UTC
     # HOURLY across the first two days, not one monthly firing (AGL-2409).
     #
     # This route used to read `orgs` with `.limit(1000)` and loop with `await
@@ -216,11 +227,6 @@ jobs:
           DISPATCH_PATH: ${{ github.event.inputs.path }}
         run: |
           case "$FIRED_SCHEDULE" in
-            '0 2 * * *') path=/api/billing/report-usage ;;
-            '0 3 * * *') path=/api/admin/audit-archive ;;
-            '0 4 * * *') path=/api/admin/run-erasures ;;
-            '0 7 * * *') path='/api/billing/report-usage?month=current' ;;
-            '0 8 * * *') path=/api/billing/usage-alerts ;;
             '0 * 1-2 * *') path=/api/billing/usage-email ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;

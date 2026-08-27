@@ -173,6 +173,61 @@ describe('media CDN content-disposition (AGL-1411)', () => {
   })
 })
 
+/**
+ * `?download=1` is the REQUESTER's flag, so it cannot be what decides whether
+ * a type reaches a renderer on the customer's own domain (AGL-1476). Types
+ * with no inline use here are attachments whatever the query says.
+ */
+describe('a type with no inline use downloads whatever the query says', () => {
+  const serveAs = async (contentType: string, query = {}) => {
+    mockState.doc = { ...ORG_WIDE, contentType, fileName: 'asset.bin' }
+    mockState.metadata = { contentType, size: 4 }
+    return serve(['org:acme', 'm1'], query)
+  }
+
+  for (const contentType of [
+    'text/html',
+    'application/xml',
+    'application/json',
+    'text/csv',
+    'text/plain',
+    'application/zip',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ]) {
+    it(`${contentType} is an attachment`, async () => {
+      expect(disposition(await serveAs(contentType))).toContain('attachment')
+    })
+  }
+
+  for (const contentType of [
+    'image/png',
+    'image/webp',
+    // AGL-1474 chose the sandboxing CSP over a forced download precisely so
+    // that opening a logo's URL still shows the logo. That decision stands.
+    'image/svg+xml',
+    'video/mp4',
+    'audio/mpeg',
+    'application/pdf',
+  ]) {
+    it(`${contentType} still renders inline`, async () => {
+      expect(disposition(await serveAs(contentType))).toContain('inline')
+    })
+  }
+
+  it('reads the type with its parameters and in any case', async () => {
+    expect(
+      disposition(await serveAs('TEXT/HTML; charset=utf-8')),
+    ).toContain('attachment')
+    expect(disposition(await serveAs('IMAGE/PNG'))).toContain('inline')
+  })
+
+  it('an unknown type is an attachment — correctness over convenience', async () => {
+    expect(disposition(await serveAs('application/octet-stream'))).toContain(
+      'attachment',
+    )
+  })
+})
+
 describe('media CDN download cache identity (AGL-1411)', () => {
   it('gives the two dispositions DISTINCT ETags', async () => {
     // The query string is part of the CDN cache key, so the two variants

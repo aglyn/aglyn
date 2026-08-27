@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { consoleThemeCssVar, ThemeProvider } from '@aglyn/shared-ui-theme'
@@ -38,10 +41,8 @@ jest.mock('../hooks/use-add-element-drawer-callback', () => ({
 /**
  * AGL-2486 — the selection and hover chrome is drawn per LINE FRAGMENT.
  *
- * Zach: *"the element outline doesn't wrap the text on the new line unless
- * you are editing it"*. The overlay positioned everything from one
- * `getBoundingClientRect()`, which cannot describe an inline run that has
- * wrapped.
+ * A single `getBoundingClientRect()` cannot describe an inline run that has
+ * wrapped, so an outline drawn from one skips the text on the new line.
  *
  * jsdom does no layout, so the elements below state their own boxes. That is
  * the honest level for this file: what is under test is whether the overlay
@@ -208,5 +209,53 @@ describe('the node overlay follows the element it outlines (AGL-2486)', () => {
     expect(
       document.querySelectorAll(`[data-aglyn-node="${NODE_ID}"]`),
     ).toHaveLength(1)
+  })
+
+  /**
+   * Paint order is what keeps the action strip usable. Nothing in this
+   * chrome declares a `z-index`, so positioned siblings paint in document
+   * order and whatever is drawn LAST sits on top. The strip is the only
+   * interactive part of the overlay, and an outline drawn after it would
+   * cover its buttons.
+   */
+  it('paints its interactive chrome last, after every outline it draws', () => {
+    mount([rect(110, 291, 656, 56), rect(110, 347, 400, 56)])
+
+    const strip = document.querySelector(`[data-aglyn-node="${NODE_ID}"]`)
+    expect(strip).toBeTruthy()
+    const drawn = outlines()
+    expect(drawn.length).toBeGreaterThan(0)
+    for (const box of drawn) {
+      const position = box.compareDocumentPosition(strip as Node)
+      expect(Boolean(position & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    }
+  })
+})
+
+/**
+ * The same question one level up, where the canvas mounts BOTH overlays.
+ *
+ * Each overlay root is a fixed-position popper, so it is its own stacking
+ * context and a `z-index` declared inside one cannot lift it past the other:
+ * the two roots order by document position alone. The overlay carrying the
+ * action strip therefore has to be the last one rendered, or the other
+ * overlay's outline paints across the strip's buttons — and it draws the
+ * SELECTED treatment whenever the pointer is on the selected node, which is
+ * exactly when someone is reaching for them.
+ */
+describe('the canvas mounts the overlay with controls last (AGL-2486)', () => {
+  const sourceOf = (file: string) => readFileSync(join(__dirname, file), 'utf8')
+
+  it('renders the decoration overlay before the one carrying controls', () => {
+    const source = sourceOf('viewport-frame.component.tsx')
+    expect(source.indexOf('variant="hovered"')).toBeLessThan(
+      source.indexOf('variant="selected"'),
+    )
+  })
+
+  it('leaves the outline no z-index to climb back over them with', () => {
+    // Document order only decides this while the decoration stays out of the
+    // stacking game. A `z-index` here would beat the order above silently.
+    expect(sourceOf('node-outline.tsx')).not.toContain('zIndex')
   })
 })

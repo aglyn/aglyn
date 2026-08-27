@@ -353,7 +353,7 @@ async function handler(request: Request): Promise<Response> {
 
       /*==========================================
        * THE FIRST SWEEP OF AN ORG IS SILENT — it BACKFILLS the guard map
-       * instead of firing (AGL-2420, Zach's call).
+       * instead of firing (AGL-2420).
        *
        * Removing the `continue` above, on its own, mails every free org on
        * the platform on the next run: their guard maps are empty, so every
@@ -787,12 +787,11 @@ async function handler(request: Request): Promise<Response> {
         // deduped from here on without ever having been mailed about a state
         // it was already in.
         if (!recordAlert(check.key, threshold)) continue
-        // THE ALERT IS THE PROTECTION (2026-08-18). Zach's condition on
-        // billing storage was "so customers don't get a surprise bill" — and
-        // once overage bills by default rather than being refused, this
-        // notification is the entire thing standing between a customer and a
-        // number they did not expect. So it must describe what actually
-        // happens at the band:
+        // THE ALERT IS THE PROTECTION. Metered storage bills by default
+        // rather than being refused, and the condition attached to that is
+        // that no customer gets a surprise bill — so this notification is the
+        // entire thing standing between a customer and a number they did not
+        // expect. It must describe what actually happens at the band:
         //
         //   billsOverage -> the product keeps working and starts charging;
         //                   the action is "cap it or upgrade", never "upgrade
@@ -854,9 +853,6 @@ async function handler(request: Request): Promise<Response> {
 
       /*==========================================
        * USAGE BUDGETS (AGL-1528) — the GCP billing-budget half.
-       *
-       * Zach, 2026-08-18, verbatim: "our usage metering, usage alerts,
-       * budgets for usage alerts, similar to how google cloud charges".
        *
        * Everything above answers "am I near a band". A budget answers "what
        * will I owe", which is a different question and the one a metered
@@ -1108,9 +1104,8 @@ async function handler(request: Request): Promise<Response> {
       /*==========================================
        * THE FREE PLAN'S BANDWIDTH HARD CAP (AGL-1967/2155).
        *
-       * ZACH, 2026-08-19, choosing to enforce now rather than at launch:
-       * "before public signups arrive, so the cap is proven under real
-       * traffic while the cohort is small and a mistake is cheap."
+       * Enforced from before public signups, so the cap is proven under real
+       * traffic while the cohort is small and a mistake is cheap.
        *
        * THE DECISION IS MADE HERE because the numbers are already here. This
        * sweep has just summed the org's page views for the current month and
@@ -1214,8 +1209,8 @@ async function handler(request: Request): Promise<Response> {
        *
        * THE SWITCH: `AUTO_LOCK_BILLING_FROM=YYYY-MM` (utils/
        * billing-auto-lock.ts). Unset/malformed = this whole block is
-       * inert — auto-suspending paying-ish customers is a policy Zach
-       * flips deliberately, never a default. The manual button is
+       * inert — auto-suspending paying-ish customers is a policy an
+       * operator turns on deliberately, never a default. The manual button is
        * /admin/lockdown, reason `billing`.
        *=========================================*/
       if (

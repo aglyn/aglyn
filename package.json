@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.25",
+  "version": "1.0.0-beta.26",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -192,7 +192,8 @@
     "guards": "node tools/scripts/run-guards.mjs",
     "test:run-guards": "node tools/scripts/run-guards.mjs --self-test",
     "typecheck:changed": "node tools/scripts/typecheck.mjs --changed",
-    "test:gate-report": "node tools/scripts/gate-report.mjs --self-test"
+    "test:gate-report": "node tools/scripts/gate-report.mjs --self-test",
+    "check:feature-matrix": "SWC_NODE_PROJECT=tools/marketing/tsconfig.tables.json node --import @swc-node/register/esm-register tools/scripts/gen-feature-matrix.mts --check"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",

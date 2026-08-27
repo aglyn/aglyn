@@ -25,7 +25,7 @@
  * 280 reads for data that cannot change — thirteen of those fourteen days are
  * CLOSED, written by the day they name and never again.
  *
- * It is the same defect Zach named on "Used by" (*"that will get expensive"*),
+ * It is the same Used by rule on Used by — that will get expensive,
  * one collection over, and it survived the AGL-1440 sweep that fixed the media
  * drawer and the host traffic panel.
  *

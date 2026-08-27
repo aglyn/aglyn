@@ -201,16 +201,15 @@ describe('materialize / serialize pills (AGL-586)', () => {
 /**
  * AGL-2486 — the stand-down rule, expressed once.
  *
- * Zach, on the live editor: *"I can't seem to click the text or move the
- * text cursor or select text"* — the editor open, styled, and completely
- * uninteractive.
+ * The symptom this guards against is an editor that opens, styles correctly,
+ * and cannot be clicked into at all — no caret, no selection.
  *
  * Every canvas leaf registers pointer handlers that begin by preventing the
- * default, which is the default the browser uses to place a caret. Standing
- * a leaf down by IDENTITY was worse than not standing it down at all: a
- * nested run silenced its own leaf, which stopped it calling
- * `stopPropagation` too, so the event bubbled to the ancestor leaf and the
- * ancestor prevented the default instead.
+ * default, which is the default the browser uses to place a caret. Standing a
+ * leaf down by IDENTITY is worse than not standing it down at all: a nested
+ * run silences its own leaf, which stops it calling `stopPropagation` too, so
+ * the event bubbles to the ancestor leaf and the ancestor prevents the default
+ * instead.
  */
 describe('isInlineEditWithin (AGL-2486)', () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires

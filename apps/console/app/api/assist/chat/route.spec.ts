@@ -683,7 +683,7 @@ describe('a docs-answerable question costs nothing', () => {
   it('a STANDALONE follow-up is answered from the docs too (AGL-2486)', async () => {
     // This escalated until AGL-2486's second pass, and on a deployment with
     // no key that meant one answer per thread and then a capability refusal —
-    // what Zach hit. A question that stands on its own words and retrieves
+    // what was hit. A question that stands on its own words and retrieves
     // emphatically is the same question whenever it is asked.
     seedOrgs()
     const response = await POST(
@@ -740,8 +740,9 @@ describe('a docs-answerable question costs nothing', () => {
  * the questions retrieval could not answer.
  *
  * Every self-hosted install on its first day is this deployment, and so is
- * Aglyn's own production today. It used to refuse them all with a bare
- * capability error, which is what Zach read as the product being broken. The
+ * Aglyn's own production today. Refusing them all with a bare capability
+ * error reads as the product being broken, especially arriving after a
+ * question that worked. The
  * self-host charter's "degrade cleanly" has a floor: the whole documentation
  * corpus and an index over it are still there, so the answer is the closest
  * pages, never nothing.
@@ -817,7 +818,7 @@ describe('with no key at all, a question still gets the closest pages', () => {
   })
 
   it("THE REPORTED BUG: a keyless thread does not fall off a cliff", async () => {
-    // Zach's session, in order: a docs question answered in full, then a
+    // the session, in order: a docs question answered in full, then a
     // second question in the same thread. It came back "Aglyn Assist is not
     // configured on this deployment". Both turns must now be answerable, and
     // NEITHER may be a refusal.

@@ -118,7 +118,8 @@ describe('SessionHealthBanner (AGL-1063)', () => {
   })
 
   /**
-   * The change Zach asked for: the fix, not a description of the problem.
+   * A stale session gets the thing that fixes it, not a description of it:
+   * the sign-in dialog opens and no banner is drawn.
    */
   it('opens the sign-in dialog — and NO banner — once the session is the verdict', async () => {
     render(<SessionHealthBanner />)

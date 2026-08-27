@@ -26,7 +26,7 @@ AGL-1311, and §4 recommends a **derived redirect twin** — reusing the exact
 mechanism already proven on `www.aglyn.com` — rather than the data-model change
 the issue describes.
 
-Zach's actual decisions are in §7. Two of them are one-line confirmations.
+the actual decisions are in §7. Two of them are one-line confirmations.
 
 ---
 
@@ -459,7 +459,7 @@ show up in any test that exercises one org.
 
 ---
 
-## 7. What Zach actually has to decide
+## 7. What the account owner actually has to decide
 
 | # | Decision | Weight |
 | --- | --- | --- |

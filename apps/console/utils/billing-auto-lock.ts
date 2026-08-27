@@ -21,8 +21,8 @@
  * TO TURN IT ON: set `AUTO_LOCK_BILLING_FROM` to the first month it applies,
  * e.g. `AUTO_LOCK_BILLING_FROM=2026-10`. Anything else — unset, empty, or
  * malformed — and this predicate answers `false` for every org: locking
- * paying-ish customers automatically is a policy Zach flips deliberately,
- * never a default. Same design as `BILL_ORG_LIBRARY_STORAGE_FROM`
+ * paying-ish customers automatically is a policy an operator turns on
+ * deliberately, never a default. Same design as `BILL_ORG_LIBRARY_STORAGE_FROM`
  * (usage-metering.ts): a start MONTH rather than a boolean, so flipping it
  * on is also a record of when, and it FAILS CLOSED on garbage.
  *

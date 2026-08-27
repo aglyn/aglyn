@@ -347,7 +347,7 @@ export function recordSignupRefusal(
  * **403 `Permission denied for all log views`**, because the firebase-admin
  * service account can create log entries and cannot list them. So the only
  * reader the log has is a GCP alert policy that does not exist yet, and
- * creating one is Zach's click, not a thing that ships with a commit.
+ * creating one is the click, not a thing that ships with a commit.
  *
  * That is the AGL-2486 shape exactly — a detector written into a place nothing
  * watches. This marker is the second copy of the count, in a store we can
@@ -359,8 +359,9 @@ export function recordSignupRefusal(
  * degradation markers and the AGL-1907 refusal markers, for the reason those
  * two gave: it inherits the deny-all security rule and the `expiresAt` TTL
  * policy that already exist, instead of needing a new collection, a rules
- * deploy and a second TTL policy — i.e. instead of needing Zach. Minute
- * bucketed so concurrent instances converge:
+ * deploy and a second TTL policy — i.e. instead of needing a console action
+ * nobody can take from code. Minute bucketed so concurrent instances
+ * converge:
  *
  * ```
  * rateLimits/serverError_1755100800000

@@ -32,6 +32,7 @@ import {
 } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
+import type { NodeInteraction } from '../app-utils/node-interactions'
 import { schemaAcceptsChildren } from '../app-utils/child-contract'
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '../app-utils/compose-reusable-components'
 import { stripUndefinedDeep } from '../app-utils/strip-undefined'
@@ -80,6 +81,19 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
    * field survives in memory but not across a save.
    */
   public attrOverrides?: Record<string, Record<string, unknown>>
+  /**
+   * Interactions authored on this element (AGL-1478) — see `NodeSchema`.
+   * Third field under the same three-touch-point rule as the two above:
+   * declared here, assigned in the constructor, emitted in `toJSON`.
+   */
+  public interactions?: NodeInteraction[]
+  /**
+   * Hidden by the author (AGL-1479) — see `NodeSchema`. Same three touch
+   * points, and it needs all of them for a second reason as well: an
+   * undeclared field assigned at runtime is not observable, so the hierarchy
+   * row would not repaint when the eye was clicked.
+   */
+  public hidden?: boolean
 
   get parent(): NodeSchema<any> | undefined {
     if (!this.parentId) return
@@ -143,6 +157,10 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     this.attrOverrides = schema.attrOverrides
       ? { ...schema.attrOverrides }
       : undefined
+    this.interactions = Array.isArray(schema.interactions)
+      ? [...schema.interactions]
+      : undefined
+    this.hidden = schema.hidden || undefined
 
     makeAutoObservable(this, {
       store: false,
@@ -192,6 +210,18 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     if (attrOverrides && Object.keys(attrOverrides).length > 0) {
       json['attrOverrides'] = attrOverrides
     }
+    // Element interactions (AGL-1478): emitted like the bags above, absent
+    // when empty. This is the field that makes them versioned with the
+    // document at all — an interaction the canvas holds but this method
+    // does not write is one that never reaches a save.
+    const interactions = stripUndefinedDeep(toJS(this.interactions))
+    if (Array.isArray(interactions) && interactions.length > 0) {
+      json['interactions'] = interactions
+    }
+    // Author visibility (AGL-1479). Emitted only when TRUE: `false` and
+    // absent mean the same thing, and a field on every node in the document
+    // is bytes on every save and every page.
+    if (this.hidden) json['hidden'] = true
     return json as NodeSchemaJSON<P>
   }
 }
@@ -353,6 +383,7 @@ export class CanvasManager {
       deleteNode: action,
       reparentNode: action,
       reorderNode: action,
+      updateNodeFields: action,
       updateNodeProps: action,
     })
 
@@ -1262,6 +1293,33 @@ export class CanvasManager {
    * `AglynNode.toJSON` strips again at the write boundary — this one keeps the
    * live tree honest for everything that reads it before a save.
    */
+  /**
+   * Writes top-level node FIELDS, with an undo step (AGL-1480).
+   *
+   * The sibling of {@link updateNodeProps}, and it exists for the same two
+   * reasons that one documents. An edit with no `saveHistory` is an edit the
+   * author cannot take back — and every panel that assigned to a node
+   * directly was quietly in that state. And it re-resolves by `$id`: callers
+   * hold node objects across time (the focus store keeps the selection that
+   * way), while every wholesale replace of the map — `undo`, `redo`,
+   * `applyNodes`, a draft restore — builds fresh instances. Assigning to the
+   * caller's copy then mutates an orphan: no error, no dirty state, and the
+   * author's edit is simply gone.
+   *
+   * Only the keys the patch names are touched, and `undefined` clears one —
+   * which is how a cleared style or a shown element is stored, since `toJSON`
+   * omits what is undefined.
+   */
+  public updateNodeFields(
+    node: NodeSchema<any>,
+    patch: Partial<NodeSchema<any>>,
+  ): void {
+    if (!node) throw new Error('Invalid node')
+    this.saveHistory()
+    const target = this.getNode(node.$id) ?? node
+    Object.assign(target, patch)
+  }
+
   public updateNodeProps(
     node: NodeSchema<any>,
     props: NodeSchema<any>['props'],

@@ -198,7 +198,7 @@ type BeaconFreeze = 'none' | 'automations' | 'all'
  * answer, and a migration or repair now genuinely has nothing racing it
  * except a commutative counter.
  *
- * ## Still open for Zach, and cheap to change
+ * ## Still open, and cheap to change
  *
  * If the intended reading of read-only is "the meter stops too", this is one
  * line: return `'all'` for read-only instead of `'automations'`. The tests in
@@ -517,9 +517,9 @@ async function engageFreePlanBandwidthCap(options: {
  * no `plan`. So the cap had never engaged for a single never-subscribed org:
  * the entire organic free tier.
  *
- * ZACH's fix, and the reason it is here rather than in the sweep's skip
- * condition: **a cap that lives only in a scheduled sweep stops existing the
- * moment the sweep does not run, is skipped, or errors.** Every other free
+ * The reason the fix is here rather than in the sweep's skip condition:
+ * **a cap that lives only in a scheduled sweep stops existing the moment the
+ * sweep does not run, is skipped, or errors.** Every other free
  * dimension — media ingress, form submissions, contacts, datasets, API
  * requests — refuses at the point of use. Bandwidth now does too. The sweep
  * keeps its writer; this is a second, independent one that needs no cron, no

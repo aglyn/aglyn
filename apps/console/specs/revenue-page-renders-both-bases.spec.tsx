@@ -18,9 +18,9 @@
 /**
  * BOTH BASES, AND THE GAP, REACH THE SCREEN (AGL-2486).
  *
- * Zach asked for contracted and settled revenue "both, side by side" — and
- * the gap between them is the part that does the work, because two totals
- * with a reader left to subtract has wasted the decision.
+ * Contracted and settled revenue are shown side by side, and so is the GAP
+ * between them: two totals with the reader left to subtract answers nothing,
+ * because the difference is the figure the decision turns on.
  *
  * ASSERTED BY RENDERING, not by reading the helpers. The sibling AGL-2163
  * defect on the tax-return page was exactly a correct helper the page never
@@ -359,7 +359,6 @@ describe('a figure that cannot be trusted is never shown as a total', () => {
 })
 
 /**
- * The gap model, and Zach's "this negative number is confusing" (AGL-2486).
  *
  * On July 2026 in production the gap read `$-25.00` with the whole amount as
  * "unexplained residual". The arithmetic was right and the MODEL was wrong:

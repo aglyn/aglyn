@@ -19,7 +19,7 @@
 /**
  * REVENUE — what Aglyn earned, on both bases, with the gap named (AGL-2486).
  *
- * Zach asked for reporting on "how much has been earned, net, gross, from
+ * the requirement was for reporting on "how much has been earned, net, gross, from
  * where, marketplace commission, commerce commission, monthly subscriptions,
  * add-ons", and — asked whether revenue meant settled cash or contracted plan
  * value — answered "Both, side by side".

@@ -18,7 +18,7 @@ name: Legal drift
 # Wiring a check that is already red onto `push` or
 # `pull_request` would turn every merge in the repo red for a reason no
 # engineer can fix — the remedy is publishing legal text, which is a decision
-# for Zach and counsel, not a code change. So this workflow deliberately has
+# for the account owner and counsel, not a code change. So this workflow has
 # NO push and NO pull_request trigger. It gates nothing and blocks nobody. It
 # is loud (a failed scheduled run shows a red badge and mails the actor) and
 # that is the entire job: the drift was invisible, not unfixable.

@@ -157,7 +157,7 @@ describe('style field groups (AGL-540/587)', () => {
     ])
   })
 
-  it('leads Typography with a whole-text-style pick (Zach 2026-08-25)', () => {
+  it('leads Typography with a whole-text-style pick (AGL-2486)', () => {
     const typography = groups.find((group) => group.$id === 'typography')
     expect(typography).toBeDefined()
     const names = styleGroupFieldNames(typography!)
@@ -267,10 +267,9 @@ describe('style field groups (AGL-540/587)', () => {
       // next nudge into 3px — a silent 8× shrink, which is why these are
       // still barred from the dimension editor.
       //
-      // They used to be free text for want of anything better. They are
-      // pickers on the spacing ladder now (Zach 2026-08-25), which is what
-      // the "theme multiple" reading always wanted — the same rungs the box
-      // styler offers for margin and padding.
+      // They are pickers on the spacing ladder (AGL-2486), which is what the
+      // "theme multiple" reading needs — the same rungs the box styler offers
+      // for margin and padding.
       'gap',
       'rowGap',
       'columnGap',
@@ -586,8 +585,6 @@ describe('style field groups (AGL-540/587)', () => {
 
   /**
    * Plain-English controls for the fields that were raw CSS shorthand
-   * (AGL-2486, Zach 2026-08-22: *"This is not very friendly for someone who
-   * does not know code."*).
    *
    * Asserted at the DECLARATION end, like the length editors above, so a
    * field that quietly reverts to a text box fails here rather than in a
@@ -684,14 +681,13 @@ describe('style field groups (AGL-540/587)', () => {
   })
 
   /**
-   * ROW RHYTHM (AGL-2486, Zach 2026-08-22: *"Lot's of spacing in here…
-   * compared to here."*).
+   * ROW RHYTHM (AGL-2486): no half-width field left alone in its row, and no
+   * caption long enough to wrap three lines deep.
    *
-   * Both halves of this are invisible in the source — an orphan depends on
-   * a field's NEIGHBOURS, and a wrapped caption depends on a width nobody
-   * writes down — so they are checked over the built groups. Without this,
-   * the next field added restores exactly the layout Zach rejected and
-   * nothing says so.
+   * Both halves are invisible in the source — an orphan depends on a field's
+   * NEIGHBOURS, and a wrapped caption depends on a width nobody writes down —
+   * so they are checked over the built groups. Without this, the next field
+   * added reopens a gap-riddled panel and nothing says so.
    */
   describe('row rhythm (AGL-2486)', () => {
     const allGroups = [...groups, flexGridGroup]
@@ -714,8 +710,9 @@ describe('style field groups (AGL-540/587)', () => {
           run = []
         }
         if (run.length % 2 === 1) orphans.push(run[run.length - 1])
-        // Z-Index and Opacity were the two Zach pointed at: each sat alone
-        // in the left column with the whole right half of the row empty.
+        // An orphan is a half-width field with the whole right half of its
+        // row empty beside it. Z-Index and Opacity are the pair most likely
+        // to drift back into one.
         expect(orphans).toEqual([])
       },
     )
@@ -934,7 +931,7 @@ describe('per-side borders (AGL-1199)', () => {
   })
 
   it('is scheme-agnostic — only the colour follows dark mode', () => {
-    // borderColor is scheme-scoped; the widths are not, so previewing
+    // BorderColor is scheme-scoped; the widths are not, so previewing
     // dark must not fork a divider into the dark slice.
     for (const side of SIDES) expect(isSchemeScopedStyleField(side)).toBe(false)
     expect(isSchemeScopedStyleField('borderColor')).toBe(true)

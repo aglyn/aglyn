@@ -301,8 +301,8 @@ describe('listUsersAcrossPools (AGL-1122)', () => {
   })
 
   /**
-   * AGL-1962. Zach saw an SSO account listed twice. One candidate cause was
-   * the tenant pools being re-appended on every page: the staff page appends
+   * AGL-1962, one of two ways an SSO account gets listed twice: the tenant
+   * pools being re-appended on every page. The staff page appends
    * each new page to the ones already loaded, so a tenant user attached to
    * more than one page would be re-listed once per "Load more".
    *
@@ -442,7 +442,7 @@ describe('markCrossPoolUidCollisions (AGL-1962)', () => {
 })
 
 /**
- * AGL-2005. **Zach, 2026-08-18:** "We still have two users list in this list
+ * AGL-2005. **decided:** "We still have two users list in this list
  * with the same uid but one without an email attached, this needs fixed we
  * should only see one user, even if they are sso."
  *
@@ -483,9 +483,9 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   })
 
   /**
-   * Guard 2. Merged is not hidden. Zach asked not to SEE two rows; he did not
-   * ask to be uninformed, and a merge that says nothing is indistinguishable
-   * from a real duplicate being quietly dropped.
+   * Guard 2. Merged is not hidden. Collapsing the twin rows is a display
+   * decision; a merge that records nothing is indistinguishable from a real
+   * duplicate being quietly dropped.
    *
    * Forced red by having `collapseCrossPoolUidRows` skip its internal
    * `markCrossPoolUidCollisions` call: `uidAlsoInPools` reads undefined and
@@ -560,7 +560,7 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   /**
    * The staff list composed exactly as `/api/admin/users` composes it: the
    * honest primitive still returns both records, and the display merges them.
-   * Zach's report was about the list, so the list is where it is asserted.
+   * the report was about the list, so the list is where it is asserted.
    */
   it('gives the staff list ONE row for the production shape', async () => {
     projectUsers.set(uid, shadowRecord(uid))

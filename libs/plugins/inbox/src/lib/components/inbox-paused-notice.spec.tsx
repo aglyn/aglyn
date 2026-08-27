@@ -95,8 +95,14 @@ jest.mock('@aglyn/shared-ui-next', () => ({
     <div>{tabs[0]?.content}</div>
   ),
 }))
-jest.mock('@aglyn/plugins-email', () => ({ CampaignsCard: () => null }))
-jest.mock('@aglyn/plugins-commerce', () => ({ HostOrdersCard: () => null }))
+jest.mock('@aglyn/plugins-email/components/campaigns-card', () => ({
+  __esModule: true,
+  default: () => null,
+}))
+jest.mock(
+  '@aglyn/plugins-commerce/components/console/host-orders-card.component',
+  () => ({ __esModule: true, default: () => null }),
+)
 
 const renderPage = () =>
   render(<InboxConsolePage hostId="host-1" entitled />)

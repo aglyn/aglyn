@@ -39,16 +39,14 @@ export interface EntryCoverImageFieldProps {
 /**
  * The entry's cover image, WITH the picture on screen (AGL-2498).
  *
- * Zach: *"make the image previewable just like we have on the screen detail
- * pages."* The field was a bare text input holding
- * `media:DXnRbPH4CQ/4sY9JMK9fV` beside a "Choose" button — an opaque
- * reference an author cannot check, on the surface they share most
- * deliberately. Every other image field in the console (the screen's social
- * image, the site logo, the favicon, an author's portrait) renders what it
- * points at; this one did not, so the only way to find out you had picked the
- * wrong asset was to publish and look.
+ * A bare text input holds `media:DXnRbPH4CQ/4sY9JMK9fV` beside a "Choose"
+ * button — an opaque reference an author cannot check, on the surface they
+ * share most deliberately. Every other image field in the console (the
+ * screen's social image, the site logo, the favicon, an author's portrait)
+ * renders what it points at, so this one does too; without the preview the
+ * only way to find out you picked the wrong asset is to publish and look.
  *
- * ## What is DELIBERATELY kept from the old field
+ * ## What the field DELIBERATELY keeps
  *
  * The text input stays. `ScreenSocialImageField` — the field this one is
  * modelled on — is pick-only, and for a screen's OG image that is right: a

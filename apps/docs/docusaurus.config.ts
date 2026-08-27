@@ -126,7 +126,7 @@ const GTAG_HEAD_BOOTSTRAP: string =
   'function gtag(){dataLayer.push(arguments);}' +
   // The region-conditional consent default (AGL-1597).
   //
-  // Analytics GRANTED by default (Zach, 2026-08-20: implied consent where it
+  // Analytics GRANTED by default (decided: implied consent where it
   // is lawful), DENIED for the prior-consent regions — EEA/UK/CH — through the
   // second declaration's `region` array. Ads denied in both. This site
   // previously declared nothing that took effect, so its tag ran unrestricted

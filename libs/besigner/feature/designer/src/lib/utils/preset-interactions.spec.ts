@@ -55,7 +55,7 @@ const liveNode = {
 const preset = {
   $id: 'test:dropdown-panel',
   data: presetData,
-  interactions: [
+  interactionTemplates: [
     {
       name: 'Dropdown panel — open on hover',
       event: 'elementHoverEnter',
@@ -146,7 +146,7 @@ describe('buildPresetInteractionDrafts', () => {
   it('drops templates whose refs no longer resolve instead of writing broken actions', () => {
     const renamed = {
       ...preset,
-      interactions: [
+      interactionTemplates: [
         {
           name: 'Stale trigger ref',
           event: 'elementHoverEnter',

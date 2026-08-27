@@ -148,7 +148,7 @@ auto-reply is sent by Google, is not observable from the repo, and has no
 per-message outcome to record — one more reason the remaining half of this
 issue cannot be closed from here.
 
-### The Workspace change — Zach's, because these are account settings
+### The Workspace change — the account owner's, because these are account settings
 
 **Groups → the group → Settings → Email options → Auto replies**, check
 *Enable auto-reply to non-members outside the organization*, paste the body,
@@ -238,7 +238,7 @@ carried the **3 business days** from `SECURITY.md` (§"Our commitment", lines
 where a report arrives in a tracked queue with a named reporter. Pasting it here
 would newly extend the commitment to *every* inbound mail to `security@` —
 vendor questionnaires, scanner output, phishing reports, mistakes — on an inbox
-with one member. Zach's decision, 2026-08-23: acknowledge receipt, invent no
+with one member. the decision, 2026-08-23: acknowledge receipt, invent no
 timeframe. **Do not re-add a number here** without also changing `SECURITY.md`
 and `trust.md`, because then there would be three places to keep true.
 
@@ -262,7 +262,7 @@ automatically.
 >
 > This is an automated acknowledgement. Nobody has read your report yet.
 
-**Steps for Zach** (nobody else can do this — it is Workspace account state):
+**Steps for the account owner** (nobody else can do this — it is Workspace account state):
 
 1. Open `https://groups.google.com/a/aglyn.com/g/security/settings` — or
    Groups → **security** → **Settings**. You need Owner or Manager on the group.
@@ -321,7 +321,7 @@ that silence stops being ambiguous.
 >
 > This is an automated acknowledgement. Nobody has read your message yet.
 
-### The second member — also Zach's, and not fixed by anything above
+### The second member — also the account owner's, and not fixed by anything above
 
 Every one of the six has exactly one member, `zach@aglyn.com`. Because *Who can
 post* is "Anyone on the web" with no moderation, mail is **accepted** the whole

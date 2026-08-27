@@ -24,14 +24,13 @@ import { regionFills } from '../region-fills'
 /**
  * The key under the diagram (AGL-2486).
  *
- * Zach: "you also can't really understand the key below it." It was four
- * small outlined squares whose colours only loosely echoed the regions —
+ * Small outlined squares whose colours only loosely echo the regions are
  * something to decode rather than something to read.
  *
- * The fix is to stop describing the regions and start SHOWING them: each
- * swatch is painted with the same `regionFills` declaration as the region
- * it names, texture and all, so the mapping is by appearance rather than
- * by memory. It is also why the swatch grew — a 10px square cannot show a
+ * So the key SHOWS the regions instead of describing them: each swatch is
+ * painted with the same `regionFills` declaration as the region it names,
+ * texture and all, and the mapping is by appearance rather than by memory.
+ * That is also why the swatch is large — a 10px square cannot show a
  * cross-hatch, and a texture you cannot see is not a mapping.
  *
  * Each entry keeps a plain sentence on hover, since "margin" and "padding"

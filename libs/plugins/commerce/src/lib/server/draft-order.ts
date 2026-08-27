@@ -161,7 +161,7 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // own comment asserts "every storefront door gates on it"; that claim was
     // false for this one.
     //
-    // WARN, NEVER BLOCK, matching the register (AGL-2357, Zach's decision).
+    // WARN, NEVER BLOCK, matching the register (AGL-2357, the decision).
     // Both of these are MERCHANT-initiated doors rather than shopper-initiated
     // ones — the merchant may well be taking a deliberate pre-order or
     // backorder — so a stale count must not refuse a sale the merchant means to

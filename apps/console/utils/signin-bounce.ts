@@ -24,9 +24,9 @@
  * half is right on its own; together they are a ping-pong that a FLAPPING
  * session drives forever, because neither side counts.
  *
- * Zach hit it on production 2026-08-22: an org page "redirected a few times
+ * hit it on production 2026-08-22: an org page redirected a few times
  * then asked me to sign in again, then redirected a few times from the
- * auth/signin page then brought me back to the org with no sites loaded".
+ * auth/signin page then brought me back to the org with no sites loaded.
  * That is this loop, and there was no exit from it inside the app — the fix
  * he found was refreshing a different tab.
  *
@@ -51,8 +51,8 @@
  * auth state. `localStorage` would let a second tab's healthy sign-in reset
  * a first tab's stuck one, and — worse — let one stuck tab arm the breaker
  * in a tab that is working fine. `sessionStorage` is the scope of the
- * problem. It also means a new tab starts clean, which is the recovery
- * Zach performed by hand.
+ * problem. It also means a new tab starts clean, which is the recovery a
+ * stuck user reaches for anyway.
  */
 
 const BOUNCE_KEY = 'aglyn:signin-bounces'

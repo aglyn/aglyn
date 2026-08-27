@@ -24,7 +24,7 @@ import {
 import {
   ICON_VARIANT_ELEMENT,
   ICON_VARIANT_ELEMENT_BROWSE,
-  ICON_VARIANT_ELEMENT_DETAILS,
+  ICON_VARIANT_ELEMENT_INTERACTIONS,
   ICON_VARIANT_ELEMENT_PROPERTIES,
   ICON_VARIANT_ELEMENT_STYLES,
   ICON_VARIANT_ELEMENT_TREE_VIEW,
@@ -66,6 +66,7 @@ import {
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 import AccordionListComponent from './accordion-list.component'
+import ElementInteractionsForm from './element-interactions-form.component'
 import ComponentAccordionList from './component-accordion-list'
 import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
@@ -115,135 +116,6 @@ const emptyView = (
   </Stack>
 )
 
-const ElementInfo = function ElementInfo({
-  node,
-}: {
-  node: Aglyn.NodeSchema<any>
-}) {
-  const schema = Aglyn.components.getSchema(node?.componentId)
-  const failoverText = 'n/a'
-  const details = useMemo(
-    () => [
-      {
-        key: 'element-overview',
-        label: 'Element Overview',
-        items: [
-          {
-            key: 'component-display-name',
-            label: 'Type',
-            value: schema?.displayName,
-          },
-          {
-            key: 'component-title',
-            label: 'Title',
-            value: schema?.title,
-          },
-          {
-            key: 'component-subtitle',
-            label: 'Subtitle',
-            value: schema?.subtitle,
-          },
-          {
-            key: 'component-description',
-            label: 'Description',
-            value: schema?.description,
-            TypographyProps: { gutterBottom: true },
-          },
-        ],
-      },
-      {
-        key: 'unique-identifiers',
-        label: 'Unique Identifiers',
-        items: [
-          {
-            key: 'element-id',
-            label: 'Element ID',
-            value: node.$id,
-          },
-          {
-            key: 'parent-id',
-            label: 'Parent Element ID',
-            value: node?.parentId,
-          },
-          {
-            key: 'component-id',
-            label: 'Component ID',
-            value: node?.componentId,
-          },
-          {
-            key: 'plugin-id',
-            label: 'Add-on ID',
-            value: node?.pluginId,
-            ValueTypographyProps: {},
-          },
-        ],
-      },
-    ],
-    [schema, node],
-  )
-  const [expanded, setExpanded] = useState<string | false>(details[0].key)
-  const handleChange =
-    (panel: string) => (event: SyntheticEvent, newExpanded: boolean) => {
-      setExpanded(newExpanded ? panel : false)
-    }
-
-  return (
-    <TabPanelInner>
-      <AccordionListComponent
-        items={details}
-        getItemId={(item) => item.key}
-        onRenderSummary={({ item }) => <>{item?.label}</>}
-        onRenderDetail={({ item }) => (
-          <>
-            {item?.items?.map(
-              ({
-                label,
-                value,
-                TypographyProps,
-                ValueTypographyProps,
-                ...item
-              }: any) => (
-                <Typography key={item.key} component="div" {...TypographyProps}>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'inline',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    <b>{label}:</b>
-                  </Typography>{' '}
-                  <Typography
-                    variant="body1"
-                    {...ValueTypographyProps}
-                    sx={mergeSxProps(
-                      (theme) => {
-                        const tv = (theme as any).vars || theme
-                        return {
-                          bgcolor: `rgba(${tv.palette.primary.lightChannel} / 0.18)`,
-                          border: `1px solid rgba(${tv.palette.primary.lightChannel} / 0.72)`,
-                          borderRadius: '0.3em',
-                          px: 0.5,
-                          py: 0.15,
-                          wordBreak: 'break-word',
-                          fontSize: '0.8rem',
-                        }
-                      },
-                      { display: 'inline' },
-                      ValueTypographyProps?.sx,
-                    )}
-                  >
-                    {value || <i>{failoverText}</i>}
-                  </Typography>
-                </Typography>
-              ),
-            )}
-          </>
-        )}
-      />
-    </TabPanelInner>
-  )
-}
 
 /**
  * `Hero · Section` with a `SELECTED` tag — the inspector header the
@@ -433,9 +305,8 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
   },
   panelRight: {
     // Attributes first and open by default — it is what you reach for on
-    // selecting an element; Info is reference detail, so it moves last.
-    // Tab order here is display order only; the flag values are persisted
-    // in panel state, so they stay put.
+    // selecting an element. Tab order here is display order only; the flag
+    // values are persisted in panel state, so they stay put.
     defaultTab: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
     panel: {
       id: 'right',
@@ -463,14 +334,33 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
           Component: withLastSelectedNode(ElementStylesForm as any),
         },
       },
+      /*
+       * Interactions, between Styles and where Info used to be (AGL-1486).
+       *
+       * They lived at the bottom of Attributes, under every field the
+       * component declares — below the fold on anything with more than a
+       * handful, so an author had no reason to believe the element had any.
+       * An interaction is not an attribute: it is a behaviour, authored in a
+       * dialog rather than a field, and it belongs beside the styles as a
+       * peer.
+       *
+       * INFO IS GONE. Its two accordions are reference detail about the
+       * component and the node's ids — worth having, not worth a tab — and
+       * they now sit at the bottom of Attributes, beside the fields they
+       * describe. Its flag value stays reserved; panel state is persisted,
+       * and a reader whose last session ended on Info would otherwise return
+       * to a tab id that means something else.
+       */
       {
-        value: BesignerPanelTabFlag.ELEMENT_INFO,
+        value: BesignerPanelTabFlag.ELEMENT_INTERACTIONS,
         tab: {
-          icon: { path: ICON_VARIANT_ELEMENT_DETAILS.path },
-          label: 'Info',
+          icon: { path: ICON_VARIANT_ELEMENT_INTERACTIONS.path },
+          label: 'Interactions',
         },
         panel: {
-          Component: withLastSelectedNode(ElementInfo),
+          Component: withLastSelectedNode(
+            withTabPanelInner(ElementInteractionsForm as any),
+          ),
         },
       },
     ],

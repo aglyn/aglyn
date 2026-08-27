@@ -1189,10 +1189,10 @@ describe('the stock a chargeback left off the shelf (AGL-1797)', () => {
  * a double that does not model real semantics fabricates a false green about
  * the one number that moves money.
  *
- * The figures below now match what Stripe actually produces. The commercial
+ * The figures below match what Stripe actually produces. The commercial
  * question this exposes — whether the merchant should hand back the gross or
- * only the 9500 they netted — is recorded on AGL-1951 for Zach; this file
- * pins what SHIPS, which is the gross.
+ * only the 9500 they netted — is recorded on AGL-1951 and remains open; this
+ * file pins what SHIPS, which is the gross.
  */
 describe('the seller share of a lost dispute (AGL-1794)', () => {
   // Faithful to Stripe: the transfer is the whole charge. The application fee

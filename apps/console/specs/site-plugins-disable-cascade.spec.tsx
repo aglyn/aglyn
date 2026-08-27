@@ -19,12 +19,10 @@
  * Disabling a plugin another one depends on warns first (AGL-2486), on the
  * PER-SITE card.
  *
- * Zach: "if we turn off a plugin that another plugin depends on it warn the
- * user that by disabling that plugin it will also disable said plugin because
- * it depends on it, give them the option to cancel, or continue with disabling
- * the dependent plugins".
+ * Disabling a plugin another plugin depends on disables that one too, so the
+ * dialog names the cascade and offers a way to cancel before it happens.
  *
- * The case that made this real: the Members blocks and every `membership/*`
+ * The case that makes this real: the Members blocks and every `membership/*`
  * API handler ship inside the COMMERCE bundle, so Commerce off leaves a site
  * still routing `/signin` — member pages gate on `accounts`, the API gates on
  * `commerce` — with nothing able to answer the login POST.

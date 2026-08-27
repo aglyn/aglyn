@@ -18,10 +18,29 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { registerSiteRuntime } from '@aglyn/aglyn'
 import { MarketingSiteRuntime } from './components/site-runtime'
-import { loadMarketingPreviewProps } from './preview-props'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
+
+/**
+ * The preview slice is fetched only when a preview asks for it (AGL-1151).
+ *
+ * `loadMarketingPreviewProps` reads Firestore directly, so naming it statically
+ * put the whole Firestore client in this plugin's chunk — which a PUBLISHED
+ * site downloads and evaluates the moment marketing is enabled on it. Nothing
+ * on a published page ever calls this: the server enricher writes the slice
+ * there, and this path exists for the editor Preview alone, where no enricher
+ * runs.
+ *
+ * A RELATIVE deferred import, deliberately. The specifier crosses no project
+ * boundary, so nx records no lazy edge on the pair and
+ * `@nx/enforce-module-boundaries` has nothing to forbid — the distinction
+ * `aglyn/no-dynamic-first-party-import` exists to keep.
+ */
+const loadMarketingPreviewProps: NonNullable<
+  Parameters<typeof registerSiteRuntime>[0]['loadPreviewProps']
+> = async (ctx) =>
+  (await import('./preview-props')).loadMarketingPreviewProps(ctx)
 
 /** Code-split: the Marketing console page only loads when opened. */
 const MarketingConsolePage = lazy(

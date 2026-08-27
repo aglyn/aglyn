@@ -47,6 +47,39 @@ describe('dropClearedProps (AGL-1226)', () => {
       color: undefined,
     })
   })
+
+  /**
+   * The canvas writes its flags presence-based — `''` for on, absent for off
+   * — which is byte-for-byte the value a cleared select persists as. Dropping
+   * them left a hidden panel with no way to be shown for designing, a nav
+   * menu that never opened while it was being authored, and no outline on a
+   * bound element.
+   */
+  it('keeps an empty data attribute, which is a presence flag not a cleared value', () => {
+    expect(
+      dropClearedProps({
+        'data-aglyn-revealed': '',
+        'data-aglyn-selected-within': '',
+        'data-aglyn-bound': '',
+        color: '',
+      }),
+    ).toEqual({
+      'data-aglyn-revealed': '',
+      'data-aglyn-selected-within': '',
+      'data-aglyn-bound': '',
+    })
+  })
+
+  it('keeps an empty aria attribute for the same reason', () => {
+    expect(dropClearedProps({ 'aria-label': '', size: null })).toEqual({
+      'aria-label': '',
+    })
+  })
+
+  it('returns the same object when only renderer attributes are empty', () => {
+    const props = { 'data-aglyn-revealed': '', variant: 'contained' }
+    expect(dropClearedProps(props)).toBe(props)
+  })
 })
 
 /**

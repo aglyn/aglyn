@@ -40,6 +40,7 @@ import {
   inlineTextEdit,
   isInlineEditWithin,
 } from '../../utils/inline-text-edit.store'
+import { requestCanvasContextMenu } from '../../utils/canvas-context-menu'
 import { findInstanceLeafAtPoint } from '../../utils/instance-leaf-hit'
 
 export interface DraggableDroppableProps<T extends Aglyn.NodeSchema<any>> {
@@ -164,6 +165,7 @@ export const DraggableDroppable = observer(
         el.addEventListener('mousedown', handleMouseDown)
         el.addEventListener('pointerdown', handleMouseDown)
         el.addEventListener('dblclick', handleDoubleClick)
+        el.addEventListener('contextmenu', handleContextMenu)
 
         return () => {
           el.removeEventListener('mouseover', handleMouseOver)
@@ -171,7 +173,32 @@ export const DraggableDroppable = observer(
           el.removeEventListener('mousedown', handleMouseDown)
           el.removeEventListener('pointerdown', handleMouseDown)
           el.removeEventListener('dblclick', handleDoubleClick)
+          el.removeEventListener('contextmenu', handleContextMenu)
         }
+      }
+      /**
+       * Right-click opens this element's ⋮ menu (AGL-1405).
+       *
+       * A native listener like its neighbours, not an `onContextMenu` prop:
+       * React delegates at the root container and the canvas is a closed
+       * shadow root, so a delegated handler never sees the event.
+       *
+       * Selects first. The menu is rendered by the overlay, which only mounts
+       * for a selected or hovered node — and right-clicking an element is a
+       * statement about THAT element, so leaving the previous selection in
+       * place would open the wrong menu.
+       */
+      function handleContextMenu(e: Event) {
+        if (isInlineEditWithin(el)) {
+          // An open text editor keeps the browser's own menu: cut, paste and
+          // spellcheck are the whole point of a right-click there.
+          e.stopPropagation()
+          return
+        }
+        e.preventDefault()
+        e.stopPropagation()
+        Besigner.focus.setSelectedNode(node)
+        requestCanvasContextMenu(node?.$id)
       }
       function handleMouseOver(e: Event) {
         // Same stand-down, same reason to consume it: a hover repaint while

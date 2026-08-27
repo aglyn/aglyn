@@ -19,7 +19,7 @@
  * Flat platform ceilings on the two host subcollections an ANONYMOUS VISITOR
  * can create documents in (AGL-1529).
  *
- * ## Zach's decision, 2026-08-23, in his own words
+ * ## the decision, 2026-08-23, in his own words
  *
  * > A platform-wide ceiling — **not a plan dimension**, so "unlimited member
  * > accounts on every plan" stays true, because **an abuse control is not
@@ -50,7 +50,7 @@
  *
  * ## Why the shape here is the FLAT family, not the MULTIPLE family
  *
- * The two ceilings Zach named as precedent — `FORM_ABUSE_CEILING_*` and
+ * The two ceilings named as precedent — `FORM_ABUSE_CEILING_*` and
  * `BANDWIDTH_ABUSE_CEILING_*` — are both `max(floor, included × 10)`. They
  * can be, because forms and bandwidth each have an *included band* on the
  * price list to multiply. Members and leads have no included band by
@@ -81,7 +81,7 @@
  */
 
 /**
- * How many member accounts one site may hold (AGL-1529). Zach's figure.
+ * How many member accounts one site may hold (AGL-1529). the figure.
  *
  * Sized to the busiest plausible membership site rather than to today's data,
  * which is the only property a flat ceiling needs. A site member is a human

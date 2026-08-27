@@ -204,7 +204,7 @@ Aglyn breaches its own DPA §7.2 on the first subprocessor it ever noticed.** Th
 production and the route 501s — that needs confirming against the live Vercel env key list,
 not assumed.
 
-Three ways out, and this is a decision only Zach can take:
+Three ways out, and this is a decision only the account owner can take:
 
 1. **Hold the key until 2026-09-17.** Free. Costs sixteen days of Assist at launch.
 2. **Re-publish the change-log entry with an explicit effective date** and treat 08-18 as the
@@ -254,7 +254,7 @@ The spec asserts four things, each able to go red alone:
    maps to exactly one registry entry. That file already carries the mapping in prose —
    entries literally say *"an Annex III subprocessor already"* — so this makes an existing,
    unread annotation into a check.
-4. Every `ADVERTISING_VENDORS` member has an entry, in whichever posture Zach picks (§3).
+4. Every `ADVERTISING_VENDORS` member has an entry, in whichever posture §3 settles on.
 
 **Deliberately NOT in scope:** the spec cannot read the published page (network, ISR cache,
 offline flake — the same reasoning as `published-legal-pages.ts`). `publishedRow` is a
@@ -295,7 +295,7 @@ cheapest thing on this page to fix and the most embarrassing to be caught withou
 
 ---
 
-## 6. Decision needed from Zach
+## 6. Decision needed from the account owner
 
 | # | Decision | Cost of yes |
 | --- | --- | --- |

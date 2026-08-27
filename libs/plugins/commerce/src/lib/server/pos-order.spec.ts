@@ -833,7 +833,7 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
  * every in-person sale as cash and pay the platform nothing, while the
  * identical basket on a card paid the plan's rate.
  *
- * Zach's decision, 2026-08-19: the same rate on every tender. Cash is cheaper
+ * the decision, 2026-08-19: the same rate on every tender. Cash is cheaper
  * for us, not dearer — no Stripe processing is debited against it — so a
  * discount for cash would be unjustified as well as leaving the incentive
  * intact. What differs is COLLECTION: there is no payout to net it from, so
@@ -2321,7 +2321,7 @@ describe('who may ring a sale (AGL-2262)', () => {
  * `oversellPolicy: 'deny'` in the product editor silently got `backorder` at
  * the counter. That silence is the defect.
  *
- * Zach's decision: warn, never block. A till is the wrong place for a stale
+ * the decision: warn, never block. A till is the wrong place for a stale
  * number to stop a real sale, because the cashier is holding the goods. So
  * EVERY case here asserts both halves — the warning is reported AND the sale
  * completes with an order document and a 200. A test that asserted only the

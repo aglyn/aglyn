@@ -55,9 +55,9 @@ if (!dumps.length) {
 
 /**
  * Variant is keyed off the frame's own width, never off its name or the order
- * the dumps were passed in. Zach supplied four node ids without saying which
- * was which, and the ids do not sort by breakpoint — reading the width is the
- * only non-guessing way to tell a 768 tablet frame from a 1440 desktop one.
+ * the dumps were passed in. A Figma node id carries no breakpoint and the ids
+ * do not sort by one — reading the width is the only non-guessing way to tell
+ * a 768 tablet frame from a 1440 desktop one.
  */
 const VARIANTS = [
   [375, 'mobile'],

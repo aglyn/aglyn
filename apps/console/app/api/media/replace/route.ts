@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
@@ -24,8 +23,17 @@ import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band
 import {
   checkEntitlement,
   inspectUploadBytes,
+  pluginRequestFromWeb,
   readImageDimensions,
 } from '@aglyn/aglyn/server'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '@aglyn/aglyn/app-utils/sanitize-svg'
+import {
+  isImageUploadContentType,
+  normalizeImageContentType,
+} from '@aglyn/aglyn/app-utils/image-upload-types'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -39,10 +47,6 @@ import {
   scopeAllows,
   mediaCdnPathUpdate,
 } from '../../../../utils/server/media-scope'
-import {
-  isSvgUploadType,
-  sanitizeSvgBuffer,
-} from '../../../../utils/sanitize-svg'
 import { createHash, randomUUID } from 'crypto'
 
 // Base64 JSON payloads encode ~34MB for a 25MB source.
@@ -72,7 +76,10 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
   const mediaId = String(body?.mediaId ?? '')
-  const contentType = String(body?.contentType ?? '')
+  // Canonicalized before anything reads it, so the stored type, the SVG
+  // sanitizer's check and the CDN's active-document check all see one
+  // spelling of a format (AGL-1476).
+  const contentType = normalizeImageContentType(body?.contentType)
   const data = String(body?.data ?? '')
   const expectedUpdatedAtMs = body?.expectedUpdatedAtMs
     ? Number(body.expectedUpdatedAtMs)
@@ -80,7 +87,12 @@ async function handler(request: Request): Promise<Response> {
   if (!mediaId || !data) {
     return Response.json({ error: 'Missing mediaId or data' }, { status: 400 })
   }
-  if (!contentType.startsWith('image/')) {
+  // An ALLOWLIST, not the `image/` prefix (AGL-1476). The prefix tested a
+  // string the caller picks, so `image/x-anything` replaced an asset's bytes
+  // with a format nothing here recognises — and then skipped the signature
+  // check, because `inspectUploadBytes` can only compare bytes against a type
+  // it knows.
+  if (!isImageUploadContentType(contentType)) {
     return Response.json({ error: 'Only images can be replaced' }, { status: 415 })
   }
 

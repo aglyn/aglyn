@@ -62,7 +62,7 @@ import {
  * Customer issue reports (AGL-2185) → the Linear "Customer bug reports"
  * project.
  *
- * Zach asked for an issue-reporting tool in the console, "tracked in a
+ * the requirement was for an issue-reporting tool in the console, "tracked in a
  * separate linear project then our primary one". Support tickets already
  * exist but start on Pro, so a Free or Starter org that hits a bug has no
  * channel at all — and a ticket is a support conversation, not a tracked

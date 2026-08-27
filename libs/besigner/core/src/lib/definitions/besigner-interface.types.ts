@@ -51,6 +51,29 @@ export type BesignerContext = {
     heldState?: BesignerStateFlag
     /** The node the held state applies to; every other leaf renders at rest. */
     heldStateNodeId?: string
+    /**
+     * Nodes the canvas shows even though they carry the hidden class
+     * (AGL-592) — a mega-menu panel or a drawer opened up for designing.
+     * Canvas only, never persisted and never written back to the document:
+     * showing a panel to work on it is a different act from publishing the
+     * site with it open.
+     */
+    revealedNodeIds?: string[]
+    /**
+     * Style declarations the canvas is rendering without, so a layout can be
+     * compared against itself with one property switched off (AGL-2486).
+     * Encoded `nodeId|state|breakpoint|property` — see `muted-styles`. Canvas
+     * only: the declaration stays in the document exactly where it was
+     * written, and only the canvas's copy of the sx drops it.
+     */
+    mutedStyles?: string[]
+    /**
+     * Classes the canvas is rendering without, encoded `nodeId|className`
+     * (AGL-2486). Canvas only, like the style mutes: the element's class list
+     * in the document is untouched, so what the Classes chips show is what
+     * ships.
+     */
+    mutedClasses?: string[]
     /** What kind of host view the canvas is editing (screen or shared layout). */
     viewType?: HostViewType
     /**

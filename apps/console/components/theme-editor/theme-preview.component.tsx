@@ -191,14 +191,13 @@ export function ThemePreview(props: ThemePreviewProps) {
           </Toolbar>
         </AppBar>
         <Stack spacing={2} sx={{ p: 2 }}>
-          {/* The WHOLE type ramp, read off the theme (Zach 2026-08-25).
-              This was five hand-picked samples — h4, h6, subtitle2, body1,
-              caption — so the variants an author is most likely to retune
-              were the ones they could not see: every heading above h4, both
-              body sizes side by side, button and overline casing, and any
-              rung the host added itself (Aglyn's own theme carries `lede`,
-              `bodyCompact` and `micro`). A ramp you cannot see is a ramp you
-              tune by reloading the site.
+          {/* The WHOLE type ramp, read off the theme. A hand-picked sample —
+              h4, h6, subtitle2, body1, caption — hides the variants an author
+              is most likely to retune: every heading above h4, both body sizes
+              side by side, button and overline casing, and any rung the host
+              added itself (Aglyn's own theme carries `lede`, `bodyCompact` and
+              `micro`). A ramp you cannot see is a ramp you tune by reloading
+              the site.
 
               Discovered rather than listed, for the same reason the besigner's
               pickers discover theirs: a host that adds a step gets it here

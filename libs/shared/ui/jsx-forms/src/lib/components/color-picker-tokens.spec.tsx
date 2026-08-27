@@ -16,13 +16,14 @@
  */
 
 import { createTheme, ThemeProvider } from '@aglyn/shared-ui-theme'
-import { renderHook } from '@testing-library/react'
+import { render, renderHook } from '@testing-library/react'
 
 import {
   buildColorTokenOptions,
   COLOR_PICKER_TOKEN_PATHS,
   ColorPickerTokensContext,
   resolvePaletteToken,
+  TokenSwatch,
   useColorPickerTokenOptions,
 } from './color-picker-tokens'
 
@@ -128,8 +129,12 @@ describe('buildColorTokenOptions (AGL-588)', () => {
   // the mega-menu tiles would have had to type the hex back in.
   it('offers the tints, which are string leaves rather than {main}', () => {
     const options = buildColorTokenOptions(
-      { tint: { primary: '#E6F5FF', secondary: '#FBE6FE', tertiary: '#EEF0F2' } },
-      { tint: { primary: '#143043', secondary: '#3D1443', tertiary: '#262B31' } },
+      {
+        tint: { primary: '#E6F5FF', secondary: '#FBE6FE', tertiary: '#EEF0F2' },
+      },
+      {
+        tint: { primary: '#143043', secondary: '#3D1443', tertiary: '#262B31' },
+      },
     )
     const tint = options.find((o) => o.value === 'tint.primary')
     expect(tint?.label).toBe('Tint primary')
@@ -187,5 +192,79 @@ describe('useColorPickerTokenOptions', () => {
     )
     expect(paper?.dark).toBe('#121212')
     expect(paper?.light).toBeUndefined()
+  })
+})
+
+/**
+ * The emotion rules attached to a rendered element, joined into one CSS
+ * string. The swatch is styled entirely through `styled()`, so the generated
+ * declarations are the only place its geometry can be read back.
+ */
+function renderedCss(element: HTMLElement): string {
+  const sheets = Array.from(document.querySelectorAll('style'))
+    .map((style) => {
+      // Emotion writes rule text into the tag while it is not in speedy
+      // mode and inserts through the CSSOM when it is; read both, and
+      // normalise the separator spacing the CSSOM adds back.
+      const text = style.textContent ?? ''
+      if (text) return text
+      const rules = (style as HTMLStyleElement).sheet?.cssRules
+      return rules
+        ? Array.from(rules)
+            .map((rule) => rule.cssText)
+            .join('\n')
+        : ''
+    })
+    .join('\n')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([:;,{}])\s*/g, '$1')
+  return Array.from(element.classList)
+    .flatMap(
+      (className) =>
+        sheets.match(new RegExp(`\\.${className}\\{[^}]*\\}`, 'g')) ?? [],
+    )
+    .join('\n')
+}
+
+describe('TokenSwatch geometry', () => {
+  const renderSwatch = (props: Record<string, unknown>) => {
+    const { container } = render(
+      <ThemeProvider theme={createTheme()}>
+        <TokenSwatch data-testid="swatch" {...props} />
+      </ThemeProvider>,
+    )
+    return renderedCss(container.querySelector('[data-testid="swatch"]')!)
+  }
+
+  it('anchors its layers on the border box so no tile edge shows', () => {
+    // A background left on the default `padding-box` origin is positioned in
+    // an area two pixels smaller than the bordered box it paints, and the
+    // repeat fills the leftover edge bands from the next tile — where a
+    // diagonal split sits several pixels across.
+    const css = renderSwatch({ light: '#111111', dark: '#eeeeee' })
+    expect(css).toContain('background-origin:border-box')
+    expect(css).toContain('background-repeat:no-repeat')
+    expect(css).toContain('background-size:100% 100%')
+  })
+
+  it('meets the two halves exactly on the diameter', () => {
+    const css = renderSwatch({ light: '#111111', dark: '#eeeeee' })
+    expect(css).toContain(
+      'linear-gradient(105deg,#111111 0 50%,#eeeeee 50% 100%)',
+    )
+  })
+
+  it('keeps the chequerboard tiling under a translucent fill', () => {
+    const css = renderSwatch({ light: '#111111', dark: '#eeeeee', alpha: 0.25 })
+    expect(css).toContain('repeating-conic-gradient')
+    // The fill covers the swatch once; only the chequerboard repeats.
+    expect(css).toContain('background-repeat:no-repeat,repeat')
+    expect(css).toContain('background-size:100% 100%,8px 8px')
+  })
+
+  it('paints a single flat fill when both schemes resolve alike', () => {
+    const css = renderSwatch({ light: '#111111', dark: '#111111' })
+    expect(css).toContain('linear-gradient(#111111,#111111)')
+    expect(css).not.toContain('105deg')
   })
 })

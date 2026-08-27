@@ -685,7 +685,6 @@ async function handler(request: Request): Promise<Response> {
         orgCounterTotals(firestore, hostRefs, month, orgRef),
         // Aglyn Assist provider spend for the month (AGL-2280). `estCostUsd`
         // was written by the assist route from day one, expressly so the paid
-        // gate could be tuned against Zach's "must not eat margins"
         // constraint — and it lived in a collection the rollup never touched,
         // so the one cost line big enough to matter was absent from the
         // document every cost reader on the platform reads.
@@ -754,8 +753,9 @@ async function handler(request: Request): Promise<Response> {
       //
       // `billedEstimate` is what an INVOICE may see, and it excludes the org
       // library until `BILL_ORG_LIBRARY_STORAGE_FROM` names a month at or
-      // before this one. Charging for bytes stored for months is Zach's call,
-      // not a side effect of fixing the sum. Once the switch is set the two
+      // before this one. Starting to charge for bytes an org has stored for
+      // months is a pricing decision and must be made deliberately, never as
+      // a side effect of correcting the sum. Once the switch is set the two
       // estimates are the same figure and the branch costs nothing — it is a
       // pure function over numbers already in hand, no extra read.
       const estimate = estimateMonthlyUsageCost([...usage, orgLibrary], orgData)
@@ -867,7 +867,7 @@ async function handler(request: Request): Promise<Response> {
        *
        * PEAK is the only candidate that fully closes deleting on the 30th to
        * duck the band, and it is left open deliberately: it would RAISE bills,
-       * which is the direction the locked-pricing rule reserves for Zach. The
+       * which the locked-pricing rule reserves for an explicit decision. The
        * daily series this reads from is the same series a peak would need, so
        * that decision costs a predicate here and no new writer.
        *

@@ -45,7 +45,7 @@ const NOW = new Date('2026-08-19T12:00:00.000Z')
 const THIS_MONTH = '2026-08'
 const LAST_MONTH = '2026-07'
 
-/** Free's published band. LOCKED — pricing may not move (Zach, 2026-08-18). */
+/** Free's published band. LOCKED — pricing may not move (decided). */
 const FREE_BANDWIDTH_GB = 5
 
 const freeOrg = (cap?: unknown) =>

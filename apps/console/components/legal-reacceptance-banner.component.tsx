@@ -55,27 +55,28 @@ import { postLegalAcceptance } from '../utils/legal-consent'
  * timestamp.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * THE WORDING IS THE FEATURE (2026-08-24)
+ * THE WORDING IS THE FEATURE
  *
- * Zach, 2026-08-24: "Okay then leave it and they can agree again, but don't
- * phrase it that they havent agreed before it creates confusion and
- * frustration, I know I agree yesterday (but we updated overnight)."
+ * Somebody who agreed yesterday, and whose documents were updated overnight,
+ * may be asked to agree again — but must never be told they have not agreed
+ * before. That reading is both wrong and insulting, and it is the one the
+ * default phrasing produces.
  *
- * ⚠️ RE-ACCEPTANCE ON A VERSION CHANGE STAYS. An earlier pass on the same day
- * was briefed to suppress it — "accept once, never ask again" — and then to
- * keep the machinery behind a default-off flag. BOTH were withdrawn before
- * anything shipped. Do not re-derive either from the arguments for them: ToS
+ * ⚠️ RE-ACCEPTANCE ON A VERSION CHANGE STAYS. Two alternatives have been
+ * proposed and withdrawn before shipping: suppressing it entirely ("accept
+ * once, never ask again"), and keeping the machinery behind a default-off
+ * flag. Do not re-derive either from the arguments for them: ToS
  * §5.3's continued-use theory does make re-acceptance contractually optional,
  * and the decision is nevertheless to keep asking. The problem was never the
  * asking.
  *
- * The problem is that the two reasons used to share a voice, and the common
+ * The problem is a shared voice across two different situations. The common
  * one — `version-superseded`, a person who agreed and whose documents moved
- * under them — read as though we held no record of them. To someone who
- * clicked agree yesterday that is both wrong and insulting, and it is the
- * exact experience Zach hit.
+ * under them — reads, in the other branch's words, as though the platform
+ * held no record of them at all. To someone who clicked agree yesterday that
+ * is both wrong and insulting.
  *
- * So the two branches are now genuinely different situations:
+ * So the two branches read as the different situations they are:
  *
  *   `version-superseded`   LEADS WITH THE ACKNOWLEDGEMENT, and names the DAY
  *                          they agreed, because a date is what a person

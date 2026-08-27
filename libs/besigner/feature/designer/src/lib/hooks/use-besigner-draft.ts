@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import type { Firestore } from 'firebase/firestore'
 import { autorun } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -27,6 +28,10 @@ import {
   readBesignerDraft,
   writeBesignerDraft,
 } from '../drafts/besigner-draft-store'
+import {
+  clearServerDraft,
+  readServerDraft,
+} from '../drafts/besigner-server-draft'
 import { useDebouncedCommit } from './use-debounced-commit'
 
 /**
@@ -128,6 +133,17 @@ export interface UseBesignerDraftOptions {
   /** Omit to disable drafts for this document. */
   ids?: BesignerDraftIds
   /**
+   * Omit to use the local crash net alone (AGL-1152).
+   *
+   * Given one, the SHARED working draft is consulted too and PREFERRED when
+   * both exist. That ordering is the point rather than a tie-break: a local
+   * draft is residue from a browser that stopped, while a server draft is work
+   * somebody deliberately saved — possibly a colleague, possibly this person
+   * on another machine. Offering the crash residue over it would hand back the
+   * older of the two and look like data loss.
+   */
+  firestore?: Firestore
+  /**
    * True once the stored document has been pushed into the canvas. Nothing
    * is read or written before this: writing earlier would snapshot an empty
    * canvas over a real draft, and reading earlier could not tell "no draft"
@@ -181,13 +197,11 @@ export interface UseBesignerDraftOptions {
  * They are not merged and this one is not made shareable — the mirror
  * already is that, per node, without a merge of two whole maps.
  *
- * What changed in AGL-2486 is that the private snapshot is not OFFERED at
- * all while the room is shared. An earlier pass withheld only Restore and
- * re-worded the banner; Zach, looking at the result, asked the sharper
- * question — why is there a prompt here at all, when a Discard is the one
- * button left and it stands over work several people are still doing? The
- * answer is that there is not. Recovery is a crash story, a crash means
- * nothing else survived, and a live room is proof that something did. See
+ * The private snapshot is not OFFERED at all while the room is shared
+ * (AGL-2486). Withholding only Restore is not enough: that leaves a prompt
+ * whose one remaining button is Discard, standing over work several people
+ * are still doing. Recovery is a crash story, a crash means nothing else
+ * survived, and a live room is proof that something did. See
  * `roomIsShared` in the body for the two signals that decide it, and
  * {@link BesignerDraftState.restoreBlockedBy} for the narrower verdicts that
  * still apply when this editor is alone.
@@ -195,7 +209,7 @@ export interface UseBesignerDraftOptions {
 export function useBesignerDraft(
   options: UseBesignerDraftOptions,
 ): BesignerDraftState {
-  const { ids, loaded, dirty, storedStamp } = options
+  const { ids, loaded, dirty, storedStamp, firestore } = options
   // `??` would fold null into 0 and lose the distinction the whole rule
   // rests on: null is "presence has not answered yet", 0 is "it answered,
   // and you are alone".
@@ -250,7 +264,28 @@ export function useBesignerDraft(
     readKeyRef.current = key
     pruneBesignerDrafts()
     setOffer(readBesignerDraft(currentIds))
-  }, [key, loaded])
+    // The shared draft answers late, and wins when it answers. `readKeyRef`
+    // has already latched, so a slow reply cannot re-offer a draft the author
+    // has meanwhile restored or discarded — the guard covers both reads.
+    if (!firestore) return undefined
+    let live = true
+    void readServerDraft(firestore, currentIds)
+      .then((server) => {
+        if (!live || !server) return
+        setOffer({
+          nodes: server.nodes,
+          baseStamp: server.baseStamp,
+          // The shared draft stamps with `serverTimestamp`; the offer only
+          // needs an age for the local store's expiry rules, which do not
+          // apply to it. "Now" keeps it out of the aged-out branch.
+          updatedAt: Date.now(),
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [key, loaded, firestore])
 
   // Snapshot on canvas change. `autorun` re-runs whenever anything the
   // tracked read touched changes, and `toJSON()` touches every node — which
@@ -280,6 +315,9 @@ export function useBesignerDraft(
     // never existed.
     flush()
     clearBesignerDraft(currentIds)
+    // Discarding has to reach the SHARED draft too, or the next open — or the
+    // next colleague to join — is offered the very thing just declined.
+    if (firestore) void clearServerDraft(firestore, currentIds)
     wroteRef.current = false
   }, [key, loaded, dirty, flush])
 
@@ -334,14 +372,11 @@ export function useBesignerDraft(
    * Whether this room is somebody else's too, i.e. whether the mirror
    * already has the work this prompt is about (AGL-2486).
    *
-   * Zach, opening a third tab on a document two other tabs were editing
-   * unsaved: *"should we even show them that alert, that could remove the
-   * work numerous people are currently working on, it would make sense if
-   * there were no presence sessions and we just lost connection or browser
-   * quit etc."* That names the rule exactly. The recovery prompt exists for
-   * a CRASH, and a crash is the case where nothing else survived — so when
-   * something else demonstrably did, there is no recovery to offer and both
-   * buttons can only do harm.
+   * The recovery prompt exists for a CRASH, and a crash is the case where
+   * nothing else survived. When something else demonstrably did — a third tab
+   * opening onto a document two other tabs are editing unsaved — there is no
+   * recovery to offer, and both buttons can only do harm to work that is
+   * still in progress.
    *
    * TWO signals, OR'd, because they cover different halves of "the mirror
    * already has this" and neither implies the other:
@@ -356,8 +391,8 @@ export function useBesignerDraft(
    *   This is the half that catches the room whose other sessions have since
    *   closed: their work came back on join, and it is on screen now.
    *
-   * Presence alone would miss the second; `hasRemoteEdits` alone would miss
-   * the first, which is precisely the tab Zach opened before anyone typed
+   * Presence alone misses the second; `hasRemoteEdits` alone misses the
+   * first, which is any tab that joins a live room before anyone in it types
    * again. Unknown (null) counts as shared until presence says otherwise —
    * the cost of waiting a second is a delayed offer, the cost of guessing
    * wrong is a Discard button over other people's work.

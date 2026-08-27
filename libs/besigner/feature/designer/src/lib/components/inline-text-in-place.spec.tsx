@@ -25,17 +25,15 @@ import InlineTextEditorComponent from './inline-text-editor.component'
 /**
  * AGL-2486 — the canvas leaf IS the editing surface.
  *
- * Zach: *"We see/edit it exactly how it appears"*, then *"the original
- * allocated space is not reflecting changes"*, then *"The reserved space is
- * still not updating as we are editing text live"* with two texts drawn over
- * each other, and finally *"No don't go back to the inlined boxed editor,
- * just finish the project"*.
+ * An author edits text where it appears, at the size and in the place it
+ * appears. A separate editing overlay cannot deliver that: an overlay is a
+ * rectangle, the thing it stands in for is a flow of line boxes, and the two
+ * geometries always end up disagreeing — the reserved space stops tracking
+ * the text, or both are drawn at once, over each other.
  *
- * Every one of those is the same defect: an overlay is a rectangle, the
- * thing it stands in for is a flow of line boxes, and the two geometries can
- * always disagree. Editing the element directly does not solve that; it
- * deletes it. There is no second rectangle, so the text cannot move or
- * restyle, and the layout re-flows because the element really did grow.
+ * Editing the element directly does not solve the mismatch; it deletes it.
+ * There is no second rectangle, so the text cannot move or restyle, and the
+ * layout re-flows because the element really did grow.
  */
 describe('the canvas leaf is the editing surface (AGL-2486)', () => {
   let updateNodeProps: jest.SpyInstance
@@ -240,8 +238,6 @@ describe('the canvas leaf is the editing surface (AGL-2486)', () => {
   })
 
   /**
-   * AGL-2486 — Zach: *"the line break persists regardless if you remove it
-   * or not once you click out"*.
    *
    * The markup the commit computed was always right; it was being undone a
    * moment later. Ending the edit restores the element's original child

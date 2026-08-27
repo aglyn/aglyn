@@ -16,29 +16,27 @@
  */
 'use client'
 
-import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { DataTableComponent } from '@aglyn/shared-ui-jsx/components/data-table.component'
-import type { DataTableProps } from '@aglyn/shared-ui-jsx/components/data-table.component'
+import { AppLink } from './app-link'
+import { MdiIcon } from './mdi-icon/mdi-icon'
+import {
+  DataTableComponent,
+  type DataTableProps,
+} from './data-table.component'
 import { IconButton, Stack, Tooltip } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import type { ReactNode } from 'react'
 import RowActionsMenu, {
   type RowActionsMenuItem,
-} from '../row-actions-menu.component'
+} from './row-actions-menu.component'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
   TABLE_ROWS_PER_PAGE_LABEL,
-} from '../../constants/shared'
+} from '../const/table-pagination'
 
 /**
  * ONE row grammar for every artifact list (AGL-693).
  *
- * Zach: *"We need to carry this standard across all of them the screens list,
- * the layouts list, the components list, the templates list. They all could
- * have the same context menu and clicking them should open the detail view. …
- * They should all share the same kind of table, seems they all use a different
- * table right now."*
  *
  * They did. Three of the four are `DataTableComponent`, but each declared its
  * own column set, its own action arrangement and its own row-click, and the
@@ -71,6 +69,16 @@ import {
  * artifact: **Open live page** for a screen, **Preview** for anything that has
  * no address of its own. It is the only per-kind variation in the trailing
  * cluster, and it is chosen by the caller rather than inferred here.
+ *
+ * A screen is the only artifact of the four with a route the public can reach,
+ * so it is the only one whose quick action says "live". Layouts, components
+ * and templates render inside something else and have no address to open, so
+ * theirs is a **Preview** into the console's own canvas render.
+ *
+ * The quick action is ALSO the menu's first entry — see
+ * {@link quickActionMenuItem}. The icon alone is a glyph with a tooltip; the
+ * menu is where every action on the row is spelled out, and an action missing
+ * from it reads as an action the row does not have.
  */
 
 /**
@@ -83,7 +91,7 @@ import {
  * template renders under routes it does not own) must still show the control,
  * disabled, saying why. Hiding it would read as the feature being absent.
  */
-export interface ArtifactQuickAction {
+export interface ListQuickAction {
   /** `mdi` icon path. */
   icon: string
   /** Accessible name; also the tooltip when the action is unavailable. */
@@ -101,17 +109,43 @@ export interface ArtifactQuickAction {
   unavailableReason?: string
 }
 
-export interface ArtifactRowActionsProps {
+export interface ListRowActionsProps {
   /** The artifact's name — every control is labelled with it, because these
-   * repeat once per row and "More actions" alone says nothing about which. */
+   * Repeat once per row and "More actions" alone says nothing about which. */
   label: string
-  quick?: ArtifactQuickAction | null
+  quick?: ListQuickAction | null
   items: RowActionsMenuItem[]
 }
 
+/**
+ * The quick action, restated as the menu's first entry.
+ *
+ * The icon and the menu are two ways into ONE action, not two features: the
+ * icon is a bare glyph, so a reader who does not recognize it has the overflow
+ * as the place every action is named. Deriving the item from the same
+ * {@link ListQuickAction} is what keeps the two in step — availability,
+ * destination and the reason it is refused are read once and cannot drift.
+ */
+function quickActionMenuItem(
+  quick: ListQuickAction,
+): RowActionsMenuItem {
+  return {
+    key: 'quick',
+    label: quick.label,
+    icon: <MdiIcon path={quick.icon} size={0.8} />,
+    // `href` is off-site and opens a new tab; `to` is an in-app route.
+    href: quick.href ?? quick.to,
+    external: Boolean(quick.href),
+    onClick: quick.href || quick.to ? undefined : quick.onClick,
+    disabled: Boolean(quick.unavailableReason),
+    disabledReason: quick.unavailableReason,
+  }
+}
+
 /** The trailing cluster: one quick action, then the overflow menu. */
-export function ArtifactRowActions(props: ArtifactRowActionsProps) {
+export function ListRowActions(props: ListRowActionsProps) {
   const { label, quick, items } = props
+  const menuItems = quick ? [quickActionMenuItem(quick), ...items] : items
   return (
     <Stack
       direction="row"
@@ -119,10 +153,10 @@ export function ArtifactRowActions(props: ArtifactRowActionsProps) {
       /*
         `height: '100%'` is what actually centres these (AGL-693). A DataGrid
         cell is a flex box, but `renderCell` content is auto-height inside it —
-        so at the taller `TABLE_ROW_HEIGHT` these icons sat at the top of the
-        row while the text beside them was centred, which is the misalignment
-        Zach spotted. `alignItems` alone cannot fix it: there is no spare
-        height to distribute until the child claims the row.
+        so at the taller `TABLE_ROW_HEIGHT` these icons ride at the top of the
+        row while the text beside them is centred. `alignItems` alone cannot
+        fix it: there is no spare height to distribute until the child claims
+        the row.
       */
       sx={{
         height: '100%',
@@ -133,16 +167,16 @@ export function ArtifactRowActions(props: ArtifactRowActionsProps) {
       // in here would navigate out from under the thing it just opened.
       onClick={(event) => event.stopPropagation()}
     >
-      {quick ? <ArtifactQuickButton label={label} action={quick} /> : null}
-      <RowActionsMenu label={label} items={items} />
+      {quick ? <ListQuickButton label={label} action={quick} /> : null}
+      <RowActionsMenu label={label} items={menuItems} />
     </Stack>
   )
 }
-ArtifactRowActions.displayName = 'ArtifactRowActions'
+ListRowActions.displayName = 'ListRowActions'
 
-function ArtifactQuickButton(props: {
+function ListQuickButton(props: {
   label: string
-  action: ArtifactQuickAction
+  action: ListQuickAction
 }) {
   const { label, action } = props
   const icon = <MdiIcon path={action.icon} size={0.8} />
@@ -210,7 +244,7 @@ function ArtifactQuickButton(props: {
  * screens table (which cannot use it at all) grew a second implementation.
  * One `renderCell` gives every list the same cluster and the same width.
  */
-export function artifactActionsColumn(
+export function listActionsColumn(
   render: (row: any) => ReactNode,
   options: { width?: number } = {},
 ): GridColDef {
@@ -228,7 +262,7 @@ export function artifactActionsColumn(
   }
 }
 
-export interface ArtifactTableProps extends DataTableProps {
+export interface ListTableProps extends DataTableProps {
   /** Row click → the artifact's detail view. */
   onOpen?: (id: string, row: any) => void
 }
@@ -237,10 +271,10 @@ export interface ArtifactTableProps extends DataTableProps {
  * The grid every FLAT artifact list uses — layouts, components, templates.
  *
  * Screens is the deliberate exception and keeps its own tree; it adopts
- * {@link ArtifactRowActions} so the two still read alike, which is the part a
+ * {@link ListRowActions} so the two still read alike, which is the part a
  * reader actually compares.
  */
-export function ArtifactTable(props: ArtifactTableProps) {
+export function ListTable(props: ListTableProps) {
   const { onOpen, sx, ...rest } = props
   return (
     <DataTableComponent
@@ -277,6 +311,6 @@ export function ArtifactTable(props: ArtifactTableProps) {
     />
   )
 }
-ArtifactTable.displayName = 'ArtifactTable'
+ListTable.displayName = 'ListTable'
 
-export default ArtifactTable
+export default ListTable

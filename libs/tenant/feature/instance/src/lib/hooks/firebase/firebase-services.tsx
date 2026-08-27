@@ -454,7 +454,7 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       // works even though gtag.js is not loaded yet — the queue is what makes
       // the ordering expressible.
       //
-      // Analytics is GRANTED by default (Zach, 2026-08-20: implied consent
+      // Analytics is GRANTED by default (decided: implied consent
       // where it is lawful) and DENIED for the prior-consent regions —
       // EEA/UK/CH — via the payload's `region` array. Ad storage stays denied
       // everywhere. Until now this surface declared NOTHING, which is not

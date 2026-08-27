@@ -18,8 +18,19 @@
 export * from './lib/constants/bundle-common'
 export * from './lib/components/email-blocks'
 export * from './lib/plugin'
-// Console surfaces consumed directly by the app (e.g. inbox Campaigns tab).
-export { default as CampaignsCard } from './lib/components/campaigns-card'
-export { default as OrgListsCard } from './lib/components/lists-card'
-export { default as EmailScreensCard } from './lib/components/email-screens-card'
 export * from './lib/model'
+/**
+ * ⛔ No console surface may be re-exported here (AGL-1151).
+ *
+ * The tenant's generated loader activates the site half of this plugin with
+ * `import('@aglyn/plugins-email')` — this file. Anything named statically here
+ * lands in the chunk a PUBLISHED site downloads and evaluates, so the three
+ * console cards that used to sit on these lines carried `firebase/firestore`
+ * and `@aglyn/tenant-feature-instance` onto every visitor's first paint, to
+ * render markup that queries nothing. Two of the three had no consumer outside
+ * this library at all.
+ *
+ * Console consumers deep-import the component they need
+ * (`@aglyn/plugins-email/components/...`), which reaches the same module
+ * without routing it through the site half's entry point.
+ */

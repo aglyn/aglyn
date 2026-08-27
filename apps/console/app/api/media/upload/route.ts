@@ -16,20 +16,22 @@
  */
 
 import {
+  checkEntitlement,
+  createResourceUid,
   defaultScopeForNewResource,
+  inspectUploadBytes,
   pluginRequestFromWeb,
+  readImageDimensions,
 } from '@aglyn/aglyn/server'
+import {
+  isSvgUploadType,
+  sanitizeSvgBuffer,
+} from '@aglyn/aglyn/app-utils/sanitize-svg'
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
-import {
-  checkEntitlement,
-  createResourceUid,
-  inspectUploadBytes,
-  readImageDimensions,
-} from '@aglyn/aglyn/server'
 import {
   deleteMediaWithTombstone,
   emailUnverifiedResponse,
@@ -54,10 +56,6 @@ import {
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
-import {
-  isSvgUploadType,
-  sanitizeSvgBuffer,
-} from '../../../../utils/sanitize-svg'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
 // platform rejects request bodies over 4.5MB with a 413 before this

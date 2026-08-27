@@ -83,9 +83,8 @@ interface ImpactCount {
 /**
  * What else goes off, before it goes off (AGL-2486).
  *
- * Zach: "if we turn off a plugin that another plugin depends on ... warn the
- * user that by disabling that plugin it will also disable said plugin because
- * it depends on it, give them the option to cancel, or continue".
+ * Disabling a plugin another plugin depends on disables that one too, so the
+ * dialog names the cascade and offers a way to cancel before it happens.
  *
  * Naming the dependents is the easy half. The half that decides whether this
  * dialog is worth reading is the CONSEQUENCE, and there are two of them:

@@ -23,17 +23,14 @@ import {
 /**
  * The presence failure copy names a REMEDY (AGL-2486).
  *
- * Zach, on the version that shipped in `88e07b56d`: "what does this mean? It
- * gives the users no course of action on how to fix it." The tooltip then
- * read `Presence could not start. … Failed at: broker (500) — Could not start
- * presence` — a stage name and an HTTP status, in front of a customer, with
- * nothing in it a customer could act on.
+ * A tooltip reading `Presence could not start. … Failed at: broker (500) —
+ * Could not start presence` puts a stage name and an HTTP status in front of a
+ * customer, with nothing in it they can act on.
  *
  * These are assertions about WORDS, which is unusual and deliberate. The copy
- * is the entire deliverable of that half of the issue: there is no behaviour
- * to assert, so a spec that only checked `fault.kind` would pass on a build
- * that had quietly gone back to printing a status code. Each case below
- * failed against the pre-AGL-2486 tree.
+ * is the entire deliverable here: there is no behavior to assert, so a spec
+ * that only checked `fault.kind` would pass on a build that had quietly gone
+ * back to printing a status code.
  */
 
 const fault = (over: Partial<PresenceFault> = {}): PresenceFault => ({
@@ -55,7 +52,7 @@ describe('every presence failure keeps the two things that were right', () => {
   it.each(kinds)(
     'still warns that an empty stack is not proof you are alone (%s)',
     (kind) => {
-      // Zach asked for this sentence to be KEPT. It is the one thing on the
+      // This sentence is kept on EVERY branch. It is the one thing on the
       // badge that prevents the worst outcome — two people editing the same
       // screen, each believing the empty avatar stack means they are alone.
       expect(presenceFaultNotice(fault({ kind })).caution).toContain(

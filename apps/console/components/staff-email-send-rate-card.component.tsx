@@ -60,7 +60,7 @@ function formatClock(ms: number | null | undefined): string {
  * per-day throttle anywhere in the email path — so the day a sending-domain
  * ramp was needed, there was nothing to turn.
  *
- * This is the turn. Zach's standing rule is that a capability is not a feature
+ * This is the turn. the standing rule is that a capability is not a feature
  * until the console exposes it, and a rate limit is the sharpest case of it: a
  * ceiling nobody can see cannot be trusted (is it biting? is that why the
  * campaign was short?) and a ceiling nobody can raise is an outage waiting for

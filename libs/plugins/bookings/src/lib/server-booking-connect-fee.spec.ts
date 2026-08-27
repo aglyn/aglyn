@@ -60,7 +60,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: () => true,
   resolveBrandingProfile: () => ({ name: 'Acme' }),
   // The REAL resolver, and that is the whole point of this suite (AGL-2315).
-  // Zach's decision was that bookings mirror the STOREFRONT ladder rather than
+  // the decision was that bookings mirror the STOREFRONT ladder rather than
   // take a new rate, so the thing under test is that this handler consults
   // that ladder — a stubbed `() => 3` would assert only that some number
   // reaches Stripe, which is true of a hard-coded rate too and is precisely
@@ -425,7 +425,7 @@ describe('a paid booking pays the MERCHANT (AGL-2315)', () => {
 
 describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
   /**
-   * Zach's decision, 2026-08-19: bookings mirror the storefront ladder — the
+   * the decision, 2026-08-19: bookings mirror the storefront ladder — the
    * same 5%→0%-by-tier rate a storefront sale already takes. The table below
    * is the ladder's `'service'` axis read off `PLAN_ENTITLEMENTS`, written out
    * as MONEY on a $75 massage so the suite fails on a rate change rather than

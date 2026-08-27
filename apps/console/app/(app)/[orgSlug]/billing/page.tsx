@@ -837,15 +837,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/* Permission guard (AGL-243): billing.view gates the page.
 
-            THE HOLD IS PART OF THE GUARD. This read
-            `permissionsLoaded && !can('billing.view') ? refusal : …page…`,
-            which puts the loading flag in the REFUSAL branch — so while the
-            member read was in flight the refusal was false and the else-branch
-            painted the entire ledger. Zach saw it: "we see it flicker with real
-            data then show this message they shouldn't see it at all." The plan,
-            the subscription status, the negotiated price and the renewal date
-            were all on screen first, and a screenshot or a screen recording
-            keeps them. 200ms is not a mitigation.
+            THE HOLD IS PART OF THE GUARD. Spelling this as
+            `permissionsLoaded && !can('billing.view') ? refusal : …page…` puts
+            the loading flag in the REFUSAL branch, so while the member read is
+            in flight the refusal is false and the else-branch paints the entire
+            ledger — the plan, the subscription status, the negotiated price and
+            the renewal date all render for whoever is watching, and a
+            screenshot or a screen recording keeps them after the refusal
+            replaces them. A flash of a few hundred milliseconds is not a
+            mitigation, so the pending state gets its own branch above.
 
             `useOrgPermissions` fails OPEN while loading — `can()` answers as an
             owner until `loaded` — so a pending read does not merely fail to
@@ -1135,9 +1135,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               ),
             },
             {
-              // The narrow cards read two-abreast (AGL-2486). Zach: "Many of
-              // these full width cards could share a half width or something
-              // with others." Each of these declared `size: { xs: 12 }`, and a
               // full-width item is its own band in `GridItems masonry` — so
               // seven cards holding one sentence or an empty state each took a
               // full page width, one under the next. `Billing history` was the
@@ -1220,9 +1217,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     {
                       key: 'usage-budget',
                       children: (
-                        // The customer's MONTHLY USAGE BUDGET (AGL-1528) — Zach's
-                        // "budgets for usage alerts, similar to how google cloud
-                        // charges". Deliberately BELOW the storage cap and visibly
+                        // The customer's MONTHLY USAGE BUDGET (AGL-1528): an alert
+                        // threshold on metered spend, in the shape cloud providers
+                        // use. Deliberately BELOW the storage cap and visibly
                         // separate from it: the cap refuses uploads, the budget
                         // refuses nothing and only warns. A card that blurred the two
                         // would sell a heads-up as a brake.

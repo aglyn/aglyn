@@ -23,9 +23,9 @@
 /**
  * The app ↔ `/signin` volley terminates (AGL-2486).
  *
- * Zach, on production `v1.0.0-beta.8`: opening an org "redirected a few
- * times then asked me to sign in again, then redirected a few times from the
- * auth/signin page then brought me back to the org with no sites loaded".
+ * Opening an org with a flapping session redirects several times, lands on
+ * `/signin`, redirects several times more, and comes back to the org with
+ * nothing loaded.
  * `AuthenticatedLayout` pushes to `/signin` on every session-less mount and
  * `AuthenticatingLayout` pushes straight back on every signed-in one, so a
  * flapping session drives that pair forever and nothing counted.

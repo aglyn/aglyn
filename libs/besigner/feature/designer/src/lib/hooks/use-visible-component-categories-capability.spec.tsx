@@ -32,17 +32,15 @@ jest.mock('./use-aglyn-besigner-flag', () => ({
  * The Members blocks follow the per-site USER ACCOUNTS capability, not the
  * bundle that happens to ship them (AGL-2486).
  *
- * Zach, on `aglyn-org`: *"Memberships are disabled for aglyn-org but yet we
- * still see the components in besigner"* — the Elements panel offering
- * Password recovery, Member sign-in and Member sign-up on a site whose
- * `/signin`, `/signup` and `/recover` now 404.
+ * With memberships off, a site's `/signin`, `/signup` and `/recover` all 404 —
+ * while the Elements panel keeps offering Password recovery, Member sign-in
+ * and Member sign-up.
  *
- * The two halves contradicted each other because they are gated by different
- * things. The routes read the new `accounts` capability; the drawer reads
- * `item.pluginId`, and these three blocks are registered by the COMMERCE
- * bundle, so a site with commerce on kept being offered sign-in blocks it
- * could not serve. An author could drop one on a page, publish, and learn
- * from a visitor.
+ * The two halves disagree because they are gated by different things. The
+ * routes read the `accounts` capability; the drawer reads `item.pluginId`, and
+ * these three blocks are registered by the COMMERCE bundle, so a site with
+ * commerce on is offered sign-in blocks it cannot serve. An author drops one
+ * on a page, publishes, and learns from a visitor.
  *
  * Attribution by CATEGORY rather than by re-registering the components under
  * another bundle: re-registering would move where they load from and change
@@ -178,15 +176,12 @@ describe('Members blocks follow the user-accounts capability (AGL-2486)', () => 
    *
    * MARK - the GENERAL rule, not a members-shaped special case
    *
-   * Zach, 2026-08-23: "That hiding membership features if the plugin is
-   * turned off should also work for commerce if commerce is turned off and
-   * the same thing with any other plugin for that matter."
-   *
-   * The rule is: an element whose PROVIDING plugin is disabled for this site
-   * is not offered on this site. That already held for every bundle through
-   * `pluginId` — what did not hold was Members, because those blocks are
-   * registered by the commerce bundle and so rode commerce's verdict. These
-   * pin the general behaviour so the next capability does not repeat it.
+   * The rule is: an element whose PROVIDING plugin is disabled for this site is
+   * not offered on this site — commerce, members, and any bundle after them.
+   * That holds for every bundle through `pluginId`; what does not is Members,
+   * because those blocks are registered by the commerce bundle and so ride
+   * commerce's verdict. These pin the general behavior so the next capability
+   * does not repeat it.
    *
    *=========================================*/
 

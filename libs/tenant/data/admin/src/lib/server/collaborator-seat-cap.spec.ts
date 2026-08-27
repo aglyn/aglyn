@@ -24,8 +24,7 @@
  * `membersPerHost` must be a HARD CAP on every door that admits a site
  * collaborator, and under concurrency (AGL-2068).
  *
- * ZACH, 2026-08-18, verbatim: **"We need to make sure the free/hobby tier does
- * hard cap so it always actually stays free."**
+ * The free/hobby tier hard-caps, so that it always actually stays free.
  *
  * ## What was broken
  *
@@ -680,7 +679,7 @@ describe('the collaborator add-on is a per-site POOL (AGL-2439)', () => {
   /**
    * THE GRANDFATHER, at the only place it could be violated.
    *
-   * Zach's 2026-08-19 decision: do NOT evict or lock out any org that is
+   * the 2026-08-19 decision: do NOT evict or lock out any org that is
    * currently over the corrected cap. The cap binds ALLOCATION, never ACCESS.
    *
    * These are the tests that would catch someone adding a reconciliation

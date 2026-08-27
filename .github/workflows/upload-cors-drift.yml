@@ -52,7 +52,7 @@ name: Upload CORS drift
 on:
   push:
     branches:
-      # Sept-1 freeze (Zach, 2026-08-20): `main` is deliberately absent from the
+      # Sept-1 freeze (decided): `main` is deliberately absent from the
       # push trigger across the drift family. Agents land on `main` continuously
       # and every red notified him. RESTORE `main` AFTER LAUNCH.
       - production

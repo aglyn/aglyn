@@ -336,8 +336,8 @@ async function handler(request: Request): Promise<Response> {
       billing_address_collection: 'required',
       'phone_number_collection[enabled]': 'true',
       'tax_id_collection[enabled]': 'true',
-      // Stripe computes and charges tax (AGL-1133). Decision by Zach — this
-      // changes what customers pay, so it was never mine to switch on.
+      // Stripe computes and charges tax (AGL-1133). This changes what
+      // customers pay, so the flag is a pricing decision, not a config tidy.
       //
       // The address collection above is its PREREQUISITE, not decoration:
       // automatic tax on a session with no address reports

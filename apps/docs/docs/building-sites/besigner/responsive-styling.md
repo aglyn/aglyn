@@ -30,6 +30,39 @@ and breakpoint-driven component layouts all resolve as they will on a
 real device of that size — the published site is untouched by preview
 mode.
 
+## Switch one style off to compare {#mute-a-style}
+
+Every field that has a value carries an **eye** in its top corner. Click
+it and that one declaration stops applying on the canvas — the value
+stays in the box, struck through and dimmed, and clicking again puts it
+straight back. It is the way to answer "what does this section look like
+without the max width?" without deleting a value you want to compare
+against.
+
+The same eye is on the rows under **Classes & custom CSS**: each
+declaration in the **Builder** list, and each **class chip**. A switched-off
+class stays on the element — the chip's ✕ is still the only thing that
+removes one — so the chips are always the class list your site ships.
+The one exception is `aglyn-hidden` — the class behind **⋮ → Start
+hidden until an interaction shows it**. Its chip's eye shows the element
+on the canvas while you design it, because "stop applying the hidden
+class here" and "show this element while I design it" are one decision.
+Its ✕ still removes the class, which is the same as choosing **Do not
+start hidden**.
+
+The eye on the **Hierarchy** row is a different control: it hides the
+element outright, in the besigner and on the published site. It writes
+no class, and it never touches the element's own styles — hide a Stack
+laid out with `display: flex` and you get that flex back when you show
+it again.
+
+Switching a style off is a **canvas** setting, like the device preview:
+it is never saved, it never reaches Preview or your published site, and
+reloading the editor brings every declaration back. It also follows the
+scopes below — switching off a colour in the **Hover** state leaves the
+default colour applying, and one switched off while styling *SM* is back
+on at *all screen sizes*.
+
 ## Style hover, focus and other states {#interaction-states}
 
 Under the breakpoint chip is a second row of chips: **Default**, **Hover**,

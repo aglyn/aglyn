@@ -126,9 +126,8 @@ export function aimAuthAtPool(
  * 2. The cross-tab sync path — `_onStorageEvent` → `_updateCurrentUser` —
  *    hits the assertion above and THROWS. A tab in this state silently
  *    stops tracking what the rest of the browser profile is doing with the
- *    shared auth record, which is the "an old tab and a new tab disagree"
- *    shape Zach reported on production. It bites only tenant-pool
- *    identities, i.e. SSO accounts.
+ *    shared auth record, so an old tab and a new tab disagree about who is
+ *    signed in. It bites only tenant-pool identities, i.e. SSO accounts.
  *
  * Assigned unconditionally and from the USER, for the same reason
  * `signInWithPooledCustomToken` assigns unconditionally: `null` is a real

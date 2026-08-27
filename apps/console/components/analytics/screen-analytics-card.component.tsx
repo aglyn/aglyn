@@ -81,7 +81,7 @@ export function ScreenAnalyticsCard(props: {
 
       It is the one analytics surface the AGL-1440 sweep missed — the media
       drawer, the host traffic panel and the entry panel all read through
-      here already, and the fix is the same shape Zach asked for on "Used by":
+      here already, and the fix is the same shape the requirement was for on "Used by":
       stop paying for the same documents over and over.
 
       `field` NAMES THE SCREEN, and that is load-bearing. These day-docs are

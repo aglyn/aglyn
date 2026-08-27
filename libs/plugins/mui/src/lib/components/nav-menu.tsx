@@ -565,7 +565,7 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
         },
       ],
     },
-    interactions: [
+    interactionTemplates: [
       {
         name: 'Dropdown panel — open on hover',
         event: 'elementHoverEnter',

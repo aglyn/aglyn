@@ -109,7 +109,11 @@ export function useAddElementDrawerCallback(): Response {
           // presetRef markers against the freshly minted subtree and hand
           // ready drafts to the host app to validate + persist — the
           // designer stays storage-agnostic (same split as the builder).
-          if (node && preset.interactions?.length && onCreatePresetInteractions) {
+          if (
+            node &&
+            preset.interactionTemplates?.length &&
+            onCreatePresetInteractions
+          ) {
             const drafts = buildPresetInteractionDrafts(preset, node)
             if (drafts.length) {
               onCreatePresetInteractions({ interactions: drafts })

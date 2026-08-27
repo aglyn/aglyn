@@ -115,17 +115,17 @@ function monthOptions(): Array<{ value: string; label: string; from: string; to:
  * `totals.taxCents` at a time and nothing else. This card is that absence
  * closed, and closing it is all it does.
  *
- * ## THE NUMBER, NOT THE LABEL — Zach's 2026-08-19 decision, as amended
+ * ## THE NUMBER, NOT THE LABEL
  *
  * This card presents the buckets SEPARATELY and prints no per-row verdict on
- * who must remit which one. That structure is unchanged. What changed is the
- * premise underneath one sentence of the copy: on 2026-08-24 Zach decided
- * Aglyn IS a marketplace facilitator for storefront sales and the Terms
- * publish it at §10.7 (AGL-1956), so the old line — "Aglyn does not make that
- * determination for you" — became a statement the company's own contract
- * contradicts. It is corrected below.
+ * who must remit which one.
  *
- * The rest of the 2026-08-19 decision survives intact, because §10.7 is
+ * The copy may not say that Aglyn makes no determination: Aglyn IS a
+ * marketplace facilitator for storefront sales and the Terms publish that at
+ * §10.7 (AGL-1956), so such a line would contradict the company's own
+ * contract.
+ *
+ * Separate buckets and no per-row verdict still hold, because §10.7 is
  * narrow: it binds Aglyn only where applicable law gives it a collection
  * obligation for the transaction in question, which is a per-sale,
  * per-jurisdiction test and not a fact about a merchant. So the copy still

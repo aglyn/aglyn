@@ -186,17 +186,16 @@ describe('EntityLogoCard writes a URL a crawler can fetch', () => {
 /**
  * A PERSON does not have a logo (AGL-2486).
  *
- * Zach: *"it also doesn't reflect copy when the entity is a person."* Every
- * word on this card said logo — publisher's mark, the organization publishing
- * this site — while the Type select one field up may say Person, which is the
- * common case for a portfolio or a one-person consultancy.
+ * The Type select one field up may say Person — the common case for a
+ * portfolio or a one-person consultancy — so no line on this card may talk
+ * about a logo, a publisher's mark or the organization publishing the site.
  *
  * It is not only wording, which is why this is asserted rather than eyeballed:
- * `schema.org` gives `logo` to an Organization and `image` to a Person, and
- * the tenant emitted `logo` for both until this issue — so a Person's picture
- * was published under a property its own `@type` does not define, and every
- * consumer ignored it. `hostSeoEntityImageJsonLd` fixes the output; this
- * fixes what the console claims about it.
+ * `schema.org` gives `logo` to an Organization and `image` to a Person, so a
+ * Person's picture emitted as `logo` sits under a property its own `@type`
+ * does not define, and every consumer ignores it. `hostSeoEntityImageJsonLd`
+ * settles the output; these assertions settle what the console claims about
+ * it.
  *
  * The type is read from the SAVED document, not the form's live selection —
  * the card describes what is published, and nothing is published until Update.

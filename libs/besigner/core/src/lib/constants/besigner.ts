@@ -30,9 +30,20 @@ export enum BesignerPanelViewFlag {
 export enum BesignerPanelTabFlag {
   ELEMENTS_TREE = 0x1,
   ELEMENT_BROWSE = 0x2,
+  /**
+   * Retired (AGL-1486). The Info panel's two accordions — the component's own
+   * description, and the element/parent/component/plugin ids — moved to the
+   * bottom of Attributes, where they are reference detail beside the fields
+   * they describe rather than a tab of their own.
+   *
+   * The VALUE stays reserved. Panel state is persisted, so a reader whose
+   * last session ended on Info would otherwise come back to a tab id that now
+   * means something else.
+   */
   ELEMENT_INFO = 0x3,
   ELEMENT_PROPS_FORM = 0x4,
   ELEMENT_STYLES = 0x5,
+  ELEMENT_INTERACTIONS = 0x6,
 }
 
 export enum DndDragType {

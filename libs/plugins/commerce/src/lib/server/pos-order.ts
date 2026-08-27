@@ -256,12 +256,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (lineItems.length === 0) {
       return res.status(400).json({ error: 'No valid lines' })
     }
-    // WHAT THE COUNT SAYS, said out loud (AGL-2357). This handler had no
-    // `canPurchase` call at all — every storefront door gates on it and the
-    // register did not — so a merchant who chose `oversellPolicy: 'deny'` in
-    // the product editor was silently getting `backorder` at the till.
+    // WHAT THE COUNT SAYS, said out loud (AGL-2357). Every storefront door
+    // gates on `canPurchase`; a register that skips it silently downgrades a
+    // merchant's `oversellPolicy: 'deny'` to `backorder` at the till.
     //
-    // The decision (AGL-2357, Zach): WARN, NEVER BLOCK. A till is the wrong
+    // The rule here is WARN, NEVER BLOCK. A till is the wrong
     // place for a stale number to stop a real sale — the cashier is holding
     // the goods — but a merchant who set "deny" is entitled to have the
     // register say something before it sells past zero. So the shortfall is
@@ -397,7 +396,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
      * cash and folio never touch Stripe, so there is no charge to take an
      * `application_fee_amount` out of, so record nothing. That left a merchant
      * on a non-zero rate one tap away from paying Aglyn nothing forever —
-     * ring every in-person sale as cash. Zach's decision, 2026-08-19: close
+     * ring every in-person sale as cash. the decision, 2026-08-19: close
      * it. The tender is at most an input to the RATE; it is never a switch
      * that zeroes the fee.
      *

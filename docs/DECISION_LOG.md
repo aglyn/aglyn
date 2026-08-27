@@ -88,13 +88,41 @@ worse than no log.
 ```
 
 ⚠️ Recording a decision here **is not** deciding one. Nothing in this file may
-introduce a price or an entitlement that Zach has not chosen.
+introduce a price or an entitlement the account owner has not chosen.
+
+---
+
+## 2026-08-26 — CDN delivery moves to every plan; the feature matrix becomes a tracked, generated document
+
+- **Decided by:** the account owner — the CDN path is the cheaper one to serve, so gating it raised the cost of the tier that pays nothing; the feature matrix becomes a tracked, generated document in the same pass.
+- **Scope:** packaging
+- **Evidence:** `PLAN_ENTITLEMENTS.free.features.mediaCdn`; `docs/feature-matrix.md` (generated); `npm run check:feature-matrix`; full reasoning in Drive → Pricing & Packaging → 05-Pricing-Decision-Log
+
+**No charged price moves.** A feature moves DOWN into Free.
+
+The gate had the economics backwards, because "no CDN" is not an absent feature
+— it is a **different, more expensive delivery path**. Without the entitlement a
+site serves absolute `firebasestorage.googleapis.com` URLs, so every visitor
+pulls the **full-size original** from Storage egress with **no shared edge
+cache**; the same entitlement covers responsive variants, so the ungated path
+lost on bytes-per-request *and* origin-requests-per-byte at once. The free tier
+was the most expensive tier we run, and the gate was what made it so.
+
+⚠️ **The counterweight is real and was accepted, not missed:** this removes a
+rung from the paid ladder. What paid tiers keep selling is storage quota, large
+video uploads and the higher bands — not the delivery path.
+
+**The matrix half.** These documents tracked prices; nothing owned the feature
+matrix, which is why `mediaCdn` could be gated, published on `/pricing`, drawn
+in Figma, and recorded in no pricing document at all. It is now generated from
+`PLAN_ENTITLEMENTS` and CI-checked, because a hand-kept 8×34 table drifts on
+the first change nobody mirrors — the exact failure being fixed.
 
 ---
 
 ## 2026-08-24 — Aglyn **is** a marketplace facilitator; commerce and plugin selling ship Sept 1
 
-- **Decided by:** Zach, 2026-08-24, asked directly and answered *"we are a marketplace facilitator, do whatever you need but yes it is shipping sept 1, including the marketplace selling features for plugins and commerce etc."* He was offered gating storefront payments off for the beta and **rejected** it; do not re-propose.
+- **Decided by:** the account owner — Aglyn accepts marketplace-facilitator status, and commerce plus plugin selling ship on Sept 1. Gating storefront payments off for the beta was offered and **rejected**; do not re-propose it.
 - **Scope:** packaging, tax, commerce
 - **Evidence:** `f6131ace9`, `f7e5465f5`, `76cd31488` (AGL-1956); `npm run check:facilitator-charge-shape`; `CommerceModel.destinationChargeParams()` in `libs/plugins/commerce/src/lib/model/commerce-connect-transfer.ts`; Texas registration under AGL-1811
 
@@ -117,7 +145,7 @@ repo, in a file or in a commit message.
 
 ## 2026-08-24 — `LEGAL_DOCUMENT_VERSION` stays `v1` until launch; the hashes still move
 
-- **Decided by:** Zach, 2026-08-24, verbatim: *"Legal documents should all still be v1, we have not released yet so a v2 should not exist yet. Everything is being updated in the v1."*
+- **Decided by:** the account owner — nothing has released, so no v2 exists to supersede a v1 nobody has accepted. Changes land inside v1 and the hashes are re-pinned.
 - **Scope:** legal, change-control
 - **Evidence:** `apps/console/constants/legal-documents.ts:75` and its docblock; `npm run check:legal-snapshots`
 
@@ -137,7 +165,7 @@ Gdoc-first, and several are mid-publication.
 
 - **Decided by:** conformance to the **published** Privacy/Cookie policy, which is the authority — not a new product decision. Implemented under AGL-1649.
 - **Scope:** policy, consent
-- **Evidence:** `b42c1b071` (*"advertising needs an explicit yes again, as the policy says"*), preceded by `ca324b4e6`
+- **Evidence:** `b42c1b071` (advertising requires an explicit yes, as the published policy states), preceded by `ca324b4e6`
 
 Consent had been widened so advertising rode along with a broader grant; the
 published policy promises an explicit yes. Recorded here so the next reader who
@@ -146,7 +174,7 @@ is not "someone tightened it."
 
 ## 2026-08-24 — Under a read-only lockdown the analytics counters keep counting; host automations do not fire
 
-- **Decided by:** Claude, recorded in-repo at the time — **not** a Zach decision. Stands until contradicted.
+- **Decided by:** an agent, recorded in-repo at the time — **not** an owner decision. Stands until contradicted.
 - **Scope:** packaging, billing
 - **Evidence:** `87dd09687` (AGL-1627); `apps/docs/docs/staff-console/lockdown.md` → "The analytics beacon, which a read-only lock splits in half"
 
@@ -160,7 +188,7 @@ what a read-only lock is for, and it stops.
 
 ## 2026-08-23 — The site-member / lead abuse ceiling is platform-wide, **not** a plan dimension
 
-- **Decided by:** Zach, 2026-08-23, chose "flat abuse ceiling, generous" from four options and explicitly declined alert-only (*"detection without protection"*)
+- **Decided by:** the account owner, from four options — a flat, generous abuse ceiling. Alert-only was declined explicitly: detection without protection.
 - **Scope:** packaging
 - **Evidence:** `aa29892e5`, `e32a93ea1` (AGL-1529); `libs/aglyn/src/lib/app-utils/visitor-record-ceiling.ts`
 
@@ -168,7 +196,7 @@ what a read-only lock is for, and it stops.
 visitors on a public site and were bounded by nothing — the per-(host, IP) rate
 limiter fails soft and bounds the **rate**, not the total.
 
-⛔ **Do not add it to `PLAN_ENTITLEMENTS`.** Zach's reasoning has to survive into
+⛔ **Do not add it to `PLAN_ENTITLEMENTS`.** the reasoning has to survive into
 the code: a platform-wide ceiling keeps *"unlimited member accounts on every
 plan"* literally true, **because an abuse control is not something we sell**.
 AGL-889's "unlimited on every plan" is a pricing promise and `/pricing` must stay
@@ -177,7 +205,7 @@ true under the Sept-1 lock. Same instrument already approved twice — AGL-1655
 
 ## 2026-08-21 — Agency's contacts overage rate is removed; its band is unlimited
 
-- **Decided by:** Zach, 2026-08-21, asked with options and answered *"Unlimited — drop the rate"*
+- **Decided by:** the account owner — the band is unlimited, so the overage rate is dropped rather than left advertising a fee that cannot be charged
 - **Scope:** pricing
 - **Evidence:** Drive Pricing Decision Log, entry `2026-08-21`
 
@@ -187,7 +215,7 @@ a mis-charge. Full arithmetic in the Drive entry.
 
 ## 2026-08-20 — Lodging and service tax become merchant-settable, default off
 
-- **Decided by:** Zach, 2026-08-20 (AGL-1969, AGL-2028)
+- **Decided by:** the account owner (AGL-1969, AGL-2028)
 - **Scope:** pricing, tax
 - **Evidence:** Drive Pricing Decision Log, entry `2026-08-20`
 
@@ -198,7 +226,7 @@ charge changes**, so the Sept-1 lock holds.
 
 ## 2026-08-19 — The margin lock is lifted for exactly three leaks, and for nothing else
 
-- **Decided by:** Zach, 2026-08-19, verbatim: *"make a minimum price floor that does not cause us to lose money. same thing with 2152 make sure we are not losing money"* — he selected **all three** options
+- **Decided by:** the account owner, selecting **all three** options — each leak is a path that sells something below what it costs to deliver, and the floor is set at break-even rather than at a chosen number
 - **Scope:** pricing
 - **Evidence:** AGL-2152, AGL-2111, AGL-2343; Drive Pricing Decision Log, three entries dated `2026-08-19`
 
@@ -207,13 +235,13 @@ loss, not a break-even), cash/folio POS tenders recording no fee (the fee
 attaches to the **sale**, not the tender), and the absent marketplace listing
 minimum (the fixed 30¢ component dominates a small order).
 
-⚠️ This is a **narrow, explicit exception**. The standard Zach set is *"not
-losing money"* — derived from break-even arithmetic, not a round number. The
+⚠️ This is a **narrow, explicit exception**. The standard set is * not
+losing money* — derived from break-even arithmetic, not a round number. The
 rest of the lock holds: visibility may change, **the charged price may not**.
 
 ## 2026-08-19 — The free tier hard-caps at three workspaces per person, with a staff-console control
 
-- **Decided by:** Zach, 2026-08-19, verbatim: *"3 but provide a control in the staff console."* Serves his top-line requirement that *"the free/hobby tier does hard cap so it always actually stays free."*
+- **Decided by:** the account owner — three per person, with a staff-console control to raise it. It serves the standing requirement that the free tier hard-caps so it always actually stays free.
 - **Scope:** packaging
 - **Evidence:** `81c432500` (AGL-2265)
 
@@ -223,7 +251,7 @@ the count, create, restore), and a loading default that answers as a real value.
 
 ## 2026-08-18 — The Sept-1 launch price set is LOCKED
 
-- **Decided by:** Zach, 2026-08-18, asked with options and answered *"Lock all of it as listed"* — the partial-lock and hold-the-republish alternatives were offered and declined
+- **Decided by:** the account owner — the whole set is locked as listed; the partial-lock and hold-the-republish alternatives were offered and declined
 - **Scope:** pricing
 - **Evidence:** Drive Pricing Decision Log, entry `2026-08-18`; the `LOCKED` pin in `tools/scripts/check-pricing-drift.mjs`; `apps/console/specs/published-pricing-table-parity.spec.ts`; AGL-1885
 
@@ -262,7 +290,7 @@ lesson, enforced by `assertBoundedWinbackCoupon`).
 Not decided. Listed here because each one is **blocked on the log existing** —
 they are packaging or disclosure calls whose change-control legs could not be
 described until there was somewhere to describe them. ⚠️ None of these may be
-resolved by an agent; each needs Zach.
+resolved by an agent; each needs the account owner.
 
 ### Entry scheduling: is it `scheduledPublishing`, or deliberately free?
 
@@ -286,8 +314,8 @@ defaults, so a gate on a read path that fails to load the org would silently sto
 a paying customer's scheduled posts. The fail direction is closed, and that is a
 content outage.
 
-**The question for Zach: does entry scheduling count as `scheduledPublishing`,
-or is it a free capability on purpose?**
+**The open question: does entry scheduling count as `scheduledPublishing`, or
+is it a free capability on purpose?**
 
 ### The marketplace take rate is undisclosed on `/pricing`
 
@@ -297,8 +325,8 @@ resolver at `:2391`). `release_marketplace` is on in production and commerce
 ships launch day, and the page does not say it. A seller finds out at settlement.
 
 Disclosure is besigner click-work on the `aglyn-marketing` host — publication-first,
-not a repo change — plus a Drive Decision Log entry. **Blocked on Zach:** the
-copy, and whether the Free-plan 30% is disclosed as such.
+not a repo change — plus a Drive Decision Log entry. **Blocked on the account
+owner:** the copy, and whether the Free-plan 30% is disclosed as such.
 
 ### `/pricing` tier visibility — the republish itself
 
@@ -312,8 +340,7 @@ which is the only thing that proves what the edit produced — cannot run.
 
 Carried into AGL-1908's brief as a requirement: re-acceptance stays, but the
 banner must not imply the user never agreed. ⚠️ **Recorded as a question, not a
-decision** — no Zach quote stands behind it, and the console's current
-"no record of your acceptance" copy is literally true pre-launch. Needs his read
+decision** — no quote stands behind it, and the console's current no record of your acceptance copy is literally true pre-launch. Needs his read
 before any wording moves, and any change is gdoc-first if it touches a legal page.
 
 ### Event Calendar packaging

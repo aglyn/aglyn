@@ -30,6 +30,8 @@ import {
   ICON_VARIANT_MODIFY_MOVE_OUT,
   ICON_VARIANT_MODIFY_MOVE_UP,
   ICON_VARIANT_MODIFY_PASTE,
+  ICON_VARIANT_VISIBILITY_HIDDEN,
+  ICON_VARIANT_VISIBILITY_SHOWN,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -42,8 +44,10 @@ import {
   type PaperProps,
   Typography,
 } from '@mui/material'
+import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { ChangeEvent, forwardRef, useCallback, useState } from 'react'
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
 import {
@@ -57,6 +61,10 @@ import {
   useMoveNodeInCallback,
   useMoveNodeOutCallback,
 } from '../hooks/use-move-node-callbacks'
+import {
+  isNodeHiddenOnSite,
+  nodePropsWithHiddenOnSite,
+} from '../utils/canvas-reveal'
 import SubtreeJsonDialog from './subtree-json-dialog.component'
 
 export interface NodeContextMenuProps extends PaperProps {
@@ -193,6 +201,83 @@ export const NodeContextMenu = observer(
     const canPaste = Besigner.clipboard.hasContent()
     const clipboardLabels = Besigner.clipboard.getLabels()
 
+    /**
+     * Start hidden until an interaction shows it (AGL-592).
+     *
+     * A DIFFERENT switch from the eye on the hierarchy row, and the naming is
+     * the whole point. The eye hides an element outright — `display: none`,
+     * nothing reveals it. This one enrols the element in a runtime contract:
+     * it starts hidden, an interaction's show step reveals it, and the canvas
+     * opens it while it is being designed. A mega-menu panel, a drawer, an
+     * announcement that appears on scroll.
+     *
+     * `aglyn-hidden` is the storage — the published stylesheet, the show/hide
+     * steps and the canvas reveal all key off it — and until this existed the
+     * only way to set it was to know the literal string and type it into the
+     * Classes box. An element property with no picker is a missing feature,
+     * not a power-user path.
+     */
+    const [, setRevealedNodeIds] = useAglynBesignerFlag('revealedNodeIds')
+    const hiddenOnSite = isNodeHiddenOnSite(node as never)
+    const handleToggleHiddenClick = useCallback(() => {
+      if (isRootNode) return
+      onAction?.()
+      const targets = multi ? Besigner.focus.getSelected() : [node]
+      const changed: string[] = []
+      action(() => {
+        for (const target of targets) {
+          if (!target || Aglyn.canvas.isRootNode(target)) continue
+          const props = nodePropsWithHiddenOnSite(target as never, !hiddenOnSite)
+          if (!props) continue
+          target.props = props as never
+          changed.push(target.$id)
+        }
+      })()
+      // Showing an element again retires its canvas reveal with it. The flag
+      // is only meaningful for something the site hides, so leaving an entry
+      // behind means the next hide silently starts revealed. Hiding sets
+      // nothing: hidden is hidden, and selecting the element — which
+      // whichever surface opened this menu has already done — is what shows
+      // it while it is being designed.
+      if (hiddenOnSite && changed.length) {
+        setRevealedNodeIds((current) =>
+          (current ?? []).filter((id) => !changed.includes(id)),
+        )
+      }
+    }, [node, isRootNode, multi, hiddenOnSite, onAction, setRevealedNodeIds])
+
+    /**
+     * Copy and paste a LOOK (AGL-1480).
+     *
+     * `node.sx` — the Styles panel's whole output, including its responsive,
+     * `@scheme` and state slices, which are keys inside that object. Classes
+     * are deliberately not carried: a class is a name pointing at rules the
+     * element does not own, and two of them carry behaviour rather than
+     * appearance, so moving them under a label that promises looks would move
+     * behaviour with it.
+     *
+     * Paste REPLACES. Merging makes the result depend on what the target
+     * already had, so the same look pasted onto two elements could produce
+     * two different ones — and there would be no way to paste "no styles".
+     */
+    const copiedStyleLabel = Besigner.styleClipboard.getStyleLabel()
+    const canPasteStyles = Besigner.styleClipboard.hasStyles()
+    const handleCopyStyles = useCallback(() => {
+      if (isRootNode) return
+      onAction?.()
+      Besigner.styleClipboard.copyStyles(node)
+    }, [node, isRootNode, onAction])
+    const handlePasteStyles = useCallback(() => {
+      if (isRootNode) return
+      onAction?.()
+      const targets = multi ? Besigner.focus.getSelected() : [node]
+      for (const target of targets) {
+        if (target && !Aglyn.canvas.isRootNode(target)) {
+          Besigner.styleClipboard.pasteStyles(target)
+        }
+      }
+    }, [node, isRootNode, multi, onAction])
+
     const deleteElementCallback = useDeleteElementCallback()
     const deleteElementsCallback = useDeleteElementsCallback()
     const handleDeleteClick = useCallback(() => {
@@ -210,7 +295,26 @@ export const NodeContextMenu = observer(
     ])
 
     return (
-      <Paper ref={ref} sx={{ width: 240, overflow: 'hidden' }} {...rest}>
+      <Paper
+        ref={ref}
+        sx={{
+          width: 240,
+          // Caps itself rather than growing past the window (AGL-1405). The
+          // Popper can only slide a menu back inside the viewport if it FITS
+          // in one; a taller menu was laid out past the bottom of the
+          // document and the page grew a scrollbar around it. `dvh` so a
+          // mobile browser's retracting toolbar does not leave the last item
+          // under it.
+          // Shorter than the window, not merely within it. A menu that only
+          // just fits is one `preventOverflow` has to slide a long way to
+          // place, and a menu that lands 200px from where it was asked for
+          // reads as landing at random.
+          maxHeight: 'min(420px, calc(100dvh - 24px))',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
+        {...rest}
+      >
         <MenuList dense>
           <Typography
             variant="caption"
@@ -302,6 +406,30 @@ export const NodeContextMenu = observer(
               <ListItemText inset>Edit JSON</ListItemText>
             </MenuItem>
           )}
+          <MenuItem disabled={isRootNode} onClick={handleToggleHiddenClick}>
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={
+                  hiddenOnSite
+                    ? ICON_VARIANT_VISIBILITY_SHOWN.path
+                    : ICON_VARIANT_VISIBILITY_HIDDEN.path
+                }
+              />
+            </ListItemIcon>
+            <ListItemText
+              secondary={
+                hiddenOnSite
+                  ? 'It will be on the page from the first paint'
+                  : 'For a menu panel or drawer. To hide it outright, use the eye on its Hierarchy row'
+              }
+              slotProps={{ secondary: { sx: { whiteSpace: 'normal' } } }}
+            >
+              {hiddenOnSite
+                ? 'Do not start hidden'
+                : 'Start hidden until an interaction shows it'}
+            </ListItemText>
+          </MenuItem>
           <Divider />
           <MenuItem disabled={isRootNode} onClick={handleCopyClick}>
             <ListItemIcon>
@@ -309,6 +437,42 @@ export const NodeContextMenu = observer(
             </ListItemIcon>
             <ListItemText>{multi ? 'Copy selection' : 'Copy'}</ListItemText>
           </MenuItem>
+          <MenuItem disabled={isRootNode} onClick={handleCopyStyles}>
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_COPY.path}
+              />
+            </ListItemIcon>
+            <ListItemText>{'Copy styles'}</ListItemText>
+          </MenuItem>
+          <MenuItem
+            disabled={isRootNode || !canPasteStyles}
+            onClick={handlePasteStyles}
+          >
+            <ListItemIcon>
+              <MdiIcon
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_PASTE.path}
+              />
+            </ListItemIcon>
+            <ListItemText
+              slotProps={{
+                primary: {
+                  sx: {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                },
+              }}
+            >
+              {copiedStyleLabel
+                ? `Paste styles from ${copiedStyleLabel}`
+                : 'Paste styles'}
+            </ListItemText>
+          </MenuItem>
+          <Divider />
           <MenuItem disabled={!canPaste} onClick={handlePasteClick}>
             <ListItemIcon>
               <MdiIcon

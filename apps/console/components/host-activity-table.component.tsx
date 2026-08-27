@@ -17,6 +17,9 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   Alert,
   Button,
@@ -38,17 +41,18 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   activityHref,
   activityTargetLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
+import { formatStaffTimestamp } from '../utils/staff-timestamps'
 
 export interface HostActivityTableProps {
   hostId: string
-  pageSize?: number
 }
 
 /**
@@ -57,10 +61,20 @@ export interface HostActivityTableProps {
  * the dashboard card's bounded window.
  */
 export function HostActivityTable(props: HostActivityTableProps) {
-  const { hostId, pageSize = 25 } = props
-  const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
+  const { hostId } = props
+  /*
+   * The link context is the CUSTOMER route's params, and this table also
+   * mounts on the staff host page (AGL-1488), whose route has neither. A
+   * target with no route to it renders as plain text rather than as an
+   * anchor to a URL with a hole in it — `activityHref` already answers
+   * undefined for an incomplete context, so nothing here has to decide.
+   */
+  const { orgSlug, host } = useParams<{ orgSlug?: string; host?: string }>()
   const firestore = useFirestore()
   const [rows, setRows] = useState<any[]>([])
+  // The console's shared default and the console's shared menu, so this feed
+  // is the same control as every other list (AGL-693).
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
@@ -114,6 +128,61 @@ export function HostActivityTable(props: HostActivityTableProps) {
     void loadPage(0)
   }, [loadPage])
 
+  /*
+   * One row grammar, the console's (AGL-693) — the same table the artifact
+   * lists use, minus the row click.
+   */
+  const activityColumns: GridColDef[] = useMemo(
+    () => [
+      { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
+      {
+        field: 'target',
+        headerName: 'Target',
+        flex: 1.2,
+        minWidth: 180,
+        valueGetter: (_value, row: any) => activityTargetLabel(row.target),
+        renderCell: ({ row }: any) => {
+          /*
+           * The link context is the CUSTOMER route's params, and this table
+           * also mounts on the staff host page (AGL-1488), whose route has
+           * neither. A target with no route to it renders as plain text
+           * rather than as an anchor to a URL with a hole in it.
+           */
+          const href =
+            orgSlug && host ? activityHref(row, { orgSlug, host }) : undefined
+          const label = activityTargetLabel(row.target)
+          return href ? (
+            <AppLink href={href} color="primary" underline="hover">
+              {label}
+            </AppLink>
+          ) : (
+            label
+          )
+        },
+      },
+      {
+        field: 'actorEmail',
+        headerName: 'Who',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (_value, row: any) => row.actorEmail ?? 'Someone',
+      },
+      {
+        field: 'createdAt',
+        headerName: 'When',
+        flex: 1,
+        minWidth: 180,
+        // Sorted on the instant, rendered as a local string: a grid sorting
+        // the rendered text puts 12 January before 2 February.
+        valueGetter: (_value, row: any) =>
+          row.createdAt?.toDate?.()?.getTime?.() ?? 0,
+        renderCell: ({ row }: any) =>
+          formatStaffTimestamp(row.createdAt?.toDate?.() ?? null),
+      },
+    ],
+    [orgSlug, host],
+  )
+
   return (
     <CardDisplay
       header={'Activity'}
@@ -155,7 +224,10 @@ export function HostActivityTable(props: HostActivityTableProps) {
             </TableHead>
             <TableBody>
               {rows.map((entry) => {
-                const href = activityHref(entry, { orgSlug, host })
+                const href =
+                  orgSlug && host
+                    ? activityHref(entry, { orgSlug, host })
+                    : undefined
                 const label = activityTargetLabel(entry.target)
                 return (
                 <TableRow key={entry.$id}>
@@ -171,7 +243,9 @@ export function HostActivityTable(props: HostActivityTableProps) {
                   </TableCell>
                   <TableCell>{entry.actorEmail ?? 'Someone'}</TableCell>
                   <TableCell>
-                    {entry.createdAt?.toDate?.().toLocaleString() ?? ''}
+                    {formatStaffTimestamp(
+                      entry.createdAt?.toDate?.() ?? null,
+                    )}
                   </TableCell>
                 </TableRow>
                 )
@@ -179,27 +253,20 @@ export function HostActivityTable(props: HostActivityTableProps) {
             </TableBody>
           </Table>
         )}
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <Button
-            size="small"
-            color="primary"
-            disabled={loading || page === 0}
-            onClick={() => loadPage(page - 1, cursors[page - 2])}
-          >
-            {'Previous'}
-          </Button>
-          <Typography variant="caption" color="text.secondary">
-            {`Page ${page + 1}`}
-          </Typography>
-          <Button
-            size="small"
-            color="primary"
-            disabled={loading || !hasMore}
-            onClick={() => loadPage(page + 1, cursors[page])}
-          >
-            {'Next'}
-          </Button>
-        </Stack>
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={rows.length}
+          hasMore={hasMore}
+          disabled={loading}
+          onPageChange={(next) => {
+            if (next === page) return
+            // `cursors[i]` is the LAST row of page i, so page i+1 resumes
+            // after `cursors[i]` and page i resumes after `cursors[i - 1]`.
+            void loadPage(next, next > page ? cursors[page] : cursors[next - 1])
+          }}
+          onPageSizeChange={setPageSize}
+        />
       </Stack>
     </CardDisplay>
   )

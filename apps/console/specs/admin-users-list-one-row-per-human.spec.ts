@@ -29,7 +29,7 @@ export {}
 /**
  * AGL-2005 — `GET /api/admin/users` returns ONE row per human.
  *
- * **Zach, 2026-08-18:** "We still have two users list in this list with the
+ * **decided:** "We still have two users list in this list with the
  * same uid but one without an email attached, this needs fixed we should only
  * see one user, even if they are sso."
  *
@@ -146,7 +146,7 @@ describe('AGL-2005 · one row per human', () => {
   /**
    * The report itself. Forced red by deleting the `collapseCrossPoolUidRows`
    * call from the route and serializing `page.users`: two rows come back, one
-   * of them the emailless twin — exactly what Zach is looking at.
+   * of them the emailless twin, which is what the staff list then renders.
    */
   it('returns ONE row for a uid that exists in two pools', async () => {
     const payload = await listUsers()
@@ -180,9 +180,10 @@ describe('AGL-2005 · one row per human', () => {
   })
 
   /**
-   * Merged is not hidden. Zach asked not to SEE two rows; he did not ask to be
-   * uninformed, and the staff console is where a genuine duplicate has to stay
-   * legible. Forced red by dropping `uidAlsoInPools` from the route's
+   * Merged is not hidden. Collapsing the twin rows is a display decision, not
+   * a reason to drop the fact that a second record exists — the staff console
+   * is exactly where a genuine duplicate has to stay legible. Forced red by
+   * dropping `uidAlsoInPools` from the route's
    * `serialize` — the row still renders, and every trace that a second record
    * exists is gone.
    */

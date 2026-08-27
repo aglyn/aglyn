@@ -541,11 +541,11 @@ the memo, one measured to a firm number, three still waiting on a decision.
 | 1(a) `#E0E0E0` | **Closed** — bucket empty, `grey.300` in use | — |
 | 1(b) `rgba(0,0,0,0.12)` | **Closed** — bucket is the empty set | — |
 | 1(c) tile tints | **Decided + code shipped**, canvas repoint NOT done | execution |
-| 1(d) on-dark cluster | **Open** — rows 1 and 5 need a name | Zach |
-| 2 landmark | **Analysed, not decided, not built** | Zach, then canvas |
+| 1(d) on-dark cluster | **Open** — rows 1 and 5 need a name | the account owner |
+| 2 landmark | **Analysed, not decided, not built** | the account owner, then canvas |
 | 3 dead nodes | **Done** — 61 pruned, verified live | — |
 | 4 Figma layer names | 18 renames done; residual gap **measured: 4** | engineer |
-| 5 mobile gutter | **Open** — one line either way | Zach |
+| 5 mobile gutter | **Open** — one line either way | the account owner |
 | 6 mockups | **Struck** — AGL-1234, In Review | — |
 
 ### Item 3 is done
@@ -628,7 +628,7 @@ separately; it is outside the six items.
 
 ### What is still owed
 
-- **Zach:** item 1(d) (name the inverted surface and its on-dark ink, or leave
+- **The account owner:** item 1(d) (name the inverted surface and its on-dark ink, or leave
   them literal), item 2 (label sections by heading, yes or no), item 5 (Figma
   moves to 16, or the site moves to 20/24).
 - **Execution, already decided:** the 131-node tint repoint, by clicking.
@@ -636,17 +636,17 @@ separately; it is outside the six items.
 
 ---
 
-## Addendum 3 — Zach's ratifications, and state as of 2026-08-24
+## Addendum 3 — the ratifications, and state as of 2026-08-24
 
-Addendum 2 above is **stale from the moment it was written**: Zach answered
-1(d), 2 and 5 on the issue the next day (2026-08-12) and that never reached this
+Addendum 2 above is **stale from the moment it was written**: 1(d), 2 and 5
+were answered on the issue the next day (2026-08-12) and that never reached this
 file, so the repo has been telling every builder since that three decided items
 were still open. Recording them here is the point of this addendum.
 
 Everything else below was re-measured today against production, the live
 Firestore census, and the Figma file — not restated from the issue.
 
-### The three decisions Zach made on 2026-08-12
+### The three decisions taken on 2026-08-12
 
 - **1(d) — name them.** `#161C21` (the inverted surface) and the on-dark inks
   become tokens. Reasoning was evidence, not preference: AGL-1431 showed a

@@ -222,6 +222,41 @@ const MEDIA_CDN_ACTIVE_DOCUMENT_TYPES = new Set([
   'application/mathml+xml',
 ])
 
+/**
+ * Types this CDN will serve `inline` (AGL-1476).
+ *
+ * `?download=1` has always been able to force `attachment`, but it is the
+ * REQUESTER's flag — the safe disposition cannot depend on a caller asking
+ * for it. Anything not on this list is served as a download whatever the
+ * query says, so opening its URL top-level saves a file instead of handing
+ * the type to a renderer on the customer's own domain.
+ *
+ * The list is what a browser has a real inline use for on this route:
+ * pictures, media a player streams, and PDFs, which people expect to open in
+ * a tab. Everything else — the office and text formats, JSON, ZIP, and any
+ * legacy `text/html` still sitting in the bucket from before the allowlist
+ * narrowed — has no inline use case here and every one of them is a document
+ * a browser would happily parse.
+ *
+ * SVG stays INLINE deliberately. AGL-1474 chose the sandboxing CSP over a
+ * forced download precisely so that opening a logo's URL still shows the
+ * logo, and that policy already denies it script, an origin, and everything
+ * it could reach for. Turning it into a download now would take that
+ * decision back without adding to it.
+ */
+function servesInline(contentType: string): boolean {
+  const type = String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase()
+  return (
+    type.startsWith('image/') ||
+    type.startsWith('video/') ||
+    type.startsWith('audio/') ||
+    type === 'application/pdf'
+  )
+}
+
 /** The `Content-Security-Policy` for a response serving `contentType`. */
 export function mediaCdnContentSecurityPolicy(contentType: string): string {
   const type = String(contentType ?? '')
@@ -1004,7 +1039,9 @@ export async function serveMediaCdn(
       'Content-Disposition',
       mediaContentDisposition(
         mediaDownloadName(snapshot.get('fileName'), mediaId),
-        { download },
+        // `?download=1` can force a download; nothing can force an INLINE
+        // render of a type that has no inline use here (AGL-1476).
+        { download: download || !servesInline(servedType) },
       ),
     )
     // `immutable` for a year is the strongest possible caching, and on a

@@ -92,7 +92,7 @@ The reverse is much faster still: an upgrade releases within roughly a minute.
 
 Most bandwidth on a content site is images.
 
-- Turn on **CDN delivery** where your plan includes it, so images are served in WebP at
+- Turn on **CDN delivery** — it is on every plan — so images are served in WebP at
   the size the visitor's screen asks for. See
   [Media library & CDN](../../content-and-data/media/overview.md#deliver-over-cdn).
 - Replace oversized hero images. A 4 MB photograph scaled down in the browser still costs

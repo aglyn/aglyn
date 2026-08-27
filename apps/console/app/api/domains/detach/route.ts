@@ -16,6 +16,7 @@
  */
 
 import { pluginRequestFromWeb, TENANT_APEX } from '@aglyn/aglyn/server'
+import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -158,6 +159,13 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
+
+    // AFTER the write, never before: the tenant re-reads on the next request,
+    // so busting first would race the delete and re-warm the entry we are
+    // trying to drop. The domain no longer resolves to this host, and the
+    // `cname--` alias entry is the only thing that still says it does.
+    await revalidateHostAliases({ subdomain, hostId, cname: domain })
+
     return Response.json({ detached: true }, { status: 200 })
   } catch (error) {
     console.error(error)

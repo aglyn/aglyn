@@ -24,7 +24,7 @@ import { consoleThemeLight } from './console.theme'
  * 24px right of the page container at every width below the container clamp
  * because of it.
  */
-describe('brand font weights (Zach 2026-08-25)', () => {
+describe('brand font weights', () => {
   const typography = consoleThemeLight.typography as unknown as Record<
     string,
     unknown
@@ -48,16 +48,16 @@ describe('brand font weights (Zach 2026-08-25)', () => {
   })
 })
 
-describe('brand display ramp (Zach 2026-08-25)', () => {
+describe('brand display ramp', () => {
   const typography = consoleThemeLight.typography as unknown as Record<
     string,
     any
   >
 
   it('makes a heading MEAN the brand, not MUI’s Light 300', () => {
-    // The whole reason eleven /press headings shipped at Light 300: the
-    // variant said Heading 2 and resolved to a Material display face nobody
-    // chose, so every built page hand-wrote size and weight over the top.
+    // Left at MUI's defaults, `variant="h2"` resolves to a Material display
+    // face nobody chose, so every built page has to hand-write size and
+    // weight over the top of it — and the ones that forget ship at Light 300.
     expect(typography.h1.fontWeight).toBe(900)
     expect(typography.h2.fontWeight).toBe(800)
     expect(typography.h3.fontWeight).toBe(700)

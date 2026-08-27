@@ -41,7 +41,7 @@
  * ## Why a guard and not a note
  *
  * Revoking the tokens in the Firebase console and deleting the Vercel
- * variables are both Zach's clicks; a repo cannot do either. What a repo CAN
+ * variables are both the clicks; a repo cannot do either. What a repo CAN
  * do is make the dangerous half — a build that starts READING one — a failing
  * check rather than a plausible-looking three-line diff. The SDK reads
  * `FIREBASE_APPCHECK_DEBUG_TOKEN` off `self`/`globalThis`/`window`, so a

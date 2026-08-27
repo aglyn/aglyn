@@ -223,8 +223,25 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
   '/api/admin/finish-domain-attachments',
 ]
 
-/** One route's outcome, for the log line. */
-async function postConsoleCron(route: string): Promise<void> {
+/** What one POST to a cron route settled as. */
+interface ConsoleCronChunk {
+  /** The request was accepted (200 or 207). A refusal is already logged. */
+  accepted: boolean
+  /** 207 — finished, and something in it needs a person. */
+  partial: boolean
+  /** The sweep has no further chunk. A route that does not chunk is done. */
+  done: boolean
+  nextCursor: string | null
+}
+
+/**
+ * One POST. `cursor` resumes a chunked sweep (AGL-1141), exactly the body
+ * `scheduled-crons.yml` sends: `{"cursor":"…"}`, and `{}` for a first call.
+ */
+async function postConsoleCron(
+  route: string,
+  cursor: string | null = null,
+): Promise<ConsoleCronChunk> {
   const url = `${CONSOLE_URL}${route}`
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -232,13 +249,19 @@ async function postConsoleCron(route: string): Promise<void> {
   }
   if (PROBE_TOKEN) headers['x-aglyn-probe'] = PROBE_TOKEN
 
+  const refused: ConsoleCronChunk = {
+    accepted: false,
+    partial: false,
+    done: true,
+    nextCursor: null,
+  }
+
   const response = await fetch(url, {
     method: 'POST',
     headers,
     // The routes treat a bodyless POST as their normal invocation; a body is
-    // how `report-usage` and friends resume a sweep, and neither of these
-    // chunks.
-    body: '{}',
+    // how `report-usage` and friends resume a sweep.
+    body: cursor ? JSON.stringify({ cursor }) : '{}',
     // AGL-786. fetch would follow the redirect and drop `x-cron-secret` doing
     // it, turning a misconfigured origin into a request that 200s having
     // authenticated as nobody. Manual, so a 3xx is a status we can name.
@@ -253,29 +276,75 @@ async function postConsoleCron(route: string): Promise<void> {
       status: response.status,
       location: response.headers.get('location') ?? '',
     })
-    return
+    return refused
+  }
+  if (!response.ok && response.status !== 207) {
+    logger.error('console cron refused', { route, status: response.status, body: text.slice(0, 2000) })
+    return refused
   }
   if (response.status === 207) {
-    // "Finished, and something in it needs a person" — the same meaning the
-    // workflow gives it, and the same reason it must not read as success.
-    logger.error('console cron finished with failures (207)', { route, body: text.slice(0, 2000) })
-    return
-  }
-  if (!response.ok) {
-    logger.error('console cron refused', { route, status: response.status, body: text.slice(0, 2000) })
-    return
-  }
-  if (text.replace(/\s/g, '').includes('"done":false')) {
-    // A resumable sweep (AGL-1141). This caller does not loop on `nextCursor`,
-    // because neither route chunks today — so if one starts to, it must be a
-    // loud error here rather than a sweep that silently stops after chunk one.
-    logger.error('console cron returned done:false — this caller does not resume sweeps', {
+    // "Finished this chunk, and something in it needs a person" — the same
+    // meaning the workflow gives it. The sweep CONTINUES (the cursor has
+    // already moved past the failures) so one bad org cannot both stall the
+    // run and go unnoticed; it must simply not read as success.
+    logger.error('console cron chunk finished with failures (207)', {
       route,
       body: text.slice(0, 2000),
     })
-    return
   }
-  logger.debug('console cron ok', { route, status: response.status })
+
+  const compact = text.replace(/\s/g, '')
+  const done = !compact.includes('"done":false')
+  const match = /"nextCursor":"([^"]*)"/.exec(compact)
+  return {
+    accepted: true,
+    partial: response.status === 207,
+    done,
+    nextCursor: match?.[1] ?? null,
+  }
+}
+
+/**
+ * The chunk ceiling, mirroring `scheduled-crons.yml`. A sweep that has not
+ * finished in fifty chunks is not a slow sweep, it is a loop.
+ */
+const CRON_SWEEP_MAX_CHUNKS = 50
+
+/**
+ * Drive one cron route to completion, following `nextCursor`.
+ *
+ * The workflow has always looped; this caller used to refuse to, and said so
+ * loudly, because neither high-frequency route chunks. The daily routes do —
+ * `report-usage` returns `done:false` with a cursor whenever a sweep outgrows
+ * one invocation — so a caller that stopped after the first chunk would
+ * report half the platform and leave the rest unmetered, silently.
+ */
+async function sweepConsoleCron(route: string): Promise<void> {
+  let cursor: string | null = null
+  let partial = false
+  for (let chunk = 1; chunk <= CRON_SWEEP_MAX_CHUNKS; chunk += 1) {
+    const result = await postConsoleCron(route, cursor)
+    if (!result.accepted) return
+    partial = partial || result.partial
+    if (result.done) {
+      logger.debug('console cron ok', { route, chunks: chunk, partial })
+      return
+    }
+    if (!result.nextCursor) {
+      // The one shape that must never be retried blindly: without a cursor
+      // the next call would re-read the same chunk for ever.
+      logger.error('console cron returned done:false with no nextCursor', {
+        route,
+        chunk,
+      })
+      return
+    }
+    cursor = result.nextCursor
+  }
+  logger.error('console cron sweep did not finish', {
+    route,
+    chunks: CRON_SWEEP_MAX_CHUNKS,
+  })
 }
 
 /**
@@ -319,7 +388,7 @@ export const consoleFastCrons = onSchedule(
     // allSettled, not a loop with awaits: one route that throws must not stop
     // the other from being called at all. They share nothing but a secret.
     const outcomes = await Promise.allSettled(
-      CONSOLE_FAST_CRON_ROUTES.map((route) => postConsoleCron(route)),
+      CONSOLE_FAST_CRON_ROUTES.map((route) => sweepConsoleCron(route)),
     )
     outcomes.forEach((outcome, index) => {
       if (outcome.status === 'rejected') {
@@ -332,6 +401,105 @@ export const consoleFastCrons = onSchedule(
   },
 )
 
+
+/*==============================================================
+ * THE CONSOLE'S DAILY CRONS
+ *=============================================================*/
+
+/**
+ * WHY THESE MOVED TOO.
+ *
+ * AGL-1617 moved the frequent sweeps here and left the daily ones on GitHub
+ * Actions, on the reasoning that "an hour of GitHub's drift costs nothing and
+ * the six-hour graces are honest". On 2026-08-27 that reasoning failed: the
+ * workflow's 02:00 and 03:00 schedules did not fire until 12:25 and 13:56 —
+ * ten and eleven hours late — and the 04:00, 07:00 and 08:00 schedules did not
+ * fire at all. `run-erasures`, `report-usage-current` and `usage-alerts` went
+ * silent for thirty-plus hours and the uptime monitor correctly went red.
+ *
+ * Every run that DID fire succeeded. Nothing was broken but the dispatch, and
+ * dispatch is the one part of GitHub's scheduler that is documented as
+ * best-effort. In the same window both Cloud Scheduler jobs beat within a
+ * minute of every tick, as they have since AGL-1617.
+ *
+ * What these jobs drive is not tolerant of a lost day: `report-usage` is the
+ * only run that meters a closed month into Stripe, and `run-erasures` is a
+ * deletion a customer has asked for with a clock running on it.
+ *
+ * ONE FUNCTION PER JOB, unlike the fast pair. Their times are staggered on
+ * purpose — `report-usage-current` at 07:00 is deliberately an hour ahead of
+ * `usage-alerts` so the budget evaluation reads a figure computed today — and
+ * one function per schedule keeps those times exactly as `SCHEDULED_JOBS`
+ * describes them, so `/api/health/crons` judges the same job it did before.
+ * It also gives each sweep its own 540-second budget rather than five of them
+ * sharing one.
+ *
+ * ⚠️ These routes must be scheduled in EXACTLY ONE place. `report-usage`
+ * meters into Stripe, so a day on which both runners fired would be a day
+ * customers were billed twice — which is why the matching `- cron:` entries
+ * leave `scheduled-crons.yml` in the same commit that adds these.
+ */
+const CONSOLE_DAILY_CRONS = {
+  'report-usage': {
+    schedule: '0 2 * * *',
+    route: '/api/billing/report-usage',
+  },
+  'audit-archive': {
+    schedule: '0 3 * * *',
+    route: '/api/admin/audit-archive',
+  },
+  'run-erasures': {
+    schedule: '0 4 * * *',
+    route: '/api/admin/run-erasures',
+  },
+  'report-usage-current': {
+    schedule: '0 7 * * *',
+    route: '/api/billing/report-usage?month=current',
+  },
+  'usage-alerts': {
+    schedule: '0 8 * * *',
+    route: '/api/billing/usage-alerts',
+  },
+} as const
+
+/**
+ * One scheduled function for one console route.
+ *
+ * `retryCount: 0` for the same reason the fast pair carries it: these sweeps
+ * are idempotent claim-and-work passes, a retried tick can only duplicate
+ * reads, and a run that failed is already visible as a silent job on
+ * `/api/health/crons` well inside its six-hour grace. That visibility is the
+ * signal that matters — a retry that quietly succeeded would hide a route
+ * that is refusing every other call.
+ */
+function consoleDailyCron(job: keyof typeof CONSOLE_DAILY_CRONS) {
+  const { schedule, route } = CONSOLE_DAILY_CRONS[job]
+  return onSchedule(
+    {
+      schedule,
+      timeZone: 'Etc/UTC',
+      secrets: [CONSOLE_CRON_SECRET],
+      retryCount: 0,
+      timeoutSeconds: 540,
+    },
+    async () => {
+      if (!CONSOLE_URL) {
+        logger.error(
+          `console daily cron ${job} skipped — set AGLYN_CONSOLE_URL to the ` +
+            'origin that SERVES your console, e.g. https://app.example.com.',
+        )
+        return
+      }
+      await sweepConsoleCron(route)
+    },
+  )
+}
+
+export const consoleReportUsage = consoleDailyCron('report-usage')
+export const consoleAuditArchive = consoleDailyCron('audit-archive')
+export const consoleRunErasures = consoleDailyCron('run-erasures')
+export const consoleReportUsageCurrent = consoleDailyCron('report-usage-current')
+export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

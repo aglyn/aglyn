@@ -68,14 +68,13 @@ describe('richTextToPlain', () => {
 /**
  * AGL-2486 — the break the Attributes panel could not see.
  *
- * Zach: *"I also still do not see the line break in the text field in the
- * attributes panel"*. Measured on `yFjgqiG2wm`, node `C3rodYc1Gd` stores
+ * A node that carries a line break stores
  * `html: "Your entire web <div>presence. </div>"` beside
  * `children: "Your entire web presence. "`. The canvas renders `html` and
- * shows two lines; the panel renders `children` and showed one. The two
- * disagreed because this projection was `textContent`, which concatenates
- * across every element boundary — the `<div>` a contentEditable forks on
- * Enter, and a `<br>`, both vanish into nothing.
+ * shows two lines; the panel renders `children`. Projected with
+ * `textContent`, which concatenates across every element boundary, the panel
+ * shows one — the `<div>` a contentEditable forks on Enter, and a `<br>`,
+ * both vanish into nothing.
  *
  * `children` is what every plain renderer, the SSR fallback and the panel
  * field read, so the break was lost to all three, not just the display.

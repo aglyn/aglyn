@@ -37,7 +37,7 @@ import { renderSystemEmail } from '../../_lib/render-system-email'
 /**
  * Several email addresses per account (AGL-2486) — the management surface.
  *
- * GitHub's model, adopted because that is what Zach asked for: an account
+ * GitHub's model: an account
  * holds a handful of independently verified addresses, exactly one of them
  * primary, and any verified one may be used to sign in. See
  * `@aglyn/aglyn/app-utils/account-emails` for the policy and, more

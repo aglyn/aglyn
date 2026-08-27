@@ -51,11 +51,10 @@ export interface ElementFragmentRects {
  *
  * ## The defect this exists for
  *
- * Zach: *"the element outline doesn't wrap the text on the new line unless
- * you are editing it"*. The besigner drew selection, hover, the drag
- * affordance and the collaborator selection boxes from ONE
- * `getBoundingClientRect()`. For a block that is right. For an inline run
- * that has wrapped it is not merely imprecise — it is a different shape.
+ * The besigner draws selection, hover, the drag affordance and the
+ * collaborator selection boxes from element geometry. Taking that from ONE
+ * `getBoundingClientRect()` is right for a block. For an inline run that has
+ * wrapped it is not merely imprecise — it is a different shape.
  * An inline element is a set of line fragments; its bounding rect is their
  * union, which covers the empty space to the right of a short last line, and
  * — when the run starts mid-line — the whole left gutter of the first line,

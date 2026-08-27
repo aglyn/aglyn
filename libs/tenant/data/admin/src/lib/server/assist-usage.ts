@@ -48,8 +48,7 @@ import { FieldValue } from 'firebase-admin/firestore'
  *
  * Costs are OUR cost estimates at list rates (pricing-tunable telemetry),
  * mirrored after ORG_COGS_UNIT_RATES_USD's posture: cost visibility per org
- * from day one so the paid gate and caps can be tuned with data — Zach's
- * "must not eat margins" constraint.
+ * from day one so the paid gate and caps can be tuned with data — the * "must not eat margins" constraint.
  *
  * ── Why the exchange is split in two (AGL-1972) ────────────────────────────
  *
@@ -167,8 +166,7 @@ export function assistEntitledMonthlyLimit(): number {
 }
 
 /**
- * The repo default spend ceiling: **$40 per org per month** (Zach,
- * 2026-08-19, closing AGL-2264).
+ * The repo default spend ceiling: **$40 per org per month** (AGL-2264).
  *
  * The number is arithmetic rather than pricing. After AGL-2441 the
  * 1,000-message entitled guard bounds roughly $28/org/month of worst-case

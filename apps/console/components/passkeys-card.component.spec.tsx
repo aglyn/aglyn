@@ -211,7 +211,7 @@ describe('PasskeysCard credential claims (AGL-1380)', () => {
  * Three strings already promised the capability: this row's own "Blocked",
  * the sign-in failure copy ("remove it from Manage account → Security") and
  * the registration limit error ("Passkey limit reached — remove one
- * first."). Zach's standing rule is that a capability must be REACHABLE in
+ * first."). the standing rule is that a capability must be REACHABLE in
  * the console, not merely exist, so the endpoint alone would not have
  * closed this.
  */

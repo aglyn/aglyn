@@ -44,8 +44,8 @@ export const AVATAR_COLOURS = [
  *
  * The SEED is the caller's choice and it matters. Member surfaces seed on the
  * email, so a rename does not repaint someone. Presence seeds on
- * `uid:sessionId`, because Zach asked for one avatar per open SESSION each in
- * its own colour, matching the cursor that session draws.
+ * `uid:sessionId`, because it draws one avatar per open SESSION, each in the
+ * colour of the cursor that session draws.
  */
 export function avatarColourFor(seed: string): string {
   let hash = 0
@@ -183,15 +183,11 @@ export function MemberAvatar(props: MemberAvatarProps) {
         // Two letters need to fit the same circle one did.
         fontSize: size * (initials.length > 1 ? 0.36 : 0.45),
         fontWeight: 600,
-        // COLOUR, not the SDK's grey (AGL-2486). Zach, seeing the account
-        // menu next to the presence stack: "I like how we created the named
-        // avatars for no profile picture let's do the same". The grey letter
-        // was not a neutral choice — MUI's `colorDefault` is the same grey it
-        // uses for an image that FAILED to load, so a deliberate initials
-        // avatar was rendering as a broken one. It matters most for SSO
-        // accounts, which have no picture at all: `zach@aglyn.com`
-        // authenticates through `saml.aglyn-workspace`, whose assertion
-        // carries no photo, so for the enterprise tier the initials ARE the
+        // COLOUR, not the SDK's grey (AGL-2486). MUI's `colorDefault` is the
+        // same grey it paints for an image that FAILED to load, so a
+        // deliberate initials avatar renders as a broken one. It matters most
+        // for SSO accounts, which have no picture at all — a SAML assertion
+        // carries no photo — so for the enterprise tier the initials ARE the
         // avatar on every screen.
         bgcolor: colour ?? avatarColourFor(colourSeed || email || label),
         // `common.white`, not `#fff` — the same colour, said in the one
@@ -202,14 +198,11 @@ export function MemberAvatar(props: MemberAvatarProps) {
         // A theme-aware pairing would flip this to black in a light theme and
         // put black on #d93025.
         color: 'common.white',
-        // The identity colour has to be VISIBLE on a photo too (AGL-2486).
-        // Zach, looking at a presence stack of two photos and two initials:
-        // "The users with a profile image need to have a border indicative of
-        // their color in the canvas, right now only those without an image
-        // can you tell because it uses the background." A photo covers the
-        // background entirely, so on exactly the sessions that HAVE a picture
-        // the one signal tying an avatar to its cursor and its selection box
-        // disappeared.
+        // The identity colour has to be VISIBLE on a photo too (AGL-2486). An
+        // initials chip shows its colour as the background, but a photo covers
+        // that background entirely — so without a ring, exactly the sessions
+        // that HAVE a picture lose the one signal tying an avatar to its
+        // cursor and its selection box.
         //
         // Only when the caller supplied `colour` explicitly. That is the
         // signal that the colour MEANS something — presence passes the
@@ -227,9 +220,6 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // The old reasoning was that an initials chip's background
               // already IS the identity colour, so a same-colour ring carries
               // no new information. That was true and it was beside the point.
-              // Zach: "I know we are using the background color on the avatars
-              // with no picture, but it should still have a border, because
-              // now they are different sizes." The ring is not only
               // information, it is GEOMETRY: it paints 2px outside the circle,
               // so in a mixed stack the photo chips read 4px wider than the
               // initials chips beside them and the row looks uneven.
@@ -237,10 +227,10 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // So the session colour, on both, and on an initials chip it
               // simply reads as a slightly larger disc of the one colour. The
               // alternative — a ring in the toolbar's background colour on
-              // initials chips only — would equalise the size too, and was
-              // rejected because it puts a second meaning on the ring
-              // depending on whether a picture loaded. That is the exact
-              // inconsistency Zach objected to twice over the dashed border.
+              // initials chips only — would equalise the size too, but it puts
+              // a second meaning on the ring depending on whether a picture
+              // loaded, and the ring already carries one: this session's
+              // identity colour, dashed when the session is your own.
               // Adjacent chips are guaranteed different colours by the
               // room-wide allocation, so the overlap still has a colour edge.
               //
@@ -254,23 +244,15 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // varies, and dashed means "one of your own other sessions"
               // (AGL-2486).
               //
-              // This settled after three rounds of getting it wrong, and the
-              // history is worth keeping because each step removed a real
-              // defect. It began dashed in the WARNING colour, which said
-              // "you" in a second colour that competed with the identity
-              // colour. It became dashed in the session colour. Then solid
-              // everywhere, on the reasoning that the monitor badge already
-              // says "this is you" and a second signal was noise.
-              //
-              // That last step was the one mistake. Zach: "go ahead and go
-              // back to the dashed border on the avatars when it is you in
-              // the other tabs so it matches what appears in the canvas."
-              // The canvas draws a DASHED outline around what your other
-              // session has selected, so making the chip solid did not remove
-              // a redundant signal — it made two surfaces disagree about how
-              // the same session looks. The redundancy is the point: the chip
-              // and the outline are the same person, and they now say so the
-              // same way.
+              // Two nearby alternatives are both wrong. A dashed ring in the
+              // WARNING colour says "you" in a second colour that competes
+              // with the identity colour the session already owns. A solid
+              // ring everywhere, on the argument that the monitor badge
+              // already says "this is you", breaks the tie with the canvas:
+              // the canvas draws a DASHED outline around what your other
+              // session has selected, so the chip and the outline would
+              // describe one session two different ways. The redundancy is
+              // the point — same session, same form, on both surfaces.
               //
               // SIZE PARITY IS UNAFFECTED, deliberately. Dashed and solid are
               // both `2px`, and `outline` does not participate in layout

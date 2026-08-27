@@ -392,12 +392,11 @@ const baseOptions: ThemeOptions = {
   spacing: 8,
   typography: {
     fontFamily: buildFontFamilyList().join(','),
-    // The brand's named weights, beyond MUI's four (Zach 2026-08-25).
+    // The brand's named weights, beyond MUI's four.
     //
     // MUI ships Light 300 / Regular 400 / Medium 500 / Bold 700, and the
-    // brand type ramp uses three more — the press page's own typography
-    // card states it: "Black (heroes) · ExtraBold (H2) · Bold · SemiBold ·
-    // Regular · Light (numerals)". Without these, reaching 600/800/900 meant
+    // brand type ramp uses three more: Black for heroes, ExtraBold for H2,
+    // SemiBold below Bold. Without these tokens, reaching 600/800/900 means
     // typing a raw number, which pins an element to a weight instead of to
     // the brand and leaves it behind when the ramp moves.
     //
@@ -414,13 +413,13 @@ const baseOptions: ThemeOptions = {
     fontWeightSemiBold: 600,
     fontWeightExtraBold: 800,
     fontWeightBlack: 900,
-    // The brand's display ramp, so `variant="h1"` / `"h2"` MEANS the brand
-    // (Zach 2026-08-25). MUI's defaults are Light 300 at 96px/60px — a
-    // display face for a Material app, and nothing like the type card on
-    // /press ("Black (heroes) · ExtraBold (H2)"). Because they did not match,
-    // every heading on a built page carried a hand-written `fontSize` and
-    // `fontWeight`, which is how eleven of them shipped at Light 300: the
-    // variant said Heading 2 and rendered as something nobody chose.
+    // The brand's display ramp, so `variant="h1"` / `"h2"` MEANS the brand.
+    // MUI's defaults are Light 300 at 96px/60px — a display face for a
+    // Material app, and nothing like the brand's Black heroes and ExtraBold
+    // H2. Left at the defaults, every heading on a built page needs a
+    // hand-written `fontSize` and `fontWeight` to look right, and the ones
+    // that miss render as a Material display face nobody chose while the
+    // markup still says Heading 2.
     //
     // Scoped deliberately to h1 and h2. They have ZERO `variant="hN"` usages
     // in the console and one in the tenant app, so this restyles no product
@@ -456,12 +455,12 @@ const baseOptions: ThemeOptions = {
       lineHeight: 1.2,
       letterSpacing: '-0.015em',
     },
-    // The three text rungs the brand uses that MUI's scale has no name for
-    // (Zach 2026-08-25). MUI runs 16 / 14 / 12 (`body1` / `body2` /
-    // `caption`); the built pages kept reaching for 17, 13 and 11 and, with
-    // nothing to ask for, wrote the pixels. /press alone carried 286 such
-    // literals — 165 of them the same 11px metadata line — each one pinned to
-    // a size instead of to the scale.
+    // The three text rungs the brand uses that MUI's scale has no name for.
+    // MUI runs 16 / 14 / 12 (`body1` / `body2` / `caption`); the brand's
+    // pages want 17, 13 and 11, and with no token to ask for they write the
+    // pixels instead. One marketing page alone can carry 286 such literals —
+    // 165 of them the same 11px metadata line — each pinned to a size rather
+    // than to the scale.
     //
     // Full variant objects rather than bare sizes, so one pick brings the
     // line height with it: `variant="micro"` or, where the element's own

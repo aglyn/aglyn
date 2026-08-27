@@ -228,13 +228,12 @@ describe('the three width cases the standard now has (AGL-1298)', () => {
     expect(isStockWidth(null)).toBe(false)
   })
 
-  it('SECTION: the default preset is XL — Zach confirmed it 2026-08-18', () => {
-    // "XL is fine for the default page width on the marketing site, I like
-    // that." The /pricing audit measured 8/8 sections on `maxWidthXl`, so
-    // the earlier premise that the site was "designed with LG" was off by
-    // one step and the default does NOT move.
+  it('SECTION: the default preset is XL', () => {
+    // XL is the marketing site's own page width: the /pricing audit measured
+    // 8/8 sections on `maxWidthXl`, so a premise that the site is "designed
+    // with LG" is off by one step and the default does NOT move.
     //
-    // ⚠️ That sentence is a COMMENT and this `expect` asserts a preset
+    // ⚠️ That measurement is a COMMENT and this `expect` asserts a preset
     // literal in this file — it says nothing about the live site and would
     // not fail if /pricing drifted to 3 of 8 (AGL-1296). The corpus reading
     // is re-derived by `npm run audit:marketing-containers` (needs ADC on

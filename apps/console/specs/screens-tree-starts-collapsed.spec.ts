@@ -24,12 +24,12 @@
  * Tracking the EXPANDED set makes the empty default the cheap one and the
  * count honest.
  *
- * This asserts the DECLARATION, following `screen-view-card-masonry.spec.tsx`:
- * the component needs dnd-kit, MUI and a Firestore-shaped feed to render, and
- * jsdom performs no layout, so a render test here would cost far more than it
- * proves. What can regress is someone reintroducing the inverted state — a
- * `collapsedIds` set, or an `expandedIds` seeded with anything — and that is
- * what this catches.
+ * This asserts the DECLARATION, following `screen-view-card-masonry.spec.tsx`.
+ * What can regress here is the STATE's polarity — a `collapsedIds` set, or an
+ * `expandedIds` seeded with anything — and a polarity is a property of the
+ * declaration rather than of a render. That a closed subtree is genuinely
+ * absent from the document is proved by rendering, in
+ * `screens-tree-expand-holds-columns.spec.tsx`.
  *
  * It does NOT prove reads are bounded, and nothing here should be read as
  * claiming so: `screens/page.tsx` still fetches the collection with a single
@@ -53,10 +53,14 @@ describe('the screens tree starts collapsed (AGL-693)', () => {
     )
   })
 
-  it('walks into a child only when it is expanded', () => {
-    // The polarity is the whole fix: `!collapsedIds.has(id)` descends by
-    // default, `expandedIds.has(id)` does not.
-    expect(source).toMatch(/if \(hasChildren && expandedIds\.has\(child\.\$id\)\)/)
+  it('mounts a subtree only when its parent is expanded', () => {
+    // The polarity is the whole fix: `!collapsedIds.has(id)` reveals by
+    // default, `expandedIds.has(id)` does not. `unmountOnExit` is what makes
+    // the closed state cost nothing — without it the whole tree is in the
+    // document from the first paint, merely at zero height.
+    expect(source).toMatch(
+      /in=\{expandedIds\.has\(row\.\$id\)\}\s*\n\s*unmountOnExit/,
+    )
     expect(source).not.toMatch(/!collapsedIds\.has/)
   })
 

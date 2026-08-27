@@ -50,13 +50,12 @@
  *   storage they did not pay for, and never shown a projection that will not
  *   materialise. It costs no revenue, because none was being collected.
  * - Turning the meter on instead would start billing a scope on a date nobody
- *   chose. The rate is locked and published, but the START MONTH is Zach's
- *   live billing decision (AGL-1886) and it needs a redeploy, so a code change
+ *   chose. The rate is locked and published, but the START MONTH is the *   live billing decision (AGL-1886) and it needs a redeploy, so a code change
  *   cannot make it.
  *
- * The fix is self-healing in the direction Zach wants: the day the env var
- * names a month, `scopeBillsStorageOverage` returns true, the gate opens on
- * its own, and no second decision has to be remembered.
+ * The pairing is self-healing: the day the env var names a month,
+ * `scopeBillsStorageOverage` returns true, the gate opens on its own, and no
+ * second decision has to be remembered.
  *
  * ## Why the assertions are shaped this way
  *

@@ -26,8 +26,7 @@ import {
 } from './plan-entitlements'
 
 /**
- * The POS register add-on is a POOL allocated per site (AGL-1775, Zach's
- * 2026-08-17 decision — direction 1, per-host enforcement, explicitly
+ * The POS register add-on is a POOL allocated per site (AGL-1775, the * 2026-08-17 decision — direction 1, per-host enforcement, explicitly
  * choosing the expensive option over re-documenting the add-on as org-wide).
  *
  * $89/mo is priced "per extra register/location". It used to raise an

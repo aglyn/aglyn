@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { Button, Stack, Typography } from '@mui/material'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { StaffListPagination } from '../hooks/use-staff-list-pagination'
 
 export interface StaffListPaginationControlsProps<TRow> {
@@ -30,45 +30,52 @@ export interface StaffListPaginationControlsProps<TRow> {
    * that nobody is missing.
    */
   shown?: number
+  /**
+   * Offer the size menu. Off for a list whose size the ROUTE dictates — the
+   * Users list pages at Firebase Auth's width because anything smaller hides
+   * tenant-pool accounts, and a menu there would offer a choice the request
+   * cannot honor.
+   */
+  sizeMenu?: boolean
 }
 
 /**
- * PREVIOUS / `Page n · m shown` / NEXT for a staff list (AGL-2486).
+ * The staff lists' footer — the console's shared one (AGL-693).
  *
- * Extracted from the Organizations list so the Users list is the same
- * control and not a second one that looks like it. Rendered whenever the
- * page has rows — including on a single page — because a control that
- * appears only once there is more than one page is a control staff cannot
- * learn.
+ * Extracted from the Organizations list so the Users list is the same control
+ * and not a second one that looks like it; it is now the same control as
+ * every OTHER list too, rather than a third grammar that merely resembled
+ * them. Rendered whenever the page has rows — including on a single page —
+ * because a control that appears only once there is more than one page is a
+ * control staff cannot learn.
+ *
+ * The size menu is real: `useStaffListPagination` carries the choice into
+ * each request, and both staff list routes clamp it to the shared options.
+ * Changing it discards every cursor collected so far — a cursor names a
+ * position in a walk of a given width, and under a different width it points
+ * somewhere else.
  */
 export default function StaffListPaginationControls<TRow>({
   pagination,
   shown,
+  sizeMenu = true,
 }: StaffListPaginationControlsProps<TRow>) {
-  const { rows, pageIndex, hasMore, loading, loadPage } = pagination
+  const { rows, pageIndex, hasMore, loading, loadPage, pageSize, setPageSize } =
+    pagination
   const count = shown === undefined ? (rows?.length ?? 0) : shown
   if (!rows?.length) return null
   return (
-    <Stack direction="row" spacing={1.5} sx={{ mt: 1, alignItems: 'center' }}>
-      <Button
-        size="small"
-        variant="outlined"
-        disabled={loading || pageIndex === 0}
-        onClick={() => void loadPage(pageIndex - 1)}
-      >
-        {'Previous'}
-      </Button>
-      <Typography variant="caption" color="text.secondary">
-        {`Page ${pageIndex + 1} · ${count} shown`}
-      </Typography>
-      <Button
-        size="small"
-        variant="outlined"
-        disabled={loading || !hasMore}
-        onClick={() => void loadPage(pageIndex + 1)}
-      >
-        {'Next'}
-      </Button>
-    </Stack>
+    <ListPagination
+      page={pageIndex}
+      pageSize={pageSize}
+      rowCount={count}
+      hasMore={hasMore}
+      disabled={loading}
+      onPageChange={(next) => {
+        if (next === pageIndex) return
+        void loadPage(next)
+      }}
+      onPageSizeChange={sizeMenu ? setPageSize : undefined}
+    />
   )
 }

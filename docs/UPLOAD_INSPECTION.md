@@ -115,7 +115,7 @@ function returning a refusal, called at all five ingresses, and an async
 scanner would slot in beside it feeding detections into the existing quarantine
 deny list rather than a parallel path.
 
-## Runbook — adding ClamAV later (owner: Zach)
+## Runbook — adding ClamAV later (owner: the account owner)
 
 Not done, and **deliberately not started**: it creates billable GCP resources.
 In order:

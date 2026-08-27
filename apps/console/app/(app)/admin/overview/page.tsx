@@ -222,7 +222,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                     'Stripe subscription. Staff plan overrides, comped, and ' +
                     'canceled organizations contribute $0; annual plans count ' +
                     'at their per-month equivalent.',
-                  // Zach asked for the dashboard MRR to drill into the full
+                  // the requirement was for the dashboard MRR to drill into the full
                   // report (AGL-2486). This tile is a single point-in-time
                   // number with no way to ask why it is what it is; Revenue
                   // answers that — settled cash beside it, and the gap between

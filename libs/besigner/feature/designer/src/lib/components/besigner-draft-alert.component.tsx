@@ -26,11 +26,10 @@ export interface BesignerDraftAlertProps {
    * Someone else saved this document since it loaded, i.e. what
    * `BesignerConflictAlertComponent` says on its own (AGL-2486).
    *
-   * Passed in so ONE banner covers the condition. Zach, 2026-08-22, looking
-   * at both of them stacked over the canvas: they described a single event —
-   * a colleague's save — in two voices, and reassured in opposite
-   * directions. An editor that renders this alert must render the conflict
-   * alert only while this one is absent.
+   * Passed in so ONE banner covers the condition. Stacked, the two describe a
+   * single event — a colleague's save — in two voices, and reassure in
+   * opposite directions. An editor that renders this alert must render the
+   * conflict alert only while this one is absent.
    */
   remoteChanged?: boolean
 }
@@ -102,9 +101,6 @@ export function describeDraftOffer(
  * at is the one they meant to be in.
  *
  * When the room is SHARED this banner does not render at all — `draft
- * .available` is false and there is nothing here to word (AGL-2486). Zach,
- * on the version that kept Discard: *"should we even show them that alert,
- * that could remove the work numerous people are currently working on"*.
  * Discard is in fact local — it deletes this browser's snapshot and touches
  * neither the canvas nor anyone else, which is why it looked to him like it
  * did nothing — but a prompt whose only remaining button is a delete, over a

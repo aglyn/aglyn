@@ -337,7 +337,7 @@ describe('POST /api/admin/org-refund (AGL-2486)', () => {
   /**
    * The cap that stops the cap being defeated by arithmetic.
    *
-   * Zach declined a second approver, so the per-refund cap is the whole
+   * There is no second approver, so the per-refund cap is the whole
    * control — and on its own it is evaded by splitting: a $600 annual charge
    * refunded as four $150 partials passes a $150 per-refund cap four times
    * and lands exactly where the cap existed to stop it.

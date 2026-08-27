@@ -26,8 +26,7 @@ import { hasOrgPermission as mockHasOrgPermission } from '@aglyn/aglyn'
  * The free plan's `hostLimit: 1` must be a HARD CAP under concurrency, not
  * only in the sequential case (AGL-2063).
  *
- * ZACH, 2026-08-18, verbatim: **"We need to make sure the free/hobby tier does
- * hard cap so it always actually stays free"**.
+ * The free/hobby tier hard-caps, so that it always actually stays free.
  *
  * `/api/hosts/create` is the ONLY route in the product that mints a
  * `hosts/{id}` document — client creation is `allow create: if false` in

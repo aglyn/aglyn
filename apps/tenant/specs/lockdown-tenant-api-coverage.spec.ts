@@ -241,6 +241,8 @@ const TENANT_EXEMPT_AUDIT: Record<string, string> = {
     'the verdict the edge middleware asks for; a route that refused while locked would make every request fail open',
   // Beacons and probes: no caller identity, no org action, and a monitor
   // cannot authenticate. Markers pre-dated this guard and were never read.
+  'apps/tenant/app/api/attribution/route.ts':
+    'anonymous browser beacon; a counter on the host doc, no org-scoped action',
   'apps/tenant/app/api/csp-report/route.ts':
     'anonymous browser beacon, aggregate-only write into a platform collection',
   'apps/tenant/app/api/errors/route.ts':

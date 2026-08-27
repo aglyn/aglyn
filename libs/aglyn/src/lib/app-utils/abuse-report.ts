@@ -158,7 +158,7 @@ export interface AbuseReportCategoryDefinition {
  * that survives being read by somebody who then closes the tab.
  *
  * Whether Aglyn should *build* the mechanism and make an authorities claim
- * true is open for Zach on AGL-2045. If it is ever built, the claim must
+ * true is open on AGL-2045. If it is ever built, the claim must
  * render from its own explicit configuration — never inferred — exactly as
  * AGL-2016 gated the DMCA designation.
  */

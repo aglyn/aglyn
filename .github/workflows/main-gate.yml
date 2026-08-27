@@ -13,8 +13,8 @@ name: Main Gate
 # The reason nothing caught them earlier is recorded in nx-ci.yml and
 # tools-guards.yml: on 2026-08-20 the `push` trigger on both moved from `main`
 # to `production`, because with many agents landing on `main` continuously they
-# ran dozens of times an hour and every red notified Zach. CI became noise, so
-# it was switched off for `main`, and the note left behind says exactly what
+# ran dozens of times an hour and every red raised a notification. CI became
+# noise, so it was switched off for `main`, and the note left behind says what
 # then happened — "a break can sit on `main` unnoticed until someone runs the
 # gate."
 #

@@ -23,9 +23,8 @@
 /**
  * A visitor on the fallback error screen can navigate away (AGL-2187).
  *
- * Zach, on the live 404: *"there is no ability to navigate away that is
- * horrible UX"*. Two halves have to hold for that to be fixed, and only one of
- * them is a render:
+ * A visitor stranded on a 404 with no way off it is the defect. Two halves
+ * have to hold for that to be fixed, and only one of them is a render:
  *
  * 1. **The screen renders what it is given.** Nav in the header, the same
  *    destinations plus search in the footer — and NOTHING when a site has no

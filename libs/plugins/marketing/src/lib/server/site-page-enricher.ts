@@ -38,6 +38,9 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
   path,
   screenId,
   screen,
+  // Composed nodes (AGL-659), also read here for the interactions authored
+  // on the elements themselves (AGL-1478) — see `getClientAutomations`.
+  nodes,
 }) => {
   // Marketing overlays (AGL-195/196/247): marketingOverlays-gated on the
   // effective plan (plan-less = free = no overlays); binding tokens
@@ -144,6 +147,10 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
     path: overlayPath,
     actionsEntitled: !!orgFeatures.actions,
     allowJs: !!orgFeatures.webhooks,
+    // The COMPOSED tree, so a layout's chrome and a reusable component's
+    // internals contribute their own interactions under the graft ids the
+    // renderer actually stamps (AGL-1478).
+    nodes: Aglyn.walkInteractionNodes(nodes),
   })
   // Screen/section experiments (AGL-253): Business-gated; composing a
   // tree per divergent variant is bounded (≤4) and ISR-cached.

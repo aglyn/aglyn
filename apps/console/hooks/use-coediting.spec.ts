@@ -672,7 +672,7 @@ describe('undo against a co-editor (AGL-1958)', () => {
 /**
  * AGL-2486 — an ECHO is not a peer edit, and marking it killed undo.
  *
- * Regression, found on Zach's own screen the night same-account sessions
+ * Regression, found on the screen the night same-account sessions
  * started counting as co-editors. Symptom: undo consumed its entry and
  * changed nothing. Read live off the failing tab —
  *
@@ -1189,7 +1189,7 @@ describe('applyNodes against a co-editor (AGL-2486)', () => {
  * the moment of that measurement, so the ages here are the real ones and the
  * suite does not drift as the calendar moves.
  *
- * Zach's call, 2026-08-20: option C, reap on join by age. Option A
+ * the call, 2026-08-20: option C, reap on join by age. Option A
  * (`onDisconnect().remove()`) was rejected because a network blip would
  * silently and permanently destroy unsaved work.
  */

@@ -21,8 +21,6 @@
  * Linear is Aglyn's issue tracker, so a bug a customer hits belongs where a
  * bug we find goes — not in a Firestore collection nobody opens. Reports land
  * in the **Customer bug reports** project, never mixed into the engineering
- * backlog: Zach, 2026-08-19, "tracked in a separate linear project then our
- * primary one".
  *
  * That separation survives because the Sept-1 cut is defined by the
  * `launch-blocker` LABEL, not by an open-issue count — so inbound volume,
@@ -121,13 +119,12 @@ export interface ReportField {
 /**
  * What each kind of report asks for (AGL-2486).
  *
- * Zach, 2026-08-22: "provide more fields to the issue report to really
- * encourage greater detail and this way it will naturally moderate/limit how
- * many we get". The friction is deliberate — but it is aimed, not sprayed.
- * Nothing here asks for a fact the server can observe for itself: the route,
- * org, host, role, plan, app version, build id, browser, viewport and release
- * flags are all attached automatically and are more reliable than what
- * somebody would type. These are only the things ONLY the human knows.
+ * Asking for detail is deliberate friction — it raises the quality of what
+ * arrives and moderates the volume — but it is aimed, not sprayed. Nothing
+ * here asks for a fact the server can observe for itself: the route, org,
+ * host, role, plan, app version, build id, browser, viewport and release flags
+ * are all attached automatically and are more reliable than anything typed.
+ * These fields are only the things ONLY the human knows.
  */
 export const REPORT_FIELDS: Readonly<
   Record<ReportKind, readonly ReportField[]>
@@ -302,12 +299,11 @@ export interface LinearConfig {
   /**
    * Destination project PER REPORT KIND inside {@link teamId}.
    *
-   * Linear requires a `teamId` on every issue, so the team is what makes
-   * this configured at all; the project is the finer destination Zach asked
-   * for on 2026-08-19 — "tracked in a separate linear **project** then our
-   * primary one" — and on 2026-08-22 he split it by kind: "each type of
-   * issue report feature, bug etc all options should be filed under its own
-   * project in the Customer Reports team".
+   * Linear requires a `teamId` on every issue, so the team is what makes this
+   * configured at all. The project is the finer destination: customer reports
+   * belong in a project of their own rather than mixed into the product
+   * backlog, and each report kind — feature, bug, and the rest — files into
+   * its own project inside the customer-reports team.
    *
    * A kind may map to `null`, and then the issue files into the team's own
    * backlog with no project. That is not a lost report, and it is the right

@@ -52,7 +52,7 @@ interface FreeWorkspaceCapBody {
  *
  * Every free cap in the product is per ORG, so before this one account could
  * hold any number of free workspaces and multiply the whole free allowance by
- * that number. Zach's decision was three — **and a control here**, which is
+ * that number. the decision was three — **and a control here**, which is
  * the half that makes the number safe to have at all: the accounts this
  * refuses and the accounts it must never refuse (a consultant, an agency,
  * anyone who asks) are told apart by a person, and a person must not need a

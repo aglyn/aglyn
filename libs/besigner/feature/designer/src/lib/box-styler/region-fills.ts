@@ -20,11 +20,10 @@
  *
  * Two reasons this is not inline in the component.
  *
- * **The legend has to be readable.** Zach: "you also can't really understand
- * the key below it." Four abstract swatches beside a textured diagram is a
- * puzzle. A swatch that is painted with the *same* declaration as the region
- * it names needs no decoding — so the diagram and the legend both read their
- * fills from here, and the two cannot drift.
+ * **The legend has to be readable.** Four abstract swatches beside a textured
+ * diagram is a puzzle. A swatch painted with the *same* declaration as the
+ * region it names needs no decoding — so the diagram and the legend both read
+ * their fills from here, and the two cannot drift.
  *
  * **Dark mode has to come from the theme.** Every value below is a palette
  * TOKEN or a channel form of one, never a literal, so the console's
@@ -32,13 +31,12 @@
  * scheme flips. That is also what keeps this file at zero entries in the
  * hardcoded-colour ratchet, whose baseline may not rise.
  *
- * The texture is deliberate and so is its weight. Zach on the first pass:
- * "what happened to the styles ... with the orange and the stripes etc. The
- * orange definitely stood out too much and I like you switched it to grey,
- * but you made everything else really boring." So the stripes come back —
- * carried by `text.primary` at a low alpha rather than by a hue, which is
- * what makes them read as material instead of as decoration, and what makes
- * them survive both schemes: `text.primary` is near-black on light and
+ * The texture is deliberate and so is its weight. Stripes and hatching are
+ * what tell one region from another; a saturated hue does the same job but
+ * shouts over its neighbours, and flat greys leave the regions
+ * indistinguishable. So the pattern is carried by `text.primary` at a low
+ * alpha rather than by a hue, which reads as material instead of decoration
+ * and survives both schemes: `text.primary` is near-black on light and
  * near-white on dark, so the tint always contrasts gently with its ground.
  */
 
@@ -120,8 +118,6 @@ export function regionFills(tv: RegionFillTheme): RegionFills {
      *
      * It used to carry the stripes. That put the two loudest materials on
      * the two outermost regions and the diagram read as busy rather than
-     * layered, which is Zach's "the stripes should not be on the margin
-     * buttons". A flat grey tint is all it needs: it is the region an
      * author looks at last.
      */
     margin: {

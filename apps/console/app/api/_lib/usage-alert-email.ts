@@ -43,10 +43,10 @@ import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-su
  * So the warning reached only people already signed in and looking at the
  * console. Since AGL-1886/AGL-2033 metered storage past the included band
  * BILLS by default rather than being refused, and `utils/storage-overage.ts`
- * names this notification as the whole of the protection — Zach, verbatim:
- * "*with overage protection + usage alerts, so customers don't get a surprise
- * bill*". The customer who gets the surprise bill is exactly the customer who
- * was not in the console. An in-app-only alert cannot discharge that promise.
+ * names this notification as the whole of the protection: overage protection
+ * plus usage alerts are what stand between a customer and a surprise bill.
+ * The customer who gets that bill is exactly the customer who was not in the
+ * console. An in-app-only alert cannot discharge the promise.
  *
  * ## Shape
  *

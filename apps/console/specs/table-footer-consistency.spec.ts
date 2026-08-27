@@ -18,12 +18,11 @@
 /**
  * ONE table footer, and no call site may re-decide it (AGL-693).
  *
- * Zach: *"The table footer is not consistent."* It was not — layouts paged 5
- * at a time, components and templates 10, the team list 10, the screens tree
- * 25, and the size menu was labelled three different ways. Nothing was wrong
- * with any single one; they were written at different times and each picked
- * its own numbers, which is what a shared control looks like when nothing
- * holds it together.
+ * Left to themselves the lists disagree: layouts page 5 at a time, components
+ * and templates 10, the team list 10, the screens tree 25, with the size menu
+ * labeled three different ways. Nothing is wrong with any single one — they
+ * are written at different times and each picks its own numbers, which is what
+ * a shared control looks like when nothing holds it together.
  *
  * A constant alone would not hold it: the next list added to the console can
  * type `[5, 10, 15]` and nothing objects. So this reads the SOURCE of every
@@ -36,7 +35,7 @@
  * which one they are standing in.
  */
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
@@ -47,10 +46,13 @@ import {
 const REPO = join(__dirname, '..', '..', '..')
 const read = (path: string) => readFileSync(join(REPO, path), 'utf8')
 
-/** Every file in the console that renders a paginated table footer. */
+/** Every file that renders a paginated footer from the primitives. */
 const FOOTERS: Array<[string, string]> = [
   // The grid family: layouts, components and templates all render through it.
-  ['artifact table', 'apps/console/components/artifacts/artifact-table.component.tsx'],
+  [
+    'the shared list table',
+    'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
+  ],
   // The bespoke family.
   ['screens tree', 'apps/console/components/screens-hierarchy-table.component.tsx'],
   ['team list', 'apps/console/components/org-members-card.component.tsx'],
@@ -58,6 +60,62 @@ const FOOTERS: Array<[string, string]> = [
     'content entries',
     'apps/console/components/content/collection-entries-page.component.tsx',
   ],
+  // The shared footer itself — every cursor and window feed renders through
+  // it, so it is the one that must not re-decide the options or the label.
+  [
+    'shared list pagination',
+    'libs/shared/ui/jsx/src/lib/components/list-pagination.component.tsx',
+  ],
+]
+
+/**
+ * Lists that had NO footer at all — a bare Previous/Next pair, or a "Load
+ * more" that only ever grew — and now render the shared one.
+ *
+ * Two of the console's four pagination grammars offered no way to change the
+ * page size, and the activity feeds were both of them: a reader could page
+ * through an audit log ten rows at a time and had no control saying so.
+ */
+const SHARED_FOOTER: Array<[string, string]> = [
+  ['org activity', 'apps/console/components/org-activity-card.component.tsx'],
+  ['site activity', 'apps/console/components/host-activity-table.component.tsx'],
+  ['actor activity', 'apps/console/components/actor-activity-table.component.tsx'],
+  ['notifications', 'apps/console/app/(app)/manage/notifications/page.tsx'],
+  ['staff lists', 'apps/console/components/staff-list-pagination.component.tsx'],
+  ['site collaborators', 'apps/console/components/host-members-card.component.tsx'],
+  ['site accounts', 'apps/console/components/site-accounts-card.component.tsx'],
+  // Plugin console cards are lists too, and were the worst of the four
+  // grammars: a big read sliced small, with no control at all.
+  ...(
+    [
+      'gift-cards-card',
+      'host-coupons-card',
+      'member-posts-card',
+      'reservations-card',
+      'reviews-moderation-card',
+    ].map((name) => [
+      `commerce ${name}`,
+      `libs/plugins/commerce/src/lib/components/console/${name}.component.tsx`,
+    ]) as Array<[string, string]>
+  ),
+]
+
+/**
+ * The two lists that keep "Load more", and why.
+ *
+ * Neither is a table. The DAM grid completes a SEARCH as it loads — it reads
+ * until the filter is satisfied or a document ceiling is hit (AGL-1460), so
+ * "how many pages" is not a question it can answer, and a page number would
+ * be a number about the wrong thing. The storefront product grid is a
+ * shopper's browse surface on a published site, where a pager is a different
+ * design decision from a console list's.
+ *
+ * Listed rather than skipped: an exclusion nobody wrote down is
+ * indistinguishable from one nobody noticed.
+ */
+const LOAD_MORE_ALLOWED = [
+  'apps/console/components/media/media-library.component.tsx',
+  'libs/plugins/commerce/src/lib/components/product-grid.tsx',
 ]
 
 /** A literal page-size array anywhere in a footer prop. */
@@ -101,8 +159,6 @@ describe('the console has one table footer (AGL-693)', () => {
   })
 
   it('every list starts on the SMALLEST page size', () => {
-    // Zach: "Make all paginated lists default to the minimum count … that
-    // goes for all lists across the entire platform." Asserted against the
     // options rather than against `10`, so the rule outlives the number: a
     // default that stops being the minimum is the failure, whatever the
     // minimum becomes.
@@ -119,7 +175,7 @@ describe('the console has one table footer (AGL-693)', () => {
       'apps/console/components/org-members-card.component.tsx',
       'apps/console/components/content/collection-entries-page.component.tsx',
       'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
-      'apps/console/components/artifacts/artifact-table.component.tsx',
+      'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
     ]) {
       expect(read(path)).toContain('TABLE_PAGE_SIZE_DEFAULT')
     }
@@ -134,5 +190,107 @@ describe('the console has one table footer (AGL-693)', () => {
     // difference belongs in the COUNT, and the count says so.
     expect(TABLE_ROWS_PER_PAGE_LABEL).toBe('Rows per page:')
     expect(read(FOOTERS[1][1])).toContain('top-level')
+  })
+})
+
+/**
+ * No list may grow its own pager again (AGL-693, extended).
+ *
+ * A constant and a component are not enough on their own: the previous round
+ * of this left four grammars standing, and every one of them began as a
+ * reasonable two-button Stack written next to the list it served. This walks
+ * the console's component tree and fails on the SHAPE, which is the only
+ * version of the guard that survives the next list.
+ */
+const CONSOLE_COMPONENTS = join(__dirname, '..', 'components')
+
+function tsxFilesUnder(dir: string): string[] {
+  const found: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      found.push(...tsxFilesUnder(path))
+      continue
+    }
+    if (entry.name.endsWith('.tsx') && !entry.name.includes('.spec.')) {
+      found.push(path)
+    }
+  }
+  return found
+}
+
+/** A hand-rolled pager: a Previous label and a Next label in one file. */
+const handRolledPager = (source: string) =>
+  /\{'Previous'\}/.test(source) && /\{'Next'\}/.test(source)
+
+describe('no list hand-rolls a pager (AGL-693)', () => {
+  it('THE CONTROL: the shape check catches what it is meant to catch', () => {
+    // Guard the guard. A check that matched nothing would pass over a console
+    // that had grown ten new two-button pagers.
+    expect(handRolledPager(`<Button>{'Previous'}</Button><Button>{'Next'}</Button>`)).toBe(
+      true,
+    )
+    expect(handRolledPager(`<ListPagination page={0} />`)).toBe(false)
+  })
+
+  it('no console component renders its own Previous/Next pair', () => {
+    const offenders = tsxFilesUnder(CONSOLE_COMPONENTS)
+      .filter((path) => handRolledPager(readFileSync(path, 'utf8')))
+      .map((path) => path.slice(path.indexOf('apps/console')))
+    expect(offenders).toEqual([])
+  })
+
+  it.each(SHARED_FOOTER)('%s renders the shared footer', (_label, path) => {
+    expect(read(path)).toContain('<ListPagination')
+  })
+
+  it.each(SHARED_FOOTER)('%s does not re-decide the page size', (_label, path) => {
+    const source = read(path)
+    expect(source).not.toMatch(LITERAL_OPTIONS)
+    expect(source).not.toMatch(LITERAL_LABEL)
+  })
+})
+
+describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
+  const CONSOLE_ROOT = join(REPO, 'apps', 'console', 'components')
+  const PLUGIN_CONSOLE = join(
+    REPO,
+    'libs',
+    'plugins',
+    'commerce',
+    'src',
+    'lib',
+    'components',
+  )
+  // The literal, not one JSX spelling of it: the storefront grid writes
+  // `{loadingMore ? 'Loading…' : 'Load more'}`, which a check for
+  // `{'Load more'}` walks straight past.
+  const LOADS_MORE = /'Load more'/
+  const repoRelative = (path: string) => path.replace(`${REPO}/`, '')
+
+  it('THE CONTROL: the check catches both spellings', () => {
+    expect(LOADS_MORE.test(`<Button>{'Load more'}</Button>`)).toBe(true)
+    expect(
+      LOADS_MORE.test(`{loadingMore ? 'Loading…' : 'Load more'}`),
+    ).toBe(true)
+    expect(LOADS_MORE.test(`<ListPagination page={0} />`)).toBe(false)
+  })
+
+  it('only the two documented grids still grow instead of paging', () => {
+    const offenders = [
+      ...tsxFilesUnder(CONSOLE_ROOT),
+      ...tsxFilesUnder(PLUGIN_CONSOLE),
+    ]
+      .filter((path) => LOADS_MORE.test(readFileSync(path, 'utf8')))
+      .map(repoRelative)
+      .filter((path) => !LOAD_MORE_ALLOWED.includes(path))
+    expect(offenders).toEqual([])
+  })
+
+  it('the allowlist names files that EXIST and still load more', () => {
+    // An allowlist entry that has gone stale silently widens the exemption.
+    for (const path of LOAD_MORE_ALLOWED) {
+      expect(read(path)).toMatch(LOADS_MORE)
+    }
   })
 })

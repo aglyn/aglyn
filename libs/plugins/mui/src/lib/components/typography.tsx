@@ -192,9 +192,30 @@ function sanitizeTypographyHtml(html: string): string {
  * changed the mapping fails there rather than silently reopening the
  * reparenting hazard below.
  */
+/**
+ * The element each variant renders as, and the ONE place that decides
+ * (AGL-1487).
+ *
+ * MUI's own `variantMapping` sends `subtitle1` and `subtitle2` to `<h6>`.
+ * That is a typographic choice made in a component library, and on a page
+ * builder it is a document-outline decision made by somebody who has never
+ * seen the page: a subtitle is a label, not a section, and every one on every
+ * Aglyn site was silently inserting an `<h6>` into the heading order. It is
+ * what Lighthouse's `heading-order` was reporting — a "Open source &
+ * self-hostable" card label rendering ahead of the page's own `<h1>`, from a
+ * node whose author had selected Subtitle 1 and nothing else.
+ *
+ * Subtitles render as `<p>` here. An author who wants a heading still says so
+ * with the Component field, which is the control for exactly that question
+ * and is unchanged.
+ *
+ * Passed to MUI as `variantMapping` rather than only consulted by
+ * `blockSafeComponent`, so the table cannot describe one thing while the
+ * element is another.
+ */
 const VARIANT_ELEMENT: Record<string, string> = {
   h1: 'h1', h2: 'h2', h3: 'h3', h4: 'h4', h5: 'h5', h6: 'h6',
-  subtitle1: 'h6', subtitle2: 'h6', body1: 'p', body2: 'p', inherit: 'p',
+  subtitle1: 'p', subtitle2: 'p', body1: 'p', body2: 'p', inherit: 'p',
 }
 
 /**
@@ -259,6 +280,7 @@ const AglynTypography = forwardRef<
     return (
       <Typography
         ref={ref}
+        variantMapping={VARIANT_ELEMENT}
         {...rest}
         {...(component ? { component } : {})}
         dangerouslySetInnerHTML={{ __html: sanitized }}
@@ -266,7 +288,7 @@ const AglynTypography = forwardRef<
     )
   }
   return (
-    <Typography ref={ref} {...rest}>
+    <Typography ref={ref} variantMapping={VARIANT_ELEMENT} {...rest}>
       {children}
     </Typography>
   )

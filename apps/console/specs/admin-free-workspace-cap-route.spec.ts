@@ -24,7 +24,7 @@
 /**
  * THE FREE-WORKSPACE CEILING, and who may move it (AGL-2265).
  *
- * Zach's decision was "3 but provide a control in the staff console", and the
+ * the decision was "3 but provide a control in the staff console", and the
  * second half is what this route is. It carries the same posture as release
  * flags and the send-rate ramp: any staff may READ the number — support fields
  * "why can't I create another workspace" and has to be able to answer it — and

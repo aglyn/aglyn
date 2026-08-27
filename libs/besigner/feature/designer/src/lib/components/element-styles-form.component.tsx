@@ -17,10 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { BoxStyler, Measurements } from '../box-styler'
-import {
-  ButtonGroupFormControl,
-  ToggleButtonFormControl,
-} from '../form-fields'
+import { ButtonGroupFormControl, ToggleButtonFormControl } from '../form-fields'
 import { FieldComponentType } from '@aglyn/aglyn'
 import {
   SX_SCHEME_DARK_KEY,
@@ -60,6 +57,9 @@ import {
 } from '@aglyn/shared-svg-icons'
 import {
   componentMapper,
+  type FieldMuteAction,
+  FIELD_MUTED_STYLES,
+  FieldMuteButton,
   FormRenderer,
   type FormRendererProps,
 } from '@aglyn/shared-ui-jsx-forms'
@@ -97,7 +97,13 @@ import {
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import {
+  buildStyleMute,
+  toggleMutedStyle,
+  withStyleMuteControls,
+} from '../utils/muted-styles'
+import {
   deriveStateSlice,
+  readStateSlice,
   stateScopedSx,
   stripStateSlices,
   stateAdvisory,
@@ -524,14 +530,28 @@ const FLEXBOX_TOGGLES: ButtonGroupFormControl[] = [
   justifySelf,
 ]
 
-const TextAlignToggleButtonGroup = (props: { onChange: (e: SyntheticEvent, value: string) => void; value: string; field: { component?: FieldComponentType; name: string; label: string; exclusive?: boolean; options: { value: string; icon: string; label: string }[]; description?: string } }) => {
-  const { onChange, value, field } = props
+const TextAlignToggleButtonGroup = (props: {
+  onChange: (e: SyntheticEvent, value: string) => void
+  value: string
+  /** Switch this declaration off without losing it (AGL-2486). */
+  mute?: FieldMuteAction
+  field: {
+    component?: FieldComponentType
+    name: string
+    label: string
+    exclusive?: boolean
+    options: { value: string; icon: string; label: string }[]
+    description?: string
+  }
+}) => {
+  const { onChange, value, mute, field } = props
 
   return (
-    <FormControl fullWidth>
-      <FormLabel htmlFor={field.name} sx={{ marginBottom: 1 }}>
-        {field.label}
-      </FormLabel>
+    <FormControl fullWidth sx={mute?.muted ? FIELD_MUTED_STYLES : undefined}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+        <FormLabel htmlFor={field.name}>{field.label}</FormLabel>
+        <FieldMuteButton mute={mute} />
+      </Box>
       <div>
         <ToggleButtonGroup
           id={field.name}
@@ -609,9 +629,11 @@ const ElementStylesForm = observer(
     // The fallback keeps a node the map does not have (a spec's hand-built
     // schema, a node deleted while its panel is still mounted) rendering
     // rather than blanking the panel.
-    const node = (selectedNode?.$id
-      ? (Aglyn.canvas.getNode(selectedNode.$id) ?? selectedNode)
-      : selectedNode) as Aglyn.NodeSchema | undefined
+    const node = (
+      selectedNode?.$id
+        ? (Aglyn.canvas.getNode(selectedNode.$id) ?? selectedNode)
+        : selectedNode
+    ) as Aglyn.NodeSchema | undefined
 
     // The definition behind a selected instance (AGL-1332): the panel needs
     // its node tree to offer the leaves an author may style. Read from the
@@ -700,8 +722,7 @@ const ElementStylesForm = observer(
     )
     // Every typed layout field, rendered under the alignment toggles in
     // the single Flexbox & Grid section (AGL-2486).
-    // Gaps are theme-spacing pickers now, so this group needs the scales too
-    // (Zach 2026-08-25).
+    // Gaps are theme-spacing pickers, so this group needs the scales too.
     const flexGridGroup = useMemo(
       () => buildFlexGridGroup({ themeScales }),
       [themeScales],
@@ -778,18 +799,15 @@ const ElementStylesForm = observer(
     const clearState = useCallback(
       (state: SxState) => {
         if (!node) return
-        Aglyn.canvas.transact(
-          () => {
-            target.setSx(
-              writeStateSlice(
-                (target.sx ?? {}) as Record<string, any>,
-                state,
-                undefined,
-              ),
-            )
-          },
-          ['sx', node.$id, 'clear-state', state].join(':'),
-        )
+        Aglyn.canvas.transact(() => {
+          target.setSx(
+            writeStateSlice(
+              (target.sx ?? {}) as Record<string, any>,
+              state,
+              undefined,
+            ),
+          )
+        }, ['sx', node.$id, 'clear-state', state].join(':'))
       },
       [node, target],
     )
@@ -884,14 +902,78 @@ const ElementStylesForm = observer(
           // (AGL-2486), so a field the author has not overridden for hover
           // shows the inherited value rather than empty — the same reading
           // the breakpoint scope gives, and what the browser actually paints.
-          stateScopedSx(
-            nodeSx as Record<string, any>,
-            activeState,
-          ) as Record<string, any>,
+          stateScopedSx(nodeSx as Record<string, any>, activeState) as Record<
+            string,
+            any
+          >,
           activeBreakpoint,
           activeScheme,
         ),
       [nodeSx, activeBreakpoint, activeScheme, activeState],
+    )
+
+    // Declarations switched off for comparison (AGL-2486). Canvas only: the
+    // value stays in the document and only the canvas's copy of the sx drops
+    // it, so turning one back on is not a restore that can fail — see
+    // `muted-styles`.
+    const [mutedStyles, setMutedStyles] = useAglynBesignerFlag('mutedStyles')
+
+    // What the ACTIVE SCOPE declares, as against what the panel displays.
+    // The two differ in a state scope, where a field the author has not
+    // overridden for hover still shows the base value it inherits: there is
+    // no hover declaration to switch off, so that row gets no control.
+    const scopeValues = useMemo(() => {
+      const sx = (nodeSx ?? {}) as Record<string, any>
+      const scoped = activeState
+        ? readStateSlice(sx, activeState)
+        : stripStateSlices(sx)
+      return computeEffectiveStyleValues(
+        (scoped ?? {}) as Record<string, any>,
+        activeBreakpoint,
+        activeScheme,
+      )
+    }, [nodeSx, activeState, activeBreakpoint, activeScheme])
+
+    const styleMute = useCallback(
+      (name: string, label?: unknown) =>
+        buildStyleMute(name, label, {
+          nodeId: node?.$id,
+          state: activeState,
+          breakpoint: activeBreakpoint,
+          scopeValues,
+          mutedStyles,
+          onToggle: (muteTarget) =>
+            setMutedStyles((current) => toggleMutedStyle(current, muteTarget)),
+        }),
+      [
+        node,
+        activeState,
+        activeBreakpoint,
+        scopeValues,
+        mutedStyles,
+        setMutedStyles,
+      ],
+    )
+
+    const withStyleMutes = useCallback(
+      (fields: any[]) =>
+        withStyleMuteControls(fields, {
+          nodeId: node?.$id,
+          state: activeState,
+          breakpoint: activeBreakpoint,
+          scopeValues,
+          mutedStyles,
+          onToggle: (muteTarget) =>
+            setMutedStyles((current) => toggleMutedStyle(current, muteTarget)),
+        }),
+      [
+        node,
+        activeState,
+        activeBreakpoint,
+        scopeValues,
+        mutedStyles,
+        setMutedStyles,
+      ],
     )
 
     /**
@@ -1011,7 +1093,8 @@ const ElementStylesForm = observer(
         entry.isRoot
           ? 'Component root'
           : entry.name ||
-            (entry.componentId && Aglyn.components.getLabel(entry.componentId)) ||
+            (entry.componentId &&
+              Aglyn.components.getLabel(entry.componentId)) ||
             entry.componentInternalId,
       [],
     )
@@ -1060,7 +1143,7 @@ const ElementStylesForm = observer(
       () =>
         styleGroups
           .map((group) => filterStyleGroup(group, search))
-          .filter((group): group is typeof styleGroups[number] =>
+          .filter((group): group is (typeof styleGroups)[number] =>
             Boolean(group),
           ),
       [styleGroups, search],
@@ -1071,12 +1154,12 @@ const ElementStylesForm = observer(
       !searching ||
       Boolean(
         visibleStyleGroups.length ||
-          visibleFlexboxToggles.length ||
-          visibleFlexGridGroup ||
-          matchesSection('box') ||
-          matchesSection('textAlign') ||
-          matchesSection('visibility') ||
-          matchesSection('classes'),
+        visibleFlexboxToggles.length ||
+        visibleFlexGridGroup ||
+        matchesSection('box') ||
+        matchesSection('textAlign') ||
+        matchesSection('visibility') ||
+        matchesSection('classes'),
       )
 
     // Re-seeds a group form's initial values when the selection, the
@@ -1176,8 +1259,7 @@ const ElementStylesForm = observer(
               width — but the panel is resizable, and at ~260px nothing fits at
               any size consistent with the rest of the panel. `nowrap` plus
               `overflow-x` makes the failure mode a few pixels of scroll rather
-              than an orphaned chip on a second line, which is what this row
-              shipped as and what Zach reported. */}
+              than an orphaned chip stranded on a second line. */}
           <Box
             sx={{
               display: 'flex',
@@ -1345,63 +1427,74 @@ const ElementStylesForm = observer(
           </Container>
         ) : null}
         {matchesSection('box') ? (
-        <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
-          <HelpTip
-            title="Margin & padding"
-            excerpt="Click a side of the box to set its space at the active breakpoint — a step from your theme's spacing scale, or an exact amount in the unit of your choice."
-            href={besignerDocsUrl('responsiveStyling', '#box-stylers')}
-            sx={{ position: 'absolute', top: 0, right: 8, zIndex: 1, fontSize: '0.9em' }}
-          />
-          <BoxStyler
-            measurements={boxMeasurements}
-            spacingSteps={themeScales.spacing}
-            border={boxBorder}
-            onChange={handleBoxStylerChange}
-          />
-        </Container>
+          <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
+            <HelpTip
+              title="Margin & padding"
+              excerpt="Click a side of the box to set its space at the active breakpoint — a step from your theme's spacing scale, or an exact amount in the unit of your choice."
+              href={besignerDocsUrl('responsiveStyling', '#box-stylers')}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                right: 8,
+                zIndex: 1,
+                fontSize: '0.9em',
+              }}
+            />
+            <BoxStyler
+              measurements={boxMeasurements}
+              spacingSteps={themeScales.spacing}
+              border={boxBorder}
+              onChange={handleBoxStylerChange}
+              // One eye per SIDE, resolved when a side is opened: the box
+              // editor shows one side's value at a time, and each side is
+              // its own declaration.
+              muteForSide={styleMute}
+            />
+          </Container>
         ) : null}
         {matchesSection('textAlign') ? (
-        <Container gutterY={[2]} dense>
-          <TextAlignToggleButtonGroup
-            onChange={handleTextAlignChange}
-            value={effectiveValues['textAlign']}
-            field={{
-              component: FieldComponentType.TOGGLE_BUTTON,
-              name: 'textAlign',
-              label: 'Text Alignment',
-              description:
-                'Sets the horizontal alignment of the inline-level content inside a block element or table-cell box.',
-              exclusive: true,
-              options: [
-                {
-                  value: 'inherit',
-                  icon: ICON_VARIANT_CSS_INHERIT.path,
-                  label: 'Inherit',
-                },
-                {
-                  value: 'left',
-                  icon: ICON_VARIANT_ALIGN_LEFT.path,
-                  label: 'Left',
-                },
-                {
-                  value: 'center',
-                  icon: ICON_VARIANT_ALIGN_CENTER.path,
-                  label: 'Center',
-                },
-                {
-                  value: 'right',
-                  icon: ICON_VARIANT_ALIGN_RIGHT.path,
-                  label: 'Right',
-                },
-                {
-                  value: 'justify',
-                  icon: ICON_VARIANT_ALIGN_JUSTIFY.path,
-                  label: 'Justify',
-                },
-              ],
-            }}
-          />
-        </Container>
+          <Container gutterY={[2]} dense>
+            <TextAlignToggleButtonGroup
+              onChange={handleTextAlignChange}
+              value={effectiveValues['textAlign']}
+              mute={styleMute('textAlign', 'Text Alignment')}
+              field={{
+                component: FieldComponentType.TOGGLE_BUTTON,
+                name: 'textAlign',
+                label: 'Text Alignment',
+                description:
+                  'Sets the horizontal alignment of the inline-level content inside a block element or table-cell box.',
+                exclusive: true,
+                options: [
+                  {
+                    value: 'inherit',
+                    icon: ICON_VARIANT_CSS_INHERIT.path,
+                    label: 'Inherit',
+                  },
+                  {
+                    value: 'left',
+                    icon: ICON_VARIANT_ALIGN_LEFT.path,
+                    label: 'Left',
+                  },
+                  {
+                    value: 'center',
+                    icon: ICON_VARIANT_ALIGN_CENTER.path,
+                    label: 'Center',
+                  },
+                  {
+                    value: 'right',
+                    icon: ICON_VARIANT_ALIGN_RIGHT.path,
+                    label: 'Right',
+                  },
+                  {
+                    value: 'justify',
+                    icon: ICON_VARIANT_ALIGN_JUSTIFY.path,
+                    label: 'Justify',
+                  },
+                ],
+              }}
+            />
+          </Container>
         ) : null}
 
         {/* One layout section, not two (AGL-2486). `Flexbox & Grids` and
@@ -1411,18 +1504,18 @@ const ElementStylesForm = observer(
             while `Grid Columns`, a container property, sat under "Flex
             Child". Every property both sections carried is here. */}
         {visibleFlexboxToggles.length || visibleFlexGridGroup ? (
-        <Accordion
-          key={`flex-grid:${accordionKey}`}
-          expanded={searching}
-          summary="Flexbox & Grid"
-          help={{
-            title: 'Flexbox & grid layout',
-            excerpt:
-              'Configure the selected element as a flex or grid container — alignment, wrapping, direction, gaps and track lists — and place it inside its own parent’s layout.',
-            href: besignerDocsUrl('responsiveStyling', '#style-groups'),
-          }}
-        >
-          {/* Every container toggle reads its own key back (AGL-1458).
+          <Accordion
+            key={`flex-grid:${accordionKey}`}
+            expanded={searching}
+            summary="Flexbox & Grid"
+            help={{
+              title: 'Flexbox & grid layout',
+              excerpt:
+                'Configure the selected element as a flex or grid container — alignment, wrapping, direction, gaps and track lists — and place it inside its own parent’s layout.',
+              href: besignerDocsUrl('responsiveStyling', '#style-groups'),
+            }}
+          >
+            {/* Every container toggle reads its own key back (AGL-1458).
               These were rendered with an `onChange` and no `value`, so the
               control seeded its local state from nothing and reported "-
               not set" for a property the node demonstrably had — while
@@ -1430,76 +1523,82 @@ const ElementStylesForm = observer(
               highlighted the same authoring correctly on the same node.
               Rendered from a list rather than eight hand-wired call sites
               so a toggle added later cannot arrive read-only again. */}
-          {visibleFlexboxToggles.map((schema) => (
-            <ToggleButtonFormControl
-              key={schema.name}
-              onChange={handleFlexboxChange(schema.name as string)}
-              schema={schema}
-              value={effectiveValues[schema.name as string] ?? ''}
-            />
-          ))}
-          {/* Gaps, grid tracks, item placement and flex-child sizing —
+            {visibleFlexboxToggles.map((schema) => (
+              <ToggleButtonFormControl
+                key={schema.name}
+                onChange={handleFlexboxChange(schema.name as string)}
+                schema={schema}
+                mute={styleMute(schema.name as string, schema.label)}
+                value={effectiveValues[schema.name as string] ?? ''}
+              />
+            ))}
+            {/* Gaps, grid tracks, item placement and flex-child sizing —
               the typed half of the same section. They apply immediately
               like everything else. */}
-          {visibleFlexGridGroup ? (
-            <FormRenderer
-              key={formSeedKey}
-              FormTemplate={ElementStylesFormTemplate}
-              componentMapper={componentMapper}
-              keepDirtyOnReinitialize
-              // The SAVE stays scoped to the whole group even while the
-              // panel shows a filtered subset (AGL-2486): a partial does not
-              // carry the hidden fields, and `computeStylePartial` would
-              // then write `undefined` over every one of them — a search
-              // would silently clear the styles it was only meant to hide.
-              onSubmit={handleGroupSave(
-                styleGroupFieldNames(visibleFlexGridGroup),
-              )}
-              initialValues={pickStyleValues(
-                styleGroupFieldNames(visibleFlexGridGroup),
-                effectiveValues,
-              )}
-              schema={{ fields: visibleFlexGridGroup.fields }}
-            />
-          ) : null}
-        </Accordion>
+            {visibleFlexGridGroup ? (
+              <FormRenderer
+                key={formSeedKey}
+                FormTemplate={ElementStylesFormTemplate}
+                componentMapper={componentMapper}
+                keepDirtyOnReinitialize
+                // The SAVE stays scoped to the whole group even while the
+                // panel shows a filtered subset (AGL-2486): a partial does not
+                // carry the hidden fields, and `computeStylePartial` would
+                // then write `undefined` over every one of them — a search
+                // would silently clear the styles it was only meant to hide.
+                onSubmit={handleGroupSave(
+                  styleGroupFieldNames(visibleFlexGridGroup),
+                )}
+                initialValues={pickStyleValues(
+                  styleGroupFieldNames(visibleFlexGridGroup),
+                  effectiveValues,
+                )}
+                schema={{
+                  fields: withStyleMutes(visibleFlexGridGroup.fields),
+                }}
+              />
+            ) : null}
+          </Accordion>
         ) : null}
 
         {/* Responsive visibility (AGL-562): hide the element on whole
             device bands — e.g. hide the desktop link cluster on mobile
             and show a menu button instead. */}
         {matchesSection('visibility') ? (
-        <Accordion
-          key={`visibility:${accordionKey}`}
-          expanded={searching}
-          summary="Visibility"
-          help={{
-            title: 'Visibility per device band',
-            excerpt:
-              'Hide the element on whole device bands — e.g. hide a desktop link cluster on mobile and show a menu button instead.',
-            href: besignerDocsUrl('responsiveStyling', '#visibility-per-device-band'),
-          }}
-        >
-          {VISIBILITY_BANDS.map((band) => (
-            <FormControlLabel
-              key={band}
-              control={
-                <Switch
-                  size="small"
-                  checked={hiddenBands.includes(band)}
-                  onChange={handleVisibilityChange(band)}
-                />
-              }
-              label={VISIBILITY_BAND_LABELS[band]}
-              sx={{ display: 'flex', mb: 0.5 }}
-            />
-          ))}
-          <FormHelperText>
-            {'Hidden bands apply on the live site at those screen widths. ' +
-              'The canvas preview follows your browser window width, so ' +
-              'resize the window (or publish) to see the effect.'}
-          </FormHelperText>
-        </Accordion>
+          <Accordion
+            key={`visibility:${accordionKey}`}
+            expanded={searching}
+            summary="Visibility"
+            help={{
+              title: 'Visibility per device band',
+              excerpt:
+                'Hide the element on whole device bands — e.g. hide a desktop link cluster on mobile and show a menu button instead.',
+              href: besignerDocsUrl(
+                'responsiveStyling',
+                '#visibility-per-device-band',
+              ),
+            }}
+          >
+            {VISIBILITY_BANDS.map((band) => (
+              <FormControlLabel
+                key={band}
+                control={
+                  <Switch
+                    size="small"
+                    checked={hiddenBands.includes(band)}
+                    onChange={handleVisibilityChange(band)}
+                  />
+                }
+                label={VISIBILITY_BAND_LABELS[band]}
+                sx={{ display: 'flex', mb: 0.5 }}
+              />
+            ))}
+            <FormHelperText>
+              {'Hidden bands apply on the live site at those screen widths. ' +
+                'The canvas preview follows your browser window width, so ' +
+                'resize the window (or publish) to see the effect.'}
+            </FormHelperText>
+          </Accordion>
         ) : null}
 
         {/* First-class style groups (AGL-540/587). Each form is keyed on
@@ -1536,34 +1635,34 @@ const ElementStylesForm = observer(
                 keepDirtyOnReinitialize
                 onSubmit={handleGroupSave(fieldNames)}
                 initialValues={pickStyleValues(fieldNames, effectiveValues)}
-                schema={{ fields: group.fields }}
+                schema={{ fields: withStyleMutes(group.fields) }}
               />
             </Accordion>
           )
         })}
 
         {matchesSection('classes') ? (
-        <Accordion
-          key={`classes:${accordionKey}`}
-          expanded={searching}
-          summary="Classes & custom CSS"
-          help={{
-            title: 'Custom classes & CSS',
-            excerpt:
-              'Attach reusable style classes to the element, or write raw CSS (sx) for anything the panels don’t cover.',
-            href: besignerDocsUrl('responsiveStyling', '#custom-classes'),
-          }}
-        >
-          <ElementClassesField node={node} />
-          {/* Same override target as the rest of the panel (AGL-1332) — a
+          <Accordion
+            key={`classes:${accordionKey}`}
+            expanded={searching}
+            summary="Classes & custom CSS"
+            help={{
+              title: 'Custom classes & CSS',
+              excerpt:
+                'Attach reusable style classes to the element, or write raw CSS (sx) for anything the panels don’t cover.',
+              href: besignerDocsUrl('responsiveStyling', '#custom-classes'),
+            }}
+          >
+            <ElementClassesField node={node} />
+            {/* Same override target as the rest of the panel (AGL-1332) — a
               raw sx edit must land on the leaf the picker names, not
               silently back on the component root. */}
-          <CustomCssForm
-            node={node}
-            breakpoint={activeBreakpoint}
-            overrideKey={overrideKey}
-          />
-        </Accordion>
+            <CustomCssForm
+              node={node}
+              breakpoint={activeBreakpoint}
+              overrideKey={overrideKey}
+            />
+          </Accordion>
         ) : null}
 
         <Container gutterY={[2]} dense>

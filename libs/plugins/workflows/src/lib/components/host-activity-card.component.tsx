@@ -29,7 +29,7 @@ import {
 } from '@mui/material'
 import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -71,12 +71,11 @@ const WINDOW = 200
  * client sort below dutifully ordered that sample and sliced the top off it —
  * which made the result look right and be wrong.
  *
- * Measured on the production host that reported the bug: 996 activity
- * documents, so the window covered the ~200 lexicographically-lowest ids and
- * ended at `ClSZ…`. The screen Zach was looking at had FIVE real entries, ids
- * beginning `Y`, `h`, `j`, `k`, `t` — every one of them past the boundary. The
- * card fetched 200 rows, matched 0, and said "No activity yet" about a page
- * whose SEO had been changed that morning.
+ * Measured on a production host: 996 activity documents, so a 200-row window
+ * covers the lexicographically-lowest ids and ends at `ClSZ…`. A screen whose
+ * five entries have ids beginning `Y`, `h`, `j`, `k`, `t` has every one of
+ * them past that boundary — the card fetches 200 rows, matches 0, and says
+ * "No activity yet" about a page edited that morning.
  *
  * ## Why the targeted query filters SERVER-side
  *
@@ -145,15 +144,28 @@ export function HostActivityCard(props: HostActivityCardProps) {
    * un-targeted one it still catches a just-written entry whose timestamp the
    * local snapshot has not resolved. Sorting 200 items costs nothing.
    */
-  const items = useMemo(
+  /**
+   * Paging is FREE here, which is why it is a slice and not a second query
+   * (AGL-2486). The read above already fetches `WINDOW` rows and this then
+   * threw all but `max` of them away — 180 documents paid for and discarded
+   * on every render of this card. Showing more of what is already in hand
+   * costs nothing; only running past `WINDOW` would cost a read, and the
+   * "View all" link exists for that.
+   */
+  const sorted = useMemo(
     () =>
-      [...(entries ?? [])]
-        .sort(
-          (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-        )
-        .slice(0, max),
-    [entries, max],
+      [...(entries ?? [])].sort(
+        (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+      ),
+    [entries],
   )
+  const [shown, setShown] = useState(max)
+  // Re-collapse when the card is pointed at a different target, or the page
+  // that mounts it asks for a different page size — otherwise a previous
+  // screen's "show more" silently sets the size for the next one.
+  useEffect(() => setShown(max), [max, targetId, hostId])
+  const items = useMemo(() => sorted.slice(0, shown), [sorted, shown])
+  const more = Math.min(sorted.length - shown, max)
   // Three states, not two: a read that never happened must not be reported as
   // an empty history.
   const unreadable = status === 'error' || !hostId
@@ -186,39 +198,53 @@ export function HostActivityCard(props: HostActivityCardProps) {
           {'No activity yet — changes made in the console appear here.'}
         </Typography>
       ) : (
-        <List dense disablePadding>
-          {items.map((entry) => {
-            const href = activityHref(entry, { orgSlug, host })
-            const label = activityPrimaryText(entry)
-            return (
-            <ListItem key={entry.$id} disableGutters dense>
-              <ListItemText
-                primary={
-                  href ? (
-                    <AppLink href={href} color="inherit" underline="hover">
-                      {label}
-                    </AppLink>
-                  ) : (
-                    label
-                  )
-                }
-                secondary={
-                  `${entry.actorEmail ?? 'Someone'} · ${
-                    entry.createdAt?.toDate?.().toLocaleString() ?? ''
-                  }` +
-                  // Run-log entries carry duration (wave v6).
-                  (entry.durationMs != null ? ` · ${entry.durationMs}ms` : '')
-                }
-                slotProps={
-                  entry.status === 'error'
-                    ? { primary: { color: 'error' } }
-                    : undefined
-                }
-              />
-            </ListItem>
-            )
-          })}
-        </List>
+        <>
+          <List dense disablePadding>
+            {items.map((entry) => {
+              const href = activityHref(entry, { orgSlug, host })
+              const label = activityPrimaryText(entry)
+              return (
+                <ListItem key={entry.$id} disableGutters dense>
+                  <ListItemText
+                    primary={
+                      href ? (
+                        <AppLink href={href} color="inherit" underline="hover">
+                          {label}
+                        </AppLink>
+                      ) : (
+                        label
+                      )
+                    }
+                    secondary={
+                      `${entry.actorEmail ?? 'Someone'} · ${
+                        entry.createdAt?.toDate?.().toLocaleString() ?? ''
+                      }` +
+                      // Run-log entries carry duration (wave v6).
+                      (entry.durationMs != null
+                        ? ` · ${entry.durationMs}ms`
+                        : '')
+                    }
+                    slotProps={
+                      entry.status === 'error'
+                        ? { primary: { color: 'error' } }
+                        : undefined
+                    }
+                  />
+                </ListItem>
+              )
+            })}
+          </List>
+          {/* Free paging: these rows are already fetched — see `sorted`. */}
+          {more > 0 ? (
+            <Button
+              size="small"
+              onClick={() => setShown((count) => count + max)}
+              sx={{ alignSelf: 'flex-start', mt: 1 }}
+            >
+              {`Show ${more} more`}
+            </Button>
+          ) : null}
+        </>
       )}
       {viewAllHref ? (
         <Typography variant="body2" sx={{ mt: 1 }}>

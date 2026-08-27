@@ -63,19 +63,16 @@ export interface GlobalSearchDialogProps {
  * cluster costs a fixed ~40px and cannot distort the chain, and the field
  * itself lives in here where there is room to be honest about what it searches.
  *
- * ## The dead click, named
+ * ## Two ways a result row reads as dead, neither of them the markup
  *
- * Zach: *"console search does not seem to do anything when you click on it"*.
- * Driven against a real signed-in console, the row markup turned out to be
- * sound — the anchor carries its `href`, `AppLink` resolves it through
- * `NextLink`, and clicking one navigates. Two other things were producing the
- * symptom, and both are fixed here:
+ * The row markup is sound: the anchor carries its `href`, `AppLink` resolves
+ * it through `NextLink`, and clicking one navigates. A palette that appears
+ * to do nothing when clicked is one of these two instead:
  *
- * 1. **Typing emptied the list.** See `global-search-scope.ts` — the old
- *    prefix query ordered by a field most documents do not carry, so results
- *    vanished the moment a character was typed. That is the bulk of the fix
- *    and it lives in the scope and match modules.
- * 2. **A second dialog made this one inert.** Every MUI `Dialog` renders at
+ * 1. **Typing empties the list.** See `global-search-scope.ts` — a prefix
+ *    query ordered by a field most documents do not carry drops every result
+ *    the moment a character is typed, so there is nothing left to click.
+ * 2. **A second dialog makes this one inert.** Every MUI `Dialog` renders at
  *    `theme.zIndex.modal`, so when two are mounted the winner is decided by
  *    DOM order, and the palette is reachable from the top bar of EVERY
  *    console page — including pages that raise their own dialog. Measured
@@ -83,7 +80,7 @@ export interface GlobalSearchDialogProps {
  *    notifications prompt mounted, every row hit-tests to the OTHER dialog's
  *    container and Playwright refuses the click outright ("subtree intercepts
  *    pointer events"); dismiss it and the same rows hit-test to themselves and
- *    navigate. The palette now sits one step above `modal`, which is correct
+ *    navigate. The palette therefore sits one step above `modal`, which is correct
  *    for it specifically: it is opened by an explicit gesture, it is
  *    transient, and Escape closes it — so it can never strand the reader
  *    behind it the way a genuine confirmation dialog could.

@@ -29,9 +29,17 @@ import { alpha, Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useCallback, useContext, useMemo, useRef } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
+import CanvasRevealContext, {
+  CanvasMutedClassesContext,
+} from '../contexts/canvas-reveal-context'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import {
+  isNodeHiddenOnSite,
+  isNodeRevealedOnCanvas,
+} from '../utils/canvas-reveal'
+import { stripMutedClasses } from '../utils/muted-classes'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
 
@@ -206,6 +214,12 @@ export const NodeLeaf = observer(
       !node?.nodes?.length &&
       viewType !== Aglyn.HostViewType.LAYOUT
 
+    // Nodes the author has opened up for designing (AGL-592). Through a
+    // context rather than the flag itself: the canvas subscribes once and
+    // every leaf reads the result.
+    const revealedNodeIds = useContext(CanvasRevealContext)
+    const mutedClasses = useContext(CanvasMutedClassesContext)
+
     // WYSIWYG bindings (AGL-97): resolve variable/function tokens
     // live on the rendered copy (selection/dnd keep the original node).
     // Bound nodes are flagged either way so editors can spot them.
@@ -214,8 +228,7 @@ export const NodeLeaf = observer(
     const boundProps = useMemo(
       () =>
         Object.entries(node?.props ?? {}).filter(
-          ([, value]) =>
-            typeof value === 'string' && Aglyn.hasBindings(value),
+          ([, value]) => typeof value === 'string' && Aglyn.hasBindings(value),
         ),
       // MobX props are observable; the JSON string keys the memo cheaply.
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,6 +261,15 @@ export const NodeLeaf = observer(
       }
       return { ...node, props: resolved }
     }, [node, boundProps, resolveFlag, variables, functions])
+
+    // Classes switched off for comparison (AGL-2486). Composed onto the SAME
+    // render copy the binding resolution builds, never onto the canvas node:
+    // selection, the hierarchy and every save keep reading the element's real
+    // class list, and the canvas paints without the switched-off names.
+    const renderNodeUnclassed = useMemo(
+      () => stripMutedClasses(renderNode as never, node?.$id, mutedClasses),
+      [renderNode, node, mutedClasses],
+    )
 
     // A component instance renders its definition (AGL-1251) instead of the
     // named dashed box. Authors placed a hero and saw a grey rectangle, so
@@ -318,7 +340,9 @@ export const NodeLeaf = observer(
         definitions as any,
       )
       const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
-      return graftedRootId ? denormalizeTree(composed, graftedRootId) : undefined
+      return graftedRootId
+        ? denormalizeTree(composed, graftedRootId)
+        : undefined
       // Observable props/overrides: the JSON strings key the memo, as above.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
@@ -338,7 +362,7 @@ export const NodeLeaf = observer(
       >
         <Leaf
           ref={registerElement}
-          node={renderNode as typeof node}
+          node={renderNodeUnclassed as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
           // Present while the selection lives in this node's subtree (the
           // node itself or any descendant). Canvas-aware components (nav
@@ -347,6 +371,17 @@ export const NodeLeaf = observer(
           // (''/undefined) so unaffected leaves carry no attribute.
           data-aglyn-selected-within={
             Besigner.focus.isNodeOrDescendantSelected(node) ? '' : undefined
+          }
+          // Present on an element that carries the hidden class while the
+          // canvas is showing it anyway (AGL-592) — the flag the canvas
+          // stylesheet checks before collapsing it. Stamped on the hidden
+          // element itself, so no wrapper a component renders around its
+          // children can come between the two.
+          data-aglyn-revealed={
+            isNodeHiddenOnSite(node) &&
+            isNodeRevealedOnCanvas(node, revealedNodeIds)
+              ? ''
+              : undefined
           }
           data-aglyn-bound={boundProps.length ? '' : undefined}
           {...rest}
@@ -364,7 +399,9 @@ export const NodeLeaf = observer(
             </Box>
           ) : null}
           {showSlotMarker ? (
-            <SlotMarker caption={node?.props?.['caption'] as string | undefined} />
+            <SlotMarker
+              caption={node?.props?.['caption'] as string | undefined}
+            />
           ) : null}
           {showEmptyDocumentSlot ? <EmptyDocumentSlot /> : null}
         </Leaf>

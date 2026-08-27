@@ -177,9 +177,9 @@ describe('the fallback shell is the PROSE width (AGL-1298)', () => {
   const CONTAINER_ID = 'cfb__container'
 
   it('an entry body renders at stock md, not the xl section default', () => {
-    // Zach 2026-08-18: the Container standard grows a third case for
-    // long-form. A collection entry IS the long-form case, and this is the
-    // one place the repo — not besigner authoring — decides its width.
+    // The Container standard carries a third case for long-form. A collection
+    // entry IS the long-form case, and this is the one place the repo — not
+    // besigner authoring — decides its width.
     const nodes = build(undefined) as Record<string, any>
     expect(nodes[CONTAINER_ID].componentId).toBe('muiContainer')
     expect(nodes[CONTAINER_ID].props.maxWidth).toBe('md')

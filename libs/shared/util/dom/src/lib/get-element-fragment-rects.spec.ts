@@ -105,7 +105,7 @@ describe('getElementFragmentRects (AGL-2486)', () => {
       [659, 130],
     ])
     // The union covers 139px of empty space to the right of the last line.
-    // That gap is precisely the wrong outline Zach saw.
+    // An outline drawn on the union is exactly that much too wide.
     expect(geometry.union.width).toBe(269)
     expect(geometry.union.height).toBe(60)
   })

@@ -153,11 +153,9 @@ export function OrgMembersCard() {
   /**
    * Pagination for the roster (AGL-693).
    *
-   * Zach: *"We are also missing pagination on the team page like we have on
-   * the layouts page."* The list rendered every member unbounded, which is
-   * fine at three and is a page that never ends on an org with two hundred —
-   * and this is the one list in the console whose row count is set by the
-   * customer's headcount rather than by what they built.
+   * An unbounded roster is fine at three members and is a page that never ends
+   * at two hundred — and this is the one list in the console whose row count is
+   * set by the customer's headcount rather than by what they built.
    *
    * Local slicing, not a paged read: `members` is already fully in memory (the
    * seat counts and the manager-seat gate above both count across ALL of them),

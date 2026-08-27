@@ -305,7 +305,7 @@ function collaboratorSeatKey(entry: CollaboratorSeatEntry): string {
  * free org — `membersPerHost: 1` — could take on unlimited collaborators,
  * each with full site access, on a plan that is never invoiced.
  *
- * Zach, 2026-08-18, verbatim: **"We need to make sure the free/hobby tier
+ * verbatim: **"We need to make sure the free/hobby tier
  * does hard cap so it always actually stays free."**
  *
  * ## What counts

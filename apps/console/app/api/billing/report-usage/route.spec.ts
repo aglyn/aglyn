@@ -859,7 +859,7 @@ describe('AGL-1878: usage is withheld rather than forfeited when nothing can bil
  *      mutually consistent.
  *
  * Peak is the only candidate that fully closes the bulk-delete-before-the-31st
- * vector. That remains Zach's call; it would raise bills, which is the
+ * vector. That remains the call; it would raise bills, which is the
  * direction the locked-pricing rule reserves for him.
  *=========================================*/
 describe('contacts and dataset storage bill the month, not the sweep (AGL-2399)', () => {

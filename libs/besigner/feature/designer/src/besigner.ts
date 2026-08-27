@@ -16,6 +16,7 @@
  */
 
 export * from './lib/drafts/besigner-draft-store'
+export * from './lib/drafts/besigner-server-draft'
 
 export * from './lib/constants/sample-data'
 export * from './lib/constants/shared'
@@ -72,7 +73,6 @@ export * from './lib/components/node-context-menu'
 export * from './lib/components/node-leaf'
 export * from './lib/components/node-outline'
 export * from './lib/components/node-overlay'
-export * from './lib/components/node-pinned-actions'
 export * from './lib/components/node-quick-actions'
 export * from './lib/components/node-tree-view'
 export * from './lib/components/panel-controls.component'

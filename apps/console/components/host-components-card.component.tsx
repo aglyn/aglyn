@@ -68,10 +68,10 @@ import {
 } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
-import ArtifactTable, {
-  ArtifactRowActions,
-  artifactActionsColumn,
-} from './artifacts/artifact-table.component'
+import ListTable, {
+  ListRowActions,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from './artifacts/artifact-delete-confirm.component'
@@ -169,12 +169,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   /**
    * The readout the page header renders (AGL-693).
    *
-   * Zach: *"Reusable components is also missing the usage cap notice in the
-   * header."* It was left out on the argument that `reusableComponents` is a
-   * BOOLEAN entitlement, so there is no denominator to print — which was the
-   * wrong conclusion from a true premise. The denominator is exactly what a
-   * boolean says: a plan that grants it caps nothing (`∞`, which is what
-   * layouts and screens already print on this plan), and a plan that does not
+   * `reusableComponents` is a BOOLEAN entitlement, which looks like a reason
+   * to print no denominator at all. It is not: the denominator is exactly what
+   * the boolean says. A plan that grants it caps nothing (`∞`, which is what
+   * layouts and screens already print on that plan), and a plan that does not
    * grant it allows none.
    *
    * So `0/0 components on your plan` on Free is not a missing number, it is
@@ -504,11 +502,11 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       is the arrangement the other three lists each varied in their own way.
       Everything except Preview now lives in the menu.
     */
-    artifactActionsColumn((row: any) => {
+    listActionsColumn((row: any) => {
       const definition = { ...row, $id: row.$id as string }
       const versionId = definition.versionId as string | undefined
       return (
-        <ArtifactRowActions
+        <ListRowActions
           label={definition.displayName ?? definition.$id}
           quick={{
             icon: mdiEyeOutline.path,
@@ -535,21 +533,34 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
               key: 'details',
               label: 'View details',
               icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
-              onClick: () =>
-                router.push(
-                  buildRoute(Route.COMPONENT_DETAILS, {
-                    orgSlug,
-                    host,
-                    componentId: definition.$id,
-                  }),
-                ),
+              href: buildRoute(Route.COMPONENT_DETAILS, {
+                orgSlug,
+                host,
+                componentId: definition.$id,
+              }),
             },
             {
               key: 'besigner',
               label: 'Edit in besigner',
               icon: <MdiIcon path={mdiVectorSquare.path} size={0.8} />,
               disabled: opening === definition.$id,
-              onClick: () => void handleOpenInBesigner(definition),
+              /*
+                A LINK only once the component has a version. A component that
+                predates the standalone editor has none, and opening it mints
+                the first one before it can navigate — that is a write, so it
+                stays a handler. Everything else on this list is an address,
+                and an address should behave like one.
+              */
+              ...(versionId
+                ? {
+                    href: buildRoute(Route.COMPONENT_BESIGNER, {
+                      orgSlug,
+                      host,
+                      componentId: definition.$id,
+                      versionId,
+                    }),
+                  }
+                : { onClick: () => void handleOpenInBesigner(definition) }),
             },
             {
               key: 'rename',
@@ -609,7 +620,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   // and screens/layouts do not repeat it either (AGL-693).
   return (
     <CardDisplay>
-      <ArtifactTable
+      <ListTable
         rowHeight={TABLE_ROW_HEIGHT}
         columns={columns}
         noRowsLabel="No reusable components yet"

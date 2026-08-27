@@ -67,10 +67,10 @@ import {
 } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
-import ArtifactTable, {
-  ArtifactRowActions,
-  artifactActionsColumn,
-} from '../artifacts/artifact-table.component'
+import ListTable, {
+  ListRowActions,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { checkOrgQuota } from '../../constants/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
@@ -670,7 +670,7 @@ export function HostTemplatesCard({
       the menu offers its page list instead — that distinction is AGL-696's and
       moving the controls must not quietly drop it.
     */
-    artifactActionsColumn((row: any) => {
+    listActionsColumn((row: any) => {
       const template = row.template
       const bundle = row.pages.length > 1
       const items = [
@@ -683,14 +683,11 @@ export function HostTemplatesCard({
               size={0.8}
             />
           ),
-          onClick: () =>
-            router.push(
-              buildRoute(Route.TEMPLATE_DETAILS, {
-                orgSlug,
-                host,
-                templateId: template.$id,
-              }),
-            ),
+          href: buildRoute(Route.TEMPLATE_DETAILS, {
+            orgSlug,
+            host,
+            templateId: template.$id,
+          }),
         },
         ...(bundle
           ? []
@@ -699,14 +696,11 @@ export function HostTemplatesCard({
                 key: 'besigner',
                 label: 'Edit in besigner',
                 icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
-                onClick: () =>
-                  router.push(
-                    buildRoute(Route.TEMPLATE_BESIGNER, {
-                      orgSlug,
-                      host,
-                      templateId: template.$id,
-                    }),
-                  ),
+                href: buildRoute(Route.TEMPLATE_BESIGNER, {
+                  orgSlug,
+                  host,
+                  templateId: template.$id,
+                }),
               },
             ]),
         {
@@ -735,7 +729,7 @@ export function HostTemplatesCard({
         } as any)
       }
       return (
-        <ArtifactRowActions
+        <ListRowActions
           label={template.displayName ?? template.$id}
           quick={{
             icon: mdiEyeOutline.path,
@@ -799,7 +793,7 @@ export function HostTemplatesCard({
           through `onQuota` so the page can render it without counting the
           documents a second time — two counts of the same thing is how a
           readout and the gate it belongs to come to disagree. */}
-      <ArtifactTable
+      <ListTable
         rowHeight={TABLE_ROW_HEIGHT}
         // A template ROW is a page GROUP, not a document — a five-page bundle
         // is one row keyed by its group, so this list keeps its own row id.

@@ -642,13 +642,13 @@ describe('the read-only Text field explains itself (AGL-2486)', () => {
  * The easing formerly labelled "Slight overshoot" is now "Settles into
  * place" (AGL-2486).
  *
- * The rename is Zach's, and the curve is deliberately untouched: it is still
+ * The curve is deliberately untouched: it is still
  * `cubic-bezier(.34,1.56,.64,1)`, still the only one of the six that leaves
- * the 0–1 range. What changed is the promise the name makes. The docs page
+ * the 0–1 range. Only the promise the name makes is different. The docs page
  * says every preset only fades, slides or resizes and that nothing bounces,
- * and a control labelled "overshoot" advertised the one thing the page said
- * the platform does not do — an author reading the label chose it expecting
- * a bounce, or avoided it expecting one.
+ * so a control labeled "overshoot" advertises the one thing the platform says
+ * it does not do — an author reading that label picks it expecting a bounce,
+ * or avoids it expecting one.
  *
  * THE ID IS THE PART THAT MUST NOT MOVE, and it is why this spec exists at
  * all rather than the rename being a one-word diff. `overshoot` is persisted:

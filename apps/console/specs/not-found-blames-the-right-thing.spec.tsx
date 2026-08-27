@@ -20,8 +20,7 @@
  *
  * One description used to cover three unrelated causes — a stale link, a
  * workspace you cannot open, a site you cannot open — and on the commonest
- * 404 of all it named the wrong one. Zach's
- * `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV` names a workspace he
+ * 404 of all it named the wrong one. the * `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV` names a workspace he
  * owns and a site that exists; the only thing wrong is that
  * `/screens/[screenId]` is not a route. Telling him the workspace might not be
  * his sends him hunting for a permissions problem that does not exist.

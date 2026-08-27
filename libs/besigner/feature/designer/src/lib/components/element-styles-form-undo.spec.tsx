@@ -243,9 +243,9 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
   describe('a value stored as a NUMBER', () => {
     it('rolls a free-text field back', async () => {
       // Flex Grow: a unitless number, and one of the fields still on free
-      // text because no theme scale answers it. Gap used to stand here; it
-      // is a spacing picker now (Zach 2026-08-25), and the preset case is
-      // covered by Corner Radius below.
+      // text because no theme scale answers it. Gap cannot stand in for it —
+      // that is a spacing picker (AGL-2486) — and the preset case is covered
+      // by Corner Radius below.
       const node = seedNode({ flexGrow: 2 })
       render(panel(node))
       await open('Flexbox & Grid')

@@ -222,8 +222,8 @@ export function UserMenu() {
               single grey letter on the SDK's default grey, sitting inches from
               a coloured two-initial avatar of the same person — and for every
               SSO account, which has no picture at all, the grey letter was the
-              whole identity. Zach: "I like how we created the named avatars
-              for no profile picture let's do the same". Seeded on the email
+              whole identity. I like how we created the named avatars
+              for no profile picture let's do the same. Seeded on the email
               rather than the display name so the colour survives a rename. */}
           <MemberAvatar
             name={name}

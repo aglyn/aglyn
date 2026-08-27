@@ -200,7 +200,7 @@ export const MAY_QUOTE_RETRY_WINDOW_IN_COPY = false
 export const LIVE_STRIPE_DUNNING_EMAIL_IS_KNOWN = true
 
 /**
- * WHAT THE LIVE DASHBOARD SAYS, as read by Zach on 2026-08-23 at
+ * WHAT THE LIVE DASHBOARD SAYS, read from
  * Settings → Billing → Subscriptions and emails. Recorded here because it is
  * unreadable through the API (see above) and because two of the four lines
  * are decisions with reasons, not merely observations.
@@ -216,7 +216,7 @@ export const LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS = {
    * The other four customer emails on that screen, all ON as of the read:
    * trial-ending reminder (7 days), upcoming renewals, expiring cards, and
    * bank-debit payment failures. The last was OFF and was turned ON on
-   * 2026-08-24 at Zach's explicit instruction, verified persisted after a
+   * 2026-08-24 at the explicit instruction, verified persisted after a
    * reload — the only Dashboard write in this whole issue.
    */
   otherCustomerEmailsAllOn: true,
@@ -240,8 +240,8 @@ export const LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS = {
    *
    * ⛔ SWITCHING OFF `Use a mix of both (Legacy)` IS IRREVERSIBLE. Stripe
    * shows a confirmation dialog saying so, and the legacy option cannot be
-   * restored on this account afterwards. Zach has seen that dialog and
-   * deliberately declined it once. Do not take it on his behalf.
+   * restored on this account afterwards. It has been declined deliberately;
+   * accepting it is an account owner's decision, never an incidental one.
    */
   paymentMethodUpdates: 'mix-of-both-legacy' as const,
   /**

@@ -684,7 +684,7 @@
             "label": "CDN & responsive images",
             "duplicateOf": null,
             "values": {
-              "free": "—",
+              "free": "✓",
               "starter": "✓",
               "pro": "✓",
               "business": "✓",

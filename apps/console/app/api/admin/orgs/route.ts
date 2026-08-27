@@ -26,8 +26,25 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_PAGE_SIZE_OPTIONS,
+} from '@aglyn/shared-ui-jsx/const/table-pagination'
 
-const PAGE_SIZE = 25
+/**
+ * The staff list's page, when the request does not name one.
+ *
+ * It named nothing before, so the size menu on the console side had no
+ * request to travel in. Clamped to the shared options rather than trusted:
+ * a page nobody reads is still a page somebody pays for.
+ */
+const PAGE_SIZE = TABLE_PAGE_SIZE_DEFAULT
+
+const resolvePageSize = (raw: unknown): number => {
+  const asked = Math.floor(Number(raw))
+  if (!Number.isFinite(asked)) return PAGE_SIZE
+  return TABLE_PAGE_SIZE_OPTIONS.includes(asked) ? asked : PAGE_SIZE
+}
 
 /**
  * Staff organization list (AGL-878). The page used to read `collection('orgs')`
@@ -63,18 +80,19 @@ async function handler(request: Request): Promise<Response> {
     const after = String(query['after'] ?? '')
     const byId = firebaseAdmin.firestore.FieldPath.documentId()
     // One extra row tells us whether a next page exists.
-    let ref = db.collection('orgs').orderBy(byId).limit(PAGE_SIZE + 1)
+    const pageSize = resolvePageSize(query['pageSize'])
+    let ref = db.collection('orgs').orderBy(byId).limit(pageSize + 1)
     if (after) {
       ref = db
         .collection('orgs')
         .orderBy(byId)
         .startAfter(after)
-        .limit(PAGE_SIZE + 1)
+        .limit(pageSize + 1)
     }
     const snapshot = await ref.get()
     const docs = snapshot.docs
-    const more = docs.length > PAGE_SIZE
-    const pageDocs = more ? docs.slice(0, PAGE_SIZE) : docs
+    const more = docs.length > pageSize
+    const pageDocs = more ? docs.slice(0, pageSize) : docs
     // Serialize timestamps to the `{ seconds }` shape the page reads.
     const ts = (value: unknown) =>
       value && typeof (value as { seconds?: unknown }).seconds === 'number'

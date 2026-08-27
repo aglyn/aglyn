@@ -27,7 +27,12 @@ import {
   isSecureTransport,
   reportingDirectives,
   reportingEndpointsHeader,
+  tenantConnectSrcDirective,
+  tenantFontSrcDirective,
+  tenantFormActionDirective,
+  tenantFrameSrcDirective,
   tenantImgSrcDirective,
+  tenantMediaSrcDirective,
 } from '../../security-origins'
 
 /**
@@ -196,6 +201,11 @@ const lockdownVerdicts = new Map<
     attribution: boolean
     overQuota: boolean
     approvedImageHosts: string[]
+    approvedMediaHosts: string[]
+    approvedFontHosts: string[]
+    approvedFormActions: string[]
+    approvedConnectHosts: string[]
+    approvedFrameHosts: string[]
     runsMeasurement: boolean
     siteOrigins: string[]
   }
@@ -223,6 +233,11 @@ async function hostVerdict(
   attribution: boolean
   overQuota: boolean
   approvedImageHosts: string[]
+  approvedMediaHosts: string[]
+  approvedFontHosts: string[]
+  approvedFormActions: string[]
+  approvedConnectHosts: string[]
+  approvedFrameHosts: string[]
   runsMeasurement: boolean
   siteOrigins: string[]
 }> {
@@ -233,6 +248,11 @@ async function hostVerdict(
       attribution: cached.attribution,
       overQuota: cached.overQuota,
       approvedImageHosts: cached.approvedImageHosts,
+      approvedMediaHosts: cached.approvedMediaHosts,
+      approvedFontHosts: cached.approvedFontHosts,
+      approvedFormActions: cached.approvedFormActions,
+      approvedConnectHosts: cached.approvedConnectHosts,
+      approvedFrameHosts: cached.approvedFrameHosts,
       runsMeasurement: cached.runsMeasurement,
       siteOrigins: cached.siteOrigins,
     }
@@ -284,6 +304,19 @@ async function hostVerdict(
    * different facts and must not share an encoding.
    */
   let approvedImageHosts: string[] = cached?.approvedImageHosts ?? []
+  // Stale-retentive exactly like images above: a verdict outage must not read
+  // as "the owner approved nothing".
+  let approvedMediaHosts: string[] = cached?.approvedMediaHosts ?? []
+  let approvedFontHosts: string[] = cached?.approvedFontHosts ?? []
+  let approvedFormActions: string[] = cached?.approvedFormActions ?? []
+  // Stale-retentive with the four beside it, and the one whose loss is
+  // quietest: a `srcdoc` iframe inherits `connect-src`, so an emptied list
+  // during a verdict outage would break an author's embedded widget rather
+  // than anything of ours.
+  let approvedConnectHosts: string[] = cached?.approvedConnectHosts ?? []
+  // Stale-retentive with the rest: a site's embedded video or booking widget
+  // must not go to an empty box because a verdict fetch failed.
+  let approvedFrameHosts: string[] = cached?.approvedFrameHosts ?? []
   // Stale-retentive for the same reason as the list beside it: losing this to
   // an outage would blank a site's analytics beacons rather than its images,
   // which is quieter and therefore worse.
@@ -303,6 +336,11 @@ async function hostVerdict(
         attribution?: boolean
         overQuota?: boolean
         approvedImageHosts?: unknown
+        approvedMediaHosts?: unknown
+        approvedFontHosts?: unknown
+        approvedFormActions?: unknown
+        approvedConnectHosts?: unknown
+        approvedFrameHosts?: unknown
         runsMeasurement?: boolean
         siteOrigins?: unknown
       } | null
@@ -313,6 +351,25 @@ async function hostVerdict(
       // could not read the host doc, and an older deployment that predates
       // this field sends nothing at all — both must keep the last known good
       // list rather than silently narrowing the policy.
+      const strings = (value: unknown): string[] =>
+        (value as unknown[]).filter(
+          (entry): entry is string => typeof entry === 'string',
+        )
+      if (Array.isArray(data?.approvedMediaHosts)) {
+        approvedMediaHosts = strings(data.approvedMediaHosts)
+      }
+      if (Array.isArray(data?.approvedFontHosts)) {
+        approvedFontHosts = strings(data.approvedFontHosts)
+      }
+      if (Array.isArray(data?.approvedFormActions)) {
+        approvedFormActions = strings(data.approvedFormActions)
+      }
+      if (Array.isArray(data?.approvedConnectHosts)) {
+        approvedConnectHosts = strings(data.approvedConnectHosts)
+      }
+      if (Array.isArray(data?.approvedFrameHosts)) {
+        approvedFrameHosts = strings(data.approvedFrameHosts)
+      }
       if (Array.isArray(data?.approvedImageHosts)) {
         approvedImageHosts = data.approvedImageHosts.filter(
           (entry): entry is string => typeof entry === 'string',
@@ -336,6 +393,11 @@ async function hostVerdict(
     attribution,
     overQuota,
     approvedImageHosts,
+    approvedMediaHosts,
+    approvedFontHosts,
+    approvedFormActions,
+    approvedConnectHosts,
+    approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
   })
@@ -344,6 +406,11 @@ async function hostVerdict(
     attribution,
     overQuota,
     approvedImageHosts,
+    approvedMediaHosts,
+    approvedFontHosts,
+    approvedFormActions,
+    approvedConnectHosts,
+    approvedFrameHosts,
     runsMeasurement,
     siteOrigins,
   }
@@ -519,7 +586,12 @@ export const middleware: NextMiddleware = async (req, event) => {
       // resolves it via host.cname (unknown domains 404 there). Only
       // host-shaped names proceed; garbage still bounces to the console.
       const hostname = reqHost.split(':')[0].toLowerCase()
-      if (IS_DEPLOYED && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
+      if (
+        IS_DEPLOYED &&
+        /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(
+          hostname,
+        )
+      ) {
         console.debug('Tenant Host Switch=', 'cname', 'hostname=', hostname)
         tenantHost = `cname--${hostname}`
         break
@@ -671,13 +743,54 @@ export const middleware: NextMiddleware = async (req, event) => {
   // unnonced, and should not read that as the fix having failed.
   //
   // Dropping `strict-dynamic` for a plain `script-src 'self'` is not an escape
-  // either: Next emits ~12 INLINE scripts per page for RSC flight data, and
-  // `'self'` alone blocks inline. Making this enforceable needs a real design —
-  // a nonce baked into the cached bytes (per-page-version, not per-visitor) or
-  // build-time hashes — not a header change. Tracked in AGL-1228.
+  // either: Next emits INLINE scripts per page for RSC flight data, and
+  // `'self'` alone blocks inline. Re-measured on production 2026-08-26,
+  // `https://aglyn.com/pricing`: 62 `<script>` elements, EIGHT of them inline,
+  // ZERO carrying a nonce — the inline set being the JSON-LD block and the
+  // `self.__next_f.push([1,"…"])` flight payload, whose content IS the
+  // serialized page tree.
   //
-  // What DOES enforce here, unchanged: the base directives below — `object-src
-  // 'none'`, `base-uri 'self'`, `frame-ancestors` — plus the plugin sandbox.
+  // ## The two escapes that look available and are not (AGL-1152)
+  //
+  // 1. **A per-HOST nonce.** It solves the ISR mismatch — the same string on
+  //    every response for one site, so cached bytes and header agree — and it
+  //    is what makes the owner-widened directives beside this one shippable. It
+  //    is worthless HERE and only here: a nonce defends by being unguessable,
+  //    and a value baked into bytes every visitor downloads is a value the
+  //    injected script can simply read off the page and wear. Per-host is the
+  //    right shape for an allowlist and a contradiction in terms for a nonce.
+  // 2. **Hashes computed at render.** The bytes are stable for the life of one
+  //    cached render, so per-page hashes would be valid — but this function
+  //    runs BEFORE the render and sets the header without ever seeing them, and
+  //    the flight payload changes on every revalidation. That leaves a
+  //    build-time hash pipeline, which cannot cover a payload built per page
+  //    per revalidation. It is a real project, not a header change (AGL-1228).
+  //
+  // ## And it would revoke an advertised feature, which nothing can give back
+  //
+  // Measured: a `srcdoc` iframe INHERITS `script-src`. Under a policy allowing
+  // only two hashes, a srcdoc child's unhashed inline script did not run. The
+  // Custom HTML block's Embed mode is exactly that — its own field help says
+  // "Runs the raw snippet in a sandboxed iframe (scripts allowed)" — and the
+  // script is INLINE in an author's snippet, so no allowlist entry reaches it.
+  // The only source expression that would is `'unsafe-inline'`, which makes the
+  // directive worthless. That is a third reason on top of the two above, and it
+  // is the one an owner allowlist cannot answer.
+  //
+  // ⛔ `style-src` is ABSENT for the same shape and must not be reached for as
+  // the easier one. The same production page carried three `<style>` elements,
+  // two of them emotion's runtime injection, none with a nonce, plus 13
+  // elements with an inline `style=` attribute and NO external stylesheet at
+  // all — every byte of CSS is inline. Emotion accepts a nonce and lands on
+  // escape 1 above; hashes land on escape 2; `custom-html.tsx` emits an
+  // author's `<style>` block whose content is customer data. An enforced
+  // `style-src` would therefore need `'unsafe-inline'` for elements AND
+  // attributes, which is a directive that forbids nothing while looking like
+  // one that does.
+  //
+  // What DOES enforce here: the base directives below — `object-src 'none'`,
+  // `base-uri 'self'`, `frame-ancestors` — the six owner-widened directives,
+  // and the plugin sandbox.
   const response = NextResponse.rewrite(new URL(rewrite, req.url))
   /*
    * `img-src` IS NOW ENFORCED, alongside the base directives (AGL-1152).
@@ -700,6 +813,40 @@ export const middleware: NextMiddleware = async (req, event) => {
    * The reporting tail rides the ENFORCING policy on purpose: after the flip a
    * violation is an image that did NOT load, which is the most urgent thing the
    * log can carry.
+   *
+   * ## `connect-src` joins it (AGL-1152)
+   *
+   * The policy carries no `default-src`, so until now a published page could
+   * open a connection to any origin at all. That is the directive an injected
+   * script wants most: it is how what a visitor typed, or a shopper's card
+   * details, leave the page for an address of the attacker's choosing.
+   *
+   * ENFORCED rather than reported for the reason `img-src` is, and with the
+   * same three parts — our own measured fetches, the vendor set gated on
+   * whether the site runs measurement at all, and the owner's list for
+   * everything a customer's site may legitimately do that no reading of our
+   * repo would reveal. What each pinned origin buys, and the production
+   * request that named it, lives with `tenantConnectSrcDirective`.
+   *
+   * ⚠️ It reaches further than our runtime: a `srcdoc` iframe inherits the
+   * document's policy, which was measured rather than assumed, so the Custom
+   * HTML block's Embed mode fetches under this directive too. An owner
+   * embedding a third-party widget approves its host in the Security tab; that
+   * is the control, and it is why the flip does not revoke the capability.
+   *
+   * ## `frame-src` joins it too (AGL-1152)
+   *
+   * ⛔ NOT `frame-ancestors`, which has been here since AGL-518 and answers the
+   * opposite question. That one says who may frame US; this one says whom WE
+   * may frame, and until now nothing at this layer constrained where a frame on
+   * a published page could point — an injected `<iframe>` could load a
+   * pixel-perfect login form from anywhere.
+   *
+   * The platform's own embeds are a short, closed set — the two video players
+   * the Video block can construct, the marketplace plugin sandbox, the payment
+   * frames, the admin bar's edit-access probe — so what remains is what a
+   * customer's site legitimately embeds, which is the owner's list. Both halves
+   * live with `tenantFrameSrcDirective`.
    */
   // Computed here rather than beside `Reporting-Endpoints` below, because the
   // policy itself now carries the reporting tail and needs the answer first.
@@ -710,6 +857,27 @@ export const middleware: NextMiddleware = async (req, event) => {
       process.env.NODE_ENV === 'production',
       verdict.approvedImageHosts,
       verdict.runsMeasurement,
+      verdict.siteOrigins,
+    )}; ${tenantMediaSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedMediaHosts,
+      verdict.siteOrigins,
+    )}; ${tenantFontSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedFontHosts,
+      verdict.siteOrigins,
+    )}; ${tenantFormActionDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedFormActions,
+      verdict.siteOrigins,
+    )}; ${tenantConnectSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedConnectHosts,
+      verdict.runsMeasurement,
+      verdict.siteOrigins,
+    )}; ${tenantFrameSrcDirective(
+      process.env.NODE_ENV === 'production',
+      verdict.approvedFrameHosts,
       verdict.siteOrigins,
     )}; ${reportingDirectives(secureTransport)}`,
   )
@@ -761,10 +929,7 @@ export const middleware: NextMiddleware = async (req, event) => {
    * closes and never signs anyone in. `allow-popups` keeps that direction
    * working while still isolating this document from a hostile opener.
    */
-  response.headers.set(
-    'Cross-Origin-Opener-Policy',
-    'same-origin-allow-popups',
-  )
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
   const endpoints = reportingEndpointsHeader(secureTransport)
   if (endpoints) response.headers.set('Reporting-Endpoints', endpoints)
   /*

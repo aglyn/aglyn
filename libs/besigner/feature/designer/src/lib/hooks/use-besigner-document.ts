@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { Firestore } from 'firebase/firestore'
 import * as Aglyn from '@aglyn/aglyn'
 import isEqual from 'lodash-es/isEqual'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -130,6 +131,13 @@ export interface UseBesignerDocumentOptions<TData = unknown>
    * override of the same key produce the same string.
    */
   draft?: BesignerDraftIds
+  /**
+   * Enables the SHARED working draft — the one `Save draft` writes and
+   * `Save & publish` clears. Omit and the editor keeps the local crash net
+   * alone, which is what a document with no versions to hang a draft off
+   * should do.
+   */
+  firestore?: Firestore
   /**
    * Other live editing sessions in this document's room, or null while
    * presence has not settled — see `recoverableRoomSessions` (AGL-2486).
@@ -371,11 +379,10 @@ export function useBesignerDocument<TData = unknown>(
    * The second half is the damage. With the baseline advanced, the next
    * Save passes the client guard AND the AGL-1301 transaction — the stamp
    * and content it presents are the ones actually stored — so their work is
-   * overwritten with no warning at either layer. That is exactly the "the
-   * second save silently replaces the first, and it will not warn you"
-   * Zach hits with four tabs open, and nothing about it needs the two
-   * writers to be different people: it needs them to be different SESSIONS,
-   * which two tabs of one account are.
+   * overwritten with no warning at either layer: the second save silently
+   * replaces the first. Nothing about that needs the two writers to be
+   * different people — it needs them to be different SESSIONS, which two tabs
+   * of one account are.
    *
    * Comparing the content closes it without a schema change. A snapshot is
    * our echo only if it carries what we wrote; anything else is somebody
@@ -459,13 +466,11 @@ export function useBesignerDocument<TData = unknown>(
     // Somebody else's write. Whether it is a CONFLICT is a different
     // question from whether the document moved (AGL-2486).
     //
-    // Zach: *"I made an edit in the top browser, saved it in the bottom
-    // browser, then the alert appeared in the top browser for someone else
-    // saved… any user collaborating should be able to save as they all go
-    // along and make changes."* He is right, and the reason is the mirror:
-    // their changes reached this canvas node by node before they pressed
-    // Save, so this session usually already holds what they stored and its
-    // own write is a superset of it. `incorporatesStoredNodes` is the
+    // Everyone collaborating should be able to save as they go, and the
+    // mirror is what makes that safe: their changes reached this canvas node
+    // by node before they pressed Save, so this session usually already holds
+    // what they stored and its own write is a superset of it.
+    // `incorporatesStoredNodes` is the
     // evidence for that — never an assumption that co-editing is healthy —
     // and a session that has fallen behind cannot satisfy it, which is the
     // case the guard exists for and still refuses.
@@ -505,6 +510,9 @@ export function useBesignerDocument<TData = unknown>(
   // else has saved since".
   const draft = useBesignerDraft({
     ids: draftIds,
+    // Given one, the shared working draft joins the local crash net and wins
+    // when both exist (AGL-1152).
+    firestore: options.firestore,
     loaded: Aglyn.canvas.didSetInitial,
     dirty: saveAvailable,
     storedStamp: Aglyn.versionStamp(updatedAt),

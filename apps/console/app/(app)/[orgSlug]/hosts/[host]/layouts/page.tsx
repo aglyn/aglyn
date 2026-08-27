@@ -46,10 +46,10 @@ import {
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
-import ArtifactTable, {
-  ArtifactRowActions,
-  artifactActionsColumn,
-} from '../../../../../../components/artifacts/artifact-table.component'
+import ListTable, {
+  ListRowActions,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from '../../../../../../components/artifacts/artifact-delete-confirm.component'
@@ -407,16 +407,16 @@ function Layouts(props) {
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
     /*
-      The trailing cluster every artifact list shares (AGL-693). Layouts put
-      FOUR inline icons in a LEADING column — the arrangement Zach called out
-      — so a delete sat two icons from the row's own open handler and the
-      first thing in the row was a toolbar rather than the layout's name.
+      The trailing cluster every artifact list shares (AGL-693). Four inline
+      icons in a LEADING column put a delete two icons away from the row's own
+      open handler, and make the first thing in the row a toolbar rather than
+      the layout's name.
     */
-    artifactActionsColumn((row: any) => {
+    listActionsColumn((row: any) => {
       const layoutId = row.$id as string
       const versionId = row.versionId as string
       return (
-        <ArtifactRowActions
+        <ListRowActions
           label={row.displayName ?? layoutId}
           quick={{
             icon: mdiEyeOutline.path,
@@ -440,10 +440,11 @@ function Layouts(props) {
               key: 'details',
               label: 'View details',
               icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
-              onClick: () =>
-                router.push(
-                  buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId }),
-                ),
+              href: buildRoute(Route.LAYOUT_DETAILS, {
+                orgSlug,
+                host,
+                layoutId,
+              }),
             },
             {
               key: 'besigner',
@@ -451,15 +452,12 @@ function Layouts(props) {
               icon: (
                 <MdiIcon path={ICON_VARIANT_MODIFY_EDIT.path} size={0.8} />
               ),
-              onClick: () =>
-                router.push(
-                  buildRoute(Route.LAYOUT_BESIGNER, {
-                    orgSlug,
-                    host,
-                    layoutId,
-                    versionId,
-                  }),
-                ),
+              href: buildRoute(Route.LAYOUT_BESIGNER, {
+                orgSlug,
+                host,
+                layoutId,
+                versionId,
+              }),
             },
             {
               key: 'save-template',
@@ -523,10 +521,10 @@ function Layouts(props) {
           /*
             The plan readout sits OPPOSITE the heading, beside the create
             button (AGL-2113) — the arrangement the Sites page uses for
-            `6 of 10 sites · Business plan`. Zach: *"the 'templates on your
+            `6 of 10 sites · Business plan`. the 'templates on your
             plan' need to be moved to the header like we have on the hosts
             page, same thing goes for the screens page, components, layouts
-            and templates."*
+            and templates.
 
             Above the table rather than inside it, because it is a fact about
             the PAGE: a reader deciding whether to create another one is
@@ -578,7 +576,7 @@ function Layouts(props) {
             blurb="Layout templates add a ready-made layout you can restyle in the besigner. Existing layouts are never touched."
           />
           <CardDisplay>
-            <ArtifactTable
+            <ListTable
               rowHeight={TABLE_ROW_HEIGHT}
               columns={columns}
               noRowsLabel="No layouts yet"

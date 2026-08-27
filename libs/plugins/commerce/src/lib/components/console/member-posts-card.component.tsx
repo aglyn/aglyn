@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -31,10 +32,20 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, deleteDoc, doc, limit, query } from 'firebase/firestore'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  limit,
+  orderBy,
+  query,
+} from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestoreCollection,
+  usePagedCollection,
+} from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 
@@ -65,8 +76,30 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: postDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'memberPosts'), limit(50)),
+  /*
+   * Ordered by the SERVER, and a growing window rather than a fixed read.
+   *
+   * This was `limit(50)` with no `orderBy`, rendering `.slice(0, 8)`. A
+   * Firestore query with a limit and no ordering returns DOCUMENT-ID order,
+   * and posts are created with `.add()`, so those fifty were a pseudo-random
+   * sample of the feed — the client sort below then ordered the sample and
+   * showed eight of it, which looks newest-first and is not. Past fifty
+   * posts, one written this morning could simply never appear.
+   */
+  const {
+    rows: posts,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      query(
+        collection(firestore, 'hosts', hostId, 'memberPosts'),
+        orderBy('createdAtMs', 'desc'),
+        limit(pageLimit),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -74,9 +107,6 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
     () => query(collection(firestore, 'hosts', hostId, 'products'), limit(200)),
     [firestore, hostId],
     { idField: '$id' },
-  )
-  const posts = [...(postDocs ?? [])].sort(
-    (a: any, b: any) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0),
   )
   const [draft, setDraft] = useState<{
     title: string
@@ -143,7 +173,7 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
               'email them). Add a Member feed block to a members screen.'}
           </Typography>
         ) : (
-          posts.slice(0, 8).map((post: any) => (
+          posts.map((post: any) => (
             <Stack
               key={post.$id}
               direction="row"
@@ -172,6 +202,14 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
             </Stack>
           ))
         )}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={posts.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
         <Button
           size="small"
           sx={{ alignSelf: 'flex-start' }}

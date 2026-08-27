@@ -31,9 +31,9 @@
  * `defaultOffPerSite` one: an absent field means OFF for `accounts`, so a
  * resolver that only ever subtracts reported it as ON everywhere.
  *
- * That is the second half of what Zach saw on `aglyn-org`. Teaching the
- * component drawer to filter by capability buys nothing while the set it
- * filters against still contains the capability.
+ * That is the second half of the defect. Teaching the component drawer to
+ * filter by capability buys nothing while the set it filters against still
+ * contains the capability.
  */
 
 let mockEnabledKey: string

@@ -104,7 +104,7 @@ name: Tools guards
 on:
   push:
     branches:
-      # Sept-1 freeze (Zach, 2026-08-20): the push trigger moved from `main`
+      # Sept-1 freeze (decided): the push trigger moved from `main`
       # to `production`. With many agents landing on `main` continuously this
       # workflow was running dozens of times an hour and every red notified
       # him, so CI became noise rather than signal. It is a RELEASE gate until
@@ -614,6 +614,14 @@ jobs:
       - run: npm run test:decision-log
 
       - run: npm run check:decision-log
+
+      # The feature matrix is GENERATED from `PLAN_ENTITLEMENTS` (AGL-1152).
+      # Without this the published table drifts silently the first time a
+      # feature moves between plans and nobody remembers the doc — which is
+      # exactly how `mediaCdn` came to be gated on paid tiers with no record of
+      # it anywhere in Pricing & Packaging. A stale matrix is worse than an
+      # absent one: it is a table people trust.
+      - run: npm run check:feature-matrix
 
       # AGL-2025. Unlike every step above, these two are about the CONTENT of
       # apps/ and libs/, not about tools/ — which is why the `paths:` filter

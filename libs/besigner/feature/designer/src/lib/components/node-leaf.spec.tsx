@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { Leaf, LeafSxTransformContext } from '@aglyn/aglyn-node-renderer'
+import {
+  AglynNodeRenderer,
+  Leaf,
+  LeafSxTransformContext,
+} from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { createTheme, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { act, render } from '@testing-library/react'
@@ -24,6 +28,7 @@ import {
   createDevicePinnedTheme,
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
+import CanvasRevealContext from '../contexts/canvas-reveal-context'
 import ElementLeafComponent, { denormalizeTree } from './node-leaf'
 import * as Aglyn from '@aglyn/aglyn'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
@@ -172,9 +177,9 @@ describe('canvas element-picker capture (AGL-574)', () => {
   it('selects normally when not picking', () => {
     render(<ElementLeafComponent node={pickable()} />)
     mousedown()
-    expect(Besigner.focus.getSelected().map((selected) => selected.$id)).toEqual(
-      ['pickable-node'],
-    )
+    expect(
+      Besigner.focus.getSelected().map((selected) => selected.$id),
+    ).toEqual(['pickable-node'])
   })
 })
 
@@ -389,7 +394,10 @@ describe('component instance preview (AGL-1251)', () => {
     props: [{ name: 'headline', type: 'text', defaultValue: 'Default copy' }],
   } as any
 
-  const instanceNode = (propValues?: Record<string, unknown>, nodes: string[] = []) =>
+  const instanceNode = (
+    propValues?: Record<string, unknown>,
+    nodes: string[] = [],
+  ) =>
     ({
       $id: 'inst1',
       type: 'node',
@@ -425,7 +433,9 @@ describe('component instance preview (AGL-1251)', () => {
     expect(leafText(baseElement)).not.toContain('{{prop.headline}}')
     // Grafted ids are namespaced per instance, so two placements of one
     // definition can never collide in the DOM either.
-    expect(baseElement.querySelector('[data-aglyn="leaf:cmp__inst1__h"]')).toBeTruthy()
+    expect(
+      baseElement.querySelector('[data-aglyn="leaf:cmp__inst1__h"]'),
+    ).toBeTruthy()
   })
 
   it('falls back to the declared default, which is what the page renders', () => {
@@ -437,19 +447,27 @@ describe('component instance preview (AGL-1251)', () => {
     const { baseElement } = renderInstance(instanceNode())
     const preview = baseElement.querySelector('[data-aglyn-component-preview]')
     expect(preview).toBeTruthy()
-    expect(emotionCssFor(preview as HTMLElement)).toContain('pointer-events:none')
+    expect(emotionCssFor(preview as HTMLElement)).toContain(
+      'pointer-events:none',
+    )
   })
 
   it('does NOT draw twice when the instance is already expanded', () => {
     // Layout chrome grafts before loading its canvas (AGL-1218), so its
     // instances arrive with children and NodeLeaf must stay out of the way.
-    const { baseElement } = renderInstance(instanceNode(undefined, ['cmp__inst1__root']))
-    expect(baseElement.querySelector('[data-aglyn-component-preview]')).toBeNull()
+    const { baseElement } = renderInstance(
+      instanceNode(undefined, ['cmp__inst1__root']),
+    )
+    expect(
+      baseElement.querySelector('[data-aglyn-component-preview]'),
+    ).toBeNull()
   })
 
   it('negative control: no definitions, no preview', () => {
     const { baseElement } = renderInstance(instanceNode(), {})
-    expect(baseElement.querySelector('[data-aglyn-component-preview]')).toBeNull()
+    expect(
+      baseElement.querySelector('[data-aglyn-component-preview]'),
+    ).toBeNull()
     // Unresolvable also means unchanged — the instance keeps its own
     // placeholder rather than rendering empty.
     expect(leafText(baseElement)).not.toContain('Default copy')
@@ -732,5 +750,159 @@ describe('denormalizeTree', () => {
     expect(tree.children[0].$id).toBe('b')
     // `a` is already seen, so the cycle terminates instead of blowing the stack.
     expect(tree.children[0].children).toEqual([])
+  })
+})
+
+describe('canvas reveal for hidden elements (AGL-592)', () => {
+  const HIDDEN = Aglyn.ELEMENT_HIDDEN_CLASS
+
+  beforeEach(() => {
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        componentId: 'div',
+        nodes: ['wrapper', 'drawer'],
+      },
+      wrapper: {
+        $id: 'wrapper',
+        componentId: 'div',
+        parentId: Aglyn.NODE_ROOT_ID,
+        nodes: ['panel'],
+      },
+      panel: {
+        $id: 'panel',
+        componentId: 'div',
+        parentId: 'wrapper',
+        props: { className: HIDDEN },
+        nodes: [],
+      },
+      drawer: {
+        $id: 'drawer',
+        componentId: 'div',
+        parentId: Aglyn.NODE_ROOT_ID,
+        props: { className: HIDDEN },
+        nodes: [],
+      },
+    } as never)
+  })
+
+  afterEach(() => act(() => Besigner.focus.clearFocusStatus()))
+
+  const renderLeaf = ($id: string, revealedNodeIds?: string[]) =>
+    render(
+      <CanvasRevealContext.Provider value={revealedNodeIds}>
+        <ElementLeafComponent node={Aglyn.canvas.getNode($id)! as never} />
+      </CanvasRevealContext.Provider>,
+    )
+
+  const leafFor = ($id: string) =>
+    document.querySelector(`[data-aglyn="leaf:${$id}"]`) as HTMLElement
+
+  it('collapses a hidden element until something reveals it', () => {
+    renderLeaf('panel')
+    expect(leafFor('panel').classList.contains(HIDDEN)).toBe(true)
+    expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(false)
+  })
+
+  it('flags the element the author turned on', () => {
+    renderLeaf('panel', ['panel'])
+    expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(true)
+  })
+
+  it('leaves every other hidden element collapsed', () => {
+    renderLeaf('drawer', ['panel'])
+    expect(leafFor('drawer').hasAttribute('data-aglyn-revealed')).toBe(false)
+  })
+
+  it('flags a panel whose parent holds the selection', () => {
+    act(() => Besigner.focus.setSelectedNode(Aglyn.canvas.getNode('wrapper')!))
+    renderLeaf('panel')
+    expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(true)
+  })
+
+  it('never flags an element the site does not hide', () => {
+    renderLeaf('wrapper', ['wrapper'])
+    expect(leafFor('wrapper').hasAttribute('data-aglyn-revealed')).toBe(false)
+  })
+
+  // Canvas visibility and site visibility are different decisions: the class
+  // that hides the panel on the published page is still on the node.
+  it('reveals without taking the hidden class off the document', () => {
+    renderLeaf('panel', ['panel'])
+    expect(leafFor('panel').classList.contains(HIDDEN)).toBe(true)
+    expect(Aglyn.canvas.getNode('panel')?.props?.['className']).toBe(HIDDEN)
+  })
+})
+
+describe('canvas reveal through the rendered tree (AGL-592)', () => {
+  const HIDDEN = Aglyn.ELEMENT_HIDDEN_CLASS
+
+  beforeEach(() => {
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        componentId: 'div',
+        nodes: ['wrapper'],
+      },
+      wrapper: {
+        $id: 'wrapper',
+        componentId: 'div',
+        parentId: Aglyn.NODE_ROOT_ID,
+        sx: { display: 'inline-flex' },
+        nodes: ['trigger', 'panel'],
+      },
+      trigger: {
+        $id: 'trigger',
+        componentId: 'div',
+        parentId: 'wrapper',
+        nodes: [],
+      },
+      panel: {
+        $id: 'panel',
+        componentId: 'div',
+        parentId: 'wrapper',
+        props: { className: HIDDEN },
+        sx: { position: 'absolute', top: '100%', left: 0 },
+        nodes: [],
+      },
+    } as never)
+  })
+
+  afterEach(() => act(() => Besigner.focus.clearFocusStatus()))
+
+  const renderTree = (revealedNodeIds?: string[]) =>
+    render(
+      <CanvasRevealContext.Provider value={revealedNodeIds}>
+        <AglynNodeRenderer
+          node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)! as never}
+          LeafComponent={ElementLeafComponent as never}
+        />
+      </CanvasRevealContext.Provider>,
+    )
+
+  const leafFor = ($id: string) =>
+    document.querySelector(`[data-aglyn="leaf:${$id}"]`) as HTMLElement
+
+  // The reveal is flagged on the hidden element itself rather than inferred
+  // from a marker on its parent, so this is the relationship it relies on.
+  it('renders the panel as a direct child of its parent leaf', () => {
+    renderTree()
+    expect(leafFor('panel').parentElement).toBe(leafFor('wrapper'))
+    expect(leafFor('panel').classList.contains(HIDDEN)).toBe(true)
+  })
+
+  it('flags only the revealed element, all the way down the tree', () => {
+    renderTree(['panel'])
+    expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(true)
+    expect(leafFor('trigger').hasAttribute('data-aglyn-revealed')).toBe(false)
+    expect(leafFor('wrapper').hasAttribute('data-aglyn-revealed')).toBe(false)
+  })
+
+  it('flags the panel while the selection sits on its sibling trigger', () => {
+    act(() => Besigner.focus.setSelectedNode(Aglyn.canvas.getNode('trigger')!))
+    renderTree()
+    expect(leafFor('panel').hasAttribute('data-aglyn-revealed')).toBe(true)
   })
 })

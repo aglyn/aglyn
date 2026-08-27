@@ -22,7 +22,7 @@
 // runs, loudly — production writes require BOTH `--apply` and
 // `--yes-i-mean-production` (these scripts rewrite merchant-facing
 // financial history; AGL-1727/1745/1752/1753 record that the apply is
-// Zach's call, made after the dry-run numbers are seen).
+// the call, made after the dry-run numbers are seen).
 
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'

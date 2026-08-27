@@ -260,8 +260,8 @@ describe('useBesignerDocument', () => {
     })
 
     /**
-     * Two tabs of ONE account, which is the case Zach lives in — he keeps
-     * four open (AGL-2486).
+     * Two tabs of ONE account — the ordinary case, not an exotic one
+     * (AGL-2486).
      *
      * The console runs `persistentMultipleTabManager`, so tabs share a cache
      * and their snapshots coalesce: this session's save can be answered by a
@@ -273,7 +273,7 @@ describe('useBesignerDocument', () => {
      * either layer.
      *
      * Nothing about that needs two different people. It needs two different
-     * SESSIONS, which is what the guard now keys on.
+     * SESSIONS, which is what the guard keys on.
      */
     it('flags another session’s write that lands in place of our echo', async () => {
       setCanvasDirty(true)
@@ -488,17 +488,12 @@ describe('useBesignerDocument', () => {
    * Two people building a page together must both be able to save
    * (AGL-2486).
    *
-   * Zach: *"I made an edit in the top browser, saved it in the bottom
-   * browser, then the alert appeared in the top browser for someone else
-   * saved, the save button is still offered rather than up to date now. But
-   * any user collaborating should be able to save as they all go along and
-   * make changes."*
-   *
-   * The guard used to ask "did the stored document move", which is the wrong
-   * question once the co-edit mirror has already delivered their work to
-   * this canvas: this session's write is then a superset of what they
-   * stored, and refusing it protects nothing. It now asks whether this
-   * document INCORPORATES what is stored — and these cases are written in
+   * A guard that asks "did the stored document move" refuses the second saver
+   * in every collaborating pair, and offers them a Save button that cannot
+   * succeed. It is the wrong question once the co-edit mirror has already
+   * delivered the other session's work to this canvas: this session's write is
+   * then a superset of what they stored, and refusing it protects nothing. The
+   * guard asks instead whether this document INCORPORATES what is stored — and these cases are written in
    * pairs so the relaxation cannot quietly become "always allow": every
    * permissive case has a stale or conflicting twin that must still refuse.
    */

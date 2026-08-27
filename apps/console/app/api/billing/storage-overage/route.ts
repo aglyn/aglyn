@@ -43,13 +43,11 @@ import {
 export const STORAGE_CAP_MAX_USD = 5_000
 
 /**
- * Set or clear the org's own monthly storage-overage cap (AGL-1886, corrected
- * 2026-08-18).
+ * Set or clear the org's own monthly storage-overage cap (AGL-1886).
  *
- * Zach, 2026-08-18, verbatim: *"it should be a control by the end user, to
- * prevent overage or usage alerts rather, we just want to minimize churn"*.
- * This route is that control, and nothing else — it is **not** a consent
- * surface and there is nothing here a customer must do before storage works.
+ * The ceiling on metered storage is the END USER's control, and this route is
+ * that control and nothing else — it is **not** a consent surface, and there
+ * is nothing here a customer must do before storage works.
  *
  *   `get`      → the cap in force (if any), whether the plan meters, and the
  *                per-GB rate the invoice uses

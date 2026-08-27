@@ -37,8 +37,8 @@ export const dynamic = 'force-dynamic'
  *
  * On `*.aglyn.app` the console is CROSS-site: no iframe probe, no shared
  * cookie, no postMessage handshake can ever see the console session — the
- * AGL-1829 auto-arm was structurally blind there, which is why the bar
- * needed the chord Zach has now rejected. What this host DOES have,
+ * AGL-1829 auto-arm is structurally blind there, which otherwise leaves a
+ * keyboard chord as the only way to raise the bar. What this host DOES have,
  * post-bounce, is the HttpOnly `aglyn_edit_hint` cookie the login-time
  * bounce planted on `Domain=.aglyn.app`. It arrives here on a plain
  * same-origin POST from the bar, and this route turns it into the SAME

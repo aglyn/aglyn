@@ -59,8 +59,14 @@ import type { ReactNode } from 'react'
 
 /** Collaborators the SERVER says the site has. */
 const SERVER_SEATS = 60
-/** What one page of the listener can ever hand back (MEMBER_PAGE_SIZE). */
-const PAGE_ROWS = 25
+/**
+ * What one page of the listener can ever hand back.
+ *
+ * The console's shared default (AGL-693), `mock`-prefixed so the barrel
+ * double below may close over it — jest allows only that prefix out of scope.
+ */
+const mockDefaultPageSize = 10
+const PAGE_ROWS = mockDefaultPageSize
 
 /** Mutable so a spec can make the aggregate read fail. */
 const mockAggregate: { count: number | null } = { count: SERVER_SEATS }
@@ -101,6 +107,32 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'admin-1', getIdToken: async () => 'tok' } }),
+  /*
+   * Modelled rather than stubbed. The card's whole defect was a PAGE of rows
+   * presented as the site's seat usage, so a double that handed back every
+   * staged row would erase the distinction this file exists to guard.
+   */
+  usePagedCollection: (
+    build: (pageLimit: number) => unknown,
+    _deps: unknown,
+    options: { pageSize?: number } = {},
+  ) => {
+    const pageSize = options.pageSize ?? mockDefaultPageSize
+    const all = build(pageSize + 1) === 'hosts/host-1/members' ? mockMemberRows : []
+    return {
+      rows: all.slice(0, pageSize),
+      hasMore: all.length > pageSize,
+      page: 0,
+      setPage: () => undefined,
+      pageSize,
+      setPageSize: () => undefined,
+      data: all,
+      status: 'success',
+      error: undefined,
+      fromCache: false,
+      serverDenied: false,
+    }
+  },
 }))
 
 /**
@@ -185,10 +217,12 @@ describe('the member-seat count is a server aggregate (AGL-1716)', () => {
   it('counts the site, not the page of rows on screen', async () => {
     render(<HostMembersCard hostId="host-1" />)
 
-    // Before the fix this read "25/50" — the page
-    // window, presented as the site's seat usage.
+    // Before the fix this read the PAGE WINDOW over the limit — one page of
+    // rows presented as the site's seat usage. Written against the page size
+    // rather than a literal, so the case keeps testing the same thing when
+    // the shared default moves (AGL-693).
     await waitFor(() => expect(seatCaption()).toContain('60/50'))
-    expect(seatCaption()).not.toContain('25/50')
+    expect(seatCaption()).not.toContain(`${PAGE_ROWS}/50`)
     // Over the included band on a plan that sells seats, so the purchase
     // prompt is reachable at all — it was not while the count saturated.
     expect(seatFooter()).toContain('Extra seats $')
@@ -198,8 +232,10 @@ describe('the member-seat count is a server aggregate (AGL-1716)', () => {
   it('keeps the page window — the paging was never the defect', async () => {
     render(<HostMembersCard hostId="host-1" />)
 
-    // 25 + 1: the page plus AGL-1124's over-fetched "there are more" probe.
-    expect(mockLimits).toContain(26)
+    // The console-wide page plus AGL-1124's over-fetched "there are more"
+    // probe. Written against the constant, not the number: the rule is that
+    // the window is ONE page, whatever that page becomes (AGL-693).
+    expect(mockLimits).toContain(mockDefaultPageSize + 1)
     // Flush the aggregate's resolution so its state write lands inside this
     // test rather than as unacted-on noise in the next one. Not an assertion
     // — this case is about the window, and it holds either way.
@@ -229,7 +265,10 @@ describe('the member-seat count is a server aggregate (AGL-1716)', () => {
     // The page window is a LOWER bound and this card's prior behaviour. A
     // defaulted 0 would read "0/50 collaborators" — the flattering
     // direction, on a site that is actually over.
-    await waitFor(() => expect(seatCaption()).toContain('25/50'))
-    expect(seatCaption()).not.toContain('0/50')
+    await waitFor(() => expect(seatCaption()).toContain(`${PAGE_ROWS}/50`))
+    // Anchored: a plain substring check for '0/50' also matches '10/50',
+    // which is the honest answer. The failure being guarded is a LEADING
+    // zero — "0/50 collaborators" on a site that is actually over.
+    expect(seatCaption()).not.toMatch(/\b0\/50/)
   })
 })

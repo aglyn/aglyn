@@ -23,22 +23,22 @@
 /**
  * AGL-2486 — the SSO button keeps the destination.
  *
- * Zach: "if you are logged out and it sets the continue url but you need to
- * sign in with sso and click the sso button the url does not carry the
- * continue url and is dropped entirely".
+ * A signed-out deep link sets a continue URL; taking the SSO route must not
+ * drop it.
  *
  * `AuthenticatedLayout` sends a session-less deep link to
  * `/signin?continue=…`, and `AuthenticatingLayout` — which wraps the WHOLE
  * `(auth)` group, `/sso` included — reads that param back and routes to it
  * once the user is signed in. The password, Google and passkey paths never
- * leave `/signin`, so the param is still on the URL when they finish. The SSO
- * button was `href="/sso"`, a bare string, so it navigated to a URL with no
- * `continue` on it at all and the layout had nothing to read. The enterprise
- * user authenticated perfectly and landed on the dashboard.
+ * leave `/signin`, so the param is still on the URL when they finish. An SSO
+ * button carrying a bare `href="/sso"` navigates to a URL with no `continue`
+ * on it at all, leaving the layout nothing to read: the enterprise user
+ * authenticates perfectly and lands on the dashboard instead of the page they
+ * asked for.
  *
- * This drives the real pages and reads the real anchors, because the defect
- * was ENTIRELY in a rendered href — a unit test of the URL builder would have
- * been green against the broken page. `AppLink` is mocked to a plain `<a>`
+ * This drives the real pages and reads the real anchors, because the failure
+ * lives ENTIRELY in a rendered href — a unit test of the URL builder is green
+ * against a page that drops it. `AppLink` is mocked to a plain `<a>`
  * that FORWARDS href, which the other specs in this suite deliberately do not
  * do; a mock that drops href is exactly the bug, and would report it fixed.
  */
@@ -93,7 +93,7 @@ jest.mock('@aglyn/shared-data-mdi', () => ({
   mdiGoogle: { path: 'M0 0' },
   mdiShieldKeyOutline: { path: 'M0 0' },
 }))
-// href IS the subject — a mock that swallows it makes this spec unable to
+// Href IS the subject — a mock that swallows it makes this spec unable to
 // fail, which is the trap the rest of the suite's `AppLink` mocks fall into.
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ children, href }: { children: ReactNode; href?: string }) => (

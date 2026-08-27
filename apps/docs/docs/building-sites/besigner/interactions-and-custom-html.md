@@ -10,8 +10,9 @@ description: Build element interactions in one dialog and drop sanitized custom 
 
 ## Fluent interactions
 
-Select any element and use **Add interaction** — everything configures in
-one dialog without leaving the besigner:
+Select any element, open the **Interactions** tab in the right-hand panel —
+beside Attributes and Styles — and use **Add interaction**. Everything
+configures in one dialog without leaving the besigner:
 
 - **Trigger**: when the element is clicked, **hovered**, the **hover
   ends**, or it scrolls into view.
@@ -22,9 +23,11 @@ one dialog without leaving the besigner:
   pure in-page choreography — available on **every plan** (see
   [Plan availability](#plan-availability)):
   - **Show / hide / show-hide an element** — pick any other canvas
-    element from a list; no selectors or classes needed. Add the
-    `aglyn-hidden` class to a target to start it hidden on the live
-    site. Each of these takes an optional **Delay** (a later
+    element from a list; no selectors or classes needed. Use the
+    target's **⋮ → Start hidden until an interaction shows it** to make
+    it start hidden on the live site and on the canvas; selecting it
+    opens it again while you design. (Not the eye on the Hierarchy row —
+    that hides an element outright, and nothing reveals it.) Each of these takes an optional **Delay** (a later
     show/hide on the same target cancels a pending one — the classic
     hover grace period) and, for steps that can show, **Close on
     Esc** / **Close on outside click** so a revealed panel dismisses
@@ -58,6 +61,32 @@ one dialog without leaving the besigner:
 
 Saved interactions are **enabled immediately** and appear on the element's
 Interactions list with edit (✎), enable/disable, and remove controls.
+
+## Interactions belong to the page they are on
+
+An interaction is stored **on the element**, inside the screen, layout,
+component or template that holds it. That is what makes the obvious things
+true:
+
+- it **publishes and rolls back with the page** — restoring an earlier
+  version restores the interactions that version had;
+- it **travels with the element** — duplicate a section, copy a component to
+  another site, or package a template, and the choreography arrives with it,
+  bound to the copy rather than the original;
+- it **is removed with the element** — deleting a button takes its click
+  behaviour with it, leaving nothing pointing at something that is gone;
+- it is **unsaved work until you save**, like any other edit, rather than
+  going live the moment the dialog closes.
+
+**Workflows → Actions is a different list.** Actions are things the *site*
+does — an order was placed, a form was submitted — so they are site-wide and
+live outside any one page. Interactions are things an *element* does, and
+they are edited only here, on the element.
+
+:::note Interactions you set up earlier
+Interactions created before this change are still listed on their element and
+still run. They are being moved onto their elements; nothing you need to do.
+:::
 
 ## Plan availability
 
@@ -102,8 +131,9 @@ yourself).
 - **Hover reveal**: *When hovered → Show an element* plus *When hover
   ends → Hide an element*, both at frequency *every time*.
 - **Mega menu from scratch** (no Mega Menu element): wrap a trigger
-  button and a panel in one Stack (panel: `aglyn-hidden` class,
-  position absolute below the trigger). On the wrapper: *When hovered →
+  button and a panel in one Stack (wrapper: position relative; panel:
+  **⋮ → Start hidden until an interaction shows it**, position absolute
+  below the trigger). On the wrapper: *When hovered →
   Show* the panel, *When hover ends → Hide* it with a small **Delay**
   (say 250ms) so the pointer can travel; add **Close on Esc** to the
   show step for keyboard dismissal. The **Dropdown Panel** preset

@@ -86,11 +86,23 @@ describe('docs security headers (AGL-1152)', () => {
     expect(siteWide).toBeDefined()
   })
 
-  it('sends a CSP with the three directives that are free on this origin', () => {
+  it('sends a CSP with the directives that are free on this origin', () => {
     const csp = valueOf('Content-Security-Policy')
     expect(csp).toContain("object-src 'none'")
     expect(csp).toContain("base-uri 'self'")
     expect(csp).toContain('frame-ancestors')
+  })
+
+  it('constrains workers and the manifest, which have no default-src to fall back to', () => {
+    // This policy carries NO `default-src`, so anything not named here is
+    // simply unconstrained — an injected script could start a worker from any
+    // origin, and a worker outlives the page that spawned it. Docs keeps its
+    // policy as a literal in vercel.json rather than sharing
+    // `baseCspDirectives`, so it is the one surface that can silently drift
+    // out of parity. That is what this asserts.
+    const csp = valueOf('Content-Security-Policy')
+    expect(csp).toContain("worker-src 'self' blob:")
+    expect(csp).toContain("manifest-src 'self'")
   })
 
   it('sends nosniff and a referrer policy', () => {

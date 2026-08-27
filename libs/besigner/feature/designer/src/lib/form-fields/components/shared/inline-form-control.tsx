@@ -16,6 +16,11 @@
  */
 
 import {
+  type FieldMuteAction,
+  FIELD_MUTED_STYLES,
+  FieldMuteButton,
+} from '@aglyn/shared-ui-jsx-forms'
+import {
   Box,
   FormControl,
   type FormControlProps,
@@ -25,20 +30,37 @@ import {
 } from '@mui/material'
 import { forwardRef } from 'react'
 
-export interface InlineFormControlProps
-  extends Omit<FormControlProps, 'onChange'> {
+export interface InlineFormControlProps extends Omit<
+  FormControlProps,
+  'onChange'
+> {
   onChange?: ToggleButtonGroupProps['onChange']
   value?: ToggleButtonGroupProps['value']
   label?: JSX.Children
   helperText?: JSX.Children
+  /**
+   * Switch this declaration off without losing it (AGL-2486). These rows are
+   * not grid-wrapped fields, so they carry the eye themselves — beside the
+   * label, where the row has room, rather than in a corner it does not have.
+   */
+  mute?: FieldMuteAction
 }
 
 export const InlineFormControl = forwardRef<any, InlineFormControlProps>(
   (props, forwardRef) => {
-    const { helperText, label, onChange, children, ...rest } = props
+    const { helperText, label, mute, onChange, children, ...rest } = props
 
     return (
-      <FormControl ref={forwardRef} margin="normal" fullWidth {...rest}>
+      <FormControl
+        ref={forwardRef}
+        margin="normal"
+        fullWidth
+        {...rest}
+        sx={[
+          mute?.muted ? FIELD_MUTED_STYLES : null,
+          ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx]),
+        ]}
+      >
         <Box
           sx={{
             display: 'inline-flex',
@@ -59,6 +81,7 @@ export const InlineFormControl = forwardRef<any, InlineFormControlProps>(
           >
             {label}
           </FormLabel>
+          <FieldMuteButton mute={mute} sx={{ ml: -0.5 }} />
           <Box
             sx={{
               // overflow: 'scroll',

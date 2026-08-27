@@ -45,7 +45,7 @@ export class AglynPreset<P = JSX.AnyProps> implements PresetSchema<P> {
   public displayName: string
   public icon: MdiIconProps
   public pluginId: PluginId
-  public interactions?: PresetInteractionSchema[]
+  public interactionTemplates?: PresetInteractionSchema[]
   public tags?: string[]
   public keywords?: string[]
 

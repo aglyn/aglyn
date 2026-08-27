@@ -168,7 +168,7 @@ describe('half 2 — a host with no designed screen keeps the fallback', () => {
     await waitFor(() =>
       expect(container.querySelector('footer')).toBeTruthy(),
     )
-    // The whole of Zach's complaint, asserted positively: a way out.
+    // The whole of the complaint, asserted positively: a way out.
     expect(screen.getByRole('navigation', { name: 'Site' })).toBeTruthy()
     expect(screen.getByRole('search')).toBeTruthy()
     expect(screen.queryByTestId('designed-screen')).toBeNull()

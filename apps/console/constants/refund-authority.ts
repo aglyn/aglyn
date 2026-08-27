@@ -18,7 +18,7 @@
 /**
  * HOW MUCH a staff member may refund, and on whose authority (AGL-2486).
  *
- * The refund card shipped `super`-only to issue. Zach's call is that support
+ * The refund card shipped `super`-only to issue. the call is that support
  * may refund up to a cap and escalate above it, and his reasoning is
  * operational rather than theoretical: nine days from launch the person a
  * customer actually reaches is support, and making them escalate a $12 refund
@@ -67,7 +67,7 @@
  * closed to the least privilege the way every staff route has since AGL-495.
  * `billing` is capped alongside `support` deliberately: it is the more
  * money-trusted of the two and already holds plan and quota overrides, but
- * Zach's decision named one ceiling, and quietly giving a second role a
+ * the decision named one ceiling, and quietly giving a second role a
  * different one is not a decision anybody made.
  */
 
