@@ -40,7 +40,13 @@ import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Stack, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
 import HostActivityTable from '../../../../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -449,23 +455,26 @@ SeoFormBody.displayName = 'SeoFormBody'
 
 /** Theme tab id (AGL-114); `/setup?tab=theme` deep links land here. */
 const THEME_TAB_ID = 'theme'
-/** Custom domain tab id (AGL-122); `/setup?tab=domain` deep links. */
-const DOMAIN_TAB_ID = 'domain'
-/** Activity tab id (AGL-249); `/setup?tab=activity` deep links. */
-const ACTIVITY_TAB_ID = 'activity'
 /** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
 const EMAILS_TAB_ID = 'emails'
+
 /**
- * Security tab id (AGL-1152); `/setup?tab=security` deep links here.
+ * The three tabs that moved to ADMIN (AGL-1485), kept here only to redirect.
  *
- * Home for the owner-controlled halves of this site's Content-Security-Policy.
- * Approved image hosts used to sit under Basic details, which was the right
- * call while it was the only one — a lone card does not earn a tab. It stops
- * being right the moment there are several, because "what may this site load,
- * and from where" is a question an owner comes here to answer deliberately,
- * not something to meet while scrolling past the site title.
+ * Setup answers "what is this site, and how does it behave for a visitor".
+ * Admin answers "what governs it as an object" — its address, its
+ * permissions, its history, its existence. Custom domain is ownership and
+ * infrastructure; Activity is an audit log; and Security is the one that was
+ * not a taste call, because all six approved-host fields are admin-only in
+ * the Firestore rules and an editor was being shown controls they could not
+ * write.
+ *
+ * They keep their ids, so a bookmarked `/setup?tab=security` still means
+ * exactly what it meant — it just arrives at the page that now holds it,
+ * rather than falling back to Basic details with nothing to say a link was
+ * ever valid.
  */
-const SECURITY_TAB_ID = 'security'
+const MOVED_TO_ADMIN_TAB_IDS = ['domain', 'security', 'activity'] as const
 
 /**
  * Every tab id this page renders, in nav order (AGL-2486).
@@ -485,10 +494,7 @@ export const SETUP_TAB_IDS = [
   seoSchema.id,
   trackingSchema.id,
   THEME_TAB_ID,
-  DOMAIN_TAB_ID,
-  SECURITY_TAB_ID,
   EMAILS_TAB_ID,
-  ACTIVITY_TAB_ID,
 ] as const
 
 const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
@@ -496,6 +502,17 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { queueLoading } = useLoading()
 
   const searchParams = useSearchParams()
+  const orgSlugForTabs = useOrgSlug()
+  const hostForTabs = useHostSubdomain()
+  /** Where each moved tab lives now, or nothing until the route resolves. */
+  const adminTabDestinations = useMemo(() => {
+    if (!orgSlugForTabs || !hostForTabs) return undefined
+    const admin = buildRoute(Route.HOST_ADMIN, {
+      orgSlug: orgSlugForTabs,
+      host: hostForTabs,
+    })
+    return Object.fromEntries(MOVED_TO_ADMIN_TAB_IDS.map((id) => [id, admin]))
+  }, [orgSlugForTabs, hostForTabs])
   /*
     Every tab this page has, DERIVED (AGL-2486).
 
@@ -512,6 +529,8 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { tab, onTabChange } = useTabParam({
     ids: SETUP_TAB_IDS,
     fallback: basicSchema.id,
+    // The three that moved to Admin keep their links (AGL-1485).
+    movedTo: adminTabDestinations,
     onChange: (value) => {
       const form = forms.find(({ schema }) => schema.id === value)
       // `analytics` is undefined whenever Firebase Analytics failed to
@@ -533,6 +552,8 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const router = useRouter()
+
+
   const pathname = usePathname()
   const {
     doc: {
@@ -959,10 +980,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         />
                       ))}
                       <Tab value={THEME_TAB_ID} label={'Theme'} />
-                      <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
-                      <Tab value={SECURITY_TAB_ID} label={'Security'} />
                       <Tab value={EMAILS_TAB_ID} label={'Emails'} />
-                      <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
                     </TabList>
                   </CardDisplay>
                 ),
@@ -1094,85 +1112,8 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         </>
                       ) : null}
                     </TabPanel>
-                    <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
-                      <Stack spacing={2}>
-                        <CustomDomainCard hostId={hostId} />
-                        {/* The badge is a fact about the PUBLISHED site, so
-                            it belongs beside the domain it is published on
-                            (AGL-2081). There is nothing to toggle — the
-                            entitlement is the switch — but "do my sites show
-                            the Aglyn badge" is a question an owner should be
-                            able to answer somewhere, and until now it was
-                            answerable nowhere in the console. */}
-                        <SiteBrandingBadgeCard />
-                      </Stack>
-                    </TabPanel>
-                    <TabPanel value={SECURITY_TAB_ID} sx={{ padding: 'unset' }}>
-                      <Stack spacing={3}>
-                        <ApprovedImageHostsCard hostId={hostId} />
-                        {/* One card per CSP directive an owner can widen.
-                            Each stores its own `host` array and the tenant
-                            reads the same names off the lockdown verdict — a
-                            control whose field the middleware does not read
-                            is a switch wired to nothing. */}
-                        <ApprovedImageHostsCard
-                          hostId={hostId}
-                          field="approvedMediaHosts"
-                          header="Approved media hosts"
-                          description="Video and audio your pages play from somewhere other than this site. Your own uploads always work — this is only for media you point at by URL."
-                          emptyHint="No external hosts approved. Pages can still play every file you upload here."
-                          placeholder="videos.example.com"
-                          privacyNote="Every host here can see the IP address of anyone who visits your site, because their browser fetches the media directly."
-                        />
-                        <ApprovedImageHostsCard
-                          hostId={hostId}
-                          field="approvedFontHosts"
-                          header="Approved font hosts"
-                          description="Web fonts your pages load from somewhere other than this site. Fonts you upload always work — this is only for fonts served by another host."
-                          emptyHint="No external hosts approved. Pages can still use every font you upload here."
-                          placeholder="fonts.gstatic.com"
-                          privacyNote="Every host here can see the IP address of anyone who visits your site, because their browser fetches the font directly — which is why a self-hosted font is the private option."
-                        />
-                        <ApprovedImageHostsCard
-                          hostId={hostId}
-                          field="approvedFormActions"
-                          header="Approved form destinations"
-                          description="Where your forms may submit to. Forms handled by this site always work — this is only for forms that post to another service."
-                          emptyHint="No external destinations approved. Forms can still post to this site."
-                          placeholder="forms.example.com"
-                          privacyNote="A form posts whatever the visitor typed. Approving a destination sends that data to it directly, so add one only if you intend it to receive submissions."
-                        />
-                        {/* Embeds and connections. These two govern the
-                            Custom HTML block as well as the site's own
-                            runtime: a browser applies the page's policy
-                            inside a `srcdoc` iframe too, so a pasted widget
-                            that calls out to its own service needs its host
-                            approved under Connections. */}
-                        <ApprovedImageHostsCard
-                          hostId={hostId}
-                          field="approvedFrameHosts"
-                          header="Approved embeds"
-                          description="Other sites your pages may embed in a frame — a map, a booking widget, a player we don't build in. YouTube, Vimeo and checkout already work without being listed."
-                          emptyHint="No external embeds approved. The built-in video, plugin and checkout embeds still work."
-                          placeholder="calendar.example.com"
-                          privacyNote="An embedded page sees the IP address of everyone who visits yours, and can set its own cookies in their browser."
-                        />
-                        <ApprovedImageHostsCard
-                          hostId={hostId}
-                          field="approvedConnectHosts"
-                          header="Approved connections"
-                          description="Services your pages may send requests to in the background — an embedded widget calling its own API, for example. Your own forms, analytics and checkout already work without being listed."
-                          emptyHint="No external connections approved. Everything this site does on its own still works."
-                          placeholder="api.example.com"
-                          privacyNote="A connection can carry anything the page has, including what a visitor typed. Approve a host only if you meant to send it data."
-                        />
-                      </Stack>
-                    </TabPanel>
                     <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
                       <SiteEmailsCard />
-                    </TabPanel>
-                    <TabPanel value={ACTIVITY_TAB_ID} sx={{ padding: 'unset' }}>
-                      <HostActivityTable hostId={hostId} />
                     </TabPanel>
                   </>
                 ),

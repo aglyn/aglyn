@@ -57,6 +57,21 @@ export interface UseTabParamOptions {
   fallback?: string
   /** Ran after a change — the pages log a `screen_view` here. */
   onChange?: (id: string) => void
+  /**
+   * Tabs that MOVED to another page, by id, mapped to the route that holds
+   * them now (AGL-1485).
+   *
+   * Falling back is right for a typo and wrong for a link that was valid last
+   * week: it lands the reader somewhere unrelated with nothing to say why. A
+   * moved id is sent on with the param intact, so a bookmarked
+   * `?tab=security` still means what it meant.
+   *
+   * Here rather than in an effect on the page, because this hook is the one
+   * place that reads the tab param — `tab-param-deep-links.spec.ts` enforces
+   * that, and it is right to: a second reader is a second answer waiting to
+   * disagree with this one.
+   */
+  movedTo?: Readonly<Record<string, string | undefined>>
 }
 
 export interface UseTabParamResult {
@@ -66,7 +81,7 @@ export interface UseTabParamResult {
 }
 
 export function useTabParam(options: UseTabParamOptions): UseTabParamResult {
-  const { ids, param = 'tab', fallback, onChange } = options
+  const { ids, param = 'tab', fallback, onChange, movedTo } = options
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -87,6 +102,16 @@ export function useTabParam(options: UseTabParamOptions): UseTabParamResult {
   useEffect(() => {
     setTab((current) => (current === resolved ? current : resolved))
   }, [resolved])
+
+  // A tab that moved pages takes its link with it. `replace`, not `push`, so
+  // Back goes where the reader came from rather than to the redirect.
+  const movedDestination = requested ? movedTo?.[requested] : undefined
+  useEffect(() => {
+    if (!movedDestination) return
+    router.replace(
+      `${movedDestination}?${param}=${encodeURIComponent(requested ?? '')}`,
+    )
+  }, [movedDestination, requested, param, router])
 
   const onTabChange = useCallback(
     (_event: unknown, value: string) => {

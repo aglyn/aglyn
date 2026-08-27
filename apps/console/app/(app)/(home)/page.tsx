@@ -25,6 +25,7 @@ import {
   ICON_VARIANT_ORGANIZATION,
 } from '@aglyn/shared-data-enums'
 import {
+  AppLink,
   CardDisplay,
   Container,
   GridItems,
@@ -323,20 +324,38 @@ function OrgJump() {
                       header={org.orgName ?? org.slug ?? org.$id}
                       subheader={org.slug ?? undefined}
                       actions={
-                        <Button
-                          variant="contained"
-                          disabled={!org.slug}
-                          onClick={() =>
-                            org.slug &&
-                            router.push(
-                              buildRoute(Route.HOST_LIST, {
-                                orgSlug: org.slug,
-                              }),
-                            )
-                          }
-                        >
-                          {'Open'}
-                        </Button>
+                        /*
+                         * A real anchor (AGL-1484). `router.push` from an
+                         * onClick renders a <button>, so this could not be
+                         * middle-clicked, ⌘-clicked, opened in a new tab, or
+                         * copied as a link — and opening one workspace beside
+                         * another is exactly what a list of workspaces is
+                         * for. The styling is unchanged: `AppLink` is the
+                         * component, MUI still draws the Button.
+                         *
+                         * An org with no slug has nowhere to link to, so it
+                         * stays a disabled button rather than an anchor whose
+                         * href would be a route with a hole in it.
+                         */
+                        org.slug ? (
+                          <Button
+                            variant="contained"
+                            component={AppLink as any}
+                            {...({
+                              componentVariant: 'naked',
+                              nativeButton: false,
+                            } as any)}
+                            href={buildRoute(Route.HOST_LIST, {
+                              orgSlug: org.slug,
+                            })}
+                          >
+                            {'Open'}
+                          </Button>
+                        ) : (
+                          <Button variant="contained" disabled>
+                            {'Open'}
+                          </Button>
+                        )
                       }
                     >
                       <Typography variant="body2" color="text.secondary">
