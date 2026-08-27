@@ -114,6 +114,21 @@ export enum Route {
   // reloaded, and reached from a listing to ship an update.
   ORG_MARKETPLACE_PUBLISH_PLUGIN = '/[orgSlug]/marketplace/publish/plugin',
   ORG_SETTINGS = '/[orgSlug]/settings',
+  /*
+   * Settings SECTIONS are routes (AGL-693). `HubTabs` mounted every panel —
+   * `keepMounted`, with `lazy` off by default and passed by nobody — so
+   * opening General also mounted the API-keys, SSO and data-export cards and
+   * ran every read in them. Routes mount one page and code-split per route.
+   * `ORG_SETTINGS` itself redirects to General.
+   */
+  ORG_SETTINGS_GENERAL = '/[orgSlug]/settings/general',
+  ORG_SETTINGS_PROFILE = '/[orgSlug]/settings/profile',
+  ORG_SETTINGS_PLUGINS = '/[orgSlug]/settings/plugins',
+  ORG_SETTINGS_API_KEYS = '/[orgSlug]/settings/api-keys',
+  ORG_SETTINGS_BRANDING = '/[orgSlug]/settings/branding',
+  ORG_SETTINGS_SSO = '/[orgSlug]/settings/sso',
+  ORG_SETTINGS_OWNERSHIP = '/[orgSlug]/settings/ownership',
+  ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
   MANAGE_BILLING = '/[orgSlug]/billing',
   // The ONE billing URL that carries no org (AGL-2430).
   //
@@ -341,6 +356,14 @@ export interface RoutePayload {
   [Route.MANAGE_USER_SETTINGS]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
+  [Route.ORG_SETTINGS_GENERAL]: { orgSlug: string }
+  [Route.ORG_SETTINGS_PROFILE]: { orgSlug: string }
+  [Route.ORG_SETTINGS_PLUGINS]: { orgSlug: string }
+  [Route.ORG_SETTINGS_API_KEYS]: { orgSlug: string }
+  [Route.ORG_SETTINGS_BRANDING]: { orgSlug: string }
+  [Route.ORG_SETTINGS_SSO]: { orgSlug: string }
+  [Route.ORG_SETTINGS_OWNERSHIP]: { orgSlug: string }
+  [Route.ORG_SETTINGS_DELETE]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }
   [Route.HOST_CONTENT_COLLECTION]: {

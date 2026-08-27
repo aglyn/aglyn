@@ -586,7 +586,16 @@ describe('both funnel call sites pass the summary (AGL-2154)', () => {
 
   it.each([
     ['billing', join(APP, 'billing', 'page.tsx')],
-    ['settings', join(APP, 'settings', 'page.tsx')],
+    /*
+     * The settings call site moved into the Delete section's own component
+     * when settings became routes (AGL-693). Same invariant, same funnel —
+     * only the file changed, and it changed because a page that renders every
+     * section at once stopped being one file.
+     */
+    [
+      'settings delete section',
+      join(__dirname, '..', 'settings', 'org-delete-card.component.tsx'),
+    ],
   ])('the %s page tells the funnel what the target will not fit', (_name, path) => {
     const source = readFileSync(path, 'utf8')
     const element = source.slice(source.indexOf('<RetentionFunnelDialog'))
