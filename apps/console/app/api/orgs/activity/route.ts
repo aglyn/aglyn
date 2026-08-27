@@ -23,6 +23,10 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import {
+  orgActivityScopePaths,
+  readActorActivity,
+} from '../../../../utils/server/actor-activity'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
 // what happened to this organization. A locked owner working out why they are
@@ -93,6 +97,32 @@ async function handler(request: Request): Promise<Response> {
       !(await memberHasOrgPermission(orgId, actor?.member, 'org.auditLog'))
     ) {
       return Response.json({ error: 'org.auditLog required' }, { status: 403 })
+    }
+    /**
+     * One member's activity across the WHOLE organization (AGL-1488).
+     *
+     * The feed below answers "what happened in this org", from the org's own
+     * activity collection. `actorId` asks a different question — "what has
+     * this person done here" — and the answer is not in that collection: most
+     * of what a member does happens on a SITE, and lands in
+     * `hosts/{hostId}/activity`. The team page's own "Activity by this
+     * member" card filtered the org feed client-side and so could only ever
+     * show the handful of org-level events.
+     *
+     * Same permission, deliberately. It is the same audit log read by a
+     * narrower question, so `org.auditLog` is the right gate for both — and
+     * the scope is bounded to this org's own sites, so it cannot become a
+     * cross-organization view of a person who is also a member elsewhere.
+     */
+    const actorId = String(query['actorId'] ?? '').trim()
+    if (actorId) {
+      const page = await readActorActivity({
+        actorId,
+        pageSize: Number(query['pageSize'] ?? 25),
+        cursor: String(query['cursor'] ?? '') || null,
+        scopePaths: await orgActivityScopePaths(orgId),
+      })
+      return Response.json(page, { status: 200 })
     }
     const snapshot = await firebaseAdmin
       .app()

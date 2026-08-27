@@ -45,6 +45,7 @@ import {
   activityTargetLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
+import { formatStaffTimestamp } from '../utils/staff-timestamps'
 
 export interface HostActivityTableProps {
   hostId: string
@@ -58,7 +59,14 @@ export interface HostActivityTableProps {
  */
 export function HostActivityTable(props: HostActivityTableProps) {
   const { hostId, pageSize = 25 } = props
-  const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
+  /*
+   * The link context is the CUSTOMER route's params, and this table also
+   * mounts on the staff host page (AGL-1488), whose route has neither. A
+   * target with no route to it renders as plain text rather than as an
+   * anchor to a URL with a hole in it — `activityHref` already answers
+   * undefined for an incomplete context, so nothing here has to decide.
+   */
+  const { orgSlug, host } = useParams<{ orgSlug?: string; host?: string }>()
   const firestore = useFirestore()
   const [rows, setRows] = useState<any[]>([])
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
@@ -155,7 +163,10 @@ export function HostActivityTable(props: HostActivityTableProps) {
             </TableHead>
             <TableBody>
               {rows.map((entry) => {
-                const href = activityHref(entry, { orgSlug, host })
+                const href =
+                  orgSlug && host
+                    ? activityHref(entry, { orgSlug, host })
+                    : undefined
                 const label = activityTargetLabel(entry.target)
                 return (
                 <TableRow key={entry.$id}>
@@ -171,7 +182,9 @@ export function HostActivityTable(props: HostActivityTableProps) {
                   </TableCell>
                   <TableCell>{entry.actorEmail ?? 'Someone'}</TableCell>
                   <TableCell>
-                    {entry.createdAt?.toDate?.().toLocaleString() ?? ''}
+                    {formatStaffTimestamp(
+                      entry.createdAt?.toDate?.() ?? null,
+                    )}
                   </TableCell>
                 </TableRow>
                 )

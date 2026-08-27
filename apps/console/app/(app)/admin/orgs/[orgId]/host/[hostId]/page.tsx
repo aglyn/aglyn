@@ -46,6 +46,7 @@ import { docsHelp } from '../../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
+import HostActivityTable from '../../../../../../../components/host-activity-table.component'
 import { StaffDomainCard } from '../../../../../../../components/staff-domain-card.component'
 
 /**
@@ -344,6 +345,22 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                       </Typography>
                     </Stack>
                   </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * The site's own activity log (AGL-1488).
+                   *
+                   * The same feed the owner reads on Setup → Activity, on the
+                   * page staff open when they are working out what happened
+                   * to a site. Reading it here meant leaving the staff
+                   * console, finding the org slug, and opening the customer's
+                   * own console — which is both slower and a different
+                   * permission story.
+                   */
+                  <HostActivityTable hostId={hostId} />
                 ),
               },
             ]}
