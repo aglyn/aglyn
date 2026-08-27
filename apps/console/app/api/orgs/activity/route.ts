@@ -26,6 +26,7 @@ import {
 import {
   orgActivityScopePaths,
   readActorActivity,
+  readOrgWideActivity,
 } from '../../../../utils/server/actor-activity'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
@@ -123,6 +124,25 @@ async function handler(request: Request): Promise<Response> {
         scopePaths: await orgActivityScopePaths(orgId),
       })
       return Response.json(page, { status: 200 })
+    }
+    /**
+     * The whole organization, sites included (AGL-1490).
+     *
+     * `scope=org-wide` because the default has a caller that depends on it:
+     * the team page's "Changes to this member" card reads the ORG collection
+     * and filters by target, and folding site activity into that would show
+     * a member's own page edits under a heading about changes made TO them.
+     *
+     * Without it, a card headed "Organization activity" tells a brand-new
+     * organization it has done nothing on the day it published three pages,
+     * because everything a team does happens on a SITE.
+     */
+    if (String(query['scope'] ?? '') === 'org-wide') {
+      const entries = await readOrgWideActivity({
+        orgId,
+        limit: Number(query['limit'] ?? WINDOW),
+      })
+      return Response.json({ entries }, { status: 200 })
     }
     const snapshot = await firebaseAdmin
       .app()

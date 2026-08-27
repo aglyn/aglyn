@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { readActorActivity } from '../../../../utils/server/actor-activity'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
@@ -66,6 +67,11 @@ async function handler(request: Request): Promise<Response> {
     })
     return Response.json(page, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a 500 (AGL-1993): an expired token
+    // answered as a server error tells the client to retry the same dead
+    // token, and tells us nothing is wrong.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Activity lookup failed' }, { status: 500 })
   }

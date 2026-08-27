@@ -44,6 +44,15 @@ export interface OrgActivityCardProps {
   /** Show only entries whose target is this id — changes made TO a
    * member/host/screen (AGL-389). */
   targetId?: string
+  /**
+   * Include the org's SITES, not just its org-level events (AGL-1490).
+   *
+   * Off by default because the two existing callers depend on the narrower
+   * feed: "Changes to this member" filters org entries by target, and folding
+   * site activity in would file a member's own page edits under a heading
+   * about changes made TO them.
+   */
+  orgWide?: boolean
 }
 
 /**
@@ -78,7 +87,14 @@ export interface OrgActivityCardProps {
  * 200-item array costs nothing.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
-  const { orgId, max = 20, header = 'Recent Activity', actorId, targetId } = props
+  const {
+    orgId,
+    max = 20,
+    header = 'Recent Activity',
+    actorId,
+    targetId,
+    orgWide,
+  } = props
   const { orgSlug } = useParams<{ orgSlug: string }>()
   const { data: user } = useUser()
   const [entries, setEntries] = useState<any[] | null>(null)
@@ -113,7 +129,9 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       if (!idToken) return
       try {
         const response = await fetch(
-          `/api/orgs/activity?orgId=${encodeURIComponent(orgId)}`,
+          `/api/orgs/activity?orgId=${encodeURIComponent(orgId)}${
+            orgWide ? `&scope=org-wide&limit=${max}` : ''
+          }`,
           { headers: { Authorization: `Bearer ${idToken}` } },
         )
         // A 403 is a real answer — this member's role does not carry
@@ -128,7 +146,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
     return () => {
       live = false
     }
-  }, [orgId, uid])
+  }, [orgId, uid, orgWide, max])
   // Filters (wave v5): free-text over action/actor plus a type select
   // when the entries carry one.
   const [filter, setFilter] = useState('')

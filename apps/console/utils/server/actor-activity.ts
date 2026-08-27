@@ -212,3 +212,76 @@ export async function orgActivityScopePaths(
   for (const doc of hosts.docs) paths.add(`hosts/${doc.id}`)
   return paths
 }
+
+
+/**
+ * Everything that happened in one organization, its SITES included
+ * (AGL-1490).
+ *
+ * `orgs/{orgId}/activity` holds only what happened at ORG level — an invite,
+ * a role change, a billing edit. Nearly everything a team actually does
+ * happens on a site and lands in `hosts/{hostId}/activity`, so a card reading
+ * the org collection alone tells a brand-new organization it has done
+ * nothing, on the day it published three pages.
+ *
+ * ## Why a fan-out rather than a collection group
+ *
+ * `readActorActivity` can use one collection-group query because it filters
+ * by `actorId` — a single person, a small result set. There is no equivalent
+ * filter for "this org": the org is a document's grandparent, not a field. A
+ * collection-group query with no filter would order every activity document
+ * on the platform by date and throw away all but this org's, which is the
+ * one shape that gets more expensive as other customers get busier.
+ *
+ * So: one bounded query per subject, merged by date here. The cost is a
+ * function of THIS org's site count, which is what it should be.
+ */
+export async function readOrgWideActivity(options: {
+  orgId: string
+  limit: number
+}): Promise<ActorActivityEntry[]> {
+  const firestore = firebaseAdmin.app().firestore()
+  const limit = Math.min(
+    Math.max(1, Math.floor(options.limit) || 25),
+    ACTOR_ACTIVITY_MAX_PAGE,
+  )
+  const paths = await orgActivityScopePaths(options.orgId)
+  const perSubject = await Promise.all(
+    [...paths].map(async (path) => {
+      const [collection, id] = path.split('/')
+      if (!collection || !id) return []
+      // `limit` from EACH, because the newest `limit` overall could all have
+      // come from one site. Taking fewer per subject to save reads would
+      // silently cap how much of a busy site can appear.
+      const snapshot = await firestore
+        .collection(collection)
+        .doc(id)
+        .collection('activity')
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get()
+        .catch(() => null)
+      return (snapshot?.docs ?? []).map((doc) => {
+        const data = doc.data() as Record<string, unknown>
+        const seconds = timestampSeconds(data['createdAt'])
+        return {
+          $id: doc.id,
+          scopePath: path,
+          ...describeScope(path),
+          action:
+            typeof data['action'] === 'string' ? data['action'] : undefined,
+          target: (data['target'] as Record<string, unknown> | null) ?? null,
+          actorEmail:
+            typeof data['actorEmail'] === 'string' ? data['actorEmail'] : null,
+          createdAt: seconds === null ? null : { seconds },
+        } satisfies ActorActivityEntry
+      })
+    }),
+  )
+  return perSubject
+    .flat()
+    // An entry with no timestamp sorts last rather than first: an unreadable
+    // date is not a reason to lead the feed with it.
+    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+    .slice(0, limit)
+}
