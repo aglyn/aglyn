@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -66,9 +67,6 @@ export interface MemberPostsCardProps {
  * while it was not. A refusal the operator can see is the fix.
  */
 
-/** Posts shown before "Load more". */
-const POSTS_PAGE_SIZE = 8
-
 const memberPostsHelp = pluginDocsHelp('membersOnly', {
   anchor: '#manage-your-members',
 })
@@ -90,8 +88,11 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
    */
   const {
     rows: posts,
-    hasMore: hasMorePosts,
-    loadMore: loadMorePosts,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
       query(
@@ -100,7 +101,7 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
         limit(pageLimit),
       ),
     [firestore, hostId],
-    { idField: '$id', pageSize: POSTS_PAGE_SIZE },
+    { idField: '$id' },
   )
   const { data: productDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'products'), limit(200)),
@@ -201,15 +202,14 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
             </Stack>
           ))
         )}
-        {hasMorePosts ? (
-          <Button
-            size="small"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={loadMorePosts}
-          >
-            {'Load more'}
-          </Button>
-        ) : null}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={posts.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
         <Button
           size="small"
           sx={{ alignSelf: 'flex-start' }}

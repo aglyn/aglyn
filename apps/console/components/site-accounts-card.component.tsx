@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   Button,
   Chip,
@@ -36,12 +37,14 @@ import {
   query,
 } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  usePagedCollection,
+} from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
+
 import SiteMemberDrawer from './site-member-drawer.component'
 
-const PAGE_SIZE = 25
 
 /**
  * Site users section (AGL-350): the visitor accounts created through the
@@ -55,24 +58,36 @@ const PAGE_SIZE = 25
 export function SiteAccountsCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
-  const [pageLimit, setPageLimit] = useState(PAGE_SIZE)
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const { data: memberDocs } = useFirestoreCollection<any>(
-    () =>
+  /*
+   * The console's shared paging (AGL-693). "Load more" decided there was more
+   * from `length >= limit`, which is wrong exactly when the count is an even
+   * multiple of the page size: a site with precisely fifty accounts offered a
+   * button that fetched nothing, and one with fifty-one looked the same.
+   */
+  const {
+    rows: memberDocs,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       query(
         collection(firestore, 'hosts', hostId, 'siteMembers'),
         orderBy('createdAt', 'desc'),
         limit(pageLimit),
       ),
-    [firestore, hostId, pageLimit],
+    [firestore, hostId],
     { idField: '$id' },
   )
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return memberDocs ?? []
-    return (memberDocs ?? []).filter(
+    if (!term) return memberDocs
+    return memberDocs.filter(
       (member: any) =>
         String(member.email ?? '')
           .toLowerCase()
@@ -85,7 +100,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
 
   // Resolved from the live docs so the drawer reflects rule-side updates.
   const selectedMember =
-    (memberDocs ?? []).find((member: any) => member.$id === selectedId) ?? null
+    memberDocs.find((member: any) => member.$id === selectedId) ?? null
 
   return (
     <CardDisplay
@@ -148,14 +163,14 @@ export function SiteAccountsCard(props: { hostId: string }) {
               ))}
             </TableBody>
           </Table>
-          {(memberDocs?.length ?? 0) >= pageLimit ? (
-            <Button
-              size="small"
-              onClick={() => setPageLimit((prev) => prev + PAGE_SIZE)}
-            >
-              {'Load more'}
-            </Button>
-          ) : null}
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visible.length}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </Stack>
       ) : (
         <Typography variant="body2" color="text.secondary">

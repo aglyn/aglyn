@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -56,9 +57,6 @@ export interface ReviewsModerationCardProps {
  * moderation queue whose approvals the renderer would never honour.
  */
 
-/** Reviews shown before "Load more". */
-const REVIEWS_PAGE_SIZE = 15
-
 const reviewsHelp = pluginDocsHelp('catalog', {
   anchor: '#products-options-and-variants',
   excerpt:
@@ -90,7 +88,10 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const {
     rows: reviews,
     hasMore,
-    loadMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
       query(
@@ -100,7 +101,7 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
         limit(pageLimit),
       ),
     [firestore, hostId, filter],
-    { idField: '$id', pageSize: REVIEWS_PAGE_SIZE },
+    { idField: '$id' },
   )
   const [replyFor, setReplyFor] = useState<string | null>(null)
   const [reply, setReply] = useState('')
@@ -219,15 +220,14 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
             </Stack>
           ))
         )}
-        {hasMore ? (
-          <Button
-            size="small"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={loadMore}
-          >
-            {'Load more'}
-          </Button>
-        ) : null}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={reviews.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </Stack>
     </CardDisplay>
     </EntitlementGatedCard>

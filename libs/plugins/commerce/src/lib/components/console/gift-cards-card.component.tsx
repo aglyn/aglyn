@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -49,9 +50,6 @@ export interface GiftCardsCardProps {
 }
 
 const usd = (cents: number | undefined) => `$${((cents ?? 0) / 100).toFixed(2)}`
-
-/** Cards shown before "Load more". */
-const CARDS_PAGE_SIZE = 25
 
 const giftCardsHelp = pluginDocsHelp('commerce', {
   anchor: '#gift-cards',
@@ -99,7 +97,10 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
   const {
     rows: allCards,
     hasMore,
-    loadMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
       query(
@@ -108,7 +109,7 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
         limit(pageLimit),
       ),
     [firestore, hostId],
-    { idField: '$id', pageSize: CARDS_PAGE_SIZE },
+    { idField: '$id' },
   )
   const [search, setSearch] = useState('')
   const [amount, setAmount] = useState('')
@@ -381,20 +382,19 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
           ) : (
             <Typography variant="body2" color="text.secondary">
               {search
-                ? 'No gift card loaded so far matches that code or email — ' +
-                  'load more to search further back.'
+                ? 'No gift card on this page matches that code or email — ' +
+                  'the search reads the page in front of you.'
                 : 'No gift cards yet. Sell a gift-card product, or issue one above.'}
             </Typography>
           )}
-          {hasMore ? (
-            <Button
-              size="small"
-              sx={{ alignSelf: 'flex-start' }}
-              onClick={loadMore}
-            >
-              {'Load more'}
-            </Button>
-          ) : null}
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={cards.length}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </Stack>
       </CardDisplay>
     </EntitlementGatedCard>

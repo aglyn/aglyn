@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -78,9 +79,6 @@ const day = (dayMs: number | undefined) =>
  * check-in/out, no-show, cancel, and walk-in creation. The storefront
  * widget books against the same docs.
  */
-/** Reservations shown before "Load more". */
-const RESERVATIONS_PAGE_SIZE = 20
-
 export function ReservationsCard(props: ReservationsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -116,7 +114,10 @@ export function ReservationsCard(props: ReservationsCardProps) {
   const {
     rows: reservations,
     hasMore,
-    loadMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
       query(
@@ -125,7 +126,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
         limit(pageLimit),
       ),
     [firestore, hostId],
-    { idField: '$id', pageSize: RESERVATIONS_PAGE_SIZE },
+    { idField: '$id' },
   )
   const resourceNames = useMemo(() => {
     const map: Record<string, string> = {}
@@ -463,15 +464,14 @@ export function ReservationsCard(props: ReservationsCardProps) {
             </Stack>
           ))
         )}
-        {hasMore ? (
-          <Button
-            size="small"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={loadMore}
-          >
-            {'Load more'}
-          </Button>
-        ) : null}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={reservations.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </Stack>
 
       <Dialog

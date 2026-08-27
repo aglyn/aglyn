@@ -52,6 +52,7 @@ jest.mock('./use-firestore-collection', () => ({
 }))
 
 import { usePagedCollection } from './use-paged-collection'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 
 const rowsNamed = (count: number) =>
   Array.from({ length: count }, (_, index) => ({ $id: `row-${index}` }))
@@ -80,7 +81,7 @@ describe('usePagedCollection', () => {
     render()
     // The probe row. Without it `hasMore` would have to guess from
     // `length === pageSize`, which is wrong exactly when the total is an even
-    // multiple of the page — offering a Load more that leads nowhere, or
+    // multiple of the page — offering a next page that leads nowhere, or
     // hiding one that leads somewhere.
     expect(limitsAsked[0]).toBe(4)
   })
@@ -99,32 +100,84 @@ describe('usePagedCollection', () => {
 
   it('a full page with no probe row is the LAST page', () => {
     // The even-multiple case: exactly pageSize rows exist. `hasMore` must be
-    // false, or the caller offers a Load more onto nothing.
+    // false, or the caller offers a next page onto nothing.
     docs = rowsNamed(3)
     const { result } = render()
     expect(result.current.rows).toHaveLength(3)
     expect(result.current.hasMore).toBe(false)
   })
 
-  it('loadMore widens the window by a page', () => {
-    docs = rowsNamed(4)
+  it('page two widens the query and slices the SECOND page out of it', () => {
+    /*
+     * The listener covers page 0..n rather than page n alone, because this is
+     * a live `onSnapshot` and a Firestore cursor needs a document snapshot to
+     * resume from — which a listener that never read page n-1 does not have.
+     * Widening is what makes forward and back symmetrical on one read path.
+     */
+    docs = rowsNamed(7)
     const { result } = render()
-    act(() => result.current.loadMore())
+    act(() => result.current.setPage(1))
     expect(limitsAsked.at(-1)).toBe(7)
-    expect(result.current.windowSize).toBe(6)
+    expect(result.current.rows.map((row) => row.$id)).toEqual([
+      'row-3',
+      'row-4',
+      'row-5',
+    ])
+    expect(result.current.page).toBe(1)
+  })
+
+  it('paging BACK costs no further read', () => {
+    docs = rowsNamed(7)
+    const { result } = render()
+    act(() => result.current.setPage(1))
+    const asked = limitsAsked.length
+    act(() => result.current.setPage(0))
+    // The rows are already in the snapshot; only the slice moves.
+    expect(result.current.rows.map((row) => row.$id)).toEqual([
+      'row-0',
+      'row-1',
+      'row-2',
+    ])
+    expect(limitsAsked.length).toBeLessThanOrEqual(asked + 1)
+  })
+
+  it('changing the page size returns to the FIRST page', () => {
+    // Page four of a ten-row list does not exist once the reader asks for
+    // fifty at a time, and an out-of-range page renders as an empty list with
+    // no explanation — which reads as the data having gone.
+    docs = rowsNamed(20)
+    const { result } = render()
+    act(() => result.current.setPage(2))
+    expect(result.current.page).toBe(2)
+    act(() => result.current.setPageSize(5))
+    expect(result.current.page).toBe(0)
+    expect(result.current.pageSize).toBe(5)
   })
 
   it('a NEW subject starts at page one again', () => {
-    // Without the reset, a card grown to a wide window on one site opens the
-    // next site just as wide — a read the reader never asked for, charged to
+    // Without the reset, a card paged three deep on one site opens the next
+    // site three pages in — a read the reader never asked for, charged to
     // whoever they switched to.
-    docs = rowsNamed(4)
+    docs = rowsNamed(20)
     const { result, rerender } = render()
-    act(() => result.current.loadMore())
-    expect(result.current.windowSize).toBe(6)
+    act(() => result.current.setPage(2))
+    expect(result.current.page).toBe(2)
     rerender({ scope: ['host-2'] })
-    expect(result.current.windowSize).toBe(3)
+    expect(result.current.page).toBe(0)
     expect(limitsAsked.at(-1)).toBe(4)
+  })
+
+  it('defaults to the console-wide page size when none is given', () => {
+    renderHook(() =>
+      usePagedCollection<{ $id: string }>(
+        (pageLimit) => {
+          limitsAsked.push(pageLimit)
+          return null
+        },
+        ['host-1'],
+      ),
+    )
+    expect(limitsAsked.at(-1)).toBe(TABLE_PAGE_SIZE_DEFAULT + 1)
   })
 
   it('passes the underlying read state through', () => {

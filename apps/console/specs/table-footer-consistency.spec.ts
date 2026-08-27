@@ -79,6 +79,40 @@ const SHARED_FOOTER: Array<[string, string]> = [
   ['actor activity', 'apps/console/components/actor-activity-table.component.tsx'],
   ['notifications', 'apps/console/app/(app)/manage/notifications/page.tsx'],
   ['staff lists', 'apps/console/components/staff-list-pagination.component.tsx'],
+  ['site collaborators', 'apps/console/components/host-members-card.component.tsx'],
+  ['site accounts', 'apps/console/components/site-accounts-card.component.tsx'],
+  // Plugin console cards are lists too, and were the worst of the four
+  // grammars: a big read sliced small, with no control at all.
+  ...(
+    [
+      'gift-cards-card',
+      'host-coupons-card',
+      'member-posts-card',
+      'reservations-card',
+      'reviews-moderation-card',
+    ].map((name) => [
+      `commerce ${name}`,
+      `libs/plugins/commerce/src/lib/components/console/${name}.component.tsx`,
+    ]) as Array<[string, string]>
+  ),
+]
+
+/**
+ * The two lists that keep "Load more", and why.
+ *
+ * Neither is a table. The DAM grid completes a SEARCH as it loads — it reads
+ * until the filter is satisfied or a document ceiling is hit (AGL-1460), so
+ * "how many pages" is not a question it can answer, and a page number would
+ * be a number about the wrong thing. The storefront product grid is a
+ * shopper's browse surface on a published site, where a pager is a different
+ * design decision from a console list's.
+ *
+ * Listed rather than skipped: an exclusion nobody wrote down is
+ * indistinguishable from one nobody noticed.
+ */
+const LOAD_MORE_ALLOWED = [
+  'apps/console/components/media/media-library.component.tsx',
+  'libs/plugins/commerce/src/lib/components/product-grid.tsx',
 ]
 
 /** A literal page-size array anywhere in a footer prop. */
@@ -211,5 +245,49 @@ describe('no list hand-rolls a pager (AGL-693)', () => {
     const source = read(path)
     expect(source).not.toMatch(LITERAL_OPTIONS)
     expect(source).not.toMatch(LITERAL_LABEL)
+  })
+})
+
+describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
+  const CONSOLE_ROOT = join(REPO, 'apps', 'console', 'components')
+  const PLUGIN_CONSOLE = join(
+    REPO,
+    'libs',
+    'plugins',
+    'commerce',
+    'src',
+    'lib',
+    'components',
+  )
+  // The literal, not one JSX spelling of it: the storefront grid writes
+  // `{loadingMore ? 'Loading…' : 'Load more'}`, which a check for
+  // `{'Load more'}` walks straight past.
+  const LOADS_MORE = /'Load more'/
+  const repoRelative = (path: string) => path.replace(`${REPO}/`, '')
+
+  it('THE CONTROL: the check catches both spellings', () => {
+    expect(LOADS_MORE.test(`<Button>{'Load more'}</Button>`)).toBe(true)
+    expect(
+      LOADS_MORE.test(`{loadingMore ? 'Loading…' : 'Load more'}`),
+    ).toBe(true)
+    expect(LOADS_MORE.test(`<ListPagination page={0} />`)).toBe(false)
+  })
+
+  it('only the two documented grids still grow instead of paging', () => {
+    const offenders = [
+      ...tsxFilesUnder(CONSOLE_ROOT),
+      ...tsxFilesUnder(PLUGIN_CONSOLE),
+    ]
+      .filter((path) => LOADS_MORE.test(readFileSync(path, 'utf8')))
+      .map(repoRelative)
+      .filter((path) => !LOAD_MORE_ALLOWED.includes(path))
+    expect(offenders).toEqual([])
+  })
+
+  it('the allowlist names files that EXIST and still load more', () => {
+    // An allowlist entry that has gone stale silently widens the exemption.
+    for (const path of LOAD_MORE_ALLOWED) {
+      expect(read(path)).toMatch(LOADS_MORE)
+    }
   })
 })

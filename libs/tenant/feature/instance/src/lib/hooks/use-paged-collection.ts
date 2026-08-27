@@ -24,6 +24,7 @@ import {
   useState,
   type DependencyList,
 } from 'react'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   useFirestoreCollection,
   type UseFirestoreCollectionOptions,
@@ -32,23 +33,29 @@ import {
 
 export interface UsePagedCollectionOptions
   extends UseFirestoreCollectionOptions {
-  /** Rows per page. The window grows by this much per `loadMore()`. */
+  /**
+   * Rows per page. Defaults to the console-wide smallest option — a list
+   * that picks its own number is how five different ones appear, and on a
+   * query bounded by its page size the smallest page is the smallest bill.
+   */
   pageSize?: number
 }
 
 export interface UsePagedCollectionResult<T>
   extends UseFirestoreCollectionResult<T> {
-  /** The page. `data` holds the over-fetched probe row; this never does. */
+  /** The current page's rows. `data` holds the probe row; this never does. */
   rows: T[]
   /** A further page exists. A FACT from the probe row, not a guess. */
   hasMore: boolean
-  loadMore: () => void
-  /** Rows the window currently admits — what "showing N" should print. */
-  windowSize: number
+  /** Zero-based, to match `ListPagination` and MUI. */
+  page: number
+  setPage: (page: number) => void
+  pageSize: number
+  setPageSize: (pageSize: number) => void
 }
 
 /**
- * A growing window over a collection, instead of a big read sliced small.
+ * A paged window over a live collection, instead of a big read sliced small.
  *
  * ## The shape this replaces
  *
@@ -60,22 +67,33 @@ export interface UsePagedCollectionResult<T>
  * indication that ten more exist; past three hundred, a card issued this
  * morning cannot be reached at all.
  *
- * Here the window IS the query. A page costs `pageSize + 1` reads, and
- * `loadMore` widens it.
+ * Here the window IS the query, and it is expressed in PAGES so the same
+ * `ListPagination` footer serves this and a cursor feed. The listener is
+ * widened to cover every page up to the one being read, so paging BACK costs
+ * nothing — the rows are already in the snapshot — and paging forward costs
+ * one page more.
+ *
+ * ## Why the window covers page 0..n rather than page n alone
+ *
+ * This is a live `onSnapshot`, not a fetch. Firestore cursors need a document
+ * snapshot to resume from, which a listener that has never read page n - 1
+ * does not have. Widening the limit is what makes forward and backward
+ * symmetrical without a second read path, and the cost is bounded by how deep
+ * the reader actually goes — with the shared default of ten, page three is
+ * thirty-one documents, and most readers never leave page one.
  *
  * ## Why over-fetch by one
  *
  * `hasMore` has to be a fact. Comparing `length === limit` is wrong exactly
  * when the count is an even multiple of the page size — the case that offers
- * a "Load more" leading nowhere, or hides one that leads somewhere. The probe
- * row answers it outright and is dropped before render.
+ * a "next page" leading nowhere, or hides one that leads somewhere. The probe
+ * row answers it outright and is never rendered.
  *
  * ## Why the window resets on `deps`
  *
  * `deps` identify the SUBJECT being listened to. Without the reset, a card
- * grown to two hundred rows on one site opens the next site two hundred rows
- * deep — a read the reader never asked for, charged to whoever they switched
- * to.
+ * paged three deep on one site opens the next site three pages in — a read
+ * the reader never asked for, charged to whoever they switched to.
  *
  * `buildQuery` receives the limit to apply, so the caller keeps ownership of
  * ordering and predicates:
@@ -88,7 +106,7 @@ export interface UsePagedCollectionResult<T>
  *               orderBy('createdAt', 'desc'), limit(pageLimit))
  *       : null,
  *   [firestore, hostId],
- *   { idField: '$id', pageSize: 25 },
+ *   { idField: '$id' },
  * )
  * ```
  */
@@ -97,8 +115,10 @@ export function usePagedCollection<T = DocumentData>(
   deps: DependencyList,
   options: UsePagedCollectionOptions = {},
 ): UsePagedCollectionResult<T> {
-  const { pageSize = 25, ...collectionOptions } = options
-  const [windowSize, setWindowSize] = useState(pageSize)
+  const { pageSize: initialPageSize = TABLE_PAGE_SIZE_DEFAULT, ...collectionOptions } =
+    options
+  const [pageSize, setPageSizeState] = useState(initialPageSize)
+  const [page, setPage] = useState(0)
   const buildQueryRef = useRef(buildQuery)
   buildQueryRef.current = buildQuery
 
@@ -108,10 +128,12 @@ export function usePagedCollection<T = DocumentData>(
    * Query.
    */
   useEffect(() => {
-    setWindowSize(pageSize)
+    setPage(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, pageSize])
+  }, [...deps])
 
+  // Everything up to and including the page being read, plus the probe row.
+  const windowSize = pageSize * (page + 1)
   const result = useFirestoreCollection<T>(
     () => buildQueryRef.current(windowSize + 1),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,13 +143,16 @@ export function usePagedCollection<T = DocumentData>(
 
   const hasMore = (result.data?.length ?? 0) > windowSize
   const rows = useMemo(
-    () => (result.data ?? []).slice(0, windowSize),
-    [result.data, windowSize],
+    () => (result.data ?? []).slice(page * pageSize, windowSize),
+    [result.data, page, pageSize, windowSize],
   )
-  const loadMore = useCallback(
-    () => setWindowSize((size) => size + pageSize),
-    [pageSize],
-  )
+  const setPageSize = useCallback((next: number) => {
+    setPageSizeState(next)
+    // Page four of a ten-row list does not exist once the reader asks for
+    // fifty at a time, and an out-of-range page renders as an empty list
+    // with no explanation — which reads as the data having gone.
+    setPage(0)
+  }, [])
 
-  return { ...result, rows, hasMore, loadMore, windowSize }
+  return { ...result, rows, hasMore, page, setPage, pageSize, setPageSize }
 }

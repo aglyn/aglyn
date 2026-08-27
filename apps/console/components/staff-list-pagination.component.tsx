@@ -19,12 +19,6 @@
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { StaffListPagination } from '../hooks/use-staff-list-pagination'
 
-/**
- * What the staff list ROUTES page at. Not a choice this control makes — it
- * mirrors `PAGE_SIZE` in `/api/admin/orgs` so the count line adds up.
- */
-const STAFF_ROUTE_PAGE_SIZE = 25
-
 export interface StaffListPaginationControlsProps<TRow> {
   /** The value returned by `useStaffListPagination`. */
   pagination: StaffListPagination<TRow>
@@ -36,6 +30,13 @@ export interface StaffListPaginationControlsProps<TRow> {
    * that nobody is missing.
    */
   shown?: number
+  /**
+   * Offer the size menu. Off for a list whose size the ROUTE dictates — the
+   * Users list pages at Firebase Auth's width because anything smaller hides
+   * tenant-pool accounts, and a menu there would offer a choice the request
+   * cannot honor.
+   */
+  sizeMenu?: boolean
 }
 
 /**
@@ -48,26 +49,25 @@ export interface StaffListPaginationControlsProps<TRow> {
  * because a control that appears only once there is more than one page is a
  * control staff cannot learn.
  *
- * ⚠️ No size menu yet, and that is a property of what is behind it: the page
- * size is fixed by the ROUTE (`/api/admin/orgs` pages 25, the Users list pages
- * through Firebase Auth), so offering the menu would offer a choice the
- * request cannot carry. Passing `onPageSizeChange` is all this needs once
- * those routes take a size.
+ * The size menu is real: `useStaffListPagination` carries the choice into
+ * each request, and both staff list routes clamp it to the shared options.
+ * Changing it discards every cursor collected so far — a cursor names a
+ * position in a walk of a given width, and under a different width it points
+ * somewhere else.
  */
 export default function StaffListPaginationControls<TRow>({
   pagination,
   shown,
+  sizeMenu = true,
 }: StaffListPaginationControlsProps<TRow>) {
-  const { rows, pageIndex, hasMore, loading, loadPage } = pagination
+  const { rows, pageIndex, hasMore, loading, loadPage, pageSize, setPageSize } =
+    pagination
   const count = shown === undefined ? (rows?.length ?? 0) : shown
   if (!rows?.length) return null
   return (
     <ListPagination
       page={pageIndex}
-      // The size the routes actually serve. Stated rather than guessed: the
-      // count line is arithmetic over it, so a wrong number here would read
-      // as a wrong total.
-      pageSize={STAFF_ROUTE_PAGE_SIZE}
+      pageSize={pageSize}
       rowCount={count}
       hasMore={hasMore}
       disabled={loading}
@@ -75,6 +75,7 @@ export default function StaffListPaginationControls<TRow>({
         if (next === pageIndex) return
         void loadPage(next)
       }}
+      onPageSizeChange={sizeMenu ? setPageSize : undefined}
     />
   )
 }

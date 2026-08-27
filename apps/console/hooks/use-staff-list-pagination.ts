@@ -17,6 +17,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 
 /**
  * ONE cursor-pagination mechanism for the staff list screens (AGL-2486).
@@ -69,6 +70,7 @@ export interface UseStaffListPaginationOptions<TRow> {
   fetchPage: (
     cursor: string | null,
     pageIndex: number,
+    pageSize: number,
   ) => Promise<StaffListPage<TRow>>
   /** Reported to the caller so each screen keeps its own wording. */
   onError?: (error: unknown) => void
@@ -78,6 +80,16 @@ export interface UseStaffListPaginationOptions<TRow> {
    * turns true; it is not a permanent opt-out.
    */
   enabled?: boolean
+  /**
+   * The page size to start at, when the ROUTE dictates one.
+   *
+   * The Users list does: `listUsersAcrossPools` only appends tenant-pool
+   * users once the project-level walk has run out of pages, so a smaller page
+   * would push every enterprise SSO account behind several Next clicks — the
+   * invisible-users bug AGL-1122 fixed. Its size is Firebase Auth's, not a
+   * preference, and it renders without the menu.
+   */
+  pageSize?: number
 }
 
 export interface StaffListPagination<TRow> {
@@ -85,6 +97,17 @@ export interface StaffListPagination<TRow> {
   pageIndex: number
   hasMore: boolean
   loading: boolean
+  /** Rows the ROUTE is asked for — the console-wide default until changed. */
+  pageSize: number
+  /**
+   * Change it, and restart the walk.
+   *
+   * A cursor names a position in a walk of a given width; the same cursor
+   * under a different page size points somewhere else entirely, so every
+   * cursor collected so far is discarded rather than reused. Restarting at
+   * page 0 is the only honest answer.
+   */
+  setPageSize: (pageSize: number) => void
   /** Load a page by index. Only an index whose cursor is known is reachable. */
   loadPage: (index: number) => Promise<void>
   /** Re-read the page currently shown — the post-mutation refresh. */
@@ -101,11 +124,13 @@ export function useStaffListPagination<TRow>({
   fetchPage,
   onError,
   enabled = true,
+  pageSize: initialPageSize = TABLE_PAGE_SIZE_DEFAULT,
 }: UseStaffListPaginationOptions<TRow>): StaffListPagination<TRow> {
   const [rows, setRows] = useState<TRow[]>([])
   const [pageIndex, setPageIndex] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [pageSize, setPageSizeState] = useState(initialPageSize)
   // Cursor that STARTS each page; page 0 has none.
   const pageCursorsRef = useRef<Array<string | null>>([null])
 
@@ -114,7 +139,7 @@ export function useStaffListPagination<TRow>({
       setLoading(true)
       try {
         const cursor = pageCursorsRef.current[index] ?? null
-        const page = await fetchPage(cursor, index)
+        const page = await fetchPage(cursor, index, pageSize)
         setRows(page?.rows ?? [])
         const more =
           page?.hasMore === undefined
@@ -135,7 +160,7 @@ export function useStaffListPagination<TRow>({
         setLoading(false)
       }
     },
-    [fetchPage, onError],
+    [fetchPage, onError, pageSize],
   )
 
   const showRows = useCallback((next: TRow[]) => {
@@ -153,7 +178,26 @@ export function useStaffListPagination<TRow>({
 
   const refresh = useCallback(() => void loadPage(pageIndex), [loadPage, pageIndex])
 
-  return { rows, pageIndex, hasMore, loading, loadPage, refresh, showRows }
+  const setPageSize = useCallback((next: number) => {
+    // Every cursor collected so far described a walk of the OLD width and
+    // points somewhere else under the new one, so they go rather than get
+    // reused. The effect below reloads page 0.
+    pageCursorsRef.current = [null]
+    setPageSizeState(next)
+    setPageIndex(0)
+  }, [])
+
+  return {
+    rows,
+    pageIndex,
+    hasMore,
+    loading,
+    pageSize,
+    setPageSize,
+    loadPage,
+    refresh,
+    showRows,
+  }
 }
 
 export default useStaffListPagination

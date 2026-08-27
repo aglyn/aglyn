@@ -133,6 +133,10 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    */
   const pageRowsRef = useRef<Map<number, AdminUser[]>>(new Map())
 
+  /** What `/api/admin/users` asks Firebase Auth for. Mirrored so the footer's
+   * count line is arithmetic over the real page and not a guess. */
+  const AUTH_LIST_PAGE_SIZE = 200
+
   const fetchUsersPage = useCallback(
     async (cursor: string | null, index: number) => {
       const idToken = await (user as any)?.getIdToken?.()
@@ -160,12 +164,19 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const reportUsersError = useCallback(() => {
     enqueueSnackbar('Could not load users', { variant: 'error' })
   }, [enqueueSnackbar])
-  // Previous/Next, the same mechanism the Organizations list uses (AGL-2486);
-  // the page size is Firebase Auth's, applied by /api/admin/users.
+  /*
+   * The console's shared footer (AGL-693), with the size menu deliberately
+   * off. The page size here is Firebase Auth's, applied by
+   * `/api/admin/users`: `listUsersAcrossPools` only appends tenant-pool users
+   * once the project-level walk has run out of pages, so a smaller page would
+   * push every enterprise SSO account behind several Next clicks. That is the
+   * invisible-users bug AGL-1122 fixed, and it is not worth a menu.
+   */
   const pagination = useStaffListPagination<AdminUser>({
     fetchPage: fetchUsersPage,
     onError: reportUsersError,
     enabled: Boolean(isStaff),
+    pageSize: AUTH_LIST_PAGE_SIZE,
   })
   const { rows: users, pageIndex, refresh, showRows } = pagination
 
@@ -554,6 +565,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   is the screen staff check when they think an account is
                   missing, so it must not claim a row it did not draw. */}
               <StaffListPaginationControls
+                sizeMenu={false}
                 pagination={pagination}
                 shown={visible.length}
               />

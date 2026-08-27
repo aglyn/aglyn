@@ -85,13 +85,15 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // cheap fix for that was a second copy of this block. The page size is the
   // route's (`PAGE_SIZE`, 25), not the screen's; nothing here decides it.
   const fetchOrgsPage = useCallback(
-    async (cursor: string | null) => {
+    async (cursor: string | null, _pageIndex: number, pageSize: number) => {
       const idToken = await (user as { getIdToken?: () => Promise<string> })
         ?.getIdToken?.()
-      const response = await fetch(
-        `/api/admin/orgs${cursor ? `?after=${encodeURIComponent(cursor)}` : ''}`,
-        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
-      )
+      const url = new URL('/api/admin/orgs', window.location.origin)
+      url.searchParams.set('pageSize', String(pageSize))
+      if (cursor) url.searchParams.set('after', cursor)
+      const response = await fetch(url.toString(), {
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+      })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload?.error ?? 'Failed')
       return {

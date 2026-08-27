@@ -18,6 +18,7 @@
 
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -46,9 +47,6 @@ export interface HostCouponsCardProps {
  * `hosts/{hostId}/coupons/{CODE}`; the discounts engine (AGL-305)
  * supersedes these.
  */
-/** Coupons shown before "Load more". */
-const COUPONS_PAGE_SIZE = 40
-
 export function HostCouponsCard(props: HostCouponsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -66,12 +64,15 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
   const {
     rows: couponDocs,
     hasMore,
-    loadMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
       query(collection(firestore, 'hosts', hostId, 'coupons'), limit(pageLimit)),
     [firestore, hostId],
-    { idField: '$id', pageSize: COUPONS_PAGE_SIZE },
+    { idField: '$id' },
   )
   const coupons = [...couponDocs].sort((a: any, b: any) =>
     String(a.$id).localeCompare(String(b.$id)),
@@ -158,15 +159,14 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
             </Stack>
           ))
         )}
-        {hasMore ? (
-          <Button
-            size="small"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={loadMore}
-          >
-            {'Load more'}
-          </Button>
-        ) : null}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={coupons.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
         <Button
           size="small"
           sx={{ alignSelf: 'flex-start' }}
