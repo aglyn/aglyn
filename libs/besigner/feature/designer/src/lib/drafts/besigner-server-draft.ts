@@ -124,18 +124,54 @@ export function serverDraftRef(firestore: Firestore, ids: BesignerDraftIds) {
  * Writes the working draft. Resolves false rather than throwing when the
  * target cannot hold one, so a caller does not have to re-derive that.
  */
+/**
+ * What a draft save did.
+ *
+ * `unchanged` is a SUCCESS, not a failure: the draft already holds this tree.
+ * Distinguished from `written` because the two deserve different words on
+ * screen — "Draft saved" said four times over an untouched document is how a
+ * reader stops believing the message (AGL-1483).
+ */
+export type ServerDraftWrite = 'written' | 'unchanged' | 'failed'
+
+/**
+ * The tree last written to each draft, by path.
+ *
+ * Module scope, so all three editors get the check without repeating it, and
+ * so it survives a re-render rather than a mount.
+ *
+ * A LOCAL baseline, deliberately, where `handleSave` insists on comparing
+ * against the stored document. The two are guarding opposite mistakes.
+ * `handleSave` must never skip a write that is needed, so a baseline that
+ * lies would lose work and it re-reads to be sure. Here a stale baseline
+ * only ever causes an extra identical write, which costs one document and
+ * changes nothing — while reading the draft back on every click would cost a
+ * Firestore read per click for a check nothing depends on.
+ */
+const lastWritten = new Map<string, string>()
+
 export async function writeServerDraft(
   firestore: Firestore,
   ids: BesignerDraftIds,
   draft: BesignerServerDraft,
-): Promise<boolean> {
+): Promise<ServerDraftWrite> {
   const ref = serverDraftRef(firestore, ids)
-  if (!ref) return false
+  if (!ref) return 'failed'
+  // Keyed on the whole payload, not just the nodes: a draft carries the base
+  // stamp it was taken against, and one taken against a newer document is a
+  // different draft even when the tree is identical.
+  const fingerprint = JSON.stringify([
+    draft.nodes,
+    draft.baseStamp ?? null,
+    draft.updatedByUid ?? null,
+  ])
+  if (lastWritten.get(ref.path) === fingerprint) return 'unchanged'
   // Not `merge`: a draft is the whole working tree, and merging a smaller
   // tree into a larger one would leave nodes from a previous save behind —
   // the shape of AGL-1445, where a partial write resurrects deleted content.
   await setDoc(ref, { ...draft, updatedAt: serverTimestamp() })
-  return true
+  lastWritten.set(ref.path, fingerprint)
+  return 'written'
 }
 
 export async function readServerDraft(
@@ -170,6 +206,10 @@ export async function clearServerDraft(
 ): Promise<void> {
   const ref = serverDraftRef(firestore, ids)
   if (!ref) return
+  // Forget the fingerprint with the draft. Otherwise the next save of the
+  // same tree — a publish, then an undo back to it — would report itself
+  // unchanged against a draft that no longer exists.
+  lastWritten.delete(ref.path)
   // Best effort: a publish that succeeded must not report failure because the
   // tidy-up afterwards did. A stale draft is offered, not applied.
   await deleteDoc(ref).catch(() => undefined)

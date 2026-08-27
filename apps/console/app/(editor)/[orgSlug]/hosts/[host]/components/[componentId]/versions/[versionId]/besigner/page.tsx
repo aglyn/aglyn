@@ -587,10 +587,22 @@ function ComponentBesignerPage(props) {
         updatedByUid: user?.uid ?? null,
         updatedByEmail: user?.email ?? null,
       },
-    ).catch(() => false)
-    if (!wrote) {
+    ).catch(() => 'failed' as const)
+    if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
+        persist: false,
+      })
+      return
+    }
+    // Nothing new to store, and saying so is the point (AGL-1483). The
+    // control stays clickable on purpose — a disabled Save is a dead control
+    // the one time it matters (AGL-1262) — so the answer has to come from
+    // the click, and "Draft saved" four times over an untouched document is
+    // how a reader stops believing the message.
+    if (wrote === 'unchanged') {
+      enqueueSnackbar('Already saved — the draft is up to date.', {
+        variant: 'info',
         persist: false,
       })
       return
@@ -611,11 +623,53 @@ function ComponentBesignerPage(props) {
     enqueueSnackbar,
   ])
 
+  /**
+   * Do the live sites already match this version?
+   *
+   * A component is live only once its tree has been promoted onto the PARENT
+   * document — the pointer alone is not enough, which is the asymmetry with
+   * screens. An unpublished draft makes the sites out of date just as surely
+   * as an unpromoted save does.
+   *
+   * Hoisted out of the button's props (AGL-1483) because the HANDLER needs
+   * the same answer: it is the difference between "nothing to publish" and
+   * "saved, but the live site is still behind".
+   */
+  const livePublished =
+    publishedVersionId === versionId &&
+    !savedSincePublish &&
+    !draftPending &&
+    !draft.available
+
   const handleSaveAndPublish = useCallback(async () => {
     if (publishing) return
     savedLandedRef.current = false
     await handleSave()
-    if (!savedLandedRef.current) return
+    /**
+     * A save that did not write is not a reason to stop (AGL-1483).
+     *
+     * It used to be: the guard returned unless the write landed, so a version
+     * that was already saved but not yet promoted could not be published at
+     * all — the button said Publish and silently did nothing, which is the
+     * state the split label exists to name.
+     *
+     * Two different "did not write" cases, and only one of them should stop
+     * here. A REFUSAL — a size guard, a concurrent edit — has already told
+     * the author why, and promoting past it would push a canvas the document
+     * does not hold. NOTHING TO SAVE is not a refusal: the document already
+     * has the tree, so the promote is exactly the step that is left.
+     *  is what tells them apart, and it is also what makes a
+     * second click on an up-to-date document say so instead of republishing.
+     */
+    if (!savedLandedRef.current) {
+      if (livePublished) {
+        return enqueueSnackbar('Already published — the live sites match this version.', {
+          variant: 'info',
+          persist: false,
+        })
+      }
+      if (remoteChanged) return
+    }
     await promoteToSites()
     void clearServerDraft(firestore, {
       scope: hostId,
@@ -628,6 +682,9 @@ function ComponentBesignerPage(props) {
     publishing,
     handleSave,
     promoteToSites,
+    livePublished,
+    remoteChanged,
+    enqueueSnackbar,
     firestore,
     hostId,
     componentId,
@@ -867,14 +924,7 @@ function ComponentBesignerPage(props) {
                           // A component is live only once its tree has been promoted onto
                           // the PARENT document — the pointer alone is not enough, which
                           // is the asymmetry with screens this whole change is about.
-                          livePublished={
-                            publishedVersionId === versionId &&
-                            !savedSincePublish &&
-                            // An unpublished draft makes the sites out of date
-                            // just as surely as an unpromoted save does.
-                            !draftPending &&
-                            !draft.available
-                          }
+                          livePublished={livePublished}
                           publishBlockedReason={
                             canPublish ? undefined : publishBlock
                           }

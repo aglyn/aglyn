@@ -729,10 +729,22 @@ function BesignerPage(props) {
         updatedByUid: user?.uid ?? null,
         updatedByEmail: user?.email ?? null,
       },
-    ).catch(() => false)
-    if (!wrote) {
+    ).catch(() => 'failed' as const)
+    if (wrote === 'failed') {
       enqueueSnackbar('Could not save the draft — your work is still here.', {
         variant: 'error',
+        persist: false,
+      })
+      return
+    }
+    // Nothing new to store, and saying so is the point (AGL-1483). The
+    // control stays clickable on purpose — a disabled Save is a dead control
+    // the one time it matters (AGL-1262) — so the answer has to come from
+    // the click, and "Draft saved" four times over an untouched document is
+    // how a reader stops believing the message.
+    if (wrote === 'unchanged') {
+      enqueueSnackbar('Already saved — the draft is up to date.', {
+        variant: 'info',
         persist: false,
       })
       return
@@ -767,10 +779,47 @@ function BesignerPage(props) {
    * `onSaved` was already doing — so the action is the same shape either way
    * and the author does not have to know which case they are in.
    */
+  /**
+   * Does the live site already match this version? Hoisted out of the
+   * button's props (AGL-1483) because the HANDLER needs the same answer — it
+   * is the difference between "nothing to publish" and "saved, but the live
+   * site is still behind". A draft found on OPEN counts too, not just one
+   * saved in this session, or reopening the tab reports the site as up to
+   * date while yesterday's draft is still waiting.
+   */
+  const livePublished =
+    screenResult?.data?.versionId === versionId &&
+    !draftPending &&
+    !draft.available
+
   const handleSaveAndPublish = useCallback(async () => {
     savedLandedRef.current = false
     await handleSave()
-    if (!savedLandedRef.current) return
+    /**
+     * A save that did not write is not a reason to stop (AGL-1483).
+     *
+     * It used to be: the guard returned unless the write landed, so a version
+     * that was already saved but not yet promoted could not be published at
+     * all — the button said Publish and silently did nothing, which is the
+     * state the split label exists to name.
+     *
+     * Two different "did not write" cases, and only one should stop here. A
+     * REFUSAL — a size guard, a concurrent edit — has already told the author
+     * why, and promoting past it would push a canvas the document does not
+     * hold. NOTHING TO SAVE is not a refusal: the document already has the
+     * tree, so the promote is exactly the step left. `livePublished` tells
+     * them apart, and is also what makes a second click on an up-to-date
+     * document say so instead of republishing.
+     */
+    if (!savedLandedRef.current) {
+      if (livePublished) {
+        return enqueueSnackbar(
+          'Already published — the live site matches this version.',
+          { variant: 'info', persist: false },
+        )
+      }
+      if (remoteChanged) return
+    }
     const livePointer = screenResult?.data?.versionId
     if (livePointer !== versionId) {
       await updateScreenDoc({ versionId } as any)
@@ -796,6 +845,8 @@ function BesignerPage(props) {
     )
   }, [
     handleSave,
+    livePublished,
+    remoteChanged,
     screenResult?.data?.versionId,
     versionId,
     updateScreenDoc,
@@ -1399,14 +1450,7 @@ function BesignerPage(props) {
                           }
                           onSaveAndPublish={handleSaveAndPublish}
                           // Live only when the parent's pointer names THIS version.
-                          livePublished={
-                            screenResult?.data?.versionId === versionId &&
-                            // A draft found on OPEN counts too, not just one saved in this
-                            // session — otherwise reopening the tab reports the site as up
-                            // to date while yesterday's draft is still waiting.
-                            !draftPending &&
-                            !draft.available
-                          }
+                          livePublished={livePublished}
                           onPreview={handlePreview}
                           liveUrl={liveUrl}
                           liveUnavailableReason={liveUnavailableReason}
