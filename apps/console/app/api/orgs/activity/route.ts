@@ -154,11 +154,12 @@ async function handler(request: Request): Promise<Response> {
      * because everything a team does happens on a SITE.
      */
     if (String(query['scope'] ?? '') === 'org-wide') {
-      const entries = await readOrgWideActivity({
+      const page = await readOrgWideActivity({
         orgId,
-        limit: Number(query['limit'] ?? WINDOW),
+        limit: Number(query['pageSize'] ?? query['limit'] ?? WINDOW),
+        cursor: String(query['cursor'] ?? '') || null,
       })
-      return Response.json({ entries }, { status: 200 })
+      return Response.json(page, { status: 200 })
     }
     /**
      * Changes made TO one member, host or screen (AGL-389).

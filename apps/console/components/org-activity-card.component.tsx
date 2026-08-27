@@ -54,8 +54,9 @@ export interface OrgActivityCardProps {
    * site activity in would file a member's own page edits under a heading
    * about changes made TO them.
    *
-   * This scope is a fan-out merged by date rather than one collection, so it
-   * has no cursor to continue from and the pager below stays hidden for it.
+   * The scope is a fan-out merged by date rather than one collection, so its
+   * cursor is a timestamp plus the ids already shown at that instant — see
+   * `readOrgWideActivity`. Opaque from here, like any other cursor.
    */
   orgWide?: boolean
 }
@@ -164,14 +165,13 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         if (!idToken) return
         const url = new URL('/api/orgs/activity', window.location.origin)
         url.searchParams.set('orgId', orgId)
-        if (orgWide) {
-          url.searchParams.set('scope', 'org-wide')
-          url.searchParams.set('limit', String(pageSize))
-        } else {
-          url.searchParams.set('pageSize', String(pageSize))
-          if (targetId) url.searchParams.set('targetId', targetId)
-          if (cursor) url.searchParams.set('cursor', cursor)
-        }
+        url.searchParams.set('pageSize', String(pageSize))
+        // The org-wide scope is a fan-out merged by date, and its cursor is a
+        // time rather than a document — but it is a cursor, so this side does
+        // not have to know the difference.
+        if (orgWide) url.searchParams.set('scope', 'org-wide')
+        else if (targetId) url.searchParams.set('targetId', targetId)
+        if (cursor) url.searchParams.set('cursor', cursor)
         const response = await fetch(url.toString(), {
           headers: { Authorization: `Bearer ${idToken}` },
         })
@@ -250,9 +250,8 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   }, [entries, filter, typeFilter])
 
   // A pager on a single-page feed is furniture. It appears once there is
-  // somewhere to go — and never for the org-wide fan-out, which has no
-  // cursor to offer.
-  const paged = !orgWide && (page > 0 || Boolean(nextCursor))
+  // somewhere to go, which the org-wide fan-out can now say as well.
+  const paged = page > 0 || Boolean(nextCursor)
 
   return (
     <CardDisplay

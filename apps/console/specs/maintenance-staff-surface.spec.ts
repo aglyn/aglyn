@@ -141,7 +141,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           }
           return mockEmptyQuery()
         },
-        collectionGroup: () => ({ get: async () => ({ docs: [] }) }),
+        /*
+         * The claim walk, modelled rather than stubbed. The reaper pages the
+         * collection group and deletes exactly the objects nothing claims, so
+         * a double that answered `get()` without the ordering and cursor the
+         * real walk uses would let a change that stopped walking pass.
+         */
+        collectionGroup: () => {
+          const page = () => ({
+            orderBy: () => page(),
+            select: () => page(),
+            limit: () => page(),
+            startAfter: () => page(),
+            get: async () => ({ empty: true, docs: [] }),
+          })
+          return page()
+        },
         getAll: async () => [],
         batch: () => ({
           delete: () => {

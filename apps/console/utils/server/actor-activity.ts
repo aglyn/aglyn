@@ -236,29 +236,92 @@ export async function orgActivityScopePaths(
  * So: one bounded query per subject, merged by date here. The cost is a
  * function of THIS org's site count, which is what it should be.
  */
+/**
+ * Where a merged fan-out left off.
+ *
+ * A single-collection cursor can be a document path, because "the row after
+ * that one" is a question one query can answer. A merge has no such row: the
+ * next page begins part-way through several subjects at once, and the only
+ * thing they share is the clock.
+ *
+ * So the cursor is a TIME plus the ids already emitted AT that time. The time
+ * alone is not enough — a strict `<` would drop every entry sharing the
+ * boundary second (a save and its revalidation, a bulk role change land in
+ * the same second routinely), and a non-strict `<=` would repeat them. The id
+ * list is what makes `<=` safe: re-read the boundary second, discard what has
+ * already been shown.
+ */
+interface OrgWideCursor {
+  /** `createdAt` seconds of the last row emitted. */
+  seconds: number
+  /** Ids already emitted whose `createdAt` is exactly `seconds`. */
+  ids: string[]
+}
+
+const encodeOrgWideCursor = (cursor: OrgWideCursor): string =>
+  Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
+
+function decodeOrgWideCursor(raw: string | null | undefined): OrgWideCursor | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
+    const seconds = Number(parsed?.seconds)
+    if (!Number.isFinite(seconds)) return null
+    const ids = Array.isArray(parsed?.ids) ? parsed.ids.map(String) : []
+    return { seconds, ids }
+  } catch {
+    // An unreadable cursor restarts at the top rather than throwing. A stale
+    // Next in an open tab should not turn the feed into a 500.
+    return null
+  }
+}
+
+export interface OrgWideActivityPage {
+  entries: ActorActivityEntry[]
+  /** Opaque; hand it back to continue. `null` at the end of the feed. */
+  nextCursor: string | null
+}
+
 export async function readOrgWideActivity(options: {
   orgId: string
   limit: number
-}): Promise<ActorActivityEntry[]> {
+  cursor?: string | null
+}): Promise<OrgWideActivityPage> {
   const firestore = firebaseAdmin.app().firestore()
   const limit = Math.min(
     Math.max(1, Math.floor(options.limit) || 25),
     ACTOR_ACTIVITY_MAX_PAGE,
   )
+  const cursor = decodeOrgWideCursor(options.cursor)
   const paths = await orgActivityScopePaths(options.orgId)
   const perSubject = await Promise.all(
     [...paths].map(async (path) => {
       const [collection, id] = path.split('/')
       if (!collection || !id) return []
-      // `limit` from EACH, because the newest `limit` overall could all have
-      // come from one site. Taking fewer per subject to save reads would
-      // silently cap how much of a busy site can appear.
-      const snapshot = await firestore
+      // `limit + 1` from EACH, because the newest `limit` overall could all
+      // have come from one site — taking fewer per subject to save reads
+      // would silently cap how much of a busy site can appear. The extra row
+      // is what tells a full subject from an exhausted one.
+      //
+      // `select` because the merge reads four fields and a version of an
+      // activity document can carry considerably more. It does not change
+      // what Firestore bills — that is per document — only what crosses the
+      // wire.
+      let query = firestore
         .collection(collection)
         .doc(id)
         .collection('activity')
         .orderBy('createdAt', 'desc')
-        .limit(limit)
+        .select('action', 'target', 'actorEmail', 'createdAt')
+      if (cursor) {
+        query = query.where(
+          'createdAt',
+          '<=',
+          firebaseAdmin.firestore.Timestamp.fromMillis(cursor.seconds * 1000),
+        )
+      }
+      const snapshot = await query
+        .limit(limit + 1)
         .get()
         .catch(() => null)
       return (snapshot?.docs ?? []).map((doc) => {
@@ -278,10 +341,40 @@ export async function readOrgWideActivity(options: {
       })
     }),
   )
-  return perSubject
+
+  const alreadyShown = new Set(cursor?.ids ?? [])
+  const merged = perSubject
     .flat()
+    .filter((entry) => !alreadyShown.has(entry.$id))
     // An entry with no timestamp sorts last rather than first: an unreadable
     // date is not a reason to lead the feed with it.
     .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
-    .slice(0, limit)
+
+  const entries = merged.slice(0, limit)
+  const last = entries[entries.length - 1]
+  const lastSeconds = last?.createdAt?.seconds ?? null
+  /*
+   * More to come only when this page was FULL and the boundary second is
+   * readable. A short page means every subject ran out; a final row with no
+   * timestamp cannot be a cursor, and continuing from a guess would repeat or
+   * skip rows rather than admit the feed ended.
+   */
+  const hasMore = merged.length > limit && lastSeconds !== null
+  return {
+    entries,
+    nextCursor: hasMore
+      ? encodeOrgWideCursor({
+          seconds: lastSeconds,
+          // Everything shown at the boundary second, including what an
+          // earlier page showed there — otherwise a second spanning three
+          // pages would serve its first page's rows again on the third.
+          ids: [
+            ...(cursor?.seconds === lastSeconds ? (cursor?.ids ?? []) : []),
+            ...entries
+              .filter((entry) => entry.createdAt?.seconds === lastSeconds)
+              .map((entry) => entry.$id),
+          ],
+        })
+      : null,
+  }
 }
