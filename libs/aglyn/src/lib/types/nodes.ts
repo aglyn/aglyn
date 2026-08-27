@@ -41,6 +41,7 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type React from 'react'
 import type { ComponentClass, ComponentProps } from 'react'
 import type { NODE_ROOT_ID } from '../canvas-manager'
+import type { NodeInteraction } from '../app-utils/node-interactions'
 
 import type { FEATURE_FLAG, FieldComponentType } from '../foundation'
 import type { PluginId } from '../plugin-manager'
@@ -368,6 +369,40 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    * beats the component's own default.
    */
   attrOverrides?: Record<string, Record<string, unknown>>
+  /**
+   * Interactions this element carries (AGL-1478) — the click, hover and
+   * scroll-into-view choreography authored on it in the besigner.
+   *
+   * ## Why they live on the NODE
+   *
+   * They used to be rows in `hosts/{hostId}/actions`, bound to an element by
+   * a `[data-aglyn="leaf:<id>"]` selector — the same collection the Workflows
+   * page lists. An interaction is not a site-wide automation, and storing it
+   * as one had four consequences, every one of them a thing an author would
+   * expect to work:
+   *
+   * - it was not versioned with the document, so it neither published nor
+   *   rolled back with the screen it belongs to;
+   * - it did not travel with a component copied to another site, or packaged
+   *   into a template or a plugin — the element arrived inert;
+   * - deleting the element left the action behind, pointing at a selector
+   *   nothing resolves;
+   * - and a nav's hover choreography sat in the site's automation list
+   *   beside "when an order is placed", which is a different kind of thing.
+   *
+   * Host actions remain, and remain the right home for a genuine site event.
+   * The split is the concept: an ACTION is something the site does, an
+   * INTERACTION is something an element does.
+   *
+   * ## Shape
+   *
+   * Deliberately the same `HostAction` the automations engine already takes,
+   * so nothing about the runtime changes: the selector is stamped from this
+   * node's own id when the page is composed, and the compiled result is the
+   * shape the client engine has always consumed. `trigger.selector` is
+   * therefore ignored here — the node IS the selector.
+   */
+  interactions?: NodeInteraction[]
   /**
    * The computed node parent (only for type completion)
    */

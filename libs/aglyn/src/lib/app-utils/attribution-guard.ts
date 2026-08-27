@@ -36,12 +36,12 @@
  *
  * - **Restore into a closed shadow root.** No selector crosses a shadow
  *   boundary, so the CSS above stops matching, and `document.querySelector`
- *   cannot find the contents to remove them. The host element carries a
+ *   cannot find the contents to remove them. The mount element carries a
  *   name minted per page load, so a stylesheet cannot name it either, and its
  *   own layout properties are set inline `!important` — the highest
  *   precedence an author-origin declaration has, which a stylesheet rule of
  *   any specificity cannot beat.
- * - **Put it back.** Removing the host re-appends it; overwriting its styles
+ * - **Put it back.** Removing the mount re-appends it; overwriting its styles
  *   re-asserts them.
  * - **Say so.** A suppression that had to be repaired is reported once per
  *   page view, so the site becomes reviewable rather than quietly
@@ -109,7 +109,7 @@ let installed = false
  * Kept so a test can take them off the document again. In a browser they run
  * for the life of the page, which is the point — a keeper that stops keeping
  * is the same as no keeper — but a test document outlives the test, and an
- * observer left watching `body` puts its host back the moment the next test
+ * observer left watching `body` puts its mount back the moment the next test
  * clears the page.
  */
 const keepers: MutationObserver[] = []
@@ -164,7 +164,7 @@ export function inspectAttributionElement(
 }
 
 /** A tag name no stylesheet written before this page load can name. */
-function mintHostName(view: Window & typeof globalThis): string {
+function mintMountName(view: Window & typeof globalThis): string {
   const bytes = new Uint8Array(8)
   if (view.crypto?.getRandomValues) view.crypto.getRandomValues(bytes)
   const suffix = Array.from(bytes, (byte) =>
@@ -181,11 +181,11 @@ function mintHostName(view: Window & typeof globalThis): string {
  * overwrite `style` as easily as a stylesheet can lose to it.
  *
  * Writes only what is actually wrong. The observer that calls this watches
- * the host's `style` attribute, so an unconditional write is a mutation that
+ * the mount's `style` attribute, so an unconditional write is a mutation that
  * schedules the observer that performs the write — the loop does not
  * terminate, and it is not slow enough to look like anything but a hang.
  */
-function pinHostStyle(host: HTMLElement, corner: 'left' | 'right'): void {
+function pinMountStyle(mount: HTMLElement, corner: 'left' | 'right'): void {
   const pinned: Array<[string, string]> = [
     ['position', 'fixed'],
     ['bottom', '12px'],
@@ -205,12 +205,12 @@ function pinHostStyle(host: HTMLElement, corner: 'left' | 'right'): void {
   ]
   for (const [property, value] of pinned) {
     if (
-      host.style.getPropertyValue(property) === value &&
-      host.style.getPropertyPriority(property) === 'important'
+      mount.style.getPropertyValue(property) === value &&
+      mount.style.getPropertyPriority(property) === 'important'
     ) {
       continue
     }
-    host.style.setProperty(property, value, 'important')
+    mount.style.setProperty(property, value, 'important')
   }
 }
 
@@ -268,30 +268,30 @@ export function installAttributionGuard(
     restored.add(subject)
     try {
       const corner = subject === 'report' ? 'left' : 'right'
-      const host = doc.createElement(mintHostName(view))
-      pinHostStyle(host as HTMLElement, corner)
-      const root = host.attachShadow({ mode: 'closed' })
+      const mount = doc.createElement(mintMountName(view))
+      pinMountStyle(mount as HTMLElement, corner)
+      const root = mount.attachShadow({ mode: 'closed' })
       const clone = original.cloneNode(true) as HTMLElement
-      // The clone is positioned by its host now, not by its own `fixed`
+      // The clone is positioned by its mount now, not by its own `fixed`
       // coordinates, or the two would stack in the same corner.
       clone.style.setProperty('position', 'static', 'important')
       clone.style.setProperty('display', 'inline-flex', 'important')
       root.appendChild(clone)
-      doc.body.appendChild(host)
+      doc.body.appendChild(mount)
 
       // Put it back if it is taken off, and re-pin the styles if they are
-      // overwritten. Watching the host's own attributes as well as the body's
+      // overwritten. Watching the mount's own attributes as well as the body's
       // children covers both moves with one observer.
       const keeper = new MutationObserver(() => {
         try {
-          if (!host.isConnected) doc.body.appendChild(host)
-          pinHostStyle(host as HTMLElement, corner)
+          if (!mount.isConnected) doc.body.appendChild(mount)
+          pinMountStyle(mount as HTMLElement, corner)
         } catch {
           // Ditto.
         }
       })
       keeper.observe(doc.body, { childList: true })
-      keeper.observe(host, { attributes: true, attributeFilter: ['style'] })
+      keeper.observe(mount, { attributes: true, attributeFilter: ['style'] })
       keepers.push(keeper)
     } catch {
       // Ditto: a browser without shadow DOM keeps the original element and

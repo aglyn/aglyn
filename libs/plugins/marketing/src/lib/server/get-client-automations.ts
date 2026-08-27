@@ -55,6 +55,20 @@ export async function getClientAutomations(options: {
   /** Leading-slash page path for pathPattern targeting. */
   path: string
   /**
+   * The composed nodes of the page being rendered (AGL-1478).
+   *
+   * Interactions authored on an element live ON the node, so they arrive with
+   * the document rather than from a second query — which is the point: they
+   * publish and roll back with the screen, they travel with a copied
+   * component, and they are gone when the element is. The host's `actions`
+   * collection keeps carrying genuine site-event automations, and both
+   * compile through the same compiler below so the client engine sees one
+   * shape.
+   *
+   * Costs nothing to read: these nodes are already in hand for the render.
+   */
+  nodes?: Iterable<Aglyn.InteractionNode | null | undefined>
+  /**
    * `actions` entitlement (AGL-577). Basic presentational steps
    * (menu/drawer/show-hide/class/nav/alert) always load; the advanced
    * client steps (overlay/showHtml/analytics) and server steps are
@@ -72,10 +86,24 @@ export async function getClientAutomations(options: {
       tags: [tenantDataTag(options.hostId)],
       read: () => readHostActions(options.hostId),
     })
+    /**
+     * The document's own interactions, merged before the compile (AGL-1478).
+     *
+     * AFTER the host actions, so an element's own choreography enrols last
+     * and a site-wide automation on the same event still runs first — the
+     * order a page is read in.
+     *
+     * Deliberately OUTSIDE the cache above. That entry is keyed on the host
+     * and shared by every path on the site; these belong to one page, and
+     * putting them in would serve one screen's interactions to another.
+     */
+    const withNodeInteractions = options.nodes
+      ? [...actions, ...Aglyn.collectNodeInteractions(options.nodes)]
+      : actions
     // Shared mapping (AGL-830): the same pure compiler the editor Preview
     // uses, so live and preview trim + shape automations identically. Run per
     // render, never cached — see `HOST_ACTIONS_TTL_SECONDS`.
-    return compileClientAutomations(actions, {
+    return compileClientAutomations(withNodeInteractions, {
       path: options.path,
       actionsEntitled: options.actionsEntitled,
       allowJs: options.allowJs,
