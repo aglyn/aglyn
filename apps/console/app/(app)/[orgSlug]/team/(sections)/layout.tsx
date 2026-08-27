@@ -19,10 +19,10 @@
 
 import { mdiAccountMultipleOutline } from '@aglyn/shared-data-mdi'
 import { Container } from '@aglyn/shared-ui-jsx'
+import { HubSections } from '@aglyn/shared-ui-next/components/hub-tabs'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import SectionNavLayout from '../../../../../components/layouts/section-nav.layout'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 import type { ReactNode } from 'react'
@@ -54,8 +54,8 @@ export default function TeamSectionsLayout({ children }: { children: ReactNode }
       }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <SectionNavLayout
-          items={[
+        <HubSections
+          sections={[
             {
               href: buildRoute(Route.MANAGE_TEAM_MEMBERS, { orgSlug }),
               label: 'Members',
@@ -81,7 +81,7 @@ export default function TeamSectionsLayout({ children }: { children: ReactNode }
           ]}
         >
           {children}
-        </SectionNavLayout>
+        </HubSections>
       </Container>
     </DashboardLayout>
   )

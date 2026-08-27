@@ -85,8 +85,6 @@ const CARD_EXCEPTIONS: Record<string, string> = {
     'The workspace picker on the org-agnostic billing entry point (AGL-2430) — the same navigational card the org jump page renders, and exempt for the same reason: it names one of the reader\'s own workspaces and claims nothing about billing. The surface itself carries help="billing" on its DashboardLayout, which is where the explanation belongs.',
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/admin/page.tsx#"Navigation"':
     'A vertical TabList — the page\'s own navigation rail, not a feature. Its two tabs (Plugins, Danger zone) each open a card that carries its own help, so a help icon here would explain the act of clicking a tab.',
-  'apps/console/components/layouts/section-nav.layout.tsx#{header}':
-    'The SHARED section rail (AGL-693), and exempt for the same reason as the hand-rolled one above it: the card is the page\'s own navigation, and every section it leads to carries its own help. A help icon here would explain the act of clicking a link. Each surface keeps its explanation on its DashboardLayout, which is where a reader looks for what the page is.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {
