@@ -179,4 +179,55 @@ describe('/api/edit-hint/set (AGL-1842)', () => {
     expect(response.headers.get('Location')).toBe(RETURN_URL)
     expect(response.headers.getSetCookie()).toHaveLength(0)
   })
+
+  /*
+   * A workspace subdomain IS the console (AGL-627).
+   *
+   * `acme.aglyn.com` serves the console with the org already named in the
+   * host. The allowlist only knew `app.`, so an editor working there had
+   * their once-a-day bounce refused and landed on a bare "Invalid return
+   * target" — ejected from their own console by a background convenience
+   * whose whole cost was supposed to be one redirect flash.
+   */
+  it('bounces back to a WORKSPACE subdomain of the console', async () => {
+    const response = await GET(
+      bounceRequest({
+        sig: freshSig(),
+        returnUrl: 'https://aglyn-org.aglyn.com/hosts/site-1',
+      }),
+    )
+    expect(response.status).toBe(302)
+    expect(response.headers.get('Location')).toBe(
+      'https://aglyn-org.aglyn.com/hosts/site-1',
+    )
+    expect(response.headers.getSetCookie()).toHaveLength(2)
+  })
+
+  it('still refuses a LOOKALIKE of the console apex', async () => {
+    // The widening is one label on the front of a known apex, never a
+    // suffix test: `endsWith('aglyn.com')` also matches `evil-aglyn.com`,
+    // and an open redirect on an aglyn.app URL is a phishing primitive.
+    for (const target of [
+      'https://evil-aglyn.com/',
+      'https://aglyn.com.evil.test/',
+      'https://a.b.aglyn.com/',
+      'http://aglyn-org.aglyn.com/',
+    ]) {
+      const response = await GET(
+        bounceRequest({ sig: freshSig(), returnUrl: target }),
+      )
+      expect([target, response.status]).toEqual([target, 400])
+      expect(response.headers.getSetCookie()).toHaveLength(0)
+    }
+  })
+
+  it('refuses the tenant apex itself, which is not a console at all', async () => {
+    const response = await GET(
+      bounceRequest({
+        sig: freshSig(),
+        returnUrl: 'https://northwind-coffee.aglyn.app/',
+      }),
+    )
+    expect(response.status).toBe(400)
+  })
 })

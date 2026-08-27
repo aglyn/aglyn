@@ -101,6 +101,56 @@ function consoleReturnAllowlist(): Set<string> {
   return origins
 }
 
+/**
+ * Is this a console origin, INCLUDING a workspace subdomain?
+ *
+ * The set above holds the console's canonical origins, and for a long time
+ * that was the whole story. It stopped being true with AGL-627: a workspace
+ * is reachable at its own subdomain of the console apex — `acme.aglyn.com`,
+ * which serves the console with the org already named, so the path does not
+ * repeat it.
+ *
+ * A person working on `acme.aglyn.com` therefore had their once-a-day bounce
+ * refused and landed on a bare `Invalid return target`, because the only
+ * origins on the list began with `app.`. The bounce is a background
+ * convenience nobody asked for; being ejected onto an error page by it is the
+ * worst possible outcome of a feature whose entire cost was meant to be one
+ * redirect flash.
+ *
+ * ⚠️ This must stay a SUBDOMAIN test against a known console apex, never a
+ * suffix test. `endsWith('aglyn.com')` also matches `evil-aglyn.com`, and the
+ * thing being guarded is an open redirect on an `aglyn.app` URL — a phishing
+ * primitive, per this module's own note. Same scheme, same port, one extra
+ * label: that is the whole widening.
+ *
+ * A console on a CUSTOM domain is deliberately still refused. Proving one
+ * would mean asking the console's `console-domain-verdict` endpoint on every
+ * bounce, and an allowlist that makes a network call is one that fails open
+ * the day that call times out.
+ */
+function isConsoleReturnOrigin(destination: URL): boolean {
+  const allowed = consoleReturnAllowlist()
+  if (allowed.has(destination.origin)) return true
+  return [...allowed].some((entry) => {
+    let apex: URL
+    try {
+      apex = new URL(entry)
+    } catch {
+      return false
+    }
+    if (apex.protocol !== destination.protocol) return false
+    if (apex.port !== destination.port) return false
+    // `app.aglyn.com` → `aglyn.com`; a workspace subdomain is one label on
+    // the front of that, and nothing deeper.
+    const parts = apex.hostname.split('.')
+    if (parts.length < 3) return false
+    const base = parts.slice(1).join('.')
+    const host = destination.hostname
+    if (!host.endsWith(`.${base}`)) return false
+    return host.slice(0, -(base.length + 1)).split('.').length === 1
+  })
+}
+
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const sig = url.searchParams.get('sig')
@@ -114,7 +164,7 @@ export async function GET(request: Request): Promise<Response> {
   } catch {
     destination = null
   }
-  if (!destination || !consoleReturnAllowlist().has(destination.origin)) {
+  if (!destination || !isConsoleReturnOrigin(destination)) {
     return new Response('Invalid return target', {
       status: 400,
       headers: { 'Cache-Control': 'no-store' },
