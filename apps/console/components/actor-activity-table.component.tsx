@@ -19,6 +19,8 @@
 import { activityTargetLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -31,9 +33,12 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
-import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
+import {
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_ROW_HEIGHT,
+} from '../constants/shared'
 
 export interface ActorActivityEntry {
   $id: string
@@ -136,6 +141,52 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
     return '—'
   }
 
+  /* One row grammar, the console's (AGL-693) — the same table, no row click. */
+  const activityColumns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'action',
+        headerName: 'Action',
+        flex: 1.2,
+        minWidth: 180,
+        valueGetter: (_value, row: ActorActivityEntry) => row.action ?? '—',
+      },
+      {
+        field: 'target',
+        headerName: 'Target',
+        flex: 1.2,
+        minWidth: 180,
+        valueGetter: (_value, row: ActorActivityEntry) =>
+          activityTargetLabel(row.target as never) || '—',
+      },
+      {
+        field: 'scopeId',
+        headerName: 'Where',
+        flex: 0.9,
+        minWidth: 150,
+        valueGetter: (_value, row: ActorActivityEntry) => scopeLabel(row),
+        renderCell: ({ row }: any) => (
+          <Chip size="small" variant="outlined" label={scopeLabel(row)} />
+        ),
+      },
+      {
+        field: 'createdAt',
+        headerName: 'When',
+        flex: 1,
+        minWidth: 180,
+        // Sorted on the instant the wire carried, rendered as a local
+        // string: a grid sorting the rendered text orders it alphabetically.
+        valueGetter: (_value, row: ActorActivityEntry) =>
+          row.createdAt?.seconds ?? 0,
+        renderCell: ({ row }: any) => formatWireTimestamp(row.createdAt),
+      },
+    ],
+    // `scopeLabel` closes over `scopeNames`, which is the only thing that
+    // moves it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scopeNames],
+  )
+
   return (
     // `contentGutter*` like every other card on these pages — without them a
     // card's content sits flush against its own border while the ones above
@@ -160,32 +211,19 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
             {'No activity recorded.'}
           </Typography>
         ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Action'}</TableCell>
-                <TableCell>{'Target'}</TableCell>
-                <TableCell>{'Where'}</TableCell>
-                <TableCell>{'When'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((entry) => (
-                <TableRow key={`${entry.scopeId}:${entry.$id}`}>
-                  <TableCell>{entry.action ?? '—'}</TableCell>
-                  <TableCell>
-                    {activityTargetLabel(entry.target as never) || '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Chip size="small" variant="outlined" label={scopeLabel(entry)} />
-                  </TableCell>
-                  <TableCell>
-                    {formatWireTimestamp(entry.createdAt)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListTable
+            rows={rows}
+            columns={activityColumns}
+            getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
+            /*
+             * NO `onOpen`, like the site activity log. An audit row is not a
+             * record you open; a row-click would promise a destination these
+             * rows do not have.
+             */
+            hideFooter
+            autoHeight
+            rowHeight={TABLE_ROW_HEIGHT}
+          />
         )}
         <ListPagination
           page={page}
