@@ -137,12 +137,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
   },
   {
-    file: 'apps/console/app/(app)/[orgSlug]/settings/page.tsx',
-    count: 1,
-    reason:
-      'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
-  },
-  {
     file: 'apps/console/app/api/_lib/auth-action-url.ts',
     count: 1,
     reason:

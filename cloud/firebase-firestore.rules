@@ -426,7 +426,15 @@ service cloud.firestore {
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
-             'erasureRequestedAt']));
+             'erasureRequestedAt',
+             // AGL-693. The SEARCH KEYS behind the staff organization list.
+             // Derived from `name` by `nameSearchFields` on every writer, so
+             // there is no state in which a client should set one — and a
+             // client that could would decide which name its organization is
+             // FOUND by, independently of the name it displays: a workspace
+             // reachable by somebody else's brand, or reachable by nothing at
+             // all while looking perfectly normal on the staff list.
+             'nameLower', 'nameTokens', 'nameReversed']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site
