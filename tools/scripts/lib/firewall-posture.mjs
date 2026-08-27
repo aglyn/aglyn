@@ -59,6 +59,16 @@
 //
 // ⛔ Do not "simplify" any tooling here into a PUT. The 200 is the danger.
 //
+// ## That same error message ALSO means "your `value` carries read-only fields"
+//
+// `value` takes the EDITABLE fields only — `name`, `description`, `active`,
+// `conditionGroup`, `action`. The obvious move when editing an existing rule
+// is to read it and spread it (`{ ...rule, conditionGroup: next }`), and the
+// live object carries `id`, `valid` and `validationErrors` alongside those.
+// The schema rejects the extras with the identical ``Invalid request:
+// `action` should be equal to constant`` — no mention of which field is
+// unwanted. Measured 2026-08-27, removing a stale bypass group.
+//
 // ## That same error message also means "your description is too long"
 //
 // `value.description` is capped at **256 characters**, and exceeding it
