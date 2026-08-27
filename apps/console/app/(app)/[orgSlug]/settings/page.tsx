@@ -18,35 +18,18 @@
 'use client'
 
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { useOrgSlug } from '../../../../hooks/use-org-scope'
 
 /**
- * The section ids this page used to carry in `?tab=`, and where they live now.
- *
- * Kept, not dropped. `HubTabs` mirrored the active tab into the query string
- * precisely so a section could be linked to, and those links are in bookmarks,
- * in support replies and in our own docs — `settings?tab=installed` is written
- * into another page in this console. A redirect that ignored the parameter
- * would land every one of them on General and look like the section had been
- * removed.
- */
-const LEGACY_TAB_SECTIONS: Readonly<Record<string, Route>> = {
-  general: Route.ORG_SETTINGS_GENERAL,
-  profile: Route.ORG_SETTINGS_PROFILE,
-  plugins: Route.ORG_SETTINGS_PLUGINS,
-  installed: Route.ORG_SETTINGS_PLUGINS,
-  'api-keys': Route.ORG_SETTINGS_API_KEYS,
-  branding: Route.ORG_SETTINGS_BRANDING,
-  sso: Route.ORG_SETTINGS_SSO,
-  ownership: Route.ORG_SETTINGS_OWNERSHIP,
-  danger: Route.ORG_SETTINGS_DELETE,
-}
-
-/**
  * `/settings` is the section index and renders nothing of its own (AGL-693).
+ *
+ * No `?tab=` compatibility map. The sections were panels behind a query
+ * parameter and are routes now; with no shipped customers there is nothing
+ * holding an old link, and a map kept "just in case" is a second set of names
+ * for the same eight pages that has to be maintained against them.
  *
  * `replace`, not `push`: a redirect the reader did not ask for must not become
  * a history entry their back button bounces off.
@@ -54,13 +37,10 @@ const LEGACY_TAB_SECTIONS: Readonly<Record<string, Route>> = {
 const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
   const router = useRouter()
   const orgSlug = useOrgSlug()
-  const searchParams = useSearchParams()
-  const requested = searchParams?.get('tab') ?? ''
   useEffect(() => {
     if (!orgSlug) return
-    const route = LEGACY_TAB_SECTIONS[requested] ?? Route.ORG_SETTINGS_GENERAL
-    router.replace(buildRoute(route as never, { orgSlug } as never))
-  }, [router, orgSlug, requested])
+    router.replace(buildRoute(Route.ORG_SETTINGS_GENERAL, { orgSlug }))
+  }, [router, orgSlug])
   return null
 }
 OrgSettings.displayName = 'Page:OrgSettings'

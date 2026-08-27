@@ -113,42 +113,25 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
   })
 
   /**
-   * A page whose panels became ROUTES answers the same question differently
-   * (AGL-693): it reads `?tab=` once and redirects, so `useTabParam` — which
-   * resolves a value against tabs that are rendered — has nothing to resolve
-   * against. What has to hold instead is that the map is COMPLETE. A section
-   * added without a legacy entry is a link that used to work and now lands on
-   * the first section, which is the AGL-2486 failure wearing a redirect.
+   * A page whose panels became ROUTES carries no `?tab=` map at all (AGL-693).
+   *
+   * The parameter existed so a panel could be linked to; a route is the link.
+   * With no shipped customers there is nothing holding an old settings or
+   * admin URL, so a compatibility map would be a second set of names for the
+   * same pages, maintained against them forever.
+   *
+   * What this still holds is that those pages do not go back to reading the
+   * parameter by hand — the thing the resolver above exists to prevent.
    */
-  describe('a page whose panels became routes maps every section', () => {
+  it('a routed section index reads no tab param', () => {
     const routed = [
-      ['app', '(app)', '[orgSlug]', 'settings'],
-      ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'admin'],
+      ['app', '(app)', '[orgSlug]', 'settings', 'page.tsx'],
+      ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'admin', 'page.tsx'],
     ]
-
-    it('THE CONTROL: both redirect pages exist and read the param', () => {
-      // Otherwise the loop below passes by finding no sections to check.
-      for (const segments of routed) {
-        expect(read(...segments, 'page.tsx')).toContain(`get('tab')`)
-      }
-    })
-
-    it('names every section directory in its redirect map', () => {
-      for (const segments of routed) {
-        const dir = join(__dirname, '..', ...segments, '(sections)')
-        const sections = readdirSync(dir, { withFileTypes: true })
-          .filter((entry) => entry.isDirectory())
-          .map((entry) => entry.name)
-        expect(sections.length).toBeGreaterThan(2)
-        const source = read(...segments, 'page.tsx')
-        for (const section of sections) {
-          // The route constant carries the section's own directory name, so
-          // finding it proves the map can reach that section.
-          expect(source.toLowerCase()).toContain(
-            section.replace(/-/g, '_').toLowerCase(),
-          )
-        }
-      }
-    })
+    for (const segments of routed) {
+      const source = read(...segments)
+      expect(source).not.toContain(`get('tab')`)
+      expect(source).toContain('router.replace')
+    }
   })
 })
