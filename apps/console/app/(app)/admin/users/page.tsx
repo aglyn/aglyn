@@ -599,7 +599,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 // Server-paged through Firebase Auth: the footer below owns
                 // the page, so the grid must not also slice these rows.
                 hideFooter
-                autoHeight
                 // The console's row height, like every other grid list.
                 rowHeight={TABLE_ROW_HEIGHT}
               />

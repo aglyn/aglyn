@@ -289,10 +289,41 @@ export function ListTable(props: ListTableProps) {
       onRowClick={
         onOpen ? ({ id, row }) => onOpen(String(id), row) : undefined
       }
+      /*
+       * The list GROWS; the PAGE scrolls.
+       *
+       * `DataTableComponent` gives its wrapper a fixed `height: 400`, which
+       * is right for a grid sitting in a pane of its own and wrong for a
+       * card in a column of cards: the table got its own scrollbar, the card
+       * stopped at 400px whatever it held, and the last row was cut through
+       * the middle. Two scroll regions on one page is the thing to avoid —
+       * a reader scrolling the page expects the page to move.
+       *
+       * `autoHeight` sizes the grid to its rows; clearing the wrapper's
+       * height is what lets the card follow it. Caller `sx` is spread after,
+       * so a list that genuinely wants a viewport can still take one.
+       */
+      autoHeight
       sx={[
+        { height: 'auto' },
         { '& .MuiDataGrid-row': { cursor: onOpen ? 'pointer' : 'default' } },
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}
+      /*
+       * The column menu can hide a column; only the toolbar can bring it
+       * back.
+       *
+       * Every column here is hideable, `Manage columns` lives in the toolbar,
+       * and the toolbar was off — so hiding the last column left a grid with
+       * no columns and no control that could restore one. Not a rare misuse
+       * either: the per-column menu offers `Hide column` on every column, and
+       * the way out was never on screen.
+       *
+       * The Actions column is the reason the grid was not left completely
+       * blank — `listActionsColumn` marks it `hideable: false` — and "one
+       * unhideable column" is not a recovery path.
+       */
+      showToolbar
       pagination
       // The console's ONE footer (AGL-693): same options, same default, same
       // label. `initialState` is a default and not a lock — a caller that

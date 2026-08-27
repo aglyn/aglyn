@@ -221,7 +221,6 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
              * rows do not have.
              */
             hideFooter
-            autoHeight
             rowHeight={TABLE_ROW_HEIGHT}
           />
         )}

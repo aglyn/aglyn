@@ -117,20 +117,20 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { rows: orgDocs, loading, refresh } = pagination
 
   /*
-   * Search over the current page (AGL-135). The bespoke Sort select is gone:
-   * the grid sorts by COLUMN now, which is both more of a control and one
-   * the reader already knows from every other list (AGL-693). Its three
-   * options — name, plan, newest — are three of the columns.
+   * Search and sort are the GRID's now (AGL-693).
+   *
+   * Both were bespoke: a `Sort` select offering three of the table's own
+   * columns, and a text box filtering the current page. The grid does both,
+   * with controls a reader already knows from every other list — and a
+   * second search box beside the toolbar's own was simply two of the same
+   * thing.
+   *
+   * The reach is preserved rather than assumed: the old box matched id, name,
+   * slug and plan, and the name column carries a quick-filter matcher for
+   * exactly that set. Page-scoped either way — this list is server-paged, and
+   * neither control has ever searched past the rows on screen.
    */
-  const [search, setSearch] = useState('')
-  const needle = search.trim().toLowerCase()
-  const orgs = orgDocs.filter(
-    (org) =>
-      !needle ||
-      [org.$id, org.name, org.slug, org.plan]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(needle)),
-  )
+  const orgs = orgDocs
 
 
   // Usage drill-down (AGL-205): last 12 monthly org rollups with deltas.
@@ -182,6 +182,16 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         flex: 1.4,
         minWidth: 200,
         valueGetter: (_value, row: any) => String(row.name ?? row.$id),
+        // What the removed box used to match. Sorting stays on the name
+        // alone; only the search widens.
+        getApplyQuickFilterFn: (value: string) => {
+          const needle = String(value ?? '').trim().toLowerCase()
+          if (!needle) return null
+          return (_cell: unknown, row: any) =>
+            [row.$id, row.name, row.slug, row.plan]
+              .filter(Boolean)
+              .some((entry) => String(entry).toLowerCase().includes(needle))
+        },
         renderCell: ({ row }: any) => (
           /*
            * Two lines inside one row, so the pair has to FIT it.
@@ -411,23 +421,12 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                     'as; where that differs from what is stored, the stored ' +
                     'value is shown beside it.'}
                 </Typography>
-                <Stack direction="row" spacing={1}>
-                  <TextField
-                    size="small"
-                    label="Search"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    sx={{ minWidth: 220 }}
-                  />
-                </Stack>
               {orgs.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   {loading
                     ? 'Loading…'
-                    : needle
-                      ? 'No organizations on this page match your search.'
-                      : 'No organizations yet — they are created at signup ' +
-                        'or first site.'}
+                    : 'No organizations yet — they are created at signup ' +
+                      'or first site.'}
                 </Typography>
               ) : (
                 <ListTable
@@ -443,7 +442,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   // Server-paged: the footer below owns the page, so the grid
                   // must not also try to slice these rows.
                   hideFooter
-                  autoHeight
                   // The console's row height, like every other grid list.
                   rowHeight={TABLE_ROW_HEIGHT}
                 />
