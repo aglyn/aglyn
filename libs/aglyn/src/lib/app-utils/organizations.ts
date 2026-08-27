@@ -402,9 +402,12 @@ export function countCollaboratorSeats(
  *
  * `siteMember` is the third kind and never appears in `orgs/{id}/members` at
  * all: it is an end-user account on a PUBLISHED site (`siteMembers`), not a
- * console user. It is listed here so the vocabulary is complete and so a
- * surface that does mix the two populations (the staff user directory) has a
- * label for it — it is free and uncounted on every plan (AGL-889).
+ * console user. It has no Firebase Auth record of any kind — a site member is
+ * a Firestore document under `hosts/{hostId}/siteMembers` with its own scrypt
+ * hash and its own session cookie — so no surface that lists AUTH accounts,
+ * the staff user directory included, can contain one. The label is here so the
+ * vocabulary is complete, for a surface that lists site accounts and needs a
+ * word for them. Free and uncounted on every plan (AGL-889).
  */
 export type ConsoleUserType = 'manager' | 'collaborator' | 'siteMember'
 
@@ -429,8 +432,9 @@ export const CONSOLE_USER_TYPE_HINTS: Record<ConsoleUserType, string> = {
 /**
  * Classify an `orgs/{orgId}/members` entry (or a pending invite, same shape).
  * Never returns `siteMember` — nothing in that collection is one; the value
- * exists for surfaces that list published-site accounts alongside console
- * users and must label them.
+ * exists for surfaces that list published-site accounts and must label them —
+ * never for one that lists both, since the two populations do not share an
+ * identity system.
  */
 export function consoleUserType(
   member: Partial<AglynOrgMember> | null | undefined,

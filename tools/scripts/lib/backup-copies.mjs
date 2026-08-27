@@ -155,6 +155,12 @@ export const PRODUCTION_DATA_STORES = [
     copiedBy: 'nothing-to-copy',
     why: 'Google-managed deploy scratch space. Holds no production data.',
   },
+  {
+    bucket: 'run-sources-{projectId}-us-central1',
+    holds: 'Cloud Run source archives — currently the log-drain receiver',
+    copiedBy: 'nothing-to-copy',
+    why: "Created by the first `gcloud run deploy --source` of the log-drain receiver (AGL-2483), which is why it appeared in production without anyone classifying it. Service source, reproducible from git (cloud/log-drain). Losing it costs a redeploy, not data — the same standing as the Cloud Functions source bucket above.",
+  },
 ]
 
 /**

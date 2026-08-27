@@ -41,6 +41,18 @@ export interface ListFilterInput {
   value: string
 }
 
+export interface ListFilterOptions {
+  /** Sort field for a `contains`, which cannot order by its token array. */
+  containsOrderBy?: string
+  /**
+   * The list's own sort field, when the caller owns it — an activity feed
+   * ordered by `createdAt` with a cursor into that ordering. Set it and the
+   * translator adds predicates without touching `orderBy`, refusing any that
+   * would need a different one.
+   */
+  fixedOrderBy?: string
+}
+
 /** Firestore caps `in` at 30 values. */
 const IN_LIMIT = 30
 
@@ -88,7 +100,7 @@ export function applyListFilter(
   ref: FirebaseFirestore.Query,
   fields: readonly ListFilterField[],
   input: ListFilterInput | null,
-  options: { containsOrderBy?: string } = {},
+  options: ListFilterOptions = {},
 ): FirebaseFirestore.Query | null {
   if (!input) return null
   const byId = firebaseAdmin.firestore.FieldPath.documentId()
@@ -96,23 +108,40 @@ export function applyListFilter(
   if (!field) return null
   const raw = (input.value ?? '').trim()
   const op = input.op
+  /*
+   * A list whose ORDER is not the filter's to choose.
+   *
+   * The activity feeds are `orderBy('createdAt', 'desc')` and their cursor is
+   * a document in that ordering — re-sorting them to suit a predicate would
+   * not narrow the list, it would shuffle it and invalidate every cursor
+   * already issued. Firestore also requires the first `orderBy` to be the
+   * range field, so with the order pinned only two shapes are possible:
+   * equality (any field, given a composite index) and a range over the sort
+   * field ITSELF. Anything else returns null and the list stays unfiltered,
+   * which is the honest answer to an ask this list cannot serve.
+   */
+  const pinned = options.fixedOrderBy
+  const ordered = (query: FirebaseFirestore.Query, by: string | FirebaseFirestore.FieldPath) =>
+    pinned ? query : query.orderBy(by)
+  const rangeAllowed = (path: string) => !pinned || pinned === path
 
   if (op === 'isEmpty') {
     // Only where writers store `null`; Firestore cannot find documents that
     // simply LACK a field. See `presence` on the shared declaration.
     if (field.presence !== 'nullable') return null
-    return ref.where(field.path, '==', null).orderBy(byId)
+    return ordered(ref.where(field.path, '==', null), byId)
   }
   if (op === 'isNotEmpty') {
     // `!=` also requires the field to EXIST, which is the meaning wanted.
     if (field.presence === 'always') return null
-    return ref.where(field.path, '!=', null).orderBy(field.path)
+    if (!rangeAllowed(field.path)) return null
+    return ordered(ref.where(field.path, '!=', null), field.path)
   }
 
   if (field.kind === 'boolean') {
     // MUI sends the empty string when the tri-state control is cleared.
     if (raw !== 'true' && raw !== 'false') return null
-    return ref.where(field.path, '==', raw === 'true').orderBy(byId)
+    return ordered(ref.where(field.path, '==', raw === 'true'), byId)
   }
 
   if (!raw) return null
@@ -124,19 +153,20 @@ export function applyListFilter(
    * prefix search, which is the quiet way "starts with" stops working.
    */
   const range = (path: string, prefix: string) =>
-    prefix ? ref.orderBy(path).startAt(prefix).endAt(`${prefix}\uf8ff`) : null
+    prefix && rangeAllowed(path)
+      ? ref.orderBy(path).startAt(prefix).endAt(`${prefix}\uf8ff`)
+      : null
 
   if (field.kind === 'text') {
     if (op === 'contains' && field.tokensPath) {
       const token = nameSearchToken(raw)
-      return token
-        ? ref
-            .where(field.tokensPath, 'array-contains', token)
-            .orderBy(options.containsOrderBy ?? field.lowerPath ?? field.path)
-        : null
+      if (!token) return null
+      const sortBy = options.containsOrderBy ?? field.lowerPath ?? field.path
+      const contains = ref.where(field.tokensPath, 'array-contains', token)
+      return pinned ? contains : contains.orderBy(sortBy)
     }
     if (op === 'equals' && field.lowerPath) {
-      return ref.where(field.lowerPath, '==', nameSearchKey(raw)).orderBy(byId)
+      return ordered(ref.where(field.lowerPath, '==', nameSearchKey(raw)), byId)
     }
     if (op === 'startsWith' && field.lowerPath) {
       return range(field.lowerPath, nameSearchKey(raw))
@@ -148,23 +178,24 @@ export function applyListFilter(
   }
 
   if (field.kind === 'id') {
-    if (op === 'equals') return ref.where(byId, '==', raw).orderBy(byId)
+    if (op === 'equals') return ordered(ref.where(byId, '==', raw), byId)
     if (op === 'startsWith') {
+      if (pinned) return null
       return ref.orderBy(byId).startAt(raw).endAt(`${raw}\uf8ff`)
     }
     if (op === 'isAnyOf') {
       const values = csv(raw)
-      return values.length ? ref.where(byId, 'in', values).orderBy(byId) : null
+      return values.length ? ordered(ref.where(byId, 'in', values), byId) : null
     }
     return null
   }
 
   if (field.kind === 'exact') {
-    if (op === 'equals') return ref.where(field.path, '==', raw).orderBy(byId)
+    if (op === 'equals') return ordered(ref.where(field.path, '==', raw), byId)
     if (op === 'isAnyOf') {
       const values = csv(raw)
       return values.length
-        ? ref.where(field.path, 'in', values).orderBy(byId)
+        ? ordered(ref.where(field.path, 'in', values), byId)
         : null
     }
     return null
@@ -183,9 +214,9 @@ export function applyListFilter(
     }
     const operator = comparison[op]
     if (!operator) return null
-    return operator === '=='
-      ? ref.where(field.path, '==', value).orderBy(byId)
-      : ref.where(field.path, operator, value).orderBy(field.path)
+    if (operator === '==') return ordered(ref.where(field.path, '==', value), byId)
+    if (!rangeAllowed(field.path)) return null
+    return ordered(ref.where(field.path, operator, value), field.path)
   }
 
   if (field.kind === 'date') {
@@ -202,8 +233,10 @@ export function applyListFilter(
      * equality against midnight matches nothing — a date column filtered by
      * `is` would answer "none" for every row, every time.
      */
+    if (!rangeAllowed(field.path)) return null
     if (op === 'is') {
-      return ref.orderBy(field.path).startAt(stamp(start)).endAt(stamp(end))
+      const bounded = pinned ? ref : ref.orderBy(field.path)
+      return bounded.startAt(stamp(start)).endAt(stamp(end))
     }
     const bound: Record<string, [FirebaseFirestore.WhereFilterOp, Date]> = {
       after: ['>=', end],
@@ -213,7 +246,7 @@ export function applyListFilter(
     }
     const found = bound[op]
     if (!found) return null
-    return ref.where(field.path, found[0], stamp(found[1])).orderBy(field.path)
+    return ordered(ref.where(field.path, found[0], stamp(found[1])), field.path)
   }
 
   return null

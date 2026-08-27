@@ -200,3 +200,37 @@ export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   lastSignInAt: 'Last sign-in',
   disabled: 'Disabled',
 }
+
+/*
+ * The activity feeds (`activity` subcollections, read as a collection group).
+ *
+ * These are ordered `createdAt` DESC and their cursor is a document in that
+ * ordering, so the sort is not the filter's to change: re-sorting to suit a
+ * predicate would not narrow the feed, it would shuffle it and invalidate
+ * every cursor already handed out. With the order pinned, Firestore allows
+ * equality on any field (given a composite index) and a range over the sort
+ * field itself — which is exactly what is declared here.
+ *
+ * ⛔ `scopeId` is not filterable and cannot be. It is not a stored field: the
+ * reader derives it from the document's PATH (`doc.ref.parent.parent`), and a
+ * query cannot filter on where a document lives. Filtering by site would mean
+ * writing the scope onto each entry.
+ */
+export const ACTIVITY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
+  {
+    // Equality and `in` only — a text range would need `action` to be the
+    // first `orderBy`, which would unsort the feed.
+    column: 'action',
+    kind: 'exact',
+    path: 'action',
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
+    // The sort field, so a range over it is free: the existing
+    // `actorId ASC, createdAt DESC` index already serves it.
+    column: 'createdAt',
+    kind: 'date',
+    path: 'createdAt',
+    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
+  },
+]

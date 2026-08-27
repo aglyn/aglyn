@@ -20,17 +20,18 @@ import { activityTargetLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  gridFilterRequest,
+  listFilterColumn,
+  type ListFilterRequest,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import { ACTIVITY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Chip,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -90,6 +91,17 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
   const [loading, setLoading] = useState(true)
   const [unreadable, setUnreadable] = useState(false)
 
+  /*
+   * The filter the next request carries, in a ref.
+   *
+   * `loadPage` is a `useCallback` dependency of the effect that starts the
+   * feed, so a filter held in state alone would rebuild it and restart the
+   * walk. Written by the grid's change handler BEFORE it asks for page 0 —
+   * during render is a tick too late, and the request would carry the filter
+   * from before the reader changed it.
+   */
+  const filterRef = useRef<ListFilterRequest | null>(null)
+
   const loadPage = useCallback(
     async (targetPage: number, cursor: string | null) => {
       setLoading(true)
@@ -100,7 +112,15 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         if (!idToken) return
         const url = new URL(endpoint, window.location.origin)
         url.searchParams.set('pageSize', String(pageSize))
-        if (cursor) url.searchParams.set('cursor', cursor)
+        const filter = filterRef.current
+        if (filter) {
+          url.searchParams.set('filterField', filter.field)
+          url.searchParams.set('filterOp', filter.op)
+          url.searchParams.set('filterValue', filter.value)
+        }
+        // A narrowed feed is a different query, not a page of the old one, so
+        // it carries no cursor — resuming one would page the UNFILTERED feed.
+        if (cursor && !filter) url.searchParams.set('cursor', cursor)
         const response = await fetch(url.toString(), {
           headers: { Authorization: `Bearer ${idToken}` },
         })
@@ -149,6 +169,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         headerName: 'Action',
         flex: 1.2,
         minWidth: 180,
+        ...listFilterColumn(ACTIVITY_LIST_FILTER_FIELDS, 'action'),
         valueGetter: (_value, row: ActorActivityEntry) => row.action ?? '—',
       },
       {
@@ -156,6 +177,9 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         headerName: 'Target',
         flex: 1.2,
         minWidth: 180,
+        // A rendered summary of an object, not a stored scalar — there is
+        // nothing for a query to compare.
+        filterable: false,
         valueGetter: (_value, row: ActorActivityEntry) =>
           activityTargetLabel(row.target as never) || '—',
       },
@@ -164,6 +188,10 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         headerName: 'Where',
         flex: 0.9,
         minWidth: 150,
+        // Derived from the document's PATH, not stored on it, so no query can
+        // narrow by site. Filtering here would mean writing the scope onto
+        // every entry.
+        filterable: false,
         valueGetter: (_value, row: ActorActivityEntry) => scopeLabel(row),
         renderCell: ({ row }: any) => (
           <Chip size="small" variant="outlined" label={scopeLabel(row)} />
@@ -174,10 +202,14 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         headerName: 'When',
         flex: 1,
         minWidth: 180,
+        // `type: 'date'` is what gives the panel a date PICKER rather than a
+        // free-text box for a value the route parses as a day.
+        type: 'date',
+        ...listFilterColumn(ACTIVITY_LIST_FILTER_FIELDS, 'createdAt'),
         // Sorted on the instant the wire carried, rendered as a local
         // string: a grid sorting the rendered text orders it alphabetically.
         valueGetter: (_value, row: ActorActivityEntry) =>
-          row.createdAt?.seconds ?? 0,
+          row.createdAt?.seconds ? new Date(row.createdAt.seconds * 1000) : null,
         renderCell: ({ row }: any) => formatWireTimestamp(row.createdAt),
       },
     ],
@@ -222,6 +254,18 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
              */
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
+            /*
+             * The grid must NOT also filter. The feed is paged, so a
+             * client-side pass would narrow the twenty-five rows on screen
+             * and call that the answer — on an audit log, "nothing happened"
+             * is the wrong answer to give about everything before this page.
+             */
+            filterMode="server"
+            onFilterModelChange={(model) => {
+              filterRef.current = gridFilterRequest(model)
+              setCursors([null])
+              void loadPage(0, null)
+            }}
           />
         )}
         <ListPagination

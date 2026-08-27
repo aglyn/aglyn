@@ -29,6 +29,7 @@ import {
   readActorActivity,
   readOrgWideActivity,
 } from '../../../../utils/server/actor-activity'
+import { readListFilter } from '../../../../utils/server/list-filter'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
 // what happened to this organization. A locked owner working out why they are
@@ -137,6 +138,8 @@ async function handler(request: Request): Promise<Response> {
         actorId,
         pageSize: Number(query['pageSize'] ?? 25),
         cursor: String(query['cursor'] ?? '') || null,
+        // The column filter, answered by the query rather than by the page.
+        filter: readListFilter(query),
         scopePaths: await orgActivityScopePaths(orgId),
       })
       return Response.json(page, { status: 200 })
@@ -158,6 +161,8 @@ async function handler(request: Request): Promise<Response> {
         orgId,
         limit: Number(query['pageSize'] ?? query['limit'] ?? WINDOW),
         cursor: String(query['cursor'] ?? '') || null,
+        // The column filter, answered by the query rather than by the page.
+        filter: readListFilter(query),
       })
       return Response.json(page, { status: 200 })
     }
