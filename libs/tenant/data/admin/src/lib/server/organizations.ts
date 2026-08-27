@@ -42,7 +42,10 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
-import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  nameSearchKey,
+  nameSearchTokens,
+} from '@aglyn/aglyn/app-utils/name-search'
 // LEAF MODULE, NOT THE BARREL (AGL-1289). This file is itself reachable
 // through `@aglyn/aglyn/server`, and the verdict route proved this week that a
 // constant pulled from that barrel inside the cycle typechecks and then
@@ -281,6 +284,9 @@ export async function createOrganization(
        * rename in `/api/orgs/settings` is the other one.
        */
       nameLower: nameSearchKey(name),
+      // Word-prefix tokens, so the staff search can answer "contains a word
+      // starting with X" rather than only "starts with X" (AGL-693).
+      nameTokens: nameSearchTokens(name),
       slug,
       ownerUid,
       // Stamped once and never mutated — `transferOrgOwnership` moves

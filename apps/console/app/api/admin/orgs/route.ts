@@ -26,7 +26,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
+import { nameSearchToken } from '@aglyn/aglyn/app-utils/name-search'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -90,22 +90,25 @@ async function handler(request: Request): Promise<Response> {
      * as "no such organization" for every organization past the first page,
      * which is the answer a search must never give wrongly.
      *
-     * A Firestore prefix range over the normalized `nameLower` finds a match
-     * anywhere in the collection, at the cost of being anchored at the START
-     * of the name: this matches "acme" for "Acme Coffee" and does not match
-     * "coffee". That limit is real and worth stating — `contains` is not
-     * something Firestore can answer without a search service — but it beats
-     * a filter that cannot see past the page it is standing on.
+     * `array-contains` over `nameTokens` — the word-prefix tokens the write
+     * path prepared — so a reader finds "Acme Coffee" by typing "coffee" and
+     * not only by typing "acme". A prefix range over `nameLower` was the
+     * first shape here and it was anchored at the START of the whole name,
+     * which is the wrong end for a search box: the word somebody remembers is
+     * rarely the first one.
      *
-     * `orderBy(nameLower)` alone needs no composite index; single-field
-     * indexes are automatic in both directions.
+     * What it still cannot do is match MID-word — "offee" is a prefix of no
+     * word — and a multi-word query narrows by its first word only, because
+     * Firestore permits one `array-contains` per query. Both are the honest
+     * edge of doing this without a search service; see `nameSearchTokens`.
      *
-     * ⚠️ Ordering by `nameLower` DROPS documents that lack it. That is why
-     * the field is written by every `name` writer and backfilled by
-     * `tools/scripts/backfill-org-name-lower.mjs` — an organization missing
-     * it would be invisible to search while still listing normally.
+     * ⚠️ Ordering by `nameLower` DROPS documents that lack it, and the
+     * `array-contains` drops any that lack `nameTokens`. Both fields are
+     * written by every `name` writer and backfilled by
+     * `tools/scripts/backfill-name-lower.mjs` — an organization missing
+     * either would be invisible to search while still listing normally.
      */
-    const search = nameSearchKey(String(query['search'] ?? ''))
+    const search = nameSearchToken(String(query['search'] ?? ''))
     const orgsRef = db.collection('orgs')
     /*
      * The cursor stays a DOCUMENT ID in both modes, and is resolved to a
@@ -129,10 +132,7 @@ async function handler(request: Request): Promise<Response> {
           .catch(() => null)
       : null
     const base = search
-      ? orgsRef
-          .orderBy('nameLower')
-          .startAt(search)
-          .endAt(`${search}\uf8ff`)
+      ? orgsRef.where('nameTokens', 'array-contains', search).orderBy('nameLower')
       : orgsRef.orderBy(byId)
     const ref = (
       afterDoc?.exists ? base.startAfter(afterDoc) : base

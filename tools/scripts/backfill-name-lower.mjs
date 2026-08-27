@@ -20,7 +20,8 @@
 // only ones created/renamed after the write-path change shipped.
 //
 // Scope: `hosts/{hostId}` and `hosts/{hostId}/screens` (both from
-// displayName), and `orgs/{orgId}` (from name).
+// displayName, `nameLower` only), and `orgs/{orgId}` (from name — `nameLower`
+// AND the `nameTokens` word-prefix array the staff search matches on).
 //
 // ORGS WERE DELIBERATELY EXCLUDED, and are not any more (AGL-693). The
 // original reason was sound — "they stay client-filtered, so a nameLower on
@@ -102,6 +103,27 @@ const ONLY_HOST = opt('--host', '')
 const nameSearchKey = (name) =>
   (name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 
+// MUST match `nameSearchTokens` in the same module. Every prefix of every
+// word, so `array-contains` answers "contains a word starting with X" — which
+// is what lets the staff search find "Acme Coffee" by "coffee". The caps are
+// the library's: twelve characters per prefix, 120 tokens per document.
+const NAME_TOKEN_MAX_PREFIX = 12
+const NAME_TOKEN_LIMIT = 120
+const nameSearchTokens = (name) => {
+  const key = nameSearchKey(name)
+  if (!key) return []
+  const tokens = new Set()
+  for (const word of key.split(' ')) {
+    if (!word) continue
+    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    for (let end = 1; end <= capped.length; end += 1) {
+      tokens.add(capped.slice(0, end))
+      if (tokens.size >= NAME_TOKEN_LIMIT) return [...tokens]
+    }
+  }
+  return [...tokens]
+}
+
 // ── Admin init (same pattern as migrate-blog-covers.mjs) ────────────────────
 const projectId = process.env.FIREBASE_PROJECT_ID
 if (!projectId) {
@@ -130,10 +152,10 @@ console.log(
 let batch = firestore.batch()
 let buffered = 0
 let written = 0
-const stamp = async (ref, value) => {
+const stamp = async (ref, value, fields = undefined) => {
   written += 1
   if (!COMMIT) return
-  batch.update(ref, { nameLower: value })
+  batch.update(ref, { nameLower: value, ...(fields ?? {}) })
   if ((buffered += 1) >= 400) {
     // Swap in the fresh batch BEFORE awaiting the full one: `batch` never
     // points at an in-flight commit, which is also what satisfies
@@ -189,7 +211,7 @@ let orgsChanged = 0
 if (!ONLY_HOST) {
   const orgSnap = await firestore
     .collection('orgs')
-    .select('name', 'nameLower')
+    .select('name', 'nameLower', 'nameTokens')
     .get()
   for (const orgDoc of orgSnap.docs) {
     orgsScanned += 1
@@ -199,9 +221,19 @@ if (!ONLY_HOST) {
     // very front of every prefix range it does not belong to.
     if (typeof org.name !== 'string' || !org.name.trim()) continue
     const want = nameSearchKey(org.name)
-    if (org.nameLower !== want) {
+    // The staff search is `array-contains` over word-prefix tokens, so the
+    // tokens are what makes an org findable — `nameLower` only orders the
+    // result. A doc with one and not the other is half-migrated, so both are
+    // compared and both are written.
+    const wantTokens = nameSearchTokens(org.name)
+    const haveTokens = Array.isArray(org.nameTokens) ? org.nameTokens : null
+    const tokensDiffer =
+      !haveTokens ||
+      haveTokens.length !== wantTokens.length ||
+      wantTokens.some((token, index) => haveTokens[index] !== token)
+    if (org.nameLower !== want || tokensDiffer) {
       orgsChanged += 1
-      await stamp(orgDoc.ref, want)
+      await stamp(orgDoc.ref, want, { nameTokens: wantTokens })
     }
   }
 }

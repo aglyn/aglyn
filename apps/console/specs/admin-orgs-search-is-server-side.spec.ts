@@ -28,15 +28,21 @@
  * organization past the first page. That is the one answer a search must
  * never give wrongly, and it gets quietly more wrong as the platform grows.
  *
- * The search is a Firestore PREFIX RANGE over the normalized `nameLower`,
- * which reaches the whole collection. Prefix, not contains: Firestore cannot
- * answer contains without a search service, and this is the honest trade.
+ * The search is an `array-contains` over `nameTokens` — every prefix of every
+ * WORD, written by the same paths that write the name — which reaches the
+ * whole collection and matches a word wherever it sits in the name. It
+ * replaced a prefix range over `nameLower`, which was anchored at the start
+ * of the whole name and so found "Acme Coffee" by "acme" and never by
+ * "coffee".
+ *
+ * What it still cannot do is match MID-word, and a multi-word query narrows
+ * by its first word only — one `array-contains` per query is a Firestore
+ * limit. Both are the honest edge of doing this without a search service.
  */
 
 /** Everything the query builder was asked for, in order. */
 let ordering: string[] = []
-let startAt: string | null = null
-let endAt: string | null = null
+let wheres: Array<[string, string, unknown]> = []
 let startedAfter: string | null = null
 let capped: number | null = null
 
@@ -66,12 +72,8 @@ function orgQuery(): any {
       ordering.push(typeof field === 'string' ? field : '__name__')
       return orgQuery()
     },
-    startAt: (value: string) => {
-      startAt = value
-      return orgQuery()
-    },
-    endAt: (value: string) => {
-      endAt = value
+    where: (field: string, op: string, value: unknown) => {
+      wheres.push([field, op, value])
       return orgQuery()
     },
     startAfter: (cursor: { id?: string }) => {
@@ -152,15 +154,23 @@ const get = (params: Record<string, string> = {}) => {
 
 beforeEach(() => {
   ordering = []
-  startAt = null
-  endAt = null
+  wheres = []
   startedAfter = null
   capped = null
-  orgs = [{ id: 'org-a', data: { name: 'Acme', nameLower: 'acme' } }]
+  orgs = [
+    {
+      id: 'org-a',
+      data: {
+        name: 'Acme Coffee',
+        nameLower: 'acme coffee',
+        nameTokens: ['a', 'ac', 'acm', 'acme', 'c', 'co', 'cof', 'coff', 'coffe', 'coffee'],
+      },
+    },
+  ]
 })
 
 describe('the staff organization list searches the COLLECTION', () => {
-  it('orders by document id and ranges over nothing when not searching', () => {
+  it('orders by document id and filters on nothing when not searching', () => {
     // The instrument: without a term the list is the plain paged walk it
     // always was, so the assertions below read as a difference.
     return get().then(async (response) => {
@@ -169,32 +179,50 @@ describe('the staff organization list searches the COLLECTION', () => {
       // so a route 500ing on every request would leave these green.
       expect(response.status).toBe(200)
       expect(ordering).toEqual(['__name__'])
-      expect(startAt).toBeNull()
-      expect(endAt).toBeNull()
+      expect(wheres).toEqual([])
     })
   })
 
-  it('runs a PREFIX RANGE over nameLower when searching', async () => {
-    expect((await get({ search: 'Acme' })).status).toBe(200)
+  it('matches a word ANYWHERE in the name, not just the first', async () => {
+    /*
+     * The whole point of the token array. A prefix range over `nameLower` is
+     * anchored at the start of the WHOLE name — "acme" found "Acme Coffee"
+     * and "coffee" did not — which is the wrong end for a search box, since
+     * the word somebody remembers is rarely the first one.
+     */
+    expect((await get({ search: 'coffee' })).status).toBe(200)
+    expect(wheres).toEqual([['nameTokens', 'array-contains', 'coffee']])
     expect(ordering).toEqual(['nameLower'])
-    // Normalized on the way in — the stored key is lowercased and
-    // whitespace-collapsed, so the range has to be too or it matches nothing.
-    expect(startAt).toBe('acme')
-    expect(endAt).toBe('acme')
   })
 
-  it('normalizes case and stray whitespace like the stored key', async () => {
-    expect((await get({ search: '  ACME   Coffee ' })).status).toBe(200)
-    expect(startAt).toBe('acme coffee')
+  it('normalizes case and stray whitespace like the stored tokens', async () => {
+    expect((await get({ search: '  COF ' })).status).toBe(200)
+    expect(wheres).toEqual([['nameTokens', 'array-contains', 'cof']])
+  })
+
+  it('narrows a multi-word query by its FIRST word', async () => {
+    // Firestore permits one `array-contains` per query, so a multi-word
+    // search cannot be an AND on the server. Stated rather than silently
+    // dropping the rest.
+    expect((await get({ search: 'acme cof' })).status).toBe(200)
+    expect(wheres).toEqual([['nameTokens', 'array-contains', 'acme']])
+  })
+
+  it('caps the query at the length the tokens were written to', async () => {
+    // A longer query would look for a token that was never stored, so every
+    // search past twelve characters would find nothing at all.
+    expect((await get({ search: 'extraordinarilylongname' })).status).toBe(200)
+    expect(wheres[0][2]).toBe('extraordinar')
   })
 
   it('a blank search is NOT a search', async () => {
-    // Otherwise an empty box would range from '' to '' — every
-    // organization, ordered by a field some may not carry.
+    // Otherwise an empty box would filter on '' — a token no document holds,
+    // which reads as "there are no organizations".
     expect((await get({ search: '   ' })).status).toBe(200)
     expect(ordering).toEqual(['__name__'])
-    expect(startAt).toBeNull()
+    expect(wheres).toEqual([])
   })
+
 
   it('resumes from a SNAPSHOT, not a raw cursor value', async () => {
     /*
