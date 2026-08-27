@@ -95,12 +95,49 @@ describe('GridItems masonry', () => {
         items={[
           {size: {xs: 12, md: 4}, children: card('a')},
           {size: {xs: 12, md: 4}, children: card('b')},
+          {size: {xs: 12, md: 4}, children: card('c')},
+          {size: {xs: 12, md: 4}, children: card('d')},
         ]}
       />,
     )
-    // One shared column. Under the `Math.max` bug this was two, because both
-    // cards looked full width and each took a band of its own.
-    expect(columns()).toEqual([['a', 'b']])
+    /*
+     * FOUR cards, because two cannot tell the two failures apart: under the
+     * `Math.max` bug each 4-wide card was its own full-width band, and with
+     * only two cards that renders as two columns — exactly what a correct
+     * fan-out also produces.
+     *
+     * At four the shapes separate. Twelve columns divided by a span of four is
+     * three columns, so a correct build wraps `d` back under `a`; the bug
+     * gives four columns of one card each, every one of them full width.
+     */
+    expect(columns()).toEqual([['a', 'd'], ['b'], ['c']])
+  })
+
+  it('a band of ONE width fans out instead of queueing in one column', () => {
+    /*
+     * The health page's shape: eight equal probe cards. Bucketing same-width
+     * items together is right when something else occupies the rest of the row
+     * — billing, above — and wrong when the band is all of that width, which
+     * left six of twelve columns empty and read as a single stacked column.
+     *
+     * Round-robin rather than filling each column in turn, so reading order
+     * stays left-to-right: first card top-left, second top-right.
+     */
+    render(
+      <GridItems
+        data-testid="grid"
+        masonry
+        spacing={3}
+        items={['a', 'b', 'c', 'd', 'e'].map((name) => ({
+          size: {xs: 12, md: 6},
+          children: card(name),
+        }))}
+      />,
+    )
+    expect(columns()).toEqual([
+      ['a', 'c', 'e'],
+      ['b', 'd'],
+    ])
   })
 
   it('THE CONTROL: a genuinely full-width card DOES get its own column', () => {

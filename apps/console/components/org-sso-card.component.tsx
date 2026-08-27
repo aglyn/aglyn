@@ -186,7 +186,6 @@ function SsoCardShell({ children }: { children: ReactNode }) {
       help={docsHelp('sso')}
       contentGutterX
       contentGutterY
-      sx={{ mt: 3 }}
     >
       {children}
     </CardDisplay>
@@ -286,7 +285,7 @@ export function OrgSsoCard() {
       options?: { keepErrorBody?: boolean },
     ) => {
       if (!orgId) return null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/orgs/sso', {
         method: 'POST',

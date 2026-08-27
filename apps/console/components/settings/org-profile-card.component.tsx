@@ -137,7 +137,6 @@ export function OrgProfileCard() {
   })}
   contentGutterX
   contentGutterY
-  sx={{ mt: 3 }}
 >
   <Stack spacing={2} sx={{ maxWidth: 480 }}>
     <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>

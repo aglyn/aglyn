@@ -88,7 +88,6 @@ export function OrgOwnershipCard() {
   })}
   contentGutterX
   contentGutterY
-  sx={{ mt: 3 }}
 >
   <Stack spacing={2} sx={{ maxWidth: 480 }}>
     <Typography variant="body2" color="text.secondary">

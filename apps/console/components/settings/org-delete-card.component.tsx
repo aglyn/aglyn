@@ -197,7 +197,6 @@ export function OrgDeleteCard() {
       })}
       contentGutterX
       contentGutterY
-      sx={{ mt: 3 }}
     >
       {org?.erasureRequestedAt ? (
         <Stack spacing={2} sx={{ maxWidth: 480 }}>
