@@ -69,7 +69,11 @@ roof.
 
 ## 📸 Take a look
 
-<p align="center"><i>The Besigner — a clickable, in-place canvas where design and content live on the same surface.</i></p>
+<p align="center">
+  <img src="docs/assets/readme/besigner-editor.png" alt="The Aglyn Besigner — a clickable, in-place editing canvas" width="100%" />
+</p>
+
+<p align="center"><i><b>The Besigner™</b> — a clickable, in-place canvas where design and content live on the same surface. What you click is what you ship.</i></p>
 
 <table>
   <tr>
@@ -269,11 +273,29 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md
 <h3 align="center">Connect with us</h3>
 
 <p align="center">
-  <a href="https://www.linkedin.com/company/aglyn/" title="LinkedIn">
+  <a href="https://www.linkedin.com/company/aglyn" title="LinkedIn">
     <img src="https://img.shields.io/badge/LinkedIn-Follow-0A66C2?logo=linkedin&style=for-the-badge&labelColor=F1F1F1&logoColor=0A66C2&color=0A66C2" alt="LinkedIn" />
   </a>&nbsp;
-  <a href="https://twitter.com/AglynOfficial" title="Twitter / X">
-    <img src="https://img.shields.io/badge/@AglynOfficial-Follow-1d9bf0?logo=x&style=for-the-badge&labelColor=F1F1F1&logoColor=000000&color=1d9bf0" alt="Twitter" />
+  <a href="https://x.com/AglynSoftware" title="X">
+    <img src="https://img.shields.io/badge/@AglynSoftware-Follow-000000?logo=x&style=for-the-badge&labelColor=F1F1F1&logoColor=000000&color=000000" alt="X" />
+  </a>&nbsp;
+  <a href="https://www.facebook.com/AglynSoftware/" title="Facebook">
+    <img src="https://img.shields.io/badge/Facebook-Follow-1877F2?logo=facebook&style=for-the-badge&labelColor=F1F1F1&logoColor=1877F2&color=1877F2" alt="Facebook" />
+  </a>&nbsp;
+  <a href="https://www.instagram.com/aglyn_software/" title="Instagram">
+    <img src="https://img.shields.io/badge/Instagram-Follow-E4405F?logo=instagram&style=for-the-badge&labelColor=F1F1F1&logoColor=E4405F&color=E4405F" alt="Instagram" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://www.tiktok.com/@aglyn_software" title="TikTok">
+    <img src="https://img.shields.io/badge/TikTok-Follow-000000?logo=tiktok&style=for-the-badge&labelColor=F1F1F1&logoColor=000000&color=000000" alt="TikTok" />
+  </a>&nbsp;
+  <a href="https://www.youtube.com/Aglyn" title="YouTube">
+    <img src="https://img.shields.io/badge/YouTube-Subscribe-FF0000?logo=youtube&style=for-the-badge&labelColor=F1F1F1&logoColor=FF0000&color=FF0000" alt="YouTube" />
+  </a>&nbsp;
+  <a href="https://www.crunchbase.com/organization/aglyn" title="Crunchbase">
+    <img src="https://img.shields.io/badge/Crunchbase-Aglyn-0288D1?logo=crunchbase&style=for-the-badge&labelColor=F1F1F1&logoColor=0288D1&color=0288D1" alt="Crunchbase" />
   </a>&nbsp;
   <a href="https://github.com/aglyn" title="GitHub org">
     <img src="https://img.shields.io/badge/GitHub-aglyn-181717?logo=github&style=for-the-badge&labelColor=F1F1F1&logoColor=181717&color=404C5C" alt="GitHub" />
