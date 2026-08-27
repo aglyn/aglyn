@@ -173,18 +173,24 @@ describe('sanitizeAuthorHtml is a fixed point of the parser (AGL-1901)', () => {
     ['h1', 'H1'],
     ['h2', 'H2'],
     ['h6', 'H6'],
-    ['subtitle1', 'H6'],
-    ['subtitle2', 'H6'],
+    // `P` since AGL-1487, deliberately: MUI's own mapping sends a subtitle
+    // to `<h6>`, which on a page builder puts a label into the document
+    // outline. `VARIANT_ELEMENT` is passed to MUI as `variantMapping` now, so
+    // it decides rather than describes.
+    ['subtitle1', 'P'],
+    ['subtitle2', 'P'],
     ['caption', 'SPAN'],
     ['overline', 'SPAN'],
   ] as Array<[string | undefined, string]>)(
     'MUI still renders %s as <%s>, which the container rule assumes',
     (variant, element) => {
-      // `VARIANT_ELEMENT` in typography.tsx is a copy of MUI's own
-      // `defaultVariantMapping`, which MUI does not export. If a MUI upgrade
-      // changes it, the container rule would start guessing wrong and the
-      // reparenting hazard would reopen silently — so pin it against what MUI
-      // ACTUALLY renders, not against the copy.
+      // `VARIANT_ELEMENT` in typography.tsx is the mapping we HAND to MUI,
+      // and the variants it does not name fall through to MUI's own
+      // `defaultVariantMapping`, which MUI does not export. Either half can
+      // drift — a MUI upgrade changing the fallback, or that table being
+      // edited without thinking about the container rule — and the
+      // reparenting hazard reopens silently. So pin it against what MUI
+      // ACTUALLY renders, not against the table.
       const host = document.createElement('div')
       host.innerHTML = renderToString(
         <AglynTypography variant={variant as never}>x</AglynTypography>,
