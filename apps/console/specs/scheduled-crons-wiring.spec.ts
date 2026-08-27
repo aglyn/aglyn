@@ -234,8 +234,13 @@ describe('scheduled-crons.yml wiring', () => {
       // const that the `onSchedule` options do not actually use would pass
       // every assertion below while the deployed job ran on something else.
       expect(functions).toContain('schedule: CONSOLE_FAST_CRON_SCHEDULE')
+      // The constant is not decorative on the ROUTE side either: a list
+      // pinned in a named const that the tick does not actually iterate
+      // would pass every assertion below while the deployed job posted
+      // somewhere else. `sweepConsoleCron` rather than a bare post since the
+      // daily routes chunk — see `CONSOLE_DAILY_CRONS`.
       expect(functions).toContain(
-        'CONSOLE_FAST_CRON_ROUTES.map((route) => postConsoleCron(route))',
+        'CONSOLE_FAST_CRON_ROUTES.map((route) => sweepConsoleCron(route))',
       )
     })
 
