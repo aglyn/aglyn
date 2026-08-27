@@ -31,12 +31,14 @@ import {
   collection,
   doc,
   limit,
+  orderBy,
   query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { usePagedCollection } from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 
@@ -54,6 +56,9 @@ export interface ReviewsModerationCardProps {
  * moderation queue whose approvals the renderer would never honour.
  */
 
+/** Reviews shown before "Load more". */
+const REVIEWS_PAGE_SIZE = 15
+
 const reviewsHelp = pluginDocsHelp('catalog', {
   anchor: '#products-options-and-variants',
   excerpt:
@@ -65,23 +70,40 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: reviewDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'reviews'), limit(200)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
   const [filter, setFilter] = useState('pending')
+  /*
+   * The status filter is the QUERY, and the order is the server's.
+   *
+   * This read `limit(200)` with no `orderBy` and then filtered and sorted in
+   * the browser. A limited Firestore query with no ordering returns
+   * DOCUMENT-ID order, and reviews are written with `.add()`, so those two
+   * hundred were a pseudo-random sample — "Pending" showed whichever pending
+   * reviews happened to fall in it, which on a busy shop is not the queue and
+   * cannot be worked through.
+   *
+   * Filtering here rather than in the browser is what lets the window shrink:
+   * a page of 25 mixed reviews might hold three pending ones, and a card that
+   * rendered those three would call it a page while the queue sat behind it.
+   * `reviews(status ASC, createdAtMs DESC)` is in
+   * cloud/firebase-firestore.indexes.json for exactly this.
+   */
+  const {
+    rows: reviews,
+    hasMore,
+    loadMore,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      query(
+        collection(firestore, 'hosts', hostId, 'reviews'),
+        ...(filter === 'all' ? [] : [where('status', '==', filter)]),
+        orderBy('createdAtMs', 'desc'),
+        limit(pageLimit),
+      ),
+    [firestore, hostId, filter],
+    { idField: '$id', pageSize: REVIEWS_PAGE_SIZE },
+  )
   const [replyFor, setReplyFor] = useState<string | null>(null)
   const [reply, setReply] = useState('')
-  const reviews = useMemo(
-    () =>
-      [...(reviewDocs ?? [])]
-        .filter((review: any) =>
-          filter === 'all' ? true : review.status === filter,
-        )
-        .sort((a: any, b: any) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)),
-    [reviewDocs, filter],
-  )
 
   const setStatus = (review: any, status: string) =>
     updateDoc(doc(firestore, 'hosts', hostId, 'reviews', review.$id), {
@@ -125,7 +147,7 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
             {'Nothing to moderate.'}
           </Typography>
         ) : (
-          reviews.slice(0, 15).map((review: any) => (
+          reviews.map((review: any) => (
             <Stack key={review.$id} spacing={0.5}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <Rating value={review.rating} size="small" readOnly />
@@ -197,6 +219,15 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
             </Stack>
           ))
         )}
+        {hasMore ? (
+          <Button
+            size="small"
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={loadMore}
+          >
+            {'Load more'}
+          </Button>
+        ) : null}
       </Stack>
     </CardDisplay>
     </EntitlementGatedCard>

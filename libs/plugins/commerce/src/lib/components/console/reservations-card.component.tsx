@@ -37,6 +37,7 @@ import {
   deleteDoc,
   doc,
   limit,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -45,6 +46,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   useFirestoreCollection,
+  usePagedCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -76,6 +78,9 @@ const day = (dayMs: number | undefined) =>
  * check-in/out, no-show, cancel, and walk-in creation. The storefront
  * widget books against the same docs.
  */
+/** Reservations shown before "Load more". */
+const RESERVATIONS_PAGE_SIZE = 20
+
 export function ReservationsCard(props: ReservationsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -99,14 +104,28 @@ export function ReservationsCard(props: ReservationsCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: reservationDocs } = useFirestoreCollection<any>(
-    () =>
+  /*
+   * Ordered by the server, and a growing window rather than a fixed 300.
+   *
+   * `limit(300)` carried no `orderBy`, so Firestore returned DOCUMENT-ID
+   * order and the client sort below arranged that pseudo-random sample by
+   * check-in. The ordering is unchanged — earliest check-in first, exactly
+   * what the sort did — it is now the QUERY's, so the window is the real
+   * front of the list and the rest can be reached.
+   */
+  const {
+    rows: reservations,
+    hasMore,
+    loadMore,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       query(
         collection(firestore, 'hosts', hostId, 'reservations'),
-        limit(300),
+        orderBy('checkInDayMs', 'asc'),
+        limit(pageLimit),
       ),
     [firestore, hostId],
-    { idField: '$id' },
+    { idField: '$id', pageSize: RESERVATIONS_PAGE_SIZE },
   )
   const resourceNames = useMemo(() => {
     const map: Record<string, string> = {}
@@ -115,13 +134,6 @@ export function ReservationsCard(props: ReservationsCardProps) {
     }
     return map
   }, [resourceDocs])
-  const reservations = useMemo(
-    () =>
-      [...(reservationDocs ?? [])].sort(
-        (a: any, b: any) => (a.checkInDayMs ?? 0) - (b.checkInDayMs ?? 0),
-      ),
-    [reservationDocs],
-  )
 
   const [resourceDraft, setResourceDraft] = useState<
     (Partial<CommerceModel.HostResource> & { id: string | null }) | null
@@ -366,7 +378,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
             {'Reservations from the widget (and walk-ins) appear here.'}
           </Typography>
         ) : (
-          reservations.slice(0, 20).map((reservation: any) => (
+          reservations.map((reservation: any) => (
             <Stack
               key={reservation.$id}
               direction="row"
@@ -451,6 +463,15 @@ export function ReservationsCard(props: ReservationsCardProps) {
             </Stack>
           ))
         )}
+        {hasMore ? (
+          <Button
+            size="small"
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={loadMore}
+          >
+            {'Load more'}
+          </Button>
+        ) : null}
       </Stack>
 
       <Dialog

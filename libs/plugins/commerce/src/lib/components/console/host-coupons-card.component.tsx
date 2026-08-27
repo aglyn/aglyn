@@ -33,7 +33,7 @@ import {
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { usePagedCollection } from '@aglyn/tenant-feature-instance'
 import { PLATFORM_BRAND_NAME, pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface HostCouponsCardProps {
@@ -46,16 +46,34 @@ export interface HostCouponsCardProps {
  * `hosts/{hostId}/coupons/{CODE}`; the discounts engine (AGL-305)
  * supersedes these.
  */
+/** Coupons shown before "Load more". */
+const COUPONS_PAGE_SIZE = 40
+
 export function HostCouponsCard(props: HostCouponsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: couponDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'coupons'), limit(100)),
+  /*
+   * A growing window rather than a hard hundred, which a shop with more
+   * codes than that could not see past.
+   *
+   * No `orderBy`: a coupon's document ID is its CODE, and document-ID order
+   * is what Firestore returns by default — so the window is already the
+   * alphabetical front of the list, which is what the sort below wants. The
+   * sort is kept because it makes that dependency explicit rather than
+   * relying on the default holding.
+   */
+  const {
+    rows: couponDocs,
+    hasMore,
+    loadMore,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      query(collection(firestore, 'hosts', hostId, 'coupons'), limit(pageLimit)),
     [firestore, hostId],
-    { idField: '$id' },
+    { idField: '$id', pageSize: COUPONS_PAGE_SIZE },
   )
-  const coupons = [...(couponDocs ?? [])].sort((a: any, b: any) =>
+  const coupons = [...couponDocs].sort((a: any, b: any) =>
     String(a.$id).localeCompare(String(b.$id)),
   )
   const [couponDraft, setCouponDraft] = useState<{
@@ -140,6 +158,15 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
             </Stack>
           ))
         )}
+        {hasMore ? (
+          <Button
+            size="small"
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={loadMore}
+          >
+            {'Load more'}
+          </Button>
+        ) : null}
         <Button
           size="small"
           sx={{ alignSelf: 'flex-start' }}

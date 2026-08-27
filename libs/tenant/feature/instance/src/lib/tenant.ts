@@ -29,6 +29,7 @@ export * from './hooks/helpers/guarded-seed-write'
 
 export * from './hooks/firestore-denial-reporter'
 export * from './hooks/use-firestore-collection'
+export * from './hooks/use-paged-collection'
 export * from './hooks/use-firestore-doc'
 export * from './hooks/use-switcher-collection'
 export * from './hooks/use-host-activity-logger'

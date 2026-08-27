@@ -87,12 +87,24 @@ describe('AGL-2226 · gift cards are reachable from the console', () => {
     expect(body(CARD)).toContain('feature="giftCards"')
   })
 
-  it('shows the outstanding total, floored per card', () => {
-    // The number is the reason the card exists. Flooring matters because
-    // AGL-1767 produced NEGATIVE balances, and summing those raw understates
-    // the liability — the exact bug, re-created in the readout.
+  it('shows the outstanding total, floored, and over EVERY card', () => {
+    // The number is the reason the card exists, and it has two properties.
+    //
+    // FLOORED, because AGL-1767 produced NEGATIVE balances and summing those
+    // raw understates the liability — the exact bug, re-created in the
+    // readout. The floor used to be `Math.max(0, …)` inside a client-side
+    // reduce; it is now `where('balanceCents','>',0)`, which excludes the
+    // same rows the floor zeroed. Same property, moved into the query.
+    //
+    // OVER EVERY CARD, which the reduce was not: it summed whatever the
+    // window held, so a shop with more cards than the window under-reported
+    // what it owed and had no way to know. An aggregation has no window.
     expect(body(CARD)).toContain('outstandingCents')
-    expect(body(CARD)).toMatch(/Math\.max\(0, Number\(card\.balanceCents/)
+    expect(body(CARD)).toMatch(/where\('balanceCents', '>', 0\)/)
+    expect(body(CARD)).toContain("sum('balanceCents')")
+    // The negative control on "no window": a reduce over the rendered rows
+    // would pass the two assertions above and still be a page total.
+    expect(body(CARD)).not.toMatch(/outstandingCents:\s*\w+\.reduce/)
   })
 })
 

@@ -139,6 +139,27 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: listener.status,
     fromCache: listener.fromCache,
   }),
+  // Modelled rather than stubbed: the real hook over-fetches by one and
+  // hands back the page WITHOUT the probe row. A stub returning everything
+  // would render rows the component cannot actually be given, and hide an
+  // off-by-one instead of catching it.
+  usePagedCollection: (
+    build: (pageLimit: number) => unknown,
+    _deps: unknown,
+    options: { pageSize?: number } = {},
+  ) => {
+    const pageSize = options.pageSize ?? 25
+    const data = collections[build(pageSize + 1) as string] ?? []
+    return {
+      rows: data.slice(0, pageSize),
+      hasMore: data.length > pageSize,
+      loadMore: () => undefined,
+      windowSize: pageSize,
+      data,
+      status: listener.status,
+      fromCache: listener.fromCache,
+    }
+  },
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the card passed it, which is the one thing these specs disprove.

@@ -25,11 +25,20 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import {
+  collection,
+  count,
+  getAggregateFromServer,
+  limit,
+  orderBy,
+  query,
+  sum,
+  where,
+} from 'firebase/firestore'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
-  useFirestoreCollection,
+  usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -40,6 +49,9 @@ export interface GiftCardsCardProps {
 }
 
 const usd = (cents: number | undefined) => `$${((cents ?? 0) / 100).toFixed(2)}`
+
+/** Cards shown before "Load more". */
+const CARDS_PAGE_SIZE = 25
 
 const giftCardsHelp = pluginDocsHelp('commerce', {
   anchor: '#gift-cards',
@@ -76,41 +88,98 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { data: cardDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'giftCards'), limit(300)),
+  /*
+   * Ordered by the server, and a growing window rather than a fixed 300.
+   *
+   * `limit(300)` with no `orderBy` returns DOCUMENT-ID order, and a gift card
+   * is keyed by its CODE, so the window was three hundred cards chosen by
+   * code — sorted by date afterwards to look newest-first. Past three hundred
+   * cards, one issued this morning was not in it.
+   */
+  const {
+    rows: allCards,
+    hasMore,
+    loadMore,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      query(
+        collection(firestore, 'hosts', hostId, 'giftCards'),
+        orderBy('createdAtMs', 'desc'),
+        limit(pageLimit),
+      ),
     [firestore, hostId],
-    { idField: '$id' },
+    { idField: '$id', pageSize: CARDS_PAGE_SIZE },
   )
   const [search, setSearch] = useState('')
   const [amount, setAmount] = useState('')
   const [recipient, setRecipient] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const { cards, outstandingCents, liveCount } = useMemo(() => {
-    const all = [...(cardDocs ?? [])].sort(
-      (a: any, b: any) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0),
-    )
+  const cards = useMemo(() => {
     const term = search.trim().toUpperCase()
-    return {
-      cards: term
-        ? all.filter(
-            (card: any) =>
-              card.$id.includes(term) ||
-              String(card.recipientEmail ?? '').toUpperCase().includes(term),
-          )
-        : all,
-      // Floored at zero per card: a negative balance is a data fault
-      // (AGL-1767), not credit the merchant gets back.
-      outstandingCents: all.reduce(
-        (sum: number, card: any) =>
-          sum + Math.max(0, Number(card.balanceCents ?? 0)),
-        0,
-      ),
-      liveCount: all.filter(
-        (card: any) => Number(card.balanceCents ?? 0) > 0,
-      ).length,
+    if (!term) return allCards
+    return allCards.filter(
+      (card: any) =>
+        card.$id.includes(term) ||
+        String(card.recipientEmail ?? '').toUpperCase().includes(term),
+    )
+  }, [allCards, search])
+
+  /*==========================================
+   * OUTSTANDING LIABILITY IS A SERVER AGGREGATE, not a page total.
+   *
+   * These two numbers are what the merchant owes their customers, and they
+   * were `reduce`d over whatever the window happened to hold — 300 cards
+   * chosen by code. A shop with 400 gift cards under-reported its own
+   * liability and had no way to know: the chip does not say "of the cards on
+   * screen", and there is no reading of "$X outstanding" under which a
+   * sample is the answer.
+   *
+   * `where('balanceCents','>',0)` IS the per-card floor the reduce applied
+   * by hand. A negative balance is a data fault (AGL-1767), not credit the
+   * merchant gets back; excluding it contributes zero, exactly as flooring
+   * it did. Zero-balance cards contribute nothing either way and are what
+   * `liveCount` was already counting.
+   *
+   * An aggregation is billed per 1,000 documents scanned rather than per
+   * document, so this is cheaper than the read it replaces as well as
+   * correct.
+   *=========================================*/
+  const [totalsEpoch, setTotalsEpoch] = useState(0)
+  const [totals, setTotals] = useState<{
+    outstandingCents: number
+    liveCount: number
+    issuedCount: number
+  } | null>(null)
+  useEffect(() => {
+    let active = true
+    const cardsRef = collection(firestore, 'hosts', hostId, 'giftCards')
+    void Promise.all([
+      getAggregateFromServer(query(cardsRef, where('balanceCents', '>', 0)), {
+        outstandingCents: sum('balanceCents'),
+        liveCount: count(),
+      }),
+      // "Issued" is every card ever, so this one carries no predicate.
+      getAggregateFromServer(cardsRef, { issuedCount: count() }),
+    ])
+      .then(([balances, issued]) => {
+        if (!active) return
+        setTotals({
+          outstandingCents: Number(balances.data().outstandingCents ?? 0),
+          liveCount: Number(balances.data().liveCount ?? 0),
+          issuedCount: Number(issued.data().issuedCount ?? 0),
+        })
+      })
+      .catch(() => {
+        // Held at null rather than zeroed. "$0.00 outstanding" is a
+        // confident wrong number in the flattering direction; an absent one
+        // renders as unknown and cannot be mistaken for a settled book.
+        if (active) setTotals(null)
+      })
+    return () => {
+      active = false
     }
-  }, [cardDocs, search])
+  }, [firestore, hostId, totalsEpoch])
 
   const post = useCallback(
     async (payload: Record<string, unknown>, success: (body: any) => string) => {
@@ -133,6 +202,10 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
           })
         }
         enqueueSnackbar(success(body), { variant: 'success', persist: false })
+        // Issuing, voiding or adjusting moves the liability. The list is a
+        // live listener and updates itself; the aggregate is a one-shot read
+        // and would otherwise keep reporting the balance from before.
+        setTotalsEpoch((epoch) => epoch + 1)
       } finally {
         setBusy(false)
       }
@@ -206,11 +279,22 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
             <Chip
               size="small"
-              color={outstandingCents ? 'warning' : 'default'}
-              label={`${usd(outstandingCents)} outstanding`}
+              color={totals?.outstandingCents ? 'warning' : 'default'}
+              label={
+                totals
+                  ? `${usd(totals.outstandingCents)} outstanding`
+                  : 'Outstanding unavailable'
+              }
             />
-            <Chip size="small" label={`${liveCount} with a balance`} />
-            <Chip size="small" label={`${(cardDocs ?? []).length} issued`} />
+            {totals ? (
+              <Chip
+                size="small"
+                label={`${totals.liveCount} with a balance`}
+              />
+            ) : null}
+            {totals ? (
+              <Chip size="small" label={`${totals.issuedCount} issued`} />
+            ) : null}
           </Stack>
           <Typography variant="caption" color="text.secondary">
             {'Outstanding balance is store credit your customers have already ' +
@@ -244,7 +328,7 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
           </Stack>
 
           <TextField
-            label="Find a code or recipient"
+            label="Find in the cards below"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             size="small"
@@ -253,7 +337,7 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
 
           {cards.length ? (
             <Stack spacing={1}>
-              {cards.slice(0, 50).map((card: any) => (
+              {cards.map((card: any) => (
                 <Stack
                   key={card.$id}
                   direction="row"
@@ -297,10 +381,20 @@ export function GiftCardsCard(props: GiftCardsCardProps) {
           ) : (
             <Typography variant="body2" color="text.secondary">
               {search
-                ? 'No gift card matches that code or email.'
+                ? 'No gift card loaded so far matches that code or email — ' +
+                  'load more to search further back.'
                 : 'No gift cards yet. Sell a gift-card product, or issue one above.'}
             </Typography>
           )}
+          {hasMore ? (
+            <Button
+              size="small"
+              sx={{ alignSelf: 'flex-start' }}
+              onClick={loadMore}
+            >
+              {'Load more'}
+            </Button>
+          ) : null}
         </Stack>
       </CardDisplay>
     </EntitlementGatedCard>
