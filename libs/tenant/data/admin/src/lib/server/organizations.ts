@@ -310,6 +310,20 @@ export async function createOrganization(
         email: ownerEmail ?? null,
         displayName: ownerDisplayName ?? null,
         joinedAt: FieldValue.serverTimestamp(),
+        /*
+         * The rules projection, stamped AT CREATION (AGL-1038).
+         *
+         * Every other membership write reaches `syncOrgAuthProjections`,
+         * which recomputes this for the whole roster. This one does not —
+         * it is inside the creating transaction, and nothing runs after it
+         * — so a brand-new org's owner had no `scopeTokens` at all and the
+         * weekly scope-drift detector reported the org from the day it was
+         * made until some later membership change happened to heal it.
+         *
+         * Computed rather than written as a literal, so it cannot disagree
+         * with the projection every other path uses.
+         */
+        scopeTokens: projectMemberScopeTokens({ role: 'owner', allHosts: true }),
       },
     )
     tx.set(

@@ -238,6 +238,16 @@ const IMAGE_ORIGINS = [
   // it directly; Google is the only social provider wired
   // (`utils/oauth-providers.ts`), and it serves photos from `lh3`.
   'https://lh3.googleusercontent.com',
+  // App Check's reCAPTCHA badge. Path-scoped to match the `SCRIPT_ORIGINS`
+  // entry that loads the script it belongs to — the same widget, the other
+  // half of it.
+  'https://www.google.com/recaptcha/',
+  // GA4's measurement pixel. `SCRIPT_ORIGINS` above admits this host for the
+  // gtag SCRIPT and asks, in a comment, whether the matching pixel is an
+  // ad-network beacon that has no business in a logged-in console. Measured:
+  // it is GA4's own, on the pages that load the analytics SDK we deliberately
+  // ship. Allowlisting the script and reporting its beacon measures nothing.
+  'https://www.googletagmanager.com',
 ]
 
 /**
@@ -483,6 +493,21 @@ const SCRIPT_ORIGINS = [
   // `img-src` report and is a question about ad-network beacons in a logged-in
   // console rather than an allowlist entry (see `imgSrcDirective`).
   'https://www.googletagmanager.com',
+  // Google Sign-In. `signInWithPopup` loads gapi from here for the federated
+  // flows, which is why the reports cluster on `/signin` — 37 of them in the
+  // first fortnight of measurement, every one a script we deliberately ship.
+  'https://apis.google.com',
+  /*
+   * Realtime Database. The RTDB SDK appends a `<script>` per long-poll frame,
+   * and the besigner's presence and version views hold an open connection —
+   * 61 reports, all from besigner and version routes.
+   *
+   * Wildcarded because the hostname is a SHARD, assigned per connection:
+   * production served `s-gke-usc1-nssi2-2.firebaseio.com` alongside the
+   * project's own `aglyn-main-default-rtdb.firebaseio.com`, and pinning either
+   * would report the other from the next connection onward.
+   */
+  'https://*.firebaseio.com',
 ]
 
 /**
@@ -546,6 +571,26 @@ const SCRIPT_ORIGINS = [
  * `'unsafe-eval'` follows the enforcing policy off production for the same
  * reason it is there — React's dev build evals, and a directive violated on
  * every dev page load is one nobody reads.
+ */
+/*
+ * ## The residue that is NOT an allowlist entry
+ *
+ * With the origins above, what still reports is `blocked-uri: inline` — 22 in
+ * the first fortnight, on `/signin` and `/app`. None of them is ours: the
+ * console renders no inline `<script>` anywhere, and reads `x-nonce` nowhere.
+ * They are injected at runtime BY the third-party scripts this list admits —
+ * gapi on the sign-in page, the Firebase SDKs on the app shell — and an
+ * injected inline script carries no nonce by construction.
+ *
+ * `'strict-dynamic'` is the directive designed for exactly this and it is not
+ * the answer here: it makes `'self'` inert, and measuring it took the count
+ * from 1 to 70 (see the note above). `'unsafe-inline'` would clear the report
+ * by removing the protection the whole policy exists for.
+ *
+ * So this residue is the standing reason `script-src` cannot be flipped from
+ * report-only to enforcing, and it is a property of the dependencies rather
+ * than a gap in this file. Dropping a dependency that injects inline is what
+ * would move it; nothing in this list can.
  */
 function scriptSrcReportOnlyDirective(nonce, isProduction) {
   const sources = ["'self'", 'blob:', `'nonce-${nonce}'`]

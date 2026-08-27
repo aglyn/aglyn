@@ -263,7 +263,14 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
               )
             ) : null}
 
+            {/* MASONRY. Every probe card is a different height — Serving
+                carries one check and Billing webhook carries five plus a
+                paragraph — and a twelve-column flex row makes each row as tall
+                as its tallest card. That left a screen of dead space under
+                Serving with Error beacon pushed below it, on the page whose
+                job is showing eight verdicts at a glance. */}
             <GridItems
+              masonry
               spacing={3}
               items={HEALTH_PROBES.map((probe) => {
                 const result = byId.get(probe.id)
