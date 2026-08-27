@@ -32,6 +32,38 @@ const ANALYZE_BUNDLE = process.env.NEXT_ANALYZE_BUNDLE === 'true'
 
 const { PRODUCTION_DOMAINS } = require('./security-origins')
 
+/*
+ * The repo-root `.env`, for LOCAL DEVELOPMENT only.
+ *
+ * Next reads env files from the APP directory, so a key written to the
+ * monorepo root is invisible to `apps/console` and `apps/tenant` — while the
+ * tooling in `tools/scripts` reads root explicitly and sees it fine. That
+ * split is a trap rather than a convention: `RESEND_API_KEY` sat in the root
+ * `.env` while the console's own email probe reported the key MISSING and
+ * pointed at Vercel, which is the wrong place to look and the wrong
+ * environment to look in.
+ *
+ * Two rules keep this safe:
+ *
+ *   NEVER in production. Vercel injects real env; reading a file there would
+ *   let a stray checked-out `.env` shadow it, which is how a staging secret
+ *   reaches production traffic.
+ *
+ *   NEVER overrides. `override: false` is dotenv's default and is stated
+ *   here because it is the load-bearing half: an app-level `.env.local` and
+ *   the process environment both still win, so this only fills gaps.
+ */
+if (NODE_ENV !== 'production') {
+  require('dotenv').config({
+    path: require('path').join(__dirname, '.env'),
+    override: false,
+    // The banner names the file and the count on every dev boot and every
+    // build — one more line between a developer and the error they are
+    // reading.
+    quiet: true,
+  })
+}
+
 const DEVELOPMENT_DOMAINS = IS_PRODUCTION
   ? []
   : [

@@ -231,6 +231,16 @@ export enum Route {
   // enablement and the Danger zone — out of the Setup page collaborators
   // legitimately visit.
   HOST_ADMIN = '/[orgSlug]/hosts/[host]/admin',
+  /*
+   * Site-admin SECTIONS are routes (AGL-693), so an unopened one costs neither
+   * a read nor a byte. `HOST_ADMIN` redirects to Plugins and still honours the
+   * `?tab=` ids these sections were deep-linked by.
+   */
+  HOST_ADMIN_PLUGINS = '/[orgSlug]/hosts/[host]/admin/plugins',
+  HOST_ADMIN_DOMAIN = '/[orgSlug]/hosts/[host]/admin/domain',
+  HOST_ADMIN_SECURITY = '/[orgSlug]/hosts/[host]/admin/security',
+  HOST_ADMIN_ACTIVITY = '/[orgSlug]/hosts/[host]/admin/activity',
+  HOST_ADMIN_DANGER = '/[orgSlug]/hosts/[host]/admin/danger',
   HOST_THEME = '/[orgSlug]/hosts/[host]/theme',
   HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
   HOST_DATA = '/[orgSlug]/hosts/[host]/data',
@@ -402,6 +412,11 @@ export interface RoutePayload {
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_PLUGINS]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_DOMAIN]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_SECURITY]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_ACTIVITY]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_DANGER]: { orgSlug: string; host: string }
   [Route.HOST_PLUGIN]: { orgSlug: string; host: string; pluginSlug: string }
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }
   [Route.HOST_THEME]: { orgSlug: string; host: string }

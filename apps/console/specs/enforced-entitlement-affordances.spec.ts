@@ -140,17 +140,21 @@ describe('AGL-2081 · enforced entitlements have a console affordance', () => {
   it('the branding card is mounted on a real page, not merely written', () => {
     // A component nobody renders is the same gap with more code in it.
     //
-    // On ADMIN since AGL-1485, with the Custom domain tab it belongs to: the
-    // badge is a fact about the published site, so it sits beside the domain
-    // it is published on. Asserted against the page that holds the tab rather
-    // than a fixed path, so the next move fails on the MOUNT being gone
-    // rather than on the file having been renamed.
-    const page = source('app/(app)/[orgSlug]/hosts/[host]/admin/page.tsx')
+    // On ADMIN since AGL-1485, with the Custom domain section it belongs to:
+    // the badge is a fact about the published site, so it sits beside the
+    // domain it is published on.
+    // Moved with the Domain SECTION when site admin became routes (AGL-693) —
+    // same invariant, same card, still beside the domain it is a fact about.
+    const page = source(
+      'app/(app)/[orgSlug]/hosts/[host]/admin/(sections)/domain/page.tsx',
+    )
     expect(page).toContain('SiteBrandingBadgeCard')
     // Mounted as an element, not just imported.
-    expect(body('app/(app)/[orgSlug]/hosts/[host]/admin/page.tsx')).toContain(
-      '<SiteBrandingBadgeCard',
-    )
+    expect(
+      body(
+        'app/(app)/[orgSlug]/hosts/[host]/admin/(sections)/domain/page.tsx',
+      ),
+    ).toContain('<SiteBrandingBadgeCard')
   })
 
   it('the abandoned-cart template declares the flag that gates its send', () => {

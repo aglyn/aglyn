@@ -464,11 +464,51 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                           <Chip
                             key={entry.directive}
                             size="small"
-                            color="warning"
-                            label={`${entry.directive}: ${entry.count}`}
+                            /*
+                             * BLOCKED is red; measured is amber. They were
+                             * one amber count, so a login script that did not
+                             * run for somebody looked like an analytics pixel
+                             * a stricter policy would have stopped.
+                             */
+                            color={entry.blocked ? 'error' : 'warning'}
+                            label={
+                              entry.blocked
+                                ? `${entry.directive}: ${entry.blocked} blocked` +
+                                  (entry.reported
+                                    ? `, ${entry.reported} measured`
+                                    : '')
+                                : `${entry.directive}: ${entry.reported} measured`
+                            }
                           />
                         ))}
                       </Stack>
+                      {/* A blocked violation is an INCIDENT, and an incident
+                          that stopped is not the same as one still happening.
+                          Without the date, twenty-two scripts blocked on a
+                          Wednesday read for the rest of the fortnight exactly
+                          like this morning's. */}
+                      {csp.lastBlockedMs ? (
+                        <Alert
+                          severity={
+                            Date.now() - csp.lastBlockedMs < 86_400_000
+                              ? 'error'
+                              : 'info'
+                          }
+                        >
+                          <AlertTitle>
+                            {Date.now() - csp.lastBlockedMs < 86_400_000
+                              ? 'Something is being blocked right now'
+                              : 'Nothing has been blocked since ' +
+                                new Date(csp.lastBlockedMs).toLocaleString()}
+                          </AlertTitle>
+                          {Date.now() - csp.lastBlockedMs < 86_400_000
+                            ? 'A script or resource did not run, for somebody, ' +
+                              'on a live page. Read the enforced rows below.'
+                            : 'The enforced rows below are a past incident ' +
+                              'still inside the window, not a live one. They ' +
+                              'age out on their own.'}
+                        </Alert>
+                      ) : null}
                       <Typography variant="body2" color="text.secondary">
                         {`${csp.totalViolations} violations across ` +
                           `${csp.rowCount} rows since ${csp.since}.`}

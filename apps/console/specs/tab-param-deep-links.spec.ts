@@ -30,7 +30,7 @@
  * with the ids the resolver is given. Adding a tab and forgetting the list is
  * red here rather than silently unreachable.
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SETUP_TAB_IDS } from '../app/(app)/[orgSlug]/hosts/[host]/setup/page'
 
@@ -98,12 +98,11 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
     }
   })
 
-  it('every page with a tab param goes through the shared resolver', () => {
+  it('every page that still has PANELS goes through the shared resolver', () => {
     // Three pages had three different answers and one of them was wrong.
     // Reading `?tab=` by hand is how the fourth one gets it wrong too.
     const pages = [
       ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'setup', 'page.tsx'],
-      ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'admin', 'page.tsx'],
       ['app', '(app)', 'manage', 'user', 'page.tsx'],
     ]
     for (const segments of pages) {
@@ -111,5 +110,45 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
       expect(source).toContain('useTabParam')
       expect(source).not.toContain(`get('tab')`)
     }
+  })
+
+  /**
+   * A page whose panels became ROUTES answers the same question differently
+   * (AGL-693): it reads `?tab=` once and redirects, so `useTabParam` — which
+   * resolves a value against tabs that are rendered — has nothing to resolve
+   * against. What has to hold instead is that the map is COMPLETE. A section
+   * added without a legacy entry is a link that used to work and now lands on
+   * the first section, which is the AGL-2486 failure wearing a redirect.
+   */
+  describe('a page whose panels became routes maps every section', () => {
+    const routed = [
+      ['app', '(app)', '[orgSlug]', 'settings'],
+      ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'admin'],
+    ]
+
+    it('THE CONTROL: both redirect pages exist and read the param', () => {
+      // Otherwise the loop below passes by finding no sections to check.
+      for (const segments of routed) {
+        expect(read(...segments, 'page.tsx')).toContain(`get('tab')`)
+      }
+    })
+
+    it('names every section directory in its redirect map', () => {
+      for (const segments of routed) {
+        const dir = join(__dirname, '..', ...segments, '(sections)')
+        const sections = readdirSync(dir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name)
+        expect(sections.length).toBeGreaterThan(2)
+        const source = read(...segments, 'page.tsx')
+        for (const section of sections) {
+          // The route constant carries the section's own directory name, so
+          // finding it proves the map can reach that section.
+          expect(source.toLowerCase()).toContain(
+            section.replace(/-/g, '_').toLowerCase(),
+          )
+        }
+      }
+    })
   })
 })
