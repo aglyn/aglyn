@@ -24,6 +24,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import {
+  ACTOR_ACTIVITY_MAX_PAGE,
   orgActivityScopePaths,
   readActorActivity,
   readOrgWideActivity,
@@ -61,15 +62,30 @@ import {
  * `org.auditLog` is the narrower question layered on top: whether this
  * member's seat may see the audit trail at all.
  *
- * ## The window
+ * ## The page
  *
- * Newest-first, ordered server-side, capped at 200 — the same window and the
- * same ordering the client query used after AGL-2292, moved rather than
- * redesigned. `createdAt` is flattened to `{ seconds }` because that is what
- * the card's own tie-break sort reads, and shipping a Firestore `Timestamp`
- * through JSON would arrive as `{_seconds}` and silently sort everything to
- * the bottom.
+ * Newest-first, ordered server-side, and a real page rather than a window:
+ * `pageSize` rows plus a `nextCursor` to continue from.
+ *
+ * It was a flat cap of 200 that the card then sliced 20 rows out of. That
+ * read 200 documents to render 20 on every mount, and the other 180 were not
+ * merely wasted — they were unreachable. Nothing rendered rows 21 through
+ * 200, and an organization past its 200th entry could not reach entry 201 at
+ * all. On the only audit surface a customer admin has, "the history stops
+ * here" was a rendering accident.
+ *
+ * The cursor is a document ID rather than a path. The parent collection is
+ * fixed by `orgId`, which is permission-checked above, so an id cannot be
+ * used to page into another organization's feed the way a caller-supplied
+ * path could.
+ *
+ * `createdAt` is flattened to `{ seconds }` because a Firestore `Timestamp`
+ * through JSON arrives as `{_seconds}` and would silently sort everything to
+ * the bottom. `formatWireTimestamp` is what reads it back.
  */
+const DEFAULT_PAGE_SIZE = 25
+
+/** The org-wide fan-out still serves a window; see `readOrgWideActivity`. */
 const WINDOW = 200
 
 async function handler(request: Request): Promise<Response> {
@@ -144,16 +160,51 @@ async function handler(request: Request): Promise<Response> {
       })
       return Response.json({ entries }, { status: 200 })
     }
-    const snapshot = await firebaseAdmin
+    /**
+     * Changes made TO one member, host or screen (AGL-389).
+     *
+     * Filtered by the SERVER now. The card fetched the window and filtered it
+     * in the browser, which cannot survive pagination: a page of 25 org
+     * entries might contain two that touch this member, and the card would
+     * render those two and call it the page. `logOrgActivity` writes
+     * `target: { type, id }`, so this is a field query, and the composite
+     * index it needs is in `cloud/firebase-firestore.indexes.json`.
+     */
+    const targetId = String(query['targetId'] ?? '').trim()
+    const pageSize = Math.min(
+      Math.max(
+        1,
+        Math.floor(Number(query['pageSize'] ?? DEFAULT_PAGE_SIZE)) ||
+          DEFAULT_PAGE_SIZE,
+      ),
+      ACTOR_ACTIVITY_MAX_PAGE,
+    )
+    const activityRef = firebaseAdmin
       .app()
       .firestore()
       .collection('orgs')
       .doc(orgId)
       .collection('activity')
-      .orderBy('createdAt', 'desc')
-      .limit(WINDOW)
-      .get()
-    const entries = snapshot.docs.map((doc) => {
+    /*
+     * A cursor that no longer resolves restarts at the top rather than
+     * throwing. An audit log left open in a tab while its oldest entries are
+     * pruned should answer the next click with the newest page, not a 500.
+     */
+    const cursorId = String(query['cursor'] ?? '').trim()
+    const after = cursorId
+      ? await activityRef
+          .doc(cursorId)
+          .get()
+          .catch(() => null)
+      : null
+    let pageQuery: FirebaseFirestore.Query = (
+      targetId ? activityRef.where('target.id', '==', targetId) : activityRef
+    ).orderBy('createdAt', 'desc')
+    if (after?.exists) pageQuery = pageQuery.startAfter(after)
+    // One extra row answers "is there another page" without a second query.
+    const snapshot = await pageQuery.limit(pageSize + 1).get()
+    const pageDocs = snapshot.docs.slice(0, pageSize)
+    const entries = pageDocs.map((doc) => {
       const data = doc.data() as Record<string, unknown>
       const createdAt = data['createdAt'] as { seconds?: number } | undefined
       return {
@@ -165,7 +216,16 @@ async function handler(request: Request): Promise<Response> {
             : null,
       }
     })
-    return Response.json({ entries }, { status: 200 })
+    return Response.json(
+      {
+        entries,
+        nextCursor:
+          snapshot.docs.length > pageSize
+            ? (pageDocs[pageDocs.length - 1]?.id ?? null)
+            : null,
+      },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Activity lookup failed' }, { status: 500 })

@@ -47,3 +47,27 @@ export function formatStaffTimestamp(value: unknown): string {
   if (Number.isNaN(date.getTime())) return String(value)
   return date.toLocaleString()
 }
+
+/**
+ * When something a ROUTE sent happened.
+ *
+ * A Firestore `Timestamp` cannot cross JSON intact, so every route that
+ * serves activity flattens it to `{ seconds }` first. That leaves two traps
+ * for the surface rendering it, and the org activity card fell into both:
+ * `createdAt.toDate()` is not a function on the flattened object, so
+ * `?.toDate?.()` quietly yields nothing and the row renders its separator
+ * with no date after it; and handing the object to `formatStaffTimestamp`
+ * directly makes an Invalid Date that prints as `[object Object]`.
+ *
+ * Seconds become milliseconds here, once, so no caller has to remember
+ * either. `typeof` rather than truthiness because second 0 is a real instant
+ * and an audit surface should print it, not an em dash.
+ */
+export function formatWireTimestamp(
+  value: { seconds?: number } | null | undefined,
+): string {
+  const seconds = value?.seconds
+  return formatStaffTimestamp(
+    typeof seconds === 'number' ? seconds * 1000 : null,
+  )
+}

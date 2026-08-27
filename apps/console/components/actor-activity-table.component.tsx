@@ -32,7 +32,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { formatStaffTimestamp } from '../utils/staff-timestamps'
+import { formatWireTimestamp } from '../utils/staff-timestamps'
 
 export interface ActorActivityEntry {
   $id: string
@@ -178,11 +178,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
                     <Chip size="small" variant="outlined" label={scopeLabel(entry)} />
                   </TableCell>
                   <TableCell>
-                    {formatStaffTimestamp(
-                      entry.createdAt?.seconds
-                        ? entry.createdAt.seconds * 1000
-                        : null,
-                    )}
+                    {formatWireTimestamp(entry.createdAt)}
                   </TableCell>
                 </TableRow>
               ))}

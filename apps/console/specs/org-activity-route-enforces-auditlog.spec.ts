@@ -44,6 +44,7 @@
  * allowed case by one field: their role, or one key in their overrides.
  */
 import { resolveOrgPermissions } from '@aglyn/aglyn'
+import { ACTOR_ACTIVITY_MAX_PAGE } from '../utils/server/actor-activity'
 
 const mockVerifyIdToken = jest.fn()
 /** The member document `resolveOrgMembership` answers with. */
@@ -52,6 +53,9 @@ let member: Record<string, unknown> | null = null
 let activity: Array<Record<string, unknown>> = []
 let ordering: Array<[string, string]> = []
 let capped: number | null = null
+let wheres: Array<[string, string, unknown]> = []
+/** The id of the document the page was told to resume after, if any. */
+let startedAfter: string | null = null
 
 const snapshot = (id: string, data: any) => ({
   id,
@@ -62,8 +66,16 @@ const snapshot = (id: string, data: any) => ({
 
 function activityQuery(): any {
   return {
+    where: (field: string, op: string, value: unknown) => {
+      wheres.push([field, op, value])
+      return activityQuery()
+    },
     orderBy: (field: string, direction: string) => {
       ordering.push([field, direction])
+      return activityQuery()
+    },
+    startAfter: (cursor: { id?: string } | null) => {
+      startedAfter = cursor?.id ?? null
       return activityQuery()
     },
     limit: (count: number) => {
@@ -74,6 +86,12 @@ function activityQuery(): any {
       docs: activity.map((entry, index) =>
         snapshot(String(entry['$id'] ?? index), entry),
       ),
+    }),
+    // The cursor is resolved as a document of THIS collection, which is what
+    // stops an id from one org paging into another org's feed.
+    doc: (id: string) => ({
+      get: async () =>
+        snapshot(id, activity.find((entry) => entry['$id'] === id) ?? null),
     }),
   }
 }
@@ -134,17 +152,23 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import { GET } from '../app/api/orgs/activity/route'
 
-const get = (orgId = 'org-1') =>
-  GET(
-    new Request(`https://console.test/api/orgs/activity?orgId=${orgId}`, {
-      headers: { authorization: 'Bearer token' },
-    }),
+const get = (orgId = 'org-1', params: Record<string, string> = {}) => {
+  const url = new URL('https://console.test/api/orgs/activity')
+  url.searchParams.set('orgId', orgId)
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value)
+  }
+  return GET(
+    new Request(url.toString(), { headers: { authorization: 'Bearer token' } }),
   )
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
   ordering = []
   capped = null
+  wheres = []
+  startedAfter = null
   activity = [
     { $id: 'c', action: 'Newest', createdAt: { seconds: 300 } },
     { $id: 'b', action: 'Middle', createdAt: { seconds: 200 } },
@@ -231,10 +255,26 @@ describe('the activity feed is gated on org.auditLog (AGL-2444)', () => {
  * assertion would have retired the test along with the code it watched.
  */
 describe('the window is ordered and capped, server-side', () => {
-  it('orders by createdAt descending and caps at 200', async () => {
+  it('orders by createdAt descending, and asks for one row past the page', async () => {
     await get()
     expect(ordering).toContainEqual(['createdAt', 'desc'])
-    expect(capped).toBe(200)
+    // 25 + 1: the extra row is how the route knows whether a next page
+    // exists without paying for a second query. It replaced a flat cap of
+    // 200 that the card then rendered 20 of.
+    expect(capped).toBe(26)
+  })
+
+  it('honors pageSize, and refuses to serve an unbounded one', async () => {
+    await get('org-1', { pageSize: '10' })
+    expect(capped).toBe(11)
+    // A page nobody reads is a bill somebody pays: the request does not get
+    // to choose an arbitrary size.
+    await get('org-1', { pageSize: '100000' })
+    expect(capped).toBe(ACTOR_ACTIVITY_MAX_PAGE + 1)
+    // Garbage falls back to the default rather than to NaN, which Firestore
+    // would reject at the limit() call.
+    await get('org-1', { pageSize: 'abc' })
+    expect(capped).toBe(26)
   })
 
   it('flattens createdAt to seconds, and to null when it has none', async () => {
@@ -248,5 +288,65 @@ describe('the window is ordered and capped, server-side', () => {
     const payload = await (await get()).json()
     expect(payload.entries[0].createdAt).toEqual({ seconds: 10 })
     expect(payload.entries[1].createdAt).toBeNull()
+  })
+})
+
+/**
+ * The feed is a PAGE, not a window (AGL-2292 → this change).
+ *
+ * Ordering the query fixed WHICH rows were fetched. It did not make more
+ * than the first twenty reachable: the route served 200 and the card
+ * rendered 20, so rows 21-200 were paid for and never shown and entry 201
+ * could not be reached at all. These cases are what make the rest of the
+ * history reachable, and what keep the cost of reaching it flat.
+ */
+describe('the feed pages', () => {
+  it('returns a cursor when there is another page, and null when there is not', async () => {
+    // Three rows for a page of two: the third is the route's evidence that
+    // a next page exists, and must not be served as content.
+    activity = [
+      { $id: 'c', action: 'Newest', createdAt: { seconds: 300 } },
+      { $id: 'b', action: 'Middle', createdAt: { seconds: 200 } },
+      { $id: 'a', action: 'Oldest', createdAt: { seconds: 100 } },
+    ]
+    const payload = await (await get('org-1', { pageSize: '2' })).json()
+    expect(payload.entries.map((entry: any) => entry.$id)).toEqual(['c', 'b'])
+    // The cursor is the last row SHOWN, not the extra row read. Resuming
+    // after the unshown row would skip it from every page — the quiet half
+    // of an off-by-one, in the log where the missing entry is the one
+    // nobody thinks to look for.
+    expect(payload.nextCursor).toBe('b')
+
+    activity = activity.slice(0, 2)
+    const last = await (await get('org-1', { pageSize: '2' })).json()
+    expect(last.nextCursor).toBeNull()
+  })
+
+  it('resumes after the cursor it was handed', async () => {
+    await get('org-1', { cursor: 'b' })
+    expect(startedAfter).toBe('b')
+  })
+
+  it('a cursor that no longer resolves restarts at the top', async () => {
+    // An audit log left open in a tab while its oldest entries are pruned
+    // answers the next click with the newest page, not a 500.
+    const response = await get('org-1', { cursor: 'deleted-long-ago' })
+    expect(response.status).toBe(200)
+    expect(startedAfter).toBeNull()
+  })
+
+  it('filters by target on the SERVER', async () => {
+    // Filtering in the browser cannot survive pagination: a page of 25 org
+    // entries might contain two that touch this member, and the card would
+    // render those two and call it the page.
+    await get('org-1', { targetId: 'user-9' })
+    expect(wheres).toContainEqual(['target.id', '==', 'user-9'])
+  })
+
+  it('does NOT filter by target when none was asked for', async () => {
+    // The negative control: without it the assertion above would pass on a
+    // route that always filtered, which would render every feed empty.
+    await get()
+    expect(wheres).toEqual([])
   })
 })
