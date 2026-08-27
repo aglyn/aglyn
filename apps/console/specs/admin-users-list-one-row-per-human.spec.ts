@@ -29,9 +29,9 @@ export {}
 /**
  * AGL-2005 — `GET /api/admin/users` returns ONE row per human.
  *
- * **decided:** "We still have two users list in this list with the
- * same uid but one without an email attached, this needs fixed we should only
- * see one user, even if they are sso."
+ * Reported from the staff list: one uid appearing as two rows, the second
+ * carrying no email — including for SSO accounts, where it is most confusing,
+ * because the emailless twin is the one a project-level lookup finds first.
  *
  * The collapse RULE is proved in `auth-pools.spec.ts`, against the real
  * algorithm: which row survives, that a uid in three pools reduces to one,

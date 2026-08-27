@@ -27,7 +27,6 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
-  Button,
   Chip,
   MenuItem,
   Stack,
@@ -60,6 +59,16 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
+import {
+  gridFilterRequest,
+  hiddenFilterColumns,
+  hiddenFilterVisibility,
+  listFilterColumn,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  USER_LIST_FILTER_FIELDS,
+  USER_LIST_FILTER_HEADERS,
+} from '../../../../utils/list-filters'
 import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
 import { formatStaffTimestamp } from '../../../../utils/staff-timestamps'
 
@@ -104,6 +113,12 @@ const poolLabel = (tenantId: string | null) =>
  * actions go through the audited /api/admin/users/manage endpoint, which
  * also blocks self-lockout.
  */
+/**
+ * The filterable fields that get a column. The rest of
+ * `USER_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
+ */
+const USER_FILTER_COLUMNS = ['email', 'staffRole', 'createdAt', 'lastSignInAt']
+
 const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -141,13 +156,53 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * count line is arithmetic over the real page and not a guess. */
   const AUTH_LIST_PAGE_SIZE = 200
 
+  /*
+   * SEARCH AND FILTER RUN ON THE SERVER, or they are not search and filter
+   * (AGL-693).
+   *
+   * Both used to narrow the rows already on screen — 200 accounts, one Auth
+   * page — so both answered "no such account" for everyone past it. Firebase
+   * Auth has no predicate to push them into, so `/api/admin/users` reads the
+   * pools and matches there, routing a complete email to the O(1) lookup
+   * first.
+   *
+   * The query lives in a REF, and `applyQuery` writes it before it asks for a
+   * page. The fetcher is a dependency of the pagination hook, so holding the
+   * query in state alone would rebuild it on every keystroke and restart the
+   * walk — and writing the ref during render instead is a tick too late: the
+   * grid's change handler asks for page 0 in the same tick, and the fetch
+   * would read the query the panel had BEFORE the reader changed it, which
+   * shows as a filter that highlights its column and narrows nothing.
+   */
+  type ListQuery = { field: string; op: string; value: string } | null
+  const queryRef = useRef<{ search: string; filter: ListQuery }>({
+    search: '',
+    filter: null,
+  })
+  /** Set when the last response could not read the whole directory. */
+  const [scanTruncated, setScanTruncated] = useState<{
+    scan: boolean
+    match: boolean
+    count: number
+  } | null>(null)
+
   const fetchUsersPage = useCallback(
     async (cursor: string | null, index: number) => {
       const idToken = await (user as any)?.getIdToken?.()
+      const params = new URLSearchParams()
+      const { search: term, filter: item } = queryRef.current
+      if (term) params.set('search', term)
+      if (item) {
+        params.set('filterField', item.field)
+        params.set('filterOp', item.op)
+        params.set('filterValue', item.value)
+      }
+      // A narrowed list is not a page of the walk, so it carries no cursor —
+      // resuming one would page through the unfiltered directory instead.
+      if (cursor && !term && !item) params.set('nextPageToken', cursor)
+      const query = params.toString()
       const response = await fetch(
-        `/api/admin/users${
-          cursor ? `?nextPageToken=${encodeURIComponent(cursor)}` : ''
-        }`,
+        `/api/admin/users${query ? `?${query}` : ''}`,
         { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
       )
       if (!response.ok) throw new Error(`Listing failed (${response.status})`)
@@ -157,6 +212,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       // A tenant pool bigger than one page is reported, never dropped
       // silently (AGL-1122) — invisible users are the bug this fixed.
       setTruncatedTenants(payload.tenantTruncated ?? [])
+      setScanTruncated(
+        payload.scanTruncated || payload.matchTruncated
+          ? {
+              scan: Boolean(payload.scanTruncated),
+              match: Boolean(payload.matchTruncated),
+              count: Number(payload.matchCount ?? rows.length),
+            }
+          : null,
+      )
       return {
         rows,
         nextCursor: payload.nextPageToken ?? null,
@@ -183,30 +247,24 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     pageSize: AUTH_LIST_PAGE_SIZE,
   })
   const router = useRouter()
-  const { rows: users, pageIndex, loading, refresh, showRows } = pagination
+  const { rows: users, pageIndex, loading, refresh } = pagination
 
   /**
-   * Exact-email lookup (AGL-270): reaches an account beyond the loaded pages
-   * and replaces the list with the single match. It is not a page of the
-   * walk, so it resets the walk rather than pretending to be page n of it.
+   * Change the query and re-ask for the first page, in that order.
+   *
+   * A narrowed list is a different query, not a page of the old one, so it
+   * restarts at page 0 — resuming a cursor would page through the unfiltered
+   * directory instead.
    */
-  const lookupEmail = useCallback(
-    async (email: string) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(
-        `/api/admin/users?email=${encodeURIComponent(email)}`,
-        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
-      )
-      if (!response.ok) throw new Error(`Lookup failed (${response.status})`)
-      const payload = await response.json()
-      pageRowsRef.current.clear()
-      setTruncatedTenants(payload.tenantTruncated ?? [])
-      showRows((payload.users ?? []) as AdminUser[])
+  const applyQuery = useCallback(
+    (search: string, filter: ListQuery) => {
+      queryRef.current = { search, filter }
+      void pagination.loadPage(0)
     },
-    [user, showRows],
+    [pagination],
   )
 
-  const [search, setSearch] = useState('')
+
   const visible = useMemo(() => {
     // One row per human across EVERY page visited (AGL-2005). The route
     // collapses the twins, but it can only merge the rows it is handed at
@@ -222,24 +280,18 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     // uids this page holds — the collapse keeps each uid at its first
     // occurrence and this page's rows come first, so what survives is this
     // page, in page order, enriched.
+    //
+    // No narrowing happens here any more. The search and the filter are the
+    // server's, so a row that arrived is a row that matched.
     const elsewhere: AdminUser[] = []
     pageRowsRef.current.forEach((rows, index) => {
       if (index !== pageIndex) elsewhere.push(...rows)
     })
     const onThisPage = new Set(users.map((record) => record.uid))
-    const merged = collapseAdminUserRows([...users, ...elsewhere]).filter(
-      (record) => onThisPage.has(record.uid),
+    return collapseAdminUserRows([...users, ...elsewhere]).filter((record) =>
+      onThisPage.has(record.uid),
     )
-    const term = search.trim().toLowerCase()
-    if (!term) return merged
-    return merged.filter((record) =>
-      [record.email, record.displayName, record.uid]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(term),
-    )
-  }, [users, pageIndex, search])
+  }, [users, pageIndex])
 
   // RBAC (AGL-206): role changes go through the same audited endpoint.
   const handleSetRole = useCallback(
@@ -328,6 +380,18 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
 
 
   /*
+   * Only the operators the SERVER can answer reach the panel — derived from
+   * `USER_LIST_FILTER_FIELDS`, the same declaration `/api/admin/users` matches
+   * against. This list matches in memory rather than through an index, so it
+   * offers a mid-string `contains` and a `doesNotContain` that the
+   * Firestore-backed lists cannot.
+   */
+  const filterColumn = useCallback(
+    (column: string) => listFilterColumn(USER_LIST_FILTER_FIELDS, column),
+    [],
+  )
+
+  /*
    * One row grammar, the console's (AGL-693). `valueGetter` on every column
    * the grid must SORT by something other than what it draws — a timestamp
    * rendered as text sorts as text, which puts 12 January before 2 February.
@@ -339,6 +403,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'User',
         flex: 1.6,
         minWidth: 280,
+        ...filterColumn('email'),
         valueGetter: (_value, row: any) =>
           String(row.email ?? row.displayName ?? ''),
         renderCell: ({ row }: any) => (
@@ -421,6 +486,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Status',
         flex: 0.8,
         minWidth: 150,
+        ...filterColumn('staffRole'),
         valueGetter: (_value, row: any) =>
           row.staff ? (row.staffRole ?? 'support') : row.disabled ? 'disabled' : '',
         renderCell: ({ row }: any) => (
@@ -460,8 +526,12 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Created',
         flex: 0.9,
         minWidth: 170,
+        // `type: 'date'` is what gives the panel a date PICKER rather than a
+        // free-text box for a value the route parses as a day.
+        type: 'date',
+        ...filterColumn('createdAt'),
         valueGetter: (_value, row: any) =>
-          new Date(row.createdAt ?? 0).getTime() || 0,
+          row.createdAt ? new Date(row.createdAt) : null,
         renderCell: ({ row }: any) => (
           <Typography variant="caption" color="text.secondary">
             {formatStaffTimestamp(row.createdAt)}
@@ -473,14 +543,29 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Last sign-in',
         flex: 0.9,
         minWidth: 170,
+        // `type: 'date'` is what gives the panel a date PICKER rather than a
+        // free-text box for a value the route parses as a day.
+        type: 'date',
+        ...filterColumn('lastSignInAt'),
         valueGetter: (_value, row: any) =>
-          new Date(row.lastSignInAt ?? 0).getTime() || 0,
+          row.lastSignInAt ? new Date(row.lastSignInAt) : null,
         renderCell: ({ row }: any) => (
           <Typography variant="caption" color="text.secondary">
             {formatStaffTimestamp(row.lastSignInAt)}
           </Typography>
         ),
       },
+      /*
+       * Filterable fields that are not worth a column of their own — the uid,
+       * the SSO pool, the sign-in providers, the disabled flag. MUI's panel
+       * lists column definitions, hidden ones included, so this is what makes
+       * a filterable non-column reachable at all.
+       */
+      ...hiddenFilterColumns(
+        USER_LIST_FILTER_FIELDS,
+        USER_FILTER_COLUMNS,
+        USER_LIST_FILTER_HEADERS,
+      ),
       listActionsColumn((row: any) => (
         <ListRowActions
           label={row.email ?? row.uid}
@@ -521,7 +606,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         />
       )),
     ],
-    [busy, notSuper, handleAction, handleSetRole],
+    [busy, notSuper, handleAction, handleSetRole, filterColumn],
   )
 
   return (
@@ -544,41 +629,12 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
             help={docsHelp('staffConsole', {
               anchor: '#whats-there',
               excerpt:
-                'Grant or revoke staff roles and disable accounts — audited, with an exact-email lookup for accounts beyond the loaded pages.',
+                'Grant or revoke staff roles and disable accounts — audited, with search and column filters that reach every pool, not just the loaded page.',
             })}
             contentGutterX
             contentGutterY
           >
             <Stack spacing={2}>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center' }}
-              >
-                <TextField
-                  size="small"
-                  label="Search (email, name, uid)"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  sx={{ maxWidth: 360, flexGrow: 1 }}
-                />
-                {/* Exact-email lookup (AGL-270): reaches accounts beyond
-                    the loaded pages. */}
-                <Button
-                  size="small"
-                  disabled={!search.includes('@')}
-                  onClick={() =>
-                    void lookupEmail(search.trim()).catch(() =>
-                      enqueueSnackbar('Lookup failed', { variant: 'error' }),
-                    )
-                  }
-                >
-                  {'Find exact email'}
-                </Button>
-                <Button size="small" onClick={() => void pagination.loadPage(0)}>
-                  {'Reset'}
-                </Button>
-              </Stack>
               {/* Staff is granted to an existing account, not invited
                   (AGL-853): custom claims attach to a real uid, so the
                   person must have signed in at least once before they turn
@@ -593,6 +649,20 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 columns={userColumns}
                 getRowId={(row: any) => row.uid}
                 loading={loading}
+                /*
+                 * The grid must NOT also filter. The server answers both the
+                 * search and the column filter, so a second client-side pass
+                 * over the returned rows could only drop rows that already
+                 * matched — the route compares an account's stored fields,
+                 * and the grid compares whatever a column happens to draw.
+                 */
+                filterMode="server"
+                onFilterModelChange={(model) => {
+                  applyQuery(
+                    (model.quickFilterValues ?? []).join(' ').trim(),
+                    gridFilterRequest(model),
+                  )
+                }}
                 onOpen={(id) =>
                   router.push(buildRoute(Route.ADMIN_USER_DETAIL, { uid: id }))
                 }
@@ -601,6 +671,14 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 hideFooter
                 // The console's row height, like every other grid list.
                 rowHeight={TABLE_ROW_HEIGHT}
+                initialState={{
+                  columns: {
+                    columnVisibilityModel: hiddenFilterVisibility(
+                      USER_LIST_FILTER_FIELDS,
+                      USER_FILTER_COLUMNS,
+                    ),
+                  },
+                }}
               />
               {/* Previous/Next instead of an ever-growing table (AGL-2486),
                   the same control the Organizations list carries. The count
@@ -612,6 +690,19 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 pagination={pagination}
                 shown={visible.length}
               />
+              {/* A partial answer never reads as a complete one. A staff
+                  list that stopped early and said "no matches" is the whole
+                  failure this change is about. */}
+              {scanTruncated ? (
+                <Alert severity="warning">
+                  {scanTruncated.scan
+                    ? 'More accounts exist than this search could read. ' +
+                      'Narrow it, or search an exact email to reach an ' +
+                      'account directly.'
+                    : `${scanTruncated.count} accounts matched; the first ` +
+                      'are shown. Narrow the search to see the rest.'}
+                </Alert>
+              ) : null}
               {/* Never let a pool go quietly missing again (AGL-1122). */}
               {truncatedTenants.length ? (
                 <Alert severity="warning">

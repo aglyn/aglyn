@@ -98,3 +98,105 @@ export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   ownerUid: 'Owner UID',
   updatedAt: 'Updated',
 }
+
+/*
+ * The staff ACCOUNT list is not a Firestore query (AGL-693).
+ *
+ * It is Firebase Auth, whose `listUsers` takes a page size and a cursor and
+ * nothing else — no predicate, no ordering, no search — and there is no
+ * Firestore mirror to filter instead: the `users` collection holds profile
+ * details for a fraction of the accounts and carries neither email nor the
+ * staff claim.
+ *
+ * So a filter here is answered by scanning the pools and matching in memory,
+ * which makes this list MORE capable than a Firestore-backed one rather than
+ * less: plain JavaScript does a mid-string `contains` and a `doesNotContain`
+ * that no index can. Each field says so through `operators`.
+ *
+ * Exact email and exact uid never reach the scan — Firebase Auth answers
+ * those in one call, and the route routes them there.
+ */
+const MEMORY_TEXT_OPERATORS = [
+  'contains',
+  'doesNotContain',
+  'equals',
+  'startsWith',
+  'endsWith',
+  'isAnyOf',
+  'isEmpty',
+  'isNotEmpty',
+] as const
+
+const MEMORY_DATE_OPERATORS = [
+  'is',
+  'after',
+  'onOrAfter',
+  'before',
+  'onOrBefore',
+  'isEmpty',
+  'isNotEmpty',
+] as const
+
+/** Accounts, as `/api/admin/users` serializes them. */
+export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
+  { column: 'email', kind: 'text', path: 'email', operators: MEMORY_TEXT_OPERATORS },
+  {
+    column: 'displayName',
+    kind: 'text',
+    path: 'displayName',
+    operators: MEMORY_TEXT_OPERATORS,
+  },
+  { column: 'uid', kind: 'text', path: 'uid', operators: MEMORY_TEXT_OPERATORS },
+  { column: 'disabled', kind: 'boolean', path: 'disabled' },
+  { column: 'staff', kind: 'boolean', path: 'staff' },
+  {
+    column: 'staffRole',
+    kind: 'exact',
+    path: 'staffRole',
+    operators: ['equals', 'isAnyOf', 'isEmpty', 'isNotEmpty'],
+  },
+  {
+    /*
+     * The GCIP pool. `null` is the project pool, which is why `isEmpty` is
+     * the way to ask for "not an SSO account" — and why it is offered here
+     * even though a Firestore-backed list could not answer it.
+     */
+    column: 'tenantId',
+    kind: 'text',
+    path: 'tenantId',
+    operators: MEMORY_TEXT_OPERATORS,
+  },
+  {
+    // Serialized as an array of provider ids; matched as its joined text, so
+    // `contains 'google'` finds `google.com`.
+    column: 'providers',
+    kind: 'text',
+    path: 'providers',
+    operators: ['contains', 'doesNotContain', 'isEmpty', 'isNotEmpty'],
+  },
+  {
+    column: 'createdAt',
+    kind: 'date',
+    path: 'createdAt',
+    operators: MEMORY_DATE_OPERATORS,
+  },
+  {
+    // Absent until a first sign-in, so `isEmpty` here means "never signed in".
+    column: 'lastSignInAt',
+    kind: 'date',
+    path: 'lastSignInAt',
+    operators: MEMORY_DATE_OPERATORS,
+  },
+]
+
+/** Headers for account fields that are filterable without being columns. */
+export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  uid: 'UID',
+  displayName: 'Display name',
+  staff: 'Staff claim',
+  staffRole: 'Staff role',
+  tenantId: 'SSO pool (empty = none)',
+  providers: 'Sign-in providers',
+  lastSignInAt: 'Last sign-in',
+  disabled: 'Disabled',
+}

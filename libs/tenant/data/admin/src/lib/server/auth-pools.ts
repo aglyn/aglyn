@@ -384,6 +384,70 @@ export async function listUsersAcrossPools(
   }
 }
 
+/**
+ * Every account across every pool, up to a cap — the only way to FILTER them.
+ *
+ * Firebase Auth's `listUsers` takes a page size and a cursor and nothing else:
+ * no predicate, no ordering, no search. So a staff filter on anything but an
+ * exact email, uid or phone number (which have their own O(1) lookups) can
+ * only be answered by reading the accounts and matching them.
+ *
+ * That is an expensive read, so it happens on an ASK and never on a mount —
+ * the route calls this only when a request carries a filter, and pages the
+ * cheap way otherwise.
+ *
+ * `truncated` is true when the cap was reached, and it must be shown rather
+ * than swallowed: a staff list that searched part of the directory and said
+ * "no matches" is worse than one that admits where it stopped.
+ */
+export async function scanUsersAcrossPools(
+  cap: number,
+): Promise<{
+  users: PooledUserRecord[]
+  truncated: boolean
+  tenantTruncated: string[]
+}> {
+  const users: PooledUserRecord[] = []
+  let truncated = false
+  let pageToken: string | undefined
+
+  do {
+    const remaining = cap - users.length
+    if (remaining <= 0) {
+      truncated = true
+      break
+    }
+    // `listUsers` caps a page at 1000 whatever it is asked for.
+    const page = await auth().listUsers(Math.min(remaining, 1000), pageToken)
+    users.push(...page.users.map((record) => ({ record, tenantId: null })))
+    pageToken = page.pageToken
+    if (pageToken && users.length >= cap) truncated = true
+  } while (pageToken && users.length < cap)
+
+  const tenantTruncated: string[] = []
+  for (const tenantId of await listAuthTenantIds()) {
+    if (users.length >= cap) {
+      truncated = true
+      break
+    }
+    try {
+      const page = await authForPool(tenantId).listUsers(
+        Math.min(cap - users.length, TENANT_USER_CAP),
+      )
+      users.push(...page.users.map((record) => ({ record, tenantId })))
+      if (page.pageToken) tenantTruncated.push(tenantId)
+    } catch (error) {
+      console.error(`listing users for tenant ${tenantId} failed`, error)
+    }
+  }
+
+  return {
+    users: markCrossPoolUidCollisions(users),
+    truncated,
+    tenantTruncated,
+  }
+}
+
 /** Where a claim mutation landed, so a caller can audit the POOL as well. */
 export interface StaffClaimWrite {
   uid: string

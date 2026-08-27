@@ -109,6 +109,25 @@ export interface ListFilterField {
    *              wastes the reader's time.
    */
   presence?: 'sparse' | 'nullable' | 'always'
+  /**
+   * The operators this field offers, replacing the derived list.
+   *
+   * Not every list is a Firestore query. The staff account list is Firebase
+   * Auth, which cannot filter at ALL — so a filter there is answered by
+   * scanning the pools and matching in memory, and plain JavaScript can do
+   * things no index can: a mid-string `contains`, and `doesNotContain`. A
+   * list whose substrate is more capable says so here rather than being held
+   * to Firestore's limits by a shared default.
+   *
+   * Pair with {@link matchListFilter}, which is the matcher those lists use.
+   */
+  operators?: readonly string[]
+  /**
+   * Where to read this field from a ROW, when the list matches in memory.
+   * Defaults to `path`. Only needed when the row's shape differs from the
+   * document's — an Auth record's `staff` lives under `customClaims`.
+   */
+  rowPath?: string
 }
 
 /** The empty-operators a field can honestly offer. See `presence`. */
@@ -125,6 +144,7 @@ const emptyOperators = (field: ListFilterField): string[] => {
 
 /** The operators a field offers, derived from the paths it actually has. */
 export function listFilterOperators(field: ListFilterField): string[] {
+  if (field.operators) return [...field.operators]
   const empties = emptyOperators(field)
   switch (field.kind) {
     case 'text':
@@ -275,6 +295,133 @@ export function hiddenFilterColumns(
       ...listFilterColumn(fields, field.column),
     }))
     .filter((column) => column.filterable)
+}
+
+const readPath = (row: unknown, path: string): unknown =>
+  path
+    .split('.')
+    .reduce<any>(
+      (value, key) => (value == null ? undefined : value[key]),
+      row as any,
+    )
+
+const asTime = (value: unknown): number | null => {
+  if (value == null) return null
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === 'number') return value
+  // A Firestore timestamp, in either the admin shape or the serialized one.
+  const seconds = (value as { seconds?: unknown }).seconds
+  if (typeof seconds === 'number') return seconds * 1000
+  const parsed = new Date(String(value)).getTime()
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+/**
+ * Match ONE row against a filter, for a list that cannot push it to a query.
+ *
+ * The staff account list is the reason this exists: it is Firebase Auth, whose
+ * `listUsers` takes a page size and a cursor and nothing else — no predicate,
+ * no ordering, no search. A filter there is answered by walking the pools and
+ * matching here, which is why that list can offer a mid-string `contains` and
+ * a `doesNotContain` that a Firestore-backed list cannot.
+ *
+ * The declaration is still the same `ListFilterField`, so a list swapping
+ * substrates changes where the matching happens and not what it offers.
+ */
+export function matchListFilter(
+  row: unknown,
+  fields: readonly ListFilterField[],
+  input: ListFilterRequest | null,
+): boolean {
+  if (!input) return true
+  const field = fields.find((entry) => entry.column === input.field)
+  if (!field) return true
+  const value = readPath(row, field.rowPath ?? field.path)
+  const op = input.op
+
+  if (op === 'isEmpty') return value == null || value === ''
+  if (op === 'isNotEmpty') return value != null && value !== ''
+
+  const raw = (input.value ?? '').trim()
+  if (field.kind === 'boolean') {
+    if (raw !== 'true' && raw !== 'false') return true
+    return Boolean(value) === (raw === 'true')
+  }
+  if (!raw) return true
+
+  if (field.kind === 'date') {
+    const at = asTime(value)
+    const day = new Date(raw)
+    if (at === null || Number.isNaN(day.getTime())) return false
+    const start = new Date(day)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 1)
+    switch (op) {
+      // A day, not an instant — a stored time never equals midnight.
+      case 'is':
+        return at >= start.getTime() && at < end.getTime()
+      case 'after':
+        return at >= end.getTime()
+      case 'onOrAfter':
+        return at >= start.getTime()
+      case 'before':
+        return at < start.getTime()
+      case 'onOrBefore':
+        return at < end.getTime()
+      default:
+        return true
+    }
+  }
+
+  if (field.kind === 'number') {
+    const asked = Number(raw)
+    const held = Number(value)
+    if (!Number.isFinite(asked) || !Number.isFinite(held)) return false
+    switch (op) {
+      case '=':
+        return held === asked
+      case '!=':
+        return held !== asked
+      case '>':
+        return held > asked
+      case '>=':
+        return held >= asked
+      case '<':
+        return held < asked
+      case '<=':
+        return held <= asked
+      default:
+        return true
+    }
+  }
+
+  const held = value == null ? '' : String(value).toLowerCase()
+  const asked = raw.toLowerCase()
+  switch (op) {
+    case 'contains':
+      return held.includes(asked)
+    case 'doesNotContain':
+      return !held.includes(asked)
+    case 'equals':
+      return held === asked
+    case 'doesNotEqual':
+      return held !== asked
+    case 'startsWith':
+      return held.startsWith(asked)
+    case 'endsWith':
+      return held.endsWith(asked)
+    case 'isAnyOf':
+      return asked
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .includes(held)
+    default:
+      // An operator nothing here answers must not narrow the list to
+      // nothing — that reads as "no such record" rather than "not supported".
+      return true
+  }
 }
 
 /** The visibility model that hides what {@link hiddenFilterColumns} added. */
