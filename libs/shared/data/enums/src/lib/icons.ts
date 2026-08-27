@@ -86,6 +86,7 @@ import {
   mdiMonitorSmall,
   mdiOpenInNew,
   mdiPageNextOutline,
+  mdiGestureTapHold,
   mdiPaletteOutline,
   mdiPencil,
   mdiPlus,
@@ -199,6 +200,7 @@ export const ICON_VARIANT_VISIBILITY_HIDDEN = mdiEyeOffOutline
 export const ICON_VARIANT_ELEMENT_BROWSE = mdiGroup
 export const ICON_VARIANT_ELEMENT_DETAILS = mdiInformationVariant
 export const ICON_VARIANT_ELEMENT_PROPERTIES = mdiFormDropdown
+export const ICON_VARIANT_ELEMENT_INTERACTIONS = mdiGestureTapHold
 export const ICON_VARIANT_ELEMENT_STYLES = mdiPaletteOutline
 export const ICON_VARIANT_ELEMENT_TREE_VIEW = mdiFileTree
 

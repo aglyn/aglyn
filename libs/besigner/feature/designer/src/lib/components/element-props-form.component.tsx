@@ -76,6 +76,7 @@ import {
   SCREEN_LINK_FIELD_COMPONENT,
 } from './screen-link-field.component'
 import { besignerDocsUrl } from '../utils/docs-help'
+import ElementInfoDetails from './element-info-details.component'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
   InteractionsContext,
@@ -1555,152 +1556,12 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     the form, below Save Element — now ride on the fields
                     themselves as end adornments (AGL-2236). See
                     `fieldsWithMediaPickers`. */}
-                {interactions.onCreateInteraction && node?.$id ? (
-                  <FormControl margin="none" fullWidth>
-                    {/* Interactions (AGL-258): automations bound to this
-                        element's stable data-aglyn selector. */}
-                    <Typography
-                      variant="overline"
-                      color="text.secondary"
-                      sx={{ mt: 2 }}
-                    >
-                      {'Interactions'}
-                      {/* AGL-2167 — the trigger list says when, and
-                          nothing here says what an interaction can then
-                          do, or that the target is picked by clicking. */}
-                      <HelpTip
-                        title="Interactions"
-                        excerpt="Run an action when this element is clicked, hovered, or scrolled into view. Targets are picked by clicking them on the canvas."
-                        href={besignerDocsUrl('interactions', '#fluent-interactions')}
-                        sx={{ ml: 0.25, fontSize: '0.9em' }}
-                      />
-                    </Typography>
-                    {nodeAutomations.map((automation) => (
-                      <Stack
-                        key={automation.id}
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center', mb: 0.5 }}
-                      >
-                        <Typography variant="body2" noWrap sx={{ flex: 1 }}>
-                          {automation.name ?? automation.id}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {automation.event}
-                        </Typography>
-                        {/* Manage in place (wave v7): toggle + remove
-                            without leaving the canvas. */}
-                        {interactions.onToggleInteraction ? (
-                          <Switch
-                            size="small"
-                            checked={automation.enabled !== false}
-                            onChange={(event) =>
-                              interactions.onToggleInteraction?.({
-                                id: automation.id,
-                                enabled: event.target.checked,
-                              })
-                            }
-                            slotProps={{
-                              input: { 'aria-label': 'Interaction enabled' },
-                            }}
-                          />
-                        ) : automation.enabled === false ? (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                          >
-                            {'off'}
-                          </Typography>
-                        ) : null}
-                        {/* Fluent builder (AGL-319): edit reopens the
-                            inline dialog — no Workflows detour. */}
-                        {interactions.onEditInteraction && node?.$id ? (
-                          <IconButton
-                            size="small"
-                            aria-label="Edit interaction"
-                            onClick={() =>
-                              interactions.onEditInteraction?.({
-                                id: automation.id,
-                                nodeId: node.$id as string,
-                              })
-                            }
-                          >
-                            {'✎'}
-                          </IconButton>
-                        ) : null}
-                        {interactions.onDeleteInteraction ? (
-                          <IconButton
-                            size="small"
-                            aria-label="Remove interaction"
-                            onClick={() =>
-                              interactions.onDeleteInteraction?.({
-                                id: automation.id,
-                              })
-                            }
-                          >
-                            {'✕'}
-                          </IconButton>
-                        ) : null}
-                      </Stack>
-                    ))}
-                    <TextField
-                      select
-                      size="small"
-                      label="Add interaction"
-                      value=""
-                      onChange={(event) => {
-                        const trigger = event.target
-                          .value as InteractionTriggerEvent
-                        if (trigger && node?.$id) {
-                          interactions.onCreateInteraction?.({
-                            nodeId: node.$id,
-                            event: trigger,
-                          })
-                        }
-                      }}
-                    >
-                      <MuiMenuItem value="elementClick">
-                        {'When clicked…'}
-                      </MuiMenuItem>
-                      {/* Hover choreography (AGL-562). */}
-                      <MuiMenuItem value="elementHoverEnter">
-                        {'When hovered…'}
-                      </MuiMenuItem>
-                      <MuiMenuItem value="elementHoverLeave">
-                        {'When hover ends…'}
-                      </MuiMenuItem>
-                      <MuiMenuItem value="elementVisible">
-                        {'When scrolled into view…'}
-                      </MuiMenuItem>
-                    </TextField>
-                    {interactions.onCreateSectionExperiment ? (
-                      nodeExperiment ? (
-                        <Typography
-                          variant="caption"
-                          color="primary"
-                          sx={{ mt: 1 }}
-                        >
-                          {`A/B test: ${nodeExperiment.name ?? nodeExperiment.id}` +
-                            ` (${nodeExperiment.status ?? 'draft'})`}
-                        </Typography>
-                      ) : (
-                        <Button
-                          color="primary"
-                          size="small"
-                          sx={{ mt: 1, alignSelf: 'flex-start' }}
-                          onClick={() =>
-                            node?.$id &&
-                            interactions.onCreateSectionExperiment?.({
-                              nodeId: node.$id,
-                            })
-                          }
-                        >
-                          {'A/B test this section'}
-                        </Button>
-                      )
-                    ) : null}
-                  </FormControl>
-                ) : null}
+                {/* Interactions moved to their own panel tab (AGL-1486).
+                    They are not attributes: a behaviour authored in a
+                    dialog rather than a field, and sitting below every
+                    declared attribute put them under the fold on anything
+                    with more than a handful. See
+                    `element-interactions-form.component.tsx`. */}
                 {(node?.props as any)?.repeatDataset ? (
                   <FormControl margin="none" fullWidth>
                     {/* Repeat badge (AGL-168): make dataset-driven
@@ -1773,6 +1634,13 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     Delete Element
                   </Button>
                 </FormControl>
+                {/* What this element IS (AGL-1486): the component's own
+                    description and the node's ids, in two collapsed
+                    accordions. They were a tab of their own, which cost every
+                    reader a third of the panel's header for reference detail
+                    most of them never open. Last, and closed, so they cost
+                    nothing until wanted. */}
+                <ElementInfoDetails node={node} />
               </>
             )}
           </FormRenderer>

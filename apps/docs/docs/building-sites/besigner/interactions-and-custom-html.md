@@ -10,8 +10,9 @@ description: Build element interactions in one dialog and drop sanitized custom 
 
 ## Fluent interactions
 
-Select any element and use **Add interaction** — everything configures in
-one dialog without leaving the besigner:
+Select any element, open the **Interactions** tab in the right-hand panel —
+beside Attributes and Styles — and use **Add interaction**. Everything
+configures in one dialog without leaving the besigner:
 
 - **Trigger**: when the element is clicked, **hovered**, the **hover
   ends**, or it scrolls into view.
