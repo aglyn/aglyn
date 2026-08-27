@@ -439,12 +439,30 @@ const NodeTreeItem = observer(
      * menu cannot drift while it is open.
      */
     const anchorFor = useCallback((e: any): MenuAnchor | null => {
-      const row = (e.currentTarget as HTMLElement)?.closest(
+      const row = ((e.currentTarget as HTMLElement)?.closest(
         `.${classKey.treeListItem}`,
-      )
-      const rect = (row ?? (e.currentTarget as HTMLElement))?.getBoundingClientRect()
+      ) ?? e.currentTarget) as HTMLElement | null
+      const rect = row?.getBoundingClientRect()
       if (!rect) return null
-      const x = rect.right
+      /**
+       * The PANEL's edge, not the row's.
+       *
+       * A deep row is wider than the panel — the hierarchy scrolls
+       * horizontally, and indentation is what makes it — so `row.right` is a
+       * coordinate off the side of the visible panel, and a menu placed
+       * there opens in the middle of the canvas with a gap behind it. The
+       * nearest ancestor that actually scrolls is the panel, and its right
+       * edge is the boundary the menu should start from.
+       *
+       * Falls back to the row when nothing above it scrolls, which is the
+       * case the row's own edge is the right answer for.
+       */
+      let scroller: HTMLElement | null = row
+      while (scroller && scroller.scrollWidth <= scroller.clientWidth) {
+        scroller = scroller.parentElement
+      }
+      const bound = scroller?.getBoundingClientRect()
+      const x = Math.min(rect.right, bound?.right ?? rect.right)
       const y = e.clientY || rect.top + rect.height / 2
       return { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) }
     }, [])
