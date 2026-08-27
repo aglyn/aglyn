@@ -47,22 +47,75 @@ let reconciliation: {
   claims: Promise<Record<string, unknown>>
 } | null = null
 
-function reconcileClaims(user: TokenUser): Promise<Record<string, unknown>> {
+function reconcileClaims(
+  user: TokenUser,
+): Promise<Record<string, unknown> | null> {
   const uid = user.uid ?? ''
   if (reconciliation?.uid === uid) return reconciliation.claims
-  const claims = Promise.resolve(user.getIdTokenResult?.(true))
-    .then((result) => result?.claims ?? {})
-    // A token we cannot refresh is not a staff token. Deliberately does not
-    // fall back to the cached verdict: failing closed on the UI costs a
-    // staff member one reload, while failing open shows admin chrome on a
-    // token we could not confirm.
-    .catch(() => ({}) as Record<string, unknown>)
-  reconciliation = { uid, claims }
-  return claims
+  const entry: {
+    uid: string
+    claims: Promise<Record<string, unknown> | null>
+  } = {
+    uid,
+    claims: Promise.resolve(user.getIdTokenResult?.(true))
+      .then((result) => result?.claims ?? {})
+      /*
+       * `null` is "could not read", which is NOT the empty claim set.
+       *
+       * This answered `{}` — indistinguishable from a token that genuinely
+       * carries no `staff` claim — and then MEMOISED it. A tab left open on
+       * an admin page refreshes its token roughly hourly, a backgrounded tab
+       * is exactly when that fails, and the cached refusal was handed to
+       * every later mount for the life of the page: `StaffGuard` rendered
+       * `notFound()` and no amount of navigating got back off it.
+       *
+       * Failing closed is still the rule and is unchanged — `null` leaves
+       * the guards holding their spinner, which renders no admin chrome. It
+       * just stops an unreachable network from being reported as a verdict
+       * about who this person is. Dropping the slot lets the next attempt
+       * genuinely retry.
+       */
+      .catch(() => {
+        if (reconciliation === entry) reconciliation = null
+        return null
+      }),
+  }
+  reconciliation = entry
+  return entry.claims
 }
 
-function reconcileStaffClaim(user: TokenUser): Promise<boolean> {
-  return reconcileClaims(user).then((claims) => Boolean(claims.staff))
+function reconcileStaffClaim(user: TokenUser): Promise<boolean | null> {
+  return reconcileClaims(user).then((claims) =>
+    claims === null ? null : Boolean(claims.staff),
+  )
+}
+
+/**
+ * Coming back to an idle tab is when retrying is both wanted and free.
+ *
+ * A successful reconciliation is memoised, so this bumps only while there is
+ * nothing cached — i.e. only when the last attempt did not land. Without it
+ * the recovery path is a manual reload, which is what the reader was left
+ * with.
+ */
+function useClaimAttempt(): number {
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    const retry = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return
+      }
+      if (reconciliation) return
+      setAttempt((count) => count + 1)
+    }
+    document.addEventListener('visibilitychange', retry)
+    window.addEventListener('online', retry)
+    return () => {
+      document.removeEventListener('visibilitychange', retry)
+      window.removeEventListener('online', retry)
+    }
+  }, [])
+  return attempt
 }
 
 /**
@@ -84,6 +137,7 @@ function reconcileStaffClaim(user: TokenUser): Promise<boolean> {
 export function useIsStaff(): boolean | null {
   const { data: user } = useUser()
   const [isStaff, setIsStaff] = useState<boolean | null>(null)
+  const attempt = useClaimAttempt()
 
   useEffect(() => {
     let active = true
@@ -93,18 +147,18 @@ export function useIsStaff(): boolean | null {
       .then((result) => {
         if (active) setIsStaff(Boolean(result?.claims?.staff))
       })
-      .catch(() => {
-        // A token we cannot read is not a staff token.
-        if (active) setIsStaff(false)
-      })
+      // An unreadable token says nothing about who this is, so nothing is
+      // recorded: the verdict stays whatever it already was, and `null` — the
+      // guards' spinner — is where it starts.
+      .catch(() => undefined)
       .then(() => reconcileStaffClaim(account))
       .then((claim) => {
-        if (active) setIsStaff(claim)
+        if (active && claim !== null) setIsStaff(claim)
       })
     return () => {
       active = false
     }
-  }, [user])
+  }, [user, attempt])
 
   return isStaff
 }
@@ -129,6 +183,7 @@ export function useIsStaff(): boolean | null {
 export function useStaffRole(): string | null {
   const { data: user } = useUser()
   const [role, setRole] = useState<string | null>(null)
+  const attempt = useClaimAttempt()
 
   useEffect(() => {
     let active = true
@@ -140,17 +195,16 @@ export function useStaffRole(): string | null {
       .then((result) => {
         if (active) setRole(read(result?.claims))
       })
-      .catch(() => {
-        if (active) setRole(null)
-      })
+      .catch(() => undefined)
       .then(() => reconcileClaims(account))
       .then((claims) => {
-        if (active) setRole(read(claims))
+        // Same rule as the staff claim: an unread token is not a demotion.
+        if (active && claims !== null) setRole(read(claims))
       })
     return () => {
       active = false
     }
-  }, [user])
+  }, [user, attempt])
 
   return role
 }

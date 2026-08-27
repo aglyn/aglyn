@@ -146,11 +146,25 @@ describe('StaffOnly (AGL-760/847)', () => {
     expect(screen.queryByText('internal')).toBeNull()
   })
 
-  it('treats an unreadable token as not staff', async () => {
+  it('shows NOTHING on an unreadable token — neither the content nor a 404', async () => {
+    /*
+     * The property is "admin chrome never reaches the DOM on a token we could
+     * not confirm", and it still holds: the gate renders nothing at all.
+     *
+     * What changed is the other half. This used to assert `notFound()`, which
+     * is a VERDICT about who the reader is, and an unreadable token is not
+     * one. It was reached by a tab left idle on an admin page — the hourly
+     * token refresh fails in a backgrounded tab — and because the refusal was
+     * memoised by uid at module scope, every later mount replayed it. The
+     * reader sat on "This page isn't here" until they reloaded.
+     *
+     * Failing closed is unchanged; asserting a false negative is what stops.
+     */
     state.tokenRejects = true
     renderGated()
-    await waitFor(() => expect(notFound.count).toBeGreaterThan(0))
+    await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.queryByText('internal')).toBeNull()
+    expect(notFound.count).toBe(0)
   })
 
   it('refuses without naming the internal grant script (AGL-847)', async () => {

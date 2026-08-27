@@ -94,9 +94,21 @@ describe('useIsStaff', () => {
     ).toHaveLength(1)
   })
 
-  it('fails closed when the refresh throws', async () => {
-    // Showing admin chrome on a token we could not confirm is the worse
-    // failure; a staff member pays one reload instead.
+  it('does not turn a failed refresh into a REFUSAL', async () => {
+    /*
+     * The idle-tab 404. This asserted `false`, and `StaffGuard` turns `false`
+     * into `notFound()` — so a tab left open on an admin page landed on
+     * "This page isn't here" as soon as its hourly token refresh failed,
+     * which a backgrounded tab is exactly the condition for.
+     *
+     * The property the old assertion was defending — never show admin chrome
+     * on a token we could not confirm — is unchanged and still tested, by
+     * `stays null for a user that cannot mint tokens` below and by the
+     * StaffOnly gate's own case. What is dropped is the claim that an
+     * unreachable network is evidence about who the reader is. Here the
+     * CACHED token is valid, unexpired and says staff; only the background
+     * re-mint could not run.
+     */
     mockUser = {
       uid: 'uid-1',
       getIdTokenResult: jest.fn(async (forceRefresh?: boolean) => {
@@ -105,7 +117,50 @@ describe('useIsStaff', () => {
       }),
     }
     const { result } = renderHook(() => useIsStaff())
-    await waitFor(() => expect(result.current).toBe(false))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(result.current).toBe(true)
+  })
+
+  it('never asserts staff from a token it could not read at all', async () => {
+    // The other side of the same coin, and the reason `null` is the right
+    // held value: with NO readable token there is no verdict to give, and the
+    // guards render their spinner rather than admin chrome.
+    mockUser = {
+      uid: 'uid-unreadable',
+      getIdTokenResult: jest.fn(async () => {
+        throw new Error('network')
+      }),
+    }
+    const { result } = renderHook(() => useIsStaff())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(result.current).toBeNull()
+  })
+
+  it('a failed refresh is not REMEMBERED as one', async () => {
+    /*
+     * What made it unrecoverable. The forced-refresh promise is memoised by
+     * uid at module scope, so a cached failure was replayed to every later
+     * mount for the life of the page — navigating elsewhere and back kept
+     * the 404, and only a reload cleared it.
+     */
+    let forced = 0
+    mockUser = {
+      uid: 'uid-retry',
+      getIdTokenResult: jest.fn(async (forceRefresh?: boolean) => {
+        if (!forceRefresh) return { claims: { staff: true } }
+        forced += 1
+        if (forced === 1) throw new Error('network')
+        return { claims: { staff: true } }
+      }),
+    }
+    const first = renderHook(() => useIsStaff())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    first.unmount()
+
+    const second = renderHook(() => useIsStaff())
+    await waitFor(() => expect(second.result.current).toBe(true))
+    // It tried again instead of replaying the refusal.
+    expect(forced).toBeGreaterThan(1)
   })
 
   it('stays null for a user that cannot mint tokens', () => {
