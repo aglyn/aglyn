@@ -274,16 +274,38 @@ describe('cronJobsHealth', () => {
   })
 
   it('tolerates ordinary lateness up to the job grace', () => {
-    // GitHub delays scheduled workflows routinely. A row that reds on a
-    // twenty-minute delay is one people learn to ignore.
-    const late = Date.parse('2026-08-19T02:00:00.000Z') - 1 // just before 02:00
+    /*
+     * A row that reds on a few minutes' drift is one people learn to ignore.
+     *
+     * The delay is derived from the job's OWN `graceMinutes` rather than
+     * written as a number of hours. It used to be a flat four hours against a
+     * six-hour grace, which silently stopped testing anything the day
+     * `report-usage` moved to Cloud Scheduler and its grace tightened to
+     * ninety minutes — the assertion failed for the right reason but for a
+     * property nobody had restated.
+     */
+    const job = SCHEDULED_JOBS.find((entry) => entry.id === 'report-usage')
+    expect(job).toBeDefined()
+    const due = Date.parse('2026-08-19T02:00:00.000Z')
+    const late = due - 1 // the previous run, just before this one came due
+    const withinGrace = due + (job!.graceMinutes - 1) * 60_000
     const checks = cronJobsHealth(
       [{ jobId: 'report-usage', atMs: late }],
       WATCHING_SINCE,
       3,
-      Date.parse('2026-08-19T06:00:00.000Z'), // four hours late, grace is six
+      withinGrace,
     )
     expect(checks['report-usage'].ok).toBe(true)
+
+    // …and the far side of the same line still reds, or the case above would
+    // pass for a check that never fails.
+    const pastGrace = cronJobsHealth(
+      [{ jobId: 'report-usage', atMs: late }],
+      WATCHING_SINCE,
+      3,
+      due + (job!.graceMinutes + 1) * 60_000,
+    )
+    expect(pastGrace['report-usage'].ok).toBe(false)
   })
 
   /*==========================================
