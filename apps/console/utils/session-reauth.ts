@@ -200,9 +200,104 @@ export function reopenSessionReauth(): void {
 
 /** Re-auth landed (or the session came back another way) — stand down. */
 export function clearSessionReauth(): void {
+  clearSessionReauthRedirect()
   if (state.reason === null) return
   state = IDLE_STATE
   publish()
+}
+
+/*==========================================
+ * SURVIVING AN OAUTH REDIRECT (AGL-2486)
+ *
+ * The store above is module state, and that is deliberate: a genuinely fresh
+ * unauthenticated load — a deep link, cleared storage — must still bounce to
+ * `/signin` exactly as before, and module state resetting on load is what
+ * guarantees it.
+ *
+ * It also breaks the one flow that leaves the page on purpose. The dialog
+ * signs the user out BEFORE the credential ceremony (a stale session's denied
+ * reads survive an in-place token refresh, AGL-1062), and on a browser that
+ * takes the redirect path — `isMobileBrowser`, which is true for any Mac
+ * reporting touch points, not only phones — the ceremony is a full
+ * navigation. So the tab comes back signed out, with the prompt that was
+ * holding the page erased by the reload, while Firebase is still resolving
+ * the redirect result. The layout sees "not signed in, nothing pending" and
+ * sends the reader to `/signin` — all the way back, from a dialog whose whole
+ * promise is that they will stay where they are.
+ *
+ * A `sessionStorage` breadcrumb is the narrowest thing that fixes it. It is
+ * per-TAB, so it cannot leak the hold into a sibling tab or a new one; it
+ * exists only when this console started a ceremony, so a fresh load still
+ * bounces; and it carries a stamp, so a tab resumed hours later from
+ * bfcache is not held open by a ceremony nobody is running.
+ *=========================================*/
+
+const REDIRECT_KEY = 'aglyn.session-reauth.redirect'
+
+/**
+ * How long a started ceremony stays believable. Longer than any real trip to
+ * a provider and back, short enough that a forgotten tab is not held hostage.
+ */
+const REDIRECT_TTL_MS = 15 * 60 * 1000
+
+/** Remember the prompt across the navigation the ceremony is about to make. */
+export function markSessionReauthRedirect(): void {
+  if (state.reason === null) return
+  try {
+    sessionStorage.setItem(
+      REDIRECT_KEY,
+      JSON.stringify({
+        reason: state.reason,
+        identity: state.identity,
+        atMs: Date.now(),
+      }),
+    )
+  } catch {
+    // Private mode, or storage denied. The redirect still works; the tab
+    // just lands on /signin as it did before, which is the old behaviour
+    // rather than a new failure.
+  }
+}
+
+/** The ceremony settled — or never started. Drop the breadcrumb. */
+export function clearSessionReauthRedirect(): void {
+  try {
+    sessionStorage.removeItem(REDIRECT_KEY)
+  } catch {
+    /* nothing to clean up if it could not be written either */
+  }
+}
+
+/**
+ * Re-raise the prompt a redirect ceremony left behind, if there is one.
+ *
+ * Returns whether it did, so the caller can hold its redirect on the same
+ * tick rather than waiting for the subscription to come back around.
+ */
+export function restoreSessionReauthRedirect(): boolean {
+  let raw: string | null = null
+  try {
+    raw = sessionStorage.getItem(REDIRECT_KEY)
+  } catch {
+    return false
+  }
+  if (!raw) return false
+  try {
+    const parsed = JSON.parse(raw) as {
+      reason?: SessionReauthReason
+      identity?: SessionReauthIdentity
+      atMs?: number
+    }
+    if (!parsed?.reason || Date.now() - (parsed.atMs ?? 0) > REDIRECT_TTL_MS) {
+      clearSessionReauthRedirect()
+      return false
+    }
+    requestSessionReauth(parsed.reason, parsed.identity)
+    return true
+  } catch {
+    clearSessionReauthRedirect()
+    return false
+  }
 }
 
 export function subscribeSessionReauth(

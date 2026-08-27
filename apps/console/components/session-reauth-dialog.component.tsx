@@ -56,6 +56,7 @@ import {
   clearSessionReauth,
   dismissSessionReauth,
   getSessionReauth,
+  markSessionReauthRedirect,
   reopenSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
@@ -249,14 +250,23 @@ export function SessionReauthDialog() {
 
   const handleProviderClick = useCallback(() => {
     const provider = providerForId(state.identity.providerId)
-    void signInAgain(() =>
+    void signInAgain(() => {
       // Mobile popups become tabs whose result never reaches the SDK
       // (AGL-462); the redirect flow returns to THIS route and completes
       // on load, with the interactive marker minting the shared cookie.
-      isMobileBrowser()
-        ? signInWithRedirect(auth, provider)
-        : signInWithPopup(auth, provider),
-    )
+      if (!isMobileBrowser()) return signInWithPopup(auth, provider)
+      /*
+       * The redirect LEAVES the page, and `signInAgain` has already signed
+       * this user out — so the tab returns unauthenticated with the prompt
+       * that was holding it erased by the reload, while Firebase is still
+       * resolving the redirect result. Without this breadcrumb the layout
+       * reads "not signed in, nothing pending" and sends the reader to
+       * /signin: all the way back, from the dialog that promised they would
+       * stay where they are.
+       */
+      markSessionReauthRedirect()
+      return signInWithRedirect(auth, provider)
+    })
   }, [auth, signInAgain, state.identity.providerId])
 
   const handlePasskeyClick = useCallback(() => {

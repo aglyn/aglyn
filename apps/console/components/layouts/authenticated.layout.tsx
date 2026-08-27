@@ -25,6 +25,7 @@ import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import useIdleLogout from '../../hooks/use-idle-logout'
 import {
   getSessionReauth,
+  restoreSessionReauthRedirect,
   requestSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
@@ -111,6 +112,20 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
     if (!signedIn) {
       // Session lost mid-use with the re-auth dialog up (AGL-664): stay.
       if (reauthActive) return void 0
+      /*
+       * …and stay for a re-auth that LEFT the page to do its ceremony.
+       *
+       * The dialog signs the user out before the credential flow, and on a
+       * browser taking the redirect path that flow is a full navigation. The
+       * tab comes back signed out with the prompt erased by the reload, so
+       * this branch would bounce the reader to /signin — from the one dialog
+       * whose promise is that they stay put.
+       *
+       * The breadcrumb is per-TAB and stamped, so a fresh unauthenticated
+       * load still redirects exactly as before; only a ceremony this tab
+       * actually started holds here.
+       */
+      if (restoreSessionReauthRedirect()) return void 0
       // …and stop bouncing once this tab has made the round trip too many
       // times without settling (AGL-2486). `AuthenticatingLayout` pushes
       // back here the moment the session returns, so a session that flaps
