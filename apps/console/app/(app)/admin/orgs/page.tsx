@@ -45,6 +45,7 @@ import {
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '../../../../constants/shared'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -182,7 +183,21 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         minWidth: 200,
         valueGetter: (_value, row: any) => String(row.name ?? row.$id),
         renderCell: ({ row }: any) => (
-          <Stack sx={{ justifyContent: 'center', height: '100%' }}>
+          /*
+           * Two lines inside one row, so the pair has to FIT it.
+           *
+           * At the default line heights a body line and a caption line come
+           * to more than `TABLE_ROW_HEIGHT`, and a DataGrid cell does not
+           * grow — it clips. The slug was being cut in half and the leftover
+           * leading read as a gap between the name and its own slug.
+           */
+          <Stack
+            sx={{
+              justifyContent: 'center',
+              height: '100%',
+              lineHeight: 1.25,
+            }}
+          >
             {/* The primary cell is a real anchor, so it can be
                 middle-clicked, copied, or opened from the browser's own
                 context menu — affordances the row's click handler cannot
@@ -191,6 +206,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
               href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: row.$id })}
               color="inherit"
               underline="hover"
+              sx={{ lineHeight: 1.25 }}
               onClick={(event: any) => event.stopPropagation()}
             >
               {row.name ?? row.$id}
@@ -198,7 +214,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
             <Typography
               variant="caption"
               color="text.secondary"
-              sx={{ fontFamily: 'monospace' }}
+              sx={{ fontFamily: 'monospace', lineHeight: 1.25 }}
+              noWrap
             >
               {row.slug ?? row.$id}
             </Typography>
@@ -427,6 +444,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   // must not also try to slice these rows.
                   hideFooter
                   autoHeight
+                  // The console's row height, like every other grid list.
+                  rowHeight={TABLE_ROW_HEIGHT}
                 />
               )}
               {/* Pagination (AGL-878): each page is a fresh Admin-SDK read via

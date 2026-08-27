@@ -44,6 +44,7 @@ import {
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { TABLE_ROW_HEIGHT } from '../../../../constants/shared'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -599,6 +600,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 // the page, so the grid must not also slice these rows.
                 hideFooter
                 autoHeight
+                // The console's row height, like every other grid list.
+                rowHeight={TABLE_ROW_HEIGHT}
               />
               {/* Previous/Next instead of an ever-growing table (AGL-2486),
                   the same control the Organizations list carries. The count
