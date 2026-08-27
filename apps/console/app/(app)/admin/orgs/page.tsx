@@ -458,6 +458,26 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   onFilterModelChange={(model) =>
                     onQuickFilter((model.quickFilterValues ?? []).join(' '))
                   }
+                  /*
+                   * The per-column filter panel is OFF, because on this list
+                   * it cannot work.
+                   *
+                   * `filterMode="server"` hands the whole filter model to the
+                   * handler above and stops the grid applying anything
+                   * itself. That handler answers the quick search — a
+                   * Firestore prefix range — and nothing else, so a funnel
+                   * offering "Plan is business" would have set a filter the
+                   * query never received and the grid no longer applied:
+                   * a control that silently does nothing.
+                   *
+                   * Turning it back on means giving each filterable column a
+                   * server predicate, which Firestore can do for equality on
+                   * an indexed field (plan, subscription status) and cannot
+                   * do for the operators the panel offers by default. Better
+                   * absent than dead — an inert control teaches a reader the
+                   * list is broken.
+                   */
+                  disableColumnFilter
                   // The row IS the way in, on every list in the console.
                   onOpen={(id) =>
                     router.push(
