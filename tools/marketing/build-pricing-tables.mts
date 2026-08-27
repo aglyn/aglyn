@@ -873,7 +873,31 @@ const EXPECTED_EXTRA: Record<string, string> = {
 // first run after that check existed.
 
 
+/**
+ * Cells where the CODE has moved and the published frame has not.
+ *
+ * The reconciler's own message asks for these to be said "deliberately", and
+ * until now there was nowhere to say it: any disagreement failed, so a
+ * deliberate product change could not land without the Figma frame moving in
+ * the same commit — which is not how the frame gets updated, and is why this
+ * guard sat red rather than being answered.
+ *
+ * Keyed `row label · plan`, valued with the frame's stale cell and the reason.
+ * Declaring the FRAME's value rather than a bare "ignore this" is what keeps
+ * the exemption honest: the moment the page catches up the declaration stops
+ * matching and is reported as resolved, so it cannot outlive its reason. An
+ * exemption that outlives its reason is just an untested cell.
+ */
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
+  'CDN & responsive images · Free': {
+    frame: '—',
+    why: 'AGL-1152 moved the CDN to every plan, Free included; the frame still shows the pre-AGL-1152 split',
+  },
+}
+
 const diffs: string[] = []
+/** Declared-stale cells the frame has since caught up on. */
+const staleCellsResolved: string[] = []
 const missing: string[] = []
 for (const g of GROUPS) {
   for (const r of g.rows) {
@@ -891,8 +915,17 @@ for (const g of GROUPS) {
       // (see the `enterprise` note on Row), so the excuse is gone and all 50
       // Enterprise cells are checked like every other column. An exemption
       // that outlives its reason is just an untested column.
-      if (ours !== theirs) {
-        diffs.push(`  ${r.label} · ${PLAN_LABELS[p]}: code=${ours}  frame=${theirs}`)
+      const cellKey = `${r.label} · ${PLAN_LABELS[p]}`
+      const staleCell = FRAME_STALE_CELLS[cellKey]
+      if (ours === theirs) {
+        // The page caught up. The declaration has to go with it, or the next
+        // regression is silently pre-excused.
+        if (staleCell) staleCellsResolved.push(cellKey)
+      } else if (staleCell && theirs === staleCell.frame) {
+        // Known stale, and stale in exactly the way we recorded. A frame that
+        // has drifted to some THIRD value is not this exemption.
+      } else if (ours !== theirs) {
+        diffs.push(`  ${cellKey}: code=${ours}  frame=${theirs}`)
       }
     })
   }
@@ -1017,6 +1050,10 @@ fail('frame records that are not a full plan row', malformed)
 fail(
   'CODE-vs-FRAME disagreements (the code wins — but say so deliberately)',
   diffs,
+)
+fail(
+  'cells declared stale in FRAME_STALE_CELLS that the frame has CAUGHT UP on — delete the declaration',
+  staleCellsResolved,
 )
 fail(
   'rows in our spec but NOT in the frame, and not declared in EXPECTED_MISSING',
