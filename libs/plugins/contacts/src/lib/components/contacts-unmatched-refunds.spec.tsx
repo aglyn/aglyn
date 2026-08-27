@@ -82,6 +82,15 @@ const FIRESTORE = {}
 const DATA_SCOPE = { scope: ['orgs', 'org-1'] as const }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  /*
+   * The real translator, not a stub. It is a pure function of the shared
+   * declaration, and returning `undefined` here made every render throw —
+   * a mock that omits a barrel export does not fail as "missing", it fails
+   * as the component being broken.
+   */
+  listFilterConstraints: jest.requireActual(
+    '@aglyn/tenant-feature-instance',
+  ).listFilterConstraints,
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useFirestoreCollection: (build: () => unknown) => ({

@@ -23,6 +23,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { readActorActivity } from '../../../../utils/server/actor-activity'
+import { readListFilter } from '../../../../utils/server/list-filter'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
 // what someone did. A lockdown is often the reason staff are reading it.
@@ -64,6 +65,8 @@ async function handler(request: Request): Promise<Response> {
       actorId: uid,
       pageSize: Number(query['pageSize'] ?? 25),
       cursor: String(query['cursor'] ?? '') || null,
+      // The column filter, answered by the query rather than by the page.
+      filter: readListFilter(query),
     })
     return Response.json(page, { status: 200 })
   } catch (error) {

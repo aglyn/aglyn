@@ -34,12 +34,21 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { GridColDef } from '@mui/x-data-grid'
+import { type GridColDef } from '@mui/x-data-grid'
+import {
+  gridFilterRequest,
+  hiddenFilterColumns,
+  hiddenFilterVisibility,
+  listFilterColumn,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  ORG_LIST_FILTER_FIELDS,
+  ORG_LIST_FILTER_HEADERS,
+} from '../../../../utils/list-filters'
 import { mdiChartLine } from '@aglyn/shared-data-mdi'
 import {
   ListTable,
@@ -72,6 +81,12 @@ import { useStaffListPagination } from '../../../../hooks/use-staff-list-paginat
  * writes on the billing/suspension keys and billing-staff writes on plan
  * and entitlements, so the same claims gate server-side.
  */
+/**
+ * The filterable fields that get a column of their own. The rest of
+ * `ORG_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
+ */
+const ORG_FILTER_COLUMNS = ['name', 'plan', 'subscription', 'createdAt']
+
 const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -86,12 +101,50 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // (AGL-2486) — it was written here and the Users list had none, and the
   // cheap fix for that was a second copy of this block. The page size is the
   // route's (`PAGE_SIZE`, 25), not the screen's; nothing here decides it.
+  /** The debounced term the toolbar's quick filter last settled on. */
+  const [search, setSearch] = useState('')
+  /**
+   * The one column filter the query is currently answering.
+   *
+   * One, not a list: Firestore composes a second predicate only with an
+   * index built for that exact pair, so offering two filters would mean
+   * either a combinatorial index set or a panel where some combinations
+   * quietly return nothing.
+   */
+  const [filter, setFilter] = useState<{
+    field: string
+    op: string
+    value: string
+  } | null>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /*
+   * Debounced, because each settled term is a Firestore query and a fast
+   * typist would otherwise spend one per keystroke. Cleared on unmount so a
+   * pending keystroke cannot set state on a page that has gone.
+   */
+  const onQuickFilter = useCallback((value: string) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => setSearch(value.trim()), 300)
+  }, [])
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    },
+    [],
+  )
+
   const fetchOrgsPage = useCallback(
     async (cursor: string | null, _pageIndex: number, pageSize: number) => {
       const idToken = await (user as { getIdToken?: () => Promise<string> })
         ?.getIdToken?.()
       const url = new URL('/api/admin/orgs', window.location.origin)
       url.searchParams.set('pageSize', String(pageSize))
+      if (search) url.searchParams.set('search', search)
+      if (filter) {
+        url.searchParams.set('filterField', filter.field)
+        url.searchParams.set('filterOp', filter.op)
+        url.searchParams.set('filterValue', filter.value)
+      }
       if (cursor) url.searchParams.set('after', cursor)
       const response = await fetch(url.toString(), {
         headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
@@ -104,7 +157,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         nextCursor: payload.nextCursor ?? null,
       }
     },
-    [user],
+    [user, search, filter],
   )
   const reportOrgsError = useCallback(() => {
     enqueueSnackbar('Could not load organizations', { variant: 'error' })
@@ -117,20 +170,24 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { rows: orgDocs, loading, refresh } = pagination
 
   /*
-   * Search over the current page (AGL-135). The bespoke Sort select is gone:
-   * the grid sorts by COLUMN now, which is both more of a control and one
-   * the reader already knows from every other list (AGL-693). Its three
-   * options — name, plan, newest — are three of the columns.
+   * Search runs on the SERVER; sorting is the grid's (AGL-693).
+   *
+   * Both used to be bespoke and both were wrong at scale: a `Sort` select
+   * offering three of the table's own columns, and a text box that filtered
+   * the rows already fetched. This list is paged, so filtering in the browser
+   * answered "no such organization" for every organization past the first
+   * page — an answer a search must never give wrongly.
+   *
+   * The toolbar's quick filter now drives `/api/admin/orgs?search=`, a
+   * Firestore prefix range over the normalized `nameLower`. Debounced,
+   * because each keystroke is a query.
+   *
+   * ⚠️ Prefix, not contains: "acme" finds "Acme Coffee" and "coffee" does
+   * not. Firestore cannot answer contains without a search service, and a
+   * prefix that reaches the whole collection beats a contains that cannot
+   * see past ten rows.
    */
-  const [search, setSearch] = useState('')
-  const needle = search.trim().toLowerCase()
-  const orgs = orgDocs.filter(
-    (org) =>
-      !needle ||
-      [org.$id, org.name, org.slug, org.plan]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(needle)),
-  )
+  const orgs = orgDocs
 
 
   // Usage drill-down (AGL-205): last 12 monthly org rollups with deltas.
@@ -167,6 +224,22 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // actions without this page and that one drifting apart.
 
   /*
+   * Only the operators the QUERY can answer reach the panel.
+   *
+   * MUI offers `contains`, `equals`, `startsWith`, `endsWith`, `isEmpty`,
+   * `isNotEmpty`, `isAnyOf` and `doesNotContain` on a string column. Which of
+   * those a given column gets is not decided here — it is derived from
+   * `ORG_LIST_FILTER_FIELDS`, the same declaration `/api/admin/orgs` builds
+   * its predicate from. One list, so the menu cannot offer an operator the
+   * route will not answer, and the funnel cannot go back to setting filters
+   * nobody honours.
+   */
+  const filterColumn = useCallback(
+    (column: string) => listFilterColumn(ORG_LIST_FILTER_FIELDS, column),
+    [],
+  )
+
+  /*
    * One row grammar, the console's (AGL-693).
    *
    * `valueGetter` on every column that is not already a plain string: the
@@ -181,6 +254,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Organization',
         flex: 1.4,
         minWidth: 200,
+        ...filterColumn('name'),
         valueGetter: (_value, row: any) => String(row.name ?? row.$id),
         renderCell: ({ row }: any) => (
           /*
@@ -227,6 +301,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Plan',
         flex: 1,
         minWidth: 180,
+        ...filterColumn('plan'),
         valueGetter: (_value, row: any) =>
           isEnterpriseOrg(row as never)
             ? PLAN_LABELS.enterprise
@@ -286,6 +361,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Subscription',
         flex: 0.8,
         minWidth: 130,
+        ...filterColumn('subscription'),
         valueGetter: (_value, row: any) => row.subscription?.status ?? '--',
       },
       {
@@ -293,6 +369,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Site limit',
         flex: 0.8,
         minWidth: 130,
+        // A derived entitlement, not a stored field — there is nothing for a
+        // query to filter on.
+        filterable: false,
         // An UNLIMITED quota is Number.POSITIVE_INFINITY, which renders as
         // the literal "Infinity" (AGL-1118).
         valueGetter: (_value, row: any) =>
@@ -328,7 +407,12 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Created',
         flex: 0.7,
         minWidth: 120,
-        valueGetter: (_value, row: any) => row.createdAt?.seconds ?? 0,
+        // `type: 'date'` is what gives the panel a date PICKER rather than a
+        // free-text box for a value the route parses as a day.
+        type: 'date',
+        ...filterColumn('createdAt'),
+        valueGetter: (_value, row: any) =>
+          row.createdAt?.seconds ? new Date(row.createdAt.seconds * 1000) : null,
         renderCell: ({ row }: any) => (
           <Typography variant="caption" color="text.secondary">
             {row.createdAt?.seconds
@@ -337,6 +421,19 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           </Typography>
         ),
       },
+      /*
+       * Filterable fields that are not worth a column of their own.
+       *
+       * MUI's panel lists COLUMNS, so a field with no column is a field a
+       * reader cannot filter by however well the route answers it. These are
+       * declared hidden rather than dropped, which keeps one source of truth —
+       * `ORG_LIST_FILTER_FIELDS` — instead of a second list that drifts.
+       */
+      ...hiddenFilterColumns(
+        ORG_LIST_FILTER_FIELDS,
+        ORG_FILTER_COLUMNS,
+        ORG_LIST_FILTER_HEADERS,
+      ),
       listActionsColumn(
         (row: any) => (
           <StaffOrgActions
@@ -371,7 +468,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         { width: 120 },
       ),
     ],
-    [refresh, handleShowUsage, usageLoading],
+    [refresh, handleShowUsage, usageLoading, filterColumn],
   )
 
   return (
@@ -411,29 +508,30 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                     'as; where that differs from what is stored, the stored ' +
                     'value is shown beside it.'}
                 </Typography>
-                <Stack direction="row" spacing={1}>
-                  <TextField
-                    size="small"
-                    label="Search"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    sx={{ minWidth: 220 }}
-                  />
-                </Stack>
               {orgs.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   {loading
                     ? 'Loading…'
-                    : needle
-                      ? 'No organizations on this page match your search.'
-                      : 'No organizations yet — they are created at signup ' +
-                        'or first site.'}
+                    : 'No organizations yet — they are created at signup ' +
+                      'or first site.'}
                 </Typography>
               ) : (
                 <ListTable
                   rows={orgs}
                   columns={orgColumns}
                   loading={loading}
+                  /*
+                   * The grid must NOT also filter. With the server answering
+                   * the search, a second client-side pass over the returned
+                   * page would drop rows the query already matched — the
+                   * prefix range matches `nameLower`, and the grid compares
+                   * against whatever a column happens to render.
+                   */
+                  filterMode="server"
+                  onFilterModelChange={(model) => {
+                    onQuickFilter((model.quickFilterValues ?? []).join(' '))
+                    setFilter(gridFilterRequest(model))
+                  }}
                   // The row IS the way in, on every list in the console.
                   onOpen={(id) =>
                     router.push(
@@ -443,9 +541,16 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   // Server-paged: the footer below owns the page, so the grid
                   // must not also try to slice these rows.
                   hideFooter
-                  autoHeight
                   // The console's row height, like every other grid list.
                   rowHeight={TABLE_ROW_HEIGHT}
+                  initialState={{
+                    columns: {
+                      columnVisibilityModel: hiddenFilterVisibility(
+                        ORG_LIST_FILTER_FIELDS,
+                        ORG_FILTER_COLUMNS,
+                      ),
+                    },
+                  }}
                 />
               )}
               {/* Pagination (AGL-878): each page is a fresh Admin-SDK read via

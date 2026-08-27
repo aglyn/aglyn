@@ -495,6 +495,15 @@ export interface CspAggregateRow {
   count?: number
   lastSite?: string
   lastPath?: string
+  /**
+   * `enforce` means the browser BLOCKED it; `report` means a report-only
+   * policy measured it and the script or image loaded anyway. The collector
+   * has always stored this — the summary above it did not read it, so a
+   * blocked login script and a measured analytics pixel counted the same.
+   */
+  disposition?: 'enforce' | 'report'
+  /** Epoch millis of the most recent report in this row. */
+  lastSeenMs?: number
 }
 
 export interface CspReportView {
@@ -505,8 +514,28 @@ export interface CspReportView {
   rows: CspAggregateRow[]
   /** Total violations across the window — the number worth a headline. */
   totalViolations: number
-  /** Distinct directives seen, most-violated first. */
-  directives: Array<{ directive: string; count: number }>
+  /**
+   * Distinct directives seen, most-violated first.
+   *
+   * `blocked` and `reported` are split because they are different questions.
+   * `reported` is the flip decision — what a stricter policy WOULD break.
+   * `blocked` is an incident: something did not run, for somebody, on a page
+   * that is live.
+   *
+   * `lastBlockedMs` is what stops a resolved incident reading as an ongoing
+   * one. Twenty-two blocked inline scripts on `/signin` and `/app` sat in a
+   * fourteen-day window for a week after they stopped happening, and the
+   * summary presented them exactly as it presented that morning's reports.
+   */
+  directives: Array<{
+    directive: string
+    count: number
+    blocked: number
+    reported: number
+    lastBlockedMs: number | null
+  }>
+  /** Newest ENFORCED violation in the window, or null when there is none. */
+  lastBlockedMs: number | null
 }
 
 /**
@@ -522,14 +551,37 @@ export function readCspReport(
 ): CspReportView | null {
   if (!body || !Array.isArray(body['rows'])) return null
   const rows = (body['rows'] as CspAggregateRow[]) ?? []
-  const byDirective = new Map<string, number>()
+  const byDirective = new Map<
+    string,
+    { count: number; blocked: number; reported: number; lastBlockedMs: number | null }
+  >()
   let total = 0
+  let lastBlockedMs: number | null = null
   for (const row of rows) {
     const count = Number(row?.count ?? 0)
     const safe = Number.isFinite(count) ? count : 0
     total += safe
     const directive = String(row?.directive ?? 'unknown')
-    byDirective.set(directive, (byDirective.get(directive) ?? 0) + safe)
+    const entry = byDirective.get(directive) ?? {
+      count: 0,
+      blocked: 0,
+      reported: 0,
+      lastBlockedMs: null,
+    }
+    entry.count += safe
+    // Anything not explicitly `enforce` is treated as measured. An unknown
+    // disposition must not be able to invent an incident.
+    if (row?.disposition === 'enforce') {
+      entry.blocked += safe
+      const seen = Number(row?.lastSeenMs ?? 0)
+      if (Number.isFinite(seen) && seen > 0) {
+        entry.lastBlockedMs = Math.max(entry.lastBlockedMs ?? 0, seen)
+        lastBlockedMs = Math.max(lastBlockedMs ?? 0, seen)
+      }
+    } else {
+      entry.reported += safe
+    }
+    byDirective.set(directive, entry)
   }
   return {
     windowDays: Number(body['windowDays'] ?? 0),
@@ -539,7 +591,10 @@ export function readCspReport(
     rows,
     totalViolations: total,
     directives: [...byDirective.entries()]
-      .map(([directive, count]) => ({ directive, count }))
-      .sort((a, b) => b.count - a.count),
+      .map(([directive, entry]) => ({ directive, ...entry }))
+      // Blocked first whatever the volume: one script that did not run
+      // outranks a thousand measured ones.
+      .sort((a, b) => b.blocked - a.blocked || b.count - a.count),
+    lastBlockedMs,
   }
 }

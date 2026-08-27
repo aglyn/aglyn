@@ -17,203 +17,33 @@
 
 'use client'
 
-import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { TabContext, TabList, TabPanel } from '@mui/lab'
-import { Stack, Tab, Typography } from '@mui/material'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import useTabParam from '../../../../../../hooks/use-tab-param'
-import { useCallback, useState } from 'react'
-import DeleteSiteCard from '../../../../../../components/delete-site-card.component'
-import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
-import {
-  useHostId,
-  useHostSubdomain,
-  useIsHostAdmin,
-} from '../../../../../../components/host-id-provider'
-import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
-import CustomDomainCard from '../../../../../../components/custom-domain-card.component'
-import HostActivityTable from '../../../../../../components/host-activity-table.component'
-import SiteBrandingBadgeCard from '../../../../../../components/site-branding-badge-card.component'
-import SitePluginsCard from '../../../../../../components/site-plugins-card.component'
-import SiteSecurityCards from '../../../../../../components/site-security-cards.component'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
-import { docsHelp } from '../../../../../../constants/docs-links'
+import { useHostSubdomain } from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
-/** Per-site plugins tab id; `/admin?tab=plugins` deep links land here. */
-const PLUGINS_TAB_ID = 'plugins'
 /**
- * Three tabs moved here from Setup (AGL-1485). The line that holds up is
- * SETUP = what the site is and how it behaves for a visitor; ADMIN = what
- * governs the site as an object — its address, its permissions, its history,
- * its existence.
+ * `/admin` is the section index and renders nothing of its own (AGL-693).
  *
- * - **Security** is the one that is not a taste call. All six approved-host
- *   lists are `hostMemberRole(hostId) == 'admin'` in the Firestore rules, so
- *   an editor opening that tab on Setup saw a page of controls they could not
- *   write. A surface whose permission and whose placement disagree teaches
- *   people that refusals are arbitrary.
- * - **Custom domain** is ownership and infrastructure, not design, and
- *   detaching one takes the site off its address — Danger-zone-adjacent.
- * - **Activity** is an audit log. Governance, not configuration.
+ * No `?tab=` compatibility map. The sections were panels behind a query
+ * parameter and are routes now; with no shipped customers there is nothing
+ * holding an old link, and a map kept "just in case" is a second set of names
+ * for the same eight pages that has to be maintained against them.
  *
- * Their ids are UNCHANGED, and Setup redirects the three old `?tab=` values
- * here, so every link anyone has bookmarked still lands where it means to.
- */
-const DOMAIN_TAB_ID = 'domain'
-const SECURITY_TAB_ID = 'security'
-const ACTIVITY_TAB_ID = 'activity'
-/** Danger zone tab id; `/admin?tab=danger` deep links land here. */
-const DANGER_TAB_ID = 'danger'
-
-/**
- * Host Admin area (AGL-1014): owner/admin-only site controls, out of the
- * Setup page a collaborator legitimately visits. Holds the per-site plugin
- * switchboard and the Danger zone (delete site, formerly in Setup). The
- * nav tab is hidden for non-admins; navigating here by URL shows a notice —
- * the rules (and the delete API) enforce the boundary regardless of what
- * renders.
+ * `replace`, not `push`: a redirect the reader did not ask for must not become
+ * a history entry their back button bounces off.
  */
 const HostAdmin: NextPageWithLayout<Record<string, never>> = () => {
-  // Through the shared resolver (AGL-2486): validated against the tabs that
-  // exist, and it keeps following the param rather than reading it once. The
-  // condition this replaces named two ids and was correct only because nobody
-  // had added a third — the same shape that made `?tab=hostTracking` open the
-  // wrong panel on Setup.
-  const { tab, onTabChange } = useTabParam({
-    ids: [
-      PLUGINS_TAB_ID,
-      DOMAIN_TAB_ID,
-      SECURITY_TAB_ID,
-      ACTIVITY_TAB_ID,
-      DANGER_TAB_ID,
-    ],
-  })
-  const hostId = useHostId()
+  const router = useRouter()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const isAdmin = useIsHostAdmin()
-  const router = useRouter()
-  const pathname = usePathname()
-
-  return (
-    <DashboardLayout
-      breadcrumbItems={[
-        {
-          children: <HostDisplayNameComponent hostId={hostId} />,
-          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
-        },
-        {
-          children: 'Admin',
-          href: buildRoute(Route.HOST_ADMIN, { orgSlug, host }),
-        },
-      ]}
-      help={{ topic: 'plugins', anchor: '#how-plugins-run' }}
-      header={{
-        children: 'Site Admin',
-        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-      }}
-    >
-      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        {isAdmin ? (
-          <TabContext value={tab}>
-            <GridItems
-              spacing={3}
-              items={[
-                {
-                  size: { xs: 12, sm: 3 },
-                  children: (
-                    <CardDisplay header="Navigation">
-                      <TabList
-                        orientation="vertical"
-                        textColor="primary"
-                        indicatorColor="primary"
-                        sx={{
-                          ['.MuiTab-root']: {
-                            alignItems: 'start',
-                            maxWidth: 'unset',
-                          },
-                        }}
-                        onChange={onTabChange}
-                      >
-                        <Tab value={PLUGINS_TAB_ID} label={'Plugins'} />
-                        <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
-                        <Tab value={SECURITY_TAB_ID} label={'Security'} />
-                        <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
-                        <Tab value={DANGER_TAB_ID} label={'Danger zone'} />
-                      </TabList>
-                    </CardDisplay>
-                  ),
-                },
-                {
-                  size: { xs: 12, sm: 9 },
-                  children: (
-                    <>
-                      <TabPanel
-                        value={PLUGINS_TAB_ID}
-                        sx={{ padding: 'unset' }}
-                      >
-                        <SitePluginsCard hostId={hostId} />
-                      </TabPanel>
-                      <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
-                        <Stack spacing={2}>
-                          <CustomDomainCard hostId={hostId} />
-                          {/* The badge is a fact about the PUBLISHED site, so
-                              it belongs beside the domain it is published on
-                              (AGL-2081). There is nothing to toggle — the
-                              entitlement is the switch — but "do my sites show
-                              the Aglyn badge" is a question an owner should be
-                              able to answer somewhere. */}
-                          <SiteBrandingBadgeCard />
-                        </Stack>
-                      </TabPanel>
-                      <TabPanel
-                        value={SECURITY_TAB_ID}
-                        sx={{ padding: 'unset' }}
-                      >
-                        <SiteSecurityCards hostId={hostId} />
-                      </TabPanel>
-                      <TabPanel
-                        value={ACTIVITY_TAB_ID}
-                        sx={{ padding: 'unset' }}
-                      >
-                        <HostActivityTable hostId={hostId} />
-                      </TabPanel>
-                      <TabPanel value={DANGER_TAB_ID} sx={{ padding: 'unset' }}>
-                        {/* Moved out of Setup (AGL-1014): destructive site
-                            actions no longer sit in a page collaborators
-                            otherwise have reason to visit. The card keeps
-                            its own admin gate and the delete API its own. */}
-                        <DeleteSiteCard hostId={hostId} />
-                      </TabPanel>
-                    </>
-                  ),
-                },
-              ]}
-            />
-          </TabContext>
-        ) : (
-          <CardDisplay
-            header="Admin"
-            help={docsHelp('team', {
-              excerpt:
-                'Site admin actions — per-site plugin choices and deleting ' +
-                'the site — are limited to site admins.',
-            })}
-            contentGutterX
-            contentGutterY
-          >
-            <Typography variant="body2" color="text.secondary">
-              {'Only site admins can open this area.'}
-            </Typography>
-          </CardDisplay>
-        )}
-      </Container>
-    </DashboardLayout>
-  )
+  useEffect(() => {
+    if (!orgSlug || !host) return
+    router.replace(buildRoute(Route.HOST_ADMIN_PLUGINS, { orgSlug, host }))
+  }, [router, orgSlug, host])
+  return null
 }
 HostAdmin.displayName = 'Page:HostAdmin'
 

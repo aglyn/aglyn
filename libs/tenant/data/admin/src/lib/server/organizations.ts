@@ -42,6 +42,11 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
+import {
+  nameSearchKey,
+  nameSearchReversed,
+  nameSearchTokens,
+} from '@aglyn/aglyn/app-utils/name-search'
 // LEAF MODULE, NOT THE BARREL (AGL-1289). This file is itself reachable
 // through `@aglyn/aglyn/server`, and the verdict route proved this week that a
 // constant pulled from that barrel inside the cycle typechecks and then
@@ -265,6 +270,27 @@ export async function createOrganization(
     )
     tx.set(db.collection('orgs').doc(orgId), {
       name,
+      /*
+       * The searchable form of `name`, written beside it (AGL-693).
+       *
+       * Firestore cannot search a string it has not been given in search
+       * form: a prefix range needs the normalized key to ORDER by, and
+       * `name` carries case and stray whitespace. Without this the staff
+       * organization list can only filter the rows already on screen — ten
+       * of them — which stops being a search the moment there are more
+       * organizations than a page.
+       *
+       * Denormalized rather than computed at query time because there is no
+       * query-time in Firestore. Every writer of `name` owes this field; the
+       * rename in `/api/orgs/settings` is the other one.
+       */
+      nameLower: nameSearchKey(name),
+      // Word-prefix tokens, so the staff search can answer "contains a word
+      // starting with X" rather than only "starts with X" (AGL-693).
+      nameTokens: nameSearchTokens(name),
+      // Reversed, so the list's "ends with" filter is a prefix range like
+      // every other string operator Firestore can answer.
+      nameReversed: nameSearchReversed(name),
       slug,
       ownerUid,
       // Stamped once and never mutated — `transferOrgOwnership` moves
@@ -284,6 +310,20 @@ export async function createOrganization(
         email: ownerEmail ?? null,
         displayName: ownerDisplayName ?? null,
         joinedAt: FieldValue.serverTimestamp(),
+        /*
+         * The rules projection, stamped AT CREATION (AGL-1038).
+         *
+         * Every other membership write reaches `syncOrgAuthProjections`,
+         * which recomputes this for the whole roster. This one does not —
+         * it is inside the creating transaction, and nothing runs after it
+         * — so a brand-new org's owner had no `scopeTokens` at all and the
+         * weekly scope-drift detector reported the org from the day it was
+         * made until some later membership change happened to heal it.
+         *
+         * Computed rather than written as a literal, so it cannot disagree
+         * with the projection every other path uses.
+         */
+        scopeTokens: projectMemberScopeTokens({ role: 'owner', allHosts: true }),
       },
     )
     tx.set(

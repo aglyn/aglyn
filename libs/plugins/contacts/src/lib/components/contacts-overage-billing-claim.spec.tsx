@@ -91,6 +91,15 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  /*
+   * The real translator, not a stub. It is a pure function of the shared
+   * declaration, and returning `undefined` here made every render throw —
+   * a mock that omits a barrel export does not fail as "missing", it fails
+   * as the component being broken.
+   */
+  listFilterConstraints: jest.requireActual(
+    '@aglyn/tenant-feature-instance',
+  ).listFilterConstraints,
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
   useFirestoreCollection: (build: () => unknown) => ({

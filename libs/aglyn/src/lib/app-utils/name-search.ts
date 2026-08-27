@@ -35,3 +35,122 @@
 export function nameSearchKey(name: string | null | undefined): string {
   return (name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 }
+
+/**
+ * The longest word-prefix a token may be.
+ *
+ * Every prefix of every word is stored, so the token count grows with name
+ * LENGTH rather than word count. Twelve characters is past the point where a
+ * search box narrows anything — a reader who has typed twelve characters has
+ * already found it — and it keeps a long name from spending a hundred index
+ * entries on the tail of one word.
+ */
+export const NAME_TOKEN_MAX_PREFIX = 12
+
+/** Ceiling on tokens per document, so a pathological name cannot bloat the index. */
+export const NAME_TOKEN_LIMIT = 120
+
+/**
+ * Word-prefix tokens for `array-contains` search (AGL-693).
+ *
+ * `nameSearchKey` supports a PREFIX range, which is anchored at the start of
+ * the whole name: "acme" finds "Acme Coffee" and "coffee" does not. That is
+ * the wrong shape for a search box, where the word a reader remembers is
+ * rarely the first one.
+ *
+ * Firestore cannot answer `contains` on a string, but it can answer
+ * `array-contains` on a field the write path prepared. Storing every prefix
+ * of every WORD turns "does this name contain a word starting with X" into a
+ * single indexed equality:
+ *
+ *   "Acme Coffee" → a, ac, acm, acme, c, co, cof, coff, coffe, coffee
+ *
+ * So "cof" finds it, and so does "acme". What it still cannot do is match
+ * mid-word — "offee" is not a prefix of any word — which is the honest edge
+ * of doing this without a search service.
+ *
+ * Normalized through `nameSearchKey` so the stored tokens and the typed query
+ * agree on case, trimming and internal whitespace; diacritics are kept, for
+ * the reason given there.
+ */
+export function nameSearchTokens(name: string | null | undefined): string[] {
+  const key = nameSearchKey(name)
+  if (!key) return []
+  const tokens = new Set<string>()
+  for (const word of key.split(' ')) {
+    if (!word) continue
+    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    for (let end = 1; end <= capped.length; end += 1) {
+      tokens.add(capped.slice(0, end))
+      if (tokens.size >= NAME_TOKEN_LIMIT) return [...tokens]
+    }
+  }
+  return [...tokens]
+}
+
+/**
+ * The one token a typed query becomes.
+ *
+ * `array-contains` takes a single value, and Firestore allows only one such
+ * clause per query — so a multi-word query cannot be an AND on the server.
+ * The FIRST word is used, which is what a reader is narrowing by when they
+ * type "acme cof": they see the Acme results and read the rest themselves.
+ * Capped to the same prefix length the tokens were written at, or a longer
+ * query would match a token that was never stored.
+ */
+export function nameSearchToken(query: string | null | undefined): string {
+  const key = nameSearchKey(query)
+  if (!key) return ''
+  return (key.split(' ')[0] ?? '').slice(0, NAME_TOKEN_MAX_PREFIX)
+}
+
+/**
+ * The normalized name, reversed, so "ends with" becomes a prefix range.
+ *
+ * Firestore has one string operator that is not equality: the range. That
+ * gives "starts with" directly — `>= q` and `<= q + ''` over
+ * `nameLower` — and gives "ends with" nothing at all, because a range is
+ * anchored at the front of the stored value.
+ *
+ * Reversing the stored key moves the end to the front. "Acme Coffee" is
+ * stored as "eeffoc emca", and a search for names ending "coffee" becomes a
+ * prefix range for "eeffoc" — the same query, on the same kind of index.
+ *
+ * Reversed by CODEPOINT (`[...key]`), not by UTF-16 unit: `split('')` cuts
+ * surrogate pairs in half, so an emoji or a non-BMP character in a workspace
+ * name would reverse into two lone surrogates and never match anything.
+ */
+export function nameSearchReversed(name: string | null | undefined): string {
+  return [...nameSearchKey(name)].reverse().join('')
+}
+
+/**
+ * The three search fields that travel with a `name`, as one object.
+ *
+ * Every collection whose list is SEARCHED on the server carries them, and
+ * carrying only some is the failure mode worth designing against: `orderBy`
+ * drops a document missing the field it sorts by, and `array-contains` drops
+ * one missing the array. Either way the record still LISTS normally, so the
+ * gap shows up only as a search that quietly cannot find one row.
+ *
+ * ⚠️ Spread this at every write that sets `name`, and only where `name` is
+ * actually being written — a partial write that stamped an empty key over a
+ * real one would make the document unfindable by the name it still displays.
+ */
+export function nameSearchFields(name: string): {
+  name: string
+  nameLower: string
+  nameTokens: string[]
+  nameReversed: string
+} {
+  // `name` is INCLUDED so this is a drop-in replacement for writing `{ name }`.
+  // A helper that returned only the derived keys would be spread beside the
+  // name at four call sites, and the one that forgot would write search keys
+  // for a name it never stored.
+  return {
+    name,
+    nameLower: nameSearchKey(name),
+    nameTokens: nameSearchTokens(name),
+    nameReversed: nameSearchReversed(name),
+  }
+}

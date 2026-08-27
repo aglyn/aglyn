@@ -20,12 +20,33 @@ import {
   collapseCrossPoolUidRows,
   emailUnverifiedResponse,
   findUserByEmailAcrossPools,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
   listUsersAcrossPools,
+  scanUsersAcrossPools,
   type PooledUserRecord,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { matchListFilter } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { readListFilter } from '../../../../utils/server/list-filter'
+import { USER_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
+
+/**
+ * How many accounts a filtered request may read before it stops and says so.
+ *
+ * Firebase Auth cannot filter, so anything but an exact email or uid is
+ * answered by reading accounts and matching them. That is an expensive read,
+ * so it happens only when a request CARRIES a filter — never on a mount — and
+ * it stops at a bound rather than walking a directory of unknown size.
+ */
+const FILTER_SCAN_CAP = 2000
+
+/**
+ * How many matches come back. A staff filter is used to FIND an account, not
+ * to browse thousands, and an unbounded response is a page nobody can render.
+ */
+const FILTER_MATCH_CAP = 200
 
 /**
  * Staff user listing (AGL-204). Replaces the pre-AGL-42 handler that
@@ -94,6 +115,95 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({
         users: found ? [serialize(found)] : [],
         nextPageToken: null,
+      }, { status: 200 })
+    }
+    /*
+     * The column filter, answered ACROSS THE POOLS (AGL-693).
+     *
+     * The staff list paged 200 accounts at a time and filtered the rows it
+     * had — so it answered "no such account" for everyone past the current
+     * page, on the list whose whole job is that nobody is missing.
+     *
+     * Firebase Auth has no predicate to push this into. What it does have is
+     * three O(1) lookups, and an exact email or uid is routed to one of them
+     * rather than to a walk. Everything else reads the pools and matches in
+     * memory, which is why this list can offer a mid-string `contains` and a
+     * `doesNotContain` that a Firestore-backed list cannot.
+     */
+    /*
+     * The toolbar's quick search, answered across the POOLS.
+     *
+     * It matched email, display name or uid within the loaded page, which on
+     * a 200-account page meant it stopped at 200 accounts. A complete email
+     * is routed to the O(1) lookup first — that is the common case and it
+     * needs no walk at all — and anything else falls through to the same
+     * bounded scan a column filter uses.
+     */
+    const search =
+      typeof query.search === 'string' ? query.search.trim() : ''
+    if (search) {
+      if (/^[^@\s]+@[^@\s]+$/.test(search)) {
+        const found = await findUserByEmailAcrossPools(search)
+        if (found) {
+          return Response.json({
+            users: [serialize(found)],
+            nextPageToken: null,
+          }, { status: 200 })
+        }
+      }
+      const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
+      const term = search.toLowerCase()
+      const matched = collapseCrossPoolUidRows(scan.users)
+        .map(serialize)
+        .filter((row) =>
+          [row.email, row.displayName, row.uid]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(term),
+        )
+      return Response.json({
+        users: matched.slice(0, FILTER_MATCH_CAP),
+        nextPageToken: null,
+        tenantsIncluded: true,
+        tenantTruncated: scan.tenantTruncated,
+        scanTruncated: scan.truncated,
+        matchTruncated: matched.length > FILTER_MATCH_CAP,
+        matchCount: matched.length,
+      }, { status: 200 })
+    }
+    const filter = readListFilter(query)
+    if (filter) {
+      const exact = filter.op === 'equals' ? filter.value.trim() : ''
+      if (exact && (filter.field === 'email' || filter.field === 'uid')) {
+        const found =
+          filter.field === 'email'
+            ? await findUserByEmailAcrossPools(exact)
+            : await findUserByUidAcrossPools(exact)
+        return Response.json({
+          users: found ? [serialize(found)] : [],
+          nextPageToken: null,
+        }, { status: 200 })
+      }
+      const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
+      const matched = collapseCrossPoolUidRows(scan.users)
+        .map(serialize)
+        .filter((row) => matchListFilter(row, USER_LIST_FILTER_FIELDS, filter))
+      return Response.json({
+        users: matched.slice(0, FILTER_MATCH_CAP),
+        nextPageToken: null,
+        tenantsIncluded: true,
+        tenantTruncated: scan.tenantTruncated,
+        /*
+         * Never let a partial answer read as a complete one. `scanTruncated`
+         * says the directory outran the cap; `matchTruncated` says the filter
+         * matched more than one response can carry. A staff list that stopped
+         * early and reported "no matches" is the failure this whole change is
+         * about.
+         */
+        scanTruncated: scan.truncated,
+        matchTruncated: matched.length > FILTER_MATCH_CAP,
+        matchCount: matched.length,
       }, { status: 200 })
     }
     const pageToken =

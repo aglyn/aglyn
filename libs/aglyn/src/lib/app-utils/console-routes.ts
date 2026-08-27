@@ -114,6 +114,21 @@ export enum Route {
   // reloaded, and reached from a listing to ship an update.
   ORG_MARKETPLACE_PUBLISH_PLUGIN = '/[orgSlug]/marketplace/publish/plugin',
   ORG_SETTINGS = '/[orgSlug]/settings',
+  /*
+   * Settings SECTIONS are routes (AGL-693). `HubTabs` mounted every panel —
+   * `keepMounted`, with `lazy` off by default and passed by nobody — so
+   * opening General also mounted the API-keys, SSO and data-export cards and
+   * ran every read in them. Routes mount one page and code-split per route.
+   * `ORG_SETTINGS` itself redirects to General.
+   */
+  ORG_SETTINGS_GENERAL = '/[orgSlug]/settings/general',
+  ORG_SETTINGS_PROFILE = '/[orgSlug]/settings/profile',
+  ORG_SETTINGS_PLUGINS = '/[orgSlug]/settings/plugins',
+  ORG_SETTINGS_API_KEYS = '/[orgSlug]/settings/api-keys',
+  ORG_SETTINGS_BRANDING = '/[orgSlug]/settings/branding',
+  ORG_SETTINGS_SSO = '/[orgSlug]/settings/sso',
+  ORG_SETTINGS_OWNERSHIP = '/[orgSlug]/settings/ownership',
+  ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
   MANAGE_BILLING = '/[orgSlug]/billing',
   // The ONE billing URL that carries no org (AGL-2430).
   //
@@ -179,6 +194,15 @@ export enum Route {
   // can collide with it.
   CONTENT_ENTRY_DETAILS = '/[orgSlug]/hosts/[host]/content/[collectionSlug]/entries/[entryId]',
   MANAGE_TEAM = '/[orgSlug]/team',
+  /*
+   * Team SECTIONS are routes, not tabs (AGL-693). A section's bundle then
+   * arrives when a reader opens it and never before, the section is linkable,
+   * and the active state is a fact about the URL rather than state that has to
+   * be kept in sync with it. `MANAGE_TEAM` itself redirects to members.
+   */
+  MANAGE_TEAM_MEMBERS = '/[orgSlug]/team/members',
+  MANAGE_TEAM_ROLES = '/[orgSlug]/team/roles',
+  MANAGE_TEAM_ACTIVITY = '/[orgSlug]/team/activity',
   MANAGE_TEAM_MEMBER = '/[orgSlug]/team/[uid]',
   // Support is an UMBRELLA, not a page (AGL-1158). The two channels beneath
   // it are separate features that were only ever one screen: they are gated
@@ -207,6 +231,16 @@ export enum Route {
   // enablement and the Danger zone — out of the Setup page collaborators
   // legitimately visit.
   HOST_ADMIN = '/[orgSlug]/hosts/[host]/admin',
+  /*
+   * Site-admin SECTIONS are routes (AGL-693), so an unopened one costs neither
+   * a read nor a byte. `HOST_ADMIN` redirects to Plugins and still honours the
+   * `?tab=` ids these sections were deep-linked by.
+   */
+  HOST_ADMIN_PLUGINS = '/[orgSlug]/hosts/[host]/admin/plugins',
+  HOST_ADMIN_DOMAIN = '/[orgSlug]/hosts/[host]/admin/domain',
+  HOST_ADMIN_SECURITY = '/[orgSlug]/hosts/[host]/admin/security',
+  HOST_ADMIN_ACTIVITY = '/[orgSlug]/hosts/[host]/admin/activity',
+  HOST_ADMIN_DANGER = '/[orgSlug]/hosts/[host]/admin/danger',
   HOST_THEME = '/[orgSlug]/hosts/[host]/theme',
   HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
   HOST_DATA = '/[orgSlug]/hosts/[host]/data',
@@ -332,6 +366,14 @@ export interface RoutePayload {
   [Route.MANAGE_USER_SETTINGS]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
+  [Route.ORG_SETTINGS_GENERAL]: { orgSlug: string }
+  [Route.ORG_SETTINGS_PROFILE]: { orgSlug: string }
+  [Route.ORG_SETTINGS_PLUGINS]: { orgSlug: string }
+  [Route.ORG_SETTINGS_API_KEYS]: { orgSlug: string }
+  [Route.ORG_SETTINGS_BRANDING]: { orgSlug: string }
+  [Route.ORG_SETTINGS_SSO]: { orgSlug: string }
+  [Route.ORG_SETTINGS_OWNERSHIP]: { orgSlug: string }
+  [Route.ORG_SETTINGS_DELETE]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }
   [Route.HOST_CONTENT_COLLECTION]: {
@@ -357,6 +399,9 @@ export interface RoutePayload {
     entryId: string
   }
   [Route.MANAGE_TEAM]: { orgSlug: string }
+  [Route.MANAGE_TEAM_MEMBERS]: { orgSlug: string }
+  [Route.MANAGE_TEAM_ROLES]: { orgSlug: string }
+  [Route.MANAGE_TEAM_ACTIVITY]: { orgSlug: string }
   [Route.MANAGE_TEAM_MEMBER]: { orgSlug: string; uid: string }
   [Route.MANAGE_SUPPORT]: { orgSlug: string }
   [Route.MANAGE_SUPPORT_TICKETS]: { orgSlug: string }
@@ -367,6 +412,11 @@ export interface RoutePayload {
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_PLUGINS]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_DOMAIN]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_SECURITY]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_ACTIVITY]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_DANGER]: { orgSlug: string; host: string }
   [Route.HOST_PLUGIN]: { orgSlug: string; host: string; pluginSlug: string }
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }
   [Route.HOST_THEME]: { orgSlug: string; host: string }

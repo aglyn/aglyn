@@ -294,3 +294,44 @@ describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
     }
   })
 })
+
+/**
+ * A control that silently does nothing (AGL-693).
+ *
+ * `filterMode="server"` hands the whole filter model to the caller and stops
+ * the grid applying any of it. A list that answers only `quickFilterValues`
+ * has therefore turned its per-column filter panel into a funnel that sets a
+ * filter nobody reads and nothing applies — and an inert control does not
+ * read as unsupported, it reads as the list being broken.
+ *
+ * Two honest ways out: give each filterable column a server predicate, or
+ * turn the panel off. This asserts a list took one of them.
+ *
+ * The predicate route goes through `gridFilterRequest`, the shared reader.
+ * Reading `model.items` by hand is what a list does just before it forgets
+ * that `isEmpty` carries no value and so is skipped by any check that
+ * requires one — which is how an operator ends up in the menu and never in a
+ * request.
+ */
+describe('server-filtered lists do not offer a dead filter panel', () => {
+  const serverFiltered = tsxFilesUnder(join(REPO, 'apps', 'console'))
+    .filter((path) => readFileSync(path, 'utf8').includes('filterMode="server"'))
+
+  it('THE CONTROL: there is at least one such list to check', () => {
+    // Otherwise every assertion below is vacuously true.
+    expect(serverFiltered.length).toBeGreaterThan(0)
+  })
+
+  it('each one either disables the panel or reads the filter items', () => {
+    const dead = serverFiltered
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8')
+        return (
+          !source.includes('disableColumnFilter') &&
+          !source.includes('gridFilterRequest')
+        )
+      })
+      .map((path) => path.replace(`${REPO}/`, ''))
+    expect(dead).toEqual([])
+  })
+})

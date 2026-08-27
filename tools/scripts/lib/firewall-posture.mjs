@@ -59,6 +59,16 @@
 //
 // ⛔ Do not "simplify" any tooling here into a PUT. The 200 is the danger.
 //
+// ## That same error message ALSO means "your `value` carries read-only fields"
+//
+// `value` takes the EDITABLE fields only — `name`, `description`, `active`,
+// `conditionGroup`, `action`. The obvious move when editing an existing rule
+// is to read it and spread it (`{ ...rule, conditionGroup: next }`), and the
+// live object carries `id`, `valid` and `validationErrors` alongside those.
+// The schema rejects the extras with the identical ``Invalid request:
+// `action` should be equal to constant`` — no mention of which field is
+// unwanted. Measured 2026-08-27, removing a stale bypass group.
+//
 // ## That same error message also means "your description is too long"
 //
 // `value.description` is capped at **256 characters**, and exceeding it
@@ -530,12 +540,24 @@ export function evaluateRule(expectedRule, liveRule) {
 
     for (const required of expectedRule.conditions) {
       const satisfied = conditions.some((actual) => conditionSatisfies(required, actual))
-      if (!satisfied) {
-        findings.push(
-          `${label}${where} NO LONGER REQUIRES ${describeCondition(required)} — ` +
-            'the bypass has widened; groups are OR\'d, so every group must carry every condition',
-        )
-      }
+      if (satisfied) continue
+      /*
+       * Name what the offending group ACTUALLY matches.
+       *
+       * Without it the finding says only what is missing, which reads as "the
+       * path condition was dropped" — and the reader goes looking for an open
+       * door. The common reality is narrower and duller: one appended group
+       * bypassing one undeclared path, often a route that has since been
+       * deleted. It still widens the rule, so it is still a finding; naming
+       * the path is what turns it into a one-minute fix instead of an
+       * investigation against the live API.
+       */
+      const matches = conditions.map((actual) => describeCondition(actual)).join(' AND ')
+      findings.push(
+        `${label}${where} NO LONGER REQUIRES ${describeCondition(required)} — ` +
+          'the bypass has widened; groups are OR\'d, so every group must carry ' +
+          `every condition. That group bypasses: ${matches || '(nothing — it matches every request)'}`,
+      )
     }
   })
 

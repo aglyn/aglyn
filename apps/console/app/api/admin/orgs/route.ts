@@ -26,6 +26,12 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { nameSearchToken } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  applyListFilter,
+  readListFilter,
+} from '../../../../utils/server/list-filter'
+import { ORG_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -81,14 +87,84 @@ async function handler(request: Request): Promise<Response> {
     const byId = firebaseAdmin.firestore.FieldPath.documentId()
     // One extra row tells us whether a next page exists.
     const pageSize = resolvePageSize(query['pageSize'])
-    let ref = db.collection('orgs').orderBy(byId).limit(pageSize + 1)
-    if (after) {
-      ref = db
-        .collection('orgs')
-        .orderBy(byId)
-        .startAfter(after)
-        .limit(pageSize + 1)
-    }
+    /*
+     * SEARCH RUNS ON THE SERVER, or it is not a search (AGL-693).
+     *
+     * The staff list is paged, so a filter applied in the browser sees the
+     * rows on screen and nothing else — ten of them by default. That reads
+     * as "no such organization" for every organization past the first page,
+     * which is the answer a search must never give wrongly.
+     *
+     * `array-contains` over `nameTokens` — the word-prefix tokens the write
+     * path prepared — so a reader finds "Acme Coffee" by typing "coffee" and
+     * not only by typing "acme". A prefix range over `nameLower` was the
+     * first shape here and it was anchored at the START of the whole name,
+     * which is the wrong end for a search box: the word somebody remembers is
+     * rarely the first one.
+     *
+     * What it still cannot do is match MID-word — "offee" is a prefix of no
+     * word — and a multi-word query narrows by its first word only, because
+     * Firestore permits one `array-contains` per query. Both are the honest
+     * edge of doing this without a search service; see `nameSearchTokens`.
+     *
+     * ⚠️ Ordering by `nameLower` DROPS documents that lack it, and the
+     * `array-contains` drops any that lack `nameTokens`. Both fields are
+     * written by every `name` writer and backfilled by
+     * `tools/scripts/backfill-name-lower.mjs` — an organization missing
+     * either would be invisible to search while still listing normally.
+     */
+    const search = nameSearchToken(String(query['search'] ?? ''))
+    const orgsRef = db.collection('orgs')
+    /*
+     * The cursor stays a DOCUMENT ID in both modes, and is resolved to a
+     * snapshot before it is used.
+     *
+     * A search page is ordered by `nameLower`, so a raw string cursor would
+     * be compared against that field rather than the id — and `nameLower` is
+     * not unique. Two organizations sharing a name would make
+     * `startAfter('acme')` skip whichever of them came second, silently, on
+     * a staff list whose whole job is that nobody is missing.
+     *
+     * `startAfter(snapshot)` compares every ordering field INCLUDING the
+     * `__name__` Firestore appends to all of them, so it is exact whatever
+     * the ordering is. An unresolvable cursor restarts at the top rather
+     * than throwing.
+     */
+    const afterDoc = after
+      ? await orgsRef
+          .doc(after)
+          .get()
+          .catch(() => null)
+      : null
+    /*
+     * The column filter panel, answered by the QUERY (AGL-693).
+     *
+     * The panel was switched off for a while because `filterMode="server"`
+     * stops the grid applying anything itself, and this handler read only the
+     * quick search — so the funnel set filters nobody honoured. The fix is not
+     * to hide it but to answer it, for the operators Firestore can serve.
+     *
+     * Which fields those are, and which operators each one offers, is declared
+     * ONCE in `ORG_LIST_FILTER_FIELDS` and read by the page as well, so the
+     * menu a reader opens and the predicate this route builds are the same
+     * list. `applyListFilter` returns null when the ask cannot be served, and
+     * the list then comes back UNFILTERED — an operator the console cannot
+     * answer must not read as "no such organization".
+     */
+    const filtered = applyListFilter(
+      orgsRef,
+      ORG_LIST_FILTER_FIELDS,
+      readListFilter(query),
+    )
+
+    const base =
+      filtered ??
+      (search
+        ? orgsRef.where('nameTokens', 'array-contains', search).orderBy('nameLower')
+        : orgsRef.orderBy(byId))
+    const ref = (
+      afterDoc?.exists ? base.startAfter(afterDoc) : base
+    ).limit(pageSize + 1)
     const snapshot = await ref.get()
     const docs = snapshot.docs
     const more = docs.length > pageSize

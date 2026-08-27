@@ -166,11 +166,47 @@ interface MasonryColumn {
 }
 
 /**
+ * A band of ONE width fans out; a band of mixed widths does not.
+ *
+ * Same-size items sharing a column is right when something else occupies the
+ * rest of the row — billing's two 4-wide cards stacked beside its 8-wide
+ * `Usage` is the case this mode was built for. It is wrong when the band is
+ * ALL of that width: eight `md: 6` health probes then queue in one 6-wide
+ * column with six columns of nothing beside them, which is a worse layout than
+ * the rigid rows masonry replaced.
+ *
+ * So a single-width band spreads across the `12 / span` columns it was asking
+ * for, round-robin, which keeps left-to-right reading order — item 0 top-left,
+ * item 1 top-right — rather than the column-major order that filling one
+ * column at a time would give.
+ */
+function fanOut(band: MasonryColumn[]): MasonryColumn[] {
+  if (band.length !== 1) return band
+  const [column] = band
+  const span = layoutSpan(column.profile)
+  const columns = Math.floor(FULL_SPAN / span)
+  if (columns < 2 || column.entries.length < 2) return band
+  const spread: MasonryColumn[] = Array.from({ length: columns }, (_, i) => ({
+    key: `${column.key}#${i}`,
+    profile: column.profile,
+    // Typed, not inferred: an empty literal is `any[]` under the stricter
+    // library tsconfigs even though the annotation above it is not enough to
+    // narrow a property inside `Array.from`'s callback.
+    entries: [] as MasonryColumn['entries'],
+  }))
+  column.entries.forEach((entry, index) => {
+    spread[index % columns].entries.push(entry)
+  })
+  return spread.filter((candidate) => candidate.entries.length > 0)
+}
+
+/**
  * Items → bands → columns.
  *
  * A band is a maximal run of items that are not full width; a full-width item
  * is a band on its own. Within a band, items that declare the same `size` share
- * a column, in source order.
+ * a column, in source order — unless the band is entirely one width, which
+ * {@link fanOut} spreads.
  */
 function buildBands(items: GridProps[]): MasonryColumn[][] {
   const bands: MasonryColumn[][] = []
@@ -193,7 +229,7 @@ function buildBands(items: GridProps[]): MasonryColumn[][] {
     else current.push({ key, profile, entries: [{ item, index }] })
   })
 
-  return bands
+  return bands.map(fanOut)
 }
 
 export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {

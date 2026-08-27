@@ -9,6 +9,44 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.27 — 2026-08-27
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.26...v1.0.0-beta.27)
+
+### Added
+
+- **console:** sections become routes, starting with Team ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console,commerce,tenant:** the Site users card searches every member ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console,tenant-data-admin:** the account list searches every pool ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the filter panel comes back, answering real Firestore predicates ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the organization search finds a word anywhere in the name ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2324](https://linear.app/aglyn/issue/AGL-2324))
+- **console:** the staff organization search reaches the whole collection ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+
+### Fixed
+
+- **console:** the root .env reaches the app, and the CSP card names an incident ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console,shared-ui-jsx:** masonry fans out, and a root card stops spacing itself ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **contacts,console:** the contact list is ordered, and searches all of it ([AGL-2292](https://linear.app/aglyn/issue/AGL-2292), [AGL-1706](https://linear.app/aglyn/issue/AGL-1706))
+- **console,tenant-data-admin:** a new org is not born scope-drifted ([AGL-1038](https://linear.app/aglyn/issue/AGL-1038), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725), [AGL-1726](https://linear.app/aglyn/issue/AGL-1726))
+- **tools:** the firewall finding names the path it found ([AGL-2483](https://linear.app/aglyn/issue/AGL-2483))
+- **console,tools:** the activity feeds filter the feed, not the page ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console,shared-ui-jsx:** the org filter targets a field that exists ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1028](https://linear.app/aglyn/issue/AGL-1028))
+- **console:** the organization list stops offering a filter it cannot apply ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console,shared-ui-jsx:** the list table gets its toolbar, its height, and one search ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+
+### Changed
+
+- **console:** the routed section indexes drop their ?tab= maps ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** organization settings becomes eight routes ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2154](https://linear.app/aglyn/issue/AGL-2154))
+- **shared-ui-next,console:** the routed rail is HubTabs' twin, not a rival ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** two staff read-outs join the shared table ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the actor activity log joins the shared table ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+
+### Documentation
+
+- **tools:** the third way the firewall PATCH error misleads ([AGL-2483](https://linear.app/aglyn/issue/AGL-2483))
+- the README shows the Besigner, and links every social profile
+
 ## v1.0.0-beta.26 — 2026-08-27
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/7efa6db49...v1.0.0-beta.26)

@@ -216,11 +216,72 @@ describe('readCspReport', () => {
       ],
     })
     expect(view.totalViolations).toBe(55)
+    // A row with no `disposition` is MEASURED, never blocked: an unknown
+    // disposition must not be able to invent an incident.
     expect(view.directives).toEqual([
-      { directive: 'script-src', count: 40 },
-      { directive: 'img-src', count: 15 },
+      { directive: 'script-src', count: 40, blocked: 0, reported: 40, lastBlockedMs: null },
+      { directive: 'img-src', count: 15, blocked: 0, reported: 15, lastBlockedMs: null },
     ])
+    expect(view.lastBlockedMs).toBeNull()
     expect(view.windowDays).toBe(14)
+  })
+
+  it('separates what was BLOCKED from what was merely measured', () => {
+    /*
+     * The distinction the summary could not make. Twenty-two inline scripts
+     * were blocked on `/signin` and `/app` on 19-20 August and stopped; for
+     * the rest of the fourteen-day window they were added to the same amber
+     * total as that morning's report-only pixels, so a resolved incident and
+     * a live one were one number.
+     */
+    const blockedAt = Date.parse('2026-08-20T00:19:19Z')
+    const view = readCspReport({
+      windowDays: 14,
+      since: '2026-08-14',
+      rows: [
+        {
+          directive: 'script-src-elem',
+          count: 13,
+          disposition: 'enforce',
+          lastSeenMs: blockedAt,
+        },
+        {
+          directive: 'script-src-elem',
+          count: 41,
+          disposition: 'report',
+          lastSeenMs: Date.parse('2026-08-27T16:21:28Z'),
+        },
+      ],
+    })
+    expect(view.directives).toEqual([
+      {
+        directive: 'script-src-elem',
+        count: 54,
+        blocked: 13,
+        reported: 41,
+        lastBlockedMs: blockedAt,
+      },
+    ])
+    // The newest ENFORCED one, not the newest of any kind — the report-only
+    // row above is more recent and must not stand in for an incident.
+    expect(view.lastBlockedMs).toBe(blockedAt)
+  })
+
+  it('sorts a blocked directive above a noisier measured one', () => {
+    // One script that did not run outranks a thousand a stricter policy
+    // would have stopped.
+    const view = readCspReport({
+      windowDays: 14,
+      since: '2026-08-14',
+      rows: [
+        { directive: 'img-src', count: 900, disposition: 'report' },
+        { directive: 'script-src', count: 1, disposition: 'enforce', lastSeenMs: 1 },
+      ],
+    })
+    expect(view.directives.map((entry) => entry.directive)).toEqual([
+      'script-src',
+      'img-src',
+    ])
   })
 
   it('reads an empty window as zero rather than as no answer', () => {

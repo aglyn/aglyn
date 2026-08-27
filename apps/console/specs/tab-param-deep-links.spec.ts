@@ -30,7 +30,7 @@
  * with the ids the resolver is given. Adding a tab and forgetting the list is
  * red here rather than silently unreachable.
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SETUP_TAB_IDS } from '../app/(app)/[orgSlug]/hosts/[host]/setup/page'
 
@@ -98,18 +98,40 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
     }
   })
 
-  it('every page with a tab param goes through the shared resolver', () => {
+  it('every page that still has PANELS goes through the shared resolver', () => {
     // Three pages had three different answers and one of them was wrong.
     // Reading `?tab=` by hand is how the fourth one gets it wrong too.
     const pages = [
       ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'setup', 'page.tsx'],
-      ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'admin', 'page.tsx'],
       ['app', '(app)', 'manage', 'user', 'page.tsx'],
     ]
     for (const segments of pages) {
       const source = read(...segments)
       expect(source).toContain('useTabParam')
       expect(source).not.toContain(`get('tab')`)
+    }
+  })
+
+  /**
+   * A page whose panels became ROUTES carries no `?tab=` map at all (AGL-693).
+   *
+   * The parameter existed so a panel could be linked to; a route is the link.
+   * With no shipped customers there is nothing holding an old settings or
+   * admin URL, so a compatibility map would be a second set of names for the
+   * same pages, maintained against them forever.
+   *
+   * What this still holds is that those pages do not go back to reading the
+   * parameter by hand — the thing the resolver above exists to prevent.
+   */
+  it('a routed section index reads no tab param', () => {
+    const routed = [
+      ['app', '(app)', '[orgSlug]', 'settings', 'page.tsx'],
+      ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'admin', 'page.tsx'],
+    ]
+    for (const segments of routed) {
+      const source = read(...segments)
+      expect(source).not.toContain(`get('tab')`)
+      expect(source).toContain('router.replace')
     }
   })
 })

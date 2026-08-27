@@ -65,11 +65,21 @@ import IdempotencyClaimsCard, {
   formatAge,
 } from '../components/idempotency-claims-card.component'
 
+/*
+ * The card renders the console's shared `ListTable` now (AGL-693), which is a
+ * DataGrid: cells carry `role="gridcell"` and rows `role="row"`, not the
+ * `<tr>`/`role="cell"` an MUI `<Table>` emits.
+ *
+ * The per-ROW scoping is the point and is kept: these assertions exist so a
+ * card that reused the first claim's figures for the second is caught, and
+ * checking the values existed anywhere on screen would pass for exactly that
+ * bug.
+ */
 const rowFor = async (operation: string) => {
-  const cell = await screen.findByRole('cell', { name: operation })
-  const row = cell.closest('tr')
+  const cell = await screen.findByRole('gridcell', { name: operation })
+  const row = cell.closest('[role="row"]')
   if (!row) throw new Error(`no row for ${operation}`)
-  return within(row)
+  return within(row as HTMLElement)
 }
 
 describe('the stranded-claim card (AGL-2329)', () => {

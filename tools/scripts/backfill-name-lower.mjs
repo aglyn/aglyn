@@ -19,9 +19,23 @@
 // so the switchers' name-prefix query finds pre-existing screens and sites, not
 // only ones created/renamed after the write-path change shipped.
 //
-// Scope: `hosts/{hostId}` (from displayName) and `hosts/{hostId}/screens`
-// (from displayName). Layouts and orgs are intentionally NOT touched — they
-// stay client-filtered, so a nameLower on them would be an index nothing reads.
+// Scope: `hosts/{hostId}` and `hosts/{hostId}/screens` (both from
+// displayName, `nameLower` only), and `orgs/{orgId}` (from name — `nameLower`
+// AND the `nameTokens` word-prefix array the staff search matches on).
+//
+// ORGS WERE DELIBERATELY EXCLUDED, and are not any more (AGL-693). The
+// original reason was sound — "they stay client-filtered, so a nameLower on
+// them would be an index nothing reads" — and it stopped being true when the
+// staff organization list moved its search to the server. A filter applied in
+// the browser sees the rows on screen, ten of them, which answers "no such
+// organization" for every organization past the first page.
+//
+// ⚠️ Until this has run, an org WITHOUT `nameLower` is invisible to that
+// search: `orderBy('nameLower')` drops documents that lack the field. It
+// still lists normally, which is what makes the gap quiet.
+//
+// Layouts stay excluded, and for the original reason: nothing reads a
+// nameLower on them.
 //
 // Dry-run by default (reads + prints the plan, writes nothing). Pass --commit
 // to apply. Idempotent: re-running converges (a doc whose nameLower already
@@ -89,6 +103,31 @@ const ONLY_HOST = opt('--host', '')
 const nameSearchKey = (name) =>
   (name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 
+// MUST match `nameSearchTokens` in the same module. Every prefix of every
+// word, so `array-contains` answers "contains a word starting with X" — which
+// is what lets the staff search find "Acme Coffee" by "coffee". The caps are
+// the library's: twelve characters per prefix, 120 tokens per document.
+const NAME_TOKEN_MAX_PREFIX = 12
+const NAME_TOKEN_LIMIT = 120
+// MUST match `nameSearchReversed`. Codepoint-wise, so a surrogate pair is
+// never cut in half.
+const nameSearchReversed = (name) => [...nameSearchKey(name)].reverse().join('')
+
+const nameSearchTokens = (name) => {
+  const key = nameSearchKey(name)
+  if (!key) return []
+  const tokens = new Set()
+  for (const word of key.split(' ')) {
+    if (!word) continue
+    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    for (let end = 1; end <= capped.length; end += 1) {
+      tokens.add(capped.slice(0, end))
+      if (tokens.size >= NAME_TOKEN_LIMIT) return [...tokens]
+    }
+  }
+  return [...tokens]
+}
+
 // ── Admin init (same pattern as migrate-blog-covers.mjs) ────────────────────
 const projectId = process.env.FIREBASE_PROJECT_ID
 if (!projectId) {
@@ -117,14 +156,32 @@ console.log(
 let batch = firestore.batch()
 let buffered = 0
 let written = 0
-const stamp = async (ref, value) => {
+const stamp = async (ref, value, fields = undefined) => {
   written += 1
   if (!COMMIT) return
-  batch.update(ref, { nameLower: value })
+  batch.update(ref, { nameLower: value, ...(fields ?? {}) })
   if ((buffered += 1) >= 400) {
     // Swap in the fresh batch BEFORE awaiting the full one: `batch` never
     // points at an in-flight commit, which is also what satisfies
     // require-atomic-updates (AGL-1815).
+    const full = batch
+    batch = firestore.batch()
+    buffered = 0
+    await full.commit()
+  }
+}
+
+/**
+ * The same buffered write, for a document whose search key is not called
+ * `nameLower`. Site members key on `displayName`, so `stamp` — which always
+ * writes `nameLower` — would leave the field the query reads untouched while
+ * reporting the document as migrated.
+ */
+const stampFields = async (ref, fields) => {
+  written += 1
+  if (!COMMIT) return
+  batch.update(ref, fields)
+  if ((buffered += 1) >= 400) {
     const full = batch
     batch = firestore.batch()
     buffered = 0
@@ -170,10 +227,147 @@ for (const hostDoc of hostSnap.docs) {
   }
 }
 
+// Organizations — the staff list's server-side search orders by this.
+let orgsScanned = 0
+let orgsChanged = 0
+if (!ONLY_HOST) {
+  const orgSnap = await firestore
+    .collection('orgs')
+    .select('name', 'nameLower', 'nameTokens', 'nameReversed')
+    .get()
+  for (const orgDoc of orgSnap.docs) {
+    orgsScanned += 1
+    const org = orgDoc.data()
+    // An org with no name has nothing to key on. Skipped rather than
+    // stamped with an empty string: `orderBy` would then place it at the
+    // very front of every prefix range it does not belong to.
+    if (typeof org.name !== 'string' || !org.name.trim()) continue
+    const want = nameSearchKey(org.name)
+    // The staff search is `array-contains` over word-prefix tokens, so the
+    // tokens are what makes an org findable — `nameLower` only orders the
+    // result. A doc with one and not the other is half-migrated, so both are
+    // compared and both are written.
+    const wantTokens = nameSearchTokens(org.name)
+    const haveTokens = Array.isArray(org.nameTokens) ? org.nameTokens : null
+    const tokensDiffer =
+      !haveTokens ||
+      haveTokens.length !== wantTokens.length ||
+      wantTokens.some((token, index) => haveTokens[index] !== token)
+    const wantReversed = nameSearchReversed(org.name)
+    if (
+      org.nameLower !== want ||
+      tokensDiffer ||
+      org.nameReversed !== wantReversed
+    ) {
+      orgsChanged += 1
+      await stamp(orgDoc.ref, want, {
+        nameTokens: wantTokens,
+        nameReversed: wantReversed,
+      })
+    }
+  }
+}
+
+/*
+ * Site members — the console's Site users card searches these on the server.
+ *
+ * A collection-group read so one pass covers every host. `email` needs no key
+ * of its own: the register path lower-cases it before storing, so the stored
+ * value already IS its own normalized key.
+ */
+let membersScanned = 0
+let membersChanged = 0
+if (!ONLY_HOST) {
+  const memberSnap = await firestore
+    .collectionGroup('siteMembers')
+    .select('displayName', 'displayNameLower', 'displayNameTokens')
+    .get()
+  for (const memberDoc of memberSnap.docs) {
+    membersScanned += 1
+    const member = memberDoc.data()
+    // A member with no display name has nothing to key on. Skipped rather
+    // than stamped with an empty string, which `orderBy` would sort to the
+    // front of every prefix range it does not belong to.
+    if (typeof member.displayName !== 'string' || !member.displayName.trim()) {
+      continue
+    }
+    const want = nameSearchKey(member.displayName)
+    const wantTokens = nameSearchTokens(member.displayName)
+    const haveTokens = Array.isArray(member.displayNameTokens)
+      ? member.displayNameTokens
+      : null
+    const tokensDiffer =
+      !haveTokens ||
+      haveTokens.length !== wantTokens.length ||
+      wantTokens.some((token, index) => haveTokens[index] !== token)
+    if (member.displayNameLower !== want || tokensDiffer) {
+      membersChanged += 1
+      await stampFields(memberDoc.ref, {
+        displayNameLower: want,
+        displayNameTokens: wantTokens,
+      })
+    }
+  }
+}
+
+/*
+ * Contacts — the CRM list searches these on the server.
+ *
+ * A collection-group read: contacts live at `orgs/{orgId}/contacts`, and the
+ * console reads them scoped to a host. `email` needs no key of its own —
+ * `normalizeContactEmail` lower-cases before every write.
+ */
+let contactsScanned = 0
+let contactsChanged = 0
+if (!ONLY_HOST) {
+  const contactSnap = await firestore
+    .collectionGroup('contacts')
+    .select('name', 'nameLower', 'nameTokens', 'nameReversed')
+    .get()
+  for (const contactDoc of contactSnap.docs) {
+    contactsScanned += 1
+    const contact = contactDoc.data()
+    // A contact with no name has nothing to key on — they are still findable
+    // by email, which is its own key. Skipped rather than stamped with an
+    // empty string, which `orderBy` would sort to the front of every prefix
+    // range it does not belong to.
+    if (typeof contact.name !== 'string' || !contact.name.trim()) continue
+    const want = nameSearchKey(contact.name)
+    const wantTokens = nameSearchTokens(contact.name)
+    const haveTokens = Array.isArray(contact.nameTokens)
+      ? contact.nameTokens
+      : null
+    const tokensDiffer =
+      !haveTokens ||
+      haveTokens.length !== wantTokens.length ||
+      wantTokens.some((token, index) => haveTokens[index] !== token)
+    const wantReversed = nameSearchReversed(contact.name)
+    if (
+      contact.nameLower !== want ||
+      tokensDiffer ||
+      contact.nameReversed !== wantReversed
+    ) {
+      contactsChanged += 1
+      await stampFields(contactDoc.ref, {
+        nameLower: want,
+        nameTokens: wantTokens,
+        nameReversed: wantReversed,
+      })
+    }
+  }
+}
+
 if (COMMIT && buffered > 0) await batch.commit()
 
 console.log(`hosts:   scanned=${hostsScanned} changed=${hostsChanged}`)
+console.log(`members: scanned=${membersScanned} changed=${membersChanged}`)
+console.log(`contacts:scanned=${contactsScanned} changed=${contactsChanged}`)
 console.log(`screens: scanned=${screensScanned} changed=${screensChanged}`)
+console.log(
+  ONLY_HOST
+    ? 'orgs:    skipped (--host limits this run to one site)'
+    : `orgs:    scanned=${orgsScanned} changed=${orgsChanged}`,
+)
 console.log(
   `\n${COMMIT ? `Committed ${written} update(s).` : `Dry-run — ${written} update(s) planned. Re-run with --commit to apply.`}\n`,
 )

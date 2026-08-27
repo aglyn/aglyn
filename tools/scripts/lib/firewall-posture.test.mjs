@@ -372,6 +372,34 @@ test('a THIRTEENTH group for an undeclared path fails', () => {
   assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 11 declared paths/)
 })
 
+test('the finding NAMES what the offending group bypasses', () => {
+  /*
+   * Measured cost of it not doing so: a live `/api/log-drain` group (a route
+   * deleted when the receiver moved to Cloud Run) read as "the path condition
+   * was dropped", and answering "which path?" took a query against the Vercel
+   * API. The finding should be enough to act on by itself.
+   */
+  const config = healthyConsoleConfig()
+  ruleNamed(config, 'Machine traffic bypass').conditionGroup.push({
+    conditions: [{ op: 'eq', type: 'path', value: '/api/long-since-deleted' }],
+  })
+  assert.match(
+    evalConsole(config).findings.join('\n'),
+    /That group bypasses: path eq "\/api\/long-since-deleted"/,
+  )
+})
+
+test('a group with NO conditions says so where the paths would be', () => {
+  // The genuinely wide case must not read as an empty list of paths.
+  const config = healthyConsoleConfig()
+  const rule = ruleNamed(config, 'Machine traffic bypass')
+  rule.conditionGroup.push({ conditions: [{ op: 'eq', type: 'header', value: 'x' }] })
+  assert.match(
+    evalConsole(config).findings.join('\n'),
+    /That group bypasses: header eq/,
+  )
+})
+
 test('a group that drops its path condition entirely fails', () => {
   const config = healthyConsoleConfig()
   ruleNamed(config, 'Machine traffic bypass').conditionGroup.push({ conditions: [] })

@@ -17,6 +17,8 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -30,8 +32,9 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 export interface IdempotencyClaim {
   id: string
@@ -119,6 +122,78 @@ export default function IdempotencyClaimsCard() {
     }
   }, [user, reloadKey])
 
+  /* One row grammar, the console's (AGL-693). */
+  const claimColumns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'kind',
+        headerName: 'Operation',
+        flex: 1,
+        minWidth: 160,
+        // `kind` and `scopeId` say WHICH operation is stuck and for whom.
+        // Both were written at claim time and read by nothing until this
+        // card — a hex digest names no incident.
+        valueGetter: (_value, row: any) => row.kind ?? '—',
+      },
+      {
+        field: 'scopeId',
+        headerName: 'Scope',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (_value, row: any) => row.scopeId ?? '—',
+        renderCell: ({ row }: any) => (
+          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+            {row.scopeId ?? '—'}
+          </Typography>
+        ),
+      },
+      {
+        field: 'orgId',
+        headerName: 'Org',
+        flex: 1,
+        minWidth: 150,
+        valueGetter: (_value, row: any) => row.orgId ?? '—',
+        renderCell: ({ row }: any) => (
+          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+            {row.orgId ?? '—'}
+          </Typography>
+        ),
+      },
+      {
+        field: 'ageMs',
+        headerName: 'Age',
+        flex: 0.6,
+        minWidth: 110,
+        align: 'right',
+        headerAlign: 'right',
+        // Sorted on the number, rendered as a duration — sorting the
+        // rendered text would put "9m" after "10h".
+        valueGetter: (_value, row: any) => row.ageMs ?? 0,
+        renderCell: ({ row }: any) => formatAge(row.ageMs),
+      },
+      {
+        field: 'stranded',
+        headerName: 'State',
+        flex: 0.7,
+        minWidth: 120,
+        align: 'right',
+        headerAlign: 'right',
+        valueGetter: (_value, row: any) =>
+          row.stranded ? 'stranded' : 'in flight',
+        renderCell: ({ row }: any) => (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={row.stranded ? 'warning' : 'default'}
+            label={row.stranded ? 'stranded' : 'in flight'}
+          />
+        ),
+      },
+    ],
+    [],
+  )
+
+
   return (
     <CardDisplay
       header={'Idempotency claims'}
@@ -182,44 +257,14 @@ export default function IdempotencyClaimsCard() {
                 {'Nothing pending. Every claim taken has settled or been released.'}
               </Typography>
             ) : (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'Operation'}</TableCell>
-                    <TableCell>{'Scope'}</TableCell>
-                    <TableCell>{'Org'}</TableCell>
-                    <TableCell align="right">{'Age'}</TableCell>
-                    <TableCell align="right">{'State'}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {report.claims.map((claim) => (
-                    <TableRow key={claim.id}>
-                      {/* `kind` and `scopeId` say WHICH operation is stuck and
-                          for whom. Both were written at claim time and read by
-                          nothing until now — a hex digest names no incident. */}
-                      <TableCell>{claim.kind ?? '—'}</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace' }}>
-                        {claim.scopeId ?? '—'}
-                      </TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace' }}>
-                        {claim.orgId ?? '—'}
-                      </TableCell>
-                      <TableCell align="right">
-                        {formatAge(claim.ageMs)}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          color={claim.stranded ? 'warning' : 'default'}
-                          label={claim.stranded ? 'stranded' : 'in flight'}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ListTable
+                rows={report.claims}
+                columns={claimColumns}
+                getRowId={(row: any) => row.id}
+                // A staff read-out: nothing here has a page of its own.
+                hideFooter
+                rowHeight={TABLE_ROW_HEIGHT}
+              />
             )}
           </>
         ) : error ? null : (

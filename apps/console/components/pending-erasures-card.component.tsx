@@ -17,6 +17,8 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -31,9 +33,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 /**
  * The erasure queue: see it, and run it (AGL-2165).
@@ -153,6 +156,55 @@ export function PendingErasuresCard() {
   const dueCount = pending?.dueCount ?? 0
   const reasonTooShort = reason.trim().length < 8
 
+  /* One row grammar, the console's (AGL-693). */
+  const erasureColumns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Organization',
+        flex: 1.4,
+        minWidth: 200,
+        valueGetter: (_value, row: any) => row.name || row.slug || row.orgId,
+      },
+      {
+        field: 'requestedAtMs',
+        headerName: 'Requested',
+        flex: 1,
+        minWidth: 170,
+        // Sorted on the instant, rendered as a date — a grid sorting the
+        // rendered text would order it alphabetically.
+        valueGetter: (_value, row: any) => row.requestedAtMs ?? 0,
+        renderCell: ({ row }: any) => formatWhen(row.requestedAtMs),
+      },
+      {
+        field: 'holdExpiresAtMs',
+        headerName: 'Hold expires',
+        flex: 1,
+        minWidth: 170,
+        valueGetter: (_value, row: any) => row.holdExpiresAtMs ?? 0,
+        renderCell: ({ row }: any) => formatWhen(row.holdExpiresAtMs),
+      },
+      {
+        field: 'due',
+        headerName: 'State',
+        flex: 0.7,
+        minWidth: 120,
+        // The only question a staff member has: is this waiting on the hold,
+        // or waiting on us?
+        valueGetter: (_value, row: any) => (row.due ? 'Due' : 'Holding'),
+        renderCell: ({ row }: any) => (
+          <Chip
+            size="small"
+            color={row.due ? 'warning' : 'default'}
+            label={row.due ? 'Due' : 'Holding'}
+          />
+        ),
+      },
+    ],
+    [],
+  )
+
+
   return (
     <CardDisplay
       header={'Pending erasures'}
@@ -202,34 +254,15 @@ export function PendingErasuresCard() {
         ) : null}
 
         {pending && pending.pending.length > 0 ? (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Organization'}</TableCell>
-                <TableCell>{'Requested'}</TableCell>
-                <TableCell>{'Hold expires'}</TableCell>
-                <TableCell>{'State'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {pending.pending.map((row) => (
-                <TableRow key={row.orgId}>
-                  <TableCell>{row.name || row.slug || row.orgId}</TableCell>
-                  <TableCell>{formatWhen(row.requestedAtMs)}</TableCell>
-                  <TableCell>{formatWhen(row.holdExpiresAtMs)}</TableCell>
-                  <TableCell>
-                    {/* The only question a staff member has: is this waiting
-                        on the hold, or waiting on us? */}
-                    <Chip
-                      size="small"
-                      color={row.due ? 'warning' : 'default'}
-                      label={row.due ? 'Due' : 'Holding'}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ListTable
+            rows={pending.pending}
+            columns={erasureColumns}
+            getRowId={(row: any) => row.orgId}
+            // A staff read-out, not a navigation surface: nothing here has a
+            // detail page of its own, so the row does not pretend to.
+            hideFooter
+            rowHeight={TABLE_ROW_HEIGHT}
+          />
         ) : (
           <Typography variant="body2" color="text.secondary">
             {pending ? 'Nothing queued.' : 'Loading…'}

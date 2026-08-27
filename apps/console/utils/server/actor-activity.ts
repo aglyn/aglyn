@@ -16,6 +16,11 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  applyListFilter,
+  type ListFilterInput,
+} from './list-filter'
+import { ACTIVITY_LIST_FILTER_FIELDS } from '../list-filters'
 
 /**
  * One person's activity, wherever it happened (AGL-1488).
@@ -103,6 +108,13 @@ function describeScope(path: string): {
 export interface ReadActorActivityOptions {
   actorId: string
   pageSize: number
+  /**
+   * One column filter from the grid, or null. Applied to the QUERY so it
+   * narrows the whole feed rather than the page already on screen — a filter
+   * that sees one page answers "nothing happened" for everything before it,
+   * which on an audit log is the wrong answer to the question being asked.
+   */
+  filter?: ListFilterInput | null
   /** The `nextCursor` of the previous page — a document path. */
   cursor?: string | null
   /**
@@ -127,10 +139,21 @@ export async function readActorActivity(
     return { entries: [], nextCursor: null, scanned: 0 }
   }
 
-  const base = firestore
+  const unfiltered = firestore
     .collectionGroup('activity')
     .where('actorId', '==', actorId)
-    .orderBy('createdAt', 'desc')
+  /*
+   * `fixedOrderBy` because this feed owns its ordering: the cursor below is a
+   * DOCUMENT in `createdAt` order, so a predicate that needed a different sort
+   * would invalidate every cursor already issued. The translator refuses those
+   * rather than reordering, and the feed comes back unfiltered — which is the
+   * honest answer to an ask this query cannot serve.
+   */
+  const base = (
+    applyListFilter(unfiltered, ACTIVITY_LIST_FILTER_FIELDS, options.filter ?? null, {
+      fixedOrderBy: 'createdAt',
+    }) ?? unfiltered
+  ).orderBy('createdAt', 'desc')
 
   // The cursor is a document PATH, not a timestamp. Two entries can share a
   // second — a save and its revalidation, a bulk role change — and starting
@@ -286,6 +309,8 @@ export async function readOrgWideActivity(options: {
   orgId: string
   limit: number
   cursor?: string | null
+  /** Narrows every subject's query, not the merged page. See below. */
+  filter?: ListFilterInput | null
 }): Promise<OrgWideActivityPage> {
   const firestore = firebaseAdmin.app().firestore()
   const limit = Math.min(
@@ -307,10 +332,22 @@ export async function readOrgWideActivity(options: {
       // activity document can carry considerably more. It does not change
       // what Firestore bills — that is per document — only what crosses the
       // wire.
-      let query = firestore
+      const subject = firestore
         .collection(collection)
         .doc(id)
         .collection('activity')
+      /*
+       * The filter is applied to EACH subject before the merge, never to the
+       * merged page. The merge takes the newest `limit` across subjects, so
+       * narrowing afterwards would first discard the rows the filter wanted
+       * and then report what survived — a filter that gets emptier the busier
+       * the organization is.
+       */
+      let query = (
+        applyListFilter(subject, ACTIVITY_LIST_FILTER_FIELDS, options.filter ?? null, {
+          fixedOrderBy: 'createdAt',
+        }) ?? subject
+      )
         .orderBy('createdAt', 'desc')
         .select('action', 'target', 'actorEmail', 'createdAt')
       if (cursor) {
