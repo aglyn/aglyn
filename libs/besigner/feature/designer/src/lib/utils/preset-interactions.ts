@@ -65,7 +65,7 @@ export function buildPresetInteractionDrafts(
   preset: PresetSchema<any>,
   live: NodeSchema<any> | undefined | null,
 ): PresetInteractionDraft[] {
-  const interactions = preset?.interactions ?? []
+  const interactions = preset?.interactionTemplates ?? []
   if (!interactions.length || !live) return []
   const refs = collectPresetRefIds(preset.data, live)
   const drafts: PresetInteractionDraft[] = []

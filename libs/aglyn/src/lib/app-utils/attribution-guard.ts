@@ -55,6 +55,26 @@
  * on every free site — and burying it in a closed shadow root on every page
  * load to defend against a minority would cost that on all of them.
  *
+ * ## Why not `MuiShadowDom` / `shadowDomRootFactory`
+ *
+ * Both existing shadow-root helpers are React components that `createPortal`
+ * their children into the root, and React has to own the contents. That is
+ * the one thing this cannot have.
+ *
+ * The job is to put back a node that foreign script deleted, and React does
+ * not react to its own output being removed — the reconciler answers to state
+ * changes, not to DOM deletion, so a portalled subtree whose mount is taken
+ * off `document.body` simply stays gone. The MutationObserver below would be
+ * needed either way, and it would then be re-appending an element React
+ * believes it is managing, which is the shape that produces "removeChild on a
+ * node that is not a child" the next time React touches it.
+ *
+ * Plain DOM also means the repair outlives React: an unmount, an error
+ * boundary tripping, or the author's own script tearing out the root does not
+ * take it with them. (Both helpers also default to `mode: 'open'` and carry
+ * SSR and adopted-stylesheet machinery built for the besigner canvas, none of
+ * which applies here.)
+ *
  * Framework-free, like `error-beacon` beside it, and for the same reason: the
  * install must be able to run before any effect. Deliberately NO 'use client'
  * directive — inside this shared lib the directive forks the module graph

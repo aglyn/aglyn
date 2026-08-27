@@ -58,6 +58,51 @@ export function nodeInteractionSelector(nodeId: string): string {
   return `[data-aglyn="leaf:${nodeId}"]`
 }
 
+/** The node a derived selector names, or undefined for anything else. */
+export function nodeIdFromInteractionSelector(
+  selector: unknown,
+): string | undefined {
+  const match = /^\[data-aglyn="leaf:(.+)"\]$/.exec(String(selector ?? ''))
+  return match?.[1] || undefined
+}
+
+/**
+ * The prefix that makes a collected id say where it lives.
+ *
+ * Every surface that can toggle, edit or delete an interaction is handed an
+ * id and nothing else, and there are now two places one can be stored. A
+ * self-describing id is what lets those surfaces route without a second
+ * lookup — and, more to the point, without GUESSING, which during the
+ * migration would mean writing a node interaction into the actions
+ * collection or vice versa.
+ */
+export const NODE_INTERACTION_ID_PREFIX = 'node:'
+
+/** The node and interaction a collected id names, or null for a host action. */
+export function parseNodeInteractionId(
+  id: unknown,
+): { nodeId: string; interactionId: string } | null {
+  const value = String(id ?? '')
+  if (!value.startsWith(NODE_INTERACTION_ID_PREFIX)) return null
+  const rest = value.slice(NODE_INTERACTION_ID_PREFIX.length)
+  // The node id comes first and cannot contain a colon; the interaction id
+  // takes the remainder, so a colon inside one survives the round trip.
+  const separator = rest.indexOf(':')
+  if (separator <= 0 || separator === rest.length - 1) return null
+  return {
+    nodeId: rest.slice(0, separator),
+    interactionId: rest.slice(separator + 1),
+  }
+}
+
+/** The collected id for one interaction on one node. */
+export function nodeInteractionId(
+  nodeId: string,
+  interactionId: string,
+): string {
+  return `${NODE_INTERACTION_ID_PREFIX}${nodeId}:${interactionId}`
+}
+
 /** Minimal node shape this module reads; the canvas node satisfies it. */
 export interface InteractionNode {
   $id?: string
@@ -130,7 +175,7 @@ export function collectNodeInteractions(
       if (!interaction?.trigger?.event) continue
       index += 1
       collected.push({
-        id: `node:${nodeId}:${interaction.id || String(index)}`,
+        id: nodeInteractionId(nodeId, interaction.id || String(index)),
         action: {
           ...interaction,
           trigger: {

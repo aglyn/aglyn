@@ -19,7 +19,10 @@ import {
   collectNodeInteractions,
   walkInteractionNodes,
   NODE_MAX_INTERACTIONS,
+  nodeIdFromInteractionSelector,
+  nodeInteractionId,
   nodeInteractionSelector,
+  parseNodeInteractionId,
   removeNodeInteraction,
   upsertNodeInteraction,
   type InteractionNode,
@@ -204,5 +207,43 @@ describe('walkInteractionNodes', () => {
   it('feeds the collector, which is the whole point', () => {
     const collected = collectNodeInteractions(walkInteractionNodes(tree))
     expect(collected.map((entry) => entry.id)).toEqual(['node:a:x'])
+  })
+})
+
+describe('the id says where the interaction lives (AGL-1478)', () => {
+  it('round-trips a node and an interaction id', () => {
+    const id = nodeInteractionId('leaf-1', 'open')
+    expect(parseNodeInteractionId(id)).toEqual({
+      nodeId: 'leaf-1',
+      interactionId: 'open',
+    })
+  })
+
+  it('keeps a colon inside the interaction id', () => {
+    expect(parseNodeInteractionId(nodeInteractionId('n', 'a:b'))).toEqual({
+      nodeId: 'n',
+      interactionId: 'a:b',
+    })
+  })
+
+  /**
+   * Every surface that toggles, edits or deletes is handed an id and nothing
+   * else, and there are two stores now. A host action id must never parse as
+   * a node one, or the migration writes into the wrong place.
+   */
+  it('answers null for a host action id, however it is shaped', () => {
+    for (const id of ['abc123', '', 'node:', 'node:n', 'node:n:', 'node::x']) {
+      expect(parseNodeInteractionId(id)).toBeNull()
+    }
+    expect(parseNodeInteractionId(undefined)).toBeNull()
+  })
+
+  it('reads the node back out of a derived selector', () => {
+    expect(
+      nodeIdFromInteractionSelector(nodeInteractionSelector('leaf-1')),
+    ).toBe('leaf-1')
+    for (const selector of ['', '.promo', '[data-aglyn="leaf:"]', undefined]) {
+      expect(nodeIdFromInteractionSelector(selector)).toBeUndefined()
+    }
   })
 })

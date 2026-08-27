@@ -265,13 +265,19 @@ export interface PresetSchema<P = JSX.AnyProps> extends PresetII {
   data: NodeSchemaNested<P>
   /**
    * Interaction templates wired when the preset is inserted (AGL-589):
-   * the host app persists one `hosts/{hostId}/actions` doc per entry,
-   * with each `presetRef` marker resolved to the freshly minted node's
-   * `[data-aglyn="leaf:<id>"]` selector. Presets that need hover
-   * choreography (a primitive dropdown panel) ship working out of the
-   * box instead of asking the user to author the interactions by hand.
+   * the host app resolves each `presetRef` marker to a freshly minted node
+   * and persists the result. Presets that need hover choreography (a
+   * primitive dropdown panel) ship working out of the box instead of asking
+   * the user to author the interactions by hand.
+   *
+   * TEMPLATES, and named so (AGL-1478). These are not interactions: they are
+   * unresolved, they reference nodes that do not exist yet, and they are
+   * consumed at insert time and never stored. What they resolve INTO lives
+   * on the node as {@link NodeSchema.interactions}, and a `PresetSchema` is
+   * assignable to a `NodeSchema` — so while the two shared a name, one of
+   * them had to be wrong wherever a preset was passed as a node.
    */
-  interactions?: PresetInteractionSchema[]
+  interactionTemplates?: PresetInteractionSchema[]
 }
 
 /**
