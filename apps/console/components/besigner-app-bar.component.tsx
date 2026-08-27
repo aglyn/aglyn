@@ -241,8 +241,6 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
   onPreview?: ButtonProps['onClick']
   onPropertiesEdit?: ButtonProps['onClick']
   saveAvailable?: boolean
-  /** Current-document indicator/switcher (see BesignerDocumentSwitcher). */
-  documentSwitcher?: JSX.Children
   /**
    * Who else is in this document (AGL-675). Rendered inside the toolbar
    * rather than beside it: the screen editor passed `<PresenceAvatars />` as
@@ -256,7 +254,6 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
 export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
   (props, ref) => {
     const {
-      documentSwitcher,
       liveUrl,
       liveUnavailableReason,
       presence,
@@ -297,7 +294,14 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             flexGrow: 1
           }}>
           <AddControlsComponent />
-          {documentSwitcher}
+          {/* The document switcher is NOT here (AGL-1481). It belongs to the
+              primary app bar — `MainLayout`'s `centerPrefix`, where the
+              screen and layout editors have always put it and where every
+              other picker in the console lives. The component editor passed
+              it into this bar instead, which is how one of the three editors
+              ended up with the same control one row lower than the other
+              two. The slot is gone rather than left empty, so the wrong bar
+              cannot be chosen again. */}
           <HistoryControlsComponent sx={{ flexGrow: 1 }} />
           {/*
            *

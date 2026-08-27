@@ -705,6 +705,12 @@ function ComponentBesignerPage(props) {
                   <MainLayout
                     enableAppBarElevation
                     besigner
+                    centerPrefix={
+                      <BesignerDocumentSwitcherComponent
+                        hostId={hostId}
+                        current={{ kind: 'component', id: componentId }}
+                      />
+                    }
                     actionsPrefix={
                       <>
                         <BesignerFunctionsButton hostId={hostId} />
@@ -851,14 +857,6 @@ function ComponentBesignerPage(props) {
                       <>
                         <CollaboratorOverlays entries={presence.entries} />
                         <BesignerAppBarComponent
-                          // Components get the same switcher screens and layouts have
-                          // switcher's kind union simply stopped at two.
-                          documentSwitcher={
-                            <BesignerDocumentSwitcherComponent
-                              hostId={hostId}
-                              current={{ kind: 'component', id: componentId }}
-                            />
-                          }
                           onPreview={handlePreview}
                           detailsUrl={listUrl}
                           presence={<PresenceAvatars presence={presence} />}

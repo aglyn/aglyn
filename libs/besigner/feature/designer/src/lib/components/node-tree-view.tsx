@@ -62,6 +62,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import useLeafDrag from '../hooks/use-leaf-drag'
@@ -376,9 +377,9 @@ const NodeTreeItem = observer(
         e.stopPropagation()
         e.preventDefault()
         if (isRootNode) return
-        action(() => {
-          node.hidden = !authorHidden
-        })()
+        // Through the canvas so it records an undo step and reaches the node
+        // the MAP holds — see `updateNodeFields`.
+        Aglyn.canvas.updateNodeFields(node, { hidden: !authorHidden })
       },
       [node, isRootNode, authorHidden],
     )
@@ -414,21 +415,50 @@ const NodeTreeItem = observer(
     /**
      * The anchor the row's ⋮ menu hangs off, and the flag that it is open.
      *
-     * Always a real element: the ⋮ button for a click, the ROW itself for a
-     * right-click. Both sit at the panel's edge, which is what lets the
-     * placement below put the menu over the canvas instead of the layers.
+     * A VIRTUAL anchor: the panel's right edge, at the height the pointer was.
+     *
+     * Neither of the two obvious choices works. The pointer alone opens the
+     * menu wherever in the panel the cursor happened to be, on top of the
+     * layer list. The row alone opens it at the row's top — which for a tall
+     * menu near the bottom of a long tree gets slid up by `preventOverflow`
+     * until it has visibly nothing to do with the row that was clicked.
+     *
+     * Taking one coordinate from each gives both: the menu always starts at
+     * the panel's edge and spills into the canvas, and it always starts level
+     * with the click.
      */
-    const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+    type MenuAnchor = { getBoundingClientRect(): DOMRect }
+    const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null)
+    /** The open menu, so its own scrolling can be told from the page's. */
+    const menuRef = useRef<HTMLElement | null>(null)
     const menuOpen = Boolean(menuAnchor)
     const closeMenu = useCallback(() => setMenuAnchor(null), [])
-    const toggleMenu = useCallback((e: any) => {
-      // The row is a button and the tree item is a drop target; without this
-      // the click also selects and re-focuses the row underneath the menu.
-      e.stopPropagation()
-      e.preventDefault()
-      const target = e.currentTarget
-      setMenuAnchor((open) => (open ? null : target))
+    /**
+     * The anchor for one pointer event: the row's right edge, the pointer's
+     * height. Read once, at the moment of the click — a fixed rect, so the
+     * menu cannot drift while it is open.
+     */
+    const anchorFor = useCallback((e: any): MenuAnchor | null => {
+      const row = (e.currentTarget as HTMLElement)?.closest(
+        `.${classKey.treeListItem}`,
+      )
+      const rect = (row ?? (e.currentTarget as HTMLElement))?.getBoundingClientRect()
+      if (!rect) return null
+      const x = rect.right
+      const y = e.clientY || rect.top + rect.height / 2
+      return { getBoundingClientRect: () => new DOMRect(x, y, 0, 0) }
     }, [])
+    const toggleMenu = useCallback(
+      (e: any) => {
+        // The row is a button and the tree item is a drop target; without this
+        // the click also selects and re-focuses the row underneath the menu.
+        e.stopPropagation()
+        e.preventDefault()
+        const next = anchorFor(e)
+        setMenuAnchor((open) => (open ? null : next))
+      },
+      [anchorFor],
+    )
     /**
      * Right-click opens the same menu at the pointer. The row already carries
      * every action a node has, and a layer tree that does not answer a
@@ -449,8 +479,30 @@ const NodeTreeItem = observer(
       const onKeyDown = (event: KeyboardEvent) => {
         if (event.key === 'Escape') closeMenu()
       }
+      /**
+       * Scrolling dismisses it, which is what every native context menu does.
+       * The alternative is worse than it sounds: the menu is anchored to a
+       * point on screen, so scrolling the hierarchy slides the row out from
+       * under a menu that stays put — leaving a menu for an element the
+       * reader can no longer see, hanging over the canvas.
+       *
+       * Capture phase: the hierarchy scrolls inside its own container, and a
+       * scroll event from an element does not bubble to the document.
+       */
+      const onScroll = (event: Event) => {
+        // Not the menu's own scroll. The Paper caps its height and scrolls,
+        // so a long menu is scrolled the same way anything else is — and
+        // dismissing it for that is dismissing it for being used.
+        const target = event.target as Node | null
+        if (target && menuRef.current?.contains(target)) return
+        closeMenu()
+      }
       document.addEventListener('keydown', onKeyDown)
-      return () => document.removeEventListener('keydown', onKeyDown)
+      document.addEventListener('scroll', onScroll, true)
+      return () => {
+        document.removeEventListener('keydown', onKeyDown)
+        document.removeEventListener('scroll', onScroll, true)
+      }
     }, [menuOpen, closeMenu])
 
     /**
@@ -468,11 +520,14 @@ const NodeTreeItem = observer(
      * point; nothing is lost, since the row holds no text to copy and no link
      * to open.
      */
-    const openMenuOnRow = useCallback((e: any) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setMenuAnchor(e.currentTarget as HTMLElement)
-    }, [])
+    const openMenuOnRow = useCallback(
+      (e: any) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setMenuAnchor(anchorFor(e))
+      },
+      [anchorFor],
+    )
 
     if (!node) return <>'Invalid node'</>
     return (
@@ -672,7 +727,7 @@ const NodeTreeItem = observer(
           </IconButton>
           {menuOpen && (
             <Popper
-              anchorEl={menuAnchor}
+              anchorEl={menuAnchor as never}
               open
               /**
                * Opens SIDEWAYS, into the canvas (AGL-1405).
@@ -733,7 +788,11 @@ const NodeTreeItem = observer(
                   the rest, so it is a valid ClickAwayListener child on its
                   own — no wrapper element to disturb the Popper's layout. */}
               <ClickAwayListener onClickAway={closeMenu}>
-                <NodeContextMenu node={node} onAction={closeMenu} />
+                <NodeContextMenu
+                  ref={menuRef}
+                  node={node}
+                  onAction={closeMenu}
+                />
               </ClickAwayListener>
             </Popper>
           )}

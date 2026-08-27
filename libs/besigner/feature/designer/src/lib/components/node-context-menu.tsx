@@ -305,7 +305,11 @@ export const NodeContextMenu = observer(
           // document and the page grew a scrollbar around it. `dvh` so a
           // mobile browser's retracting toolbar does not leave the last item
           // under it.
-          maxHeight: 'min(560px, calc(100dvh - 24px))',
+          // Shorter than the window, not merely within it. A menu that only
+          // just fits is one `preventOverflow` has to slide a long way to
+          // place, and a menu that lands 200px from where it was asked for
+          // reads as landing at random.
+          maxHeight: 'min(420px, calc(100dvh - 24px))',
           overflowY: 'auto',
           overflowX: 'hidden',
         }}

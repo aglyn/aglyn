@@ -179,7 +179,10 @@ for (const host of hosts) {
     byNode.set(nodeId, [...(byNode.get(nodeId) ?? []), { id: doc.id, action }])
   }
   if (!byNode.size) continue
-  console.log(`\n${host.id} — ${actionsFound} element-scoped action(s)`)
+  // `subject.size`, not the running total: a per-host line that prints a
+  // cumulative counter overstates every host after the first, and this log is
+  // what a person reads to decide whether to run it for real.
+  console.log(`\n${host.id} — ${subject.size} element-scoped action(s)`)
 
   const placed = new Set()
   for (const kind of KINDS) {

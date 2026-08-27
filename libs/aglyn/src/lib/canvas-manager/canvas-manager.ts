@@ -383,6 +383,7 @@ export class CanvasManager {
       deleteNode: action,
       reparentNode: action,
       reorderNode: action,
+      updateNodeFields: action,
       updateNodeProps: action,
     })
 
@@ -1292,6 +1293,33 @@ export class CanvasManager {
    * `AglynNode.toJSON` strips again at the write boundary — this one keeps the
    * live tree honest for everything that reads it before a save.
    */
+  /**
+   * Writes top-level node FIELDS, with an undo step (AGL-1480).
+   *
+   * The sibling of {@link updateNodeProps}, and it exists for the same two
+   * reasons that one documents. An edit with no `saveHistory` is an edit the
+   * author cannot take back — and every panel that assigned to a node
+   * directly was quietly in that state. And it re-resolves by `$id`: callers
+   * hold node objects across time (the focus store keeps the selection that
+   * way), while every wholesale replace of the map — `undo`, `redo`,
+   * `applyNodes`, a draft restore — builds fresh instances. Assigning to the
+   * caller's copy then mutates an orphan: no error, no dirty state, and the
+   * author's edit is simply gone.
+   *
+   * Only the keys the patch names are touched, and `undefined` clears one —
+   * which is how a cleared style or a shown element is stored, since `toJSON`
+   * omits what is undefined.
+   */
+  public updateNodeFields(
+    node: NodeSchema<any>,
+    patch: Partial<NodeSchema<any>>,
+  ): void {
+    if (!node) throw new Error('Invalid node')
+    this.saveHistory()
+    const target = this.getNode(node.$id) ?? node
+    Object.assign(target, patch)
+  }
+
   public updateNodeProps(
     node: NodeSchema<any>,
     props: NodeSchema<any>['props'],

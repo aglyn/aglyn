@@ -1110,6 +1110,67 @@ describe('Aglyn: Screen Manager', () => {
   })
 
   /**
+   * `updateNodeFields` is what every panel that used to assign to a node
+   * directly should have been calling. Both halves matter, and both were
+   * missing wherever a field was written by hand.
+   */
+  describe('updateNodeFields (AGL-1480)', () => {
+    const seed = {
+      [NODE_ROOT_ID]: {
+        $id: NODE_ROOT_ID,
+        type: NodeType.NODE,
+        componentId: 'div',
+        nodes: ['a'],
+      },
+      a: {
+        $id: 'a',
+        type: NodeType.NODE,
+        parentId: NODE_ROOT_ID,
+        componentId: 'div',
+        sx: { display: 'flex', gap: 2 },
+        nodes: [],
+      },
+    } as unknown as Record<NodeId, NodeSchema>
+
+    it('records an undo step, so the edit can be taken back', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(seed as any)
+      canvas.updateNodeFields(canvas.getNode('a')!, { hidden: true })
+      expect(canvas.getNode('a')?.hidden).toBe(true)
+
+      canvas.undo()
+      expect(canvas.getNode('a')?.hidden).toBeFalsy()
+      canvas.redo()
+      expect(canvas.getNode('a')?.hidden).toBe(true)
+    })
+
+    /**
+     * A caller can be holding an instance the map has since replaced — an
+     * undo, a redo, a draft restore all build fresh ones. Writing to that
+     * orphan is silent: no error, no dirty state, and the edit is gone.
+     */
+    it('writes to the node the MAP holds, not the caller reference', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(seed as any)
+      const stale = canvas.getNode('a')!
+      // Replace the map wholesale, the way a restore does.
+      canvas.setNodes(seed as any)
+      expect(canvas.getNode('a')).not.toBe(stale)
+
+      canvas.updateNodeFields(stale, { hidden: true })
+      expect(canvas.getNode('a')?.hidden).toBe(true)
+    })
+
+    it('touches only the keys the patch names', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(seed as any)
+      canvas.updateNodeFields(canvas.getNode('a')!, { hidden: true })
+      expect(canvas.getNode('a')?.sx).toEqual({ display: 'flex', gap: 2 })
+      expect(canvas.getNode('a')?.componentId).toBe('div')
+    })
+  })
+
+  /**
    * The constructor assigns BY NAME and `toJSON` emits by name, so a field
    * declared on `NodeSchema` and nowhere else survives in memory and dies on
    * the first save — which is the shape both of these were in when they

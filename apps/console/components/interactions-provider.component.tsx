@@ -37,7 +37,6 @@ import { buildInteractionCandidate } from './interaction-builder-doc'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
-import { action as mobxAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useMemo, useState } from 'react'
 import InteractionBuilderDialog, {
@@ -122,11 +121,13 @@ export const InteractionsProvider = observer(function InteractionsProvider(
     (nodeId: string, interaction: NodeInteraction | null, id?: string): boolean => {
       const node = canvas.getNode(nodeId)
       if (!node) return false
-      mobxAction(() => {
-        node.interactions = interaction
+      // Through the canvas so the write records an undo step and reaches the
+      // node the map holds — see `updateNodeFields`.
+      canvas.updateNodeFields(node, {
+        interactions: interaction
           ? upsertNodeInteraction(node.interactions, interaction)
-          : removeNodeInteraction(node.interactions, String(id))
-      })()
+          : removeNodeInteraction(node.interactions, String(id)),
+      })
       return true
     },
     [],

@@ -128,9 +128,15 @@ export function copyStyles(node: Aglyn.NodeSchema<any> | undefined): boolean {
   } catch {
     return false
   }
+  // The ELEMENT's own label. `labelShort` answers the document root with the
+  // document's name, which is a true answer to a different question and reads
+  // as "paste styles from this whole screen" on the menu below.
+  const label = Aglyn.canvas.isRootNode(node)
+    ? (node.componentSchema?.displayName ?? 'element')
+    : (node.labelShort ?? 'element')
   const entry: StyleClipboardEntry = {
     version: STYLE_CLIPBOARD_FORMAT_VERSION,
-    label: node.labelShort ?? 'element',
+    label,
     sx,
   }
   runInAction(() => {
@@ -163,11 +169,13 @@ export function pasteStyles(node: Aglyn.NodeSchema<any> | undefined): boolean {
   } catch {
     return false
   }
-  runInAction(() => {
-    // Cloned per target as well: pasting onto three elements must give three
-    // independent objects, or editing one would edit all three.
-    node.sx = (sx ?? undefined) as never
-  })
+  // Through the canvas, not by assigning to `node.sx`. That records an undo
+  // step — a paste the author cannot take back is worse than no paste — and
+  // it re-resolves the node by `$id`, because a caller can be holding an
+  // instance the map replaced (an undo, a draft restore), and writing to that
+  // one loses the edit silently. Cloned per target as well: pasting onto
+  // three elements must give three independent objects.
+  Aglyn.canvas.updateNodeFields(node, { sx: (sx ?? undefined) as never })
   return true
 }
 
