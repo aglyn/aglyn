@@ -18,6 +18,8 @@
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   Alert,
   Button,
@@ -39,7 +41,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   activityHref,
@@ -125,6 +127,61 @@ export function HostActivityTable(props: HostActivityTableProps) {
   useEffect(() => {
     void loadPage(0)
   }, [loadPage])
+
+  /*
+   * One row grammar, the console's (AGL-693) — the same table the artifact
+   * lists use, minus the row click.
+   */
+  const activityColumns: GridColDef[] = useMemo(
+    () => [
+      { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
+      {
+        field: 'target',
+        headerName: 'Target',
+        flex: 1.2,
+        minWidth: 180,
+        valueGetter: (_value, row: any) => activityTargetLabel(row.target),
+        renderCell: ({ row }: any) => {
+          /*
+           * The link context is the CUSTOMER route's params, and this table
+           * also mounts on the staff host page (AGL-1488), whose route has
+           * neither. A target with no route to it renders as plain text
+           * rather than as an anchor to a URL with a hole in it.
+           */
+          const href =
+            orgSlug && host ? activityHref(row, { orgSlug, host }) : undefined
+          const label = activityTargetLabel(row.target)
+          return href ? (
+            <AppLink href={href} color="primary" underline="hover">
+              {label}
+            </AppLink>
+          ) : (
+            label
+          )
+        },
+      },
+      {
+        field: 'actorEmail',
+        headerName: 'Who',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (_value, row: any) => row.actorEmail ?? 'Someone',
+      },
+      {
+        field: 'createdAt',
+        headerName: 'When',
+        flex: 1,
+        minWidth: 180,
+        // Sorted on the instant, rendered as a local string: a grid sorting
+        // the rendered text puts 12 January before 2 February.
+        valueGetter: (_value, row: any) =>
+          row.createdAt?.toDate?.()?.getTime?.() ?? 0,
+        renderCell: ({ row }: any) =>
+          formatStaffTimestamp(row.createdAt?.toDate?.() ?? null),
+      },
+    ],
+    [orgSlug, host],
+  )
 
   return (
     <CardDisplay
