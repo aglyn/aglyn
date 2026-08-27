@@ -189,7 +189,10 @@ function fanOut(band: MasonryColumn[]): MasonryColumn[] {
   const spread: MasonryColumn[] = Array.from({ length: columns }, (_, i) => ({
     key: `${column.key}#${i}`,
     profile: column.profile,
-    entries: [],
+    // Typed, not inferred: an empty literal is `any[]` under the stricter
+    // library tsconfigs even though the annotation above it is not enough to
+    // narrow a property inside `Array.from`'s callback.
+    entries: [] as MasonryColumn['entries'],
   }))
   column.entries.forEach((entry, index) => {
     spread[index % columns].entries.push(entry)
