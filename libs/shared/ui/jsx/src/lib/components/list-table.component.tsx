@@ -16,20 +16,23 @@
  */
 'use client'
 
-import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { DataTableComponent } from '@aglyn/shared-ui-jsx/components/data-table.component'
-import type { DataTableProps } from '@aglyn/shared-ui-jsx/components/data-table.component'
+import { AppLink } from './app-link'
+import { MdiIcon } from './mdi-icon/mdi-icon'
+import {
+  DataTableComponent,
+  type DataTableProps,
+} from './data-table.component'
 import { IconButton, Stack, Tooltip } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import type { ReactNode } from 'react'
 import RowActionsMenu, {
   type RowActionsMenuItem,
-} from '../row-actions-menu.component'
+} from './row-actions-menu.component'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
   TABLE_ROWS_PER_PAGE_LABEL,
-} from '../../constants/shared'
+} from '../const/table-pagination'
 
 /**
  * ONE row grammar for every artifact list (AGL-693).
@@ -88,7 +91,7 @@ import {
  * template renders under routes it does not own) must still show the control,
  * disabled, saying why. Hiding it would read as the feature being absent.
  */
-export interface ArtifactQuickAction {
+export interface ListQuickAction {
   /** `mdi` icon path. */
   icon: string
   /** Accessible name; also the tooltip when the action is unavailable. */
@@ -106,11 +109,11 @@ export interface ArtifactQuickAction {
   unavailableReason?: string
 }
 
-export interface ArtifactRowActionsProps {
+export interface ListRowActionsProps {
   /** The artifact's name — every control is labelled with it, because these
    * Repeat once per row and "More actions" alone says nothing about which. */
   label: string
-  quick?: ArtifactQuickAction | null
+  quick?: ListQuickAction | null
   items: RowActionsMenuItem[]
 }
 
@@ -120,11 +123,11 @@ export interface ArtifactRowActionsProps {
  * The icon and the menu are two ways into ONE action, not two features: the
  * icon is a bare glyph, so a reader who does not recognize it has the overflow
  * as the place every action is named. Deriving the item from the same
- * {@link ArtifactQuickAction} is what keeps the two in step — availability,
+ * {@link ListQuickAction} is what keeps the two in step — availability,
  * destination and the reason it is refused are read once and cannot drift.
  */
 function quickActionMenuItem(
-  quick: ArtifactQuickAction,
+  quick: ListQuickAction,
 ): RowActionsMenuItem {
   return {
     key: 'quick',
@@ -140,7 +143,7 @@ function quickActionMenuItem(
 }
 
 /** The trailing cluster: one quick action, then the overflow menu. */
-export function ArtifactRowActions(props: ArtifactRowActionsProps) {
+export function ListRowActions(props: ListRowActionsProps) {
   const { label, quick, items } = props
   const menuItems = quick ? [quickActionMenuItem(quick), ...items] : items
   return (
@@ -164,16 +167,16 @@ export function ArtifactRowActions(props: ArtifactRowActionsProps) {
       // in here would navigate out from under the thing it just opened.
       onClick={(event) => event.stopPropagation()}
     >
-      {quick ? <ArtifactQuickButton label={label} action={quick} /> : null}
+      {quick ? <ListQuickButton label={label} action={quick} /> : null}
       <RowActionsMenu label={label} items={menuItems} />
     </Stack>
   )
 }
-ArtifactRowActions.displayName = 'ArtifactRowActions'
+ListRowActions.displayName = 'ListRowActions'
 
-function ArtifactQuickButton(props: {
+function ListQuickButton(props: {
   label: string
-  action: ArtifactQuickAction
+  action: ListQuickAction
 }) {
   const { label, action } = props
   const icon = <MdiIcon path={action.icon} size={0.8} />
@@ -241,7 +244,7 @@ function ArtifactQuickButton(props: {
  * screens table (which cannot use it at all) grew a second implementation.
  * One `renderCell` gives every list the same cluster and the same width.
  */
-export function artifactActionsColumn(
+export function listActionsColumn(
   render: (row: any) => ReactNode,
   options: { width?: number } = {},
 ): GridColDef {
@@ -259,7 +262,7 @@ export function artifactActionsColumn(
   }
 }
 
-export interface ArtifactTableProps extends DataTableProps {
+export interface ListTableProps extends DataTableProps {
   /** Row click → the artifact's detail view. */
   onOpen?: (id: string, row: any) => void
 }
@@ -268,10 +271,10 @@ export interface ArtifactTableProps extends DataTableProps {
  * The grid every FLAT artifact list uses — layouts, components, templates.
  *
  * Screens is the deliberate exception and keeps its own tree; it adopts
- * {@link ArtifactRowActions} so the two still read alike, which is the part a
+ * {@link ListRowActions} so the two still read alike, which is the part a
  * reader actually compares.
  */
-export function ArtifactTable(props: ArtifactTableProps) {
+export function ListTable(props: ListTableProps) {
   const { onOpen, sx, ...rest } = props
   return (
     <DataTableComponent
@@ -308,6 +311,6 @@ export function ArtifactTable(props: ArtifactTableProps) {
     />
   )
 }
-ArtifactTable.displayName = 'ArtifactTable'
+ListTable.displayName = 'ListTable'
 
-export default ArtifactTable
+export default ListTable

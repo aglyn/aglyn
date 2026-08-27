@@ -54,7 +54,14 @@ import { useCallback, useState } from 'react'
 import {
   StaffRoleOnly,
   SuperStaffOnly,
+  useStaffRoleGate,
+  useSuperStaffGate,
 } from './staff-super-only.component'
+import {
+  ListRowActions,
+  type ListQuickAction,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
 /**
@@ -272,9 +279,40 @@ export interface StaffOrgActionsProps {
   org: any
   /** Called after a successful mutation so the owner can re-read the org. */
   onChanged: () => void
+  /**
+   * Render as a ROW's action cluster rather than a strip of buttons
+   * (AGL-693).
+   *
+   * A list row's actions belong behind one overflow: three inline buttons per
+   * row is three chances to mis-click a suspension next to the row's own open
+   * handler, and it is what made this list read differently from every other
+   * one in the console.
+   *
+   * The role gates survive the move intact. `useStaffRoleGate` already
+   * answers `{ blocked, reason }`, which is precisely a menu item's
+   * `disabled` + `disabledReason` — so a support engineer still SEES the
+   * action they may not take, and still reads why, rather than finding it
+   * absent and wondering whether it exists.
+   */
+  rowActions?: {
+    /** The row's single direct-click action, beside the overflow. */
+    quick?: ListQuickAction | null
+    /** Items to list ABOVE this component's own. */
+    items?: RowActionsMenuItem[]
+    /** Names the controls, since they repeat once per row. */
+    label: string
+  }
 }
 
-const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
+const StaffOrgActions = ({
+  org,
+  onChanged,
+  rowActions,
+}: StaffOrgActionsProps) => {
+  // The same gates the wrappers below use, read as verdicts so a menu item
+  // can carry them as `disabled` + the reason.
+  const overrideGate = useStaffRoleGate(['super', 'billing'])
+  const suspendGate = useSuperStaffGate()
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -666,8 +704,51 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
     onChanged()
   }, [editor, user, enqueueSnackbar, onChanged])
 
+  const openSuspender = () =>
+    org &&
+    setSuspender({
+      id: org.$id,
+      suspended: Boolean(org.suspendedAt),
+      reason: isLockdownReasonCode(org.suspendedReasonCode)
+        ? org.suspendedReasonCode
+        : 'manual',
+      message: org.suspendedMessage ?? '',
+    })
+
   return (
     <>
+      {rowActions ? (
+        <ListRowActions
+          label={rowActions.label}
+          quick={rowActions.quick}
+          items={[
+            ...(rowActions.items ?? []),
+            {
+              key: 'override',
+              label: 'Override',
+              onClick: handleOverrideOpen,
+              disabled: !org || overrideGate.blocked,
+              disabledReason: overrideGate.reason,
+            },
+            {
+              key: 'suspend',
+              label: org?.suspendedAt ? 'Unsuspend' : 'Suspend',
+              destructive: !org?.suspendedAt,
+              onClick: openSuspender,
+              disabled: !org || suspendGate.blocked,
+              disabledReason: suspendGate.reason,
+            },
+            {
+              key: 'erasure',
+              label: org?.erasureRequestedAt ? 'Cancel erasure' : 'Erasure',
+              destructive: !org?.erasureRequestedAt,
+              onClick: () => void handleToggleErasure(),
+              disabled: !org,
+            },
+          ]}
+        />
+      ) : (
+        <>
       {/* AGL-2131. Gated at the TRIGGER, not at the dialog's confirm button:
           a support engineer who can open the override editor, pick a plan,
           write a reason and only then find Save dead has done the work twice
@@ -685,17 +766,7 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
           size="small"
           disabled={!org}
           color={org?.suspendedAt ? 'success' : 'error'}
-          onClick={() =>
-            org &&
-            setSuspender({
-              id: org.$id,
-              suspended: Boolean(org.suspendedAt),
-              reason: isLockdownReasonCode(org.suspendedReasonCode)
-                ? org.suspendedReasonCode
-                : 'manual',
-              message: org.suspendedMessage ?? '',
-            })
-          }
+          onClick={openSuspender}
         >
           {org?.suspendedAt ? 'Unsuspend' : 'Suspend'}
         </Button>
@@ -708,6 +779,8 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       >
         {org?.erasureRequestedAt ? 'Cancel erasure' : 'Erasure'}
       </Button>
+        </>
+      )}
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}

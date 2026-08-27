@@ -31,7 +31,7 @@
  *    it reads as an action the row does not have.
  */
 
-import { ArtifactRowActions } from '../components/artifacts/artifact-table.component'
+import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
 import { fireEvent, render, screen } from '@testing-library/react'
 
@@ -44,7 +44,7 @@ const openMenu = () => {
 describe('artifact row actions are real links (AGL-693)', () => {
   it('renders a menu item with an href as an anchor', () => {
     render(
-      <ArtifactRowActions
+      <ListRowActions
         label="Home"
         items={[
           { key: 'details', label: 'View details', href: '/acme/screens/1' },
@@ -66,7 +66,7 @@ describe('artifact row actions are real links (AGL-693)', () => {
   it('leaves a handler-only item a button, and still closes the menu', () => {
     const onClick = jest.fn()
     render(
-      <ArtifactRowActions
+      <ListRowActions
         label="Home"
         items={[{ key: 'delete', label: 'Delete', onClick }]}
       />,
@@ -81,7 +81,7 @@ describe('artifact row actions are real links (AGL-693)', () => {
 
   it('opens an external quick action in a new tab, from both surfaces', () => {
     render(
-      <ArtifactRowActions
+      <ListRowActions
         label="Home"
         quick={{
           icon: mdiOpenInNew.path,
@@ -109,7 +109,7 @@ describe('artifact row actions are real links (AGL-693)', () => {
 
   it('keeps an in-app quick action a same-tab link in both surfaces', () => {
     render(
-      <ArtifactRowActions
+      <ListRowActions
         label="Header"
         quick={{
           icon: mdiOpenInNew.path,
@@ -134,7 +134,7 @@ describe('artifact row actions are real links (AGL-693)', () => {
 
   it('refuses the quick action in BOTH surfaces at once', () => {
     render(
-      <ArtifactRowActions
+      <ListRowActions
         label="Blog — Entry Template"
         quick={{
           icon: mdiOpenInNew.path,

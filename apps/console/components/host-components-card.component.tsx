@@ -68,10 +68,10 @@ import {
 } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
-import ArtifactTable, {
-  ArtifactRowActions,
-  artifactActionsColumn,
-} from './artifacts/artifact-table.component'
+import ListTable, {
+  ListRowActions,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from './artifacts/artifact-delete-confirm.component'
@@ -502,11 +502,11 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       is the arrangement the other three lists each varied in their own way.
       Everything except Preview now lives in the menu.
     */
-    artifactActionsColumn((row: any) => {
+    listActionsColumn((row: any) => {
       const definition = { ...row, $id: row.$id as string }
       const versionId = definition.versionId as string | undefined
       return (
-        <ArtifactRowActions
+        <ListRowActions
           label={definition.displayName ?? definition.$id}
           quick={{
             icon: mdiEyeOutline.path,
@@ -620,7 +620,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   // and screens/layouts do not repeat it either (AGL-693).
   return (
     <CardDisplay>
-      <ArtifactTable
+      <ListTable
         rowHeight={TABLE_ROW_HEIGHT}
         columns={columns}
         noRowsLabel="No reusable components yet"

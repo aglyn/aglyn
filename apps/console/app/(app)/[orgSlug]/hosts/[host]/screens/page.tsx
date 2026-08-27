@@ -93,11 +93,11 @@ import {
 import AuthErrorAlertComponent from '../../../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import RowActionsMenu from '../../../../../../components/row-actions-menu.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
-import { ArtifactRowActions } from '../../../../../../components/artifacts/artifact-table.component'
+import { ListRowActions } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from '../../../../../../components/artifacts/artifact-delete-confirm.component'
@@ -720,7 +720,7 @@ function Screens(props) {
         ? undefined
         : 'This screen has no saved version yet.'
       return (
-        <ArtifactRowActions
+        <ListRowActions
           label={label}
           /*
             A screen is the ONE artifact with a real address of its own, so its

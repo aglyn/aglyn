@@ -33,17 +33,18 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import type { GridColDef } from '@mui/x-data-grid'
+import { mdiChartLine } from '@aglyn/shared-data-mdi'
+import {
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -114,35 +115,29 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // `refresh` re-reads the page currently shown — the post-mutation target.
   const { rows: orgDocs, loading, refresh } = pagination
 
-  // Search/sort (AGL-135) over the current page.
+  /*
+   * Search over the current page (AGL-135). The bespoke Sort select is gone:
+   * the grid sorts by COLUMN now, which is both more of a control and one
+   * the reader already knows from every other list (AGL-693). Its three
+   * options — name, plan, newest — are three of the columns.
+   */
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'plan' | 'newest'>('name')
   const needle = search.trim().toLowerCase()
-  const orgs = [...orgDocs]
-    .filter(
-      (org) =>
-        !needle ||
-        [org.$id, org.name, org.slug, org.plan]
-          .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(needle)),
-    )
-    .sort((a, b) => {
-      if (sortBy === 'plan') {
-        return String(a.plan ?? '').localeCompare(String(b.plan ?? ''))
-      }
-      if (sortBy === 'newest') {
-        return (
-          (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
-        )
-      }
-      return String(a.name ?? a.$id).localeCompare(String(b.name ?? b.$id))
-    })
+  const orgs = orgDocs.filter(
+    (org) =>
+      !needle ||
+      [org.$id, org.name, org.slug, org.plan]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle)),
+  )
+
 
   // Usage drill-down (AGL-205): last 12 monthly org rollups with deltas.
   const [usage, setUsage] = useState<{
     orgId: string
     months: StaffOrgUsageMonth[]
   } | null>(null)
+  const router = useRouter()
   const [usageLoading, setUsageLoading] = useState<string | null>(null)
   const handleShowUsage = useCallback(
     (orgId: string) => async () => {
@@ -169,6 +164,198 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // Override, suspend and erasure moved to the shared StaffOrgActions
   // component (AGL-939) so the org detail page carries the same audited
   // actions without this page and that one drifting apart.
+
+  /*
+   * One row grammar, the console's (AGL-693).
+   *
+   * `valueGetter` on every column that is not already a plain string: the
+   * grid sorts what the getter returns, so a date rendered as `7/9/2026`
+   * sorts as text — putting 12 January before 2 February — unless the column
+   * hands it the seconds instead.
+   */
+  const orgColumns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Organization',
+        flex: 1.4,
+        minWidth: 200,
+        valueGetter: (_value, row: any) => String(row.name ?? row.$id),
+        renderCell: ({ row }: any) => (
+          <Stack sx={{ justifyContent: 'center', height: '100%' }}>
+            {/* The primary cell is a real anchor, so it can be
+                middle-clicked, copied, or opened from the browser's own
+                context menu — affordances the row's click handler cannot
+                offer however faithfully it calls `router.push`. */}
+            <AppLink
+              href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: row.$id })}
+              color="inherit"
+              underline="hover"
+              onClick={(event: any) => event.stopPropagation()}
+            >
+              {row.name ?? row.$id}
+            </AppLink>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontFamily: 'monospace' }}
+            >
+              {row.slug ?? row.$id}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: 'plan',
+        headerName: 'Plan',
+        flex: 1,
+        minWidth: 180,
+        valueGetter: (_value, row: any) =>
+          isEnterpriseOrg(row as never)
+            ? PLAN_LABELS.enterprise
+            : resolveEffectivePlan(row as never),
+        renderCell: ({ row }: any) => {
+          const effectivePlan = resolveEffectivePlan(row as never)
+          const storedPlanLabel = row.plan ?? 'no plan'
+          return (
+            <Stack
+              direction="row"
+              spacing={0.5}
+              useFlexGap
+              sx={{ flexWrap: 'wrap', alignItems: 'center', height: '100%' }}
+            >
+              {/* THE PLAN THE ORG READS AS, not the one stored (AGL-1152).
+                  The two diverge in both directions, exactly when it matters:
+                  a LAPSED payer stores `starter` and reads as `free`, because
+                  `resolveEffectivePlan` drops any paid plan with a dead
+                  subscription (AGL-247); an org with NO plan reads as `free`
+                  too. */}
+              <Chip
+                label={
+                  isEnterpriseOrg(row as never)
+                    ? PLAN_LABELS.enterprise
+                    : effectivePlan
+                }
+                size="small"
+                color={row.plan ? 'primary' : 'default'}
+              />
+              {/* Only when the stored value would surprise someone reading
+                  the effective one. */}
+              {!isEnterpriseOrg(row as never) &&
+              storedPlanLabel !== effectivePlan ? (
+                <Chip
+                  label={`stored: ${storedPlanLabel}`}
+                  size="small"
+                  variant="outlined"
+                />
+              ) : null}
+              {row.suspendedAt ? (
+                <Chip label="suspended" size="small" color="error" />
+              ) : null}
+              {row.erasureRequestedAt ? (
+                <Chip
+                  label="erasure requested"
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                />
+              ) : null}
+            </Stack>
+          )
+        },
+      },
+      {
+        field: 'subscription',
+        headerName: 'Subscription',
+        flex: 0.8,
+        minWidth: 130,
+        valueGetter: (_value, row: any) => row.subscription?.status ?? '--',
+      },
+      {
+        field: 'siteLimit',
+        headerName: 'Site limit',
+        flex: 0.8,
+        minWidth: 130,
+        // An UNLIMITED quota is Number.POSITIVE_INFINITY, which renders as
+        // the literal "Infinity" (AGL-1118).
+        valueGetter: (_value, row: any) =>
+          resolveOrgEntitlements(row).hostLimit,
+        renderCell: ({ row }: any) => {
+          const resolved = resolveOrgEntitlements(row)
+          return (
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ alignItems: 'center', height: '100%' }}
+            >
+              <span>
+                {Number.isFinite(resolved.hostLimit)
+                  ? resolved.hostLimit
+                  : '∞'}
+              </span>
+              {overrideCount(row) ? (
+                <Chip
+                  label={`${overrideCount(row)} override${
+                    overrideCount(row) === 1 ? '' : 's'
+                  }`}
+                  size="small"
+                  variant="outlined"
+                />
+              ) : null}
+            </Stack>
+          )
+        },
+      },
+      {
+        field: 'createdAt',
+        headerName: 'Created',
+        flex: 0.7,
+        minWidth: 120,
+        valueGetter: (_value, row: any) => row.createdAt?.seconds ?? 0,
+        renderCell: ({ row }: any) => (
+          <Typography variant="caption" color="text.secondary">
+            {row.createdAt?.seconds
+              ? new Date(row.createdAt.seconds * 1000).toLocaleDateString()
+              : '—'}
+          </Typography>
+        ),
+      },
+      listActionsColumn(
+        (row: any) => (
+          <StaffOrgActions
+            org={row}
+            onChanged={refresh}
+            rowActions={{
+              label: row.name ?? row.$id,
+              // Opening the org is the row's own click; the quick action is
+              // the one other thing worth a direct press.
+              quick: {
+                icon: mdiChartLine.path,
+                label: 'Usage',
+                onClick: () => void handleShowUsage(row.$id)(),
+                // Renders it disabled WITH the reason, rather than removing
+                // it: an absent control and a busy one look identical, and
+                // only one of them is honest.
+                unavailableReason:
+                  usageLoading === row.$id ? 'Loading usage…' : undefined,
+              },
+              items: [
+                {
+                  key: 'open',
+                  label: 'Open',
+                  href: buildRoute(Route.ADMIN_ORG_DETAIL, {
+                    orgId: row.$id,
+                  }),
+                },
+              ],
+            }}
+          />
+        ),
+        { width: 120 },
+      ),
+    ],
+    [refresh, handleShowUsage, usageLoading],
+  )
 
   return (
     <>
@@ -215,18 +402,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                     onChange={(event) => setSearch(event.target.value)}
                     sx={{ minWidth: 220 }}
                   />
-                  <TextField
-                    select
-                    size="small"
-                    label="Sort"
-                    value={sortBy}
-                    onChange={(event) => setSortBy(event.target.value as any)}
-                    sx={{ minWidth: 120 }}
-                  >
-                    <MenuItem value="name">{'Name'}</MenuItem>
-                    <MenuItem value="plan">{'Plan'}</MenuItem>
-                    <MenuItem value="newest">{'Newest'}</MenuItem>
-                  </TextField>
                 </Stack>
               {orgs.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
@@ -238,165 +413,21 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                         'or first site.'}
                 </Typography>
               ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Organization'}</TableCell>
-                      <TableCell>{'Plan'}</TableCell>
-                      <TableCell>{'Subscription'}</TableCell>
-                      <TableCell>{'Site limit'}</TableCell>
-                      <TableCell>{'Created'}</TableCell>
-                      <TableCell align="right">{'Actions'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {orgs.map((org) => {
-                      const resolved = resolveOrgEntitlements(org)
-                      const effectivePlan = resolveEffectivePlan(org as never)
-                      const storedPlanLabel = org.plan ?? 'no plan'
-                      return (
-                        <TableRow key={org.$id} hover>
-                          <TableCell>
-                            <Stack>
-                              <Typography variant="body2" noWrap>
-                                {org.name ?? org.$id}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ fontFamily: 'monospace' }}
-                              >
-                                {org.slug ?? org.$id}
-                              </Typography>
-                            </Stack>
-                          </TableCell>
-                          <TableCell>
-                            {/* Show the plan the org READS as (AGL-1118) — an
-                                org on a pre-AGL-1118 enterprise arrangement
-                                stores a lower base plan, and listing that here
-                                contradicted its own Billing page. */}
-                            {/* THE PLAN THE ORG READS AS, not the one stored
-                                (AGL-1152). This column showed `org.plan` raw,
-                                and the two diverge in both directions —
-                                exactly when it matters:
-
-                                  - a LAPSED payer stores `starter` and reads
-                                    as `free`, because `resolveEffectivePlan`
-                                    drops any paid plan with a dead
-                                    subscription (AGL-247). The list said
-                                    `starter` while every gate walled them.
-                                  - an org with NO plan reads as `free` too —
-                                    pinned by `plan-entitlements.spec.ts`:
-                                    "resolves as free and is walled, not
-                                    metered". The blurb here used to claim the
-                                    opposite. */}
-                            <Chip
-                              label={
-                                isEnterpriseOrg(org as never)
-                                  ? PLAN_LABELS.enterprise
-                                  : effectivePlan
-                              }
-                              size="small"
-                              color={org.plan ? 'primary' : 'default'}
-                            />
-                            {/* Only when the stored value would surprise
-                                someone reading the effective one — a lapsed
-                                subscription, or no plan at all. */}
-                            {!isEnterpriseOrg(org as never) &&
-                            storedPlanLabel !== effectivePlan ? (
-                              <Chip
-                                label={`stored: ${storedPlanLabel}`}
-                                size="small"
-                                variant="outlined"
-                                sx={{ ml: 1 }}
-                              />
-                            ) : null}
-                            {org.suspendedAt ? (
-                              <Chip
-                                label="suspended"
-                                size="small"
-                                color="error"
-                                sx={{ ml: 1 }}
-                              />
-                            ) : null}
-                            {org.erasureRequestedAt ? (
-                              <Chip
-                                label="erasure requested"
-                                size="small"
-                                color="error"
-                                variant="outlined"
-                                sx={{ ml: 1 }}
-                              />
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            {org.subscription?.status ?? '--'}
-                          </TableCell>
-                          <TableCell>
-                            {/* An UNLIMITED quota is Number.POSITIVE_INFINITY,
-                                which renders as the literal "Infinity"
-                                (AGL-1118 — the enterprise plan is the first
-                                one whose hostLimit is uncapped).
-
-                                The `!org.plan → '∞ (no plan)'` special case is
-                                GONE (AGL-1152): it asserted that a plan-less
-                                org is uncapped, and nothing in the codebase
-                                grants that. `resolveEffectivePlan` returns
-                                `free` for an absent plan and the spec pins it,
-                                so the real limit was free's all along and this
-                                cell was the only thing saying otherwise. */}
-                            {Number.isFinite(resolved.hostLimit)
-                              ? resolved.hostLimit
-                              : '∞'}
-                            {overrideCount(org) ? (
-                              <Chip
-                                label={`${overrideCount(org)} override${
-                                  overrideCount(org) === 1 ? '' : 's'
-                                }`}
-                                size="small"
-                                variant="outlined"
-                                sx={{ ml: 1 }}
-                              />
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {org.createdAt?.seconds
-                                ? new Date(
-                                    org.createdAt.seconds * 1000,
-                                  ).toLocaleDateString()
-                                : '—'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">
-                            <AppLink
-                              componentVariant="button"
-                              size="small"
-                              href={buildRoute(Route.ADMIN_ORG_DETAIL, {
-                                orgId: org.$id,
-                              })}
-                            >
-                              {'Open'}
-                            </AppLink>
-                            <Button
-                              size="small"
-                              disabled={usageLoading === org.$id}
-                              onClick={handleShowUsage(org.$id)}
-                            >
-                              {usageLoading === org.$id
-                                ? 'Loading…'
-                                : 'Usage'}
-                            </Button>
-                            <StaffOrgActions org={org} onChanged={refresh} />
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
+                <ListTable
+                  rows={orgs}
+                  columns={orgColumns}
+                  loading={loading}
+                  // The row IS the way in, on every list in the console.
+                  onOpen={(id) =>
+                    router.push(
+                      buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: id }),
+                    )
+                  }
+                  // Server-paged: the footer below owns the page, so the grid
+                  // must not also try to slice these rows.
+                  hideFooter
+                  autoHeight
+                />
               )}
               {/* Pagination (AGL-878): each page is a fresh Admin-SDK read via
                   /api/admin/orgs, so the list is complete and never flickers.

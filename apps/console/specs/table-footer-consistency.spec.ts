@@ -49,7 +49,10 @@ const read = (path: string) => readFileSync(join(REPO, path), 'utf8')
 /** Every file that renders a paginated footer from the primitives. */
 const FOOTERS: Array<[string, string]> = [
   // The grid family: layouts, components and templates all render through it.
-  ['artifact table', 'apps/console/components/artifacts/artifact-table.component.tsx'],
+  [
+    'the shared list table',
+    'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
+  ],
   // The bespoke family.
   ['screens tree', 'apps/console/components/screens-hierarchy-table.component.tsx'],
   ['team list', 'apps/console/components/org-members-card.component.tsx'],
@@ -172,7 +175,7 @@ describe('the console has one table footer (AGL-693)', () => {
       'apps/console/components/org-members-card.component.tsx',
       'apps/console/components/content/collection-entries-page.component.tsx',
       'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
-      'apps/console/components/artifacts/artifact-table.component.tsx',
+      'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
     ]) {
       expect(read(path)).toContain('TABLE_PAGE_SIZE_DEFAULT')
     }

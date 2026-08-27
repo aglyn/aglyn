@@ -46,10 +46,10 @@ import {
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
-import ArtifactTable, {
-  ArtifactRowActions,
-  artifactActionsColumn,
-} from '../../../../../../components/artifacts/artifact-table.component'
+import ListTable, {
+  ListRowActions,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import ArtifactDeleteConfirmDescription, {
   fetchArtifactUsage,
 } from '../../../../../../components/artifacts/artifact-delete-confirm.component'
@@ -412,11 +412,11 @@ function Layouts(props) {
       open handler, and make the first thing in the row a toolbar rather than
       the layout's name.
     */
-    artifactActionsColumn((row: any) => {
+    listActionsColumn((row: any) => {
       const layoutId = row.$id as string
       const versionId = row.versionId as string
       return (
-        <ArtifactRowActions
+        <ListRowActions
           label={row.displayName ?? layoutId}
           quick={{
             icon: mdiEyeOutline.path,
@@ -576,7 +576,7 @@ function Layouts(props) {
             blurb="Layout templates add a ready-made layout you can restyle in the besigner. Existing layouts are never touched."
           />
           <CardDisplay>
-            <ArtifactTable
+            <ListTable
               rowHeight={TABLE_ROW_HEIGHT}
               columns={columns}
               noRowsLabel="No layouts yet"

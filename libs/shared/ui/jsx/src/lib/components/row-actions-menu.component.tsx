@@ -16,11 +16,8 @@
  */
 'use client'
 
-import {
-  AppLink,
-  MdiIcon,
-  type AppLinkNakedLinkProps,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, type AppLinkNakedLinkProps } from './app-link'
+import { MdiIcon } from './mdi-icon/mdi-icon'
 import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
 import {
   IconButton,

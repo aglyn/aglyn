@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 
 // The hook reads the signed-in user off the instance provider; drive it here.
 let mockUser: unknown
@@ -117,7 +117,11 @@ describe('useIsStaff', () => {
       }),
     }
     const { result } = renderHook(() => useIsStaff())
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    // Settled by the promise chain, not by a clock: a fixed sleep passes on
+    // an idle machine and fails under a full suite, which is a flake dressed
+    // as a regression.
+    await waitFor(() => expect(result.current).toBe(true))
+    await act(async () => undefined)
     expect(result.current).toBe(true)
   })
 
@@ -132,7 +136,14 @@ describe('useIsStaff', () => {
       }),
     }
     const { result } = renderHook(() => useIsStaff())
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await waitFor(() =>
+      expect(
+        (mockUser as { getIdTokenResult: jest.Mock }).getIdTokenResult,
+      ).toHaveBeenCalled(),
+    )
+    // Flush the rejection chain so "still null" is a settled answer rather
+    // than one the assertion simply arrived before.
+    await act(async () => undefined)
     expect(result.current).toBeNull()
   })
 
@@ -154,7 +165,8 @@ describe('useIsStaff', () => {
       }),
     }
     const first = renderHook(() => useIsStaff())
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await waitFor(() => expect(forced).toBe(1))
+    await act(async () => undefined)
     first.unmount()
 
     const second = renderHook(() => useIsStaff())

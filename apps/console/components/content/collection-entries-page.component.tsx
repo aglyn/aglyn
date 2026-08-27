@@ -78,7 +78,7 @@ import DashboardLayout from '../layouts/dashboard.layout'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
-} from '../row-actions-menu.component'
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
