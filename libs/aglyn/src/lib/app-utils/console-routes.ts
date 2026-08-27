@@ -179,6 +179,15 @@ export enum Route {
   // can collide with it.
   CONTENT_ENTRY_DETAILS = '/[orgSlug]/hosts/[host]/content/[collectionSlug]/entries/[entryId]',
   MANAGE_TEAM = '/[orgSlug]/team',
+  /*
+   * Team SECTIONS are routes, not tabs (AGL-693). A section's bundle then
+   * arrives when a reader opens it and never before, the section is linkable,
+   * and the active state is a fact about the URL rather than state that has to
+   * be kept in sync with it. `MANAGE_TEAM` itself redirects to members.
+   */
+  MANAGE_TEAM_MEMBERS = '/[orgSlug]/team/members',
+  MANAGE_TEAM_ROLES = '/[orgSlug]/team/roles',
+  MANAGE_TEAM_ACTIVITY = '/[orgSlug]/team/activity',
   MANAGE_TEAM_MEMBER = '/[orgSlug]/team/[uid]',
   // Support is an UMBRELLA, not a page (AGL-1158). The two channels beneath
   // it are separate features that were only ever one screen: they are gated
@@ -357,6 +366,9 @@ export interface RoutePayload {
     entryId: string
   }
   [Route.MANAGE_TEAM]: { orgSlug: string }
+  [Route.MANAGE_TEAM_MEMBERS]: { orgSlug: string }
+  [Route.MANAGE_TEAM_ROLES]: { orgSlug: string }
+  [Route.MANAGE_TEAM_ACTIVITY]: { orgSlug: string }
   [Route.MANAGE_TEAM_MEMBER]: { orgSlug: string; uid: string }
   [Route.MANAGE_SUPPORT]: { orgSlug: string }
   [Route.MANAGE_SUPPORT_TICKETS]: { orgSlug: string }

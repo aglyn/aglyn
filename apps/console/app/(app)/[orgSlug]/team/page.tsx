@@ -14,84 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 'use client'
 
-import { mdiAccountMultipleOutline } from '@aglyn/shared-data-mdi'
-import { Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
-import OrgActivityCard from '../../../../components/org-activity-card.component'
-import OrgMembersCard from '../../../../components/org-members-card.component'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
-import useOrgPermissions from '../../../../hooks/use-org-permissions'
-import OrgRolesCard from '../../../../components/org-roles-card.component'
+import { useOrgSlug } from '../../../../hooks/use-org-scope'
 
 /**
- * Organization team page (AGL-234/238): the org roster with roles,
- * invites and per-site access is the only membership system — the legacy
- * manager-seat and custom-role cards (AGL-108/133) retired with the
- * tenants collection. Per-site collaborators can also be added from a
- * site's own Users card, which grants org membership scoped to that site.
+ * `/team` is the section index and renders nothing of its own (AGL-693).
+ *
+ * Every link into Team still points here, and a bookmark from before the
+ * sections existed still resolves — both land on Members, which is what the
+ * page opened with when it was one scrolling column.
+ *
+ * `replace`, not `push`: a redirect the reader did not ask for must not
+ * become a history entry that their back button bounces off.
  */
 const ManageTeam: NextPageWithLayout<Record<string, never>> = () => {
+  const router = useRouter()
   const orgSlug = useOrgSlug()
-  const { currentOrg } = useOrgScope()
-  const { can, loaded: permissionsLoaded } = useOrgPermissions()
-  return (
-    <DashboardLayout
-      breadcrumbItems={[
-        {
-          children: 'Team',
-          href: buildRoute(Route.MANAGE_TEAM, { orgSlug }),
-        },
-      ]}
-      help="team"
-      header={{
-        children: 'Team',
-        icon: { path: mdiAccountMultipleOutline.path },
-      }}
-    >
-      <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <GridItems
-          spacing={3}
-          items={[
-            {
-              size: { xs: 12 },
-              children: <OrgMembersCard />,
-            },
-            {
-              size: { xs: 12 },
-              children: <OrgRolesCard />,
-            },
-            // Activity is permission-gated (AGL-243, org.auditLog).
-            //
-            // `permissionsLoaded &&`, never `!permissionsLoaded ||`. The old
-            // spelling rendered the audit log BECAUSE the permission read had
-            // not landed — an explicit opt-in to the fail-open, on the one card
-            // here that carries other people's data: actor names, what they
-            // did, to what, and when. The card issues its own Firestore query
-            // on mount, so an unentitled member both saw the feed and pulled
-            // it. Absent until permitted; the gate's unknown state is not a
-            // yes.
-            ...(currentOrg?.$id &&
-            permissionsLoaded &&
-            can('org.auditLog')
-              ? [
-                  {
-                    size: { xs: 12 },
-                    children: <OrgActivityCard orgId={currentOrg.$id} />,
-                  },
-                ]
-              : []),
-          ]}
-        />
-      </Container>
-    </DashboardLayout>
-  )
+  useEffect(() => {
+    if (!orgSlug) return
+    router.replace(buildRoute(Route.MANAGE_TEAM_MEMBERS, { orgSlug }))
+  }, [router, orgSlug])
+  return null
 }
 ManageTeam.displayName = 'Page:ManageTeam'
 

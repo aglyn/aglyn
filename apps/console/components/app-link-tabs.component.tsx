@@ -77,9 +77,31 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
     const pathname = usePathname()
 
     const tabValue = useMemo(() => {
-      const byPathname = items.find(
-        (i) => pathname === i?.href || pathname === i?.id,
-      )
+      /*
+       * A tab stays active on its own SUB-ROUTES (AGL-693).
+       *
+       * This matched the pathname exactly, which is correct only while every
+       * tab is a leaf. It is not: a tabbed section that becomes real routes —
+       * `/settings` → `/settings/profile` — leaves the bar with nothing
+       * selected the moment a reader opens a section, so the indicator
+       * vanishes and the scroller has nothing to bring into view. The reader
+       * is not "nowhere"; they are one level inside a tab that is right there.
+       *
+       * LONGEST prefix wins, so a nested tab beats its own parent — `/hosts`
+       * and `/hosts/x/admin` can both be tabs and the deeper one is chosen.
+       * The boundary check is what stops `/settings` claiming
+       * `/settings-export`: a prefix is only a prefix at a path separator.
+       */
+      const onPath = (href: string | undefined) => {
+        if (!href) return false
+        if (pathname === href) return true
+        return pathname.startsWith(href === '/' ? href : `${href}/`)
+      }
+      const byPathname = items
+        .filter((i) => onPath(i?.href) || onPath(i?.id))
+        .sort(
+          (a, b) => (b?.href ?? b?.id ?? '').length - (a?.href ?? a?.id ?? '').length,
+        )[0]
       // An explicit activeTab wins, but it must not be able to blank the bar:
       // a stale or wrongly-shaped one used to short-circuit the pathname
       // check entirely, leaving NO tab selected — so no indicator, and
