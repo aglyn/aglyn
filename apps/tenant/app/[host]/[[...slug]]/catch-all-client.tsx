@@ -32,6 +32,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import AttributionGuard from '../../../components/attribution-guard.component'
 import { loadSiteRealmPlugins } from '../../../utils/realm-plugins.client'
 import { sitePluginLoader } from '../../../utils/site-plugin-loader'
 import MembershipPage from './membership-page'
@@ -811,17 +812,26 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
               {`Made with ${brand.productName}`}
             </>
           )
+          // Marked for the attribution guard (AGL-1477), which checks after
+          // load that the page still presents this and repairs it into a
+          // closed shadow root if it does not.
           return brand.homeUrl ? (
             <a
               href={brand.homeUrl}
               target="_blank"
               rel="noreferrer"
               style={badgeStyle}
+              {...{ [Aglyn.ATTRIBUTION_ATTRIBUTE]: 'badge' }}
             >
               {badgeContent}
             </a>
           ) : (
-            <span style={badgeStyle}>{badgeContent}</span>
+            <span
+              style={badgeStyle}
+              {...{ [Aglyn.ATTRIBUTION_ATTRIBUTE]: 'badge' }}
+            >
+              {badgeContent}
+            </span>
           )
         })()
       ) : null}
@@ -861,6 +871,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         <a
           href="/api/report-abuse"
           rel="nofollow"
+          {...{ [Aglyn.ATTRIBUTION_ATTRIBUTE]: 'report' }}
           style={{
             position: 'fixed',
             bottom: 12,
@@ -877,6 +888,17 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         >
           Report abuse
         </a>
+      ) : null}
+      {/* Keeps the two above ON the page (AGL-1477). Both are ordinary
+          elements in a document the site's own author controls, so three
+          lines of theme CSS or one tag-manager container takes them off it —
+          and the report control is precisely what a phishing site's author
+          wants gone. The guard checks after load, repairs into a closed
+          shadow root that no author selector can reach, and reports the
+          attempt once so the site becomes reviewable. Mounted only where
+          there is something to guard. */}
+      {props.showBranding ? (
+        <AttributionGuard hostId={host?.$id} />
       ) : null}
     </Aglyn.ScreenLinkContext.Provider>
     </Aglyn.SiteContext.Provider>
