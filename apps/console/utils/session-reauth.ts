@@ -275,7 +275,7 @@ export function clearSessionReauthRedirect(): void {
  * tick rather than waiting for the subscription to come back around.
  */
 export function restoreSessionReauthRedirect(): boolean {
-  let raw: string | null = null
+  let raw: string | null
   try {
     raw = sessionStorage.getItem(REDIRECT_KEY)
   } catch {

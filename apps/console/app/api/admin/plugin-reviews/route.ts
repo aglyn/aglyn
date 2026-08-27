@@ -391,8 +391,13 @@ async function listingDetail(
       // a Cloud console link, and this bucket does not appear in the Firebase
       // console at all, so a reviewer has no way to find it by hand.
       artifactsBucket: artifactsBucket ?? null,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       versions: versions.map(
+        // The rest-strip is the point: `verification`, `reviewChecklist` and
+        // `publisherAttestation` are named only so they DO NOT reach the
+        // client payload, which is what the disable below is for. The
+        // duplicate directive that used to sit above `versions.map(` covered
+        // a line with nothing unused on it, and this config treats an
+        // unused disable as a failure.
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         ({ verification, reviewChecklist, publisherAttestation, ...entry }) => ({
           ...entry,
