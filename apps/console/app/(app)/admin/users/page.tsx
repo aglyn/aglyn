@@ -31,16 +31,19 @@ import {
   Chip,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import type { GridColDef } from '@mui/x-data-grid'
+import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -178,7 +181,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     enabled: Boolean(isStaff),
     pageSize: AUTH_LIST_PAGE_SIZE,
   })
-  const { rows: users, pageIndex, refresh, showRows } = pagination
+  const router = useRouter()
+  const { rows: users, pageIndex, loading, refresh, showRows } = pagination
 
   /**
    * Exact-email lookup (AGL-270): reaches an account beyond the loaded pages
@@ -321,6 +325,204 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     [confirm, user, refresh, enqueueSnackbar],
   )
 
+
+  /*
+   * One row grammar, the console's (AGL-693). `valueGetter` on every column
+   * the grid must SORT by something other than what it draws — a timestamp
+   * rendered as text sorts as text, which puts 12 January before 2 February.
+   */
+  const userColumns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'email',
+        headerName: 'User',
+        flex: 1.6,
+        minWidth: 280,
+        valueGetter: (_value, row: any) =>
+          String(row.email ?? row.displayName ?? ''),
+        renderCell: ({ row }: any) => (
+          <Stack
+            direction="row"
+            spacing={0.5}
+            useFlexGap
+            sx={{ flexWrap: 'wrap', alignItems: 'center', height: '100%' }}
+          >
+            {/* Detail page (AGL-244); ids stay off the email line — copy
+                them from the chip (AGL-360). A real anchor, so it can be
+                middle-clicked or copied; the row's own click opens the same
+                place. */}
+            <AppLink
+              variant="body2"
+              color="inherit"
+              underline="hover"
+              href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid })}
+              onClick={(event: any) => event.stopPropagation()}
+            >
+              {/* An account with neither address nor name used to fall back
+                  to the bare uid, which reads as an ordinary row and is what
+                  made a shadow account look like a duplicate listing
+                  (AGL-1962). */}
+              {row.email ?? row.displayName ?? 'No email on this account'}
+            </AppLink>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${row.uid.slice(0, 8)}…`}
+              sx={{ fontFamily: 'monospace' }}
+              onClick={(event: any) => {
+                event.stopPropagation()
+                void navigator.clipboard
+                  ?.writeText(row.uid)
+                  .catch(() => undefined)
+              }}
+            />
+            {/* An SSO account lives in its org's GCIP tenant pool (AGL-1122).
+                A uid is only unique WITHIN a pool, and claims set on the
+                project pool do not reach it — so "which pool" is not
+                cosmetic. */}
+            {row.tenantId ? (
+              <Chip
+                size="small"
+                color="primary"
+                variant="outlined"
+                label={`SSO · ${row.tenantId}`}
+              />
+            ) : null}
+            {/* Merged is not hidden (AGL-2005): the surviving row says what
+                was folded into it, or the fix would be a cover-up. */}
+            {row.uidAlsoInPools?.length ? (
+              <Tooltip
+                title={
+                  `This uid also exists in ${row.uidAlsoInPools
+                    .map(poolLabel)
+                    .join(', ')}. A uid is unique only WITHIN a ` +
+                  'pool, so a second copy is not a second person — ' +
+                  'it is an account minted by a cross-pool custom ' +
+                  'token. The row shown is the record that ' +
+                  'identifies the person, and it is the one every ' +
+                  'action here targets.'
+                }
+              >
+                <Chip
+                  size="small"
+                  color="warning"
+                  label={`merged · also in ${row.uidAlsoInPools
+                    .map(poolLabel)
+                    .join(', ')}`}
+                />
+              </Tooltip>
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'staffRole',
+        headerName: 'Status',
+        flex: 0.8,
+        minWidth: 150,
+        valueGetter: (_value, row: any) =>
+          row.staff ? (row.staffRole ?? 'support') : row.disabled ? 'disabled' : '',
+        renderCell: ({ row }: any) => (
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', height: '100%' }}
+            // A control, not an action: it must not also open the row.
+            onClick={(event) => event.stopPropagation()}
+          >
+            {row.staff ? (
+              <TextField
+                select
+                size="small"
+                variant="standard"
+                // A role-less account is `support` everywhere that enforces
+                // (AGL-495/AGL-2131). Showing it as `super` here made the
+                // console the last place still asserting the old fail-open.
+                value={row.staffRole ?? 'support'}
+                disabled={busy || notSuper}
+                onChange={(event) => void handleSetRole(row, event.target.value)}
+                sx={{ minWidth: 96 }}
+              >
+                <MenuItem value="support">{'support'}</MenuItem>
+                <MenuItem value="billing">{'billing'}</MenuItem>
+                <MenuItem value="super">{'super'}</MenuItem>
+              </TextField>
+            ) : null}
+            {row.disabled ? (
+              <Chip label="disabled" size="small" color="error" />
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'createdAt',
+        headerName: 'Created',
+        flex: 0.9,
+        minWidth: 170,
+        valueGetter: (_value, row: any) =>
+          new Date(row.createdAt ?? 0).getTime() || 0,
+        renderCell: ({ row }: any) => (
+          <Typography variant="caption" color="text.secondary">
+            {formatStaffTimestamp(row.createdAt)}
+          </Typography>
+        ),
+      },
+      {
+        field: 'lastSignInAt',
+        headerName: 'Last sign-in',
+        flex: 0.9,
+        minWidth: 170,
+        valueGetter: (_value, row: any) =>
+          new Date(row.lastSignInAt ?? 0).getTime() || 0,
+        renderCell: ({ row }: any) => (
+          <Typography variant="caption" color="text.secondary">
+            {formatStaffTimestamp(row.lastSignInAt)}
+          </Typography>
+        ),
+      },
+      listActionsColumn((row: any) => (
+        <ListRowActions
+          label={row.email ?? row.uid}
+          quick={{
+            icon: mdiOpenInNew.path,
+            label: 'View',
+            to: buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid }),
+          }}
+          items={[
+            {
+              key: 'staff',
+              label: row.staff ? 'Revoke staff' : 'Grant staff',
+              onClick: handleAction(
+                row,
+                row.staff ? 'revokeStaff' : 'grantStaff',
+                row.staff ? 'Revoke staff' : 'Grant staff',
+              ),
+              disabled: busy || notSuper,
+              disabledReason: notSuper
+                ? 'Only super staff may change staff access.'
+                : undefined,
+            },
+            {
+              key: 'disable',
+              label: row.disabled ? 'Enable' : 'Disable',
+              destructive: !row.disabled,
+              onClick: handleAction(
+                row,
+                row.disabled ? 'enable' : 'disable',
+                row.disabled ? 'Enable account' : 'Disable account',
+              ),
+              disabled: busy || notSuper,
+              disabledReason: notSuper
+                ? 'Only super staff may disable an account.'
+                : undefined,
+            },
+          ]}
+        />
+      )),
+    ],
+    [busy, notSuper, handleAction, handleSetRole],
+  )
+
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -385,180 +587,19 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   "isn't found, have them sign in to Aglyn once, then search " +
                   'their email here.'}
               </Typography>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{'User'}</TableCell>
-                    <TableCell>{'Status'}</TableCell>
-                    <TableCell>{'Created'}</TableCell>
-                    <TableCell>{'Last sign-in'}</TableCell>
-                    <TableCell align="right">{'Actions'}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {visible.map((record) => (
-                    <TableRow key={record.uid} hover>
-                      <TableCell>
-                        {/* Detail page (AGL-244); ids stay off the email
-                            line — copy them from the chip (AGL-360). */}
-                        <AppLink
-                          variant="body2"
-                          color="inherit"
-                          underline="hover"
-                          href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                            uid: record.uid,
-                          })}
-                        >
-                          {/* An account with neither address nor name used to
-                              fall back to the bare uid, which reads as an
-                              ordinary row and is what made a shadow account
-                              look like a duplicate listing (AGL-1962). Say
-                              that the address is missing instead — the uid is
-                              still on the chip beside it. */}
-                          {record.email ??
-                            record.displayName ??
-                            'No email on this account'}
-                        </AppLink>
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          label={`${record.uid.slice(0, 8)}…`}
-                          sx={{ ml: 1, fontFamily: 'monospace' }}
-                          onClick={() =>
-                            void navigator.clipboard
-                              ?.writeText(record.uid)
-                              .catch(() => undefined)
-                          }
-                        />
-                        {/* An SSO account lives in its org's GCIP tenant pool
-                            (AGL-1122). Say so: a uid is only unique WITHIN a
-                            pool, and claims set on the project pool do not
-                            reach it — so "which pool" is not cosmetic. */}
-                        {record.tenantId ? (
-                          <Chip
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                            label={`SSO · ${record.tenantId}`}
-                            sx={{ ml: 1 }}
-                          />
-                        ) : null}
-                        {/* One uid, more than one pool. The rows are merged
-                            now (AGL-2005) — the requirement was to see one user, not
-                            two — but merged is not the same as hidden, so the
-                            surviving row says what was folded into it and
-                            which pools those records are in. Without this the
-                            fix would be a cover-up: a genuine duplicate would
-                            vanish from the console with nothing to notice. */}
-                        {record.uidAlsoInPools?.length ? (
-                          <Tooltip
-                            title={
-                              `This uid also exists in ${record.uidAlsoInPools
-                                .map(poolLabel)
-                                .join(', ')}. A uid is unique only WITHIN a ` +
-                              'pool, so a second copy is not a second person — ' +
-                              'it is an account minted by a cross-pool custom ' +
-                              'token. The row shown is the record that ' +
-                              'identifies the person, and it is the one every ' +
-                              'action here targets.'
-                            }
-                          >
-                            <Chip
-                              size="small"
-                              color="warning"
-                              label={`merged · also in ${record.uidAlsoInPools
-                                .map(poolLabel)
-                                .join(', ')}`}
-                              sx={{ ml: 1 }}
-                            />
-                          </Tooltip>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        {record.staff ? (
-                          <TextField
-                            select
-                            size="small"
-                            variant="standard"
-                            // A role-less account is `support` everywhere
-                            // that enforces (AGL-495/AGL-2131). Showing it as
-                            // `super` here made the console the last place
-                            // still asserting the old fail-open — and it is
-                            // the screen an operator uses to decide whether
-                            // an account needs fixing.
-                            value={record.staffRole ?? 'support'}
-                            disabled={busy || notSuper}
-                            onChange={(event) =>
-                              void handleSetRole(record, event.target.value)
-                            }
-                            sx={{ minWidth: 96, mr: 1 }}
-                          >
-                            <MenuItem value="support">{'support'}</MenuItem>
-                            <MenuItem value="billing">{'billing'}</MenuItem>
-                            <MenuItem value="super">{'super'}</MenuItem>
-                          </TextField>
-                        ) : null}
-                        {record.disabled ? (
-                          <Chip
-                            label="disabled"
-                            size="small"
-                            color="error"
-                            sx={{ ml: record.staff ? 1 : 0 }}
-                          />
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatStaffTimestamp(record.createdAt)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatStaffTimestamp(record.lastSignInAt)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <AppLink
-                          componentVariant="button"
-                          size="small"
-                          variant="outlined"
-                          href={buildRoute(Route.ADMIN_USER_DETAIL, {
-                            uid: record.uid,
-                          })}
-                          sx={{ mr: 0.5 }}
-                        >
-                          {'View'}
-                        </AppLink>
-                        <Button
-                          size="small"
-                          disabled={busy || notSuper}
-                          onClick={handleAction(
-                            record,
-                            record.staff ? 'revokeStaff' : 'grantStaff',
-                            record.staff ? 'Revoke staff' : 'Grant staff',
-                          )}
-                        >
-                          {record.staff ? 'Revoke staff' : 'Grant staff'}
-                        </Button>
-                        <Button
-                          size="small"
-                          color={record.disabled ? 'success' : 'error'}
-                          disabled={busy || notSuper}
-                          onClick={handleAction(
-                            record,
-                            record.disabled ? 'enable' : 'disable',
-                            record.disabled
-                              ? 'Enable account'
-                              : 'Disable account',
-                          )}
-                        >
-                          {record.disabled ? 'Enable' : 'Disable'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ListTable
+                rows={visible}
+                columns={userColumns}
+                getRowId={(row: any) => row.uid}
+                loading={loading}
+                onOpen={(id) =>
+                  router.push(buildRoute(Route.ADMIN_USER_DETAIL, { uid: id }))
+                }
+                // Server-paged through Firebase Auth: the footer below owns
+                // the page, so the grid must not also slice these rows.
+                hideFooter
+                autoHeight
+              />
               {/* Previous/Next instead of an ever-growing table (AGL-2486),
                   the same control the Organizations list carries. The count
                   is the COLLAPSED row count, not the raw page length — this
