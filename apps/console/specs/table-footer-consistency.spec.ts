@@ -306,6 +306,12 @@ describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
  *
  * Two honest ways out: give each filterable column a server predicate, or
  * turn the panel off. This asserts a list took one of them.
+ *
+ * The predicate route goes through `gridFilterRequest`, the shared reader.
+ * Reading `model.items` by hand is what a list does just before it forgets
+ * that `isEmpty` carries no value and so is skipped by any check that
+ * requires one — which is how an operator ends up in the menu and never in a
+ * request.
  */
 describe('server-filtered lists do not offer a dead filter panel', () => {
   const serverFiltered = tsxFilesUnder(join(REPO, 'apps', 'console'))
@@ -322,7 +328,7 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
         const source = readFileSync(path, 'utf8')
         return (
           !source.includes('disableColumnFilter') &&
-          !/model\.items/.test(source)
+          !source.includes('gridFilterRequest')
         )
       })
       .map((path) => path.replace(`${REPO}/`, ''))

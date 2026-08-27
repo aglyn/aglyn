@@ -43,8 +43,8 @@
 /** Everything the query builder was asked for, in order. */
 let ordering: string[] = []
 let wheres: Array<[string, string, unknown]> = []
-let startAt: string | null = null
-let endAt: string | null = null
+let startAt: any = null
+let endAt: any = null
 let startedAfter: string | null = null
 let capped: number | null = null
 
@@ -80,11 +80,11 @@ function orgQuery(): any {
     },
     // The range operators (`startsWith`, `endsWith`) build on these; without
     // them the handler throws and every assertion reads as a 500.
-    startAt: (value: string) => {
+    startAt: (value: unknown) => {
       startAt = value
       return orgQuery()
     },
-    endAt: (value: string) => {
+    endAt: (value: unknown) => {
       endAt = value
       return orgQuery()
     },
@@ -129,7 +129,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
     firestore: {
       FieldPath: { documentId: () => '__name__' },
-      Timestamp: { fromMillis: (ms: number) => ({ toMillis: () => ms }) },
+      Timestamp: {
+        fromMillis: (ms: number) => ({ toMillis: () => ms }),
+        // Recorded as an ISO string so a date assertion reads as a date
+        // rather than as an opaque object identity.
+        fromDate: (date: Date) => ({ __ts: date.toISOString() }),
+      },
     },
   },
   emailUnverifiedResponse: () =>
@@ -318,9 +323,82 @@ describe('the column filter reaches the query', () => {
     expect((wheres[0][2] as string[]).length).toBe(30)
   })
 
-  it('subscription · equals reaches the nested status field', async () => {
+  it('subscription · equals reaches the DENORMALIZED status', async () => {
+    /*
+     * `subscription` is not a field on the org document. It moved to
+     * `orgs/{orgId}/billing/stripe` (AGL-1028) and the row merges it in after
+     * the query has run, so a predicate on `subscription.status` matches a
+     * path nothing writes — it returned zero rows for every value, which on a
+     * list reads as "no organization is in that state".
+     *
+     * `billingStatus` is the mirror `writeOrgBilling` keeps on the org
+     * document for the dunning banner, and it is the only status a query can
+     * reach.
+     */
     expect((await filterFor('subscription', 'equals', 'canceled')).status).toBe(200)
-    expect(wheres).toEqual([['subscription.status', '==', 'canceled']])
+    expect(wheres).toEqual([['billingStatus', '==', 'canceled']])
+  })
+
+  it('$id · startsWith → a range over the document id', async () => {
+    expect((await filterFor('$id', 'startsWith', 'org-')).status).toBe(200)
+    expect(ordering).toEqual(['__name__'])
+    expect(startAt).toBe('org-')
+  })
+
+  it('slug · startsWith needs no lower-case twin', async () => {
+    // A slug is lower-case by construction, so the stored value IS its own
+    // normalized key.
+    expect((await filterFor('slug', 'startsWith', 'Acme')).status).toBe(200)
+    expect(ordering).toEqual(['slug'])
+    expect(startAt).toBe('acme')
+  })
+
+  it('ownerUid · equals is filterable without being a column', async () => {
+    expect((await filterFor('ownerUid', 'equals', 'uid-1')).status).toBe(200)
+    expect(wheres).toEqual([['ownerUid', '==', 'uid-1']])
+  })
+
+  it('createdAt · is covers the DAY, not an instant', async () => {
+    /*
+     * A stored timestamp carries a time of day, so equality against midnight
+     * matches nothing — a date column filtered by `is` would answer "none"
+     * for every row, every time. It is a range across the day instead.
+     */
+    expect((await filterFor('createdAt', 'is', '2026-07-18')).status).toBe(200)
+    expect(ordering).toEqual(['createdAt'])
+    expect(wheres).toEqual([])
+    expect((startAt as any).__ts).toBeDefined()
+    expect((endAt as any).__ts).toBeDefined()
+    expect(new Date((endAt as any).__ts).getTime()).toBeGreaterThan(
+      new Date((startAt as any).__ts).getTime(),
+    )
+  })
+
+  it('createdAt · before is a bound, not a range', async () => {
+    expect((await filterFor('createdAt', 'before', '2026-07-18')).status).toBe(200)
+    expect(wheres.length).toBe(1)
+    expect(wheres[0][0]).toBe('createdAt')
+    expect(wheres[0][1]).toBe('<')
+  })
+
+  it('plan · isNotEmpty requires the field to EXIST', async () => {
+    // `!= null` in Firestore also excludes documents that lack the field,
+    // which is exactly what "is not empty" should mean.
+    expect((await filterFor('plan', 'isNotEmpty', '')).status).toBe(200)
+    expect(wheres).toEqual([['plan', '!=', null]])
+  })
+
+  it('isEmpty on a field writers OMIT lists everything, not nothing', async () => {
+    /*
+     * Firestore cannot query for absence: `== null` matches an explicit null
+     * and never a missing field. `plan` is simply absent on organizations
+     * that never had one, so answering this would report "none" to a question
+     * with real answers. The panel does not offer it — this pins that a
+     * hand-built request degrades to unfiltered rather than to empty.
+     */
+    expect((await filterFor('plan', 'isEmpty', '')).status).toBe(200)
+    expect(ordering).toEqual(['__name__'])
+    expect(wheres).toEqual([])
   })
 
   it('an unanswerable operator lists everything rather than nothing', async () => {

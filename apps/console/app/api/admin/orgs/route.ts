@@ -26,11 +26,12 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { nameSearchToken } from '@aglyn/aglyn/app-utils/name-search'
 import {
-  nameSearchKey,
-  nameSearchReversed,
-  nameSearchToken,
-} from '@aglyn/aglyn/app-utils/name-search'
+  applyListFilter,
+  readListFilter,
+} from '../../../../utils/server/list-filter'
+import { ORG_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -139,81 +140,25 @@ async function handler(request: Request): Promise<Response> {
      * The column filter panel, answered by the QUERY (AGL-693).
      *
      * The panel was switched off for a while because `filterMode="server"`
-     * stops the grid applying anything itself, and the handler read only the
-     * quick search — so the funnel set filters nobody honoured. The fix is
-     * not to hide it but to answer it, for the operators Firestore can
-     * actually serve:
+     * stops the grid applying anything itself, and this handler read only the
+     * quick search — so the funnel set filters nobody honoured. The fix is not
+     * to hide it but to answer it, for the operators Firestore can serve.
      *
-     *   contains    → `array-contains` over the word-prefix tokens
-     *   equals      → equality on `nameLower`
-     *   startsWith  → a range over `nameLower`
-     *   endsWith    → a range over `nameReversed`, the same query read
-     *                 backwards
-     *   isAnyOf     → `in`, which Firestore caps at 30 values
-     *
-     * The operators NOT offered are the ones no index can answer: a
-     * mid-string `contains`, and anything negated over a text field. The
-     * console lists exactly what it can do rather than offering a menu where
-     * some entries silently return nothing.
-     *
-     * Ordering is chosen so no new composite index is needed: a range orders
-     * by the field it ranges over, and an equality orders by document id,
-     * both of which the automatic single-field indexes serve. Only
-     * `array-contains` + `orderBy(nameLower)` needs a composite, and it has
-     * one.
+     * Which fields those are, and which operators each one offers, is declared
+     * ONCE in `ORG_LIST_FILTER_FIELDS` and read by the page as well, so the
+     * menu a reader opens and the predicate this route builds are the same
+     * list. `applyListFilter` returns null when the ask cannot be served, and
+     * the list then comes back UNFILTERED — an operator the console cannot
+     * answer must not read as "no such organization".
      */
-    const filterField = String(query['filterField'] ?? '')
-    const filterOp = String(query['filterOp'] ?? '')
-    const filterValue = String(query['filterValue'] ?? '')
-
-    const rangeOver = (field: string, prefix: string) =>
-      orgsRef.orderBy(field).startAt(prefix).endAt(`${prefix}\uf8ff`)
-
-    const filtered = (): FirebaseFirestore.Query | null => {
-      if (!filterField || !filterOp || !filterValue.trim()) return null
-      if (filterField === 'name') {
-        if (filterOp === 'contains') {
-          const token = nameSearchToken(filterValue)
-          return token
-            ? orgsRef
-                .where('nameTokens', 'array-contains', token)
-                .orderBy('nameLower')
-            : null
-        }
-        if (filterOp === 'equals') {
-          return orgsRef
-            .where('nameLower', '==', nameSearchKey(filterValue))
-            .orderBy(byId)
-        }
-        if (filterOp === 'startsWith') {
-          return rangeOver('nameLower', nameSearchKey(filterValue))
-        }
-        if (filterOp === 'endsWith') {
-          return rangeOver('nameReversed', nameSearchReversed(filterValue))
-        }
-        return null
-      }
-      const path = filterField === 'subscription' ? 'subscription.status' : filterField
-      if (filterField !== 'plan' && filterField !== 'subscription') return null
-      if (filterOp === 'equals') {
-        return orgsRef.where(path, '==', filterValue.trim()).orderBy(byId)
-      }
-      if (filterOp === 'isAnyOf') {
-        // Firestore caps `in` at 30. Truncating silently would drop values a
-        // reader picked, so the extras are refused by the client's own menu
-        // rather than lost here.
-        const values = filterValue
-          .split(',')
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-          .slice(0, 30)
-        return values.length ? orgsRef.where(path, 'in', values).orderBy(byId) : null
-      }
-      return null
-    }
+    const filtered = applyListFilter(
+      orgsRef,
+      ORG_LIST_FILTER_FIELDS,
+      readListFilter(query),
+    )
 
     const base =
-      filtered() ??
+      filtered ??
       (search
         ? orgsRef.where('nameTokens', 'array-contains', search).orderBy('nameLower')
         : orgsRef.orderBy(byId))

@@ -275,7 +275,7 @@ export interface ListTableProps extends DataTableProps {
  * reader actually compares.
  */
 export function ListTable(props: ListTableProps) {
-  const { onOpen, sx, ...rest } = props
+  const { onOpen, sx, initialState, ...rest } = props
   return (
     <DataTableComponent
       getRowId={(row: any) => row.$id}
@@ -326,14 +326,22 @@ export function ListTable(props: ListTableProps) {
       showToolbar
       pagination
       // The console's ONE footer (AGL-693): same options, same default, same
-      // label. `initialState` is a default and not a lock — a caller that
-      // owns its page size (layouts bounds its listener by it) still passes
-      // its own through `rest`, which is spread after this.
+      // label.
       pageSizeOptions={TABLE_PAGE_SIZE_OPTIONS}
+      /*
+       * MERGED, not replaced. `initialState` used to ride in through `rest`,
+       * so a caller that set anything in it — a column visibility model, a
+       * sort — silently dropped the shared page size along with it. The two
+       * keys a caller is likely to set are spread individually so that a page
+       * size and a hidden column can coexist.
+       */
       initialState={{
+        ...initialState,
         pagination: {
           paginationModel: { pageSize: TABLE_PAGE_SIZE_DEFAULT },
+          ...initialState?.pagination,
         },
+        columns: { ...initialState?.columns },
       }}
       slotProps={{
         pagination: { labelRowsPerPage: TABLE_ROWS_PER_PAGE_LABEL },
