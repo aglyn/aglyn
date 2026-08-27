@@ -57,6 +57,7 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
 import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
+import { formatStaffTimestamp } from '../../../../utils/staff-timestamps'
 
 interface AdminUser {
   uid: string
@@ -497,16 +498,12 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">
-                          {record.createdAt
-                            ? new Date(record.createdAt).toLocaleDateString()
-                            : '—'}
+                          {formatStaffTimestamp(record.createdAt)}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">
-                          {record.lastSignInAt
-                            ? new Date(record.lastSignInAt).toLocaleDateString()
-                            : '—'}
+                          {formatStaffTimestamp(record.lastSignInAt)}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">

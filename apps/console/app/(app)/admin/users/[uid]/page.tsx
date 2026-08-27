@@ -60,6 +60,7 @@ import { useImpersonationReason } from '../../../../../components/staff-imperson
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 
 interface UserDetail {
   user: {
@@ -417,9 +418,11 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 {`Providers: ${detail.user.providers.join(', ') || '—'}`}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {`Created ${detail.user.createdAt ?? '—'} · last sign-in ${
-                                  detail.user.lastSignInAt ?? '—'
-                                }`}
+                                {`Created ${formatStaffTimestamp(
+                                  detail.user.createdAt,
+                                )} · last sign-in ${formatStaffTimestamp(
+                                  detail.user.lastSignInAt,
+                                )}`}
                               </Typography>
                               {/* Phone + do-not-contact (AGL-1569). The number is
                                   collected under Privacy Policy v4 §11 for upsell and

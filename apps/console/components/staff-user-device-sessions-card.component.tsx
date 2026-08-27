@@ -28,7 +28,6 @@ import {
   DialogTitle,
   List,
   ListItem,
-  ListItemSecondaryAction,
   ListItemText,
   Typography,
 } from '@mui/material'
@@ -223,8 +222,26 @@ export function StaffUserDeviceSessionsCard({
             {rows.map((device) => {
               const revokedAt = revoked[device.id] ?? device.revokedAtMs
               return (
-                <ListItem key={device.id} disableGutters>
+                <ListItem
+                  key={device.id}
+                  disableGutters
+                  /**
+                   * A flex row, not an absolutely-positioned action
+                   * (AGL-1482). `ListItemSecondaryAction` takes the button
+                   * out of flow and pins it to the right edge, and the text
+                   * beside it reserves nothing — so a device line long
+                   * enough to wrap ran straight under "SIGN OUT", with the
+                   * two drawn on top of each other.
+                   *
+                   * In flow the button cannot be overlapped whatever the
+                   * text does, and it does not depend on guessing a gutter
+                   * wide enough for the widest label (this one alternates
+                   * between "Sign out" and "Signed out").
+                   */
+                  sx={{ alignItems: 'flex-start', gap: 2 }}
+                >
                   <ListItemText
+                    sx={{ my: 0 }}
                     primary={
                       device.deviceName ||
                       device.userAgent ||
@@ -259,16 +276,18 @@ export function StaffUserDeviceSessionsCard({
                         .join(' · ')
                     }
                   />
-                  <ListItemSecondaryAction>
-                    <Button
-                      size="small"
-                      color="error"
-                      disabled={busy || Boolean(revokedAt)}
-                      onClick={() => setConfirming(device)}
-                    >
-                      {revokedAt ? 'Signed out' : 'Sign out'}
-                    </Button>
-                  </ListItemSecondaryAction>
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={busy || Boolean(revokedAt)}
+                    onClick={() => setConfirming(device)}
+                    // Never squeezed by the text beside it, and level with
+                    // the device name rather than floating in the middle of
+                    // a wrapped block.
+                    sx={{ flexShrink: 0, alignSelf: 'flex-start' }}
+                  >
+                    {revokedAt ? 'Signed out' : 'Sign out'}
+                  </Button>
                 </ListItem>
               )
             })}
