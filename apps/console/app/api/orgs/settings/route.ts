@@ -21,6 +21,7 @@ import { stripeAddressDivergence } from '../../../../utils/stripe-address-diverg
 import { isBrandingImageUrl, isBrandingLinkUrl } from '../../_lib/branding-url'
 import { assessOwnershipTransferLockout } from '../../_lib/sso-transfer-lockout'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
@@ -137,6 +138,10 @@ async function handler(request: Request): Promise<Response> {
         .set(
           {
             name,
+            // Kept in step with `name` (AGL-693) — the staff list's search
+            // orders by this, so a rename that did not update it would make
+            // the organization findable only under its old name.
+            nameLower: nameSearchKey(name),
             updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true },

@@ -42,6 +42,7 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
+import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 // LEAF MODULE, NOT THE BARREL (AGL-1289). This file is itself reachable
 // through `@aglyn/aglyn/server`, and the verdict route proved this week that a
 // constant pulled from that barrel inside the cycle typechecks and then
@@ -265,6 +266,21 @@ export async function createOrganization(
     )
     tx.set(db.collection('orgs').doc(orgId), {
       name,
+      /*
+       * The searchable form of `name`, written beside it (AGL-693).
+       *
+       * Firestore cannot search a string it has not been given in search
+       * form: a prefix range needs the normalized key to ORDER by, and
+       * `name` carries case and stray whitespace. Without this the staff
+       * organization list can only filter the rows already on screen — ten
+       * of them — which stops being a search the moment there are more
+       * organizations than a page.
+       *
+       * Denormalized rather than computed at query time because there is no
+       * query-time in Firestore. Every writer of `name` owes this field; the
+       * rename in `/api/orgs/settings` is the other one.
+       */
+      nameLower: nameSearchKey(name),
       slug,
       ownerUid,
       // Stamped once and never mutated — `transferOrgOwnership` moves

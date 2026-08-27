@@ -173,6 +173,14 @@ export function useStaffListPagination<TRow>({
 
   useEffect(() => {
     if (!enabled) return
+    /*
+     * A new `loadPage` means a new QUERY — a different search term, a
+     * different page size. Every cursor collected so far names a position in
+     * the OLD walk and would resume somewhere unrelated, so the walk starts
+     * over. Doing it here rather than only in `setPageSize` covers the
+     * callers that change the query some other way.
+     */
+    pageCursorsRef.current = [null]
     void loadPage(0)
   }, [enabled, loadPage])
 

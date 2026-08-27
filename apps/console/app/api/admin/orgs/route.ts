@@ -26,6 +26,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -81,14 +82,61 @@ async function handler(request: Request): Promise<Response> {
     const byId = firebaseAdmin.firestore.FieldPath.documentId()
     // One extra row tells us whether a next page exists.
     const pageSize = resolvePageSize(query['pageSize'])
-    let ref = db.collection('orgs').orderBy(byId).limit(pageSize + 1)
-    if (after) {
-      ref = db
-        .collection('orgs')
-        .orderBy(byId)
-        .startAfter(after)
-        .limit(pageSize + 1)
-    }
+    /*
+     * SEARCH RUNS ON THE SERVER, or it is not a search (AGL-693).
+     *
+     * The staff list is paged, so a filter applied in the browser sees the
+     * rows on screen and nothing else — ten of them by default. That reads
+     * as "no such organization" for every organization past the first page,
+     * which is the answer a search must never give wrongly.
+     *
+     * A Firestore prefix range over the normalized `nameLower` finds a match
+     * anywhere in the collection, at the cost of being anchored at the START
+     * of the name: this matches "acme" for "Acme Coffee" and does not match
+     * "coffee". That limit is real and worth stating — `contains` is not
+     * something Firestore can answer without a search service — but it beats
+     * a filter that cannot see past the page it is standing on.
+     *
+     * `orderBy(nameLower)` alone needs no composite index; single-field
+     * indexes are automatic in both directions.
+     *
+     * ⚠️ Ordering by `nameLower` DROPS documents that lack it. That is why
+     * the field is written by every `name` writer and backfilled by
+     * `tools/scripts/backfill-org-name-lower.mjs` — an organization missing
+     * it would be invisible to search while still listing normally.
+     */
+    const search = nameSearchKey(String(query['search'] ?? ''))
+    const orgsRef = db.collection('orgs')
+    /*
+     * The cursor stays a DOCUMENT ID in both modes, and is resolved to a
+     * snapshot before it is used.
+     *
+     * A search page is ordered by `nameLower`, so a raw string cursor would
+     * be compared against that field rather than the id — and `nameLower` is
+     * not unique. Two organizations sharing a name would make
+     * `startAfter('acme')` skip whichever of them came second, silently, on
+     * a staff list whose whole job is that nobody is missing.
+     *
+     * `startAfter(snapshot)` compares every ordering field INCLUDING the
+     * `__name__` Firestore appends to all of them, so it is exact whatever
+     * the ordering is. An unresolvable cursor restarts at the top rather
+     * than throwing.
+     */
+    const afterDoc = after
+      ? await orgsRef
+          .doc(after)
+          .get()
+          .catch(() => null)
+      : null
+    const base = search
+      ? orgsRef
+          .orderBy('nameLower')
+          .startAt(search)
+          .endAt(`${search}\uf8ff`)
+      : orgsRef.orderBy(byId)
+    const ref = (
+      afterDoc?.exists ? base.startAfter(afterDoc) : base
+    ).limit(pageSize + 1)
     const snapshot = await ref.get()
     const docs = snapshot.docs
     const more = docs.length > pageSize

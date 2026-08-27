@@ -37,7 +37,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { GridColDef } from '@mui/x-data-grid'
 import { mdiChartLine } from '@aglyn/shared-data-mdi'
@@ -86,12 +86,32 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // (AGL-2486) — it was written here and the Users list had none, and the
   // cheap fix for that was a second copy of this block. The page size is the
   // route's (`PAGE_SIZE`, 25), not the screen's; nothing here decides it.
+  /** The debounced term the toolbar's quick filter last settled on. */
+  const [search, setSearch] = useState('')
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /*
+   * Debounced, because each settled term is a Firestore query and a fast
+   * typist would otherwise spend one per keystroke. Cleared on unmount so a
+   * pending keystroke cannot set state on a page that has gone.
+   */
+  const onQuickFilter = useCallback((value: string) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => setSearch(value.trim()), 300)
+  }, [])
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    },
+    [],
+  )
+
   const fetchOrgsPage = useCallback(
     async (cursor: string | null, _pageIndex: number, pageSize: number) => {
       const idToken = await (user as { getIdToken?: () => Promise<string> })
         ?.getIdToken?.()
       const url = new URL('/api/admin/orgs', window.location.origin)
       url.searchParams.set('pageSize', String(pageSize))
+      if (search) url.searchParams.set('search', search)
       if (cursor) url.searchParams.set('after', cursor)
       const response = await fetch(url.toString(), {
         headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
@@ -104,7 +124,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         nextCursor: payload.nextCursor ?? null,
       }
     },
-    [user],
+    [user, search],
   )
   const reportOrgsError = useCallback(() => {
     enqueueSnackbar('Could not load organizations', { variant: 'error' })
@@ -117,18 +137,22 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { rows: orgDocs, loading, refresh } = pagination
 
   /*
-   * Search and sort are the GRID's now (AGL-693).
+   * Search runs on the SERVER; sorting is the grid's (AGL-693).
    *
-   * Both were bespoke: a `Sort` select offering three of the table's own
-   * columns, and a text box filtering the current page. The grid does both,
-   * with controls a reader already knows from every other list — and a
-   * second search box beside the toolbar's own was simply two of the same
-   * thing.
+   * Both used to be bespoke and both were wrong at scale: a `Sort` select
+   * offering three of the table's own columns, and a text box that filtered
+   * the rows already fetched. This list is paged, so filtering in the browser
+   * answered "no such organization" for every organization past the first
+   * page — an answer a search must never give wrongly.
    *
-   * The reach is preserved rather than assumed: the old box matched id, name,
-   * slug and plan, and the name column carries a quick-filter matcher for
-   * exactly that set. Page-scoped either way — this list is server-paged, and
-   * neither control has ever searched past the rows on screen.
+   * The toolbar's quick filter now drives `/api/admin/orgs?search=`, a
+   * Firestore prefix range over the normalized `nameLower`. Debounced,
+   * because each keystroke is a query.
+   *
+   * ⚠️ Prefix, not contains: "acme" finds "Acme Coffee" and "coffee" does
+   * not. Firestore cannot answer contains without a search service, and a
+   * prefix that reaches the whole collection beats a contains that cannot
+   * see past ten rows.
    */
   const orgs = orgDocs
 
@@ -182,16 +206,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         flex: 1.4,
         minWidth: 200,
         valueGetter: (_value, row: any) => String(row.name ?? row.$id),
-        // What the removed box used to match. Sorting stays on the name
-        // alone; only the search widens.
-        getApplyQuickFilterFn: (value: string) => {
-          const needle = String(value ?? '').trim().toLowerCase()
-          if (!needle) return null
-          return (_cell: unknown, row: any) =>
-            [row.$id, row.name, row.slug, row.plan]
-              .filter(Boolean)
-              .some((entry) => String(entry).toLowerCase().includes(needle))
-        },
         renderCell: ({ row }: any) => (
           /*
            * Two lines inside one row, so the pair has to FIT it.
@@ -433,6 +447,17 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   rows={orgs}
                   columns={orgColumns}
                   loading={loading}
+                  /*
+                   * The grid must NOT also filter. With the server answering
+                   * the search, a second client-side pass over the returned
+                   * page would drop rows the query already matched — the
+                   * prefix range matches `nameLower`, and the grid compares
+                   * against whatever a column happens to render.
+                   */
+                  filterMode="server"
+                  onFilterModelChange={(model) =>
+                    onQuickFilter((model.quickFilterValues ?? []).join(' '))
+                  }
                   // The row IS the way in, on every list in the console.
                   onOpen={(id) =>
                     router.push(

@@ -19,9 +19,22 @@
 // so the switchers' name-prefix query finds pre-existing screens and sites, not
 // only ones created/renamed after the write-path change shipped.
 //
-// Scope: `hosts/{hostId}` (from displayName) and `hosts/{hostId}/screens`
-// (from displayName). Layouts and orgs are intentionally NOT touched — they
-// stay client-filtered, so a nameLower on them would be an index nothing reads.
+// Scope: `hosts/{hostId}` and `hosts/{hostId}/screens` (both from
+// displayName), and `orgs/{orgId}` (from name).
+//
+// ORGS WERE DELIBERATELY EXCLUDED, and are not any more (AGL-693). The
+// original reason was sound — "they stay client-filtered, so a nameLower on
+// them would be an index nothing reads" — and it stopped being true when the
+// staff organization list moved its search to the server. A filter applied in
+// the browser sees the rows on screen, ten of them, which answers "no such
+// organization" for every organization past the first page.
+//
+// ⚠️ Until this has run, an org WITHOUT `nameLower` is invisible to that
+// search: `orderBy('nameLower')` drops documents that lack the field. It
+// still lists normally, which is what makes the gap quiet.
+//
+// Layouts stay excluded, and for the original reason: nothing reads a
+// nameLower on them.
 //
 // Dry-run by default (reads + prints the plan, writes nothing). Pass --commit
 // to apply. Idempotent: re-running converges (a doc whose nameLower already
@@ -170,10 +183,38 @@ for (const hostDoc of hostSnap.docs) {
   }
 }
 
+// Organizations — the staff list's server-side search orders by this.
+let orgsScanned = 0
+let orgsChanged = 0
+if (!ONLY_HOST) {
+  const orgSnap = await firestore
+    .collection('orgs')
+    .select('name', 'nameLower')
+    .get()
+  for (const orgDoc of orgSnap.docs) {
+    orgsScanned += 1
+    const org = orgDoc.data()
+    // An org with no name has nothing to key on. Skipped rather than
+    // stamped with an empty string: `orderBy` would then place it at the
+    // very front of every prefix range it does not belong to.
+    if (typeof org.name !== 'string' || !org.name.trim()) continue
+    const want = nameSearchKey(org.name)
+    if (org.nameLower !== want) {
+      orgsChanged += 1
+      await stamp(orgDoc.ref, want)
+    }
+  }
+}
+
 if (COMMIT && buffered > 0) await batch.commit()
 
 console.log(`hosts:   scanned=${hostsScanned} changed=${hostsChanged}`)
 console.log(`screens: scanned=${screensScanned} changed=${screensChanged}`)
+console.log(
+  ONLY_HOST
+    ? 'orgs:    skipped (--host limits this run to one site)'
+    : `orgs:    scanned=${orgsScanned} changed=${orgsChanged}`,
+)
 console.log(
   `\n${COMMIT ? `Committed ${written} update(s).` : `Dry-run — ${written} update(s) planned. Re-run with --commit to apply.`}\n`,
 )
