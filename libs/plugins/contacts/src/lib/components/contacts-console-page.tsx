@@ -27,9 +27,23 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
+import {
+  gridFilterRequest,
+  hiddenFilterColumns,
+  hiddenFilterVisibility,
+  listFilterColumn,
+  type ListFilterRequest,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { GridColDef } from '@mui/x-data-grid'
+import {
+  CONTACT_LIST_FILTER_FIELDS,
+  CONTACT_LIST_FILTER_HEADERS,
+} from '../constants/contact-filters'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  listFilterConstraints,
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
@@ -43,11 +57,6 @@ import {
   MenuItem,
   Drawer,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -58,6 +67,7 @@ import {
   doc,
   getCountFromServer,
   limit,
+  orderBy,
   query,
   updateDoc,
 } from 'firebase/firestore'
@@ -115,6 +125,12 @@ const csvEscape = (value: unknown) => {
  * gate (via the nav tab) and passes the resolved `org` doc for the
  * `contactsPerHost` quota check.
  */
+/**
+ * The filterable fields that get a column. The rest of
+ * `CONTACT_LIST_FILTER_FIELDS` still reaches the filter panel, hidden.
+ */
+const CONTACT_FILTER_COLUMNS = ['name', 'sources', 'tags', 'updatedAt']
+
 export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org, releaseFlag } = props
   // Whether the audience overage on this page is actually INVOICED
@@ -146,6 +162,11 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
+  /*
+   * The column filter, declared BEFORE the listener that reads it — the query
+   * is rebuilt from it, so it cannot be state introduced further down.
+   */
+  const [filter, setFilter] = useState<ListFilterRequest | null>(null)
   const {
     data: contactDocs,
     status: contactsStatus,
@@ -161,21 +182,42 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
      */
     fromCache: contactsFromCache,
   } = useFirestoreCollection<any>(
-    () =>
-      dataScope
-        ? query(
-            collection(firestore, dataScope[0], dataScope[1], 'contacts'),
-            limit(1000),
-          )
-        : null,
-    [firestore, dataScope],
+    () => {
+      if (!dataScope) return null
+      /*
+       * ORDERED, and filtered by the QUERY (AGL-693, AGL-2292).
+       *
+       * Two bugs shared this one line. `limit(1000)` with no `orderBy` returns
+       * documents in ID order — contacts are created with `.add()` and
+       * `createResourceUid()`, so that is a pseudo-random SAMPLE of a thousand,
+       * and the client `.sort()` below made it look reliably newest-first. An
+       * org with forty thousand contacts saw a thousand arbitrary ones,
+       * convincingly sorted.
+       *
+       * The search then ran over that sample, so a name on the wrong side of
+       * the cap answered "no contacts match" — the answer a search must never
+       * give wrongly, on the list a merchant uses to find one person.
+       *
+       * The cap STAYS: nobody needs forty thousand rows streamed into a table,
+       * and the head-count has been a server aggregate since AGL-1706. What
+       * changes is that the thousand are now the newest thousand, and that a
+       * filter reaches the whole collection before the cap applies.
+       */
+      const constraints = listFilterConstraints(
+        CONTACT_LIST_FILTER_FIELDS,
+        filter,
+      )
+      return query(
+        collection(firestore, dataScope[0], dataScope[1], 'contacts'),
+        ...(constraints ?? [orderBy('updatedAt', 'desc')]),
+        limit(1000),
+      )
+    },
+    [firestore, dataScope, filter],
     { idField: '$id' },
   )
   const contacts: ContactDoc[] = useMemo(
-    () =>
-      [...(contactDocs ?? [])].sort(
-        (a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0),
-      ),
+    () => [...(contactDocs ?? [])],
     [contactDocs],
   )
   /**
@@ -286,7 +328,6 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
 
-  const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<'' | ContactSource>('')
   const [tagFilter, setTagFilter] = useState('')
   const filterSegment: Pick<ContactSegment, 'tags' | 'sources'> = useMemo(
@@ -302,18 +343,120 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   const filterActive = Boolean(
     filterSegment.tags?.length || filterSegment.sources?.length,
   )
-  const visible = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return contacts.filter((contact) => {
-      if (!contactMatchesSegment(contact, filterSegment)) return false
-      if (!term) return true
-      return [contact.email, contact.name, ...(contact.tags ?? [])]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(term)
-    })
-  }, [contacts, search, filterSegment])
+  /*
+   * The SEGMENT controls still narrow in the browser, and say so below.
+   *
+   * They are a different feature from the search: a segment is saved and
+   * becomes a campaign audience, and `contactMatchesSegment` is the one
+   * predicate that both the console and the sender read. Pushing it into the
+   * query would need a second copy of it in Firestore terms — and two copies
+   * of "who is in this audience" is how a campaign goes to the wrong people.
+   *
+   * So it refines the ordered window rather than the collection, which the
+   * caption states rather than leaving to be discovered. The free-text search
+   * that used to sit beside it is the grid's now, and reaches everything.
+   */
+  const visible = useMemo(
+    () =>
+      contacts.filter((contact) =>
+        contactMatchesSegment(contact, filterSegment),
+      ),
+    [contacts, filterSegment],
+  )
+
+  /* One row grammar, the console's (AGL-693) — the same table everywhere. */
+  const contactColumns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Contact',
+        flex: 1.6,
+        minWidth: 240,
+        ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'name'),
+        valueGetter: (_value, row: any) => String(row.name || row.email || ''),
+        renderCell: ({ row }: any) => (
+          <Stack sx={{ justifyContent: 'center', height: '100%', lineHeight: 1.25 }}>
+            <Typography variant="body2" sx={{ lineHeight: 1.25 }}>
+              {row.name || row.email}
+            </Typography>
+            {row.name ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ lineHeight: 1.25 }}
+                noWrap
+              >
+                {row.email}
+              </Typography>
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'sources',
+        headerName: 'Sources',
+        flex: 1,
+        minWidth: 160,
+        // A map of provenance flags, not a scalar — `sources.form == true` is
+        // queryable one key at a time, which is a menu of its own rather than
+        // a filter on this column.
+        filterable: false,
+        sortable: false,
+        valueGetter: (_value, row: any) =>
+          Object.keys(row.sources ?? {}).join(', '),
+        renderCell: ({ row }: any) => (
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ alignItems: 'center', height: '100%' }}
+          >
+            {Object.keys(row.sources ?? {}).map((source) => (
+              <Chip
+                key={source}
+                label={SOURCE_LABELS[source as ContactSource] ?? source}
+                size="small"
+              />
+            ))}
+          </Stack>
+        ),
+      },
+      {
+        field: 'tags',
+        headerName: 'Tags',
+        flex: 1,
+        minWidth: 150,
+        ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'tags'),
+        sortable: false,
+        valueGetter: (_value, row: any) => (row.tags ?? []).join(', '),
+        renderCell: ({ row }: any) => (row.tags ?? []).slice(0, 3).join(', '),
+      },
+      {
+        field: 'updatedAt',
+        headerName: 'Last activity',
+        flex: 0.8,
+        minWidth: 150,
+        // `type: 'date'` is what gives the panel a date PICKER rather than a
+        // free-text box for a value the query reads as a day.
+        type: 'date',
+        ...listFilterColumn(CONTACT_LIST_FILTER_FIELDS, 'updatedAt'),
+        valueGetter: (_value, row: any) =>
+          row.updatedAt?.seconds ? new Date(row.updatedAt.seconds * 1000) : null,
+        renderCell: ({ row }: any) => (
+          <Typography variant="caption" color="text.secondary">
+            {row.interactions?.[0]
+              ? new Date(row.interactions[0].atMs).toLocaleDateString()
+              : '—'}
+          </Typography>
+        ),
+      },
+      ...hiddenFilterColumns(
+        CONTACT_LIST_FILTER_FIELDS,
+        CONTACT_FILTER_COLUMNS,
+        CONTACT_LIST_FILTER_HEADERS,
+      ),
+    ],
+    [],
+  )
 
   const [segmentName, setSegmentName] = useState('')
   const handleSaveSegment = useCallback(async () => {
@@ -518,13 +661,6 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
             spacing={1}
             sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
           >
-            <TextField
-              size="small"
-              label="Search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              sx={{ minWidth: 220 }}
-            />
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
               {/* The org's audience, not the page's row count (AGL-1706) —
                   these two stopped being the same number the moment the
@@ -697,62 +833,42 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                 'orders, and bookings all become contacts automatically.'}
             </Typography>
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Contact'}</TableCell>
-                  <TableCell>{'Sources'}</TableCell>
-                  <TableCell>{'Tags'}</TableCell>
-                  <TableCell align="right">{'Last activity'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visible.map((contact) => (
-                  <TableRow
-                    key={contact.$id}
-                    hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => openContact(contact)}
-                  >
-                    <TableCell>
-                      <Typography variant="body2">
-                        {contact.name || contact.email}
-                      </Typography>
-                      {contact.name ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {contact.email}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={0.5}>
-                        {Object.keys(contact.sources ?? {}).map((source) => (
-                          <Chip
-                            key={source}
-                            label={
-                              SOURCE_LABELS[source as ContactSource] ?? source
-                            }
-                            size="small"
-                          />
-                        ))}
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
-                      {(contact.tags ?? []).slice(0, 3).join(', ')}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="caption" color="text.secondary">
-                        {contact.interactions?.[0]
-                          ? new Date(
-                              contact.interactions[0].atMs,
-                            ).toLocaleDateString()
-                          : '—'}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              {/* The segment controls refine the loaded window; the search
+                  and the column filters reach the whole collection. Said out
+                  loud, because a control that narrows less than it looks like
+                  it does is the thing this page has been fixing. */}
+              {filterActive ? (
+                <Typography variant="caption" color="text.secondary">
+                  {'Source and tag narrow the loaded window. Search and the ' +
+                    'column filters reach every contact.'}
+                </Typography>
+              ) : null}
+              <ListTable
+                rows={visible}
+                columns={contactColumns}
+                onOpen={(id) => {
+                  const found = visible.find((row) => row.$id === id)
+                  if (found) openContact(found)
+                }}
+                /*
+                 * The grid must NOT also filter. The query answers it, so a
+                 * client pass could only drop rows the query already matched.
+                 */
+                filterMode="server"
+                onFilterModelChange={(model) =>
+                  setFilter(gridFilterRequest(model))
+                }
+                initialState={{
+                  columns: {
+                    columnVisibilityModel: hiddenFilterVisibility(
+                      CONTACT_LIST_FILTER_FIELDS,
+                      CONTACT_FILTER_COLUMNS,
+                    ),
+                  },
+                }}
+              />
+            </>
           )}
         </Stack>
       </CardDisplay>

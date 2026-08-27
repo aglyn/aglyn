@@ -161,7 +161,7 @@ export function applyListFilter(
     if (op === 'contains' && field.tokensPath) {
       const token = nameSearchToken(raw)
       if (!token) return null
-      const sortBy = options.containsOrderBy ?? field.lowerPath ?? field.path
+      const sortBy = field.containsOrderBy ?? options.containsOrderBy ?? field.lowerPath ?? field.path
       const contains = ref.where(field.tokensPath, 'array-contains', token)
       return pinned ? contains : contains.orderBy(sortBy)
     }

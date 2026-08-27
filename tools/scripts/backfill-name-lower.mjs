@@ -310,10 +310,58 @@ if (!ONLY_HOST) {
   }
 }
 
+/*
+ * Contacts — the CRM list searches these on the server.
+ *
+ * A collection-group read: contacts live at `orgs/{orgId}/contacts`, and the
+ * console reads them scoped to a host. `email` needs no key of its own —
+ * `normalizeContactEmail` lower-cases before every write.
+ */
+let contactsScanned = 0
+let contactsChanged = 0
+if (!ONLY_HOST) {
+  const contactSnap = await firestore
+    .collectionGroup('contacts')
+    .select('name', 'nameLower', 'nameTokens', 'nameReversed')
+    .get()
+  for (const contactDoc of contactSnap.docs) {
+    contactsScanned += 1
+    const contact = contactDoc.data()
+    // A contact with no name has nothing to key on — they are still findable
+    // by email, which is its own key. Skipped rather than stamped with an
+    // empty string, which `orderBy` would sort to the front of every prefix
+    // range it does not belong to.
+    if (typeof contact.name !== 'string' || !contact.name.trim()) continue
+    const want = nameSearchKey(contact.name)
+    const wantTokens = nameSearchTokens(contact.name)
+    const haveTokens = Array.isArray(contact.nameTokens)
+      ? contact.nameTokens
+      : null
+    const tokensDiffer =
+      !haveTokens ||
+      haveTokens.length !== wantTokens.length ||
+      wantTokens.some((token, index) => haveTokens[index] !== token)
+    const wantReversed = nameSearchReversed(contact.name)
+    if (
+      contact.nameLower !== want ||
+      tokensDiffer ||
+      contact.nameReversed !== wantReversed
+    ) {
+      contactsChanged += 1
+      await stampFields(contactDoc.ref, {
+        nameLower: want,
+        nameTokens: wantTokens,
+        nameReversed: wantReversed,
+      })
+    }
+  }
+}
+
 if (COMMIT && buffered > 0) await batch.commit()
 
 console.log(`hosts:   scanned=${hostsScanned} changed=${hostsChanged}`)
 console.log(`members: scanned=${membersScanned} changed=${membersChanged}`)
+console.log(`contacts:scanned=${contactsScanned} changed=${contactsChanged}`)
 console.log(`screens: scanned=${screensScanned} changed=${screensChanged}`)
 console.log(
   ONLY_HOST

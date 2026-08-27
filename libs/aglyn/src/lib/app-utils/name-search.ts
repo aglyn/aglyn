@@ -123,3 +123,34 @@ export function nameSearchToken(query: string | null | undefined): string {
 export function nameSearchReversed(name: string | null | undefined): string {
   return [...nameSearchKey(name)].reverse().join('')
 }
+
+/**
+ * The three search fields that travel with a `name`, as one object.
+ *
+ * Every collection whose list is SEARCHED on the server carries them, and
+ * carrying only some is the failure mode worth designing against: `orderBy`
+ * drops a document missing the field it sorts by, and `array-contains` drops
+ * one missing the array. Either way the record still LISTS normally, so the
+ * gap shows up only as a search that quietly cannot find one row.
+ *
+ * ⚠️ Spread this at every write that sets `name`, and only where `name` is
+ * actually being written — a partial write that stamped an empty key over a
+ * real one would make the document unfindable by the name it still displays.
+ */
+export function nameSearchFields(name: string): {
+  name: string
+  nameLower: string
+  nameTokens: string[]
+  nameReversed: string
+} {
+  // `name` is INCLUDED so this is a drop-in replacement for writing `{ name }`.
+  // A helper that returned only the derived keys would be spread beside the
+  // name at four call sites, and the one that forgot would write search keys
+  // for a name it never stored.
+  return {
+    name,
+    nameLower: nameSearchKey(name),
+    nameTokens: nameSearchTokens(name),
+    nameReversed: nameSearchReversed(name),
+  }
+}

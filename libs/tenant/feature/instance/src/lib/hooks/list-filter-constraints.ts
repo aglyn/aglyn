@@ -141,7 +141,7 @@ export function listFilterConstraints(
     if (op === 'contains' && field.tokensPath) {
       const token = key(raw).split(' ')[0]
       if (!token) return null
-      const sortBy = options.containsOrderBy ?? field.lowerPath ?? field.path
+      const sortBy = field.containsOrderBy ?? options.containsOrderBy ?? field.lowerPath ?? field.path
       return [
         where(field.tokensPath, 'array-contains', token),
         ...(pinned ? [] : [orderBy(sortBy)]),

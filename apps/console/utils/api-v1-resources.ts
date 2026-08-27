@@ -20,6 +20,7 @@
  * org-scoped from the authenticated key (see api-v1.ts). Datasets/records are
  * the headline CRUD surface; sites, form submissions, and contacts are read.
  */
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   type AttemptClaim,
   checkApiRequestQuota,
@@ -2608,7 +2609,9 @@ async function createContact(
     const id = createResourceUid()
     await collection.doc(id).create({
       email,
-      ...(name ? { name } : {}),
+      // The search keys travel with the name — the console's contact list
+      // searches the whole collection, not the page it fetched.
+      ...(name ? nameSearchFields(name) : {}),
       tags: tags ?? [],
       ...(notes ? { notes } : {}),
       ...(marketingConsent
@@ -2667,7 +2670,9 @@ async function updateContact(
 
   const { name, tags, notes, marketingConsent } = parsed.values
   const update: Record<string, unknown> = {}
-  if (name !== undefined) update.name = name
+  // A rename must move the search keys with it, or the contact stays findable
+  // only by the name they no longer have.
+  if (name !== undefined) Object.assign(update, nameSearchFields(name))
   if (tags !== undefined) update.tags = tags
   if (notes !== undefined) update.notes = notes
   if (marketingConsent !== undefined) {

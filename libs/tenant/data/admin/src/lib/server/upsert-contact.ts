@@ -25,6 +25,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   getOrgForHost,
   orgDataCollectionForHost,
@@ -127,7 +128,10 @@ export async function upsertHostContact(options: {
       )
       await docSnapshot.ref.set(
         {
-          ...(merged.name ? { name: merged.name } : {}),
+          // The search keys travel WITH the name, and only when the name is
+          // written: stamping an empty key over a real one would make the
+          // contact unfindable by the name it still displays.
+          ...(merged.name ? nameSearchFields(merged.name) : {}),
           sources: merged.sources,
           interactions: merged.interactions,
           ...(options.marketingConsent
@@ -181,7 +185,7 @@ export async function upsertHostContact(options: {
       // that lacks it (AGL-1037).
       visibleTo: [ORG_SCOPE_TOKEN],
       email,
-      ...(options.name ? { name: options.name.slice(0, 120) } : {}),
+      ...(options.name ? nameSearchFields(options.name.slice(0, 120)) : {}),
       sources: { [options.source]: true },
       interactions: [interaction],
       tags: [],

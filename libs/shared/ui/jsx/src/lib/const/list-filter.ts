@@ -93,6 +93,15 @@ export interface ListFilterField {
   lowerPath?: string
   /** Word-prefix token array, for `contains`. */
   tokensPath?: string
+  /**
+   * What a `contains` orders by. Defaults to `lowerPath`, then `path`.
+   *
+   * A field whose `tokensPath` IS its own value — a real tag array, matched
+   * whole rather than by word prefix — has no lower-case twin to sort by, and
+   * defaulting to `path` would order by the array itself. Naming a scalar here
+   * keeps the composite index that combination needs an ordinary one.
+   */
+  containsOrderBy?: string
   /** The reversed key, for `endsWith`. */
   reversedPath?: string
   /**
