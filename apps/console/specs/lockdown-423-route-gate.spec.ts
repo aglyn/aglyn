@@ -67,6 +67,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: (...args: unknown[]) => mockGetOrgForHost(...args),
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
+  // A deployment with no domain provider, which is what this file models: the
+  // registration calls report `skipped`, neither a success nor a failure, and
+  // the Firestore write stays the one observable mutation the gate protects.
+  attachProjectDomain: async (domain: string) => ({ outcome: 'skipped', domain }),
+  detachProjectDomain: async (domain: string) => ({ outcome: 'skipped', domain }),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),

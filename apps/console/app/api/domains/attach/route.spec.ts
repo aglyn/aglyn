@@ -160,6 +160,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
   ),
+  // The REAL provider seam, reached the same way and for the same reason: it
+  // is what turns a name into an outbound call, and the `fetch` double below
+  // is the only thing standing in for the network. A stub here would make
+  // every assertion about what we sent an assertion about the stub.
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/domain-provider',
+  ),
   // The REAL `validatePlatformDomain` too, and for the same reason (AGL-1430):
   // stubbing the blocklist would turn every reserved-name test below into a
   // test of the stub. Its own suite in `platform-domain-names.spec.ts` pins the
@@ -225,6 +232,26 @@ function respond(status: number, body: unknown = {}) {
     status,
     json: async () => body,
   } as unknown as Response
+}
+
+/**
+ * Every outbound call that concerns `{subdomain}.aglyn.app`.
+ *
+ * The name reaches the provider two ways — in the PATH when an entry that
+ * already exists is repointed, and in the BODY when the entry is created
+ * carrying its redirect. Matching only the URL therefore reads a successful
+ * registration as "no redirect was sent", which would pass a route that had
+ * quietly reverted AGL-1273.
+ */
+function redirectCalls(name = 'mine.aglyn.app') {
+  return fetchMock.mock.calls.filter(([url, init]) => {
+    if (String(url).includes(name)) return true
+    try {
+      return JSON.parse(String(init?.body ?? '{}'))?.name === name
+    } catch {
+      return false
+    }
+  })
 }
 
 beforeEach(() => {
@@ -355,8 +382,8 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBe(true)
     // No edge redirect: the platform subdomain must keep serving the site.
     expect(
-      fetchMock.mock.calls.some(([url]) => String(url).includes('mine.aglyn.app')),
-    ).toBe(false)
+      redirectCalls().length,
+    ).toBe(0)
   })
 
   it('hands back the ownership challenge instead of a green tick', async () => {
@@ -382,8 +409,8 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBe(true)
     // …and no edge redirect is registered on the platform subdomain.
     expect(
-      fetchMock.mock.calls.some(([url]) => String(url).includes('mine.aglyn.app')),
-    ).toBe(false)
+      redirectCalls().length,
+    ).toBe(0)
   })
 
   it('withholds the subdomain redirect when the platform says DNS points elsewhere', async () => {
@@ -404,8 +431,8 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     })
     expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBe(true)
     expect(
-      fetchMock.mock.calls.some(([url]) => String(url).includes('mine.aglyn.app')),
-    ).toBe(false)
+      redirectCalls().length,
+    ).toBe(0)
   })
 
   it('a domain with no certificate yet is NOT serving — no redirect, flag stays', async () => {
@@ -434,8 +461,8 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     })
     expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBe(true)
     expect(
-      fetchMock.mock.calls.some(([url]) => String(url).includes('mine.aglyn.app')),
-    ).toBe(false)
+      redirectCalls().length,
+    ).toBe(0)
   })
 
   it('registers the subdomain redirect once the domain DOES serve — the control', async () => {
@@ -454,11 +481,10 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ state: 'serving' })
     expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBeUndefined()
-    const redirect = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes('mine.aglyn.app'),
-    )
+    const redirect = redirectCalls()[0]
     expect(redirect).toBeDefined()
-    expect(JSON.parse(redirect[1].body)).toEqual({
+    expect(JSON.parse(String(redirect[1].body))).toEqual({
+      name: 'mine.aglyn.app',
       redirect: 'example.com',
       redirectStatusCode: 307,
     })
@@ -480,9 +506,7 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     expect(response.status).toBe(200)
     expect(docs.get('hosts/mine')?.['cname']).toBe('example.com')
     expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBeUndefined()
-    expect(
-      fetchMock.mock.calls.some(([url]) => String(url).includes('mine.aglyn.app')),
-    ).toBe(true)
+    expect(redirectCalls().length).toBeGreaterThan(0)
   })
 
   it('records the gap when the platform env is missing, and claims nothing', async () => {
@@ -639,10 +663,8 @@ describe('the claim covers every name Vercel holds (AGL-1430)', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
       name: 'example.com',
     })
-    const redirect = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes('mine.aglyn.app'),
-    )
-    expect(JSON.parse(redirect[1].body)).toEqual({
+    expect(JSON.parse(String(redirectCalls()[0][1].body))).toEqual({
+      name: 'mine.aglyn.app',
       redirect: 'example.com',
       redirectStatusCode: 307,
     })

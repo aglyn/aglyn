@@ -18,6 +18,8 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isBlockedSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn/server'
 import {
+  attachProjectDomain,
+  domainProvider,
   domainStateServes,
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -205,10 +207,6 @@ async function reattachDomain(
   hostId: string,
   actorUid: string,
 ): Promise<Response> {
-  const token = process.env.VERCEL_TOKEN
-  const projectId = process.env.VERCEL_TENANT_PROJECT_ID
-  const teamId = process.env.VERCEL_TEAM_ID
-
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
@@ -224,14 +222,14 @@ async function reattachDomain(
       { status: 400 },
     )
   }
-  // The second writer to the tenant Vercel project, and therefore the second
-  // place the claim/attach correspondence can be broken (AGL-1430).
+  // The second writer to the tenant deployment's names, and therefore the
+  // second place the claim/attach correspondence can be broken (AGL-1430).
   //
   // This action cannot be pointed at an arbitrary name — it re-attaches the
   // `cname` already on the document, and the test above proves a caller-supplied
   // domain is ignored. But `/api/domains/attach` was writing reserved names into
   // that field until this change, so a host stored before it can still be
-  // carrying one, and a re-attach would put that name back on the project
+  // carrying one, and a re-attach would put that name back on the deployment
   // outside the claim. Refuse rather than launder it: the fix is to disconnect
   // the domain, not to press the button again.
   if (isPlatformReservedDomain(domain)) {
@@ -244,52 +242,43 @@ async function reattachDomain(
       { status: 409 },
     )
   }
-  if (!token || !projectId) {
-    // The same 501 the customer route and the cron give, for the same reason:
-    // on a self-hosted deployment there is no platform API to ask. NOT a 500 —
-    // nothing is broken, the capability simply is not configured, and the card
-    // renders a 501 as information rather than an error.
-    return Response.json(
+  // The same 501 the customer route and the cron give, for the same reason:
+  // a deployment that registers no names has nothing to re-attach to. NOT a
+  // 500 — nothing is broken, the capability simply is not configured, and the
+  // card renders a 501 as information rather than an error.
+  const notConfigured = () =>
+    Response.json(
       {
         error:
-          'Domain attachment is not configured (missing VERCEL_TOKEN / ' +
-          'VERCEL_TENANT_PROJECT_ID).',
+          'Domain attachment is not configured on this deployment ' +
+          '(no domain provider — set AGLYN_DOMAIN_PROVIDER).',
       },
       { status: 501 },
     )
-  }
+  if (!domainProvider().configured('tenant')) return notConfigured()
 
-  const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
-  const response = await fetch(
-    `https://api.vercel.com/v10/projects/${projectId}/domains${query}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: domain }),
-    },
-  )
-  const payload = await response.json().catch(() => null)
-  // `domain_already_in_use` is the answer for a domain that is ALREADY on the
-  // project, which is the common case for a re-attach and is success here. It
-  // is not taken as a green light: `projectDomainStatus` below asks whether
-  // the name is on OUR project rather than inferring it from the error code,
-  // so the same code coming back from a name held elsewhere still resolves to
+  // `already-exists` is the answer for a domain the deployment ALREADY holds,
+  // which is the common case for a re-attach and is success here. It is not
+  // taken as a green light: `projectDomainStatus` below asks whether the name
+  // is on OUR deployment rather than inferring it from the outcome, so the
+  // same answer coming back from a name held elsewhere still resolves to
   // `not-attached`.
-  if (!response.ok && payload?.error?.code !== 'domain_already_in_use') {
-    console.error(payload)
+  const attach = await attachProjectDomain(domain, {}, 'tenant')
+  // Configured, and still nothing registered — a provider that does not manage
+  // this particular name. Nothing was probed, so nothing is written: a verdict
+  // recorded here would be an assertion nobody made.
+  if (attach.outcome === 'skipped') return notConfigured()
+  if (attach.outcome === 'failed') {
     await hostRef
       .set({ cnameAttachmentPending: true }, { merge: true })
       .catch(() => undefined)
     return Response.json(
-      { error: payload?.error?.message ?? 'Attach failed at the platform' },
+      { error: attach.detail ?? 'Attach failed at the platform' },
       { status: 502 },
     )
   }
 
-  const status = await projectDomainStatus(domain, { projectId })
+  const status = await projectDomainStatus(domain, { scope: 'tenant' })
   const serving = domainStateServes(status.state)
   const before = hostSnapshot.get('cnameAttachmentPending') === true
   await hostRef

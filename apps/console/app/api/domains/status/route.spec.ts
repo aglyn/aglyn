@@ -121,11 +121,9 @@ beforeEach(() => {
   mockLockdownRefusal.mockResolvedValue(null)
   mockGetOrgForHost.mockReset()
   mockGetOrgForHost.mockResolvedValue({ orgId: 'org-1', org: { $id: 'org-1' } })
-  process.env.VERCEL_TENANT_PROJECT_ID = 'prj_tenant'
 })
 
 afterEach(() => {
-  delete process.env.VERCEL_TENANT_PROJECT_ID
   jest.restoreAllMocks()
 })
 
@@ -141,8 +139,11 @@ describe('it reports the live state, not the stored one', () => {
       conflicts: [],
       attachmentPending: false,
     })
+    // The TENANT scope, not the console's: a site's custom domain is served
+    // by the tenant runtime, and probing the console deployment would report
+    // every customer domain as not attached.
     expect(mockProjectDomainStatus).toHaveBeenCalledWith('example.com', {
-      projectId: 'prj_tenant',
+      scope: 'tenant',
     })
   })
 

@@ -78,6 +78,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
   ),
+  // The REAL provider seam, reached the same way and for the same reason: it
+  // is what turns a name into an outbound call, and the `fetch` double below
+  // is the only thing standing in for the network.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/domain-provider',
+  ),
   firebaseAdmin: {
     firestore: { FieldValue: { delete: () => '__delete__' } },
     app: () => ({
@@ -131,6 +137,25 @@ import { GET, POST } from '../app/api/admin/finish-domain-attachments/route'
 const ORIGINAL_ENV = process.env
 const ORIGINAL_FETCH = global.fetch
 let fetchMock: jest.Mock
+
+/**
+ * Every outbound call that concerns `{subdomain}.aglyn.app`.
+ *
+ * The name reaches the provider two ways — in the PATH when an entry that
+ * already exists is repointed, and in the BODY when the entry is created
+ * carrying its redirect. Matching only the URL therefore reads a successful
+ * registration as "no redirect was sent", which would pass a sweeper that
+ * cleared the flag and registered nothing.
+ */
+const redirectCalls = (name = 'mine.aglyn.app') =>
+  fetchMock.mock.calls.filter(([url, init]) => {
+    if (String(url).includes(name)) return true
+    try {
+      return JSON.parse(String(init?.body ?? '{}'))?.name === name
+    } catch {
+      return false
+    }
+  })
 
 const post = (body: Record<string, unknown> = {}) =>
   POST(
@@ -190,11 +215,10 @@ describe('AGL-2010 · finish-domain-attachments', () => {
     // The flag is what gates visitors. Clearing it IS the fix.
     expect(mockDocs.get('h1')?.['cnameAttachmentPending']).toBeUndefined()
     // And the edge redirect really went out, to the right name and target.
-    const redirect = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes('mine.aglyn.app'),
-    )
+    const redirect = redirectCalls()[0]
     expect(redirect).toBeDefined()
-    expect(JSON.parse(redirect[1].body)).toEqual({
+    expect(JSON.parse(String(redirect[1].body))).toEqual({
+      name: 'mine.aglyn.app',
       redirect: 'example.com',
       redirectStatusCode: 307,
     })
@@ -226,11 +250,7 @@ describe('AGL-2010 · finish-domain-attachments', () => {
         stillPending: ['example.com'],
       })
       expect(mockDocs.get('h1')?.['cnameAttachmentPending']).toBe(true)
-      expect(
-        fetchMock.mock.calls.some(([url]) =>
-          String(url).includes('mine.aglyn.app'),
-        ),
-      ).toBe(false)
+      expect(redirectCalls().length).toBe(0)
     }
   })
 
@@ -251,11 +271,7 @@ describe('AGL-2010 · finish-domain-attachments', () => {
     // Reported as completable, and NOT completed. Somebody's curl must not
     // change the world (the AGL-2084 shape).
     expect(mockDocs.get('h1')?.['cnameAttachmentPending']).toBe(true)
-    expect(
-      fetchMock.mock.calls.some(([url]) =>
-        String(url).includes('mine.aglyn.app'),
-      ),
-    ).toBe(false)
+    expect(redirectCalls().length).toBe(0)
   })
 
   it('registers a redirect that never landed, even though the domain is already live', async () => {
@@ -269,11 +285,7 @@ describe('AGL-2010 · finish-domain-attachments', () => {
 
     await post()
 
-    expect(
-      fetchMock.mock.calls.some(([url]) =>
-        String(url).includes('mine.aglyn.app'),
-      ),
-    ).toBe(true)
+    expect(redirectCalls().length).toBeGreaterThan(0)
     expect(mockDocs.get('h1')?.['subdomainRedirectPending']).toBeUndefined()
   })
 

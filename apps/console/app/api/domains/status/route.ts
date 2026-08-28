@@ -132,8 +132,10 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ domain: null, state: 'none' }, { status: 200 })
   }
 
-  const projectId = process.env.VERCEL_TENANT_PROJECT_ID
-  const status = await projectDomainStatus(domain, { projectId })
+  // `tenant`, because a site's custom domain has to be answered for by the
+  // tenant runtime — the console scope would probe the wrong deployment and
+  // report every customer domain as not attached.
+  const status = await projectDomainStatus(domain, { scope: 'tenant' })
   return Response.json({
     domain,
     state: status.state,

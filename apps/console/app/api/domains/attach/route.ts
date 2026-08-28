@@ -17,6 +17,8 @@
 
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  attachProjectDomain,
+  domainProvider,
   domainStateServes,
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -31,11 +33,11 @@ import {
 import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
 
 /**
- * Attaches a verified custom domain to the tenant Vercel project so SSL
- * provisions automatically (Custom Domain Self-Service). Degrades to 501
- * without `VERCEL_TOKEN`/`VERCEL_TENANT_PROJECT_ID` — the wizard treats
- * that as "DNS connected, platform attachment pending". Auth: Firebase ID
- * token; the caller must be an admin of the host.
+ * Attaches a verified custom domain to the tenant deployment so SSL provisions
+ * automatically (Custom Domain Self-Service). Degrades to 501 where the
+ * deployment has no domain provider — the wizard treats that as "DNS
+ * connected, platform attachment pending". Auth: Firebase ID token; the caller
+ * must be an admin of the host.
  */
 
 async function handler(request: Request): Promise<Response> {
@@ -44,13 +46,10 @@ async function handler(request: Request): Promise<Response> {
   if (method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
-  const token = process.env.VERCEL_TOKEN
-  const projectId = process.env.VERCEL_TENANT_PROJECT_ID
-  const teamId = process.env.VERCEL_TEAM_ID
   // The claim/attach correspondence starts HERE, before anything is claimed
   // (AGL-1430, AGL-1311 §5.2).
   //
-  // The Vercel add below tolerates `domain_already_in_use`. That is only safe
+  // The attach below tolerates a name already registered. That is only safe
   // while every name the platform holds on the tenant project is covered by
   // the Firestore claim, and TWO families of name were not:
   //
@@ -161,7 +160,11 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'That domain is already connected to another site' }, { status: 409 })
     }
 
-    if (!token || !projectId) {
+    // Ask the provider whether this deployment can register a name at all,
+    // rather than testing one vendor's credentials. A self-host behind its own
+    // proxy answers yes; a deployment that leaves names to somebody else
+    // answers no, and the wizard says so instead of reporting an outage.
+    const notConfigured = async () => {
       // Backfill path (AGL-166): remember the attachment never happened
       // so the wizard can show it honestly and offer a retry.
       await hostSnapshot.ref
@@ -169,50 +172,49 @@ async function handler(request: Request): Promise<Response> {
         .catch(() => undefined)
       return Response.json({
         error:
-          'Domain attachment is not configured (missing VERCEL_TOKEN / ' +
-          'VERCEL_TENANT_PROJECT_ID).',
+          'Domain attachment is not configured on this deployment ' +
+          '(no domain provider — set AGLYN_DOMAIN_PROVIDER).',
       }, { status: 501 })
     }
+    if (!domainProvider().configured('tenant')) return await notConfigured()
 
-    const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
-    const response = await fetch(
-      `https://api.vercel.com/v10/projects/${projectId}/domains${query}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: domain }),
-      },
-    )
-    const payload = await response.json()
-    if (!response.ok && payload?.error?.code !== 'domain_already_in_use') {
-      console.error(payload)
+    // The `already-exists` tolerance lives in the provider, not here: a name
+    // already registered is success for a create path and a retry alike, and a
+    // second copy of that judgement at the door is a second copy to drift.
+    const attach = await attachProjectDomain(domain, {}, 'tenant')
+    if (attach.outcome === 'skipped') {
+      // Configured, and still nothing registered — a provider that does not
+      // manage this particular name. Same honest answer as no provider at all.
+      return await notConfigured()
+    }
+    if (attach.outcome === 'failed') {
       await hostSnapshot.ref
         .set({ cnameAttachmentPending: true }, { merge: true })
         .catch(() => undefined)
-      return Response.json({ error: payload?.error?.message ?? 'Vercel attach failed' }, { status: 502 })
+      return Response.json(
+        { error: attach.detail ?? 'Attach failed at the platform' },
+        { status: 502 },
+      )
     }
 
-    // What the POST said is not what the customer gets (AGL-1913).
+    // What the registration said is not what the customer gets (AGL-1913).
     //
-    // Two states come back from a SUCCESSFUL add and mean the domain serves
+    // Two outcomes come back from a SUCCESSFUL add and mean the domain serves
     // nothing:
     //
-    //  - `domain_already_in_use` was tolerated above as idempotency, but it is
-    //    also the answer when the name is on a DIFFERENT project — including
-    //    one outside this account. `projectDomainStatus` asks whether the name
-    //    is on OUR project rather than inferring it from an error code, so the
-    //    tolerated 409 stops doubling as a green light for a domain we do not
-    //    hold.
-    //  - Vercel accepts a name whose apex belongs to another Vercel account and
+    //  - `already-exists` was tolerated above as idempotency, but it is also
+    //    the answer when the name is registered to a DIFFERENT deployment —
+    //    including one outside this account. `projectDomainStatus` asks whether
+    //    the name is on OUR deployment rather than inferring it from the
+    //    tolerated outcome, so the tolerance stops doubling as a green light
+    //    for a domain we do not hold.
+    //  - A provider accepts a name whose apex belongs to another account and
     //    then withholds routing and the certificate until a TXT challenge is
     //    answered. That returned `attached: true` and a green chip forever.
     //
     // `unknown`/`skipped` fall through to the previous behaviour: a status API
     // that could not answer must not block an otherwise-successful attach.
-    const status = await projectDomainStatus(domain, { projectId })
+    const status = await projectDomainStatus(domain, { scope: 'tenant' })
     // `certificate-pending` is NOT serving (AGL-1996). It used to count as
     // serving, which contradicted the comment on the redirect below in the
     // one case that comment describes: a domain Vercel has accepted and
@@ -273,9 +275,6 @@ async function handler(request: Request): Promise<Response> {
       .toLowerCase()
     if (subdomain && serves) {
       const redirected = await upsertSubdomainRedirect({
-        token,
-        projectId,
-        teamId,
         subdomain,
         target: domain,
       }).catch(() => false)
