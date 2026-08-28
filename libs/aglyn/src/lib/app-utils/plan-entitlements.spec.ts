@@ -2298,3 +2298,66 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
     }
   })
 })
+
+describe('a first payment that never completed is not a paid workspace', () => {
+  // `incomplete_expired` is the terminal form of `incomplete`: Stripe stamps it
+  // roughly a day after a signup whose first payment never authenticated, and
+  // no charge has settled or ever will. Both readers of
+  // `DEAD_SUBSCRIPTION_STATUSES` have to agree with that, and each one costs
+  // real money on its own — entitlement grants the paid plan indefinitely for
+  // free, revenue books MRR that has never arrived.
+  const expired = (plan: OrgPlan) =>
+    ({ plan, subscription: { status: 'incomplete_expired' } }) as any
+  const pastDue = (plan: OrgPlan) =>
+    ({ plan, subscription: { status: 'past_due' } }) as any
+
+  it('resolves to free rather than granting the plan forever', () => {
+    expect(resolveEffectivePlan(expired('business'))).toBe('free')
+    expect(checkEntitlement(expired('business'), 'workflows')).toBe(false)
+    expect(resolveOrgEntitlements(expired('pro')).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.free.hostLimit,
+    )
+  })
+
+  it('is not counted as revenue', () => {
+    expect(isBillingSubscription(expired('business'))).toBe(false)
+    expect(orgListPriceMonthlyUsd(expired('business'))).toBe(0)
+  })
+
+  it('reaches both readers through the billingStatus mirror too', () => {
+    // The org doc's mirror is what `subscriptionStatusOf` reads FIRST, so a set
+    // that only matched the inline subscription would answer correctly in a
+    // test and wrongly in the console.
+    const mirrored = { plan: 'business', billingStatus: 'incomplete_expired' } as any
+    expect(resolveEffectivePlan(mirrored)).toBe('free')
+    expect(isBillingSubscription(mirrored)).toBe(false)
+  })
+
+  it('leaves a dunning subscription alone — the control', () => {
+    // Without this the fix could be satisfied by treating every non-active
+    // status as dead, which would cut off a workspace Stripe is still
+    // successfully retrying.
+    expect(resolveEffectivePlan(pastDue('business'))).toBe('business')
+    expect(checkEntitlement(pastDue('business'), 'workflows')).toBe(true)
+    expect(isBillingSubscription(pastDue('business'))).toBe(true)
+    expect(orgListPriceMonthlyUsd(pastDue('business'))).toBeGreaterThan(0)
+    // And a healthy one, so the control cannot pass on a stub that answers the
+    // paid plan for everything.
+    expect(resolveEffectivePlan({ plan: 'pro', subscription: { status: 'active' } } as any)).toBe('pro')
+  })
+
+  it('takes purchased add-ons with it', () => {
+    // Add-ons bill as items on the same subscription, so a subscription that
+    // never charged never bought them either.
+    const withAddons = {
+      plan: 'pro',
+      subscription: { status: 'incomplete_expired' },
+      seatAddons: { hosts: 3, posRegisters: 2, managers: 2 },
+    } as any
+    expect(resolveOrgEntitlements(withAddons).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.free.hostLimit,
+    )
+    expect(resolveOrgEntitlements(withAddons).posRegisters).toBe(0)
+    expect(checkSeatQuota(withAddons, 'managers', 0).purchased).toBe(0)
+  })
+})

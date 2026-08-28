@@ -84,9 +84,15 @@ function usd(value: number): number {
  * `past_due` is money owed that Stripe is still retrying. But both settle $0
  * until something changes, so they are the two largest named causes of the
  * contracted-vs-settled gap and the page states each by name.
+ *
+ * `incomplete_expired` is NOT one of them and must not be added: it is a
+ * signup whose first payment never authenticated, so there is no contract to
+ * report a gap against. `isBillingSubscription` excludes it, which means it
+ * never reaches this test at all — it is filtered out one branch earlier, with
+ * every other dead subscription.
  */
 const TRIALING_STATUS = 'trialing'
-const PAST_DUE_STATUSES = new Set(['past_due', 'incomplete_expired'])
+const PAST_DUE_STATUSES = new Set(['past_due'])
 
 /** One org as the contracted fold sees it: org doc merged with billing doc. */
 export interface ContractedOrgInput {
@@ -131,8 +137,9 @@ export interface ContractedSummary {
  *
  * `contractedSummary` and the per-org attribution both need this, and a second
  * copy is how a page comes to show a total of two comped orgs beside a table
- * naming three. `inactive` is a genuinely free org — neither billing nor
- * comped, and counted in neither.
+ * naming three. `inactive` contributes to nothing: a genuinely free org, and
+ * equally a paid `plan` field left standing over a subscription that has
+ * stopped — neither is billing, and neither was given anything away.
  */
 export type OrgRevenueState =
   | 'collecting'
@@ -145,12 +152,6 @@ export function classifyOrgRevenueState(
   billing: Record<string, unknown> | null | undefined,
 ): OrgRevenueState {
   const doc = billing as any
-  if (!isBillingSubscription(doc)) {
-    // A paid plan with no subscription behind it is a comp / override / dark
-    // launch. A genuinely free org is neither, and is not counted.
-    const plan = doc?.plan
-    return plan && plan !== 'free' ? 'comped' : 'inactive'
-  }
   // Read the same way `isBillingSubscription` reads it: the mirrored
   // `billingStatus` first, the inline `subscription.status` as fallback for
   // orgs the AGL-1028 backfill has not reached.
@@ -158,6 +159,19 @@ export function classifyOrgRevenueState(
     (typeof doc?.billingStatus === 'string' && doc.billingStatus) ||
     doc?.subscription?.status ||
     ''
+  if (!isBillingSubscription(doc)) {
+    // A COMP IS THE ABSENCE OF A SUBSCRIPTION, not the presence of a dead one.
+    // A staff plan override writes `plan` and never writes `subscription`, so
+    // a paid plan with no status behind it is a comp / override / dark launch.
+    // A paid plan whose subscription is canceled or expired is neither comped
+    // nor billing — it is churn wearing a stale `plan` field, and naming it a
+    // comp puts a customer who stopped paying into the "we chose to give this
+    // away" count and hides them from the churn it actually is. A genuinely
+    // free org has neither, and is counted in nothing.
+    const plan = doc?.plan
+    if (!plan || plan === 'free') return 'inactive'
+    return status ? 'inactive' : 'comped'
+  }
   if (status === TRIALING_STATUS) return 'trialing'
   if (PAST_DUE_STATUSES.has(status)) return 'pastDue'
   return 'collecting'

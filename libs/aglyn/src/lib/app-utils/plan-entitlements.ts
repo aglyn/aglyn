@@ -1026,8 +1026,35 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
 /**
  * Subscription states that stop paying for the plan (AGL-247). `past_due`
  * keeps working as a dunning grace period; these do not.
+ *
+ * `incomplete_expired` is the state a signup reaches when its first payment
+ * never completes — an abandoned SCA challenge, a card that never
+ * authenticated — and Stripe stamps it about a day later. It has charged
+ * nothing and never will, so it belongs here beside `incomplete`, which is the
+ * same subscription an hour earlier. `LIVE_SUBSCRIPTION_STATUSES` in
+ * `org-billing-doc.ts` already excludes it, `DEAD_STATUSES` in
+ * `utils/subscription-period-notice.ts` already names it, and the revenue
+ * report already buckets it as uncollected; this set is the one that decides
+ * both what a workspace GETS and whether we count it as revenue, so it is the
+ * one place the omission cost money in both directions at once.
+ *
+ * THE DENYLIST FORM IS THE HAZARD, and it is why the omission was silent: an
+ * allowlist of live statuses cannot rot when Stripe adds a status, whereas a
+ * denylist of dead ones silently grants the plan — and books the MRR — for
+ * every status nobody has enumerated yet. The three readers below keep the
+ * denylist anyway, because the direction they fail in is not the same as the
+ * live-side question's: an unrecognized status here must not revoke a paying
+ * workspace's features, while `isLiveSubscriptionStatus` refusing to call an
+ * unrecognized status live only ever declines to sell a second subscription.
+ * A new Stripe status therefore has to be added HERE by hand, which is a
+ * standing obligation rather than a property of the code.
  */
-const DEAD_SUBSCRIPTION_STATUSES = new Set(['canceled', 'unpaid', 'incomplete'])
+const DEAD_SUBSCRIPTION_STATUSES = new Set([
+  'canceled',
+  'unpaid',
+  'incomplete',
+  'incomplete_expired',
+])
 
 /**
  * The subscription status entitlement resolution runs on (AGL-1028).
