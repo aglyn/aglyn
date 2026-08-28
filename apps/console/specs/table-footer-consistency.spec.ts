@@ -79,7 +79,11 @@ const FOOTERS: Array<[string, string]> = [
 const SHARED_FOOTER: Array<[string, string]> = [
   ['org activity', 'apps/console/components/org-activity-card.component.tsx'],
   ['site activity', 'apps/console/components/host-activity-table.component.tsx'],
-  ['actor activity', 'apps/console/components/actor-activity-table.component.tsx'],
+  // The shared activity/audit table, which is where the actor feed's footer
+  // now lives — two audit tables stacked on the staff user page were two
+  // implementations, and adding a footer to the hand-rolled one would have
+  // made them similar rather than the same.
+  ['activity table', 'apps/console/components/activity-table.component.tsx'],
   ['notifications', 'apps/console/app/(app)/manage/notifications/page.tsx'],
   /*
    * The staff audit log, which kept a "Load older" of its own — a fifth
@@ -627,6 +631,249 @@ describe('a paged list names its order (AGL-693)', () => {
       expect(withoutComments(source)).toMatch(/\blimit\(/)
       expect(source).toContain('document ID is its CODE')
     }
+  })
+})
+
+
+/**
+ * A TABLE with no footer under it (AGL-693, and the reason this kept being
+ * found one at a time).
+ *
+ * Every check above this point looks for a PAGER — a hand-rolled Previous/Next
+ * pair, a "Load more", a `limit()` that forgot its `orderBy`. A card that
+ * renders a `<Table>` over an array it already holds matches none of them: it
+ * has no pager to be inconsistent, no cap to be unordered, and no footer at
+ * all. So three consecutive sweeps each scoped to a directory found these one
+ * at a time, and the guard was silent between them because it was looking for
+ * the wrong shape.
+ *
+ * This looks for the shape that actually matters: rows mapped into a `<Table>`
+ * (or a grid with its own footer switched off) and nothing under them. Every
+ * such file must be classified — converted, or named here with the reason it
+ * is not a list. A file in neither list fails, which is what stops the next
+ * one arriving unnoticed.
+ */
+const RENDERS_A_TABLE = /<Table\b/
+const MAPS_ROWS_INTO_IT = /\.map\([\s\S]{0,400}?<TableRow/
+/** A grid renders its own footer unless the caller turns it off. */
+const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
+/**
+ * `StaffListPagination` counts: it is `ListPagination` with the page size
+ * fixed by the route behind it, and a check that missed it would report three
+ * already-paged staff lists as unpaginated.
+ */
+const RENDERS_A_FOOTER = /<ListPagination|<TablePagination|<StaffListPagination/
+
+const unpaginatedTable = (source: string) => {
+  const code = withoutComments(source)
+  if (RENDERS_A_FOOTER.test(code)) return false
+  return (
+    (RENDERS_A_TABLE.test(code) && MAPS_ROWS_INTO_IT.test(code)) ||
+    GRID_FOOTER_SWITCHED_OFF.test(code)
+  )
+}
+
+function tablesWithoutFooters(): string[] {
+  return [...tsxFilesUnder(CONSOLE_PAGES), ...tsxFilesUnder(CONSOLE_COMPONENTS)]
+    .filter((path) => unpaginatedTable(readFileSync(path, 'utf8')))
+    .map((path) => path.replace(`${REPO}/`, ''))
+    .sort()
+}
+
+/**
+ * NOT a list: a fixed or bounded set, where a pager would be a control about
+ * nothing and the second page would always be empty.
+ *
+ * The distinction is what the row COUNT is a function of. A row per US state,
+ * per configuration knob, per month in a fixed window or per line of a
+ * statutory form is bounded by the taxonomy; a row per invoice, per version or
+ * per audited action is bounded by how long the account has existed.
+ */
+const NOT_A_LIST: Array<[string, string]> = [
+  [
+    'apps/console/app/(app)/admin/revenue/page.tsx',
+    'Attribution and earnings BREAKDOWNS — one row per traffic source, plan ' +
+      'or refund cause. The cardinality is the taxonomy’s, not the traffic’s.',
+  ],
+  [
+    'apps/console/app/(app)/admin/tax-return/page.tsx',
+    'Form 01-114’s filing lines are fixed by the form, and the breakdowns ' +
+      'beside them run one row per state or jurisdiction. Another agent owns ' +
+      'this file today; the classification is not why it is untouched.',
+  ],
+  [
+    'apps/console/components/server-config-card.component.tsx',
+    'One row per declared configuration knob — a fixed set the server ships.',
+  ],
+  [
+    'apps/console/components/staff-org-usage-table.component.tsx',
+    'One row per month in a fixed window.',
+  ],
+  [
+    'apps/console/components/theme-editor/theme-overrides-card.component.tsx',
+    'One row per overridden theme token on one site, described from the ' +
+      'theme’s own shape.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/[templateId]/page.tsx',
+    'The sibling PAGES of one starter bundle, bounded by what the bundle ' +
+      'holds — the library that lists bundles is paged separately.',
+  ],
+  [
+    'apps/console/app/(app)/admin/users/[uid]/page.tsx',
+    'The two tables left here are one row per ORGANIZATION this account ' +
+      'belongs to and one per legal document version it has accepted — both ' +
+      'bounded by what the account IS rather than by what it has done. The ' +
+      'audit trail, which was bounded by the latter, renders `ActivityTable`.',
+  ],
+]
+
+/**
+ * A real list that still owes a footer, and what stands in the way today.
+ *
+ * Listed rather than skipped, and listed even where this pass could not fix
+ * it: a guard that omits what it cannot fix today is exactly how this became
+ * a dozen surfaces found one at a time. The list may shrink. It may not grow
+ * without someone writing a reason next to the addition.
+ */
+const OWES_A_FOOTER: Array<[string, string]> = [
+  [
+    'apps/console/app/(app)/[orgSlug]/billing/page.tsx',
+    'Invoices, one per month forever. Billing is out of this pass’s scope.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/components/[componentId]/page.tsx',
+    'Version history, `limit(100)` unordered and sorted by `createdAt` in the ' +
+      'browser. Blocked on the ordering trap: `IMPORTABLE_FIELDS.versions` ' +
+      'carries no `createdAt`, so a version restored from a site bundle has ' +
+      'none — `orderBy(\'createdAt\')` would hide restored versions rather ' +
+      'than mis-order them. Needs an audit of `updatedAt`’s writers, or a ' +
+      'backfill, before it can be paged.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/[layoutId]/page.tsx',
+    'The same version history, the same block.',
+  ],
+  [
+    'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
+    'The same version history, the same block.',
+  ],
+  [
+    'apps/console/components/besigner-versions.component.tsx',
+    'The same version history, the same block.',
+  ],
+  [
+    'apps/console/app/(app)/admin/assist-signals/page.tsx',
+    'Mined signal rows, which grow with usage. Another agent owns this file.',
+  ],
+  [
+    'apps/console/app/(app)/admin/health/page.tsx',
+    'The CSP report table renders `csp.rows.slice(0, 100)` — a silent ' +
+      'truncation, not a bound. The CHECK tables beside it are a fixed set ' +
+      'and would not want a pager.',
+  ],
+  [
+    'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx',
+    'An organization’s invoices, one per month forever.',
+  ],
+  [
+    'apps/console/components/org-licences-panel.component.tsx',
+    'Marketplace licences held and sold, which grow with every purchase.',
+  ],
+  [
+    'apps/console/components/org-sso-card.component.tsx',
+    'The accounts a domain claim would move. A large customer’s domain is ' +
+      'not a bounded preview.',
+  ],
+  [
+    'apps/console/components/idempotency-claims-card.component.tsx',
+    'Pending claims. They accumulate exactly when a process is stuck, which ' +
+      'is the state this card exists to show — so the long list is the one ' +
+      'that matters. `hideFooter` here was about rows having no detail page ' +
+      'of their own, which is a different question from paging.',
+  ],
+  [
+    'apps/console/components/pending-erasures-card.component.tsx',
+    'Pending erasures, which accumulate for the same reason.',
+  ],
+  [
+    'apps/console/components/staff-org-refund-card.component.tsx',
+    'An organization’s charges, which grow with its trading.',
+  ],
+]
+
+describe('a table with rows under it has a footer under those (AGL-693)', () => {
+  it('THE CONTROL: the detector fires on a <Table> with no footer', () => {
+    // The assertion this whole block turns on. The previous guards looked for
+    // a pager, and a table that never had one matched nothing — so the spec
+    // passed by asking the wrong question, which is how twelve of these
+    // shipped.
+    expect(
+      unpaginatedTable(`
+        <Table><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></Table>
+      `),
+    ).toBe(true)
+    // A grid whose own footer was switched off and given nothing in its place.
+    expect(unpaginatedTable(`<ListTable rows={rows} hideFooter />`)).toBe(true)
+  })
+
+  it('THE CONTROL: it does not fire when a footer IS present', () => {
+    // A check that fired on everything would make the classification below a
+    // list of every file in the console, which is no classification at all.
+    expect(
+      unpaginatedTable(`
+        <Table><TableBody>{rows.map((row) => (<TableRow key={row.id} />))}</TableBody></Table>
+        <ListPagination page={0} pageSize={10} rowCount={rows.length} />
+      `),
+    ).toBe(false)
+    // The staff wrapper counts: it is `ListPagination` with the page size
+    // fixed by the route behind it.
+    expect(
+      unpaginatedTable(`<ListTable rows={rows} hideFooter /><StaffListPagination page={0} />`),
+    ).toBe(false)
+    // A table of static content maps nothing into itself.
+    expect(
+      unpaginatedTable(`<Table><TableBody><TableRow><TableCell>One</TableCell></TableRow></TableBody></Table>`),
+    ).toBe(false)
+  })
+
+  it('THE CONTROL: the walk reaches both the pages and the components', () => {
+    // Scoping this walk to one directory is what let three separate sweeps
+    // each miss what the others had not reached.
+    const found = tablesWithoutFooters()
+    expect(found.some((path) => path.startsWith('apps/console/app/'))).toBe(true)
+    expect(
+      found.some((path) => path.startsWith('apps/console/components/')),
+    ).toBe(true)
+  })
+
+  it('every unpaginated table is classified', () => {
+    const classified = new Set([
+      ...NOT_A_LIST.map(([path]) => path),
+      ...OWES_A_FOOTER.map(([path]) => path),
+    ])
+    const unclassified = tablesWithoutFooters().filter(
+      (path) => !classified.has(path),
+    )
+    expect(unclassified).toEqual([])
+  })
+
+  it('every classification still describes a real file', () => {
+    // A stale entry silently widens the exemption, and an entry for a file
+    // that has since been paged makes the owed list read as longer than it is.
+    const found = new Set(tablesWithoutFooters())
+    for (const [path, reason] of [...NOT_A_LIST, ...OWES_A_FOOTER]) {
+      expect({ path, found: found.has(path) }).toEqual({ path, found: true })
+      expect(reason.length).toBeGreaterThan(30)
+    }
+  })
+
+  it('the owed list only ever shrinks', () => {
+    // A ratchet. Converting one of these means lowering the number with it;
+    // adding a surface to the list means raising it, which is a change a
+    // reviewer sees rather than a line lost in a diff.
+    expect(OWES_A_FOOTER).toHaveLength(13)
+    expect(NOT_A_LIST).toHaveLength(7)
   })
 })
 

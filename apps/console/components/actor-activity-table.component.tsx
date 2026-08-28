@@ -17,9 +17,7 @@
 'use client'
 
 import { activityTargetLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
-import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import {
   gridFilterRequest,
   listFilterColumn,
@@ -28,18 +26,11 @@ import {
 import { ACTIVITY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  Chip,
-  Stack,
-  Typography,
-} from '@mui/material'
+import { Chip } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ActivityTable from './activity-table.component'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
-import {
-  TABLE_PAGE_SIZE_DEFAULT,
-  TABLE_ROW_HEIGHT,
-} from '../constants/shared'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
 export interface ActorActivityEntry {
   $id: string
@@ -63,6 +54,11 @@ export interface ActorActivityTableProps {
 
 /**
  * What one person did, paginated (AGL-1488).
+ *
+ * The CARD, the grid, the toolbar, the empty and unreadable states and the
+ * footer are `ActivityTable`'s (AGL-693) — this owns the columns and the
+ * cursor walk, which is the half that is actually about one person's
+ * activity.
  *
  * Forward-only, because that is what the underlying query is: a
  * collection-group walk resumed from a document path. `HostActivityTable`
@@ -220,76 +216,45 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
   )
 
   return (
-    // `contentGutter*` like every other card on these pages — without them a
-    // card's content sits flush against its own border while the ones above
-    // and below it are inset, which reads as a rendering fault rather than a
-    // new card.
-    <CardDisplay header={header} help={help} contentGutterX contentGutterY>
-      <Stack spacing={1.5}>
-        {description ? (
-          <Typography variant="body2" color="text.secondary">
-            {description}
-          </Typography>
-        ) : null}
-        {unreadable ? (
-          // Not "no activity": that would be a failed read wearing the face
-          // of a clean record, on the page where that mistake costs most.
-          <Alert severity="warning">
-            {'The activity log could not be read. This is not the same as ' +
-              'there being none — try again, or check the browser console.'}
-          </Alert>
-        ) : rows.length === 0 && !loading ? (
-          <Typography variant="body2" color="text.secondary">
-            {'No activity recorded.'}
-          </Typography>
-        ) : (
-          <ListTable
-            rows={rows}
-            columns={activityColumns}
-            getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
-            /*
-             * NO `onOpen`, like the site activity log. An audit row is not a
-             * record you open; a row-click would promise a destination these
-             * rows do not have.
-             */
-            hideFooter
-            rowHeight={TABLE_ROW_HEIGHT}
-            /*
-             * The grid must NOT also filter. The feed is paged, so a
-             * client-side pass would narrow the twenty-five rows on screen
-             * and call that the answer — on an audit log, "nothing happened"
-             * is the wrong answer to give about everything before this page.
-             */
-            filterMode="server"
-            onFilterModelChange={(model) => {
-              filterRef.current = gridFilterRequest(model)
-              setCursors([null])
-              void loadPage(0, null)
-            }}
-          />
-        )}
-        <ListPagination
-          page={page}
-          pageSize={pageSize}
-          rowCount={rows.length}
-          hasMore={Boolean(nextCursor)}
-          disabled={loading}
-          onPageChange={(next) => {
-            if (next === page) return
-            if (next > page) {
-              const cursor = nextCursor
-              setCursors((current) => [...current, cursor])
-              void loadPage(next, cursor)
-              return
-            }
-            const previous = cursors[next] ?? null
-            setCursors((current) => current.slice(0, next + 1))
-            void loadPage(next, previous)
-          }}
-          onPageSizeChange={setPageSize}
-        />
-      </Stack>
-    </CardDisplay>
+    <ActivityTable
+      header={header}
+      help={help}
+      description={description}
+      columns={activityColumns}
+      rows={rows}
+      getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
+      loading={loading}
+      unreadable={unreadable}
+      /*
+       * The grid must NOT also filter. The feed is paged, so a client-side
+       * pass would narrow the rows on screen and call that the answer — on an
+       * audit log, "nothing happened" is the wrong answer to give about
+       * everything that is not on this page. Passing a handler is what puts
+       * the grid in server-filter mode.
+       */
+      onFilterModelChange={(model) => {
+        filterRef.current = gridFilterRequest(model)
+        setCursors([null])
+        void loadPage(0, null)
+      }}
+      page={page}
+      pageSize={pageSize}
+      hasMore={Boolean(nextCursor)}
+      paginationDisabled={loading}
+      onPageChange={(next) => {
+        if (next === page) return
+        if (next > page) {
+          const cursor = nextCursor
+          setCursors((current) => [...current, cursor])
+          void loadPage(next, cursor)
+          return
+        }
+        const previous = cursors[next] ?? null
+        setCursors((current) => current.slice(0, next + 1))
+        void loadPage(next, previous)
+      }}
+      onPageSizeChange={setPageSize}
+    />
   )
 }
 ActorActivityTable.displayName = 'ActorActivityTable'

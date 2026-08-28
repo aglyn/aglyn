@@ -48,7 +48,12 @@ const emptyQuery = { docs: [] as unknown[] }
 
 const mockFirestore = {
   collection: (collection: string) => ({
-    where: () => ({ limit: () => ({ get: async () => emptyQuery }) }),
+    // `orderBy` too: the audit halves order before they cap (AGL-693), and a
+    // stub that stops at `limit` throws before the route can answer.
+    where: () => ({
+      limit: () => ({ get: async () => emptyQuery }),
+      orderBy: () => ({ limit: () => ({ get: async () => emptyQuery }) }),
+    }),
     doc: (id: string) => ({
       get: async () => ({
         exists: true,

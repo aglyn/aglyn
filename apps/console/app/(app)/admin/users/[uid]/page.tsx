@@ -28,7 +28,6 @@ import {
   Container,
   GridItems,
 } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -45,6 +44,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -67,6 +67,8 @@ import {
   CONTENT_MAX_WIDTH,
   TABLE_PAGE_SIZE_DEFAULT,
 } from '../../../../../constants/shared'
+import ActivityTable from '../../../../../components/activity-table.component'
+import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 
@@ -205,6 +207,99 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   // Memoized rather than `detail?.audit ?? []` inline: a fresh empty array on
   // every render re-runs the slice below forever.
   const auditEntries = useMemo(() => detail?.audit ?? [], [detail])
+  /**
+   * The audit trail's columns, in the console's row grammar (AGL-693).
+   *
+   * This card and "Activity by this account" directly above it now render the
+   * same table — `ActivityTable` owns the card, the grid, the toolbar, the
+   * empty state and the footer — so a staff member reading two audit tables
+   * stacked on one page reads them the same way. What stays different is what
+   * they are OF: the one above is what this account DID, this one is what was
+   * done BY or TO it, and both descriptions say so.
+   */
+  /**
+   * NAME first, then email, then uid.
+   *
+   * The header and the breadcrumb both printed the email while the Identity
+   * card directly beneath them printed the name, so the page led with one
+   * identifier and then introduced the account by another. Staff still search
+   * by address — the Identity card keeps it above the fold, which is why the
+   * header can lead with the name at all.
+   *
+   * The uid is the last entry rather than a blank: an account genuinely
+   * without a name or an address is rare and must still be identifiable, and
+   * an empty header would be the one answer that names nothing. Same
+   * precedence the staff console already uses for an organization.
+   *
+   * `null` until the read settles, so both surfaces hold their placeholder
+   * rather than painting the email and swapping it a moment later — a title
+   * that corrects itself reads as the page having made a mistake.
+   */
+  const accountLabel = detail
+    ? (detail.user.displayName?.trim() ||
+      detail.user.email ||
+      detail.user.uid)
+    : null
+  // The browser tab, through the shared subject — which already holds the
+  // server's id title until a name arrives, so the tab cannot flicker through
+  // the wrong one either.
+  useDeclareDocumentSubject(uid, accountLabel ?? undefined)
+
+  const auditColumns: GridColDef[] = useMemo(
+    () => [
+      { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
+      { field: 'target', headerName: 'Target', flex: 1.2, minWidth: 180 },
+      {
+        // An `org.override` this account performed shows up here too, so the
+        // reason has to reach this table as well (AGL-1652) — the audit page
+        // is not the only place the act is read from.
+        field: 'reason',
+        headerName: 'Why',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (_value: unknown, row: any) =>
+          orgOverrideReasonSummary(row.reason, row.note) ?? '—',
+      },
+      {
+        field: 'actorUid',
+        headerName: 'Actor',
+        flex: 0.9,
+        minWidth: 150,
+        /*
+         * "this account" is a real answer, not a placeholder: the route reads
+         * two halves — entries this account performed, and entries performed
+         * against it — so a row is either one or the other. The other half
+         * still shows a bare staff uid, which is a name this page does not
+         * resolve; that is a separate gap from the one this column had.
+         */
+        valueGetter: (_value: unknown, row: any) =>
+          row.actorUid === detail?.user.uid
+            ? 'this account'
+            : (row.actorUid ?? '—'),
+        renderCell: ({ row }: any) =>
+          row.actorUid === detail?.user.uid ? (
+            <Chip size="small" variant="outlined" label="this account" />
+          ) : (
+            (row.actorUid ?? '—')
+          ),
+      },
+      {
+        field: 'at',
+        headerName: 'When',
+        flex: 1,
+        minWidth: 180,
+        // `type: 'date'` gives the panel a date picker, and sorting happens on
+        // the instant rather than on the rendered string — a grid sorting the
+        // rendered text orders it alphabetically.
+        type: 'date',
+        valueGetter: (_value: unknown, row: any) =>
+          row.at ? new Date(row.at) : null,
+        renderCell: ({ row }: any) =>
+          row.at ? new Date(row.at).toLocaleString() : '—',
+      },
+    ],
+    [detail?.user.uid],
+  )
   const pagedAudit = useMemo(
     () =>
       auditEntries.slice(
@@ -342,12 +437,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
       breadcrumbItems={[
         { children: 'Users', href: buildRoute(Route.ADMIN_USERS) },
         {
-          children: detail?.user.email ?? uid ?? '',
+          children: accountLabel ?? 'User',
           href: '#',
         },
       ]}
       header={{
-        children: detail?.user.email ?? 'User',
+        children: accountLabel ?? 'User',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
       help={{ topic: 'staffConsole', anchor: '#password-help' }}
@@ -983,74 +1078,29 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
               {
                 size: { xs: 12 },
                 children: (
-                  <CardDisplay
+                  <ActivityTable
                     header="Recent audit trail"
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
                       excerpt:
                         'Audited staff actions performed by or on this account — the full record lives on the Audit log page.',
                     })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    {detail.audit.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {'No audited actions involve this account.'}
-                      </Typography>
-                    ) : (
-                      <>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>{'Action'}</TableCell>
-                            <TableCell>{'Target'}</TableCell>
-                            {/*
-                              An `org.override` this account performed shows
-                              up here too, so the reason has to reach this
-                              table as well (AGL-1652) — the audit page is
-                              not the only place the act is read from.
-                            */}
-                            <TableCell>{'Why'}</TableCell>
-                            <TableCell>{'Actor'}</TableCell>
-                            <TableCell>{'When'}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {pagedAudit.map((entry) => (
-                            <TableRow key={entry.id}>
-                              <TableCell>{entry.action ?? '—'}</TableCell>
-                              <TableCell>{entry.target ?? '—'}</TableCell>
-                              <TableCell>
-                                {orgOverrideReasonSummary(
-                                  entry.reason,
-                                  entry.note,
-                                ) ?? '—'}
-                              </TableCell>
-                              <TableCell>
-                                {entry.actorUid === detail.user.uid
-                                  ? 'this account'
-                                  : (entry.actorUid ?? '—')}
-                              </TableCell>
-                              <TableCell>
-                                {entry.at
-                                  ? new Date(entry.at).toLocaleString()
-                                  : '—'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      <ListPagination
-                        page={auditPage}
-                        pageSize={auditPageSize}
-                        rowCount={pagedAudit.length}
-                        count={detail.audit.length}
-                        onPageChange={setAuditPage}
-                        onPageSizeChange={setAuditPageSize}
-                      />
-                      </>
-                    )}
-                  </CardDisplay>
+                    description={
+                      'Audited staff actions performed BY or ON this ' +
+                      'account. Not the same as the activity above, which ' +
+                      'is what the account itself did. The full record ' +
+                      'lives on the Audit log page.'
+                    }
+                    columns={auditColumns}
+                    rows={pagedAudit}
+                    getRowId={(row: any) => row.id}
+                    emptyLabel="No audited actions involve this account."
+                    page={auditPage}
+                    pageSize={auditPageSize}
+                    count={detail.audit.length}
+                    onPageChange={setAuditPage}
+                    onPageSizeChange={setAuditPageSize}
+                  />
                 ),
               },
             ]}

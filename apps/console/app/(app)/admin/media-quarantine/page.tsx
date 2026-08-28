@@ -73,6 +73,7 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -99,7 +100,10 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../constants/shared'
 import { useStaffRole } from '../../../../hooks/use-is-staff'
 
 /** One key that could refuse the looked-up asset, and whether it is set. */
@@ -512,6 +516,29 @@ function AdminMediaQuarantine() {
           (typeof b.record.atMs === 'number' ? b.record.atMs : 0),
       )
   }, [listing])
+  /*
+   * The deny list PAGES (AGL-693). It rendered every entry in one wall — up
+   * to `maxEntries`, which is two thousand — on a table whose rows carry a
+   * key, a reason, two timestamps, an origin and a note apiece.
+   *
+   * The rows are already in memory and already sorted here, so the footer
+   * takes the real total and the counts above it keep describing the WHOLE
+   * list rather than the page: `clearable` and `listing.count` are facts
+   * about the deny list, and paging must not turn them into facts about ten
+   * rows.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const pagedRows = useMemo(
+    () => rows.slice(page * pageSize, page * pageSize + pageSize),
+    [rows, page, pageSize],
+  )
+  // Releasing a key shortens the list, and a reader on the last page of a
+  // list that just shrank gets an empty table with no way back.
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(rows.length / pageSize) - 1)
+    if (page > lastPage) setPage(lastPage)
+  }, [rows.length, page, pageSize])
   const clearable = rows.filter((row) => row.state !== 'active').length
   const listFull = listing ? listing.count >= listing.maxEntries : false
 
@@ -933,7 +960,7 @@ function AdminMediaQuarantine() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {rows.map(({ record, state }) => (
+                        {pagedRows.map(({ record, state }) => (
                           <TableRow key={record.key}>
                             <TableCell>
                               <Stack spacing={0.5}>
@@ -1031,6 +1058,14 @@ function AdminMediaQuarantine() {
                         ))}
                       </TableBody>
                     </Table>
+                    <ListPagination
+                      page={page}
+                      pageSize={pageSize}
+                      rowCount={pagedRows.length}
+                      count={rows.length}
+                      onPageChange={setPage}
+                      onPageSizeChange={setPageSize}
+                    />
                   </Stack>
                 ) : null}
 

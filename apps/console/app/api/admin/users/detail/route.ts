@@ -319,17 +319,40 @@ async function handler(request: Request): Promise<Response> {
       }),
     )
 
-    // Recent audit trail: actions BY this account and ON this account.
+    /*
+     * Recent audit trail: actions BY this account and ON this account.
+     *
+     * Both halves are ORDERED (AGL-693). They were `limit(10)` with no
+     * `orderBy`, which Firestore answers in document-id order over generated
+     * ids — so "recent" was ten arbitrary entries per half, and the sort
+     * below arranged that sample newest-first, which is what made it look
+     * right. An account with a long history showed ten entries from anywhere
+     * in it, on the card a staff member reads to find out what just happened.
+     *
+     * `at` is safe to order on, which is the question `orderBy` always
+     * raises: it matches only documents that HAVE the field. Every one of the
+     * twenty-four writers of `adminAudit` in this app sets `at` on the same
+     * `add()` that creates the entry, and there is no client write path — the
+     * collection is server-only — so an entry without it cannot be produced.
+     *
+     * ⚠️ Each half now needs a composite index (`actorUid ASC, at DESC` and
+     * `target ASC, at DESC`), declared in `cloud/firebase-firestore.indexes.json`
+     * and OWED a deploy. Until it lands each read fails its own `catch` and
+     * that half renders empty — which is why the card must keep saying the
+     * full record lives on the Audit log page.
+     */
     const [byActor, onTarget] = await Promise.all([
       firestore
         .collection('adminAudit')
         .where('actorUid', '==', uid)
+        .orderBy('at', 'desc')
         .limit(10)
         .get()
         .catch(() => null),
       firestore
         .collection('adminAudit')
         .where('target', '==', `users/${uid}`)
+        .orderBy('at', 'desc')
         .limit(10)
         .get()
         .catch(() => null),
