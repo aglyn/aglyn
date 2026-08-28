@@ -285,6 +285,79 @@ describe('an entry about a person reaches that person’s page', () => {
   })
 })
 
+describe('a moderation decision reaches the page it belongs on', () => {
+  /*
+   * `marketplace-report-status` wrote `targetType`/`targetId` and no `target`
+   * at all. Nothing reads those two, so the row could not be retrieved by the
+   * thing it acted on — the same shape as an entry that was never written.
+   *
+   * These assert the QUERY RESULT: what the reader's halves actually return
+   * for the person the decision landed on.
+   */
+  const reviewTakedown: SeedRow = {
+    id: 'report_actioned',
+    actorUid: 'staff_1',
+    action: 'marketplace-report-status',
+    target: 'marketplaceReports/' + 'b'.repeat(40),
+    subjectUid: 'casey_uid',
+    at: '2026-08-28T09:00:00.000Z',
+  }
+
+  it('returns the decision on the review author’s page', async () => {
+    auditSeed = [reviewTakedown]
+    const payload = await detail()
+
+    const entry = payload.audit.find(
+      (row: any) => row.id === 'report_actioned',
+    )
+    expect(entry).toBeDefined()
+    // The target names the REPORT — the document the route mutates — while
+    // the subject names the person the decision landed on. Both, separately.
+    expect(entry.target).toBe('marketplaceReports/' + 'b'.repeat(40))
+    expect(entry.subjectUid).toBe('casey_uid')
+    // A moderation decision is not a read.
+    expect(entry.kind).toBe('change')
+  })
+
+  it('finds nothing for an entry carrying no target and no subject', async () => {
+    // CONTROL, and the defect stated exactly: the row as this writer used to
+    // produce it. `actorUid` is somebody else, so the actor half misses it
+    // too, and with neither a target nor a subject there is no half left that
+    // can reach it. Existing rows are in this state permanently.
+    auditSeed = [
+      {
+        id: 'legacy_report',
+        actorUid: 'staff_1',
+        action: 'marketplace-report-status',
+        at: '2026-08-28T09:00:00.000Z',
+      },
+    ]
+    const payload = await detail()
+
+    expect(payload.audit).toHaveLength(0)
+  })
+
+  it('still resolves a well-formed writer that targets the account', async () => {
+    // CONTROL that the reader was not loosened to compensate. An entry whose
+    // target IS a user path must keep arriving through the target half, with
+    // no subject on it at all.
+    auditSeed = [
+      {
+        id: 'erasure',
+        actorUid: 'staff_9',
+        action: 'user.erased',
+        target: 'users/casey_uid',
+        at: '2026-08-28T07:00:00.000Z',
+      },
+    ]
+    const payload = await detail()
+
+    expect(payload.audit).toHaveLength(1)
+    expect(payload.audit[0].action).toBe('user.erased')
+    expect(payload.audit[0].subjectUid).toBeNull()
+  })
+})
+
 describe('an access cannot displace a change', () => {
   const at = (hour: number, minute: number) =>
     `2026-08-27T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`
