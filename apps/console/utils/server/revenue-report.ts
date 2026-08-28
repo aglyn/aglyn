@@ -296,6 +296,19 @@ export interface CommerceOrderRowInput {
    */
   hostId?: unknown
   createdAt?: unknown
+  /**
+   * Whether Stripe moved real money, stamped from `event.livemode` by the
+   * webhook. Authoritative when present, and absent on every order written
+   * before that stamp shipped — which is why {@link isTestModeOrderRow} falls
+   * back to the id below rather than treating absence as an answer.
+   */
+  livemode?: unknown
+  /**
+   * The Checkout Session that produced the order. It carries its own mode
+   * (`cs_test_…`), which a subscription renewal's invoice id does not — so
+   * this is the fallback discriminator for rows predating `livemode`.
+   */
+  checkoutSessionId?: unknown
 }
 
 export interface SubscriptionSettled {
@@ -597,11 +610,8 @@ export function marketplaceCommissionCents(
  * genuine revenue from the staff figures.
  */
 function isTestModeOrderRow(row: CommerceOrderRowInput): boolean {
-  const livemode = (row as { livemode?: unknown }).livemode
-  if (typeof livemode === 'boolean') return !livemode
-  return stripeIdIsTestMode(
-    (row as { checkoutSessionId?: unknown }).checkoutSessionId ?? row.id,
-  )
+  if (typeof row.livemode === 'boolean') return !row.livemode
+  return stripeIdIsTestMode(row.checkoutSessionId ?? row.id)
 }
 
 export function commerceSettledSummary(
