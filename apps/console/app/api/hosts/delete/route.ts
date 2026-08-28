@@ -23,6 +23,7 @@ import {
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -122,7 +123,52 @@ async function handler(request: Request): Promise<Response> {
     })
     if (locked) return locked
 
+    /*==========================================
+     * READ BEFORE THE ERASE, LOG AFTER IT (AGL-118).
+     *
+     * Both halves of that are forced, and by different things.
+     *
+     * READ FIRST because `eraseHost` drops the site's entry from the owning
+     * org's `hosts` map, so `getOrgForHost` answers null the moment it
+     * returns — an entry composed afterwards has no workspace to be filed
+     * under and no name to call the site. Taken off the snapshot this handler
+     * already holds, so it costs no read.
+     *
+     * LOG AFTER because an entry written first would be a claim about a
+     * deletion that had not happened yet, and `eraseHost` can throw — this
+     * handler's catch answers 500 and the site is still there. The audit
+     * trail must not be the one place that says otherwise.
+     *=========================================*/
+    const owningOrgId = hostSnapshot.get('orgId') as string | undefined
+    const deletedName =
+      (hostSnapshot.get('displayName') as string | undefined) ?? hostId
+
     await eraseHost(hostId)
+
+    /*==========================================
+     * TO THE ORG'S FEED, NOT THE SITE'S.
+     *
+     * The site's own log is `hosts/{hostId}/activity`, which is inside the
+     * tree `eraseHost` just recursive-deleted. An entry there would be
+     * written into a document path that no longer exists, resurrecting a
+     * fragment of a site the customer asked us to destroy — and no reader
+     * would ever see it, because the surface that reads that collection is
+     * the site's own page.
+     *
+     * A destroyed site's last event therefore belongs to the workspace that
+     * owned it, which is also where somebody asking "where did our site go"
+     * is looking. An orphaned host names no workspace, and there is no
+     * honest feed to file it under; the `adminAudit` row below still records
+     * it for staff.
+     *=========================================*/
+    if (owningOrgId) {
+      await logOrgActivity(
+        owningOrgId,
+        { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+        'Deleted a site',
+        { type: 'host', id: hostId, name: deletedName },
+      )
+    }
 
     await firebaseAdmin
       .app()

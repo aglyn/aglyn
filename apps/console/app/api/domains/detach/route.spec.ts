@@ -46,7 +46,8 @@ export {}
 const mockVerifyIdToken = jest.fn()
 const mockAttachProjectDomain = jest.fn()
 const mockDetachProjectDomain = jest.fn()
-const mockHostSet = jest.fn(async () => undefined)
+const mockHostSet = jest.fn(async (..._args: unknown[]) => undefined)
+const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 /** Lazy so the hoisted mock factory never touches a const in its TDZ. */
 const mockHostData = jest.fn()
 
@@ -79,6 +80,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   attachProjectDomain: (...args: unknown[]) => mockAttachProjectDomain(...args),
   detachProjectDomain: (...args: unknown[]) => mockDetachProjectDomain(...args),
+  // CAPTURED, not stubbed away (AGL-118): which branch writes the entry is
+  // half of what this file now pins. Named explicitly because this factory is
+  // a closed world — an absent export is `undefined`, the route throws past
+  // every assertion below, and its own catch answers 500, which reads exactly
+  // like the detach itself regressing.
+  logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -232,5 +239,110 @@ describe('the platform subdomain serves again once the domain is gone (AGL-1273)
 
     expect((await post()).status).toBe(403)
     expect(mockDetachProjectDomain).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Which branch is THE EVENT (AGL-118).
+ *
+ * The whole risk in instrumenting this route is that it has three exits that
+ * are not refusals — a real release, a site that had no domain, and a
+ * provider that refused while the site kept its domain — and two of them
+ * answer something a careless reading takes for success. An entry on either
+ * is worse than none: it puts "released shop.example.com" in the audit trail
+ * of a site that either never had that domain or still has it.
+ *
+ * Every case asserts the WRITTEN ENTRY — the arguments the route handed the
+ * logger — and never the response body. The response already had coverage
+ * above and says nothing about what a customer will read back later.
+ */
+describe('the release is recorded once, and only where it happened', () => {
+  it('THE CONTROL — a real release writes exactly one entry, naming the domain', async () => {
+    // First, because every "writes nothing" assertion below also passes
+    // against a route that logs nothing at all, in any branch, forever.
+    await post()
+
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+    const [hostId, actor, action, target] = mockLogHostActivity.mock
+      .calls[0] as unknown as [
+      string,
+      { uid: string; email: string | null },
+      string,
+      Record<string, unknown>,
+    ]
+    expect(hostId).toBe('host-1')
+    // The uid this route VERIFIED, not one the caller supplied.
+    expect(actor).toEqual({ uid: 'u-1', email: null })
+    expect(action).toBe('Released the custom domain')
+    // The domain read off the HOST document. A detach that named the body's
+    // domain would be the takeover this route refuses, recorded as if normal.
+    expect(target).toEqual({
+      type: 'host',
+      id: 'host-1',
+      name: 'shop.example.com',
+    })
+  })
+
+  it('writes NOTHING when the platform refuses and the site keeps its domain', async () => {
+    // The 502 branch stamps `cnameDetachmentPending` and leaves `cname` in
+    // place. It is the branch most likely to attract a log line — it is where
+    // the platform is genuinely doing something — and a row here would say a
+    // domain was released that we are demonstrably still holding.
+    mockDetachProjectDomain.mockResolvedValue({
+      outcome: 'failed',
+      domain: 'shop.example.com',
+      detail: '500',
+    })
+
+    expect((await post()).status).toBe(502)
+
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('writes NOTHING for a site that had no domain to release', async () => {
+    // `alreadyClear` is a 200 because the caller's end state already holds,
+    // not because anything moved. There is not even a domain name to put in
+    // the entry.
+    mockHostData.mockReturnValue({
+      memberRoles: { 'u-1': 'admin' },
+      subdomain: 'shop',
+    })
+
+    await expect((await post()).json()).resolves.toMatchObject({
+      alreadyClear: true,
+    })
+
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('writes NOTHING when the caller is refused', async () => {
+    mockHostData.mockReturnValue({
+      memberRoles: { 'u-1': 'editor' },
+      cname: 'shop.example.com',
+      subdomain: 'shop',
+    })
+
+    expect((await post()).status).toBe(403)
+
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('still records the release when the platform never held the name', async () => {
+    // `not-found` and `skipped` are both success — the name is already gone,
+    // or the deployment registers no names at all. `cname` still leaves the
+    // document, so the site has genuinely released the domain and the entry
+    // is owed. Without this case, "log only on `detached`" passes every
+    // assertion above while silently dropping every self-hosted release.
+    mockDetachProjectDomain.mockImplementation(async (domain: string) => ({
+      outcome: 'skipped',
+      domain,
+    }))
+
+    expect((await post()).status).toBe(200)
+
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+    expect(
+      (mockLogHostActivity.mock.calls[0] as unknown as unknown[])[3],
+    ).toMatchObject({ name: 'shop.example.com' })
   })
 })

@@ -421,18 +421,12 @@ export function CollectionEntriesPage() {
       variant: 'success',
       persist: false,
     })
-    logActivity('Created collection', {
-      type: 'content',
-      id,
-      name: displayName,
-    })
     },
   [
     collections,
     user,
     hostId,
     enqueueSnackbar,
-    logActivity,
     claimNavigation,
     router,
     collectionHref,
@@ -523,11 +517,6 @@ export function CollectionEntriesPage() {
       variant: 'success',
       persist: false,
     })
-    logActivity('Updated collection', {
-      type: 'content',
-      id: selected.$id,
-      name: displayName,
-    })
   }, [
     editor,
     editorBusy,
@@ -536,7 +525,6 @@ export function CollectionEntriesPage() {
     user,
     hostId,
     enqueueSnackbar,
-    logActivity,
     claimNavigation,
     router,
     collectionHref,

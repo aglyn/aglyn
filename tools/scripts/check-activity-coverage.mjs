@@ -138,26 +138,9 @@ const NOT_LOGGED = {
     'A resource and its FIRST version are one act — /api/hosts/resources ' +
     'already recorded it. A later version is a save, logged by the surface ' +
     'that performs it. A row here would be an invented second event.',
-  'apps/console/app/api/hosts/collections/route.ts':
-    'The console logs `Created collection` / `Updated collection` at the ' +
-    'card that calls this. Moving it server-side is the same migration as ' +
-    'the rest and is not yet done; the act is not currently unlogged.',
   'apps/console/app/api/hosts/import/route.ts':
     'Writes its own `Restored site from export (N documents)` entry directly ' +
     'with the Admin SDK rather than through the helper.',
-  'apps/console/app/api/hosts/members/route.ts':
-    'The console logs `Added member` / `Removed member` / `Changed member ' +
-    'site access` at the members card. Pending the same migration.',
-  'apps/console/app/api/hosts/delete/route.ts':
-    'PENDING (AGL-118). Deleting a site is exactly this class and it is ' +
-    'unlogged. Left classified rather than half-instrumented: the route ' +
-    'soft-deletes and schedules, so which moment is "deleted" is a decision, ' +
-    'not a line to drop in.',
-  'apps/console/app/api/hosts/rename/route.ts':
-    'PENDING (AGL-118). A site changing its public address is this class.',
-  'apps/console/app/api/domains/detach/route.ts':
-    'PENDING (AGL-118). The attach half now logs; detach has several exit ' +
-    'branches and picking the terminal one needs the same care attach got.',
   // The three billing routes share one decision, recorded here so whoever
   // picks this up inherits the answer instead of re-deriving it.
   //
@@ -194,7 +177,7 @@ const NOT_LOGGED = {
 }
 
 /** How many exclusions are allowed. It may fall; it may not rise. */
-const RATCHET = 11
+const RATCHET = 6
 
 const read = (relative) => {
   const path = `${repoRoot}${relative}`

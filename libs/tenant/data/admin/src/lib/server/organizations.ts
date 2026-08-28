@@ -842,7 +842,15 @@ export const syncHostMemberRoles = syncOrgAuthProjections
 
 /** What an org activity entry points at; `id` lets detail views filter. */
 export interface OrgActivityTarget {
-  type: 'org' | 'member' | 'invite'
+  /**
+   * `host` is a fact about a workspace that no host feed can hold (AGL-118).
+   *
+   * A site's own log lives at `hosts/{hostId}/activity` and is destroyed with
+   * the site — `eraseHost` recursive-deletes the whole tree — so "this site
+   * was deleted" written there is an entry with no reader by construction.
+   * It is an org-level event, and this is the only feed that outlives it.
+   */
+  type: 'org' | 'member' | 'invite' | 'host'
   id?: string
   name?: string
 }
