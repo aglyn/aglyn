@@ -32,7 +32,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   useFirestore,
@@ -49,6 +49,9 @@ export interface HostRunHistoryCardProps {
   /** Overrides the default help affordance on the card header. */
   help?: HelpTipContent
 }
+
+/** Activity rows fetched before the run filter and the `max` slice. */
+const WINDOW = 200
 
 const RESULT_COLOR = {
   succeeded: 'success',
@@ -92,9 +95,35 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
     }),
   } = props
   const firestore = useFirestore()
+  /*
+   * The window is NARROWED BY THE SERVER, not by the client (AGL-2292).
+   *
+   * A bare `limit(200)` with no ordering is not "the most recent 200 runs" —
+   * Firestore answers an unordered limit in `__name__` order, so it is an
+   * arbitrary slice of the host's whole activity feed. `activity` also holds
+   * publishes, media saves and member changes, and only entries carrying a
+   * run result survive the filter below, so a busy site could fill all 200
+   * places with rows this card discards and report "No runs yet" for a
+   * workflow that had run all day.
+   *
+   * `target.id` equality is what makes the read proportional to the card:
+   * it asks for this workflow's rows rather than the site's. It carries no
+   * `orderBy` deliberately — an equality plus an ordering on a second field
+   * needs a composite index, and the client sort below already puts the
+   * newest first. The untargeted case has no equality to pair, so it orders
+   * server-side instead.
+   */
   const { data: entries } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'activity'), limit(200)),
-    [firestore, hostId],
+    () => {
+      if (!hostId) return null
+      const base = collection(firestore, 'hosts', hostId, 'activity')
+      return targetId
+        ? query(base, where('target.id', '==', targetId), limit(WINDOW))
+        : query(base, orderBy('createdAt', 'desc'), limit(WINDOW))
+    },
+    // `targetId` belongs here: it now shapes the query, so a card that
+    // switched workflows without it would go on showing the first one's runs.
+    [firestore, hostId, targetId],
     { idField: '$id' },
   )
 
