@@ -416,6 +416,12 @@ function BesignerPage(props) {
         ? 'Screen saved — your live page is refreshing now'
         : undefined,
     queueLoading,
+    // The refusal half of `onSaved` — the two together are what let
+    // `handleSaveAndPublish` tell a document that needs no save from one that
+    // could not be saved.
+    onSaveRefused: () => {
+      saveRefusedRef.current = true
+    },
     onSaved: () => {
       // Records that the write LANDED (AGL-1152), for `Save & publish`.
       // `handleSave` resolves `void` whether it wrote or refused — a size
@@ -694,6 +700,16 @@ function BesignerPage(props) {
   /** Did the last save actually land? See `onSaved`. */
   const savedLandedRef = useRef(false)
   /**
+   * Was the last save REFUSED, as opposed to merely having nothing to do?
+   *
+   * `savedLandedRef` staying false answers "did the document change", which is
+   * the wrong question for `Save & publish`: it is equally false for a size
+   * guard that stored nothing and for an already-saved document that needs no
+   * store. Promoting the version pointer is right in the second case and wrong
+   * in the first, so the refusal is tracked separately rather than inferred.
+   */
+  const saveRefusedRef = useRef(false)
+  /**
    * A draft has been saved and NOT yet published.
    *
    * The app bar's three states describe the LIVE SITE, not the canvas, and the
@@ -794,7 +810,23 @@ function BesignerPage(props) {
 
   const handleSaveAndPublish = useCallback(async () => {
     savedLandedRef.current = false
+    saveRefusedRef.current = false
     await handleSave()
+    /**
+     * A REFUSED save stops here, before anything promotes it.
+     *
+     * `remoteChanged` alone cannot carry this: it is React state, so it is
+     * still stale in this tick for a conflict the save itself discovered, and
+     * it says nothing at all about the size guard or a thrown write. Past an
+     * unstopped refusal every following step makes the failure worse — the
+     * pointer promotes a version whose document never received the edit, the
+     * recovery draft holding the only copy of that work is cleared, and a
+     * green "Saved and published" lands on top of the error toast that just
+     * explained the write did not happen.
+     *
+     * The refusal has already told the author why, so this only has to stop.
+     */
+    if (saveRefusedRef.current) return
     /**
      * A save that did not write is not a reason to stop (AGL-1483).
      *
@@ -822,7 +854,20 @@ function BesignerPage(props) {
     }
     const livePointer = screenResult?.data?.versionId
     if (livePointer !== versionId) {
-      await updateScreenDoc({ versionId } as any)
+      // The pointer write is the publish. Unhandled, a rejection here skips
+      // the success toast without ever raising one of its own, so the author
+      // is told nothing at all — the same silence as a green toast over a
+      // failed publish, minus even the wrong message.
+      try {
+        await updateScreenDoc({ versionId } as any)
+      } catch (error) {
+        return enqueueSnackbar(
+          `Saved, but publishing failed: ${
+            (error as Error | undefined)?.message ?? 'unknown error'
+          }`,
+          { variant: 'error', persist: false },
+        )
+      }
     }
     // Not awaited: the writes above have already succeeded, and a cache hint
     // that fails must never make a completed publish look failed.

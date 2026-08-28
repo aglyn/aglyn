@@ -152,6 +152,23 @@ export interface UseBesignerDocumentOptions<TData = unknown>
   /** Called after a successful save, for activity logging. */
   onSaved?: () => void
   /**
+   * Called when a save was REFUSED or FAILED — the document does not hold the
+   * canvas.
+   *
+   * `onSaved` not firing is not enough to tell a caller that, because it also
+   * stays silent for "nothing to save", where the document already holds the
+   * canvas and every follow-on step is safe. The two need opposite handling by
+   * anything that acts on a save: `handleSaveAndPublish` promotes the version
+   * pointer afterwards, and promoting past a refusal publishes a version whose
+   * document never received the edit.
+   *
+   * Fired for every path that leaves the stored tree unchanged against the
+   * author's intent: a stale-baseline conflict, an unpreparable canvas, the
+   * size guard, and a thrown write. Each has already explained itself in a
+   * toast, so a caller's job is only to stop.
+   */
+  onSaveRefused?: () => void
+  /**
    * Overrides the success message. Defaults to `"<Noun> saved successfully"`;
    * templates say simply "Template saved" and that copy is preserved rather
    * than normalised by the extraction.
@@ -289,6 +306,7 @@ export function useBesignerDocument<TData = unknown>(
     notify = noopNotify,
     queueLoading = noopQueueLoading,
     onSaved,
+    onSaveRefused,
     savedMessage,
     toCanvasNodes,
     fromCanvasNodes,
@@ -543,6 +561,7 @@ export function useBesignerDocument<TData = unknown>(
     // is worse than a refusal the user can act on — and their work is still
     // in the canvas either way.
     if (remoteChanged) {
+      onSaveRefused?.()
       return notify(new Aglyn.ConcurrentEditError().message, {
         variant: 'warning',
         allowDuplicate: true,
@@ -552,6 +571,7 @@ export function useBesignerDocument<TData = unknown>(
 
     if ('error' in prepared) {
       dequeueLoading()
+      onSaveRefused?.()
       return notify(prepared.error, {
         variant: 'warning',
         allowDuplicate: true,
@@ -565,6 +585,7 @@ export function useBesignerDocument<TData = unknown>(
     const size = Aglyn.measureNodeMap(nextNodes)
     if (size.tooLarge) {
       dequeueLoading()
+      onSaveRefused?.()
       const worst = size.largest[0]
       return notify(
         `This ${noun} is ${Aglyn.formatBytes(size.bytes)} and too large to ` +
@@ -614,6 +635,9 @@ export function useBesignerDocument<TData = unknown>(
         { variant: 'success', persist: false },
       )
     } catch (saveError) {
+      // Whatever the reason, the stored tree is not what the canvas holds, so
+      // anything waiting on this save has to stop.
+      onSaveRefused?.()
       // A store-side refusal of a stale baseline (AGL-1301) is the SAME
       // conflict the guard above refuses, caught later — surface it the same
       // way, and pause saving so the next click does not retry blind. Name
@@ -643,6 +667,7 @@ export function useBesignerDocument<TData = unknown>(
     queueLoading,
     noun,
     onSaved,
+    onSaveRefused,
     savedMessage,
     fromCanvasNodes,
     draftIds,

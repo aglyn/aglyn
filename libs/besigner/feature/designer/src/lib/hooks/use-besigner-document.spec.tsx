@@ -772,6 +772,107 @@ describe('useBesignerDocument', () => {
     })
   })
 
+  /**
+   * `handleSave` resolves `void` whichever way it went, so the only thing a
+   * caller can act on is which callback fired. `Save & publish` promotes the
+   * version pointer after a save, and the two silences it has to tell apart
+   * are "nothing to store" (promote — the document already holds the tree) and
+   * "could not store" (stop — the document holds the OLD tree, and publishing
+   * it makes the stale version live while reporting success).
+   */
+  describe('refusal signal for callers that act on a save', () => {
+    it('reports a refusal when the size guard stops the write', async () => {
+      setCanvasDirty(true)
+      jest.spyOn(Aglyn, 'measureNodeMap').mockReturnValue({
+        bytes: 1_200_000,
+        tooLarge: true,
+        nearLimit: false,
+        largest: [{ id: 'hero', bytes: 900_000 }],
+      } as never)
+      const onSaveRefused = jest.fn()
+      const onSaved = jest.fn()
+      const { result, save } = setup({ onSaveRefused, onSaved })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).not.toHaveBeenCalled()
+      expect(onSaveRefused).toHaveBeenCalled()
+      expect(onSaved).not.toHaveBeenCalled()
+    })
+
+    it('reports a refusal when the write itself rejects', async () => {
+      setCanvasDirty(true)
+      jest.spyOn(Aglyn, 'measureNodeMap').mockReturnValue({
+        bytes: 100,
+        tooLarge: false,
+        nearLimit: false,
+        largest: [],
+      } as never)
+      const onSaveRefused = jest.fn()
+      const onSaved = jest.fn()
+      const save = jest.fn().mockRejectedValue(new Error('offline'))
+
+      const { result } = setup({ save, onSaveRefused, onSaved })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(onSaveRefused).toHaveBeenCalled()
+      expect(onSaved).not.toHaveBeenCalled()
+    })
+
+    it('stays silent when there was simply nothing to save', async () => {
+      // Clean canvas that agrees with the stored document: no write, and no
+      // refusal either — the caller may go on and publish.
+      setCanvasDirty(false)
+      mockCanvas.toJSON.mockReturnValue({ nodes: NODES })
+      const onSaveRefused = jest.fn()
+      const { result, save } = setup({ onSaveRefused })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).not.toHaveBeenCalled()
+      expect(onSaveRefused).not.toHaveBeenCalled()
+    })
+
+    it('reports a refusal rather than merging a concurrent edit', async () => {
+      setCanvasDirty(true)
+      const onSaveRefused = jest.fn()
+      const { result, rerender, save } = setup({
+        updatedAt: stamp(1),
+        onSaveRefused,
+      })
+
+      // Somebody else's write lands under us, carrying a node this canvas has
+      // never seen — the content is what makes it a conflict.
+      act(() => {
+        rerender({
+          updatedAt: stamp(2),
+          nodes: {
+            root: { $id: 'root', componentId: 'div', nodes: ['theirs'] },
+            theirs: {
+              $id: 'theirs',
+              componentId: 'muiTypography',
+              parentId: 'root',
+            },
+          },
+        } as never)
+      })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).not.toHaveBeenCalled()
+      expect(onSaveRefused).toHaveBeenCalled()
+    })
+  })
+
   describe('json editor', () => {
     it('opens, applies nodes and closes', () => {
       const applyNodes = jest
