@@ -16,7 +16,13 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  buildAddToCartParams,
+  buildBeginCheckoutParams,
+  trackEvent,
+  trackEventBeforeNavigation,
+  type AnalyticsItem,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   isPaymentsNotConfigured,
   storefrontPaymentsNotConfiguredText,
@@ -102,6 +108,31 @@ const SAMPLE: Detail = {
     { id: 'b', options: { Size: 'M' }, priceUsd: 29, soldOut: false },
     { id: 'c', options: { Size: 'L' }, priceUsd: 32, soldOut: true },
   ],
+}
+
+/**
+ * The GA4 `items` entry for one line of this product.
+ *
+ * `item_id` is the PRODUCT id and never the variant's, matching the
+ * `view_item` above and the cart's lines below: GA joins the funnel on that
+ * id, and a `begin_checkout` keyed on a variant would report a product nothing
+ * else on the storefront had ever mentioned.
+ *
+ * `price` is the resolved variant's, which arrived from the server's product
+ * payload — the same figure `checkout` prices the charge from, so the reported
+ * value and the amount Stripe collects come from one source.
+ */
+function buyItem(
+  product: Detail,
+  variant: DetailVariant | undefined,
+  quantity: number,
+): AnalyticsItem {
+  return {
+    item_id: product.id,
+    item_name: product.name,
+    price: variant?.priceUsd,
+    quantity,
+  }
 }
 
 function slugFromLocation(): string {
@@ -261,9 +292,18 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       }).catch(() => null)
       if (response?.ok) {
         setAdded(true)
-        trackEvent('add_to_cart', {
-          items: [{ item_id: resolved.id, item_name: resolved.name }],
-        })
+        // Priced (AGL-1591's shape, completed): the resolved variant's price
+        // and the chosen quantity are both known here and both come from the
+        // server's product payload, so GA4's "value added to cart" is a real
+        // number rather than the empty column an items-only hit leaves. The
+        // `value` describes what was JUST ADDED, not the cart's new total —
+        // see `buildAddToCartParams`.
+        trackEvent(
+          'add_to_cart',
+          buildAddToCartParams({
+            items: [buyItem(resolved, variant, quantity)],
+          }),
+        )
         window.dispatchEvent(new Event(CART_UPDATED_EVENT))
       }
     }
@@ -320,6 +360,22 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         // Checked FIRST so a server that somehow sent both cannot silently
         // navigate the shopper away from the form we just decided to show.
         if (response.ok && payload?.clientSecret && payload?.publishableKey) {
+          // Buy-now's `begin_checkout`. The cart path has reported this since
+          // AGL-1591 and this one never did, so a storefront whose shoppers
+          // skip the cart showed `view_item` → `add_to_cart` → nothing →
+          // `purchase`: GA4's shopping funnel put every single-product sale in
+          // the "abandoned checkout" bucket, and the merchant's checkout rate
+          // read as a collapse rather than as an unmeasured path.
+          //
+          // Reported on BOTH branches, and from the same place, for the reason
+          // the cart states: a count that halved the day the in-page payment
+          // flag flipped would look like a conversion collapse.
+          trackEvent(
+            'begin_checkout',
+            buildBeginCheckoutParams({
+              items: [buyItem(resolved, variant, quantity)],
+            }),
+          )
           setNativeCheckout({
             clientSecret: String(payload.clientSecret),
             publishableKey: String(payload.publishableKey),
@@ -328,6 +384,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           return
         }
         if (response.ok && payload?.url) {
+          // Awaited before the redirect (AGL-1580), for the reason spelled out
+          // on the cart's matching branch: delivery here is a synchronous
+          // `window.gtag` call today and the await costs nothing, but the
+          // property that makes a bare call safe is invisible from this file.
+          await trackEventBeforeNavigation(
+            'begin_checkout',
+            buildBeginCheckoutParams({
+              items: [buyItem(resolved, variant, quantity)],
+            }),
+          )
           window.location.assign(payload.url)
           return
         }

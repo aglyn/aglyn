@@ -773,7 +773,7 @@ function PopupOverlay(props: {
     const value = email.trim()
     if (!value || submitted) return
     try {
-      await fetch('/api/forms/submit', {
+      const response = await fetch('/api/forms/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -788,6 +788,27 @@ function PopupOverlay(props: {
           website,
         }),
       })
+      // The popup's email capture is a lead, and it reported none: an
+      // announcement popup is often a site's highest-converting capture, and
+      // the merchant saw the impression and the dismiss (`aglyn_overlay`) with
+      // nothing in between. The generic form block has sent `generate_lead`
+      // since AGL-1561; this door was simply never wired to it.
+      //
+      // Gated on `response.ok`, unlike the visitor-facing thank-you below.
+      // The two disagree deliberately: a spam-refused or rate-limited capture
+      // is still shown the thank-you — telling a real visitor to try again
+      // after a honeypot verdict would leak the honeypot — but it is NOT a
+      // lead, and counting it would inflate the only number the merchant uses
+      // to judge whether the popup is worth interrupting people with.
+      //
+      // `form_name` is the block's own name, matching the `formName` on the
+      // wire; the address the visitor just typed never leaves this function.
+      if (response.ok) {
+        trackEvent('generate_lead', {
+          form_name: 'Popup',
+          form_location: window.location.pathname,
+        })
+      }
     } catch {
       // Best-effort — still thank the visitor.
     }

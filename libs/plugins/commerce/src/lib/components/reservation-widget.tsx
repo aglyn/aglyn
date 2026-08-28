@@ -16,6 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  buildBeginCheckoutParams,
+  trackEventBeforeNavigation,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import * as CommerceModel from '../model'
 import { mdiCalendarCheckOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -149,6 +153,44 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
         })
         const payload = await response.json().catch(() => ({}))
         if (response.ok && payload?.url) {
+          // The stay's `begin_checkout`. This widget charges a real deposit
+          // through the merchant's Stripe account and reported nothing at all,
+          // so a lodging site saw traffic and then silence — GA4's ecommerce
+          // reports read that as a 100% abandonment rate on every resource
+          // they list, which is the same hole `purchase` closed for products.
+          //
+          // After the server accepted the hold and minted a session, never on
+          // the click: the dates can lose a race and answer 409, and counting
+          // those would report checkouts that Stripe never saw.
+          //
+          // `value` is what is being charged TODAY — `reserve.ts` bills
+          // `depositCents || totalCents` — not the value of the stay. Reporting
+          // the whole stay against a deposit payment would make the merchant's
+          // checkout value disagree with the `purchase` that follows it, and
+          // the gap would look like abandoned upsell rather than a deposit.
+          //
+          // Ex-tax, matching `buildStorefrontPurchaseParams`: the lodging tax
+          // rides the session as a second line and is money held for a taxing
+          // authority, not the merchant's revenue.
+          const chargedCents = quote
+            ? quote.depositCents || quote.totalCents
+            : 0
+          if (availability && chargedCents > 0) {
+            await trackEventBeforeNavigation(
+              'begin_checkout',
+              buildBeginCheckoutParams({
+                value: chargedCents / 100,
+                items: [
+                  {
+                    item_id: resourceId,
+                    item_name: availability.resource.name,
+                    price: chargedCents / 100,
+                    quantity: 1,
+                  },
+                ],
+              }),
+            )
+          }
           window.location.assign(payload.url)
           return
         }

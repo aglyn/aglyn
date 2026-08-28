@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline, mdiFormTextbox } from '@aglyn/shared-data-mdi'
 import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
@@ -245,9 +245,19 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           )
           // GA4 lead conversion (AGL-1561). Inside `response.ok`, so it
           // measures a SUBMISSION, not a click and not a validation failure —
-          // the distinction that makes a conversion rate mean anything. It
-          // also fires BEFORE the redirect branch below, which tears the page
-          // down and would take the event with it.
+          // the distinction that makes a conversion rate mean anything.
+          //
+          // AWAITED, because the branch below navigates. Ordering the call
+          // ahead of the `assign` is not on its own enough, and the obvious
+          // reasoning about beacons is the wrong one: once a hit REACHES gtag
+          // a navigation cannot destroy it, so `transport_type: 'beacon'`
+          // fixes nothing. What is lost is a hit that never reaches gtag,
+          // which is what happens when the surface's transport is async and
+          // its initialization promise is still pending — the continuation is
+          // scheduled behind the navigation task and never runs. The tenant
+          // runtime registers no transport, so this resolves immediately and
+          // costs the redirect nothing; it is written this way because the
+          // property that makes a bare call safe is invisible from here.
           //
           // `formName` is author-written site content, never a field VALUE:
           // no submitted field ever reaches GA from here.
@@ -257,8 +267,8 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           // configured, so a customer's form reports into the customer's own
           // property and aglyn.com's reports into ours. It is consent-gated
           // either way: without a grant the script never loaded (AGL-1498)
-          // and `trackEvent` finds no `window.gtag` to call.
-          trackEvent('generate_lead', {
+          // and the delivery path finds no `window.gtag` to call.
+          await trackEventBeforeNavigation('generate_lead', {
             form_name: formName || 'Form',
             form_location: window.location.pathname,
           })
