@@ -93,11 +93,11 @@ const ENV_READ =
  * guarding is not a guard.
  */
 const INDIRECT_READS: Record<string, string> = {
-  AGLYN_TAX_JURISDICTION: 'apps/console/app/api/admin/tax-return/route.ts',
-  AGLYN_TAX_REGISTRATION_ID: 'apps/console/app/api/admin/tax-return/route.ts',
-  AGLYN_TAX_FILING_ID: 'apps/console/app/api/admin/tax-return/route.ts',
-  TX_WEBFILE_NUMBER: 'apps/console/app/api/admin/tax-return/route.ts',
-  TX_TAXPAYER_NUMBER: 'apps/console/app/api/admin/tax-return/route.ts',
+  AGLYN_TAX_JURISDICTION: 'apps/console/utils/server/tax-filing-store.ts',
+  AGLYN_TAX_REGISTRATION_ID: 'apps/console/utils/server/tax-filing-store.ts',
+  AGLYN_TAX_FILING_ID: 'apps/console/utils/server/tax-filing-store.ts',
+  TX_WEBFILE_NUMBER: 'apps/console/utils/server/tax-filing-store.ts',
+  TX_TAXPAYER_NUMBER: 'apps/console/utils/server/tax-filing-store.ts',
   AGLYN_SSO_REQUIRED_DOMAINS:
     'libs/tenant/data/admin/src/lib/server/sso-domain-policy.ts',
   AGLYN_SSO_DOMAIN_ENFORCEMENT:

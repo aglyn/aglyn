@@ -32,13 +32,8 @@ import {
   type StorefrontTaxReturnRowInput,
   type TaxReturnRowInput,
 } from '../../../../utils/server/tx-return'
-import {
-  TAX_FILING_ID_ENV,
-  TAX_JURISDICTION_ENV,
-  TAX_REGISTRATION_ID_ENV,
-  taxFilingJurisdiction,
-  TX_JURISDICTION,
-} from '../../../../utils/tax-jurisdictions'
+import { TX_JURISDICTION } from '../../../../utils/tax-jurisdictions'
+import { resolveTaxFilingSettings } from '../../../../utils/server/tax-filing-store'
 
 /**
  * The sales tax return for one filing period, summed from the
@@ -70,48 +65,36 @@ const ROW_CAP = 2000
  * The filer's registration identifiers, and the jurisdiction they belong to
  * (AGL-2021).
  *
- * SERVER-ONLY env, on purpose, and the reason is the whole point of the issue:
- * a filing credential such as the Texas Webfile number is what the
- * Comptroller's eSystems calls a "Personal Identification Code" and uses to
- * authenticate a profile claiming access to a taxpayer account. A
- * `NEXT_PUBLIC_*` var would be inlined into a client chunk that Next serves
- * without authentication — republishing the credential this change exists to
- * un-publish. Read here instead, behind the `staff` gate below, so the only
- * way to see it is to be allowed to see it.
+ * Resolved from the staff console's stored configuration first and
+ * server-only environment second — `utils/server/tax-filing-store.ts` reads
+ * both and `utils/tax-filing-config.ts` states the precedence. Neither layer
+ * is `NEXT_PUBLIC_*`, and the reason is the whole point of the issue: a filing
+ * credential such as the Texas Webfile number is what the Comptroller's
+ * eSystems calls a "Personal Identification Code" and uses to authenticate a
+ * profile claiming access to a taxpayer account. A `NEXT_PUBLIC_*` var would
+ * be inlined into a client chunk that Next serves without authentication —
+ * republishing the credential this change exists to un-publish.
+ *
+ * This response is the ONE place the whole value is handed out, behind the
+ * `staff` gate below, because it is the one place it is needed: a filer
+ * transcribes it onto the return. `/api/admin/tax-filing`, which configures
+ * it, never returns it at all.
  *
  * No defaults for the numbers themselves. An unconfigured deployment — every
  * self-host operator, on day one — reports absent and the surfaces say so; see
  * `TAX_REGISTRATION_UNSET`.
- *
- * ## Why the Texas names are still read
- *
- * `TX_TAXPAYER_NUMBER` / `TX_WEBFILE_NUMBER` configure a LIVE registration
- * with a filing obligation. A rename that quietly unsets one is a return filed
- * without its identifiers, which is a worse failure than the TX-only naming it
- * corrects — so they keep working as aliases wherever the jurisdiction still
- * declares them, and the generic names win when both are set.
  */
-function taxRegistrationFromEnv(): {
+async function taxRegistrationInForce(): Promise<{
   jurisdiction: string
   registrationId: string | null
   filingId: string | null
   webfileNumber?: string | null
   taxpayerNumber?: string | null
-} {
-  const read = (name: string): string | null => {
-    const value = process.env[name]
-    const text = typeof value === 'string' ? value.trim() : ''
-    return text.length ? text : null
-  }
-  const jurisdiction = taxFilingJurisdiction(read(TAX_JURISDICTION_ENV))
-  const legacy = jurisdiction.legacyEnv
-  const registrationId =
-    read(TAX_REGISTRATION_ID_ENV) ??
-    (legacy ? read(legacy.registrationId) : null)
-  const filingId =
-    read(TAX_FILING_ID_ENV) ?? (legacy ? read(legacy.filingId) : null)
+}> {
+  const resolved = await resolveTaxFilingSettings()
+  const { registrationId, filingId } = resolved
   return {
-    jurisdiction: jurisdiction.code,
+    jurisdiction: resolved.jurisdiction.code,
     registrationId,
     filingId,
     // The Texas-named fields, mirrored for Texas alone. A client chunk cached
@@ -120,7 +103,7 @@ function taxRegistrationFromEnv(): {
     // missing. Mirroring them on any other jurisdiction would put a foreign
     // identifier under a Comptroller label, which is the confusion this whole
     // change removes.
-    ...(jurisdiction.code === TX_JURISDICTION
+    ...(resolved.jurisdiction.code === TX_JURISDICTION
       ? { webfileNumber: filingId, taxpayerNumber: registrationId }
       : {}),
   }
@@ -185,6 +168,7 @@ async function handler(request: Request): Promise<Response> {
       storefrontInPeriod,
       storefrontUndated,
       marketplaceInPeriod,
+      registration,
     ] = await Promise.all([
         revenue
           .where('paidAt', '>=', range.start)
@@ -204,6 +188,9 @@ async function handler(request: Request): Promise<Response> {
           .where('createdAt', '<', range.end)
           .limit(ROW_CAP + 1)
           .get(),
+        // Alongside the queries rather than before them: it is one cached
+        // document read and the return cannot be built without it either way.
+        taxRegistrationInForce(),
       ])
     const truncated = inPeriod.size > ROW_CAP
     const docs = inPeriod.docs.slice(0, ROW_CAP)
@@ -257,7 +244,7 @@ async function handler(request: Request): Promise<Response> {
        * unconfigured, and the jurisdiction they belong to so the surfaces can
        * name the authority instead of assuming one.
        */
-      registration: taxRegistrationFromEnv(),
+      registration,
       /**
        * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three
        * buckets with no grand total, on purpose: `aglynLiable` is tax Stripe

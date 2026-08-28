@@ -966,6 +966,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Platform-wide operator settings written through audited staff routes
+    // (AGL-2021). Today: `taxFiling`, which holds the jurisdiction this
+    // deployment files in and the registration identifiers it files under.
+    //
+    // Deny ALL client access, staff included, and the identifiers are why. A
+    // filing credential such as a Texas Webfile number authenticates a profile
+    // at the Comptroller's eSystems; a rule that let a staff browser read this
+    // document would put that credential in any session holding a staff token,
+    // reachable without the audited route and without the masking the console
+    // applies. Every read is an Admin-SDK read behind the staff gate, and only
+    // the return itself is ever handed the whole value.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    match /platformSettings/{settingId} {
+      allow read, write: if false;
+    }
+
     // Scheduled-job heartbeats (AGL-1955): one doc per cron job, stamped by
     // the run itself through the Admin SDK, read by /api/health/crons to
     // notice a job that STOPPED being scheduled. Deny ALL client access — a

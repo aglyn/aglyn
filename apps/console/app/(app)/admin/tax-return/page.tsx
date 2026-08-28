@@ -103,6 +103,7 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { DEFAULT_FIRST_TAXABLE_PERIOD } from '../../../../utils/tax-filing-config'
 import { taxRegistrationSetupHint } from '../../../../utils/tax-jurisdictions'
 import {
   centsToDollars,
@@ -129,8 +130,59 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
   // and the default selection must not shift under a page left open across
   // a quarter boundary while someone is reading it.
   const [now] = useState(() => new Date())
-  const periodOptions = useMemo(() => taxReturnPeriodOptions(now), [now])
-  const [period, setPeriod] = useState(() => defaultTaxReturnPeriod(now))
+  /**
+   * The earliest filable period, from Platform settings.
+   *
+   * `null` means the answer has not settled yet, and NOTHING below builds a
+   * menu or fetches a return until it has. The floor used to be a compiled-in
+   * constant precisely because the menu had to exist before the first request
+   * and the configuration arrived on the response to it; a separate,
+   * identifier-free settings read breaks that circle, so an operator whose
+   * obligation began before this deployment's own is offered their own
+   * periods instead of having to reach them by hand.
+   *
+   * Degrade-safe: any failure settles on the built-in floor rather than
+   * leaving the page without a menu.
+   */
+  const [floor, setFloor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isStaff || !user) return
+    let active = true
+    void (async () => {
+      let configured: string | null = null
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/admin/tax-filing', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        })
+        const body = await response.json().catch(() => ({}))
+        const value = body?.config?.firstTaxablePeriod
+        if (response.ok && typeof value === 'string') configured = value
+      } catch {
+        configured = null
+      }
+      if (active) setFloor(configured ?? DEFAULT_FIRST_TAXABLE_PERIOD)
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, user])
+  const periodOptions = useMemo(
+    () => (floor ? taxReturnPeriodOptions(now, floor) : []),
+    [now, floor],
+  )
+  const [period, setPeriod] = useState('')
+  useEffect(() => {
+    if (!floor) return
+    // Re-selects only when the current choice is not on the menu the floor
+    // produced — which is the case on first paint, and again if an operator
+    // moves the floor past the period a reader had open.
+    setPeriod((current) =>
+      periodOptions.some((option) => option.value === current)
+        ? current
+        : defaultTaxReturnPeriod(now, floor),
+    )
+  }, [floor, now, periodOptions])
 
   const [payload, setPayload] = useState<TaxReturnPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -246,7 +298,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('salesTaxReturn', {
                 anchor: '#choosing-the-period',
                 excerpt:
-                  'Pick the quarter (or month) to file. Periods start at the registration’s first taxable sales date — 2026-09-01 — because nothing earlier can be filed.',
+                  'Pick the quarter (or month) to file. The menu starts at the earliest filable period configured in Platform settings — September 2026 by default — because nothing earlier can be filed.',
               })}
               contentGutterX
               contentGutterY

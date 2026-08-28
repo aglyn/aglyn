@@ -789,12 +789,23 @@ context.
 
 ## Sales tax, and what to do if you are not in Texas {#tax}
 
-:::info `/admin/tax-return` files where you tell it to. Texas is the default, not the assumption.
+:::info The three variables below are the BOOTSTRAP. The control is in the console.
 
-`AGLYN_TAX_JURISDICTION` says where this deployment files, and
-`AGLYN_TAX_REGISTRATION_ID` / `AGLYN_TAX_FILING_ID` carry your own identifiers.
-Unset, the jurisdiction is `US-TX` and the identifiers are absent, so both
-surfaces read `NOT CONFIGURED` rather than printing anyone else's numbers.
+Where you file and the numbers you file under live in **Staff → Platform settings
+→ Sales tax filing**, where changing them needs the `super` staff role and no
+deploy. Registering in a new state is an operator action, so it must not require
+an environment edit and a release.
+
+`AGLYN_TAX_JURISDICTION`, `AGLYN_TAX_REGISTRATION_ID` and `AGLYN_TAX_FILING_ID`
+are what a fresh install runs on before anybody opens that page: they fill in
+every field the console has not stored. **Anything stored in the console wins**,
+and the card names the layer each value came from — so a variable you set and
+then override is listed by name as *not in force* rather than quietly ignored.
+Clearing the stored record in the console hands these their layer back.
+
+Unset, and with nothing stored, the jurisdiction is `US-TX` and the identifiers
+are absent, so both surfaces read `NOT CONFIGURED` rather than printing anyone
+else's numbers.
 
 Texas is the one jurisdiction with a form this software knows. Everywhere else
 gets a **return breakdown** — what was collected, and where — labeled as raw
@@ -833,20 +844,22 @@ control your own claims — so you will see it. What you get is:
   storefront tax collected, your marketplace purchases. Nothing phones home, and
   the by-jurisdiction breakdown underneath is genuinely useful.
 - **On your own jurisdiction's lines.** The filing figures read the bucket named
-  by `AGLYN_TAX_JURISDICTION`, and the page heading, the figures card and the
+  by the configured jurisdiction, and the page heading, the figures card and the
   export all name it. A code that matches no bucket makes every figure read
-  `0.00`, so it is raised as a **blocking** finding rather than filed as a quiet
-  zero.
+  `0.00`, so it is refused at the console's own input and, for a code that
+  arrived through the environment where nothing validates it, raised on the
+  return as a **blocking** finding rather than filed as a quiet zero.
 - **As a form only where a form is known.** Texas gets Form 01-114's own lines
   and a Webfile-shaped export. Every other jurisdiction gets the period, the
   gross, the taxable base and the tax collected, split by the destination region
   the tax was computed for, under a banner saying it is for manual filing and is
   not a submittable return. There is no second state's form, no VAT or GST
   return, and no tax engine beyond Stripe Tax.
-- **With a period floor you did not choose.** The picker cannot go earlier than
-  2026 Q3, because that is Aglyn's own first taxable period. Earlier periods are
-  reachable through the route's own `?period=` — it accepts any well-formed
-  quarter or month — but the menu will not offer them.
+- **From the period your obligation began.** The picker floors at **Earliest
+  filable period** in Platform settings, which defaults to September 2026 —
+  Aglyn's own first taxable month. Set your own and the menu offers your
+  periods; the page reads the setting before it builds the menu, so the floor is
+  right on first paint.
 - **With liability sentences written for a marketplace facilitator**, sourced
   from Aglyn's terms and its reading of its own position. The mechanics are the
   same wherever this runs; the conclusions are not advice about your
@@ -854,17 +867,28 @@ control your own claims — so you will see it. What you get is:
 
 ### Setting it up {#tax-what-to-do}
 
+Set these to bring a fresh install up already filing correctly, or leave them
+unset and configure it in **Staff → Platform settings → Sales tax filing**, which
+is the same three values with an audit trail and no redeploy. Everything below is
+the bootstrap layer: a value stored in the console outranks it.
+
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
-| `AGLYN_TAX_JURISDICTION` | Optional | Runtime | Where this deployment files, as an ISO 3166-1 alpha-2 country with an optional subdivision — `US-TX`, `US-CA`, `GB`, `DE`. It is looked up as a key in the report's own buckets, which are `COUNTRY-STATE` where an address carries a state and `COUNTRY` where it does not, so write it the same way. Default `US-TX`. |
-| `AGLYN_TAX_REGISTRATION_ID` | Optional | Runtime | The number the authority knows you by — a Texas taxpayer number, a seller's permit, a VAT number. Printed on the page and in the exported working papers. **Server-only**: never prefix it with `NEXT_PUBLIC_`. |
-| `AGLYN_TAX_FILING_ID` | Optional | Runtime | The filing-portal credential where one exists, such as the Texas Webfile number — which the Comptroller's eSystems treats as an authentication code, so it is **server-only** for the same reason and more urgently. Required alongside the registration id for `US-TX`; optional everywhere else, because most authorities issue one number. |
-| `TX_WEBFILE_NUMBER` | Deprecated | Runtime | The former name of `AGLYN_TAX_FILING_ID`. Still read when the jurisdiction is `US-TX`, so an existing deployment is not unset by the rename. |
+| `AGLYN_TAX_JURISDICTION` | Bootstrap | Runtime | Where this deployment files until the console stores a jurisdiction, as an ISO 3166-1 alpha-2 country with an optional subdivision — `US-TX`, `US-CA`, `GB`, `DE`. It is looked up as a key in the report's own buckets, which are `COUNTRY-STATE` where an address carries a state and `COUNTRY` where it does not, so write it the same way. Default `US-TX`. |
+| `AGLYN_TAX_REGISTRATION_ID` | Bootstrap | Runtime | The number the authority knows you by — a Texas taxpayer number, a seller's permit, a VAT number. Printed on the return page and in the exported working papers; the console shows only a last four. **Server-only**: never prefix it with `NEXT_PUBLIC_`. |
+| `AGLYN_TAX_FILING_ID` | Bootstrap | Runtime | The filing-portal credential where one exists, such as the Texas Webfile number — which the Comptroller's eSystems treats as an authentication code, so it is **server-only** for the same reason and more urgently. Required alongside the registration id for `US-TX`; optional everywhere else, because most authorities issue one number. The console never shows it back at all. |
+| `TX_WEBFILE_NUMBER` | Deprecated | Runtime | The former name of `AGLYN_TAX_FILING_ID`. Still read when the environment's jurisdiction is `US-TX`, so an existing deployment is not unset by the rename. |
 | `TX_TAXPAYER_NUMBER` | Deprecated | Runtime | The former name of `AGLYN_TAX_REGISTRATION_ID`, read under the same condition. |
 
-With none of them set, the page says so and names what to set, and the export
-writes `NOT CONFIGURED …` rather than a blank cell someone files from — which is
-the correct output for a deployment that does not file at all.
+Both identifier variables are only in force while the jurisdiction in force is
+the one they were configured for. Change the jurisdiction in the console and they
+stop applying — one authority's registration number is never filed under another,
+so the return reads `NOT CONFIGURED` until the new authority's numbers are
+entered.
+
+With none of them set and nothing stored, the page says so and names what to set,
+and the export writes `NOT CONFIGURED …` rather than a blank cell someone files
+from — which is the correct output for a deployment that does not file at all.
 
 Two things this page cannot do for you, whatever you set: it does not decide
 whether you are a marketplace facilitator where you operate, and it does not know

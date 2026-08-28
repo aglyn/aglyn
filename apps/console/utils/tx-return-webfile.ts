@@ -172,8 +172,54 @@ export function taxReturnFilingJurisdiction(
   return taxFilingJurisdiction(payload?.registration?.jurisdiction)
 }
 
-/** First taxable sales date on the registration — no period precedes it. */
+/**
+ * First taxable sales date on this software's own registration — the floor
+ * that stands until an operator configures their own in Platform settings.
+ *
+ * Kept as `{ year, quarter }` because that is what the fallback in
+ * `defaultTaxReturnPeriod` needs; the month half lives in
+ * `DEFAULT_FIRST_TAXABLE_PERIOD`, which is `2026-09` rather than `2026-Q3`
+ * because Aglyn collected nothing in July or August of that quarter.
+ */
 export const TX_FIRST_TAXABLE_PERIOD = { year: 2026, quarter: 3 }
+
+/** The floor a period menu is built from, as year plus zero-based month. */
+interface TaxablePeriodFloor {
+  year: number
+  monthIndex: number
+}
+
+/**
+ * Parse a configured first taxable period into a menu floor.
+ *
+ * Accepts both shapes the return route accepts. A quarter floors at its FIRST
+ * month, a month at itself — so `2026-Q3` offers July onward and `2026-09`
+ * offers September onward, which is the difference between a menu that offers
+ * two months of nothing and one that does not.
+ *
+ * Anything unparseable falls back to the built-in floor rather than throwing:
+ * this runs while a page is painting, and a menu that renders the wrong floor
+ * is recoverable where one that renders nothing is not.
+ */
+function taxablePeriodFloor(period?: string | null): TaxablePeriodFloor {
+  const raw = String(period ?? '').trim().toUpperCase()
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(raw)
+  if (quarter) {
+    return {
+      year: Number(quarter[1]),
+      monthIndex: (Number(quarter[2]) - 1) * 3,
+    }
+  }
+  const month = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(raw)
+  if (month) {
+    return { year: Number(month[1]), monthIndex: Number(month[2]) - 1 }
+  }
+  return {
+    year: TX_FIRST_TAXABLE_PERIOD.year,
+    // September 2026 — see DEFAULT_FIRST_TAXABLE_PERIOD.
+    monthIndex: (TX_FIRST_TAXABLE_PERIOD.quarter - 1) * 3 + 2,
+  }
+}
 
 /** One row of the `/api/admin/tax-return` per-row listing. */
 export interface TaxReturnRow {
@@ -1425,21 +1471,25 @@ export interface TaxReturnPeriodOption {
  * filed is a period that can only be picked by mistake. Nothing later is
  * listed because a period that has not happened has no figures.
  *
- * The floor is this deployment's own, and it is NOT jurisdiction-aware: the
- * menu has to exist before the first request, and the configured jurisdiction
- * arrives on the response to it. An operator whose obligation began earlier
- * reaches those periods through the route's own `?period=` — the API accepts
- * any well-formed quarter or month — but the menu will not offer them until
- * the first taxable period is configuration too.
+ * The floor is CONFIGURATION. `firstTaxablePeriod` is stored beside the
+ * jurisdiction in Platform settings and read by the page before it builds this
+ * menu, so an operator whose obligation began in 2024 gets 2024's periods
+ * offered rather than having to reach them by hand through the route's own
+ * `?period=`. Omitted, it is this deployment's own first taxable month, which
+ * is what every existing caller gets.
  */
-export function taxReturnPeriodOptions(now: Date): TaxReturnPeriodOption[] {
+export function taxReturnPeriodOptions(
+  now: Date,
+  firstTaxablePeriod?: string | null,
+): TaxReturnPeriodOption[] {
   const quarters: TaxReturnPeriodOption[] = []
   const months: TaxReturnPeriodOption[] = []
   const year = now.getUTCFullYear()
   const monthIndex = now.getUTCMonth()
-  const firstYear = TX_FIRST_TAXABLE_PERIOD.year
-  const firstQuarterIndex = TX_FIRST_TAXABLE_PERIOD.quarter - 1
-  const firstMonthIndex = firstQuarterIndex * 3 + 2 // September
+  const floor = taxablePeriodFloor(firstTaxablePeriod)
+  const firstYear = floor.year
+  const firstQuarterIndex = Math.floor(floor.monthIndex / 3)
+  const firstMonthIndex = floor.monthIndex
 
   for (let y = firstYear; y <= year; y += 1) {
     for (let q = 0; q < 4; q += 1) {
@@ -1466,11 +1516,17 @@ export function taxReturnPeriodOptions(now: Date): TaxReturnPeriodOption[] {
 }
 
 /** The period a filer lands on: the newest quarter that has fully ended. */
-export function defaultTaxReturnPeriod(now: Date): string {
-  const options = taxReturnPeriodOptions(now).filter(
+export function defaultTaxReturnPeriod(
+  now: Date,
+  firstTaxablePeriod?: string | null,
+): string {
+  const options = taxReturnPeriodOptions(now, firstTaxablePeriod).filter(
     (option) => option.kind === 'quarter',
   )
-  if (!options.length) return `${TX_FIRST_TAXABLE_PERIOD.year}-Q${TX_FIRST_TAXABLE_PERIOD.quarter}`
+  if (!options.length) {
+    const floor = taxablePeriodFloor(firstTaxablePeriod)
+    return `${floor.year}-Q${Math.floor(floor.monthIndex / 3) + 1}`
+  }
   const currentQuarter = `${now.getUTCFullYear()}-Q${
     Math.floor(now.getUTCMonth() / 3) + 1
   }`

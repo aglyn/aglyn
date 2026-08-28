@@ -33,6 +33,12 @@ Nothing before September 2026 is offered. There was no collection obligation the
 an earlier period is not a period that can be filed — it is only a period that can be
 picked by mistake.
 
+September 2026 is Aglyn's own first taxable month, and it is a **setting**, not a fixed
+floor. An operator whose obligation began earlier sets **Earliest filable period** in
+[Where this deployment files](#where-this-deployment-files) and the menu offers their
+periods instead. The page reads that setting before it builds the menu, so the floor is
+right on first paint.
+
 The page defaults to the most recent quarter that has **fully ended**. The current
 quarter is still accruing, so its figures are a progress reading, not a return.
 
@@ -64,6 +70,62 @@ so the page states the count out loud and, when it is serious, says **do not fil
 A clean period says so explicitly — "every row read cleanly" — so that silence is never
 mistaken for a passing check.
 
+## Where this deployment files
+
+**Staff → Platform settings → Sales tax filing.** Reading it needs any staff role;
+changing it needs **super**, and every change is written to the audit log with the
+reason you type.
+
+| Field | What it is |
+|---|---|
+| **Jurisdiction** | A country, and a subdivision only if you file at that level. It is looked up as a key in the return's own buckets — `US-TX`, `US-CA`, `GB`, `DE` — so a value that cannot be a key is refused here rather than discovered later as a page of zeros. |
+| **Registration number** | The number the authority knows you by: a Texas taxpayer number, a seller's permit, a VAT number. |
+| **Filing credential** | The filing-portal number, where the authority issues one. Required alongside the registration number for `US-TX`, because the Comptroller's eSystems authenticates a profile with both; optional everywhere else, since most authorities issue one number. |
+| **Earliest filable period** | When your collection obligation began, as `YYYY-QN` or `YYYY-MM`. The period menu offers nothing earlier. |
+
+The country list is derived from the runtime's own region data rather than checked in,
+so it does not go stale. Subdivisions are **typed, not picked** — no runtime enumerates
+them, and a half-populated dropdown would be worse than an honest text field. Use the
+code that appears on buyer addresses (`TX`, `CA`, `NSW`). A country-only key is the
+right answer for most authorities.
+
+### Which layer is in force {#tax-filing-precedence}
+
+There are two places these values can come from, and the card says which one won for
+every field.
+
+1. **This console wins.** Anything stored here is in force.
+2. **The environment is the bootstrap.** `AGLYN_TAX_JURISDICTION`,
+   `AGLYN_TAX_REGISTRATION_ID` and `AGLYN_TAX_FILING_ID` (and the deprecated
+   `TX_TAXPAYER_NUMBER` / `TX_WEBFILE_NUMBER`) fill in every field the console has not
+   stored, which is what a fresh install runs on before anybody opens this page.
+
+Each field carries a chip reading *From this console*, *From the environment* or *Not
+set*, and a variable that is set but outranked is listed by name under **Set in the
+environment, not in force**, with the reason. That exists for one failure: editing
+`.env`, shipping it, seeing nothing change, and having no way to discover that a stored
+value won.
+
+**Clear and use the environment** removes the stored record and hands the environment
+its layer back. It is audited like any other change.
+
+One guard sits on top of the rule: an environment identifier applies only while the
+jurisdiction in force is the one those variables were configured for. Move the
+jurisdiction in the console and the bootstrap numbers stop applying — one authority's
+registration number is never filed under another.
+
+### What the console will not show you {#tax-filing-secrecy}
+
+The registration number reports as configured with a last four. The filing credential
+reports as configured and nothing more: a Texas Webfile number is six digits behind a
+fixed prefix, so a last four of it would narrow the secret to a hundred candidates
+rather than mask it. There is no reveal. The numbers are write-only here — type a new
+one to replace it, leave the field blank to keep what is stored — and the audit log
+records that an identifier changed, never what it changed to.
+
+The one surface that prints them in full is this return page, at the moment they are
+transcribed onto a filing, and it is behind the same staff gate.
+
 ## The figures
 
 The **Form 01-114 figures** card is Texas only. Aglyn sells everywhere; a Texas return
@@ -71,10 +133,8 @@ reports Texas receipts, so these lines come from the Texas jurisdiction bucket a
 from the platform totals.
 
 The card names the jurisdiction it is for, and so does the page heading and the chip
-beside the period menu. A deployment files where `AGLYN_TAX_JURISDICTION` says — a
-country code with an optional subdivision, such as `US-TX`, `US-CA`, `GB` or `DE`,
-written the way the report keys its buckets. Aglyn's own console leaves it unset, which
-means `US-TX`.
+beside the period menu. Where a deployment files is configured in
+[Where this deployment files](#where-this-deployment-files).
 
 Texas is the one jurisdiction with a form this software knows, so it is the one that
 gets Form 01-114's own lines. Any other jurisdiction gets a **return breakdown** — the
@@ -86,13 +146,10 @@ and where, and it does not know another authority's form.
 A jurisdiction code that cannot match a bucket at all makes every figure read `0.00`, so
 it is raised as a **blocking** finding rather than filed as a quiet zero.
 
-The registration identifiers come from server-only environment variables:
-`AGLYN_TAX_REGISTRATION_ID` (the number the authority knows the filer by) and
-`AGLYN_TAX_FILING_ID` (the filing-portal credential, required for Texas and optional
-elsewhere). The Texas-only names they replaced, `TX_TAXPAYER_NUMBER` and
-`TX_WEBFILE_NUMBER`, are deprecated and still read when the jurisdiction is `US-TX`.
-With none of them set the page says so and names what to set, and the export writes
-`NOT CONFIGURED …` rather than a blank cell someone files from.
+The registration identifiers are configured in the same place. This page is the one
+surface that prints them in full, because it is the one place they are transcribed onto
+a return. With none of them set the page says so and names what to set, and the export
+writes `NOT CONFIGURED …` rather than a blank cell someone files from.
 
 - **Item 1 — Total Texas sales.** Receipts excluding the tax itself, including the
   20% that [§151.351](https://statutes.capitol.texas.gov/Docs/TX/htm/TX.151.htm) exempts.

@@ -23,6 +23,7 @@ import { Stack, Typography } from '@mui/material'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffFreeWorkspaceCapCard from '../../../../components/staff-free-workspace-cap-card.component'
+import StaffTaxFilingCard from '../../../../components/staff-tax-filing-card.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -40,6 +41,11 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
  * any staff role, SETTING is `super`, both enforced by
  * `/api/admin/free-workspace-cap` — which is also what writes the audit
  * entry. Moving the card moved no gate and no audit.
+ *
+ * The sales-tax filing configuration (AGL-2021) follows the same shape one
+ * card down, and for the same reason the ceiling does: a business registering
+ * in a new state is an operator action, and it used to require an environment
+ * edit and a redeploy.
  */
 const AdminSettings: NextPageWithLayout<Record<string, never>> = () => {
   return (
@@ -63,6 +69,7 @@ const AdminSettings: NextPageWithLayout<Record<string, never>> = () => {
                 'with the reason given for it.'}
             </Typography>
             <StaffFreeWorkspaceCapCard />
+            <StaffTaxFilingCard />
           </Stack>
         </StaffOnly>
       </Container>

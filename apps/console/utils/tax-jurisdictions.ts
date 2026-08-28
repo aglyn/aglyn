@@ -47,7 +47,14 @@
  * is the failure mode this file is most concerned with.
  */
 
-/** Names the operator sets. Server-only: none of these may be `NEXT_PUBLIC_`. */
+/**
+ * Names the operator sets. Server-only: none of these may be `NEXT_PUBLIC_`.
+ *
+ * They are the BOOTSTRAP layer, not the control. A deployment that has never
+ * opened the staff console files under these; the moment Platform Settings
+ * stores a value, that value is in force and these fill in only where nothing
+ * is stored. See `utils/tax-filing-config.ts` for the whole rule.
+ */
 export const TAX_JURISDICTION_ENV = 'AGLYN_TAX_JURISDICTION'
 export const TAX_REGISTRATION_ID_ENV = 'AGLYN_TAX_REGISTRATION_ID'
 export const TAX_FILING_ID_ENV = 'AGLYN_TAX_FILING_ID'
@@ -69,6 +76,29 @@ export const TX_JURISDICTION = 'US-TX'
  * optionally with a subdivision.
  */
 const JURISDICTION_KEY = /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/
+
+/**
+ * Whether `code` could be a `summary.byJurisdiction` key at all.
+ *
+ * Exported so the console can refuse a bad key AT THE INPUT. The return page
+ * still diagnoses one after the fact — a value can reach the deployment
+ * through env, where nothing validates it — but a code typed into the control
+ * never has to be discovered a quarter later as a page of zeros.
+ */
+export function isTaxJurisdictionKey(code: unknown): boolean {
+  return typeof code === 'string' && JURISDICTION_KEY.test(code.trim().toUpperCase())
+}
+
+/**
+ * `code` as a jurisdiction key, or null when it cannot be one.
+ *
+ * Trims and upper-cases first, because `us-tx` and `US-TX` are the same answer
+ * and only one of them is a key.
+ */
+export function normalizeTaxJurisdictionKey(code: unknown): string | null {
+  const raw = typeof code === 'string' ? code.trim().toUpperCase() : ''
+  return raw && JURISDICTION_KEY.test(raw) ? raw : null
+}
 
 /** Which filing output a jurisdiction gets. */
 export type TaxFilingForm = 'tx-webfile' | 'breakdown'
@@ -181,7 +211,9 @@ export function taxFilingJurisdiction(code: unknown): TaxFilingJurisdiction {
  * transcribed onto a return signed under penalty of perjury, so the file says
  * what is actually true and names the fix.
  */
-export const TAX_REGISTRATION_UNSET = `NOT CONFIGURED — set ${TAX_REGISTRATION_ID_ENV} / ${TAX_FILING_ID_ENV}`
+export const TAX_REGISTRATION_UNSET =
+  'NOT CONFIGURED — set it in Platform settings or at bootstrap with ' +
+  `${TAX_REGISTRATION_ID_ENV} / ${TAX_FILING_ID_ENV}`
 
 /**
  * What the papers print for a filing credential the jurisdiction does not
@@ -197,11 +229,17 @@ export function taxFilingIdUnsetNote(
 }
 
 /**
- * The unconfigured state, in words, naming the variables to set.
+ * The unconfigured state, in words, naming where to set it.
  *
  * A surface that only says "not configured" sends the reader to a search;
- * naming the variables makes the state actionable from the screen it appears
- * on, which is where someone notices it — minutes before filing.
+ * naming the control makes the state actionable from the screen it appears on,
+ * which is where someone notices it — minutes before filing.
+ *
+ * The console comes first because it is the control: it needs no deploy and it
+ * is reachable from the screen this sentence is printed on. The variables are
+ * named after it because they are still read as the bootstrap, and because a
+ * deployment configured under them must not read this as "your registration
+ * is gone".
  */
 export function taxRegistrationSetupHint(
   jurisdiction: TaxFilingJurisdiction,
@@ -215,5 +253,8 @@ export function taxRegistrationSetupHint(
   const legacy = jurisdiction.legacyEnv
     ? ` The deprecated ${jurisdiction.legacyEnv.registrationId} / ${jurisdiction.legacyEnv.filingId} are still read.`
     : ''
-  return `Registration not configured for ${jurisdiction.code} — set ${required}.${optional}${legacy}`
+  return (
+    `Registration not configured for ${jurisdiction.code} — set it in Staff → ` +
+    `Platform settings, or at bootstrap with ${required}.${optional}${legacy}`
+  )
 }
