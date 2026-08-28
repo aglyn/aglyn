@@ -901,9 +901,20 @@ async function handler(request: Request): Promise<Response> {
             }
             // …and the address in the other direction.
             //
-            // There is ONE address for an org — `contact.address`, structured,
-            // deliberately consolidated so a third could not appear — and
-            // Stripe-side collection was never landing in it. A workspace that
+            // There is ONE PLATFORM BILLING address for an org —
+            // `contact.address`, structured, deliberately consolidated so a
+            // third personal/contact/billing variant could not appear — and
+            // Stripe-side collection was never landing in it.
+            //
+            // ⚠️ That rule is about THIS address and the variants it was
+            // written against. It does not contemplate the other two the
+            // product has: the storefront TAX ORIGIN (`{country, state}`, in
+            // the Commerce Taxes card, governing tax on the merchant's own
+            // sales) and the seller PAYOUT identity (which lives only inside
+            // Stripe Express and has no representation here at all). Those are
+            // different addresses answering different questions, and reading
+            // this note as "an org may only ever have one address anywhere"
+            // would be the wrong lesson from it. A workspace that
             // subscribed through the old Checkout gave Stripe an address and
             // still saw an empty Billing address card, with no way to tell
             // that the invoices carried one.

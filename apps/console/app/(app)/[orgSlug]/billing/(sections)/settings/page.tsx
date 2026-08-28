@@ -109,7 +109,10 @@ const BillingSettingsSection: NextPageWithLayout<Record<string, never>> = () => 
           <CardDisplay
             header={'Billing address'}
             subheader={
-              'The address your invoices are issued to, and the one sales tax is calculated from.'
+              'The address Aglyn issues your invoices to, and the address ' +
+              'sales tax on those invoices is calculated from. It does not ' +
+              'affect tax on your own storefront sales — that comes from the ' +
+              'tax origin in Commerce.'
             }
             help={docsHelp('billing', {
               anchor: '#billing-address',
