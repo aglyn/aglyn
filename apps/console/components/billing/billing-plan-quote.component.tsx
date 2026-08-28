@@ -45,6 +45,7 @@ interface QuoteState {
     taxReason: string | null
   }
   customerTaxExempt?: string | null
+  hasTaxId?: boolean
   promotionCodeApplied?: string | null
   needsBillingDetails?: boolean
   needsBillingAddress?: boolean
@@ -247,6 +248,27 @@ export default function BillingPlanQuoteComponent({
       >
         {tax.sentence}
       </Typography>
+
+      {/*
+        The tax ID prompt, positioned where it can still change the outcome.
+        A business tax ID is an input to what Stripe charges — it is what makes
+        reverse charge apply — and the card that collects one sits further down
+        this same page. A customer who finds it AFTER subscribing has already
+        paid VAT that would have been zeroed.
+
+        Shown only when tax is actually being charged and no ID is on file.
+        Deliberately does NOT promise the tax will drop: whether a registration
+        changes the outcome is Stripe's determination and depends on
+        jurisdiction, so this raises the question rather than answering it.
+      */}
+      {tax.kind === 'charged' && quote?.hasTaxId === false ? (
+        <Alert severity="info">
+          {'Registered for VAT, GST or a similar business tax? Add your tax ID ' +
+            'in Billing before you subscribe — in some countries it changes ' +
+            'what you are charged, and it can only affect invoices issued ' +
+            'after it is on file.'}
+        </Alert>
+      ) : null}
 
       {canManage ? (
         <Box>

@@ -339,7 +339,11 @@ async function handler(request: Request): Promise<Response> {
       // future reordering cannot reintroduce an addressless quote by
       // accident.
       const quoteCustomer = await fetch(
-        `https://api.stripe.com/v1/customers/${encodeURIComponent(existingCustomerId)}`,
+        // `tax_ids` expanded on the SAME read the address check already
+        // makes. A business tax ID is an input to what Stripe charges — it is
+        // what makes reverse charge apply — and it has to be known BEFORE the
+        // quote, not discovered on the invoice.
+        `https://api.stripe.com/v1/customers/${encodeURIComponent(existingCustomerId)}?expand[]=tax_ids`,
         { headers: { Authorization: `Bearer ${secretKey}` } },
       )
       const quoteCustomerRecord = await quoteCustomer.json()
@@ -385,6 +389,14 @@ async function handler(request: Request): Promise<Response> {
           // legitimately zero tax is zero, and without them the customer who
           // is specifically checking cannot tell it from a bug.
           customerTaxExempt: quoteCustomerRecord?.tax_exempt ?? null,
+          // Whether a business tax ID is on file. NOT a claim that one would
+          // change this quote — that is Stripe's determination and depends on
+          // jurisdiction. It is the fact needed to ask the question at the
+          // right moment: before the charge, while the answer can still
+          // affect it.
+          hasTaxId: Array.isArray(quoteCustomerRecord?.tax_ids?.data)
+            ? quoteCustomerRecord.tax_ids.data.length > 0
+            : false,
           promotionCodeApplied: promo.id ? promo.code : null,
         },
         { status: 200 },
