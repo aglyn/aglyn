@@ -574,19 +574,92 @@ async function handler(request: Request): Promise<Response> {
       )
     }
     const invoice = subscription?.latest_invoice ?? null
-    const intent = invoice?.payment_intent ?? null
+    let intent = invoice?.payment_intent ?? null
+
+    // ── The confirm, SERVER-SIDE, and nothing works without it ──
+    //
+    // `payment_behavior: default_incomplete` deliberately leaves the first
+    // invoice's PaymentIntent unconfirmed: Stripe opens it and charges
+    // nothing. On a stored payment method there is no form to submit and no
+    // data to gather, so the confirm is ours to make — and until it is made
+    // the intent sits at `requires_confirmation`, the subscription sits at
+    // `incomplete`, and no money moves.
+    //
+    // It has to happen HERE rather than in the browser. `handleNextAction` —
+    // the one method this flow can use, because a server-confirmed intent has
+    // no Payment Element behind it — is defined for `requires_action` alone
+    // and THROWS an `IntegrationError` on anything else. Driven against a
+    // real test-mode subscription, `requires_confirmation` produced
+    // "The PaymentIntent supplied is not in the requires_action state", which
+    // the page catches as a generic failure: an ordinary card never activated
+    // and a 3DS card never reached its challenge.
+    //
+    // Confirming here also produces the ONLY status from which SCA makes
+    // sense. An ordinary card goes straight to `succeeded` and the
+    // subscription is active; a card whose issuer wants authentication moves
+    // to `requires_action` with a next action attached, which is exactly what
+    // the browser is handed below.
+    //
+    // ⚠️ This still grants nothing. `succeeded` here means Stripe accepted the
+    // charge, and the plan is mirrored onto the org by the webhook and by
+    // nothing in this handler.
+    if (intent?.id && intent?.status === 'requires_confirmation') {
+      const confirmed = await fetch(
+        `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(
+          String(intent.id),
+        )}/confirm`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Stripe-Version': STRIPE_API_VERSION,
+            // Same claim, distinct operation. Without its own suffix a retry
+            // would present the subscription's key to a different endpoint,
+            // which Stripe rejects outright.
+            ...(claim.stripeKey
+              ? { 'Idempotency-Key': `${claim.stripeKey}-confirm` }
+              : {}),
+          },
+          body: new URLSearchParams({ 'expand[]': 'payment_method' }).toString(),
+        },
+      )
+      const confirmedIntent = await confirmed.json()
+      if (confirmed.ok) {
+        intent = confirmedIntent
+      } else {
+        // Stripe refused the confirm outright — a hard decline, a method that
+        // vanished between the two calls. Reported through the SAME
+        // `declined` branch a failed charge uses rather than as a server
+        // fault, because from the customer's side it is the same event and
+        // the subscription is `incomplete` either way.
+        console.error(
+          '[billing/checkout] intent confirm failed',
+          confirmedIntent?.error?.code,
+        )
+        intent = { ...intent, status: 'requires_payment_method' }
+      }
+    }
+
     // An issuer demanding authentication is the ONE Stripe-rendered thing the
     // customer may still see, and it is the bank's, not a checkout page.
     //
     // Handled explicitly rather than left to the webhook: a subscription that
     // stays `incomplete` because nobody dealt with this status is a customer
     // who believes they subscribed and did not. The client secret goes back so
-    // the page can run `confirmPayment`; the plan itself is still granted by
+    // the page can run `handleNextAction`; the plan itself is still granted by
     // the webhook and by nothing here.
-    const requiresAction =
-      intent?.status === 'requires_action' ||
-      intent?.status === 'requires_confirmation'
+    //
+    // `requires_action` ALONE, now that the confirm above has run.
+    // `requires_confirmation` used to be treated as the same thing, which is
+    // what sent an unconfirmable intent to a method that refuses them.
+    const requiresAction = intent?.status === 'requires_action'
     const payload = {
+      // The status AT CREATION, which the confirm above may already have moved
+      // past. Left as Stripe first reported it rather than re-read, because
+      // nothing may act on it: what the org is entitled to is decided by the
+      // webhook, and a fresher number here would only be a more convincing
+      // reason for some future caller to trust the wrong source.
       subscriptionStatus: String(subscription?.status ?? ''),
       invoice: describeInvoiceAmounts(invoice),
       ...(requiresAction && intent?.client_secret

@@ -95,6 +95,15 @@ let calls: Array<{ url: string; method: string }> = []
 let openInvoices: unknown[] = []
 let invoiceRecord: Record<string, unknown> = {}
 let payOutcome: { ok: boolean; payload: unknown } = { ok: true, payload: {} }
+/*
+ * What `invoices/{id}?expand[]=payment_intent` answers with, or null.
+ *
+ * Separate from `invoiceRecord` because the two reads are different requests
+ * and only one of them carries the intent: on the pinned API version the `pay`
+ * error for a 3DS card carries the CODE and no `payment_intent` object at all,
+ * so the secret can only come from a second, expanded read of the invoice.
+ */
+let expandedPaymentIntent: unknown = null
 
 function load() {
   jest.resetModules()
@@ -129,6 +138,7 @@ beforeEach(() => {
   ]
   invoiceRecord = { id: 'in_1', status: 'open', customer: 'cus_test_1' }
   payOutcome = { ok: true, payload: { status: 'paid' } }
+  expandedPaymentIntent = null
   mockVerifyIdToken.mockResolvedValue({
     uid: 'u-1',
     email: 'owner@example.com',
@@ -143,8 +153,17 @@ beforeEach(() => {
     if (href.includes('/pay')) {
       return { ok: payOutcome.ok, status: payOutcome.ok ? 200 : 402, json: async () => payOutcome.payload }
     }
-    if (/invoices\/[^/?]+$/.test(href)) {
-      return { ok: true, status: 200, json: async () => invoiceRecord }
+    if (/invoices\/[^/?]+(\?|$)/.test(href)) {
+      // The expand is a DIFFERENT answer, not a flag on the same one: only
+      // this read carries the PaymentIntent.
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          href.includes('expand')
+            ? { ...invoiceRecord, payment_intent: expandedPaymentIntent }
+            : invoiceRecord,
+      }
     }
     return { ok: true, status: 200, json: async () => ({ data: openInvoices }) }
   }) as never
@@ -214,19 +233,58 @@ describe('who decides that it was paid', () => {
   it('hands back the client secret when an issuer wants authentication', async () => {
     // An invoice that silently fails to a 3DS prompt nobody sees is the same
     // defect as a first purchase that does.
+    // THE SHAPE STRIPE ACTUALLY SENDS. On the pinned API version the `pay`
+    // error for a 3DS card carries the code and NOTHING else — no
+    // `payment_intent`, so no secret. A double that attached one here
+    // described a response that does not occur, and the branch reading the
+    // secret off the error passed against it while never firing in
+    // production: the customer was told their payment failed and offered no
+    // way to authenticate it. The secret lives on the INVOICE.
     payOutcome = {
       ok: false,
       payload: {
-        error: {
-          code: 'invoice_payment_intent_requires_action',
-          payment_intent: { client_secret: 'pi_secret_1' },
-        },
+        error: { code: 'invoice_payment_intent_requires_action' },
       },
+    }
+    expandedPaymentIntent = {
+      client_secret: 'pi_secret_1',
+      // `requires_action` is asserted by the route rather than assumed, and a
+      // real intent always carries a status.
+      status: 'requires_action',
     }
     const payload = await (await post(load(), { action: 'pay', invoiceId: 'in_1' })).json()
     expect(payload.requiresAction).toBe(true)
     expect(payload.paymentClientSecret).toBe('pi_secret_1')
     expect(payload.submitted).toBeUndefined()
+  })
+
+  it('CONTROL — an intent in any OTHER state is a decline, not a challenge', async () => {
+    /*
+     * The assertion that keeps the branch honest. `requires_action` is the one
+     * state `handleNextAction` accepts; handing the page a secret for an
+     * intent in any other state produces an IntegrationError the page shows as
+     * a generic failure, which is a worse outcome than the decline it really
+     * is.
+     *
+     * Without this the `status` check can be deleted and every other test here
+     * still passes, because they all supply an intent that IS in that state.
+     */
+    payOutcome = {
+      ok: false,
+      payload: {
+        error: { code: 'invoice_payment_intent_requires_action' },
+      },
+    }
+    expandedPaymentIntent = {
+      client_secret: 'pi_secret_1',
+      status: 'requires_payment_method',
+    }
+    const response = await post(load(), { action: 'pay', invoiceId: 'in_1' })
+    expect(response.status).toBe(402)
+    const payload = await response.json()
+    expect(payload.requiresAction).toBeUndefined()
+    expect(payload.paymentClientSecret).toBeUndefined()
+    expect(payload.declined).toBe(true)
   })
 
   it('surfaces a decline as a decline', async () => {

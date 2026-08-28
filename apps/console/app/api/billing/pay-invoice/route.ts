@@ -229,10 +229,37 @@ async function handler(request: Request): Promise<Response> {
       }
 
       // The issuer wants authentication. Same shape as a first purchase: the
-      // client secret goes back so the page can run `confirmPayment`, and the
-      // challenge is the bank's rather than a payment page of Stripe's.
-      const intent = paid.payload?.error?.payment_intent ?? null
-      if (intent?.client_secret) {
+      // client secret goes back so the page can run `handleNextAction`, and
+      // the challenge is the bank's rather than a payment page of Stripe's.
+      //
+      // ⚠️ THE SECRET IS NOT IN THE ERROR, and reading it from there is why
+      // this branch never fired. On the pinned API version `invoices/{id}/pay`
+      // answers a 3DS-required card with `code:
+      // invoice_payment_intent_requires_action` and NO `payment_intent`
+      // object attached — driven against a real test-mode invoice, the whole
+      // error carried nothing but the code. So `intent?.client_secret` was
+      // always undefined, the branch fell through to the decline below, and a
+      // customer whose bank wanted authentication was told their payment did
+      // not go through and offered no way to authenticate it.
+      //
+      // The intent is on the INVOICE, so it is read from there: a second GET,
+      // made only on this one error, expanding the field the pay response
+      // omits. `requires_action` is asserted rather than assumed, so a
+      // genuinely declined card still reaches the decline branch below with
+      // Stripe's own reason.
+      let intent = paid.payload?.error?.payment_intent ?? null
+      if (
+        !intent?.client_secret &&
+        paid.payload?.error?.code === 'invoice_payment_intent_requires_action'
+      ) {
+        const expanded = await stripeRequest(
+          secretKey as string,
+          'GET',
+          `invoices/${encodeURIComponent(invoiceId)}?expand[]=payment_intent`,
+        )
+        if (expanded.ok) intent = expanded.payload?.payment_intent ?? null
+      }
+      if (intent?.client_secret && intent?.status === 'requires_action') {
         return Response.json(
           { requiresAction: true, paymentClientSecret: intent.client_secret },
           { status: 200 },
