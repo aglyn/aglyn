@@ -46,9 +46,15 @@ describe('console web-vitals wiring (AGL-1642)', () => {
     // Module scope, not an effect: the ErrorBeacon argument — the thing that
     // reports a wedged page cannot be scheduled by the page.
     expect(component).toMatch(
-      /^installWebVitalsReporting\(\{ surface: 'console' \}\)$/m,
+      /^installWebVitalsReporting\(\{\s*surface: 'console',/m,
     )
     expect(component).not.toMatch(/useEffect/)
+    // …and it carries the console's consent gate. This module is the one
+    // analytics path here that calls `window.gtag` directly rather than
+    // through `deliver()`, so the layout's refusing transport does not cover
+    // it: a visitor who withdraws mid-session would keep reporting vitals
+    // against a tag Firebase has already injected and no page can unload.
+    expect(component).toMatch(/allowed: platformAnalyticsAllowed/)
   })
 
   it('the tenant runtime installs the same reporter with the site surface', () => {

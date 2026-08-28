@@ -119,6 +119,17 @@ export const LEGAL_URLS = {
 export const LEGAL_REFERENCE_URLS = {
   DPA: `${LEGAL_ORIGIN}/legal/dpa`,
   SUBPROCESSORS: `${LEGAL_ORIGIN}/legal/subprocessors`,
+  /**
+   * The Cookie Policy — the document that names what the console's analytics
+   * tag stores and how long for.
+   *
+   * Belongs in this set rather than in {@link LEGAL_URLS} for the reason
+   * stated above: it is published and linked, never accepted, so it carries no
+   * clickwrap snapshot and costs no version bump. It is the one document a
+   * consent control has to be able to point at — a choice offered with no way
+   * to read what is being chosen is not an informed one.
+   */
+  COOKIES: `${LEGAL_ORIGIN}/legal/cookies`,
 }
 
 // The version and content hashes of those documents live in

@@ -30,6 +30,7 @@ import {
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import { analyticsMayEmit } from '@aglyn/aglyn/app-utils/analytics-environment'
 import { pushPlatformConsentDefault } from '@aglyn/aglyn/app-utils/platform-consent-default'
+import { VISITOR_CONSENT_CHANGED_EVENT } from '@aglyn/aglyn/app-utils/visitor-consent'
 import {
   type Auth,
   connectAuthEmulator,
@@ -56,6 +57,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -225,6 +227,125 @@ const isAutomatedChromeSession = (): boolean =>
  */
 const CONSOLE_ANALYTICS_OPTIONS = {
   config: { send_page_view: false, content_group: 'console' },
+}
+
+/**
+ * A surface's answer to "may an analytics tag exist for this visitor at all?".
+ *
+ * Registered from the app, at module scope, in the same shape as
+ * `setFirestoreSessionReporters` and `setStaleSessionCheck` — and for a
+ * sharper version of the same reason. This is consulted during the provider's
+ * FIRST render, before any effect anywhere has run, so a gate installed from
+ * an effect would arrive after the decision it exists to make.
+ *
+ * Answering `false` means the SDK is never asked to initialize: `gtag.js` is
+ * never fetched, `window.gtag` never comes into existence, and the shared
+ * `deliver()` in `analytics-events.ts` — whose fallback IS `window.gtag` —
+ * therefore has nowhere to put a hit. That is the difference between a gate
+ * and a suppression, and it is the difference AGL-1608 paid for: a resident
+ * tag reports on its own, through enhanced measurement, whatever any flag
+ * says afterwards.
+ */
+export type AnalyticsConsentGate = () => boolean
+
+let analyticsConsentGate: AnalyticsConsentGate | null = null
+
+/**
+ * Install the consent gate for this document, or clear it with `null`.
+ *
+ * UNREGISTERED MEANS ALLOWED, which is deliberate and is the only default that
+ * is safe here. The tenant runtime does not use this provider's analytics
+ * branch at all (it builds its own tag in `site-analytics.tsx`, behind the
+ * AGL-1498 gate), and a self-hosted console points at the operator's own GA
+ * property — silencing an operator's analytics because Aglyn's own surface
+ * grew a gate is a failure they cannot diagnose. The surface that needs the
+ * gate is the one that registers it.
+ */
+export function setAnalyticsConsentGate(
+  gate: AnalyticsConsentGate | null,
+): void {
+  analyticsConsentGate = gate
+}
+
+/** The gate's verdict, with an unregistered gate reading as "allowed". */
+function analyticsConsentAllows(): boolean {
+  if (analyticsConsentGate === null) return true
+  try {
+    return analyticsConsentGate() === true
+  } catch {
+    // A gate that throws cannot be read as consent. Storage can throw in
+    // private mode, and "we could not tell" is the one state this whole
+    // mechanism resolves to "no".
+    return false
+  }
+}
+
+/**
+ * The Analytics instance per Firebase app, so a re-boot after a consent change
+ * hands back the tag that is already resident rather than asking the SDK for a
+ * second one.
+ *
+ * `initializeAnalytics` is idempotent while the options match, so this is not
+ * what makes re-entry safe — `CONSOLE_ANALYTICS_OPTIONS` being a shared
+ * constant is. What this avoids is the noisy path: once anything has
+ * initialized the provider with different options, every later call throws and
+ * is logged, and a withdrawal followed by a re-grant would log it again.
+ */
+const analyticsByApp = new WeakMap<FirebaseApp, Analytics>()
+
+/**
+ * Boot the console's Analytics tag, or return the one already booted.
+ *
+ * Extracted from the provider body so that "when is the tag created" and "may
+ * it be created" are separable: the consent gate can defer this call to a
+ * later render without the ordering below moving.
+ */
+function bootAnalytics(app: FirebaseApp): Analytics | undefined {
+  const existing = analyticsByApp.get(app)
+  if (existing) return existing
+  let analytics: Analytics
+  // The region-conditional consent default (AGL-1597), declared BEFORE the
+  // SDK boots the tag. Ordering is the whole of it: a `default` read after
+  // `config` is not a default, and the SDK issues `config` inside
+  // `initializeAnalytics` on the next line. Pushing onto `dataLayer` here
+  // works even though gtag.js is not loaded yet — the queue is what makes the
+  // ordering expressible.
+  //
+  // Still declared even though the gate above has already said yes, and the
+  // two are not redundant. The gate answers "may a tag exist"; the default
+  // answers "what may the tag that does exist do", per region, from its very
+  // first hit. Ad storage stays denied everywhere on this surface.
+  pushPlatformConsentDefault(
+    typeof window === 'undefined' ? null : (window as never),
+  )
+  try {
+    analytics = initializeAnalyticsInstance(app, CONSOLE_ANALYTICS_OPTIONS)
+  } catch (error) {
+    console.error(error)
+    try {
+      // Already initialized by someone else, with someone else's options:
+      // take THAT instance rather than leaving consumers with nothing. The
+      // tag it is attached to was configured without `send_page_view: false`
+      // and without `content_group`, so this session reports a duplicate
+      // startup page_view and an unstamped surface — degraded, and loudly so,
+      // instead of silently dead.
+      analytics = getAnalyticsInstance(app)
+    } catch (fallbackError) {
+      console.error(fallbackError)
+    }
+  }
+  if (analytics) analyticsByApp.set(app, analytics)
+  return analytics
+}
+
+/**
+ * The tag this document may have right now: none outside a real production
+ * deployment, none while consent is absent, otherwise the booted instance.
+ */
+function analyticsForConsentState(app: FirebaseApp): Analytics | undefined {
+  if (!analyticsMayEmit()) return undefined
+  if (!analyticsConsentAllows()) return undefined
+  return bootAnalytics(app)
 }
 
 export interface FirebaseServicesProviderProps {
@@ -445,48 +566,22 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // build points at the operator's own Firebase project and their own GA
     // property, and silencing a customer's analytics to protect ours is the
     // worse failure. See the module for the escape hatch.
-    let analytics: Analytics
-    if (analyticsMayEmit()) {
-      // The region-conditional consent default (AGL-1597), declared BEFORE
-      // the SDK boots the tag. Ordering is the whole of it: a `default` read
-      // after `config` is not a default, and the SDK issues `config` inside
-      // `initializeAnalytics` on the next line. Pushing onto `dataLayer` here
-      // works even though gtag.js is not loaded yet — the queue is what makes
-      // the ordering expressible.
-      //
-      // Analytics is GRANTED by default (decided: implied consent
-      // where it is lawful) and DENIED for the prior-consent regions —
-      // EEA/UK/CH — via the payload's `region` array. Ad storage stays denied
-      // everywhere. Until now this surface declared NOTHING, which is not
-      // "default on where lawful" but default on everywhere, ad storage
-      // included.
-      //
-      // SCOPE. This is the console's tag and only the console's:
-      // `CONSOLE_ANALYTICS_OPTIONS`, `content_group: 'console'`, and this
-      // provider's analytics branch has no other consumer (see above — the
-      // tenant runtime builds its tag in `site-analytics.tsx` and never
-      // passes through here). Customer sites keep the AGL-1498 gate and the
-      // host's own `consent.mode`; nothing here reaches them.
-      pushPlatformConsentDefault(
-        typeof window === 'undefined' ? null : (window as never),
-      )
-      try {
-        analytics = initializeAnalyticsInstance(app, CONSOLE_ANALYTICS_OPTIONS)
-      } catch (error) {
-        console.error(error)
-        try {
-          // Already initialized by someone else, with someone else's options:
-          // take THAT instance rather than leaving consumers with nothing. The
-          // tag it is attached to was configured without `send_page_view:
-          // false` and without `content_group`, so this session reports a
-          // duplicate startup page_view and an unstamped surface — degraded,
-          // and loudly so, instead of silently dead.
-          analytics = getAnalyticsInstance(app)
-        } catch (fallbackError) {
-          console.error(fallbackError)
-        }
-      }
-    }
+    //
+    // AND NOT while a registered consent gate says no (AGL-1498 posture,
+    // applied to Aglyn's own console). `analyticsForConsentState` is where
+    // both conditions and the boot itself now live, because the boot has to
+    // be repeatable: a visitor whose region has not resolved yet is undecided
+    // at this instant and may be granted a moment later, and a visitor who
+    // withdraws mid-session has to lose the instance without the page
+    // reloading. See the effect below.
+    //
+    // SCOPE. This is the console's tag and only the console's:
+    // `CONSOLE_ANALYTICS_OPTIONS`, `content_group: 'console'`, and this
+    // provider's analytics branch has no other consumer (the tenant runtime
+    // builds its tag in `site-analytics.tsx` and never passes through here).
+    // Customer sites keep the AGL-1498 gate and the host's own
+    // `consent.mode`; nothing here reaches them.
+    const initialAnalytics = analyticsForConsentState(app)
     // Remote Config (AGL-228): release-flag delivery. Browser-only like
     // analytics; consumers set defaultConfig before their first getValue so
     // gating never blocks on the network.
@@ -505,14 +600,58 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       auth,
       database,
       storage: getStorageInstance(app),
-      analytics,
+      analytics: initialAnalytics,
       remoteConfig,
       authPersistence,
     }
   }
 
+  const services = servicesRef.current
+
+  // The consent gate's other half: the verdict can CHANGE within one document,
+  // in both directions, and everything else in this provider is built exactly
+  // once by design.
+  //
+  // Deferred grant. A visitor with no stored record is undecided at the
+  // instant this provider first renders, because resolving them needs the
+  // region endpoint and that is a network call. Outside the prior-consent
+  // regions the answer is implied consent, and it lands a few hundred
+  // milliseconds later — same document, so `document.referrer` is still the
+  // external referrer and the pageview's attribution is unaffected. Without
+  // this, "the gate is synchronous" would have quietly meant "the rest of the
+  // world is never measured on a first visit".
+  //
+  // Withdrawal. Dropping the instance unmounts every binding hung off it,
+  // which is what unregisters the analytics transport — after that
+  // `deliver()` falls through to `window.gtag`, and the shared consent writer
+  // has already set `ga-disable-<id>` and sent a denied `consent update` on
+  // that exact tag (AGL-1608). The resident tag cannot be unloaded; it can be
+  // made to send nothing, and both halves are needed because either alone
+  // leaks — enhanced measurement fires with no call site at all.
+  const [analytics, setAnalytics] = useState<Analytics | undefined>(
+    () => services.analytics,
+  )
+  useEffect(() => {
+    const sync = () => setAnalytics(analyticsForConsentState(services.app))
+    // Once on mount as well as on the event: the priming pass can resolve a
+    // visitor between this provider's render and this effect, and the event it
+    // dispatched then had no listener yet.
+    sync()
+    window.addEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+    return () =>
+      window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+  }, [services])
+
+  // Identity changes only when the tag comes or goes, so a consent-stable
+  // document re-renders nothing.
+  const value = useMemo(
+    () =>
+      services.analytics === analytics ? services : { ...services, analytics },
+    [services, analytics],
+  )
+
   return (
-    <FirebaseServicesContext.Provider value={servicesRef.current}>
+    <FirebaseServicesContext.Provider value={value}>
       {children}
     </FirebaseServicesContext.Provider>
   )
