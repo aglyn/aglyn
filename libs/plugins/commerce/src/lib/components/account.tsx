@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as CommerceModel from '../model'
 import { mdiAccountCircleOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -152,6 +153,21 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
             body: JSON.stringify({ hostId, email, password }),
           }).catch(() => undefined)
         }
+        /*
+         * The host's own GA4 property, not Aglyn's (AGL-1591). Reported after
+         * the response was accepted and never on a validation failure, which
+         * is what makes the count mean "an account door was completed".
+         *
+         * The follow-up login above is deliberately NOT a second event: it is
+         * a cookie repair for the registration that just happened, and
+         * reporting it would give every new member both a `sign_up` and a
+         * `login` in the same second — turning a returning-visitor metric into
+         * a copy of the signup one.
+         *
+         * Not awaited: this branch re-renders in place rather than navigating,
+         * so there is no teardown to lose the hit to.
+         */
+        trackEvent(tab === 1 ? 'sign_up' : 'login', { method: 'password' })
         await refresh()
       } finally {
         setBusy(false)

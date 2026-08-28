@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { mdiLoginVariant } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -25,7 +26,10 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { continuePathFromLocation } from '../utils/member-continue'
+import {
+  continuePathFromLocation,
+  memberNavigation,
+} from '../utils/member-continue'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -73,7 +77,16 @@ const MemberSignin = forwardRef<HTMLDivElement, MemberSigninProps>(
           setError(String(payload?.error ?? 'Sign-in failed'))
           return
         }
-        window.location.assign(
+        /*
+         * The host's own GA4 property, not Aglyn's (AGL-1591). Awaited for the
+         * same reason the sign-up block awaits its own: the line below tears
+         * the document down, and the property that makes a bare call safe —
+         * that delivery on this surface is a synchronous `window.gtag` — is
+         * invisible from here and would stop being true the day a host
+         * registers an async transport.
+         */
+        await trackEventBeforeNavigation('login', { method: 'password' })
+        memberNavigation.assign(
           continuePathFromLocation(continueFallback || '/'),
         )
       } finally {
