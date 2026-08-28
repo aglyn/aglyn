@@ -189,6 +189,17 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
       throw error
     }
 
+    // PRESENT-AND-EMPTY CLEARS; ABSENT LEAVES ALONE (AGL-2512).
+    //
+    // The write below is a merge, and `bio` was spread in only when truthy, so
+    // an empty one was a no-op and the stored bio survived every attempt to
+    // remove it. The publisher could rewrite it but never take it down — while
+    // every URL field in this same write has cleared on empty since AGL-1009.
+    //
+    // Presence is what separates "clear this" from "this request is not about
+    // the bio": `req.body.bio` absent must not delete a bio the caller never
+    // mentioned, which a bare `?? ''` would do to any client that omits it.
+    const bioProvided = req.body?.bio !== undefined
     const bio = String(req.body?.bio ?? '').trim().slice(0, 500)
     // Logo, support contact and social links (AGL-1009): validated here on
     // the save route — the same server-owned discipline as the handle — and
@@ -209,7 +220,13 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
       {
         handle,
         displayName,
-        ...(bio ? { bio } : {}),
+        ...(bioProvided
+          ? {
+              bio: bio
+                ? bio
+                : firebaseAdmin.firestore.FieldValue.delete(),
+            }
+          : {}),
         ...extraWrites,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },

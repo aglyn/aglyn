@@ -162,4 +162,39 @@ describe('publisherProfileSaveHandler contact/link fields (AGL-1009)', () => {
     // the links it never rendered.
     expect('githubUrl' in write).toBe(false)
   })
+
+  /**
+   * The bio obeys the same rule as the links beside it (AGL-2512).
+   *
+   * It was spread into this merge only when truthy, so an empty one was a
+   * no-op: the publisher could rewrite their bio but never take it down, while
+   * every URL field in the very same write has cleared on empty since
+   * AGL-1009. Asserted on the WRITE, which is what reaches Firestore.
+   */
+  describe('clearing the bio (AGL-2512)', () => {
+    it('deletes a bio the publisher explicitly empties', async () => {
+      const res = makeRes()
+      await publisherProfileSaveHandler(makeReq({ bio: '' }), res)
+      expect(res.statusCode).toBe(200)
+      expect(writes()[0]['bio']).toBe(mockDeleteSentinel)
+    })
+
+    it('CONTROL: a real bio is still written through', async () => {
+      // Without this the change could satisfy the assertion above by never
+      // writing a bio at all.
+      const res = makeRes()
+      await publisherProfileSaveHandler(makeReq({ bio: 'We make desks.' }), res)
+      expect(res.statusCode).toBe(200)
+      expect(writes()[0]['bio']).toBe('We make desks.')
+    })
+
+    it('CONTROL: an absent bio is left alone, never cleared', async () => {
+      // Presence is what separates "clear this" from "this request is not
+      // about the bio" — a client that omits the field must not wipe one.
+      const res = makeRes()
+      await publisherProfileSaveHandler(makeReq({}), res)
+      expect(res.statusCode).toBe(200)
+      expect('bio' in writes()[0]).toBe(false)
+    })
+  })
 })
