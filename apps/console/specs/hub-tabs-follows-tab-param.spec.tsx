@@ -50,9 +50,11 @@ import { render, screen } from '@testing-library/react'
 // `mock`-prefixed, which is the one naming jest's out-of-scope-variable guard
 // lets a module factory close over.
 let mockSearch = ''
-const mockReplace = jest.fn((url: string) => {
-  mockSearch = url.includes('?') ? url.slice(url.indexOf('?') + 1) : ''
-})
+const mockReplace = jest.fn(
+  (url: string, _options?: { scroll?: boolean }) => {
+    mockSearch = url.includes('?') ? url.slice(url.indexOf('?') + 1) : ''
+  },
+)
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/org/hub',

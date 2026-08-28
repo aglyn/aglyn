@@ -98,6 +98,22 @@ const SHARED_FOOTER: Array<[string, string]> = [
       `libs/plugins/commerce/src/lib/components/console/${name}.component.tsx`,
     ]) as Array<[string, string]>
   ),
+  // Three card GRIDS and a bare table, all of which rendered their whole
+  // window in one wall with no control over it at all. A grid is still a
+  // list: the reader's question — how much of this am I looking at, and is
+  // there more — is the same one, and it was unanswerable on all four.
+  [
+    'marketplace browse',
+    'libs/plugins/marketplace/src/lib/components/marketplace-browse.component.tsx',
+  ],
+  [
+    'templates gallery',
+    'apps/console/components/templates/template-gallery-dialog.component.tsx',
+  ],
+  [
+    'datasets records',
+    'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
+  ],
 ]
 
 /**
@@ -219,6 +235,29 @@ function tsxFilesUnder(dir: string): string[] {
   return found
 }
 
+/**
+ * Every plugin's console components, not one plugin's.
+ *
+ * The previous version of this walk named `libs/plugins/commerce` outright,
+ * so the marketplace grid, the template gallery and the datasets table — all
+ * lists, all rendering their whole window at once — sat outside a guard whose
+ * name says it covers plugin console cards.
+ */
+function pluginComponentFiles(): string[] {
+  const root = join(REPO, 'libs', 'plugins')
+  const found: string[] = []
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const components = join(root, entry.name, 'src', 'lib', 'components')
+    try {
+      found.push(...tsxFilesUnder(components))
+    } catch {
+      // A plugin with no components directory. Not every plugin renders.
+    }
+  }
+  return found
+}
+
 /** A hand-rolled pager: a Previous label and a Next label in one file. */
 const handRolledPager = (source: string) =>
   /\{'Previous'\}/.test(source) && /\{'Next'\}/.test(source)
@@ -233,10 +272,13 @@ describe('no list hand-rolls a pager (AGL-693)', () => {
     expect(handRolledPager(`<ListPagination page={0} />`)).toBe(false)
   })
 
-  it('no console component renders its own Previous/Next pair', () => {
-    const offenders = tsxFilesUnder(CONSOLE_COMPONENTS)
+  it('no console or plugin component renders its own Previous/Next pair', () => {
+    const offenders = [
+      ...tsxFilesUnder(CONSOLE_COMPONENTS),
+      ...pluginComponentFiles(),
+    ]
       .filter((path) => handRolledPager(readFileSync(path, 'utf8')))
-      .map((path) => path.slice(path.indexOf('apps/console')))
+      .map((path) => path.replace(`${REPO}/`, ''))
     expect(offenders).toEqual([])
   })
 
@@ -253,15 +295,6 @@ describe('no list hand-rolls a pager (AGL-693)', () => {
 
 describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
   const CONSOLE_ROOT = join(REPO, 'apps', 'console', 'components')
-  const PLUGIN_CONSOLE = join(
-    REPO,
-    'libs',
-    'plugins',
-    'commerce',
-    'src',
-    'lib',
-    'components',
-  )
   // The literal, not one JSX spelling of it: the storefront grid writes
   // `{loadingMore ? 'Loading…' : 'Load more'}`, which a check for
   // `{'Load more'}` walks straight past.
@@ -279,7 +312,7 @@ describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
   it('only the two documented grids still grow instead of paging', () => {
     const offenders = [
       ...tsxFilesUnder(CONSOLE_ROOT),
-      ...tsxFilesUnder(PLUGIN_CONSOLE),
+      ...pluginComponentFiles(),
     ]
       .filter((path) => LOADS_MORE.test(readFileSync(path, 'utf8')))
       .map(repoRelative)
@@ -287,10 +320,120 @@ describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
     expect(offenders).toEqual([])
   })
 
+  it('THE CONTROL: the plugin walk reaches more than one plugin', () => {
+    // The walk named `commerce` and only commerce, so every list the
+    // marketplace and data plugins rendered was outside the guard that was
+    // supposed to cover plugin console cards — which is how three of them
+    // stayed unconverted while this file read as complete. A walk that has
+    // narrowed back to one plugin would pass every assertion above by
+    // finding nothing.
+    const reached = new Set(
+      pluginComponentFiles().map(
+        (path) => repoRelative(path).split('/')[2],
+      ),
+    )
+    expect(reached.size).toBeGreaterThan(1)
+    for (const plugin of ['commerce', 'marketplace', 'data']) {
+      expect(reached.has(plugin)).toBe(true)
+    }
+  })
+
   it('the allowlist names files that EXIST and still load more', () => {
     // An allowlist entry that has gone stale silently widens the exemption.
     for (const path of LOAD_MORE_ALLOWED) {
       expect(read(path)).toMatch(LOADS_MORE)
+    }
+  })
+})
+
+/**
+ * A paged list names its ORDER (AGL-693, and the six times before it).
+ *
+ * `limit()` with no `orderBy` is not "the first N". Firestore answers it in
+ * document-id order, and every collection here is keyed by a generated id — so
+ * the window is a pseudo-random sample of the collection. It then gets sorted
+ * in the browser, which is what makes the bug invisible: the rows on screen
+ * are in a believable order, they are simply the wrong rows, and the ones
+ * missing leave no gap to notice.
+ *
+ * This has now been the same bug seven times in this repo. A guard that names
+ * the SHAPE is the only version that survives the eighth: any file with a
+ * footer under it, that builds a capped Firestore query, has to say what the
+ * cap is a cap ON.
+ *
+ * It is a coarse check — one `orderBy` anywhere in a file with several queries
+ * satisfies it — and coarse is what catches the failure that actually happens,
+ * which is a paged list with no ordering anywhere in sight.
+ */
+const UNORDERED_BY_DESIGN = [
+  /*
+   * A coupon's document ID *is* its code. Document-id order is therefore
+   * already the alphabetical order the list wants, so the default is not a
+   * fallback here — it is the intended ordering, named in the file.
+   *
+   * Listed rather than skipped: an exemption nobody wrote down is
+   * indistinguishable from one nobody noticed.
+   */
+  'libs/plugins/commerce/src/lib/components/console/host-coupons-card.component.tsx',
+]
+
+/**
+ * Source with comments removed.
+ *
+ * Every file in this list DISCUSSES `limit()` and `orderBy()` — several of
+ * them at length, because that is where the reasoning for the current query
+ * lives. Reading the prose would make the check pass on a file whose
+ * explanation survived and whose query did not.
+ */
+const withoutComments = (source: string) =>
+  source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, (_match, before) => before)
+
+describe('a paged list names its order (AGL-693)', () => {
+  it('THE CONTROL: the comment stripper reads code, not prose', () => {
+    // Both halves matter. A stripper that removed nothing would let a file
+    // pass on its own docblock; one that removed everything would make every
+    // assertion below vacuous.
+    expect(withoutComments(`// query(x, limit(200))\nquery(y, orderBy('a'))`))
+      .not.toContain('limit(')
+    expect(withoutComments(`/* limit(200) */\nquery(y, limit(10))`)).toContain(
+      'limit(',
+    )
+    // A `//` inside a URL is not a comment, and several of these files carry
+    // license headers full of them.
+    expect(withoutComments(`const u = 'https://example.test/x'`)).toContain(
+      'https://example.test',
+    )
+  })
+
+  it('every paged list that caps a query also orders it', () => {
+    const unordered = [...FOOTERS, ...SHARED_FOOTER]
+      .map(([, path]) => path)
+      .filter((path) => !UNORDERED_BY_DESIGN.includes(path))
+      .filter((path) => {
+        const code = withoutComments(read(path))
+        return /\blimit\(/.test(code) && !/\borderBy\(/.test(code)
+      })
+    expect(unordered).toEqual([])
+  })
+
+  it('THE CONTROL: some of those files do cap a query', () => {
+    // Otherwise the filter above is satisfied by a list of files that never
+    // touch Firestore, and the test passes by never testing anything.
+    const capped = [...FOOTERS, ...SHARED_FOOTER]
+      .map(([, path]) => path)
+      .filter((path) => /\blimit\(/.test(withoutComments(read(path))))
+    expect(capped.length).toBeGreaterThan(5)
+  })
+
+  it('the exemption still EXISTS and still explains itself', () => {
+    // An allow-list entry that has gone stale silently widens the exemption —
+    // and this one is only safe while the reason in the file is still true.
+    for (const path of UNORDERED_BY_DESIGN) {
+      const source = read(path)
+      expect(withoutComments(source)).toMatch(/\blimit\(/)
+      expect(source).toContain('document ID is its CODE')
     }
   })
 })
