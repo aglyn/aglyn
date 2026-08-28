@@ -286,41 +286,66 @@ describe('an entry about a person reaches that person’s page', () => {
 })
 
 describe('an access cannot displace a change', () => {
-  /** More reads than the card has room for, all newer than the change. */
-  const flood: SeedRow[] = Array.from({ length: 20 }, (_unused, index) => ({
-    id: `read_${index}`,
-    actorUid: 'staff_1',
+  const at = (hour: number, minute: number) =>
+    `2026-08-27T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`
+
+  /*
+   * THE SHAPE THAT ACTUALLY CROWDS THE CARD.
+   *
+   * Casey is staff, so both access halves fill at once: the messages Casey
+   * opened (the actor half) and the messages of Casey's that somebody else
+   * opened (the subject half). Each half is capped at ten, so twenty reads
+   * reach the merge — past the window the card keeps — and the impersonation
+   * is the oldest row in it.
+   *
+   * A seed that filled only ONE half could never overflow the merge, and the
+   * assertion below would pass against a route with no per-kind quota at all.
+   */
+  const readsByCasey: SeedRow[] = Array.from({ length: 10 }, (_u, index) => ({
+    id: `by_${index}`,
+    actorUid: 'casey_uid',
     action: 'email.message-viewed',
-    target: `emailDeliveries/msg_${index}`,
-    subjectUid: 'casey_uid',
-    at: `2026-08-27T12:${String(index).padStart(2, '0')}:00.000Z`,
+    target: `emailDeliveries/out_${index}`,
+    at: at(12, index),
   }))
+  const readsAboutCasey: SeedRow[] = Array.from(
+    { length: 10 },
+    (_u, index) => ({
+      id: `about_${index}`,
+      actorUid: 'staff_7',
+      action: 'email.message-viewed',
+      target: `emailDeliveries/in_${index}`,
+      subjectUid: 'casey_uid',
+      at: at(13, index),
+    }),
+  )
+  const impersonation: SeedRow = {
+    id: 'impersonation',
+    actorUid: 'staff_9',
+    action: 'user.impersonate',
+    target: 'users/casey_uid',
+    subjectUid: 'casey_uid',
+    // OLDER than every read, which is exactly the case a single
+    // time-ordered window gets wrong.
+    at: at(8, 0),
+  }
 
   it('keeps an impersonation on the card under a flood of reads', async () => {
-    auditSeed = [
-      ...flood,
-      {
-        id: 'impersonation',
-        actorUid: 'staff_9',
-        action: 'user.impersonate',
-        target: 'users/casey_uid',
-        subjectUid: 'casey_uid',
-        // OLDER than every read, which is exactly the case a single
-        // time-ordered window gets wrong.
-        at: '2026-08-27T08:00:00.000Z',
-      },
-    ]
+    auditSeed = [...readsByCasey, ...readsAboutCasey, impersonation]
     const payload = await detail()
 
-    const kinds = new Map(
-      payload.audit.map((row: any) => [row.id, row.kind]),
-    )
-    expect(kinds.get('impersonation')).toBe('change')
-    // The entry somebody opens this card to find, which four message views
-    // were enough to push out of a ten-row window.
+    // Twenty reads reached the merge, so a flat newest-first window would
+    // have trimmed the impersonation off the end. It is the entry somebody
+    // opens this card to find.
+    expect(
+      payload.audit.filter((row: any) => row.kind === 'access').length,
+    ).toBeGreaterThan(15 - 1)
     expect(
       payload.audit.some((row: any) => row.action === 'user.impersonate'),
     ).toBe(true)
+    expect(
+      payload.audit.find((row: any) => row.id === 'impersonation').kind,
+    ).toBe('change')
   })
 
   it('still returns the reads — they are separated, never dropped', async () => {
@@ -328,7 +353,7 @@ describe('an access cannot displace a change', () => {
     // reads would trade one silence for another: an unrecorded look is the
     // failure this collection exists to prevent, and an unrendered one is
     // the quiet version of it.
-    auditSeed = [...flood]
+    auditSeed = [...readsByCasey, ...readsAboutCasey]
     const payload = await detail()
 
     expect(
