@@ -69,23 +69,38 @@ export function CommerceGlanceCard(props: { hostId: string }) {
     const orders = [...(orderDocs ?? [])].sort(
       (a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0),
     )
-    // `cancelled`, two Ls — the spelling `OrderStatus` persists. The American
-    // one never matches a stored status, so the test silently passes every
-    // cancelled order through and books it as revenue. The value is a
-    // PERSISTED enum and is not the place to apply the American-spelling rule;
-    // the comparison has to follow the data.
+    // ONE DEFINITION OF 30-DAY REVENUE, NOT TWO (AGL-2516).
+    //
+    // This card and `commerce-analytics-card` read the same orders collection
+    // over the same window and disagreed three ways, so one dashboard showed a
+    // store two different revenues:
+    //
+    //   - `pending` orders, which have taken no money, were counted here as
+    //     revenue and excluded there.
+    //   - `cancelled` was tested with the American spelling, which never
+    //     matches the persisted `OrderStatus`, so every cancelled order was
+    //     booked. The value is a PERSISTED enum and is not the place to apply
+    //     the American-spelling rule; the comparison follows the data.
+    //   - A refund was all-or-nothing: a fully-refunded order was dropped
+    //     whole while a 99%-refunded one counted in full.
+    //
+    // The filter and the per-order figure now match that card line for line,
+    // so the two cannot drift again without someone editing both.
     const recentWindow = orders.filter(
       (order) =>
         (order.createdAtMs ?? 0) >= since &&
-        order.status !== 'cancelled' &&
-        order.status !== 'refunded',
+        order.status !== 'pending' &&
+        order.status !== 'cancelled',
     )
-    // The legacy flat `amountCents` as the fallback, matching every other
-    // money reader (AGL-1747). This card had the modern read but not the
-    // fallback, so a Commerce Starter order (AGL-90) rendered as $0.00.
+    // Net of what went back, rather than dropping the order. The legacy flat
+    // `amountCents` is the fallback, matching every other money reader
+    // (AGL-1747): this card had the modern read but not the fallback, so a
+    // Commerce Starter order (AGL-90) rendered as $0.00.
+    const orderNetCents = (order: any) =>
+      Number(order.totals?.totalCents ?? order.amountCents ?? 0) -
+      Number(order.refundedCents ?? 0)
     const revenueCents = recentWindow.reduce(
-      (sum, order) =>
-        sum + Number(order.totals?.totalCents ?? order.amountCents ?? 0),
+      (sum, order) => sum + orderNetCents(order),
       0,
     )
     const lowStock = (productDocs ?? []).filter((product: any) => {

@@ -31,14 +31,17 @@
  * different revenue for one store; the disagreement, not either number alone,
  * is what makes this a defect rather than a preference.
  *
- * SCOPE. This pins the cancellation rule and nothing else. Two neighbouring
- * questions are deliberately left unasserted because they are open rather than
- * settled: this card counts `pending` orders that have taken no money while
- * the analytics card excludes them, and it drops only fully-refunded orders by
- * status while the analytics card subtracts `refundedCents`, so a 99%-refunded
- * sale still counts here in full. Both are real disagreements between the two
- * cards; neither is this spec's to decide, and freezing today's answer would
- * assert a decision nobody made.
+ * SCOPE, NOW SETTLED (AGL-2516). This file first pinned the cancellation rule
+ * and deliberately left two neighbouring questions unasserted, because they
+ * were open: this card counted `pending` orders that have taken no money while
+ * the analytics card excluded them, and it dropped only fully-refunded orders
+ * by status while the analytics card subtracts `refundedCents`, so a
+ * 99%-refunded sale counted here in full.
+ *
+ * Both were decided in favour of the analytics card, which was right on all
+ * three counts, and this file now pins them too. The point was never which
+ * number is prettier — it is that one dashboard must not show a store two
+ * different revenues for the same thirty days.
  *
  * ASSERTED AS THE FIGURE, not the layout: the money string is the number under
  * audit. The arithmetic is not extracted from the component, so the rendered
@@ -135,5 +138,55 @@ describe('CommerceGlanceCard revenue window', () => {
     const { getByText } = render(<CommerceGlanceCard hostId="host-1" />)
 
     expect(getByText('$390.00')).toBeTruthy()
+  })
+
+  it('leaves an unpaid pending order out', () => {
+    // A `pending` order has taken no money. It was counted here and excluded by
+    // the analytics card, which is half of why the two disagreed.
+    orderRows = [
+      order('paid', 10000),
+      order('paid', 4000),
+      order('pending', 25000),
+    ]
+
+    const { getByText, queryByText } = render(
+      <CommerceGlanceCard hostId="host-1" />,
+    )
+
+    expect(getByText('$140.00')).toBeTruthy()
+    expect(queryByText('$390.00')).toBeNull()
+  })
+
+  it('nets a partial refund instead of counting the order whole', () => {
+    // The other half. A 99%-refunded sale used to count in full here because
+    // the drop was keyed on status; the money that came back is now subtracted.
+    orderRows = [
+      order('paid', 10000),
+      { ...order('paid', 4000), refundedCents: 3900 },
+    ]
+
+    const { getByText } = render(<CommerceGlanceCard hostId="host-1" />)
+
+    expect(getByText('$101.00')).toBeTruthy()
+  })
+
+  it('nets a fully refunded order to nothing, but still counts the sale', () => {
+    // Dropping it whole and netting it to zero agree on revenue and disagree
+    // on the order count. The analytics card counts it, so this one does too.
+    // Three orders so the $140.00 total is distinct from the $46.67 average
+    // and from every per-order caption, or the matcher would pass on the
+    // wrong element.
+    orderRows = [
+      order('paid', 10000),
+      order('paid', 4000),
+      { ...order('refunded', 2500), refundedCents: 2500 },
+    ]
+
+    const { getByText, queryByText } = render(
+      <CommerceGlanceCard hostId="host-1" />,
+    )
+
+    expect(getByText('$140.00')).toBeTruthy()
+    expect(queryByText('$165.00')).toBeNull()
   })
 })
