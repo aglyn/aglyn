@@ -43,6 +43,12 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
+  /**
+   * A one-time Stripe Express dashboard link, minted by the connect route on
+   * request. Not persisted: login links are single-use and short-lived, so a
+   * stored one would be a button that fails the second time it is pressed.
+   */
+  const [dashboardUrl, setDashboardUrl] = useState<string | null>(null)
   const { org, ready: planReady } = useOrgPlan(hostId)
   /** Bumped by Retry to re-subscribe the profile listen (AGL-1380). */
   const [retryNonce, setRetryNonce] = useState(0)
@@ -136,6 +142,23 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
         // them. Read three-valued, so only a literal `false` from Stripe
         // downgrades the claim; an absent flag means unasked, not off.
         const payoutsBlocked = payload.payoutsEnabled === false
+        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX (AGL-2510).
+        //
+        // Stripe is the only place payouts can be released — an Express
+        // account has no password and no direct login — so telling the
+        // merchant their funds are stranded and then keeping them here is half
+        // an answer. The route now mints the remediation link for exactly this
+        // state; going there is the whole point of pressing the button.
+        if (payoutsBlocked && payload.url) {
+          return void window.location.assign(payload.url)
+        }
+        // Payouts are flowing, so the link is the Express dashboard: balance,
+        // payout schedule, and the reason a payout failed. Held in state
+        // rather than followed, because this click was a status check and
+        // navigating away from one nobody asked to leave is its own defect.
+        if (!payoutsBlocked && typeof payload.dashboardUrl === 'string') {
+          setDashboardUrl(payload.dashboardUrl)
+        }
         return void enqueueSnackbar(
           payoutsBlocked
             ? 'Connected — payouts are not released yet'
@@ -344,20 +367,43 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           a connected merchant gets sent back through onboarding.
         */}
         {!planReady || stripeState !== 'loaded' ? null : isOwner ? (
-          <Button
-            size="small"
-            variant={chargesEnabled ? 'text' : 'contained'}
-            color="primary"
-            disabled={busy}
-            onClick={handleConnect}
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            {chargesEnabled
-              ? 'Refresh status'
-              : busy
-                ? 'Opening Stripe…'
-                : 'Set up payments'}
-          </Button>
+          <>
+            <Button
+              size="small"
+              variant={chargesEnabled ? 'text' : 'contained'}
+              color="primary"
+              disabled={busy}
+              onClick={handleConnect}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              {chargesEnabled
+                ? 'Refresh status'
+                : busy
+                  ? 'Opening Stripe…'
+                  : 'Set up payments'}
+            </Button>
+            {/*
+            Where the money actually is (AGL-2510). Aglyn records none of it —
+            no balance, no payout schedule, and no `payout.failed` handling
+            anywhere — so a merchant whose payout bounced has no way to learn
+            that from this console. An Express account has no direct login
+            either, which leaves a link minted by the platform as the only
+            route in. `target="_blank"` because it leaves the app entirely.
+          */}
+            {dashboardUrl ? (
+              <Button
+                size="small"
+                variant="text"
+                color="primary"
+                href={dashboardUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                {'View payouts in Stripe'}
+              </Button>
+            ) : null}
+          </>
         ) : (
           <Typography variant="caption" color="text.secondary">
             {'Only the organization owner can set up payments.'}

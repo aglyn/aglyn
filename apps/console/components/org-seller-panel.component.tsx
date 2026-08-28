@@ -184,6 +184,12 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const totals = summarizeSellerLedger(sales as SellerLedgerSale[] | undefined)
 
   const [payoutsBusy, setPayoutsBusy] = useState(false)
+  /**
+   * A one-time Stripe Express dashboard link from the connect route. Not
+   * persisted: login links are single-use and short-lived, so a stored one is
+   * a button that fails the second time it is pressed.
+   */
+  const [dashboardUrl, setDashboardUrl] = useState<string | null>(null)
   const handlePayouts = useCallback(async () => {
     setPayoutsBusy(true)
     try {
@@ -219,6 +225,27 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         // about CONNECTING (AGL-1997 split the two flags; payout readiness
         // can arrive days later and is not a second activation).
         if (!chargesEnabled) trackEvent('stripe_connected', {})
+        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX (AGL-2510).
+        //
+        // "Finish payout setup in Stripe" is the label this button carries in
+        // exactly this state, and it could not open Stripe: the route returned
+        // here with a status and no link, and this branch answered before the
+        // `payload.url` check below ever ran. An Express account has no
+        // password and no direct login, so a link minted by the platform is
+        // the publisher's only way in — without one their share accumulates in
+        // an account that cannot release it and nothing says why.
+        if (payload.payoutsEnabled === false && payload.url) {
+          return void window.location.assign(payload.url)
+        }
+        // Payouts are flowing, so the route answers with the Express dashboard
+        // instead: balance, payout schedule, and the reason a payout failed.
+        // Held rather than followed — this click was a status check.
+        if (
+          payload.payoutsEnabled !== false &&
+          typeof payload.dashboardUrl === 'string'
+        ) {
+          setDashboardUrl(payload.dashboardUrl)
+        }
         // The same split the card renders (AGL-1997): the route answers both
         // flags, so the toast must not announce payouts off the charges one.
         return void enqueueSnackbar(
@@ -1023,6 +1050,24 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                           ? 'Recheck payout status'
                           : 'Set up payouts'}
               </Button>
+              {/*
+                Where the money actually is (AGL-2510). Aglyn records no
+                balance, no payout schedule, and handles no `payout.failed`
+                event, so a publisher whose payout bounced cannot learn that
+                here. An Express account has no direct login, which leaves a
+                platform-minted link as the only route in.
+              */}
+              {dashboardUrl ? (
+                <Button
+                  variant="text"
+                  color="primary"
+                  href={dashboardUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {'View payouts in Stripe'}
+                </Button>
+              ) : null}
             </>
           )}
         </Stack>
