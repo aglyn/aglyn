@@ -93,6 +93,7 @@ import BillingOpenInvoicesCardComponent from '../../../../components/billing/bil
 import BillingPlanQuoteComponent from '../../../../components/billing/billing-plan-quote.component'
 import { useBillingProfile } from '../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../utils/browser-stripe'
+import { prorationQuote } from '../../../../utils/proration-quote'
 import { subscriptionPeriodNotice } from '../../../../utils/subscription-period-notice'
 import CardColumns from '../../../../components/card-columns.component'
 import {
@@ -642,8 +643,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   `for — until ${effective}, when this organization moves ` +
                   `to ${targetPlan}. You can keep your current plan any ` +
                   `time before then.`
-                : `Prorated charge today: $${(preview.amountDueCents / 100).toFixed(2)} ` +
-                  `${String(preview.currency).toUpperCase()}; renews ${effective}.`) +
+                : prorationQuote(preview, effective)) +
               // A pending cancel and a pending plan change cannot both stand
               // (AGL-2151). The server clears the cancellation as part of this
               // operation — a customer picking a smaller plan is trying to

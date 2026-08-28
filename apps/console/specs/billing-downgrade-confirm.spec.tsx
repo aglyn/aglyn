@@ -265,7 +265,12 @@ beforeEach(() => {
           status: 200,
           json: async () => ({
             downgrade,
-            amountDueCents: downgrade ? 0 : 4200,
+            // BOTH fields, as the route really answers since AGL-535.
+            // `prorationCents` is the cost of the change; `amountDueCents` is
+            // the whole upcoming invoice, and quoting THAT was the bug the
+            // confirm carried for a release after the preview was fixed.
+            prorationCents: downgrade ? 0 : 4200,
+            amountDueCents: downgrade ? 0 : 12900,
             currency: 'usd',
             periodEnd: PERIOD_END_ISO,
           }),
@@ -427,15 +432,21 @@ describe('an upgrade is the frictionless direction (AGL-1859 §2)', () => {
     expect(upgrades.length).toBeGreaterThan(0)
   })
 
-  it('quotes the prorated charge and applies immediately — not end-of-cycle', async () => {
+  it('quotes the PRORATION on the next invoice, and applies immediately', async () => {
     confirmAnswers = [true]
     await press('Upgrade')
     await waitFor(() => expect(switches()).toHaveLength(1))
 
     const said = `${confirmCalls[0].title} ${confirmCalls[0].description}`
     // The asymmetry, stated in the two confirms' own words: an upgrade quotes
-    // money today; a downgrade quotes a date.
-    expect(said).toMatch(/Prorated charge today: \$42\.00 USD/)
+    // money, a downgrade quotes a date. What changed in AGL-535 part two is
+    // WHICH money and WHEN — the proration, on the next invoice, because
+    // `create_prorations` takes nothing at the switch.
+    expect(said).toMatch(/\$42\.00 USD/)
+    expect(said).toMatch(/next invoice/)
+    // The upcoming-invoice total must not appear: that was the overstatement.
+    expect(said).not.toMatch(/129\.00/)
+    expect(said).not.toMatch(/charge today/)
     expect(said).not.toMatch(/[Nn]othing is charged today/)
     expect(String(confirmCalls[0].confirmationText)).toBe('Switch plan')
 
