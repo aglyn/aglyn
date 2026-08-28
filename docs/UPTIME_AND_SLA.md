@@ -236,6 +236,45 @@ emailed anyone when it went red — the GitHub probe only records.
 [The channel is unverified](#the-channel-is-unverified) below. Every policy
 counted in this document points at it.
 
+🔴 **`marketing-home` and `customer-site` have read 0% since 2026-08-21, and
+the sites are fine.** Both GCP checks request a bare `/` on `aglyn.com` and
+`demo.aglyn.app` and get a **429 Vercel Security Checkpoint**, because
+`bot_protection` is `active` with action `challenge` on **both** Vercel
+projects — enabled on `aglyn-tenant` at 2026-08-21T06:23Z and on
+`aglyn-console` at 2026-08-21T06:48Z, which is when the two checks went to
+zero — and an uptime checker cannot answer a challenge.
+
+This is the failure `tools/scripts/probe-uptime.mjs` already documents and
+already solves: it sends an `x-aglyn-probe` header carrying `AGLYN_PROBE_TOKEN`,
+which matches the Vercel firewall rule literally named **"CI and uptime probe
+bypass"**. The GitHub probe was given that header. **The GCP checks never
+were.** Eleven of the thirteen survive only because they all request an
+`/api/health*` path that a *different* rule already exempts — "Health endpoint
+bypass" (`path` prefix `/api/health`) on `aglyn-tenant`, "Machine traffic
+bypass" on `aglyn-console`. The two that request a bare root page match no
+bypass on either project, so they are the only two the challenge reaches.
+
+That is luck, not coverage: the health checks are green because of a rule
+written for a different purpose, and nothing would tell us if that rule were
+narrowed.
+
+The two policies fired once each when it started and have been silent since,
+which reads as steady state rather than as a week-old outage.
+
+**The fix is on the GCP side, not the firewall side.** Do not add a path bypass
+for `/` — that would exempt the homepage from bot protection to make a monitor
+green. Add the header to the two checks instead; uptime configs support
+`httpCheck.headers` with `maskHeaders: true` so the value is not readable back:
+
+```jsonc
+// PATCH the two configs, updateMask=httpCheck.headers,httpCheck.maskHeaders
+{ "httpCheck": { "headers": { "x-aglyn-probe": "<AGLYN_PROBE_TOKEN>" },
+                 "maskHeaders": true } }
+```
+
+Until that lands, treat those two rows as UNKNOWN rather than DOWN, and read
+the GitHub probe for the real state of the two customer-facing pages.
+
 ⚠️ **The monitor set and the card set are still not identical**, in both
 directions now. `Site delivery` (`aglyn.com/api/health`) is a card with no
 monitor — though `Tenant runtime` may already be it, and the public API cannot
