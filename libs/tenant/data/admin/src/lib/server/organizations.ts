@@ -353,6 +353,19 @@ export async function createOrganization(
   // `erase.ts` already awaits the matching detach, which is what made the
   // asymmetry worth looking at.
   await attachWorkspaceDomain(slug)
+  // The first entry in the workspace's log (AGL-118). Creation is the one
+  // category the activity log never covered — it was assembled by adding
+  // calls at mutation points in the console UI, and the acts that bring a
+  // top-level object into existence happen out here, in provisioning code no
+  // UI mutation point ever reaches. The visible symptom was a customer whose
+  // page read as though they had never used the product, because their whole
+  // session had been creation.
+  await logOrgActivity(
+    orgId,
+    { uid: ownerUid, email: ownerEmail ?? null },
+    'Created the workspace',
+    { type: 'org', id: orgId, name },
+  )
   return orgId
 }
 
@@ -1479,6 +1492,42 @@ export async function transferOrgOwnership(
     syncMemberHostProjections(orgId, toUid),
     syncMemberHostProjections(orgId, fromUid),
   ])
+  /*
+   * A workspace changing hands is the highest-consequence thing that can
+   * happen to an account, and until AGL-118 it left no trace anywhere: the
+   * transaction above rewrites five documents and wrote nothing that says it
+   * happened, so the only evidence was the new state itself.
+   *
+   * BOTH principals are on the row. The actor is the outgoing owner, who is
+   * the only party allowed to perform this, and the target names the
+   * incoming one — a transfer identified by one party is half a record, and
+   * the half it keeps is the one already implied by `ownerUid`.
+   *
+   * Emails are read after the fact and best-effort. The uids are the
+   * identity; the addresses only save a reader a lookup, so a failure to
+   * resolve them must not cost the entry.
+   */
+  const [fromEmail, toEmail] = await Promise.all(
+    [fromUid, toUid].map(async (uid) =>
+      firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .collection('members')
+        .doc(uid)
+        .get()
+        .then((snapshot) => {
+          const email = snapshot.get('email')
+          return typeof email === 'string' ? email : null
+        })
+        .catch(() => null),
+    ),
+  )
+  await logOrgActivity(
+    orgId,
+    { uid: fromUid, email: fromEmail },
+    'Transferred workspace ownership',
+    { type: 'member', id: toUid, ...(toEmail ? { name: toEmail } : {}) },
+  )
 }
 
 /**

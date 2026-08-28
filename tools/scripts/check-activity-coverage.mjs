@@ -1,0 +1,279 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// AGL-118 — every path that brings a durable customer object into existence,
+// or changes who controls it, must write an activity entry or say in writing
+// why it does not.
+//
+// ── THE SYMPTOM THIS EXISTS TO PREVENT ────────────────────────────────────
+//
+// An ACTIVE ACCOUNT WITH AN EMPTY ACTIVITY FEED. That is what this gap looked
+// like from the outside, and it was misread twice before anyone looked here:
+// first as a Firestore rules denial, then as a customer who had never used the
+// product. Neither was true. The account had signed up, created a workspace,
+// created a site and built three screens from a template — and every one of
+// those acts was a CREATE, which was the one category the log did not cover.
+//
+// If you are reading this because a customer's activity feed is empty, the
+// question is not "who is being denied" but "which mutation path forgot to
+// log", and this check is where the answer lives.
+//
+// ── WHY THE GAP EXISTED ───────────────────────────────────────────────────
+//
+// The log was assembled by adding a call at each mutation point IN THE CONSOLE
+// UI. That covers saves and deletes well — a person edits a thing that already
+// exists from a screen that already has the logger in scope. It covers
+// creation almost not at all, because the acts that bring a top-level object
+// into being happen in server routes and provisioning functions that no UI
+// mutation point reaches.
+//
+// It is also why the fix is server-side and why this check is possible at all:
+// a route file is something a script can enumerate. A `logActivity()` call
+// inside a React component is not.
+//
+// ── SCOPE: DELIBERATELY NARROW ────────────────────────────────────────────
+//
+// It checks paths that CREATE, TRANSFER or DESTROY a durable customer object —
+// workspaces, sites, and the resources and memberships under them.
+//
+// It deliberately does NOT cover:
+//
+//  - every Firestore write. A detector that flags all of them is noisy, and a
+//    noisy check collects reflex exclusions until it means nothing. The class
+//    that failed here is object lifecycle, so that is the class it guards.
+//  - client-side mutation points. They cannot be enumerated statically with
+//    any confidence, and moving their writes server-side is the actual fix.
+//  - reads, and updates to fields on an object that already exists. A save is
+//    already logged by the surface that performs it.
+//  - the tenant runtime's own event/workflow writers, which append to the same
+//    collection from the site side and are not console mutation paths.
+//
+// ── HOW IT DECIDES ────────────────────────────────────────────────────────
+//
+// A path is COVERED when its file calls `logHostActivity(` or `logOrgActivity(`,
+// or when it is classified in `NOT_LOGGED` with a written reason. A path that
+// is neither fails the check. `NOT_LOGGED` is ratcheted: its size may fall and
+// may not rise, so removing a reason is free and adding one is a deliberate,
+// reviewable act.
+//
+//   node tools/scripts/check-activity-coverage.mjs
+//   node tools/scripts/check-activity-coverage.mjs --self-test
+//
+// `--self-test` is not optional decoration. A coverage check whose enumeration
+// silently matches nothing reports perfect coverage, which is the same failure
+// as a search with no control — it points the detector at one path known to
+// log and one known not to, and fails if either verdict is wrong.
+
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
+const args = process.argv.slice(2)
+const SELF_TEST = args.includes('--self-test')
+
+/** The call that satisfies the check, in either scope. */
+const LOG_CALL = /\blog(?:Host|Org)Activity\s*\(/
+
+/**
+ * The durable-object mutation surface, listed rather than globbed.
+ *
+ * A glob over `app/api/**` would sweep in reads, health probes and plugin
+ * proxies, and the exclusion list needed to quiet it would be longer than this
+ * one and would carry no information. Every entry here brings an object into
+ * existence, destroys one, or moves who controls it.
+ */
+const MUTATION_PATHS = [
+  'apps/console/app/api/orgs/create/route.ts',
+  'apps/console/app/api/orgs/delete/route.ts',
+  'apps/console/app/api/orgs/members/route.ts',
+  'apps/console/app/api/orgs/invites/route.ts',
+  'apps/console/app/api/orgs/roles/route.ts',
+  'apps/console/app/api/orgs/settings/route.ts',
+  'apps/console/app/api/hosts/create/route.ts',
+  'apps/console/app/api/hosts/delete/route.ts',
+  'apps/console/app/api/hosts/rename/route.ts',
+  'apps/console/app/api/hosts/members/route.ts',
+  'apps/console/app/api/hosts/resources/route.ts',
+  'apps/console/app/api/hosts/versions/route.ts',
+  'apps/console/app/api/hosts/import/route.ts',
+  'apps/console/app/api/hosts/collections/route.ts',
+  'apps/console/app/api/domains/attach/route.ts',
+  'apps/console/app/api/domains/detach/route.ts',
+  'apps/console/app/api/billing/subscription/route.ts',
+  'apps/console/app/api/billing/checkout/route.ts',
+  'apps/console/app/api/billing/webhook/route.ts',
+  // The provisioning module. Not a route, and the reason the gap went
+  // unnoticed for so long: `createOrganization` and `transferOrgOwnership`
+  // live here, are reachable from several routes, and are where a workspace
+  // actually comes into being.
+  'libs/tenant/data/admin/src/lib/server/organizations.ts',
+]
+
+/**
+ * Paths that legitimately write no activity entry, each with the reason.
+ *
+ * A reason is not a formality. Every line here is a claim that an act a
+ * customer performed does not belong in their audit trail, and the next
+ * person to read it has to be able to agree or disagree with it.
+ */
+const NOT_LOGGED = {
+  'apps/console/app/api/orgs/create/route.ts':
+    'Delegates to `createOrganization`, which writes the entry. Logging here ' +
+    'too would put two rows on one act, and the route is not the only caller.',
+  'apps/console/app/api/hosts/versions/route.ts':
+    'A resource and its FIRST version are one act — /api/hosts/resources ' +
+    'already recorded it. A later version is a save, logged by the surface ' +
+    'that performs it. A row here would be an invented second event.',
+  'apps/console/app/api/hosts/collections/route.ts':
+    'The console logs `Created collection` / `Updated collection` at the ' +
+    'card that calls this. Moving it server-side is the same migration as ' +
+    'the rest and is not yet done; the act is not currently unlogged.',
+  'apps/console/app/api/hosts/import/route.ts':
+    'Writes its own `Restored site from export (N documents)` entry directly ' +
+    'with the Admin SDK rather than through the helper.',
+  'apps/console/app/api/hosts/members/route.ts':
+    'The console logs `Added member` / `Removed member` / `Changed member ' +
+    'site access` at the members card. Pending the same migration.',
+  'apps/console/app/api/hosts/delete/route.ts':
+    'PENDING (AGL-118). Deleting a site is exactly this class and it is ' +
+    'unlogged. Left classified rather than half-instrumented: the route ' +
+    'soft-deletes and schedules, so which moment is "deleted" is a decision, ' +
+    'not a line to drop in.',
+  'apps/console/app/api/hosts/rename/route.ts':
+    'PENDING (AGL-118). A site changing its public address is this class.',
+  'apps/console/app/api/domains/detach/route.ts':
+    'PENDING (AGL-118). The attach half now logs; detach has several exit ' +
+    'branches and picking the terminal one needs the same care attach got.',
+  'apps/console/app/api/billing/subscription/route.ts':
+    'PENDING (AGL-118), and BLOCKED: billing is held by another change in ' +
+    'this checkout. Subscription lifecycle also needs one authoritative ' +
+    'source decided between the console action and the Stripe webhook, or a ' +
+    'plan change produces two rows saying different things.',
+  'apps/console/app/api/billing/checkout/route.ts':
+    'PENDING (AGL-118), and BLOCKED for the reason above.',
+  'apps/console/app/api/billing/webhook/route.ts':
+    'PENDING (AGL-118), and BLOCKED for the reason above. The webhook is the ' +
+    'honest source for what actually happened to a subscription, so it is ' +
+    'the likely authority — but that is a decision, not a default.',
+}
+
+/** How many exclusions are allowed. It may fall; it may not rise. */
+const RATCHET = 11
+
+const read = (relative) => {
+  const path = `${repoRoot}${relative}`
+  return existsSync(path) ? readFileSync(path, 'utf8') : null
+}
+
+/** COVERED | CLASSIFIED | UNLOGGED | MISSING */
+function verdictFor(relative) {
+  const source = read(relative)
+  if (source === null) return 'MISSING'
+  if (LOG_CALL.test(source)) return 'COVERED'
+  return NOT_LOGGED[relative] ? 'CLASSIFIED' : 'UNLOGGED'
+}
+
+if (SELF_TEST) {
+  /*
+   * The control. One path known to log and one known not to — if the
+   * enumeration ever stops matching real files, or the pattern stops matching
+   * a real call, both verdicts go wrong here before the check can report
+   * perfect coverage on an empty scan.
+   */
+  const LOGS = 'apps/console/app/api/hosts/create/route.ts'
+  const SILENT = 'apps/console/app/api/billing/subscription/route.ts'
+  const failures = []
+  if (read(LOGS) === null) failures.push(`${LOGS} does not exist`)
+  if (read(SILENT) === null) failures.push(`${SILENT} does not exist`)
+  if (verdictFor(LOGS) !== 'COVERED') {
+    failures.push(
+      `${LOGS} calls the logger but the detector says ${verdictFor(LOGS)} — ` +
+        'the pattern no longer matches a real call.',
+    )
+  }
+  if (verdictFor(SILENT) !== 'CLASSIFIED') {
+    failures.push(
+      `${SILENT} writes no entry but the detector says ${verdictFor(SILENT)} ` +
+        '— the detector is matching something that is not a log call.',
+    )
+  }
+  if (failures.length) {
+    console.error('\nSELF-TEST FAILED\n  ' + failures.join('\n  ') + '\n')
+    process.exit(1)
+  }
+  console.log(
+    '\nself-test OK — a logging path reads COVERED and a silent one reads ' +
+      'CLASSIFIED, so the detector discriminates.\n',
+  )
+  process.exit(0)
+}
+
+const covered = []
+const classified = []
+const unlogged = []
+const missing = []
+for (const relative of MUTATION_PATHS) {
+  const verdict = verdictFor(relative)
+  if (verdict === 'COVERED') covered.push(relative)
+  else if (verdict === 'CLASSIFIED') classified.push(relative)
+  else if (verdict === 'MISSING') missing.push(relative)
+  else unlogged.push(relative)
+}
+
+console.log('\nActivity coverage over durable-object mutation paths (AGL-118)\n')
+console.log(`  covered     ${covered.length}`)
+console.log(`  classified  ${classified.length}  (ratchet ${RATCHET})`)
+console.log(`  unlogged    ${unlogged.length}`)
+for (const path of covered) console.log(`    LOGS       ${path}`)
+for (const path of classified) console.log(`    classified ${path}`)
+
+let failed = false
+if (missing.length) {
+  // A renamed or deleted path silently shrinks the enumeration, which is how
+  // a coverage check starts reporting on nothing.
+  console.error('\nENUMERATION IS STALE — these paths no longer exist:')
+  for (const path of missing) console.error(`  ${path}`)
+  console.error('Update MUTATION_PATHS; do not let the list rot into a no-op.')
+  failed = true
+}
+if (unlogged.length) {
+  console.error('\nUNLOGGED MUTATION PATHS — each creates, transfers or')
+  console.error('destroys a durable customer object and writes no activity:')
+  for (const path of unlogged) console.error(`  ${path}`)
+  console.error(
+    '\nAdd a `logHostActivity`/`logOrgActivity` call, or classify it in\n' +
+      'NOT_LOGGED with the reason it does not need one. An account whose\n' +
+      'feed is empty because a path forgot to log is indistinguishable from\n' +
+      'an account that did nothing.',
+  )
+  failed = true
+}
+if (classified.length > RATCHET) {
+  console.error(
+    `\nRATCHET — ${classified.length} classified exclusions, baseline ` +
+      `${RATCHET}. The list may shrink, never grow.`,
+  )
+  failed = true
+}
+if (classified.length < RATCHET) {
+  console.log(
+    `\nRatchet can tighten: ${classified.length} < ${RATCHET}. Lower RATCHET ` +
+      'to record the win.',
+  )
+}
+if (failed) process.exit(1)
+console.log('\nEvery durable-object mutation path logs or is classified.\n')
