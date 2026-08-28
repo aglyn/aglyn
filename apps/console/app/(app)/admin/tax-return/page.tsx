@@ -17,7 +17,7 @@
 'use client'
 
 /**
- * SALES TAX — the Texas return for one filing period (AGL-1900 / AGL-1811).
+ * SALES TAX — the return for one filing period (AGL-1900 / AGL-1811).
  *
  * AGL-1811 built the mechanism and stopped there: `GET /api/admin/tax-return`
  * computed a filable return that only a curl could reach. This page is the
@@ -34,10 +34,18 @@
  * whole reason `attention` exists is that an undercount presented as a total
  * is the one failure this record cannot have.
  *
- * **Never show platform totals where the return wants Texas.** Items 1 and 2
- * come from `byJurisdiction['US-TX']`. The "Aglyn's own sales by jurisdiction"
- * table below is the audit trail for why the rest of the quarter is not on the
- * return.
+ * **Never show platform totals where the return wants one jurisdiction.** The
+ * filing figures come from `byJurisdiction[configured code]`. The "Aglyn's own
+ * sales by jurisdiction" table below is the audit trail for why the rest of
+ * the quarter is not on the return.
+ *
+ * **Never leave the jurisdiction unsaid.** The same quarter filed in two
+ * jurisdictions is two different returns, and this page named neither — it
+ * read Texas everywhere and said so nowhere, so a self-host operator filing in
+ * California or the United Kingdom was handed Texas Comptroller lines with
+ * their own figures in them. The heading, the figures card and the export all
+ * name the configured jurisdiction, and a jurisdiction with no exporter of its
+ * own gets a breakdown that says out loud it is not a return.
  *
  * **Never let one taxpayer's table answer for another's** (AGL-1956). That
  * table used to call itself the economic-nexus early warning, and it reads
@@ -61,8 +69,9 @@
  * them is the mistake the three-way split exists to prevent.
  *
  * Read-only, like the route: this page files nothing and writes nothing. The
- * filing happens at the Comptroller's Webfile keyboard, which is why the
- * export is a spreadsheet of working papers and the credentials ride along.
+ * filing happens at the authority's own keyboard — the Comptroller's Webfile,
+ * for Texas — which is why the export is a spreadsheet of working papers and
+ * the credentials ride along.
  */
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
@@ -94,6 +103,7 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { taxRegistrationSetupHint } from '../../../../utils/tax-jurisdictions'
 import {
   centsToDollars,
   defaultTaxReturnPeriod,
@@ -101,12 +111,12 @@ import {
   taxReturnCsv,
   taxReturnCsvFilename,
   taxReturnFacilitatedJurisdictionRows,
+  taxReturnFilingLines,
   taxReturnJurisdictionRows,
   taxReturnMarketplaceLines,
   taxReturnPeriodOptions,
   taxReturnRegistration,
   taxReturnStorefrontRows,
-  taxReturnWebfileLines,
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
 
@@ -163,7 +173,16 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
 
   const verdict = useMemo(() => taxReturnAttention(payload), [payload])
   const registration = useMemo(() => taxReturnRegistration(payload), [payload])
-  const webfileLines = useMemo(() => taxReturnWebfileLines(payload), [payload])
+  // WHICH AUTHORITY THIS IS FOR. It rides on the payload, so nothing names a
+  // jurisdiction until the response has said which one — a heading that
+  // defaults to Texas while the request is in flight is a Texas return in the
+  // only glance most readers give it.
+  const filing = registration.jurisdiction
+  // Named only once the response has said which jurisdiction it is. Copy that
+  // reads "US-TX" for the second before a GB deployment's figures land is the
+  // same wrong-jurisdiction glance the heading is guarded against.
+  const filingName = payload ? filing.code : 'The filing jurisdiction'
+  const filingLines = useMemo(() => taxReturnFilingLines(payload), [payload])
   const jurisdictions = useMemo(
     () => taxReturnJurisdictionRows(payload),
     [payload],
@@ -191,7 +210,10 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = taxReturnCsvFilename(payload?.period ?? period)
+    anchor.download = taxReturnCsvFilename(
+      payload?.period ?? period,
+      payload?.registration?.jurisdiction,
+    )
     anchor.click()
     URL.revokeObjectURL(url)
     enqueueSnackbar('Working papers exported', {
@@ -210,7 +232,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
       ]}
       help="salesTaxReturn"
       header={{
-        children: 'Texas Sales Tax Return',
+        children: payload
+          ? `${filing.label} Sales Tax Return`
+          : 'Sales Tax Return',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
     >
@@ -255,27 +279,43 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   {'Export working papers (CSV)'}
                 </Button>
                 {/*
+                  WHICH JURISDICTION EVERY FIGURE BELOW IS FOR. Beside the
+                  period, because the two together are the only thing that
+                  identifies what is on this screen: the same quarter filed in
+                  two jurisdictions is two different returns, and the page used
+                  to name neither out loud.
+                */}
+                {payload ? (
+                  <Chip
+                    size="small"
+                    color={filing.recognized ? 'default' : 'error'}
+                    variant="outlined"
+                    label={`Jurisdiction ${filing.code}`}
+                  />
+                ) : null}
+                {/*
                   AGL-2021. The registration comes from server-only env via the
                   staff-gated route, so it is absent on any deployment that has
-                  not configured one. Says so in words rather than rendering
-                  "Webfile number " with nothing after it — a filer copying a
-                  number off this corner must never be handed a blank.
+                  not configured one. Says so in words — and names the
+                  variables to set — rather than rendering a label with nothing
+                  after it, because a filer copying a number off this corner
+                  must never be handed a blank.
                 */}
                 <Stack sx={{ ml: { sm: 'auto' } }}>
-                  {registration.configured ? (
+                  {!payload ? null : registration.configured ? (
                     <>
                       <Typography variant="caption" color="text.secondary">
-                        {`Webfile number ${registration.webfileNumber}`}
+                        {`${filing.registrationIdLabel} ${registration.registrationId}`}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {`Taxpayer number ${registration.taxpayerNumber}`}
-                      </Typography>
+                      {registration.filingId ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {`${filing.filingIdLabel} ${registration.filingId}`}
+                        </Typography>
+                      ) : null}
                     </>
                   ) : (
                     <Typography variant="caption" color="warning.main">
-                      {
-                        'Registration not configured — set TX_WEBFILE_NUMBER and TX_TAXPAYER_NUMBER'
-                      }
+                      {taxRegistrationSetupHint(filing)}
                     </Typography>
                   )}
                 </Stack>
@@ -342,15 +382,36 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
             ) : null}
 
             <CardDisplay
-              header={'Form 01-114 figures — Texas only'}
+              header={payload ? filing.figuresHeader : 'Return figures'}
               help={docsHelp('salesTaxReturn', {
                 anchor: '#the-figures',
                 excerpt:
-                  'The lines to type into Webfile, in dollars, for Texas receipts only. Everything sold outside Texas is on the jurisdiction table instead.',
+                  'The filing figures, in dollars, for the configured jurisdiction only. Everything sold elsewhere is on the jurisdiction table instead.',
               })}
               contentGutterX
               contentGutterY
             >
+              {/*
+                THE DOCUMENT SAYS WHAT IT IS. Texas has an exporter that knows
+                Form 01-114's own lines; every other jurisdiction gets what was
+                collected there and nothing about the form, because nothing
+                here knows the form. A breakdown read as a return is the
+                failure this banner exists to prevent, and it is stated on the
+                screen as well as in the export because only one of those gets
+                looked at twice.
+              */}
+              {payload && filing.form !== 'tx-webfile' ? (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <AlertTitle>
+                    {`A breakdown for manual filing — not a ${filing.code} return`}
+                  </AlertTitle>
+                  {'These are the figures a return is assembled from: what ' +
+                    'was collected in this jurisdiction, and on what base. ' +
+                    'No form for this jurisdiction is known here, so nothing ' +
+                    'below is a form line — transcribe them onto the return ' +
+                    'the authority asks for.'}
+                </Alert>
+              ) : null}
               {/*
                 Dimmed, not hidden, while a blocking finding stands: the
                 preparer still needs to see the figures to investigate the
@@ -371,7 +432,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {webfileLines.map((line) => (
+                    {filingLines.map((line) => (
                       <TableRow key={line.label}>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {line.item}
@@ -407,7 +468,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               {payload && verdict.blocking ? (
                 <Typography variant="body2" color="error" sx={{ mt: 2 }}>
                   {'These figures are incomplete — see the findings above. ' +
-                    'Do not type them into Webfile.'}
+                    (filing.form === 'tx-webfile'
+                      ? 'Do not type them into Webfile.'
+                      : 'Do not file from them.')}
                 </Typography>
               ) : null}
             </CardDisplay>
@@ -546,7 +609,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('salesTaxReturn', {
                 anchor: '#the-figures',
                 excerpt:
-                  'Tax charged to shoppers on merchants’ storefronts, split by who owes it. None of it is in the Webfile figures above.',
+                  'Tax charged to shoppers on merchants’ storefronts, split by who owes it. None of it is in the filing figures above.',
               })}
               contentGutterX
               contentGutterY
@@ -556,7 +619,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 color="text.secondary"
                 sx={{ mb: 1.5 }}
               >
-                {'None of this is in the Webfile figures above, which sum ' +
+                {`None of this is in the ${
+                  filing.form === 'tx-webfile' ? 'Webfile' : 'breakdown'
+                } figures above, which sum ` +
                   'Aglyn’s OWN sales only. The first row is the one that ' +
                   'needs a decision: those sessions are created on Aglyn’s ' +
                   'platform account, so Stripe computed that tax against ' +
@@ -673,9 +738,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               >
                 {'What Aglyn facilitated into each state, whoever remits the ' +
                   'tax — the figure an economic-nexus threshold is measured ' +
-                  'against. Texas needs no threshold: a Texas LLC has nexus ' +
-                  'there unconditionally. A state showing sales and no tax is ' +
-                  'the one to watch.'}
+                  `against. ${filingName} needs no threshold: the filer is ` +
+                  'established there, so the obligation is unconditional. A ' +
+                  'region showing sales and no tax is the one to watch.'}
               </Typography>
               <Table size="small">
                 <TableHead>
@@ -714,7 +779,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                                 ? 'Not stated'
                                 : row.jurisdiction}
                             </Typography>
-                            {row.isTexas ? (
+                            {row.isFilingJurisdiction ? (
                               <Chip
                                 size="small"
                                 color="warning"
@@ -783,7 +848,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('salesTaxReturn', {
                 anchor: '#the-figures',
                 excerpt:
-                  'Tax on marketplace purchases. Charged on the platform’s own charge, kept platform-side, and in no Webfile line above.',
+                  'Tax on marketplace purchases. Charged on the platform’s own charge, kept platform-side, and in no filing line above.',
               })}
               contentGutterX
               contentGutterY
@@ -859,7 +924,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('salesTaxReturn', {
                 anchor: '#aglyns-own-sales-by-jurisdiction',
                 excerpt:
-                  'Every buyer state for Aglyn’s OWN subscription and add-on revenue in the period. Texas is the return; the rest is the audit trail for why that revenue is not on it. NOT the nexus list — see “Facilitated sales by buyer state”.',
+                  'Every buyer state for Aglyn’s OWN subscription and add-on revenue in the period. The configured jurisdiction is the return; the rest is the audit trail for why that revenue is not on it. NOT the nexus list — see “Facilitated sales by buyer state”.',
               })}
               contentGutterX
               contentGutterY
@@ -870,8 +935,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 sx={{ mb: 1.5 }}
               >
                 {'Aglyn’s own subscription and add-on revenue, by the ' +
-                  'customer’s state. Texas is the return; the other rows are ' +
-                  'the record of why the rest of the period is not on it. ' +
+                  `customer’s state. ${filingName} is the return; the other ` +
+                  'rows are the record of why the rest of the period is not ' +
+                  'on it. ' +
                   'For nexus from MERCHANTS’ sales, read “Facilitated sales ' +
                   'by buyer state” above — a different taxpayer’s money, and ' +
                   'never summed with this.'}
@@ -912,12 +978,12 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                               variant="body2"
                               sx={{
                                 fontFamily: 'monospace',
-                                fontWeight: row.isTexas ? 600 : 400,
+                                fontWeight: row.isFilingJurisdiction ? 600 : 400,
                               }}
                             >
                               {row.jurisdiction}
                             </Typography>
-                            {row.isTexas ? (
+                            {row.isFilingJurisdiction ? (
                               <Chip
                                 size="small"
                                 color="primary"

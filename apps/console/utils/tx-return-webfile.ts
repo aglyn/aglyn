@@ -16,7 +16,7 @@
  */
 
 /**
- * The Texas return, as a person sits down to file it (AGL-1900).
+ * The return, as a person sits down to file it (AGL-1900).
  *
  * `apps/console/utils/server/tx-return.ts` computes the figures; this module
  * is the half that had no surface — turning one `/api/admin/tax-return`
@@ -29,11 +29,24 @@
  *      return filed under penalty of perjury is the failure this whole arc
  *      exists to prevent — so `truncated` and `undatedRows` BLOCK, and the
  *      per-row attention buckets REVIEW.
- *   2. **The Webfile lines**, in dollars, Texas only. The return reports
- *      Texas receipts; the other jurisdictions are the audit trail for why
- *      the rest of the quarter is not on it.
+ *   2. **The filing figures**, in dollars, for the CONFIGURED jurisdiction
+ *      alone. The return reports that jurisdiction's receipts; the others are
+ *      the audit trail for why the rest of the quarter is not on it.
  *   3. **The working papers**, as CSV — every row behind those totals, so
  *      any figure can be walked back to an invoice id in Stripe.
+ *
+ * ## One exporter, selected by jurisdiction
+ *
+ * Texas gets the Webfile lines, in Form 01-114's own order and wording,
+ * because that form is known here. Every other jurisdiction gets a BREAKDOWN:
+ * period, gross, taxable base and tax collected for the configured
+ * jurisdiction, with the by-region tables that any authority's return is
+ * assembled from — labeled as raw material for a return, never as one. The
+ * platform knows what it collected and where; it does not know the form.
+ *
+ * Handing a self-host operator in another jurisdiction a Texas Comptroller CSV
+ * was the failure that split these apart: the figures were right and the
+ * document was for an authority they have never registered with.
  *
  * Pure: no fetch, no clock (the caller passes `now`), no DOM. The page
  * renders what it returns; the spec feeds it fixtures.
@@ -44,12 +57,18 @@ import type {
   StorefrontTaxSummary,
   TaxReturnSummary,
 } from './server/tx-return'
+import {
+  TAX_REGISTRATION_UNSET,
+  taxFilingIdUnsetNote,
+  taxFilingJurisdiction,
+  TX_JURISDICTION,
+  type TaxFilingJurisdiction,
+} from './tax-jurisdictions'
 
-/** The jurisdiction key the TX return is filed from. */
-export const TX_JURISDICTION = 'US-TX'
+export { TAX_REGISTRATION_UNSET, TX_JURISDICTION }
 
 /**
- * The filer's Texas registration identifiers — OPERATOR CONFIGURATION, never
+ * The filer's registration identifiers — OPERATOR CONFIGURATION, never
  * source (AGL-2021).
  *
  * These used to be two literals in this file, and the comment that justified
@@ -80,22 +99,34 @@ export const TX_JURISDICTION = 'US-TX'
  * Absent is a first-class state. See `taxReturnRegistration`.
  */
 export interface TaxReturnRegistration {
-  webfileNumber: string | null
-  taxpayerNumber: string | null
+  /**
+   * Where this deployment files, as a `summary.byJurisdiction` key. Absent on
+   * a payload predating the setting, which means Texas — see
+   * `DEFAULT_TAX_JURISDICTION`.
+   */
+  jurisdiction?: string | null
+  /** The number the authority knows the filer by. */
+  registrationId?: string | null
+  /** The filing-portal credential, where the jurisdiction issues one. */
+  filingId?: string | null
+  /**
+   * The Texas-named fields this pair used to arrive on. Read as a fallback so
+   * a response cached by a client chunk from before the rename still shows a
+   * registration rather than reporting one that is set as missing.
+   *
+   * @deprecated Read `registrationId` / `filingId`.
+   */
+  webfileNumber?: string | null
+  taxpayerNumber?: string | null
 }
 
-/**
- * What the working papers print where a registration number goes when the
- * deployment has not configured one.
- *
- * NOT an empty string, and NOT a placeholder that could be mistaken for a
- * number. This CSV is evidence someone files a return from; a blank cell reads
- * as "nobody filled it in yet" and a fake one reads as fact. Either can end up
- * transcribed onto a return signed under penalty of perjury, so the file says
- * what is actually true and names the fix.
- */
-export const TX_REGISTRATION_UNSET =
-  'NOT CONFIGURED — set TX_WEBFILE_NUMBER / TX_TAXPAYER_NUMBER'
+/** The registration, with the jurisdiction it belongs to resolved. */
+export interface ResolvedTaxRegistration {
+  jurisdiction: TaxFilingJurisdiction
+  registrationId: string | null
+  filingId: string | null
+  configured: boolean
+}
 
 /**
  * The registration as the surfaces should treat it: present only when it is
@@ -103,26 +134,42 @@ export const TX_REGISTRATION_UNSET =
  *
  * A whitespace-only env var is the shape a half-finished `.env` actually takes,
  * and it would otherwise satisfy a truthiness check and print as a blank cell —
- * exactly the failure `TX_REGISTRATION_UNSET` exists to prevent. So it is
+ * exactly the failure `TAX_REGISTRATION_UNSET` exists to prevent. So it is
  * trimmed and treated as absent.
  */
 export function taxReturnRegistration(
   payload: TaxReturnPayload | null,
-): TaxReturnRegistration & { configured: boolean } {
+): ResolvedTaxRegistration {
   const clean = (value: unknown): string | null => {
     const text = typeof value === 'string' ? value.trim() : ''
     return text.length ? text : null
   }
-  const webfileNumber = clean(payload?.registration?.webfileNumber)
-  const taxpayerNumber = clean(payload?.registration?.taxpayerNumber)
+  const stored = payload?.registration
+  const jurisdiction = taxFilingJurisdiction(stored?.jurisdiction)
+  const registrationId =
+    clean(stored?.registrationId) ?? clean(stored?.taxpayerNumber)
+  const filingId = clean(stored?.filingId) ?? clean(stored?.webfileNumber)
   return {
-    webfileNumber,
-    taxpayerNumber,
-    // BOTH, not either: a return filed with half a registration is not filable,
-    // and a surface that reads "configured" on one number invites someone to
-    // hunt the other one up by hand at the worst possible moment.
-    configured: Boolean(webfileNumber && taxpayerNumber),
+    jurisdiction,
+    registrationId,
+    filingId,
+    // Where the jurisdiction authenticates filing with a second identifier it
+    // is BOTH, not either: a return filed with half a registration is not
+    // filable, and a surface that reads "configured" on one number invites
+    // someone to hunt the other one up by hand at the worst possible moment.
+    // Where no such identifier exists, requiring one would leave a correctly
+    // configured deployment reading "not configured" forever.
+    configured: Boolean(
+      registrationId && (filingId || !jurisdiction.filingIdRequired),
+    ),
   }
+}
+
+/** The jurisdiction this payload's figures are being filed for. */
+export function taxReturnFilingJurisdiction(
+  payload: TaxReturnPayload | null,
+): TaxFilingJurisdiction {
+  return taxFilingJurisdiction(payload?.registration?.jurisdiction)
 }
 
 /** First taxable sales date on the registration — no period precedes it. */
@@ -213,20 +260,26 @@ export interface TaxReturnPayload {
 }
 
 /**
- * Texas storefront tax that Stripe computed against AGLYN's registrations.
+ * Storefront tax in the FILING jurisdiction that Stripe computed against the
+ * platform's own registrations.
  *
- * The one figure that decides whether this period can be filed from the
- * Webfile lines alone: it is money sitting in Aglyn's balance under Aglyn's
- * Texas registration, and it is NOT in `summary`, which sums Aglyn's own
- * sales only. Deliberately excludes `merchantManual` — a merchant's own
- * configured rate never touched Aglyn's registrations.
+ * The one figure that decides whether this period can be filed from the filing
+ * lines alone: it is money sitting in the platform's balance under the
+ * platform's registration, and it is NOT in `summary`, which sums the
+ * platform's own sales only. Deliberately excludes `merchantManual` — a
+ * merchant's own configured rate never touched those registrations.
+ *
+ * Read against the configured jurisdiction rather than Texas, because a
+ * hard-coded key answers `0.00` everywhere else — and a zero here is read as
+ * "nothing to decide" on the one finding that blocks filing.
  */
-export function storefrontTexasAglynLiableCents(
+export function storefrontPlatformLiableCents(
   payload: TaxReturnPayload | null,
 ): number {
   const bucket = payload?.storefront?.summary?.aglynLiable
-  const texas = bucket?.byJurisdiction?.[TX_JURISDICTION]
-  const cents = Number(texas?.taxCollectedCents ?? 0)
+  const filing = taxReturnFilingJurisdiction(payload)
+  const figures = bucket?.byJurisdiction?.[filing.code]
+  const cents = Number(figures?.taxCollectedCents ?? 0)
   return Number.isFinite(cents) ? cents : 0
 }
 
@@ -260,7 +313,27 @@ export function taxReturnAttentionItems(
 ): TaxReturnAttentionItem[] {
   if (!payload) return []
   const attention = payload.summary?.attention
+  const filing = taxReturnFilingJurisdiction(payload)
   const items: TaxReturnAttentionItem[] = [
+    {
+      /*
+       * A jurisdiction key nothing can match makes every figure on the return
+       * read `0.00` — the only finding here that is a fault in the DEPLOYMENT
+       * rather than in a row, and the one a clean-looking page hides best. It
+       * is not corrected to the default: guessing which authority an operator
+       * meant, on a document filed under penalty of perjury, is worse than
+       * refusing to guess.
+       */
+      id: 'jurisdictionUnrecognized',
+      severity: 'blocking',
+      count: filing.recognized ? 0 : 1,
+      label: 'Configured filing jurisdiction is not a jurisdiction key',
+      detail:
+        `"${filing.code}" cannot match any bucket in this report, so every ` +
+        'figure below reads as zero whatever was collected. Set ' +
+        'AGLYN_TAX_JURISDICTION to a country code with an optional ' +
+        'subdivision — US-TX, US-CA, GB, DE.',
+    },
     {
       id: 'truncated',
       severity: 'blocking',
@@ -291,8 +364,8 @@ export function taxReturnAttentionItems(
       label: 'Rows billed without automatic tax',
       detail:
         'Charged before their subscription gained tax behavior. If any is ' +
-        'a Texas sale, tax was under-collected and is still owed — Aglyn ' +
-        'pays it from the receipt.',
+        `a ${filing.label} sale, tax was under-collected and is still owed — ` +
+        'the platform pays it from the receipt.',
     },
     {
       id: 'rowsMissingTaxableBase',
@@ -310,8 +383,9 @@ export function taxReturnAttentionItems(
       count: Number(attention?.rowsMissingAddress ?? 0),
       label: 'Rows with no readable address',
       detail:
-        'Bucketed under "unknown" — they are NOT in the Texas figures. If ' +
-        'any is a Texas customer, this return understates the tax due.',
+        `Bucketed under "unknown" — they are NOT in the ${filing.label} ` +
+        `figures. If any is a ${filing.label} customer, this return ` +
+        'understates the tax due.',
     },
     {
       /*
@@ -372,14 +446,15 @@ export function taxReturnAttentionItems(
       // and belongs to counsel, not to this report.
       id: 'storefrontAglynLiableTax',
       severity: 'blocking',
-      count: storefrontTexasAglynLiableCents(payload),
-      label: 'Texas storefront tax collected under Aglyn’s registration',
+      count: storefrontPlatformLiableCents(payload),
+      label: `${filing.label} storefront tax collected under Aglyn’s registration`,
       detail:
         'Cents. Charged to shoppers on merchants’ storefront sales, computed ' +
-        'by Stripe Tax against AGLYN’s registrations (the session is created ' +
-        'on Aglyn’s platform account), and settled into Aglyn’s balance. It ' +
-        'is NOT included in Items 1–3 below. Decide with counsel how it is ' +
-        'reported before filing — do not file as if it were zero.',
+        'by Stripe Tax against THE PLATFORM’s registrations (the session is ' +
+        'created on the platform account), and settled into the platform’s ' +
+        `balance. It is NOT included in ${filing.figuresName} below. Decide ` +
+        'with counsel how it is reported before filing — do not file as if ' +
+        'it were zero.',
     },
     {
       id: 'storefrontUnclassified',
@@ -423,9 +498,9 @@ export function taxReturnAttentionItems(
       detail:
         'Cents, net of refunds. Charged on marketplace purchases as an ' +
         'EXCLUSIVE addition to the platform’s own charge, so none of it went ' +
-        'to the publisher and all of it is in Aglyn’s balance. It is NOT in ' +
-        'Items 1–3 below. Decide with counsel how it is reported before ' +
-        'filing — do not file as if it were zero.',
+        'to the publisher and all of it is in the platform’s balance. It is ' +
+        `NOT in ${filing.figuresName} below. Decide with counsel how it is ` +
+        'reported before filing — do not file as if it were zero.',
     },
     {
       id: 'marketplaceTruncated',
@@ -587,7 +662,7 @@ export function taxReturnWebfileLines(
       item: '—',
       label: 'Texas storefront tax under Aglyn’s registration (NOT in Items 1–3)',
       dollars: payload
-        ? centsToDollars(storefrontTexasAglynLiableCents(payload))
+        ? centsToDollars(storefrontPlatformLiableCents(payload))
         : null,
       note:
         'Collected from shoppers on merchants’ sales and held in Aglyn’s ' +
@@ -612,6 +687,101 @@ export function taxReturnWebfileLines(
   ]
 }
 
+/**
+ * THE GENERIC RETURN BREAKDOWN — every jurisdiction with no exporter of its
+ * own.
+ *
+ * Not a form, and it says so. Nothing here knows what California's CDTFA
+ * return or a UK VAT return asks for, in what order, or under which schedule
+ * a facilitated sale belongs — and a document that guessed would be worse than
+ * no document, because it would be transcribed. What the platform does know is
+ * exactly what it collected and where, which is the raw material every one of
+ * those returns is assembled from: the period, the gross, the base each rate
+ * was applied to, the tax collected, and the same figures split by destination
+ * region on the tables below.
+ *
+ * The item column carries no numbers because there is no form to number
+ * against. `Taxable purchases` is absent for the same reason — it is a Texas
+ * form line, not a universal concept, and inventing it here would claim
+ * knowledge of a form this code does not have.
+ */
+export function taxReturnBreakdownLines(
+  payload: TaxReturnPayload | null,
+): TaxReturnWebfileLine[] {
+  const filing = taxReturnFilingJurisdiction(payload)
+  const figures = payload?.summary?.byJurisdiction?.[filing.code]
+  const dollars = (cents: number | undefined) =>
+    payload ? centsToDollars(cents ?? 0) : null
+  return [
+    {
+      item: '—',
+      label: `Total sales in ${filing.code}`,
+      dollars: dollars(figures?.totalSalesCents),
+      note: 'Receipts excluding the tax itself.',
+    },
+    {
+      item: '—',
+      label: 'Taxable sales',
+      dollars: dollars(figures?.taxableSalesCents),
+      note: "Stripe's taxable_amount summed — the base each rate was applied to.",
+    },
+    {
+      item: '—',
+      label: 'Tax collected',
+      dollars: dollars(figures?.taxCollectedCents),
+      note: 'What was actually charged to customers in this jurisdiction.',
+    },
+    {
+      item: '—',
+      label: 'Transactions',
+      dollars: payload ? String(figures?.transactionCount ?? 0) : null,
+      note: `Invoices in the period with a ${filing.code} billing address.`,
+    },
+    {
+      item: '—',
+      label: `${filing.code} storefront tax under the platform’s registration (NOT in the figures above)`,
+      dollars: payload
+        ? centsToDollars(storefrontPlatformLiableCents(payload))
+        : null,
+      note:
+        'Collected from shoppers on merchants’ sales and held in the ' +
+        'platform’s balance. Excluded from every figure above. Its treatment ' +
+        'on the return is a question for the operator’s own counsel.',
+    },
+    {
+      item: '—',
+      label: `${filing.code} storefront tax under the MERCHANT’s own rate`,
+      dollars: payload
+        ? centsToDollars(
+            payload.storefront?.summary?.merchantManual?.byJurisdiction?.[
+              filing.code
+            ]?.taxCollectedCents ?? 0,
+          )
+        : null,
+      note:
+        'A manual-mode store’s own configured rate. The platform’s ' +
+        'registrations played no part in computing it. Shown so it is ' +
+        'visibly NOT the line above — the two must never be added together.',
+    },
+  ]
+}
+
+/**
+ * The filing figures for whichever jurisdiction is configured.
+ *
+ * ONE entry point, so a surface cannot render Texas's form lines on a
+ * deployment that files somewhere else by reaching for the wrong helper — the
+ * defect this dispatcher replaces was exactly that, with no reaching involved
+ * because there was only one.
+ */
+export function taxReturnFilingLines(
+  payload: TaxReturnPayload | null,
+): TaxReturnWebfileLine[] {
+  return taxReturnFilingJurisdiction(payload).form === 'tx-webfile'
+    ? taxReturnWebfileLines(payload)
+    : taxReturnBreakdownLines(payload)
+}
+
 /** A jurisdiction row for the "why the rest is not on the return" table. */
 /**
  * One working-paper line, ready to render (AGL-2329).
@@ -631,7 +801,8 @@ export interface TaxReturnWorkingPaperRow {
 
 export interface TaxReturnJurisdictionRow {
   jurisdiction: string
-  isTexas: boolean
+  /** True for the one jurisdiction this deployment files a return in. */
+  isFilingJurisdiction: boolean
   transactionCount: number
   totalSalesDollars: string
   taxableSalesDollars: string
@@ -671,15 +842,16 @@ const TAXABILITY_REASON_LABEL: Record<string, string> = {
   unstated: 'No reason recorded',
 }
 
-/** Every jurisdiction, Texas first, then by receipts descending. */
+/** Every jurisdiction, the filing one first, then by receipts descending. */
 export function taxReturnJurisdictionRows(
   payload: TaxReturnPayload | null,
 ): TaxReturnJurisdictionRow[] {
   const byJurisdiction = payload?.summary?.byJurisdiction ?? {}
+  const filing = taxReturnFilingJurisdiction(payload)
   return Object.entries(byJurisdiction)
     .map(([jurisdiction, bucket]) => ({
       jurisdiction,
-      isTexas: jurisdiction === TX_JURISDICTION,
+      isFilingJurisdiction: jurisdiction === filing.code,
       transactionCount: Number(bucket?.transactionCount ?? 0),
       totalSalesDollars: centsToDollars(bucket?.totalSalesCents),
       taxableSalesDollars: centsToDollars(bucket?.taxableSalesCents),
@@ -718,7 +890,8 @@ export function taxReturnJurisdictionRows(
       sortKey: Number(bucket?.totalSalesCents ?? 0),
     }))
     .sort((a, b) => {
-      if (a.isTexas !== b.isTexas) return a.isTexas ? -1 : 1
+      if (a.isFilingJurisdiction !== b.isFilingJurisdiction)
+        return a.isFilingJurisdiction ? -1 : 1
       return b.sortKey - a.sortKey
     })
     .map(({ sortKey: _sortKey, ...row }) => row)
@@ -814,7 +987,8 @@ export function taxReturnStorefrontRows(
 /** One state's facilitated storefront sales, for the nexus question. */
 export interface TaxReturnFacilitatedJurisdictionRow {
   jurisdiction: string
-  isTexas: boolean
+  /** True for the one jurisdiction this deployment files a return in. */
+  isFilingJurisdiction: boolean
   transactionCount: number
   totalSalesDollars: string
   taxCollectedDollars: string
@@ -851,15 +1025,16 @@ export interface TaxReturnFacilitatedJurisdictionRow {
  * resolves to `none`, so a wholly untaxed storefront sale is invisible here.
  * That is the population nexus detection most needs, and closing it is a
  * write-side change recorded on AGL-1956 rather than smuggled into a report.
- * Texas does not depend on any of this — a Texas LLC has no in-state economic
- * nexus threshold, so the Texas obligation is unconditional from 2026-09-01
- * (AGL-1811) whatever this table says.
+ * The filing jurisdiction does not depend on any of this — a filer registered
+ * where it is established has no in-state threshold left to cross, so that
+ * obligation is unconditional whatever this table says.
  */
 export function taxReturnFacilitatedJurisdictionRows(
   payload: TaxReturnPayload | null,
 ): TaxReturnFacilitatedJurisdictionRow[] {
   const summary = payload?.storefront?.summary
   if (!summary) return []
+  const filing = taxReturnFilingJurisdiction(payload)
   const totals = new Map<
     string,
     { count: number; salesCents: number; taxCents: number; aglynCents: number }
@@ -890,7 +1065,7 @@ export function taxReturnFacilitatedJurisdictionRows(
   return [...totals.entries()]
     .map(([jurisdiction, entry]) => ({
       jurisdiction,
-      isTexas: jurisdiction === TX_JURISDICTION,
+      isFilingJurisdiction: jurisdiction === filing.code,
       transactionCount: entry.count,
       totalSalesDollars: centsToDollars(entry.salesCents),
       taxCollectedDollars: centsToDollars(entry.taxCents),
@@ -899,9 +1074,10 @@ export function taxReturnFacilitatedJurisdictionRows(
     }))
     .sort(
       (a, b) =>
-        // Texas first — it is the one unconditional obligation — then by the
-        // figure a threshold is actually measured against.
-        Number(b.isTexas) - Number(a.isTexas) ||
+        // The filing jurisdiction first — it is the one obligation that does
+        // not wait on a threshold — then by the figure a threshold is
+        // actually measured against.
+        Number(b.isFilingJurisdiction) - Number(a.isFilingJurisdiction) ||
         Number(b.totalSalesDollars) - Number(a.totalSalesDollars) ||
         a.jurisdiction.localeCompare(b.jurisdiction),
     )
@@ -926,6 +1102,8 @@ export function taxReturnMarketplaceLines(
 ): TaxFigureLine[] {
   const summary = payload?.marketplace?.summary
   if (!summary) return []
+  const filing = taxReturnFilingJurisdiction(payload)
+  const figuresLine = filing.form === 'tx-webfile' ? 'Webfile' : 'breakdown'
   return [
     {
       label: 'Purchases in period',
@@ -955,7 +1133,7 @@ export function taxReturnMarketplaceLines(
     {
       label: 'Tax collected, net',
       value: `$${centsToDollars(summary.taxCollectedCents)}`,
-      note: 'The remittable figure — and it is in NO Webfile line above.',
+      note: `The remittable figure — and it is in NO ${figuresLine} line above.`,
     },
   ]
 }
@@ -973,19 +1151,44 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
   if (!payload) return ''
   const verdict = taxReturnAttention(payload)
   const registration = taxReturnRegistration(payload)
+  const filing = registration.jurisdiction
+  const texas = filing.form === 'tx-webfile'
   const lines: string[][] = [
-    ['Aglyn — Texas sales tax return working papers'],
+    texas
+      ? ['Aglyn — Texas sales tax return working papers']
+      : [`Sales tax return breakdown — ${filing.code} — working papers`],
+    // The honesty line, and it is the first thing read on a file whose whole
+    // risk is being mistaken for a return. Only where there is no exporter for
+    // the jurisdiction: the Texas block below IS the form's own lines.
+    ...(texas
+      ? []
+      : [
+          [
+            'FOR MANUAL FILING — a breakdown of what was collected in ' +
+              `${filing.code}, not a submittable return. No form for this ` +
+              'jurisdiction is known here; transcribe these figures onto ' +
+              'the return the authority asks for.',
+          ],
+        ]),
     ['Period', payload.period ?? ''],
     ['Period start (UTC)', payload.summary?.periodStart ?? ''],
     ['Period end (UTC, exclusive)', payload.summary?.periodEnd ?? ''],
+    ['Filing jurisdiction', filing.code],
     // AGL-2021: from the payload, and honestly absent when unconfigured —
     // never a blank cell, never a placeholder that reads as a real number.
-    ['Taxpayer number', registration.taxpayerNumber ?? TX_REGISTRATION_UNSET],
-    ['Webfile number', registration.webfileNumber ?? TX_REGISTRATION_UNSET],
+    [
+      filing.registrationIdLabel,
+      registration.registrationId ?? TAX_REGISTRATION_UNSET,
+    ],
+    [filing.filingIdLabel, registration.filingId ?? taxFilingIdUnsetNote(filing)],
     [],
-    ['Webfile figures (Texas only)'],
+    [
+      texas
+        ? 'Webfile figures (Texas only)'
+        : `Return breakdown (${filing.code} only)`,
+    ],
     ['Item', 'Line', 'Amount (USD)', 'Note'],
-    ...taxReturnWebfileLines(payload).map((line) => [
+    ...taxReturnFilingLines(payload).map((line) => [
       line.item,
       line.label,
       line.dollars ?? 'NOT COMPUTED',
@@ -1068,7 +1271,8 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       : [['—', '0', '0.00', '0.00', '0.00']]),
     [
       'LOWER BOUND — a storefront sale that collected no tax files no row, ' +
-        'so it is absent here. Texas needs no threshold (AGL-1811).',
+        `so it is absent here. ${filing.code} needs no threshold: the filer ` +
+        'is established there.',
     ],
     [],
     /*
@@ -1124,7 +1328,10 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       ]),
     ),
     [],
-    ['Storefront commerce tax by liability (AGL-1904) — NOT in the Webfile figures'],
+    [
+      'Storefront commerce tax by liability (AGL-1904) — NOT in ' +
+        (texas ? 'the Webfile figures' : 'the breakdown above'),
+    ],
     [
       'Bucket',
       'Who owes it',
@@ -1144,7 +1351,10 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
         ])
       : [['—', 'No storefront figures in this payload', '0', '', '', '']]),
     [],
-    ['Marketplace tax (AGL-2137) — NOT in the Webfile figures'],
+    [
+      'Marketplace tax (AGL-2137) — NOT in ' +
+        (texas ? 'the Webfile figures' : 'the breakdown above'),
+    ],
     ['Figure', 'Amount', 'Note'],
     ...(taxReturnMarketplaceLines(payload).length
       ? taxReturnMarketplaceLines(payload).map((line) => [
@@ -1183,10 +1393,20 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
   return lines.map((row) => (row ?? []).map(csvCell).join(',')).join('\n')
 }
 
-/** A filename that sorts and identifies without being opened. */
-export function taxReturnCsvFilename(period: string): string {
+/**
+ * A filename that sorts and identifies without being opened — including WHICH
+ * AUTHORITY it is for, which is the half a folder of quarterly exports needs
+ * most once a deployment files anywhere but Texas.
+ *
+ * The jurisdiction defaults rather than being required, so a caller that
+ * predates the setting still names the Texas file exactly as it always did.
+ */
+export function taxReturnCsvFilename(
+  period: string,
+  jurisdictionCode?: string | null,
+): string {
   const safe = String(period ?? '').replace(/[^\dA-Za-z-]/g, '') || 'period'
-  return `aglyn-tx-sales-tax-${safe}.csv`
+  return `${taxFilingJurisdiction(jurisdictionCode).fileStem}-${safe}.csv`
 }
 
 export interface TaxReturnPeriodOption {
@@ -1204,6 +1424,13 @@ export interface TaxReturnPeriodOption {
  * Texas collection obligation before that date, and a period that cannot be
  * filed is a period that can only be picked by mistake. Nothing later is
  * listed because a period that has not happened has no figures.
+ *
+ * The floor is this deployment's own, and it is NOT jurisdiction-aware: the
+ * menu has to exist before the first request, and the configured jurisdiction
+ * arrives on the response to it. An operator whose obligation began earlier
+ * reaches those periods through the route's own `?period=` — the API accepts
+ * any well-formed quarter or month — but the menu will not offer them until
+ * the first taxable period is configuration too.
  */
 export function taxReturnPeriodOptions(now: Date): TaxReturnPeriodOption[] {
   const quarters: TaxReturnPeriodOption[] = []

@@ -339,3 +339,128 @@ describe('GET /api/admin/tax-return (AGL-1811)', () => {
     expect(body.marketplace.summary.attention.rowsOverRefunded).toBe(1)
   })
 })
+
+/**
+ * THE REGISTRATION IS KEYED BY JURISDICTION, AND THE TEXAS NAMES STILL WORK.
+ *
+ * Two things have to hold at once. A deployment filing somewhere other than
+ * Texas must be able to state its own registration without borrowing a
+ * Comptroller's vocabulary — and the deployment already filing in Texas, whose
+ * variables are set against a live obligation, must not have them read as
+ * unset by the rename that made the first possible. An unset registration on a
+ * return is not a cosmetic regression.
+ *
+ * Every identifier here is SYNTHETIC and must stay that way: this repository is
+ * public and `check-no-tax-identifiers` refuses the real ones in tracked
+ * source. The assertions prove the WIRING — that whatever is configured
+ * arrives, under the right jurisdiction — never a value.
+ */
+describe('the filing registration on the response', () => {
+  const KEYS = [
+    'AGLYN_TAX_JURISDICTION',
+    'AGLYN_TAX_REGISTRATION_ID',
+    'AGLYN_TAX_FILING_ID',
+    'TX_TAXPAYER_NUMBER',
+    'TX_WEBFILE_NUMBER',
+  ]
+  const saved = new Map<string, string | undefined>()
+
+  beforeEach(() => {
+    docs = new Map()
+    mockVerifyIdToken.mockReset()
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'staff-1',
+      email_verified: true,
+      staff: true,
+    })
+    // The process this suite runs in may already carry a real deployment's
+    // variables. They are cleared per test and restored after, so a developer
+    // with a configured `.env` gets the same result as a bare CI runner.
+    for (const key of KEYS) {
+      saved.set(key, process.env[key])
+      delete process.env[key]
+    }
+  })
+
+  afterEach(() => {
+    for (const key of KEYS) {
+      const value = saved.get(key)
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
+
+  const registration = async () =>
+    (await (await GET(get('2026-Q3'))).json()).registration
+
+  it('defaults to Texas, so an unset jurisdiction changes nothing', async () => {
+    process.env['TX_TAXPAYER_NUMBER'] = '00000000000'
+    process.env['TX_WEBFILE_NUMBER'] = 'RT000000'
+    expect(await registration()).toMatchObject({
+      jurisdiction: 'US-TX',
+      registrationId: '00000000000',
+      filingId: 'RT000000',
+      // Mirrored under the old names as well, so a client chunk cached from
+      // before the rename does not spend a rollout reporting a configured
+      // registration as missing.
+      taxpayerNumber: '00000000000',
+      webfileNumber: 'RT000000',
+    })
+  })
+
+  it('lets the generic names win when both pairs are set', async () => {
+    process.env['TX_TAXPAYER_NUMBER'] = '00000000000'
+    process.env['TX_WEBFILE_NUMBER'] = 'RT000000'
+    process.env['AGLYN_TAX_REGISTRATION_ID'] = '11111111111'
+    process.env['AGLYN_TAX_FILING_ID'] = 'RT111111'
+    expect(await registration()).toMatchObject({
+      registrationId: '11111111111',
+      filingId: 'RT111111',
+    })
+  })
+
+  it('carries a non-Texas jurisdiction with its own registration', async () => {
+    process.env['AGLYN_TAX_JURISDICTION'] = 'GB'
+    process.env['AGLYN_TAX_REGISTRATION_ID'] = 'GB-VAT-000000'
+    const body = await registration()
+    expect(body).toMatchObject({
+      jurisdiction: 'GB',
+      registrationId: 'GB-VAT-000000',
+      // No second identifier, and none required: most authorities issue one
+      // number, and demanding a Texas-shaped pair would leave a correctly
+      // configured deployment reading "not configured" forever.
+      filingId: null,
+    })
+    // The Texas-named mirrors are Texas's alone. A VAT number under a field
+    // called `webfileNumber` is the confusion this change exists to remove.
+    expect(body.webfileNumber).toBeUndefined()
+    expect(body.taxpayerNumber).toBeUndefined()
+  })
+
+  it('does NOT let a non-Texas deployment inherit the Texas variables', async () => {
+    // The failure this prevents: an operator sets a jurisdiction, leaves the
+    // TX vars from a copied `.env` in place, and files another company's
+    // registration number.
+    process.env['AGLYN_TAX_JURISDICTION'] = 'US-CA'
+    process.env['TX_TAXPAYER_NUMBER'] = '00000000000'
+    process.env['TX_WEBFILE_NUMBER'] = 'RT000000'
+    expect(await registration()).toMatchObject({
+      jurisdiction: 'US-CA',
+      registrationId: null,
+      filingId: null,
+    })
+  })
+
+  it('normalizes the jurisdiction so casing and spacing are not a fault', async () => {
+    process.env['AGLYN_TAX_JURISDICTION'] = '  us-ca '
+    expect((await registration()).jurisdiction).toBe('US-CA')
+  })
+
+  it('reports absent rather than inventing a registration', async () => {
+    expect(await registration()).toMatchObject({
+      jurisdiction: 'US-TX',
+      registrationId: null,
+      filingId: null,
+    })
+  })
+})

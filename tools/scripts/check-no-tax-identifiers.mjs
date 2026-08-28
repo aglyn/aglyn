@@ -149,9 +149,10 @@ function main() {
     [
       '',
       'This repository is PUBLIC. These identifiers are operator configuration',
-      'and belong in server-only env (TX_WEBFILE_NUMBER / TX_TAXPAYER_NUMBER),',
-      'never in source and never in a spec — a spec that pins the literal is how',
-      'they came back the first time (AGL-2021).',
+      'and belong in server-only env (AGLYN_TAX_REGISTRATION_ID /',
+      'AGLYN_TAX_FILING_ID, or the deprecated TX_TAXPAYER_NUMBER /',
+      'TX_WEBFILE_NUMBER), never in source and never in a spec — a spec that',
+      'pins the literal is how they came back the first time (AGL-2021).',
       '',
       'Assert the MECHANISM instead: that whatever is configured reaches the CSV.',
       '',

@@ -710,11 +710,16 @@ context.
 
 ## Sales tax, and what to do if you are not in Texas {#tax}
 
-:::danger `/admin/tax-return` is Aglyn LLC's own filing. It is not a feature you can use.
+:::info `/admin/tax-return` files where you tell it to. Texas is the default, not the assumption.
 
-`TX_WEBFILE_NUMBER` and `TX_TAXPAYER_NUMBER` configure a staff-only report at
-`/admin/tax-return`. **Leave both unset.** They are Texas Comptroller identifiers
-for a single US-TX marketplace-facilitator registration.
+`AGLYN_TAX_JURISDICTION` says where this deployment files, and
+`AGLYN_TAX_REGISTRATION_ID` / `AGLYN_TAX_FILING_ID` carry your own identifiers.
+Unset, the jurisdiction is `US-TX` and the identifiers are absent, so both
+surfaces read `NOT CONFIGURED` rather than printing anyone else's numbers.
+
+Texas is the one jurisdiction with a form this software knows. Everywhere else
+gets a **return breakdown** — what was collected, and where — labeled as raw
+material for filing by hand rather than as a return.
 :::
 
 Tax **collection** and tax **filing** are different things in this product, and
@@ -740,7 +745,7 @@ variable, and there is nothing Texas-specific about it:
 Your own platform billing behaves the same way: subscription and add-on checkouts
 enable Stripe automatic tax, so it too is computed against your registrations.
 
-### Filing is Aglyn's, and only Aglyn's {#tax-filing}
+### Filing follows the jurisdiction you configure {#tax-filing}
 
 `/admin/tax-return` is behind the `staff` claim, and on your own deployment you
 control your own claims — so you will see it. What you get is:
@@ -748,42 +753,45 @@ control your own claims — so you will see it. What you get is:
 - **Your own numbers.** It reads your Firestore: your platform revenue, your
   storefront tax collected, your marketplace purchases. Nothing phones home, and
   the by-jurisdiction breakdown underneath is genuinely useful.
-- **On the wrong lines.** The Form 01-114 filing lines read the `US-TX` bucket
-  and nothing else. An operator in Ohio sees roughly zero on the lines that
-  matter and all of their real revenue in the table below.
+- **On your own jurisdiction's lines.** The filing figures read the bucket named
+  by `AGLYN_TAX_JURISDICTION`, and the page heading, the figures card and the
+  export all name it. A code that matches no bucket makes every figure read
+  `0.00`, so it is raised as a **blocking** finding rather than filed as a quiet
+  zero.
+- **As a form only where a form is known.** Texas gets Form 01-114's own lines
+  and a Webfile-shaped export. Every other jurisdiction gets the period, the
+  gross, the taxable base and the tax collected, split by the destination region
+  the tax was computed for, under a banner saying it is for manual filing and is
+  not a submittable return. There is no second state's form, no VAT or GST
+  return, and no tax engine beyond Stripe Tax.
 - **With a period floor you did not choose.** The picker cannot go earlier than
-  2026 Q3, because that is Aglyn's own first taxable period. Your earlier data
-  exists and is unreachable from this page.
-- **Under a title that is not yours.** The page is headed "Texas Sales Tax
-  Return", a section header reads "Form 01-114 figures — Texas only", and the CSV
-  export is titled "Aglyn — Texas sales tax return working papers".
-- **With liability sentences that are legally about Aglyn LLC**, sourced from
-  Aglyn's terms and Aglyn's own Stripe registrations. For you, as printed, they
-  are simply false.
+  2026 Q3, because that is Aglyn's own first taxable period. Earlier periods are
+  reachable through the route's own `?period=` — it accepts any well-formed
+  quarter or month — but the menu will not offer them.
+- **With liability sentences written for a marketplace facilitator**, sourced
+  from Aglyn's terms and its reading of its own position. The mechanics are the
+  same wherever this runs; the conclusions are not advice about your
+  registration.
 
-There is no state selector, no second state's form, no VAT or GST return, and no
-third-party tax engine beyond Stripe Tax. The jurisdiction, the form, the period
-floor and the prose are all compiled in.
+### Setting it up {#tax-what-to-do}
 
-### What to do instead {#tax-what-to-do}
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `AGLYN_TAX_JURISDICTION` | Optional | Runtime | Where this deployment files, as an ISO 3166-1 alpha-2 country with an optional subdivision — `US-TX`, `US-CA`, `GB`, `DE`. It is looked up as a key in the report's own buckets, which are `COUNTRY-STATE` where an address carries a state and `COUNTRY` where it does not, so write it the same way. Default `US-TX`. |
+| `AGLYN_TAX_REGISTRATION_ID` | Optional | Runtime | The number the authority knows you by — a Texas taxpayer number, a seller's permit, a VAT number. Printed on the page and in the exported working papers. **Server-only**: never prefix it with `NEXT_PUBLIC_`. |
+| `AGLYN_TAX_FILING_ID` | Optional | Runtime | The filing-portal credential where one exists, such as the Texas Webfile number — which the Comptroller's eSystems treats as an authentication code, so it is **server-only** for the same reason and more urgently. Required alongside the registration id for `US-TX`; optional everywhere else, because most authorities issue one number. |
+| `TX_WEBFILE_NUMBER` | Deprecated | Runtime | The former name of `AGLYN_TAX_FILING_ID`. Still read when the jurisdiction is `US-TX`, so an existing deployment is not unset by the rename. |
+| `TX_TAXPAYER_NUMBER` | Deprecated | Runtime | The former name of `AGLYN_TAX_REGISTRATION_ID`, read under the same condition. |
 
-1. **Leave `TX_WEBFILE_NUMBER` and `TX_TAXPAYER_NUMBER` unset.** Both surfaces
-   then read `NOT CONFIGURED` rather than printing anything, which is the correct
-   output for every deployment that is not Aglyn's. They are **server-only** —
-   never prefix either with `NEXT_PUBLIC_`, which would inline a Comptroller
-   authentication code into a client bundle served without authentication.
-2. **Configure collection properly** in each store's tax settings, or use
-   `stripe` mode and register in the jurisdictions you owe.
-3. **File from your own sources.** Stripe's tax reporting covers what Stripe
-   computed; the console's per-host tax summary covers what each storefront
-   collected. Neither is jurisdiction-locked.
-4. **Ignore `/admin/tax-return`.** If you would rather your operators never see
-   it, do not grant the `staff` claim to accounts that should not have it.
+With none of them set, the page says so and names what to set, and the export
+writes `NOT CONFIGURED …` rather than a blank cell someone files from — which is
+the correct output for a deployment that does not file at all.
 
-If you *do* file Texas sales tax yourself, you can set these two to your own
-Comptroller identifiers and the page prints them — but the period floor and the
-prose about who holds the liability are still Aglyn's, so read the working papers
-rather than transcribing the page.
+Two things this page cannot do for you, whatever you set: it does not decide
+whether you are a marketplace facilitator where you operate, and it does not know
+your authority's form. Configure collection properly in each store's tax
+settings, register where you owe, and read the working papers rather than
+transcribing a screen.
 
 ---
 

@@ -32,9 +32,16 @@ import {
   type StorefrontTaxReturnRowInput,
   type TaxReturnRowInput,
 } from '../../../../utils/server/tx-return'
+import {
+  TAX_FILING_ID_ENV,
+  TAX_JURISDICTION_ENV,
+  TAX_REGISTRATION_ID_ENV,
+  taxFilingJurisdiction,
+  TX_JURISDICTION,
+} from '../../../../utils/tax-jurisdictions'
 
 /**
- * The Texas sales tax return for one filing period, summed from the
+ * The sales tax return for one filing period, summed from the
  * `platformRevenue` rows the billing webhook records (AGL-1811).
  *
  * `GET ?period=2026-Q4` (a calendar quarter — the expected filing frequency
@@ -60,31 +67,62 @@ import {
 const ROW_CAP = 2000
 
 /**
- * The filer's Texas registration identifiers (AGL-2021).
+ * The filer's registration identifiers, and the jurisdiction they belong to
+ * (AGL-2021).
  *
  * SERVER-ONLY env, on purpose, and the reason is the whole point of the issue:
- * the Webfile number is what the Comptroller's eSystems calls a "Personal
- * Identification Code" and uses to authenticate a profile claiming access to a
- * taxpayer account. A `NEXT_PUBLIC_*` var would be inlined into a client chunk
- * that Next serves without authentication — republishing the credential this
- * change exists to un-publish. Read here instead, behind the `staff` gate
- * below, so the only way to see it is to be allowed to see it.
+ * a filing credential such as the Texas Webfile number is what the
+ * Comptroller's eSystems calls a "Personal Identification Code" and uses to
+ * authenticate a profile claiming access to a taxpayer account. A
+ * `NEXT_PUBLIC_*` var would be inlined into a client chunk that Next serves
+ * without authentication — republishing the credential this change exists to
+ * un-publish. Read here instead, behind the `staff` gate below, so the only
+ * way to see it is to be allowed to see it.
  *
- * No defaults. An unconfigured deployment — every self-host operator, on day
- * one — reports absent and the surfaces say so; see `TX_REGISTRATION_UNSET`.
+ * No defaults for the numbers themselves. An unconfigured deployment — every
+ * self-host operator, on day one — reports absent and the surfaces say so; see
+ * `TAX_REGISTRATION_UNSET`.
+ *
+ * ## Why the Texas names are still read
+ *
+ * `TX_TAXPAYER_NUMBER` / `TX_WEBFILE_NUMBER` configure a LIVE registration
+ * with a filing obligation. A rename that quietly unsets one is a return filed
+ * without its identifiers, which is a worse failure than the TX-only naming it
+ * corrects — so they keep working as aliases wherever the jurisdiction still
+ * declares them, and the generic names win when both are set.
  */
 function taxRegistrationFromEnv(): {
-  webfileNumber: string | null
-  taxpayerNumber: string | null
+  jurisdiction: string
+  registrationId: string | null
+  filingId: string | null
+  webfileNumber?: string | null
+  taxpayerNumber?: string | null
 } {
   const read = (name: string): string | null => {
     const value = process.env[name]
     const text = typeof value === 'string' ? value.trim() : ''
     return text.length ? text : null
   }
+  const jurisdiction = taxFilingJurisdiction(read(TAX_JURISDICTION_ENV))
+  const legacy = jurisdiction.legacyEnv
+  const registrationId =
+    read(TAX_REGISTRATION_ID_ENV) ??
+    (legacy ? read(legacy.registrationId) : null)
+  const filingId =
+    read(TAX_FILING_ID_ENV) ?? (legacy ? read(legacy.filingId) : null)
   return {
-    webfileNumber: read('TX_WEBFILE_NUMBER'),
-    taxpayerNumber: read('TX_TAXPAYER_NUMBER'),
+    jurisdiction: jurisdiction.code,
+    registrationId,
+    filingId,
+    // The Texas-named fields, mirrored for Texas alone. A client chunk cached
+    // from before the rename reads only these, and a deployment mid-rollout
+    // must not spend that window reporting a configured registration as
+    // missing. Mirroring them on any other jurisdiction would put a foreign
+    // identifier under a Comptroller label, which is the confusion this whole
+    // change removes.
+    ...(jurisdiction.code === TX_JURISDICTION
+      ? { webfileNumber: filingId, taxpayerNumber: registrationId }
+      : {}),
   }
 }
 
@@ -214,7 +252,11 @@ async function handler(request: Request): Promise<Response> {
           refundedCents: Number(row.refundedCents ?? 0),
         })),
       },
-      /** AGL-2021 — operator config, not source. Null when unconfigured. */
+      /**
+       * AGL-2021 — operator config, not source. Null identifiers when
+       * unconfigured, and the jurisdiction they belong to so the surfaces can
+       * name the authority instead of assuming one.
+       */
       registration: taxRegistrationFromEnv(),
       /**
        * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three

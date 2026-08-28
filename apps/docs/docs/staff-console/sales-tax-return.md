@@ -70,6 +70,30 @@ The **Form 01-114 figures** card is Texas only. Aglyn sells everywhere; a Texas 
 reports Texas receipts, so these lines come from the Texas jurisdiction bucket and never
 from the platform totals.
 
+The card names the jurisdiction it is for, and so does the page heading and the chip
+beside the period menu. A deployment files where `AGLYN_TAX_JURISDICTION` says — a
+country code with an optional subdivision, such as `US-TX`, `US-CA`, `GB` or `DE`,
+written the way the report keys its buckets. Aglyn's own console leaves it unset, which
+means `US-TX`.
+
+Texas is the one jurisdiction with a form this software knows, so it is the one that
+gets Form 01-114's own lines. Any other jurisdiction gets a **return breakdown** — the
+same period, gross, taxable base and tax collected, split by the destination region the
+tax was computed for — labeled on screen and in the export as raw material for filing by
+hand. It is deliberately not dressed as a return: the platform knows what it collected
+and where, and it does not know another authority's form.
+
+A jurisdiction code that cannot match a bucket at all makes every figure read `0.00`, so
+it is raised as a **blocking** finding rather than filed as a quiet zero.
+
+The registration identifiers come from server-only environment variables:
+`AGLYN_TAX_REGISTRATION_ID` (the number the authority knows the filer by) and
+`AGLYN_TAX_FILING_ID` (the filing-portal credential, required for Texas and optional
+elsewhere). The Texas-only names they replaced, `TX_TAXPAYER_NUMBER` and
+`TX_WEBFILE_NUMBER`, are deprecated and still read when the jurisdiction is `US-TX`.
+With none of them set the page says so and names what to set, and the export writes
+`NOT CONFIGURED …` rather than a blank cell someone files from.
+
 - **Item 1 — Total Texas sales.** Receipts excluding the tax itself, including the
   20% that [§151.351](https://statutes.capitol.texas.gov/Docs/TX/htm/TX.151.htm) exempts.
 - **Item 2 — Taxable sales.** The base the rate was applied to: Stripe's
@@ -148,8 +172,9 @@ row to check a threshold against.
 
 **Export working papers (CSV)** downloads a self-contained record of the period:
 
-- the period and its exact UTC bounds, the taxpayer number and the Webfile number;
-- the Webfile figures as filed;
+- the period and its exact UTC bounds, the filing jurisdiction, and the registration
+  identifiers configured for it;
+- the filing figures — the Webfile lines for Texas, the return breakdown elsewhere;
 - the refunds recorded, with their estimated tax share;
 - **every finding**, with its severity — so the export of a qualified period carries
   that qualification, instead of a spreadsheet of clean-looking numbers;
