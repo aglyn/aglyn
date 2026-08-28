@@ -323,6 +323,19 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
     note: 'Consent engine. It only ever CLEARS cookies (expires them) — the analytics prefixes, and any prefix set an advertising vendor is registered with; it sets none of its own, the consent record itself lives in web storage.',
     cookies: [],
   },
+  'apps/docs/src/advertising-tags.ts': {
+    note:
+      "The docs site's advertising gate. It only ever CLEARS cookies " +
+      '(expires them) — each mounted vendor\'s registered prefixes, on the ' +
+      'domain ladder from the exact hostname up to the registrable one. It ' +
+      'SETS none of its own: the tags it mounts write their vendors\' ' +
+      'identifiers, which are declared as third-party cookies below, and the ' +
+      'consent record it reads is written by the console rather than here. A ' +
+      'standalone copy of the shared teardown because this app cannot import ' +
+      '`libs/`; `apps/console/specs/docs-advertising-tags.spec.ts` fails if ' +
+      'the cookie lists ever drift from the vendor descriptors.',
+    cookies: [],
+  },
   'libs/aglyn/src/lib/app-utils/platform-visitor-consent.ts': {
     note:
       "Mirrors the console visitor's own consent record between the hostnames " +
