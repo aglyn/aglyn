@@ -560,38 +560,47 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
-    // Structured (AGL-1133). Kept in step with the customer-facing Settings
-    // page deliberately: both post the same `update-profile` action, so a
-    // staff edit that still sent a free-text string would overwrite a
-    // structured address with a blob.
-    contactAddressLine1: '',
-    contactAddressLine2: '',
-    contactAddressCity: '',
-    contactAddressState: '',
-    contactAddressPostalCode: '',
-    contactAddressCountry: '',
   })
   const [orgEditBusy, setOrgEditBusy] = useState(false)
   useEffect(() => {
     if (!org) return
-    const address = (org.contact?.address ?? {}) as Record<
-      string,
-      string | undefined
-    >
     setOrgEdit({
       name: String(org.name ?? ''),
       logoUrl: String(org.logoUrl ?? ''),
       contactEmail: String(org.contact?.email ?? ''),
       contactPhone: String(org.contact?.phone ?? ''),
       contactWebsite: String(org.contact?.website ?? ''),
-      contactAddressLine1: String(address.line1 ?? ''),
-      contactAddressLine2: String(address.line2 ?? ''),
-      contactAddressCity: String(address.city ?? ''),
-      contactAddressState: String(address.state ?? ''),
-      contactAddressPostalCode: String(address.postalCode ?? ''),
-      contactAddressCountry: String(address.country ?? ''),
     })
   }, [org])
+  /**
+   * The platform billing address, shown to staff and not editable here.
+   *
+   * It is the input `automatic_tax` computes from, and its single editor is
+   * the customer's own Billing → Settings, which writes Stripe first and
+   * refuses the save when Stripe rejects the address. `update-profile` — the
+   * action this panel posts — no longer carries an address at all, so leaving
+   * the fields would have been worse than removing them: staff would type a
+   * correction, be told the organization was saved, and change nothing.
+   *
+   * Staff keep the READ, because "what address are we billing them at" is a
+   * support question asked constantly.
+   */
+  const billingAddressLines = (() => {
+    const address = (org?.contact?.address ?? {}) as Record<
+      string,
+      string | undefined
+    >
+    return [
+      address.line1,
+      address.line2,
+      [address.city, address.state, address.postalCode]
+        .filter(Boolean)
+        .join(' '),
+      address.country,
+    ]
+      .map((line) => String(line ?? '').trim())
+      .filter(Boolean)
+  })()
   const handleOrgEditSave = async () => {
     if (orgEditBusy) return
     setOrgEditBusy(true)
@@ -623,12 +632,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
           contactEmail: orgEdit.contactEmail,
           contactPhone: orgEdit.contactPhone,
           contactWebsite: orgEdit.contactWebsite,
-          contactAddressLine1: orgEdit.contactAddressLine1,
-          contactAddressLine2: orgEdit.contactAddressLine2,
-          contactAddressCity: orgEdit.contactAddressCity,
-          contactAddressState: orgEdit.contactAddressState,
-          contactAddressPostalCode: orgEdit.contactAddressPostalCode,
-          contactAddressCountry: orgEdit.contactAddressCountry,
         }),
       })
       if (!response.ok) {
@@ -1130,62 +1133,35 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             }))
                           }
                         />
-                        <TextField
-                          size="small"
-                          label="Billing address"
-                          value={orgEdit.contactAddressLine1}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressLine1: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="City"
-                          value={orgEdit.contactAddressCity}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressCity: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="State / Province"
-                          value={orgEdit.contactAddressState}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressState: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Postal code"
-                          value={orgEdit.contactAddressPostalCode}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressPostalCode: event.target.value,
-                            }))
-                          }
-                        />
-                        <TextField
-                          size="small"
-                          label="Country"
-                          helperText="Two-letter code, e.g. US"
-                          value={orgEdit.contactAddressCountry}
-                          onChange={(event) =>
-                            setOrgEdit((prev) => ({
-                              ...prev,
-                              contactAddressCountry: event.target.value,
-                            }))
-                          }
-                        />
+                        {/* Read-only: the customer's Billing → Settings is
+                            the single writer of this address, because it is
+                            a tax input and two writers meant the last save
+                            won. Named as the PLATFORM billing address so it
+                            is not read as the seller payout identity (Stripe
+                            Connect) or a storefront's tax origin. */}
+                        <Stack spacing={0.5}>
+                          <Typography variant="overline" color="text.secondary">
+                            {'Platform billing address'}
+                          </Typography>
+                          {billingAddressLines.length ? (
+                            billingAddressLines.map((line) => (
+                              <Typography key={line} variant="body2">
+                                {line}
+                              </Typography>
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              {'None on file.'}
+                            </Typography>
+                          )}
+                          <Typography variant="caption" color="text.secondary">
+                            {'What Aglyn invoices this organization at, and ' +
+                              'the tax input on their subscription. Edited ' +
+                              'by the customer in Billing → Settings; not ' +
+                              'their payout identity and not a storefront ' +
+                              'tax origin.'}
+                          </Typography>
+                        </Stack>
                         <Button
                           size="small"
                           variant="outlined"

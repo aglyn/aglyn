@@ -136,17 +136,11 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => '__now__', delete: () => '__delete__' },
 }))
 
-jest.mock('../../../../utils/stripe-address-divergence', () => ({
-  __esModule: true,
-  stripeAddressDivergence: () => ({}),
-}))
-
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   canManageOrg: mockOrganizations.canManageOrg,
   checkEntitlement: () => true,
   isValidOrgSlug: () => true,
-  normalizeAddress: () => null,
   normalizePhone: (value: string) => value,
   /*
    * The REAL dependency graph (AGL-2486), not a stub. A double here would

@@ -333,7 +333,9 @@ Only workspace owners and admins can change sharing.
 
 A new folder starts shared with **All sites**, so it appears everywhere the moment you
 create it — or with the site you were working in, if your workspace has been set to make
-new resources site-scoped by default. If the **Shared with** dialog ever opens on
+new resources site-scoped by default. That default is **Default sharing for new data and
+media**, at the top of the workspace's **Media** page; it applies to new datasets as well
+as new files, and changes nothing that already exists. If the **Shared with** dialog ever opens on
 "Not shared with any site", that folder or file has no sharing stored at all: it is hidden
 from every site, and any file inside it turns up under **No folder** there. Pick a value
 and save to fix it.

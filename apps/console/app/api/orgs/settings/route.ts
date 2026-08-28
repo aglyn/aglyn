@@ -16,8 +16,6 @@
  */
 
 import { after } from 'next/server'
-import { FieldValue } from 'firebase-admin/firestore'
-import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
 import { isBrandingImageUrl, isBrandingLinkUrl } from '../../_lib/branding-url'
 import { assessOwnershipTransferLockout } from '../../_lib/sso-transfer-lockout'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
@@ -30,7 +28,6 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
   isValidOrgSlug,
-  normalizeAddress,
   normalizePhone,
   strandedDependents,
 } from '@aglyn/aglyn/server'
@@ -296,24 +293,20 @@ async function handler(request: Request): Promise<Response> {
           { status: 400 },
         )
       }
-      // The org's address is STRUCTURED (AGL-1133). It was a 400-character
-      // free-text blob, which reads as an address to a human and is unusable
-      // to anything else: Stripe Tax cannot compute from it and it cannot be
-      // placed on an invoice programmatically.
+      // THE PLATFORM BILLING ADDRESS IS NOT WRITTEN HERE (AGL-1133).
       //
-      // Converting the existing field rather than adding a `billingAddress`
-      // beside it, because a third address — personal, contact, billing —
-      // is the exact variant sprawl this issue exists to stop. Safe to
-      // convert: measured on production 2026-07-31, all four orgs have
-      // `contact.address` unset, so there is nothing to migrate.
-      const address = normalizeAddress({
-        line1: clean(body?.contactAddressLine1),
-        line2: clean(body?.contactAddressLine2),
-        city: clean(body?.contactAddressCity),
-        state: clean(body?.contactAddressState),
-        postalCode: clean(body?.contactAddressPostalCode, 20),
-        country: clean(body?.contactAddressCountry, 2),
-      })
+      // `contact.address` is the address Aglyn issues the org's invoices to
+      // and the input `automatic_tax` computes from, and its one editor is
+      // Billing → Settings (`set-billing-address` on `/api/billing/profile`),
+      // which writes Stripe FIRST and mirrors the accepted value back here.
+      // A tax input with two writers is a correctness problem: whichever
+      // form saved last won, so an address corrected on the billing page was
+      // reverted by an unrelated logo change on this one.
+      //
+      // Omitting the key from the `contact` map below is what preserves it:
+      // `set({ merge: true })` deep-merges a map, so a `contact` without
+      // `address` leaves the stored `address` exactly as it was. Naming it
+      // with an empty value would erase it instead.
       const rawPhone = clean(body?.contactPhone, 40)
       const contact = {
         email: clean(body?.contactEmail),
@@ -321,19 +314,6 @@ async function handler(request: Request): Promise<Response> {
         // is not stored in a different format from its owner's.
         phone: rawPhone ? (normalizePhone(rawPhone) ?? rawPhone) : '',
         website: clean(body?.contactWebsite),
-        address,
-      }
-      if (
-        contact.address &&
-        !contact.address.country &&
-        clean(body?.contactAddressCountry, 2)
-      ) {
-        // normalizeAddress drops anything that is not ISO-3166 alpha-2. Say
-        // so rather than silently saving an address Stripe Tax cannot use.
-        return Response.json(
-          { error: 'Country must be a two-letter code, e.g. US' },
-          { status: 400 },
-        )
       }
       if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
         return Response.json({ error: 'Enter a valid contact email' }, { status: 400 })
@@ -348,88 +328,32 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
-      // Push to the Stripe customer ON CHANGE (AGL-1133). Checkout collects
-      // an address at purchase; nothing carried a later EDIT across, so an
-      // org that moved kept the old address on every future invoice —
-      // which is the case that actually matters for tax.
+      // Push the contact PHONE to the Stripe customer on change (AGL-1133).
+      // The address is deliberately absent: it is set on Billing → Settings,
+      // which writes Stripe itself and refuses the save when Stripe rejects
+      // it, so a second best-effort writer here could only ever overwrite the
+      // accepted value with a stale one.
       //
       // `after()` rather than a bare `void promise`. The first version used
       // the latter to keep the save fast, and it silently never ran: on
       // serverless the function can be frozen once the response is sent, so
-      // work scheduled after it is not guaranteed to execute. Measured —
-      // Firestore had the new address and Stripe still had the old one.
+      // work scheduled after it is not guaranteed to execute.
       //
       // Still best-effort inside: a settings save is the user's action and
       // must not fail because Stripe was slow, and Firestore is already
       // correct so a missed sync self-heals on the next save.
       after(async () => {
+        // An empty phone is not a request to clear Stripe's copy, the same
+        // rule the address follows on the billing route. Nothing to send is
+        // the end of it — no read, no write, no bookkeeping.
+        if (!contact.phone) return
         const secretKey = process.env.STRIPE_SECRET_KEY
         // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
         const customerId = (await readOrgBilling(orgDocRef.id)).stripeCustomerId as
           | string
           | undefined
         if (!secretKey || !customerId) return
-        const params = new URLSearchParams()
-        if (contact.address) {
-          const a = contact.address
-          // Stripe rejects an address without a country, so send one only
-          // when it is complete enough to be accepted at all.
-          if (a.country) {
-            if (a.line1) params.set('address[line1]', a.line1)
-            if (a.line2) params.set('address[line2]', a.line2)
-            if (a.city) params.set('address[city]', a.city)
-            if (a.state) params.set('address[state]', a.state)
-            if (a.postalCode) params.set('address[postal_code]', a.postalCode)
-            params.set('address[country]', a.country)
-          }
-        }
-        if (contact.phone) params.set('phone', contact.phone)
-
-        // Nothing to push. Clearing an address here deliberately does NOT
-        // clear it on the Stripe customer (AGL-1133): that address is what an
-        // active subscription's invoices carry and what `automatic_tax`
-        // computes from, so wiping it on Stripe's side would silently stop
-        // tax being calculated and put an addressless invoice in front of a
-        // tax authority. Emptying a form field is not a request to do that.
-        //
-        // It does leave the two out of step, and the previous behaviour was
-        // to leave that difference invisible — the console showed no address
-        // while every invoice still carried the old one. So ASK Stripe what
-        // it actually holds and record the answer, rather than inferring
-        // divergence from the fact that we skipped a write: the customer may
-        // well have no address either, and a warning that fires on a
-        // perfectly consistent pair is one people learn to ignore.
-        if (![...params.keys()].length) {
-          try {
-            const customer = await fetch(
-              `https://api.stripe.com/v1/customers/${customerId}`,
-              { headers: { Authorization: `Bearer ${secretKey}` } },
-            )
-            const held = (await customer.json()) as {
-              address?: { line1?: string | null; country?: string | null } | null
-              phone?: string | null
-            }
-            await orgDocRef.set(
-              {
-                billing: {
-                  // Only the fact, never the address itself. The UI needs to
-                  // say "Stripe still has one"; echoing it back onto the org
-                  // doc would put it in front of every member and site
-                  // collaborator who can read that doc (AGL-1122).
-                  ...stripeAddressDivergence({
-                    pushed: false,
-                    stripeHasAddress: Boolean(held?.address?.line1),
-                  }),
-                  addressCheckedAt: FieldValue.serverTimestamp(),
-                },
-              },
-              { merge: true },
-            )
-          } catch (error) {
-            console.error('[orgs/settings] Stripe address read failed', orgId, error)
-          }
-          return
-        }
+        const params = new URLSearchParams({ phone: contact.phone })
         try {
           const response = await fetch(
             `https://api.stripe.com/v1/customers/${customerId}`,
@@ -449,33 +373,8 @@ async function handler(request: Request): Promise<Response> {
               (await response.json().catch(() => null))?.error?.message,
             )
           }
-          // Record the outcome either way. A failed push leaves the same
-          // invisible mismatch as a cleared address — the console shows the
-          // new address, the invoice still carries the old one — and it is
-          // the case nobody would think to look for, because the save itself
-          // reported success.
-          await orgDocRef.set(
-            {
-              billing: {
-                ...stripeAddressDivergence({ pushed: true, pushOk: response.ok }),
-                addressCheckedAt: FieldValue.serverTimestamp(),
-              },
-            },
-            { merge: true },
-          )
         } catch (error) {
           console.error('[orgs/settings] Stripe customer sync threw', orgId, error)
-          await orgDocRef
-            .set(
-              {
-                billing: {
-                  ...stripeAddressDivergence({ pushed: true, pushOk: false }),
-                  addressCheckedAt: FieldValue.serverTimestamp(),
-                },
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
         }
       })
       void logOrgActivity(
