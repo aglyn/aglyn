@@ -17,19 +17,15 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import {
-  Alert,
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+// From the subpath, never the barrel (AGL-1151): `ListTable` wraps MUI X
+// DataGrid, and the barrel is imported by the tenant runtime — exporting it
+// there put ~257 KB of virtualizer into every published customer page.
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { Alert, Chip, Stack, Typography } from '@mui/material'
+import { type GridColDef } from '@mui/x-data-grid'
+import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import StaffEmailMessageDialog from './staff-email-message-dialog.component'
 
 /** One message, as the staff detail route returns it. */
 export interface StaffEmailDeliveryRow {
@@ -131,6 +127,80 @@ export function StaffUserEmailHistoryCard({
   lookupFailed,
   address,
 }: StaffUserEmailHistoryCardProps) {
+  const [open, setOpen] = useState<StaffEmailDeliveryRow | null>(null)
+
+  /*
+   * `$id` because that is the id `ListTable` reads (`getRowId={row => row.$id}`),
+   * and the original row is carried through as `record` so the dialog gets the
+   * whole thing rather than the flattened cells the grid renders.
+   */
+  const gridRows = useMemo(
+    () =>
+      rows.map((row) => ({
+        $id: row.messageId,
+        record: row,
+        subject: row.subject || 'No subject recorded',
+        context: row.context,
+        sentAtMs: row.timestamps?.sent ?? row.firstSeenAtMs,
+        status: row.status,
+        openCount: row.openCount,
+        clickCount: row.clickCount,
+      })),
+    [rows],
+  )
+
+  const columns: GridColDef[] = useMemo(
+    () => [
+      {
+        field: 'subject',
+        headerName: 'Message',
+        flex: 2,
+        minWidth: 220,
+        renderCell: (params) => (
+          <Stack spacing={0.25} sx={{ py: 1 }}>
+            <Typography variant="body2">{params.row.subject}</Typography>
+            {params.row.context ? (
+              <Typography variant="caption" color="text.secondary">
+                {params.row.context}
+              </Typography>
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'sentAtMs',
+        headerName: 'Sent',
+        flex: 1,
+        minWidth: 170,
+        // A NUMBER in the row and a string only at render, so the column
+        // sorts chronologically rather than alphabetically — "Aug" before
+        // "Dec" before "Jan" is what a formatted string would give.
+        renderCell: (params) => formatWhen(params.row.sentAtMs),
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        width: 150,
+        renderCell: (params) => {
+          const presentation = STATUS_PRESENTATION[params.row.status] ?? {
+            label: params.row.status,
+            color: 'default' as const,
+          }
+          return (
+            <Chip
+              size="small"
+              color={presentation.color}
+              label={presentation.label}
+            />
+          )
+        },
+      },
+      { field: 'openCount', headerName: 'Opens', width: 90, type: 'number' },
+      { field: 'clickCount', headerName: 'Clicks', width: 90, type: 'number' },
+    ],
+    [],
+  )
+
   const help = docsHelp('staffConsole', {
     anchor: '#email-delivery',
     excerpt:
@@ -168,107 +238,17 @@ export function StaffUserEmailHistoryCard({
       ) : (
         <>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            {'Newest first. Opens are approximate — an inbox that blocks ' +
+            {'Newest first. Open a row to read the message and see which links ' +
+              'were followed. Opens are approximate — an inbox that blocks ' +
               'images never reports one, so a missing open is not evidence ' +
               'the mail was unread. A click is a real action and is reliable.'}
           </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Message</TableCell>
-                <TableCell>Sent</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Opens</TableCell>
-                <TableCell align="right">Clicks</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => {
-                const presentation = STATUS_PRESENTATION[row.status] ?? {
-                  label: row.status,
-                  color: 'default' as const,
-                }
-                return (
-                  <TableRow key={row.messageId}>
-                    <TableCell>
-                      <Stack spacing={0.5}>
-                        <Typography variant="body2">
-                          {row.subject || 'No subject recorded'}
-                        </Typography>
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                          useFlexGap
-                        >
-                          {row.context ? (
-                            /* WHICH sender produced it. Without this a row
-                               says only that some email went out, which is
-                               the question the staffer already had. */
-                            <Chip
-                              size="small"
-                              variant="outlined"
-                              label={row.context}
-                            />
-                          ) : null}
-                          {row.clickedLinks.length ? (
-                            <Tooltip title={row.clickedLinks.join('\n')}>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {`followed ${row.clickedLinks.length} link${
-                                  row.clickedLinks.length === 1 ? '' : 's'
-                                }`}
-                              </Typography>
-                            </Tooltip>
-                          ) : null}
-                        </Stack>
-                        {row.detail ? (
-                          <Typography variant="caption" color="error">
-                            {row.detail}
-                          </Typography>
-                        ) : null}
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {formatWhen(row.timestamps?.sent ?? row.firstSeenAtMs)}
-                      </Typography>
-                      {row.timestamps?.delivered ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {`delivered ${formatWhen(row.timestamps.delivered)}`}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        color={presentation.color}
-                        label={presentation.label}
-                      />
-                      {row.bounceType ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: 'block' }}
-                        >
-                          {row.bounceType}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell align="right">{row.openCount}</TableCell>
-                    <TableCell align="right">{row.clickCount}</TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          {rows.some((row) => row.campaignId) ? (
-            <Typography variant="caption" color="text.secondary">
-              {'Campaign sends also appear on the site’s own campaign stats.'}
-            </Typography>
-          ) : null}
+          <ListTable
+            rows={gridRows}
+            columns={columns}
+            onOpen={(_id, row) => setOpen(row.record as StaffEmailDeliveryRow)}
+          />
+          <StaffEmailMessageDialog row={open} onClose={() => setOpen(null)} />
         </>
       )}
     </CardDisplay>

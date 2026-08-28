@@ -18,8 +18,10 @@
 import {
   normalizeEventTags,
   normalizeResendDeliveryEvents,
+  normalizeResendMessage,
   normalizeResendSentEmails,
   resendDeliveryHistorySource,
+  resendDeliveryMessageSource,
   worstDeliveryStatus,
 } from './email-delivery-events'
 
@@ -355,5 +357,104 @@ describe('resendDeliveryHistorySource', () => {
     await expect(resendDeliveryHistorySource('re_send_only')({})).rejects.toThrow(
       /401.*restricted_api_key/,
     )
+  })
+})
+
+describe('normalizeResendMessage', () => {
+  const RAW = {
+    object: 'email',
+    id: '5c8f827f-ea43-41c8-a883-58ecb4e5bc7d',
+    to: ['william.hymes@hitechproductions.com'],
+    from: 'Aglyn <noreply@aglyn.com>',
+    created_at: '2026-08-26 04:48:46.284000+00',
+    subject: 'Confirm your email address',
+    html: '',
+    text: 'Confirm this address…',
+    bcc: null,
+    cc: null,
+    reply_to: null,
+    last_event: 'delivered',
+  }
+
+  it('translates the envelope and both body parts', () => {
+    expect(normalizeResendMessage(RAW)).toMatchObject({
+      provider: 'resend',
+      providerMessageId: '5c8f827f-ea43-41c8-a883-58ecb4e5bc7d',
+      to: ['william.hymes@hitechproductions.com'],
+      from: 'Aglyn <noreply@aglyn.com>',
+      subject: 'Confirm your email address',
+      text: 'Confirm this address…',
+      status: 'delivered',
+    })
+  })
+
+  /*
+   * The distinction the preview depends on. A message really sent with no
+   * HTML part comes back `""`; a body we could not read is `null`. Collapsing
+   * them would make "this went out as text only, so no click could ever be
+   * recorded" — which is the finding that started this work — render as "the
+   * preview failed to load".
+   */
+  it('keeps an empty HTML part distinct from a missing one', () => {
+    expect(normalizeResendMessage(RAW).html).toBe('')
+    expect(normalizeResendMessage({ ...RAW, html: undefined }).html).toBeNull()
+  })
+
+  it('normalizes null address lists to empty arrays', () => {
+    const message = normalizeResendMessage(RAW)
+    expect(message.cc).toEqual([])
+    expect(message.bcc).toEqual([])
+    expect(message.replyTo).toBeNull()
+  })
+
+  it('is null for a payload with no id', () => {
+    expect(normalizeResendMessage({ ...RAW, id: '' })).toBeNull()
+    expect(normalizeResendMessage(null)).toBeNull()
+  })
+})
+
+describe('resendDeliveryMessageSource', () => {
+  afterEach(() => {
+    delete (globalThis as { fetch?: unknown }).fetch
+  })
+
+  it('fetches one message by id', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'm1', to: ['a@example.com'], html: '<p>Hi</p>' }),
+    }))
+    ;(globalThis as { fetch?: unknown }).fetch = fetchMock
+
+    const message = await resendDeliveryMessageSource('re_full')('m1')
+    expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toContain(
+      '/emails/m1',
+    )
+    expect(message?.html).toBe('<p>Hi</p>')
+  })
+
+  /*
+   * A 404 is an ANSWER — the provider aged the message out — not a failure to
+   * surface as an error the staffer must act on. Throwing here would present
+   * "we no longer hold the body" as "something is broken".
+   */
+  it('returns null when the provider no longer holds the message', async () => {
+    ;(globalThis as { fetch?: unknown }).fetch = jest.fn(async () => ({
+      ok: false,
+      status: 404,
+      text: async () => 'not found',
+    }))
+    await expect(resendDeliveryMessageSource('re_full')('gone')).resolves.toBeNull()
+  })
+
+  it('throws on a key that cannot read, rather than reporting an empty message', async () => {
+    ;(globalThis as { fetch?: unknown }).fetch = jest.fn(async () => ({
+      ok: false,
+      status: 401,
+      text: async () => '{"name":"restricted_api_key"}',
+    }))
+    await expect(
+      resendDeliveryMessageSource('re_send_only')('m1'),
+    ).rejects.toThrow(/401/)
   })
 })

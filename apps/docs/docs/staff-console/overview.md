@@ -232,6 +232,22 @@ Read it before you resend anything. The four states that change what you do next
   marketing to that address; transactional mail still goes.
 - **Nothing at all.** See the limits below before concluding we never wrote to them.
 
+**Open a row** to read the message itself. The dialog shows the full envelope —
+from, reply-to, cc, message id — the timeline with a timestamp per state, the open and
+click counts, every link the recipient actually followed, and the message rendered as it
+was sent, with a plain-text tab beside it.
+
+The body is fetched from the sending service at the moment you open it; we do not keep
+copies of messages, which would mean storing every reset link and receipt we have ever
+sent. Two consequences worth knowing: a message the service has aged out says so rather
+than showing you a blank preview, and opening one is recorded in the audit log, because
+reading somebody's mail is a legitimate support action and a sensitive one.
+
+Links in the preview are inert on purpose. It is rendered in a locked-down frame with no
+scripts and no navigation, so nothing in a customer's mail can act on your session — and
+you cannot burn a single-use reset link by clicking it out of curiosity. The links the
+recipient followed are listed separately, as text.
+
 **Opens are approximate; clicks are not.** An open is recorded by a hidden image, and
 most inboxes block images by default — a message with no open was very often read. A
 click is a real action and can be trusted. Say it that way to the account holder rather

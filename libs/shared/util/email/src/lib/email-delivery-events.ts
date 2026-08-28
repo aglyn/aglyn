@@ -417,3 +417,100 @@ export function resendDeliveryHistorySource(
     }
   }
 }
+
+/*==========================================
+ * ONE MESSAGE, RENDERED.
+ *
+ * The log records what HAPPENED to a message; it does not keep the message.
+ * Storing every body would put an unbounded copy of every email we have ever
+ * sent — including reset links and receipts — into our own database, to
+ * duplicate something the provider already holds.
+ *
+ * So a body is fetched when a staffer explicitly opens one row. That is a
+ * deliberate single lookup, not the per-render fan-out the read path refuses:
+ * one message, on one click, by id.
+ *=========================================*/
+
+/** One message's content and envelope, in our vocabulary. */
+export interface EmailDeliveryMessage {
+  provider: string
+  providerMessageId: string
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  from: string | null
+  replyTo: string[] | null
+  subject: string | null
+  /** The HTML part, or null when the message was sent as text only. */
+  html: string | null
+  /** The plain-text part, or null. */
+  text: string | null
+  sentAt: number | null
+  status: EmailDeliveryEventType | null
+}
+
+/** A single message by id. The shape a second provider would implement. */
+export type EmailDeliveryMessageSource = (
+  providerMessageId: string,
+) => Promise<EmailDeliveryMessage | null>
+
+function addressList(raw: unknown): string[] {
+  return (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
+    .map((address) => String(address ?? '').trim())
+    .filter(Boolean)
+}
+
+/** Resend's `GET /emails/:id` payload, in our vocabulary. */
+export function normalizeResendMessage(raw: unknown): EmailDeliveryMessage | null {
+  const record = (raw ?? {}) as Record<string, any>
+  const providerMessageId = String(record.id ?? '').trim()
+  if (!providerMessageId) return null
+  const parsed = Date.parse(String(record.created_at ?? ''))
+  return {
+    provider: 'resend',
+    providerMessageId,
+    to: addressList(record.to),
+    cc: addressList(record.cc),
+    bcc: addressList(record.bcc),
+    from: String(record.from ?? '').trim() || null,
+    replyTo: addressList(record.reply_to).length
+      ? addressList(record.reply_to)
+      : null,
+    subject: String(record.subject ?? '').trim() || null,
+    // Empty string is NOT null here, and the difference is the point: a
+    // message that went out text-only really does have an empty HTML part,
+    // and a reader has to be able to tell that from "we could not fetch it".
+    html: typeof record.html === 'string' ? record.html : null,
+    text: typeof record.text === 'string' ? record.text : null,
+    sentAt: Number.isFinite(parsed) ? parsed : null,
+    status:
+      RESEND_LAST_EVENTS[
+        String(record.last_event ?? '')
+          .trim()
+          .toLowerCase()
+      ] ?? null,
+  }
+}
+
+/** Resend's single-message endpoint. Needs the same full-access key. */
+export function resendDeliveryMessageSource(
+  apiKey: string,
+): EmailDeliveryMessageSource {
+  return async (providerMessageId: string) => {
+    const response = await fetch(
+      `${RESEND_EMAILS_ENDPOINT}/${encodeURIComponent(providerMessageId)}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+    )
+    // A message the provider has aged out is a 404, and that is an ANSWER —
+    // "we know this was sent and the body is gone" — not a failure to report
+    // as an error the staffer must act on.
+    if (response.status === 404) return null
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(
+        `message read failed: HTTP ${response.status} ${detail.slice(0, 200)}`,
+      )
+    }
+    return normalizeResendMessage(await response.json())
+  }
+}
