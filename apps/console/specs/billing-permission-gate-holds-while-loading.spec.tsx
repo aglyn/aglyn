@@ -207,7 +207,6 @@ jest.mock(
   '../components/billing/billing-collaborator-allocations-card.component',
   () => nullCard,
 )
-jest.mock('../components/embedded-checkout-panel.component', () => nullCard)
 jest.mock('../components/billing/retention-funnel.dialog', () => ({
   __esModule: true,
   RetentionFunnelDialog: () => null,
@@ -232,10 +231,21 @@ const PAYING_PRO_ORG = {
   },
 }
 
-/** The renewal date exactly as the page formats it. */
-const RENEWAL_TEXT = `Renews ${new Date(
-  PAYING_PRO_ORG.subscription.currentPeriodEnd,
-).toLocaleDateString()}`
+/**
+ * The renewal sentence exactly as the page formats it.
+ *
+ * Derived from `subscriptionPeriodNotice` rather than restated, so this stays
+ * true when the copy changes — and, more importantly, so it cannot keep
+ * asserting "Renews" on a subscription that is cancelling. The old literal
+ * would have done exactly that: the date is the same field in both states and
+ * only the verb differs.
+ */
+const RENEWAL_TEXT = subscriptionPeriodNotice({
+  status: PAYING_PRO_ORG.subscription.status,
+  cancelAtPeriodEnd: (PAYING_PRO_ORG.subscription as { cancelAtPeriodEnd?: boolean })
+    .cancelAtPeriodEnd,
+  currentPeriodEnd: PAYING_PRO_ORG.subscription.currentPeriodEnd,
+}).sentence as string
 
 const REFUSAL =
   'You do not have permission to view billing for this ' +
@@ -268,6 +278,8 @@ const invoiceCalls = () =>
   fetchMock.mock.calls.filter((call) =>
     String(call[0] ?? '').includes('/api/billing/invoices'),
   )
+
+import { subscriptionPeriodNotice } from '../utils/subscription-period-notice'
 
 describe('THE FLICKER: no ledger paints before the permission read lands', () => {
   beforeEach(() => {

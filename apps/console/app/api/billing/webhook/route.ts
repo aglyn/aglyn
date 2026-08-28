@@ -28,6 +28,8 @@ import { after } from 'next/server'
 // and drops the work. The ledger records what actually COMMITTED, and the
 // classifier separates "moved nothing" from "correctly moved nothing".
 import {
+  isBlankAddress,
+  normalizeAddress,
   buildRoute,
   classifyDeliveryLag,
   classifyWebhookDelivery,
@@ -896,6 +898,45 @@ async function handler(request: Request): Promise<Response> {
                   body: new URLSearchParams(identity).toString(),
                 },
               )
+            }
+            // …and the address in the other direction.
+            //
+            // There is ONE address for an org — `contact.address`, structured,
+            // deliberately consolidated so a third could not appear — and
+            // Stripe-side collection was never landing in it. A workspace that
+            // subscribed through the old Checkout gave Stripe an address and
+            // still saw an empty Billing address card, with no way to tell
+            // that the invoices carried one.
+            //
+            // Only ever FILLS A GAP: if the org already has an address, that
+            // one wins and nothing is written. The org doc is the editor's
+            // copy, and an event arriving later must not quietly revert what
+            // somebody typed.
+            if (isBlankAddress(orgSnapshot.get('contact')?.address)) {
+              const held = await fetch(
+                `https://api.stripe.com/v1/customers/${stripeCustomerId}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+                  },
+                },
+              ).then((response) => response.json())
+              const address = normalizeAddress({
+                line1: held?.address?.line1,
+                line2: held?.address?.line2,
+                city: held?.address?.city,
+                state: held?.address?.state,
+                postalCode: held?.address?.postal_code,
+                country: held?.address?.country,
+              })
+              if (address) {
+                await firebaseAdmin
+                  .app()
+                  .firestore()
+                  .collection('orgs')
+                  .doc(String(orgId))
+                  .set({ contact: { address } }, { merge: true })
+              }
             }
           } catch (error) {
             console.error(

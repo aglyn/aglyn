@@ -24,6 +24,7 @@ import {
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
+  writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { describeMissingStripeCustomer } from '../../_lib/stripe-customer-mode-notice'
 // The shared shaper and the shared status list. The list is a deliberate
@@ -36,6 +37,7 @@ import {
   describeStripePaymentMethod,
   LIVE_SUBSCRIPTION_STATUSES,
 } from '../../_lib/stripe-payment-method'
+import { deploymentLivemode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import { platformPaymentsConfigured } from '../../../../utils/server/payments-platform'
 import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
 import { taxIdTypeLabel } from '../../../../utils/stripe-tax-id-types'
@@ -101,12 +103,15 @@ async function stripeRequest(
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   body?: URLSearchParams,
+  /** Stripe-side replay protection for the calls that create something. */
+  idempotencyKey?: string,
 ): Promise<StripeResult> {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${secretKey}`,
       ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
     ...(body ? { body: body.toString() } : {}),
   })
@@ -130,6 +135,81 @@ function loggableStripeError(payload: any): Record<string, unknown> {
     code: payload?.error?.code ?? null,
     param: payload?.error?.param ?? null,
   }
+}
+
+/**
+ * Actions allowed to CREATE the org's Stripe customer if it has none.
+ *
+ * The three the owner named — billing email, billing address, payment method —
+ * plus the tax id, which is the same kind of thing: a detail that belongs on
+ * an invoice, decided before there is an invoice to put it on.
+ */
+const CREATES_CUSTOMER = new Set([
+  'set-billing-email',
+  'set-billing-address',
+  'add-tax-id',
+  'create-setup-intent',
+])
+
+/**
+ * The org's Stripe customer, created ON DEMAND if it does not exist yet.
+ *
+ * Until now the only thing that ever minted one was Checkout, which is why
+ * every billing field was gated behind a purchase. Creating one here costs
+ * nothing, commits nobody to anything, and is what lets a workspace put its
+ * finance address and its card in place before it decides to subscribe.
+ *
+ * ## The idempotency key is doing real work
+ *
+ * Two saves racing — a double-click, or the address and email cards being
+ * saved together — would otherwise mint two customers, and only one would win
+ * the Firestore write. The other becomes an orphan that later invoices could
+ * scatter onto. The key is derived from the org and the Stripe mode, so it is
+ * stable across retries and across the two cards, and Stripe returns the SAME
+ * customer for all of them.
+ *
+ * `writeOrgBilling` is what persists it: it projects the id onto the
+ * mode-scoped physical field, so a test-mode customer cannot overwrite the
+ * live one, and it stamps the `stripeCustomers` reverse index the webhook
+ * resolves through (AGL-2486, AGL-1028). Writing the field by hand here would
+ * silently skip both.
+ */
+async function ensureStripeCustomer(
+  secretKey: string,
+  orgId: string,
+  existing: string | undefined,
+): Promise<string | undefined> {
+  if (existing) return existing
+  const org = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .get()
+  const name = String(org.get('name') ?? '').trim().slice(0, 200)
+  const params = new URLSearchParams({ 'metadata[orgId]': orgId })
+  if (name) params.set('name', name)
+  const contactEmail = String(org.get('contact')?.email ?? '').trim()
+  if (contactEmail) params.set('email', contactEmail.slice(0, 320))
+  const created = await stripeRequest(
+    secretKey,
+    'POST',
+    'customers',
+    params,
+    // Mode-scoped so a test-mode run and a live one do not collide on one key.
+    `org-customer-${deploymentLivemode() ? 'live' : 'test'}-${orgId}`,
+  )
+  const id = typeof created.payload?.id === 'string' ? created.payload.id : null
+  if (!created.ok || !id) {
+    console.error(
+      '[billing/profile] customer create failed',
+      orgId,
+      loggableStripeError(created.payload),
+    )
+    return undefined
+  }
+  await writeOrgBilling(orgId, { stripeCustomerId: id })
+  return id
 }
 
 /** Trim and cap, matching `/api/orgs/settings`'s handling of the same fields. */
@@ -181,31 +261,65 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: `${needed} required` }, { status: 403 })
     }
 
-    const customerId = (await readOrgBilling(orgId)).stripeCustomerId as
+    let customerId = (await readOrgBilling(orgId)).stripeCustomerId as
       | string
       | undefined
 
-    if (!customerId) {
-      // No customer means no billing identity to read or write — an org that
-      // has never been to checkout. Every action answers the same way, and
-      // the mode notice distinguishes "never billed" from "billed in the
-      // Stripe mode this deployment cannot see" (AGL-2486), which otherwise
-      // look identical and are not.
-      return Response.json(
-        {
-          configured: true,
-          customer: null,
-          taxIds: [],
-          paymentMethods: [],
-          ...(await describeMissingStripeCustomer(orgId)),
-        },
-        { status: 200 },
-      )
-    }
-
+    // A read NEVER mints a customer. `get` runs on every visit to the Billing
+    // page, so creating one here would leave an empty Stripe customer behind
+    // for every org that has ever looked at its own billing — a mess someone
+    // inherits later, and one that makes "has a customer" stop meaning
+    // anything.
     if (action === 'get') {
+      if (!customerId) {
+        // Not an error and not a refusal: an org that has never saved a
+        // billing detail. The cards render editable fields over this. The
+        // mode notice distinguishes "never billed" from "billed in the Stripe
+        // mode this deployment cannot see" (AGL-2486), which otherwise look
+        // identical and are not.
+        return Response.json(
+          {
+            configured: true,
+            customer: null,
+            taxIds: [],
+            paymentMethods: [],
+            ...(await describeMissingStripeCustomer(orgId)),
+          },
+          { status: 200 },
+        )
+      }
       return await readProfile(secretKey as string, orgId, customerId)
     }
+
+    // Everything below is a WRITE, and a write is allowed to bring the
+    // customer into existence.
+    //
+    // Setting a billing email, a billing address or a card is ordinary account
+    // setup, and gating it behind a purchase had it backwards: someone putting
+    // a card on file BEFORE upgrading is a customer trying to pay us. What
+    // those fields need is a Stripe customer, which is free and carries no
+    // commitment — not a subscription.
+    //
+    // Actions that act on an object which must already exist (removing a card
+    // or a tax id, changing a default, finalizing a setup intent) are not in
+    // `CREATES_CUSTOMER`: there is nothing for them to operate on, and minting
+    // a customer to then fail against it would be worse than the 409 they get.
+    const resolvedCustomerId = CREATES_CUSTOMER.has(action)
+      ? await ensureStripeCustomer(secretKey as string, orgId, customerId)
+      : customerId
+    if (!resolvedCustomerId) {
+      return Response.json(
+        {
+          error:
+            'This workspace has no billing details yet. Save a billing email ' +
+            'or address first.',
+        },
+        { status: 409 },
+      )
+    }
+    // Every branch below reads this name; the original stays untouched so the
+    // `get` path above cannot accidentally be given a just-created customer.
+    customerId = resolvedCustomerId
 
     if (action === 'set-billing-email') {
       const email = clean(body?.email, 320)

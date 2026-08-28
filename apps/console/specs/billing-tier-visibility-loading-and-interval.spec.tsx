@@ -207,7 +207,6 @@ jest.mock(
   '../components/billing/billing-register-allocations-card.component',
   () => nullCard,
 )
-jest.mock('../components/embedded-checkout-panel.component', () => nullCard)
 jest.mock('../components/billing/retention-funnel.dialog', () => ({
   __esModule: true,
   RetentionFunnelDialog: () => null,

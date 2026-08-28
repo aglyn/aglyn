@@ -153,138 +153,136 @@ export default function BillingTaxIdCardComponent({
       onRetry={reload}
       subject="tax IDs"
     >
-      {(loaded) =>
-        !loaded.customer ? (
-          <Typography variant="body2" color="text.secondary">
-            {'There are no tax IDs yet. Upgrade to a paid plan to add one — a ' +
-              'tax ID appears on the invoices we issue you.'}
-          </Typography>
-        ) : (
-          <Stack spacing={2}>
-            {loaded.taxIds.length ? (
-              <List dense disablePadding>
-                {loaded.taxIds.map((taxId) => (
-                  <ListItem
-                    key={taxId.id}
-                    disableGutters
-                    secondaryAction={
-                      canManage ? (
-                        <IconButton
-                          edge="end"
-                          size="small"
-                          disabled={busy}
-                          aria-label={`Remove ${taxIdTypeLabel(
-                            String(taxId.type ?? ''),
-                          )}`}
-                          onClick={() => remove(taxId.id)}
-                        >
-                          {'×'}
-                        </IconButton>
-                      ) : null
+      {(state) => (
+        <Stack spacing={2}>
+          {/*
+            Editable before there is a subscription. A tax ID is a detail that
+            belongs on an invoice, decided before there is an invoice to put it
+            on — the workspace's Stripe customer is created on the first save.
+          */}
+          {state.taxIds.length ? (
+            <List dense disablePadding>
+              {state.taxIds.map((taxId) => (
+                <ListItem
+                  key={taxId.id}
+                  disableGutters
+                  secondaryAction={
+                    canManage ? (
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        disabled={busy}
+                        aria-label={`Remove ${taxIdTypeLabel(
+                          String(taxId.type ?? ''),
+                        )}`}
+                        onClick={() => remove(taxId.id)}
+                      >
+                        {'×'}
+                      </IconButton>
+                    ) : null
+                  }
+                >
+                  <ListItemText
+                    primary={taxId.value ?? ''}
+                    secondary={
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        component="span"
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <span>{taxIdTypeLabel(String(taxId.type ?? ''))}</span>
+                        {/* Stripe verifies some types asynchronously, so
+                            `unverified` is a real outcome the customer has
+                            to be able to see — a number that will not be
+                            honored looks identical to one that will
+                            otherwise. */}
+                        {taxId.verification &&
+                        taxId.verification !== 'verified' ? (
+                          <Chip
+                            component="span"
+                            label={taxId.verification}
+                            size="small"
+                            variant="outlined"
+                            color={
+                              taxId.verification === 'pending'
+                                ? 'default'
+                                : 'warning'
+                            }
+                          />
+                        ) : null}
+                      </Stack>
                     }
-                  >
-                    <ListItemText
-                      primary={taxId.value ?? ''}
-                      secondary={
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          component="span"
-                          sx={{ alignItems: 'center' }}
-                        >
-                          <span>{taxIdTypeLabel(String(taxId.type ?? ''))}</span>
-                          {/* Stripe verifies some types asynchronously, so
-                              `unverified` is a real outcome the customer has
-                              to be able to see — a number that will not be
-                              honored looks identical to one that will
-                              otherwise. */}
-                          {taxId.verification &&
-                          taxId.verification !== 'verified' ? (
-                            <Chip
-                              component="span"
-                              label={taxId.verification}
-                              size="small"
-                              variant="outlined"
-                              color={
-                                taxId.verification === 'pending'
-                                  ? 'default'
-                                  : 'warning'
-                              }
-                            />
-                          ) : null}
-                        </Stack>
-                      }
-                      slotProps={{ secondary: { component: 'div' } }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                {'No tax IDs yet.'}
-              </Typography>
-            )}
+                    slotProps={{ secondary: { component: 'div' } }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {'No tax IDs yet.'}
+            </Typography>
+          )}
 
-            {rejection ? (
-              // Stripe's own words. It names the format expected for the type
-              // chosen, which is what the customer needs while retyping.
-              <Alert severity="warning" onClose={() => setRejection(null)}>
-                {rejection}
-              </Alert>
-            ) : null}
+          {rejection ? (
+            // Stripe's own words. It names the format expected for the type
+            // chosen, which is what the customer needs while retyping.
+            <Alert severity="warning" onClose={() => setRejection(null)}>
+              {rejection}
+            </Alert>
+          ) : null}
 
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              sx={{ alignItems: 'flex-start' }}
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            sx={{ alignItems: 'flex-start' }}
+          >
+            <Autocomplete
+              sx={{ minWidth: 260, flexGrow: 1 }}
+              size="small"
+              disabled={!canManage || busy}
+              options={TAX_ID_TYPE_OPTIONS}
+              value={type}
+              onChange={(_event, next) => setType(next)}
+              getOptionLabel={(option) => option.label}
+              isOptionEqualToValue={(option, selected) =>
+                option.code === selected.code
+              }
+              // Match on the prose AND the raw Stripe code. The default
+              // filter reads the label only, so a customer typing the code
+              // their accountant gave them would find nothing.
+              filterOptions={(options, params) => {
+                const needle = params.inputValue.trim().toLowerCase()
+                if (!needle) return options
+                return options.filter((option) =>
+                  option.searchText.includes(needle),
+                )
+              }}
+              renderInput={(params) => (
+                <TextField {...params} label="Type" placeholder="Search…" />
+              )}
+            />
+            <TextField
+              label="Tax ID"
+              size="small"
+              sx={{ minWidth: 200, flexGrow: 1 }}
+              value={value}
+              disabled={!canManage || busy}
+              onChange={(event) => setValue(event.target.value)}
+              slotProps={{ htmlInput: { 'aria-label': 'Tax ID' } }}
+            />
+            <Button
+              variant="contained"
+              size="small"
+              disabled={!canManage || busy || !type || !value.trim()}
+              onClick={save}
+              sx={{ mt: { xs: 0, sm: 0.5 } }}
             >
-              <Autocomplete
-                sx={{ minWidth: 260, flexGrow: 1 }}
-                size="small"
-                disabled={!canManage || busy}
-                options={TAX_ID_TYPE_OPTIONS}
-                value={type}
-                onChange={(_event, next) => setType(next)}
-                getOptionLabel={(option) => option.label}
-                isOptionEqualToValue={(option, selected) =>
-                  option.code === selected.code
-                }
-                // Match on the prose AND the raw Stripe code. The default
-                // filter reads the label only, so a customer typing the code
-                // their accountant gave them would find nothing.
-                filterOptions={(options, params) => {
-                  const needle = params.inputValue.trim().toLowerCase()
-                  if (!needle) return options
-                  return options.filter((option) =>
-                    option.searchText.includes(needle),
-                  )
-                }}
-                renderInput={(params) => (
-                  <TextField {...params} label="Type" placeholder="Search…" />
-                )}
-              />
-              <TextField
-                label="Tax ID"
-                size="small"
-                sx={{ minWidth: 200, flexGrow: 1 }}
-                value={value}
-                disabled={!canManage || busy}
-                onChange={(event) => setValue(event.target.value)}
-                slotProps={{ htmlInput: { 'aria-label': 'Tax ID' } }}
-              />
-              <Button
-                variant="contained"
-                size="small"
-                disabled={!canManage || busy || !type || !value.trim()}
-                onClick={save}
-                sx={{ mt: { xs: 0, sm: 0.5 } }}
-              >
-                {'Save'}
-              </Button>
-            </Stack>
+              {'Save'}
+            </Button>
           </Stack>
-        )
-      }
+        </Stack>
+      )}
     </BillingProfileGateComponent>
   )
 }

@@ -90,8 +90,9 @@ import BillingPaymentMethodsCardComponent from '../../../../components/billing/b
 import BillingAddressCardComponent from '../../../../components/billing/billing-address-card.component'
 import BillingTaxIdCardComponent from '../../../../components/billing/billing-tax-id-card.component'
 import { useBillingProfile } from '../../../../components/billing/use-billing-profile'
+import { getBrowserStripe } from '../../../../utils/browser-stripe'
+import { subscriptionPeriodNotice } from '../../../../utils/subscription-period-notice'
 import CardColumns from '../../../../components/card-columns.component'
-import EmbeddedCheckoutPanelComponent from '../../../../components/embedded-checkout-panel.component'
 import {
   clearSubscribeCheckoutPending,
   markSubscribeCheckoutPending,
@@ -159,14 +160,39 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     orgId,
     permissionsLoaded && can('billing.view'),
   )
+
+  /**
+   * Why this workspace cannot subscribe yet, or null when it can.
+   *
+   * The order the customer walks is payment method → billing address → plan,
+   * so the plan grid has to say which of the first two is missing rather than
+   * offering a button whose only outcome is a 409. Both are cards on this same
+   * page, directly above the grid.
+   *
+   * Deliberately null while the profile is still loading or could not be read:
+   * an unknown is not a refusal, and blocking Upgrade on a fetch that has not
+   * landed would accuse a fully set-up workspace of being incomplete.
+   */
+  const subscribeBlockedReason = useMemo(() => {
+    if (billingProfile.loadState !== 'loaded') return null
+    const profile = billingProfile.state
+    if (!profile) return null
+    const hasCard = (profile.paymentMethods ?? []).length > 0
+    const hasAddress = Boolean(profile.customer?.address?.country)
+    if (!hasCard && !hasAddress) {
+      return 'Add a payment method and a billing address above first.'
+    }
+    if (!hasCard) return 'Add a payment method above first.'
+    if (!hasAddress) {
+      return 'Add a billing address above first — sales tax is calculated from it.'
+    }
+    return null
+  }, [billingProfile.loadState, billingProfile.state])
   // Annual billing (AGL-269): checkout maps to the *_YEARLY price ids.
   const [interval, setInterval] = useState<'month' | 'year'>('month')
   // Non-null while an in-page checkout is open (AGL-1132). Null is both the
   // closed state and the state on every deploy where the route chose the
   // redirect instead, so nothing here has to know which mode is live.
-  const [checkoutClientSecret, setCheckoutClientSecret] = useState<
-    string | null
-  >(null)
   // A checkout feature lockdown, held as the PARSED notice rather than a
   // flattened string (AGL-1558). This page is the one surface where the toast
   // was the wrong shape: the customer reading it is mid-upgrade and wondering
@@ -284,6 +310,22 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
 
   const cancelAtPeriodEnd =
     (org?.subscription as any)?.cancelAtPeriodEnd === true
+  /**
+   * The one sentence the plan card says about the billing period.
+   *
+   * Derived rather than composed on the card: the old version rendered a
+   * "cancels at period end" chip and a hardcoded "Renews {date}" line
+   * independently, so a cancelling subscription claimed both at once.
+   */
+  const periodNotice = useMemo(
+    () =>
+      subscriptionPeriodNotice({
+        status: (org?.subscription as any)?.status,
+        cancelAtPeriodEnd: (org?.subscription as any)?.cancelAtPeriodEnd,
+        currentPeriodEnd: (org?.subscription as any)?.currentPeriodEnd,
+      }),
+    [org?.subscription],
+  )
   /**
    * A downgrade waiting for the period end (AGL-1862). The type's doc comment
    * has always claimed this is "the mirror the billing page renders" — it was
@@ -470,14 +512,35 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * a visible control for it, the only way back was to notice the chip and
    * guess.
    */
+  /**
+   * Release a scheduled downgrade by restating the plan the org is ALREADY on.
+   *
+   * ⚠️ The interval is the SUBSCRIPTION's, never the page's toggle.
+   *
+   * It used to send `interval` — the monthly/annual switch above the grid,
+   * which exists so a customer can compare prices. Flipping it to look at
+   * annual and then pressing this button fell through to the instant switch
+   * and re-priced the plan, the add-ons and the metered item onto the other
+   * interval with prorations, while the snackbar said the plan was staying
+   * put. A month→year flip is a year's charge from the one control whose
+   * entire job is to change nothing.
+   *
+   * When the mirrored interval is unknown the field is omitted rather than
+   * guessed, so the server keeps whatever the subscription already has:
+   * defaulting to either value here would be the same bug with better odds.
+   */
   const handleKeepCurrentPlan = useCallback(async () => {
     if (!org?.plan) return
+    const liveInterval = (org?.subscription as any)?.interval as
+      | 'month'
+      | 'year'
+      | undefined
     const dequeue = queueLoading()
     try {
       const payload = await subscriptionRequest({
         action: 'switch',
         plan: org.plan,
-        interval,
+        ...(liveInterval ? { interval: liveInterval } : {}),
       })
       if (payload) {
         enqueueSnackbar('Your current plan is staying put.', {
@@ -488,7 +551,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       dequeue()
     }
-  }, [org?.plan, subscriptionRequest, interval, queueLoading, enqueueSnackbar])
+  }, [
+    org?.plan,
+    org?.subscription,
+    subscriptionRequest,
+    queueLoading,
+    enqueueSnackbar,
+  ])
 
   /**
    * One idempotency key per (org, plan, interval) checkout attempt
@@ -696,86 +765,97 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             { variant: 'info', persist: false },
           )
         }
-        // Held so the hosted-redirect branch below can WAIT for the hit
-        // (AGL-1580). The console's transport is Firebase `logEvent`, which is
-        // async and reaches gtag only after the SDK's initialization promise
-        // settles; on the redirect path `window.location.assign` ran in the
-        // same tick and destroyed the document first, so a still-initializing
-        // tag lost the event outright. Started at the emit, awaited at the
-        // redirect — the refusal branches in between run against the timeout
-        // rather than after it, so the common path waits for nothing.
-        let beginCheckoutFlush: Promise<void> | undefined
-        // In-page checkout (AGL-1132) when the route returns a client secret;
-        // otherwise the unchanged redirect. The route decides — it only picks
-        // embedded when the flag is on AND a publishable key is configured —
-        // so the two shapes are mutually exclusive and this never has to guess.
-        // GA4 checkout funnel (AGL-1561). Fired once here, after the
-        // lockdown/501/error branches, so it means "Stripe actually gave us a
-        // checkout to show" rather than "somebody clicked Upgrade" — the two
-        // differ by exactly the refusals above, which are the interesting
-        // failures. Covers both shapes: the embedded client secret and the
-        // hosted redirect.
-        //
-        // Annual is priced per-month-billed-yearly, so the checkout VALUE is
-        // twelve of them; `begin_checkout` should carry what the customer is
-        // about to be charged, not a monthly rate.
-        if (payload?.clientSecret || (response.ok && payload?.url)) {
-          const pricing = PLAN_PRICING[targetPlan]
-          const value =
-            interval === 'year'
-              ? (pricing?.basePriceAnnualMonthlyUsd ?? 0) * 12
-              : (pricing?.basePriceMonthlyUsd ?? 0)
-          // Through the shared constructor since AGL-1591, so this payload and
-          // the tenant storefront's cart checkout cannot drift into two shapes
-          // under one event name. `value` is derived from the item rather than
-          // restated here — same number, one definition.
-          beginCheckoutFlush = trackEventBeforeNavigation(
-            'begin_checkout',
-            buildBeginCheckoutParams({
-              billingInterval: interval === 'year' ? 'annual' : 'monthly',
-              items: [
-                {
-                  item_id: targetPlan,
-                  item_name: PLAN_LABELS[targetPlan] ?? targetPlan,
-                  item_category: 'subscription',
-                  price: value,
-                  quantity: 1,
-                },
-              ],
-            }),
-          )
-        }
-        if (payload?.clientSecret) {
-          // Remember the attempt before showing the form: the conversion can
-          // only be reported from this browser, and this is the last moment
-          // that is guaranteed to run.
-          markSubscribeCheckoutPending(orgId ?? '')
-          setCheckoutClientSecret(String(payload.clientSecret))
-          return
-        }
-        // The server refused because this workspace is already subscribed
-        // (AGL-1697) — the state the `subscriptionActive` branch above exists
-        // to keep us out of, reached anyway by a stale tab or a second window.
-        // Named rather than thrown: the catch-all below says "Could not start
-        // checkout", which reads as a payment failure and is the opposite of
-        // what happened. Nothing was charged; there is simply already a
-        // subscription, and the page reloads onto it.
-        if (response.status === 409 && payload?.code === 'subscription_exists') {
+        // The workspace is not ready to subscribe yet (AGL-1697's 409 gained
+        // two siblings). None of these is a payment failure: they name a card
+        // that is missing from the same page, above this grid.
+        if (response.status === 409) {
           return void enqueueSnackbar(
-            payload.error ?? 'This workspace already has a subscription.',
+            payload?.error ?? 'This workspace cannot subscribe yet.',
             { variant: 'warning', persist: false },
           )
         }
-        if (!response.ok || !payload?.url) {
-          throw new Error(payload?.error ?? 'Checkout failed')
+        if (!response.ok) {
+          throw new Error(payload?.error ?? 'Subscription failed')
         }
-        // The ONE line that changed on the money path (AGL-1580). It does not
-        // touch the session, the target, the price or any refusal above — it
-        // only lets the analytics hit reach gtag before the document dies, and
-        // it is bounded, so a blocked analytics host delays the redirect by at
-        // most `NAVIGATION_FLUSH_TIMEOUT_MS` and then it proceeds regardless.
-        await beginCheckoutFlush
-        window.location.assign(payload.url)
+        // GA4 checkout funnel (AGL-1561). Fired after the lockdown/501/refusal
+        // branches, so it means "Stripe actually opened the subscription"
+        // rather than "somebody clicked Upgrade" — the two differ by exactly
+        // the refusals above, which are the interesting failures.
+        //
+        // Annual is priced per-month-billed-yearly, so the VALUE is twelve of
+        // them; `begin_checkout` should carry what the customer is about to be
+        // charged, not a monthly rate.
+        const pricing = PLAN_PRICING[targetPlan]
+        const value =
+          interval === 'year'
+            ? (pricing?.basePriceAnnualMonthlyUsd ?? 0) * 12
+            : (pricing?.basePriceMonthlyUsd ?? 0)
+        // Through the shared constructor since AGL-1591, so this payload and
+        // the tenant storefront's cart checkout cannot drift into two shapes
+        // under one event name.
+        void trackEvent(
+          'begin_checkout',
+          buildBeginCheckoutParams({
+            billingInterval: interval === 'year' ? 'annual' : 'monthly',
+            items: [
+              {
+                item_id: targetPlan,
+                item_name: PLAN_LABELS[targetPlan] ?? targetPlan,
+                item_category: 'subscription',
+                price: value,
+                quantity: 1,
+              },
+            ],
+          }),
+        )
+        // Remember the attempt: the Ads conversion can only be reported from
+        // this browser, and this is the last moment guaranteed to run.
+        // `transaction_id` is the org, so this and any later repair count
+        // once — unchanged by dropping Checkout, because the de-duplication
+        // was always the id and never the container.
+        markSubscribeCheckoutPending(orgId ?? '')
+
+        // A card the issuer wants authenticated. The ONLY Stripe-rendered step
+        // left in this flow, and it belongs to the bank: `confirmPayment`
+        // shows the challenge and returns.
+        //
+        // Handled here rather than left to the webhook because a subscription
+        // stuck at `incomplete` is a customer who believes they subscribed and
+        // did not — the webhook mirrors whatever Stripe reports, and what
+        // Stripe reports until this runs is "not paid".
+        if (payload?.requiresAction && payload?.paymentClientSecret) {
+          const stripe = await getBrowserStripe()
+          if (!stripe) {
+            return void enqueueSnackbar(
+              'Your bank needs to confirm this payment, but the payment ' +
+                'library could not load. Nothing has been charged.',
+              { variant: 'warning', persist: false },
+            )
+          }
+          const outcome = await stripe.confirmPayment({
+            clientSecret: String(payload.paymentClientSecret),
+            redirect: 'if_required',
+          })
+          if (outcome.error) {
+            return void enqueueSnackbar(
+              outcome.error.message ??
+                'Your bank did not confirm the payment. Nothing has been charged.',
+              { variant: 'warning', persist: false },
+            )
+          }
+        }
+        if (payload?.declined) {
+          return void enqueueSnackbar(
+            'Your saved card was declined. Add another payment method and ' +
+              'try again — nothing has been charged.',
+            { variant: 'warning', persist: false },
+          )
+        }
+        enqueueSnackbar(
+          `You are on ${PLAN_LABELS[targetPlan] ?? targetPlan}. Your ` +
+            'workspace updates as soon as Stripe confirms the payment.',
+          { variant: 'success', persist: false },
+        )
       } catch (error) {
         console.error(error)
         enqueueSnackbar('Could not start checkout', {
@@ -1045,14 +1125,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       : 'No plan assigned yet — this organization resolves ' +
                         'to the Free limits.'}
                   </Typography>
-                  {cancelAtPeriodEnd ? (
-                    <Chip
-                      label="cancels at period end"
-                      size="small"
-                      color="warning"
-                      sx={{ mt: 1 }}
-                    />
-                  ) : null}
                   {/* A scheduled downgrade (AGL-1862) was invisible here
                       until now, so the plan card looked identical whether or
                       not the org was dropping a tier at renewal. */}
@@ -1070,19 +1142,22 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ mt: 1 }}
                     />
                   ) : null}
-                  {/* Renewal + addons (AGL-248). */}
-                  {(org?.subscription as any)?.currentPeriodEnd ? (
+                  {/* ONE sentence about the billing period (AGL-248).
+                      Previously three fragments — a "cancels at period end"
+                      chip and a hardcoded "Renews {date}" — which contradicted
+                      each other whenever a subscription was set to cancel.
+                      The truth table is in `subscriptionPeriodNotice`. */}
+                  {periodNotice.sentence ? (
                     <Typography
                       variant="caption"
-                      color="text.secondary"
+                      color={
+                        periodNotice.kind === 'renewing'
+                          ? 'text.secondary'
+                          : 'warning.main'
+                      }
                       sx={{ display: 'block', mt: 1 }}
                     >
-                      {`Renews ${new Date(
-                        (org?.subscription as any).currentPeriodEnd
-                          ?.toDate?.()
-                          ?.getTime?.() ??
-                          (org?.subscription as any).currentPeriodEnd,
-                      ).toLocaleDateString()}`}
+                      {periodNotice.sentence}
                     </Typography>
                   ) : null}
                   {can('billing.manage') ? (
@@ -1663,55 +1738,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 }]
               : []),
-            // In-page checkout (AGL-1132), directly above the grid whose
-            // button opened it — the one place the customer is already
-            // looking. It renders nothing unless the route handed back a
-            // client secret, so on the redirect path, which is still the
-            // default, this costs a null.
-            ...(checkoutClientSecret
-              ? [{
-                  size: { xs: 12 },
-                  children: (
-                    <EmbeddedCheckoutPanelComponent
-                      clientSecret={checkoutClientSecret}
-                      onClose={() => setCheckoutClientSecret(null)}
-                      /*
-                       * The Google Ads Subscribe conversion (AGL-1152).
-                       *
-                       * Reported HERE and not from the Stripe webhook, which
-                       * is where the `purchase` event goes: an Ads website
-                       * conversion is matched to the ad click through the
-                       * GCLID the tag holds in the browser, and a server has
-                       * neither. A webhook-reported one arrives unattributed
-                       * to the click that paid for it, which is the whole
-                       * thing being bought.
-                       *
-                       * ⚠️ Attribution only. Entitlements come from the
-                       * webhook and always will — this fires late, can be
-                       * missed entirely if the tab closes, and nothing may be
-                       * gated on it.
-                       *
-                       * `transaction_id` is the org, so this and the
-                       * pending-checkout repair above both firing counts
-                       * once. Unchanged by the move out of the dialog: the
-                       * de-duplication is the id, not the container.
-                       */
-                      onComplete={() => {
-                        reportPlatformAdConversion(
-                          'subscribe',
-                          platformAdvertisingAllowed(),
-                          { transactionId: orgId ?? undefined },
-                        )
-                        clearSubscribeCheckoutPending()
-                      }}
-                    />
-                  ),
-                }]
-              : []),
             {
               size: { xs: 12 },
               children: (
                 <BillingPlanCardsComponent
+                  subscribeBlockedReason={subscribeBlockedReason}
                   // The page's own defaulted value (AGL-1422), not the raw
                   // field (AGL-2156): a pre-billing workspace with no `plan`
                   // handed the grid `undefined`, which is `currentIndex = -1` —
