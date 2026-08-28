@@ -222,6 +222,13 @@ beforeEach(() => {
         amount_due: upcomingAmountDue,
         currency: 'usd',
         period_end: PERIOD_END,
+        // Invoice-level tax, deliberately present and deliberately much
+        // larger than the tax on any one proration: it covers the WHOLE
+        // upcoming invoice, next period's recurring charge included. A
+        // response that quotes this on a proration is reading the wrong
+        // field, and it has to be readable for that mistake to be catchable.
+        tax: 1064,
+        automatic_tax: { status: 'complete' },
         lines: { data: upcomingLines },
       }
     } else {
@@ -326,5 +333,74 @@ describe('plan-switch preview: the proration, not the next invoice', () => {
     expect(payload.prorationCents).toBe(0)
     expect(payload.amountDueCents).toBe(0)
     expect(upcomingRequested).toBe(false)
+  })
+})
+
+/**
+ * The tax on a change is the tax on the CHANGE.
+ *
+ * `automatic_tax` was already enabled on this preview — Stripe computed the
+ * tax every time and the response never carried it, so the confirm dialog
+ * quoted a bare proration as though a mid-cycle switch were untaxed.
+ *
+ * Carrying it introduces a second chance at the original bug, one field over:
+ * the invoice's own `tax` covers the whole upcoming invoice, so adding THAT to
+ * a proration overstates the change by a period's tax. These cases pin the
+ * attribution, which is the part a reader cannot verify by eye.
+ */
+describe('plan-switch preview: the tax on the proration, not on the invoice', () => {
+  it('sums the proration lines\' own tax, not the invoice total', async () => {
+    // The change costs $30.00 and carries $2.48 of tax. The invoice totals
+    // $129.00 and carries $10.64 — the number that must NOT come back.
+    upcomingLines = [
+      { proration: true, amount: 4500, tax_amounts: [{ amount: 372, taxability_reason: 'standard_rated' }] },
+      { proration: true, amount: -1500, tax_amounts: [{ amount: -124, taxability_reason: 'standard_rated' }] },
+      { proration: false, amount: 9900, tax_amounts: [{ amount: 816, taxability_reason: 'standard_rated' }] },
+    ]
+    const post = loadSubscription()
+    const payload = await (
+      await call(post, { action: 'preview', plan: 'pro', interval: 'month' })
+    ).json()
+    expect(payload.prorationCents).toBe(3000)
+    expect(payload.prorationTaxCents).toBe(248)
+    // THE REGRESSION: the invoice's own tax must never be the answer.
+    expect(payload.prorationTaxCents).not.toBe(1064)
+  })
+
+  it('carries whether Stripe finished computing it', async () => {
+    // A tax of 0 from `requires_location_inputs` is indistinguishable from a
+    // real zero unless the status travels with it.
+    upcomingLines = [{ proration: true, amount: 3000, tax_amounts: [] }]
+    const post = loadSubscription()
+    const payload = await (
+      await call(post, { action: 'preview', plan: 'pro', interval: 'month' })
+    ).json()
+    expect(payload.taxComplete).toBe(true)
+    expect(payload.prorationTaxCents).toBe(0)
+  })
+
+  it('carries Stripe\'s own reason, so a zero can be explained', async () => {
+    upcomingLines = [
+      { proration: true, amount: 3000, tax_amounts: [{ amount: 0, taxability_reason: 'reverse_charge' }] },
+    ]
+    const post = loadSubscription()
+    const payload = await (
+      await call(post, { action: 'preview', plan: 'pro', interval: 'month' })
+    ).json()
+    expect(payload.taxReason).toBe('reverse_charge')
+    expect(payload.prorationTaxCents).toBe(0)
+  })
+
+  it('CONTROL — a taxed proration really does report a non-zero tax', async () => {
+    // Without this, a route that always returned 0 would satisfy every
+    // "not the invoice total" assertion above.
+    upcomingLines = [
+      { proration: true, amount: 3000, tax_amounts: [{ amount: 248, taxability_reason: 'standard_rated' }] },
+    ]
+    const post = loadSubscription()
+    const payload = await (
+      await call(post, { action: 'preview', plan: 'pro', interval: 'month' })
+    ).json()
+    expect(payload.prorationTaxCents).toBeGreaterThan(0)
   })
 })

@@ -872,12 +872,50 @@ async function handler(request: Request): Promise<Response> {
     // exactly as `/api/billing/addons` derives it, because both routes are
     // previewing the same Stripe mechanic on the same subscription and the
     // two answering differently is indistinguishable from a pricing bug.
-    const prorationCents = (preview?.lines?.data ?? [])
-      .filter((line: any) => line?.proration)
-      .reduce((sum: number, line: any) => sum + Number(line?.amount ?? 0), 0)
+    const prorationLines = (preview?.lines?.data ?? []).filter(
+      (line: any) => line?.proration,
+    )
+    const prorationCents = prorationLines.reduce(
+      (sum: number, line: any) => sum + Number(line?.amount ?? 0),
+      0,
+    )
+    // The TAX ON THE CHANGE, and only on the change.
+    //
+    // `automatic_tax` was already enabled on this preview, so Stripe computed
+    // the tax — the response simply never carried it, and the confirm dialog
+    // quoted a bare proration as though a mid-cycle switch were untaxed. A
+    // charge quoted without its tax is an incomplete number presented as
+    // final, which is the same failure the plan quote was fixed for.
+    //
+    // Summed from the PRORATION LINES' own `tax_amounts`, never from the
+    // invoice's `tax`: that figure covers the whole upcoming invoice
+    // including next period's recurring charge, so adding it to a proration
+    // would overstate the change by a period's tax — the proration bug again,
+    // one field over.
+    const prorationTaxCents = prorationLines.reduce(
+      (sum: number, line: any) =>
+        sum +
+        (line?.tax_amounts ?? []).reduce(
+          (lineSum: number, tax: any) => lineSum + Number(tax?.amount ?? 0),
+          0,
+        ),
+      0,
+    )
     return Response.json({
       amountDueCents: preview?.amount_due ?? 0,
       prorationCents,
+      prorationTaxCents,
+      // Whether Stripe finished computing it. `requires_location_inputs`
+      // yields a tax of 0 that is indistinguishable from a real zero unless
+      // the status travels with it.
+      taxComplete: preview?.automatic_tax?.status === 'complete',
+      // Stripe's own verdict for the change's tax, so a zero can be explained
+      // rather than presented bare.
+      taxReason:
+        prorationLines
+          .flatMap((line: any) => line?.tax_amounts ?? [])
+          .find((tax: any) => tax?.taxability_reason)?.taxability_reason ??
+        null,
       currency: preview?.currency ?? 'usd',
       periodEnd: preview?.period_end
         ? new Date(preview.period_end * 1000).toISOString()

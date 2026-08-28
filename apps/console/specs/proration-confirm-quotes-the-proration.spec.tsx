@@ -140,3 +140,84 @@ describe('the third place the same claim lived', () => {
     expect(source).toContain('next invoice')
   })
 })
+
+/**
+ * A mid-cycle change is a charge, so it is quoted WITH its tax.
+ *
+ * `automatic_tax` was already enabled on the plan-switch preview — Stripe
+ * computed the tax on every one of these and the response simply never carried
+ * it. The dialog therefore quoted a bare proration as though a mid-cycle switch
+ * were untaxed: the same failure as a plan total that omits tax, on the same
+ * endpoint as the proration bug above.
+ *
+ * The tax must come from the PRORATION LINES, never from the invoice's `tax`:
+ * that figure covers the whole upcoming invoice including next period's
+ * recurring charge, so adding it to a proration overstates the change by a
+ * period's tax — the proration bug again, one field over.
+ */
+describe('the tax on a mid-cycle change', () => {
+  const TAXED = {
+    prorationCents: 3000,
+    prorationTaxCents: 248,
+    taxComplete: true,
+    taxReason: 'standard_rated',
+    amountDueCents: 12900,
+    currency: 'usd',
+  }
+
+  it('is quoted, not omitted', () => {
+    const quote = prorationQuote(TAXED, EFFECTIVE)
+    expect(quote).toContain('30.00')
+    expect(quote).toContain('2.48')
+  })
+
+  it('never adds the WHOLE invoice’s tax to a proration', () => {
+    // The invoice totals $129.00; its tax would be far larger than the tax on
+    // a $30 change. A quote carrying that figure is reading the wrong field.
+    const quote = prorationQuote({ ...TAXED, prorationTaxCents: 248 }, EFFECTIVE)
+    expect(quote).not.toContain('129')
+    expect(quote).not.toContain('10.64')
+  })
+
+  it('explains a zero rather than printing "plus $0.00 tax"', () => {
+    // Reverse charge is the case a VAT-registered business is checking for,
+    // and "$0.00 tax" tells them nothing about whether it applied.
+    const quote = prorationQuote(
+      { ...TAXED, prorationTaxCents: 0, taxReason: 'reverse_charge' },
+      EFFECTIVE,
+    )
+    expect(quote).not.toContain('$0.00')
+    expect(quote.toLowerCase()).toContain('reverse charge')
+  })
+
+  it('says the total is not final when Stripe could not compute the tax', () => {
+    // `requires_location_inputs` yields a tax of 0 that is indistinguishable
+    // from a real zero unless the status travels with it.
+    const quote = prorationQuote(
+      { ...TAXED, prorationTaxCents: 0, taxComplete: false },
+      EFFECTIVE,
+    )
+    expect(quote.toLowerCase()).toContain('billing address')
+    expect(quote).not.toContain('$0.00')
+  })
+
+  it('CONTROL — it reuses taxExplanation rather than growing a second vocabulary', () => {
+    // Two sets of tax sentences for one fact is how they drift apart. The
+    // reverse-charge wording here must be the SAME string the plan quote uses.
+    const {
+      taxExplanation,
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+    } = require('../utils/tax-explanation')
+    const shared = taxExplanation({
+      taxComplete: true,
+      taxCents: 0,
+      taxReason: 'reverse_charge',
+    }).sentence
+    expect(
+      prorationQuote(
+        { ...TAXED, prorationTaxCents: 0, taxReason: 'reverse_charge' },
+        EFFECTIVE,
+      ),
+    ).toContain(shared)
+  })
+})
