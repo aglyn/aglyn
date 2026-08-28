@@ -69,10 +69,15 @@ export function CommerceGlanceCard(props: { hostId: string }) {
     const orders = [...(orderDocs ?? [])].sort(
       (a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0),
     )
+    // `cancelled`, two Ls — the spelling `OrderStatus` persists. The American
+    // one never matches a stored status, so the test silently passes every
+    // cancelled order through and books it as revenue. The value is a
+    // PERSISTED enum and is not the place to apply the American-spelling rule;
+    // the comparison has to follow the data.
     const recentWindow = orders.filter(
       (order) =>
         (order.createdAtMs ?? 0) >= since &&
-        order.status !== 'canceled' &&
+        order.status !== 'cancelled' &&
         order.status !== 'refunded',
     )
     // The legacy flat `amountCents` as the fallback, matching every other
