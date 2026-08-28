@@ -18,8 +18,10 @@
 import type { EmailDeliveryEvent } from '@aglyn/shared-util-email'
 import {
   eraseEmailDeliveries,
+  eraseEmailDeliveriesForAddresses,
   importEmailDeliveryHistory,
   readEmailDeliveries,
+  readEmailDeliveryErasure,
   readEmailDeliveryHistory,
   recordEmailDeliveryEvent,
   recordEmailDeliverySnapshot,
@@ -111,6 +113,11 @@ function fakeDeliveryFirestore() {
       exists: store.has(path),
       id: path.split('/').pop(),
       data: () => store.get(path),
+      // Real snapshots carry `get(field)` alongside `data()`, and the
+      // tombstone reader uses it. A double offering only `data()` would throw
+      // on the one read that proves an erasure was recorded — which reads as
+      // a broken spec rather than the missing behaviour it is.
+      get: (field: string) => store.get(path)?.[field],
     }),
     set: async (update: Record<string, any>) => {
       store.set(path, applyWrite(store.get(path) ?? {}, update))
@@ -427,6 +434,99 @@ describe('eraseEmailDeliveries', () => {
   it('erases nothing, and reports nothing, for an account with no address', async () => {
     const firestore = fakeDeliveryFirestore()
     expect(await eraseEmailDeliveries(null, firestore)).toBe(0)
+  })
+})
+
+/*==========================================
+ * THE SWEEP ACROSS AN ACCOUNT'S ADDRESSES.
+ *
+ * What this function does with a set of addresses. THE RULE ITSELF — that an
+ * address a second account also holds is left intact, and why — is specified
+ * in `account-addresses.spec.ts`, end to end from the resolver that decides
+ * `shared`. Repeating it here would be two places to keep a policy in step.
+ *
+ * Every assertion is on the DOCUMENTS — the messages that survive or do not,
+ * and the tombstone — never on rendered output. The card is one more reader
+ * of these documents; a spec that drove the card would pass on a page that
+ * renders correctly over data that is wrong.
+ *=========================================*/
+
+describe('eraseEmailDeliveriesForAddresses', () => {
+  const held = (address: string, shared = false) => ({ address, shared })
+
+  it('erases an address only this account holds, and tombstones it', async () => {
+    // CONTROL. If the contested-address cases ever pass because the sweep
+    // reached nothing at all, this fails first and says so: same fixture,
+    // same double, and it asserts the sweep DOES erase.
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ providerMessageId: 'a' }), firestore)
+    await recordEmailDeliveryEvent(event({ providerMessageId: 'b' }), firestore)
+
+    const result = await eraseEmailDeliveriesForAddresses(
+      [held('person@example.com')],
+      firestore,
+    )
+
+    expect(result.removed).toBe(2)
+    expect(result.addresses).toEqual(['person@example.com'])
+    expect(result.contestedAddresses).toEqual([])
+    expect(
+      await readEmailDeliveries('person@example.com', { firestore }),
+    ).toEqual([])
+
+    // The tombstone: what the ordinary case leaves behind so no reader meets
+    // a blank table and concludes we never wrote to them.
+    const tombstone = await readEmailDeliveryErasure(
+      'person@example.com',
+      firestore,
+    )
+    expect(tombstone).not.toBeNull()
+    expect(tombstone?.count).toBe(2)
+  })
+
+  it('erases the addresses it can decide about even when another is contested', async () => {
+    // A contested address must not turn the sweep into a no-op. `eraseUser`
+    // refuses the whole run before reaching here, but the guarantee belongs
+    // to this function too: it stops at the contested address, not at the
+    // first one.
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ to: 'role@example.com' }), firestore)
+    await recordEmailDeliveryEvent(
+      event({ to: 'person@example.com' }),
+      firestore,
+    )
+
+    const result = await eraseEmailDeliveriesForAddresses(
+      [held('role@example.com', true), held('person@example.com')],
+      firestore,
+    )
+
+    expect(result.contestedAddresses).toEqual(['role@example.com'])
+    expect(result.addresses).toEqual(['person@example.com'])
+    expect(result.removed).toBe(1)
+    expect(
+      await readEmailDeliveries('role@example.com', { firestore }),
+    ).toHaveLength(1)
+    expect(
+      await readEmailDeliveries('person@example.com', { firestore }),
+    ).toEqual([])
+  })
+
+  it('tombstones an erased address that held nothing', async () => {
+    // An address swept and found empty is still covered by the request, and a
+    // later import must not be able to refill it silently.
+    const firestore = fakeDeliveryFirestore()
+
+    const result = await eraseEmailDeliveriesForAddresses(
+      [held('person@example.com')],
+      firestore,
+    )
+
+    expect(result.removed).toBe(0)
+    expect(result.addresses).toEqual(['person@example.com'])
+    expect(
+      await readEmailDeliveryErasure('person@example.com', firestore),
+    ).not.toBeNull()
   })
 })
 

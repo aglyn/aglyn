@@ -505,17 +505,37 @@ describe('erasure reaches every address', () => {
   })
 })
 
-describe('the shared-address rule', () => {
-  it('erases the mail and leaves a tombstone the other account can read', async () => {
-    const firestore = fakeFirestore()
-    await sendTo(firestore, 'shared@example.test', 'msg_shared')
+/*==========================================
+ * THE SHARED-ADDRESS RULE.
+ *
+ * The delivery log is keyed by ADDRESS, so an address two accounts hold has
+ * ONE set of rows standing as two people's answer to "what did you send me".
+ * Erasing them honours one request and destroys a second person's history for
+ * an address they legitimately hold.
+ *
+ * Nothing readable here separates the two shapes it could be — one human with
+ * two accounts (the ordinary live case: a provider address that is another
+ * account's primary) or a role mailbox two people share. The data records
+ * that two account records name one address, and nothing about the humans. So
+ * the sweep does not choose: it erases what it can decide about, reports the
+ * rest as CONTESTED, and `eraseUser` refuses the whole run on that.
+ *=========================================*/
 
-    // Held by this account through a provider, and by another as its primary.
+describe('the shared-address rule', () => {
+  /** Held by this account through a provider, and by another as its primary. */
+  const heldByAnotherAccount = () =>
     mockFindUserByEmailAcrossPools.mockImplementation(async (address: string) =>
       address === 'shared@example.test'
         ? { record: { uid: 'uid_other' }, tenantId: null }
         : null,
     )
+
+  it('leaves a two-holder address intact rather than erasing the other account’s mail', async () => {
+    const firestore = fakeFirestore()
+    await sendTo(firestore, 'shared@example.test', 'msg_shared')
+    await sendTo(firestore, 'primary@example.test', 'msg_primary')
+    heldByAnotherAccount()
+
     const set = await resolveAccountAddresses({
       uid: 'uid_1',
       record: {
@@ -530,14 +550,77 @@ describe('the shared-address rule', () => {
       firestore,
     )
 
-    // The DATA GOES. Withholding it would leave a subject's mail intact after
-    // an erasure reported complete.
-    expect(firestore.messagesFor('shared@example.test')).toEqual([])
-    expect(result.sharedAddresses).toEqual(['shared@example.test'])
+    // THE ASSERTION THAT BITES: destroying the second holder's mail is the
+    // one outcome here with no remedy, and an erasure request against this
+    // account never authorized it.
+    expect(firestore.messagesFor('shared@example.test')).toEqual(['msg_shared'])
+    expect(result.contestedAddresses).toEqual(['shared@example.test'])
 
-    // And the other account's card can say WHY it is empty, rather than
-    // rendering the blank table this whole surface exists to prevent.
-    const tombstone = firestore.tombstoneFor('shared@example.test')
+    // The account's OWN address still goes. A contested address must not turn
+    // the sweep into a no-op, which would be the other failure: mail left
+    // behind under an erasure reported complete.
+    expect(firestore.messagesFor('primary@example.test')).toEqual([])
+    expect(result.addresses).toEqual(['primary@example.test'])
+    expect(result.removed).toBe(1)
+  })
+
+  it('writes no tombstone over rows it left in place', async () => {
+    const firestore = fakeFirestore()
+    await sendTo(firestore, 'shared@example.test', 'msg_shared')
+    heldByAnotherAccount()
+
+    const set = await resolveAccountAddresses({
+      uid: 'uid_1',
+      record: { email: 'shared@example.test' },
+      detectShared: true,
+      firestore,
+    })
+    await eraseEmailDeliveriesForAddresses(set.addresses, firestore)
+
+    // A tombstone means "the records here were removed under an erasure
+    // request". Over rows still present it is confidently wrong, which is
+    // worse than the blank table it exists to prevent: it would tell the
+    // second holder their mail is gone while it sits underneath.
+    expect(firestore.tombstoneFor('shared@example.test')).toBeUndefined()
+  })
+
+  it('leaves the other holder’s card reading their real mail, not a blank table', async () => {
+    const firestore = fakeFirestore()
+    await sendTo(firestore, 'shared@example.test', 'msg_shared')
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'shared@example.test', shared: true }],
+      firestore,
+    )
+
+    // Read the way the staff route reads it. Three states render as an empty
+    // table and are kept apart; this must be none of them.
+    const history = await readEmailDeliveryHistoryForAddresses(
+      ['shared@example.test'],
+      { firestore },
+    )
+    expect(history.rows.map((row) => row.messageId)).toEqual(['msg_shared'])
+    expect(history.lookupFailed).toBe(false)
+    expect(history.erasures['shared@example.test']).toBeUndefined()
+  })
+
+  it('still tombstones a single-holder address, so its reader is never blank', async () => {
+    // The tombstone mechanism is unchanged for every address that IS erased —
+    // including ones merely BELIEVED unshared, since `shared: false` is only
+    // ever the absence of evidence.
+    const firestore = fakeFirestore()
+    await sendTo(firestore, 'solo@example.test', 'msg_solo')
+
+    const set = await resolveAccountAddresses({
+      uid: 'uid_1',
+      record: { email: 'solo@example.test' },
+      detectShared: true,
+      firestore,
+    })
+    await eraseEmailDeliveriesForAddresses(set.addresses, firestore)
+
+    expect(firestore.messagesFor('solo@example.test')).toEqual([])
+    const tombstone = firestore.tombstoneFor('solo@example.test')
     expect(tombstone?.erasedCount).toBe(1)
     expect(typeof tombstone?.erasedAtMs).toBe('number')
     // ⚠️ The tombstone must not retain what the erasure destroyed.
@@ -546,24 +629,13 @@ describe('the shared-address rule', () => {
       'erasedCount',
       'updatedAt',
     ])
-  })
-
-  it('reports the erasure to a reader of the surviving account', async () => {
-    const firestore = fakeFirestore()
-    await sendTo(firestore, 'shared@example.test', 'msg_shared')
-    await eraseEmailDeliveriesForAddresses(
-      [{ address: 'shared@example.test', shared: true }],
-      firestore,
-    )
 
     const history = await readEmailDeliveryHistoryForAddresses(
-      ['shared@example.test'],
+      ['solo@example.test'],
       { firestore },
     )
     expect(history.rows).toEqual([])
-    // Three states that all render as an empty table, kept apart.
-    expect(history.lookupFailed).toBe(false)
-    expect(history.erasures['shared@example.test']?.count).toBe(1)
+    expect(history.erasures['solo@example.test']?.count).toBe(1)
   })
 
   it('CONTROL: an untouched address carries no tombstone', async () => {

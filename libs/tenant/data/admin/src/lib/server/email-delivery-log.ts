@@ -571,41 +571,66 @@ export async function readEmailDeliveryHistoryForAddresses(
 
 /** What one multi-address erasure did. */
 export interface EmailDeliveryErasureResult {
-  /** Messages removed, across every address. */
+  /** Messages removed, across every address that was erased. */
   removed: number
-  /** The addresses swept. */
+  /** The addresses actually erased. Tombstoned, one document each. */
   addresses: string[]
   /**
-   * An address the account holds that ANOTHER account also holds.
+   * Addresses left INTACT because another account is also known to hold them.
    *
-   * Reported rather than skipped — see {@link eraseEmailDeliveriesForAddresses}
-   * for why the data still goes.
+   * Never empty and ignorable: a caller erasing an account has to treat a
+   * non-empty list as an erasure it did not finish. See
+   * {@link eraseEmailDeliveriesForAddresses}.
    */
-  sharedAddresses: string[]
+  contestedAddresses: string[]
 }
 
 /**
- * Erase the delivery log for every address an account holds.
+ * Erase the delivery log for every address an account holds, except the ones
+ * a second account also holds.
  *
  * ## The shared-address decision
  *
- * The log describes an ADDRESS, not an account. When two accounts hold one
- * address the mail went to one mailbox, and in every shape we can construct
- * — including the live one, where an account's federated provider address is
- * another account's primary — that mailbox is one human.
+ * The log describes an ADDRESS, not an account. Where one account holds an
+ * address, erasing it is simply erasing the subject's mail, and this sweeps
+ * it.
  *
- * So the data GOES. Withholding it would leave a subject's mail intact after
- * an erasure we reported as complete, which is both the worse failure and the
- * legally sharper one. What must not happen is the other account's card
- * silently going blank, because "no mail recorded" is exactly the reading
- * this whole surface exists to prevent — so a tombstone replaces the rows.
+ * Where TWO accounts hold one address, the same rows are two people's answer
+ * to "what did you send me", and the two readings are incompatible:
  *
- * ⚠️ The tombstone is written for EVERY address, not only shared ones. We
- * cannot reliably tell which are shared: there is no lookup for an account
+ *  - **One human, two accounts** — the ordinary live shape, an account whose
+ *    federated provider address is another account's primary. Erasing is
+ *    right; the mail is the requester's.
+ *  - **A genuinely shared mailbox** — `billing@`, `support@`, a role account
+ *    two different people hold. Erasing destroys the second person's delivery
+ *    history for an address they legitimately hold, and they asked for
+ *    nothing.
+ *
+ * ⛔ **Nothing here can tell those apart.** The difference is a fact about the
+ * humans, and the data holds no fact about the humans — only that two account
+ * records name one address. So this function does not choose. It erases what
+ * it can decide about and reports the rest as CONTESTED, and `eraseUser`
+ * refuses the whole erasure rather than half-perform one: destroying the
+ * second party's mail has no remedy, and quietly leaving it while reporting
+ * the erasure complete is the gap this area exists to close. Refusing is the
+ * only outcome that is neither, and it is reversible — a human decides which
+ * reading applies, detaches the address or confirms the account, and the
+ * erasure runs.
+ *
+ * ⚠️ A contested address is not tombstoned. The tombstone means "the records
+ * here were removed under an erasure request", and writing one over rows that
+ * are still present would tell the second holder their mail is gone while it
+ * sits underneath — a worse misreading than the blank table, because it is
+ * confidently wrong rather than merely empty. Nothing was removed, so their
+ * card renders their mail exactly as before.
+ *
+ * ⚠️ `shared` is one-directional evidence. True proves a second holder; false
+ * only means none was found, because there is no lookup for an account
  * holding an address through a federated provider (see
- * `account-addresses.ts`), so "not shared" is only ever the absence of
- * evidence. Writing it unconditionally costs one small document and removes
- * the case where the blank table comes back through the gap in the probe.
+ * `account-addresses.ts`). So the tombstone is still written for EVERY
+ * address that IS erased, not only ones believed unshared — it costs one
+ * small document and closes the case where a second holder exists behind the
+ * gap in the probe and would otherwise meet a blank table.
  *
  * ⛔ Only addresses the account HOLDS, resolved through the one resolver. An
  * address arriving here that the account does not hold erases a stranger's
@@ -616,16 +641,22 @@ export async function eraseEmailDeliveriesForAddresses(
   firestore?: any,
 ): Promise<EmailDeliveryErasureResult> {
   const db = firestore ?? defaultFirestore()
-  const swept: string[] = []
-  const sharedAddresses: string[] = []
+  const erased: string[] = []
+  const contestedAddresses: string[] = []
   let removed = 0
 
   for (const entry of addresses) {
     const key = emailSuppressionKey(entry.address)
     if (!key) continue
-    swept.push(entry.address)
-    if (entry.shared === true) sharedAddresses.push(entry.address)
 
+    // Before any write for this address, so a contested one is untouched
+    // rather than erased-then-regretted. There is no undo below this line.
+    if (entry.shared === true) {
+      contestedAddresses.push(entry.address)
+      continue
+    }
+
+    erased.push(entry.address)
     const count = await eraseEmailDeliveries(entry.address, db).catch(() => 0)
     removed += count
 
@@ -649,7 +680,7 @@ export async function eraseEmailDeliveriesForAddresses(
     }
   }
 
-  return { removed, addresses: swept, sharedAddresses }
+  return { removed, addresses: erased, contestedAddresses }
 }
 
 /**

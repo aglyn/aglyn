@@ -130,16 +130,28 @@ async function handler(request: Request): Promise<Response> {
       }
       const result = await eraseUser(uid)
       if (!result.ok) {
+        // Both refusals are 409, not 404: the account exists and nothing was
+        // erased, which is a conflict to resolve rather than a missing thing.
+        // `shared-address` means a second account holds one of this account's
+        // addresses, so erasing its mail would destroy that account's history
+        // too — a decision about two real customers, which `eraseUser` hands
+        // back rather than making.
+        const conflict =
+          result.skippedReason === 'owns-orgs' ||
+          result.skippedReason === 'shared-address'
         return Response.json(
           {
             error:
               result.skippedReason === 'owns-orgs'
                 ? 'This person owns workspaces — transfer ownership or delete them first'
-                : 'No such account',
+                : result.skippedReason === 'shared-address'
+                  ? 'Another account holds one of this person’s email addresses — erasing would delete their mail too'
+                  : 'No such account',
             skippedReason: result.skippedReason,
             blockers: result.blockers,
+            sharedAddresses: result.sharedAddresses,
           },
-          { status: result.skippedReason === 'owns-orgs' ? 409 : 404 },
+          { status: conflict ? 409 : 404 },
         )
       }
       await firebaseAdmin

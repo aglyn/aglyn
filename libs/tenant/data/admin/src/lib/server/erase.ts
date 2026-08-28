@@ -27,6 +27,7 @@ import { authForPool, findUserByUidAcrossPools } from './auth-pools'
 import { eraseEmailDeliveriesForAddresses } from './email-delivery-log'
 import {
   type AccountAddressSet,
+  type AccountAddressSource,
   resolveAccountAddresses,
 } from './account-addresses'
 import { EMAIL_IDENTITY_INDEX_COLLECTION } from './account-emails'
@@ -1320,12 +1321,55 @@ export function userErasureBlockers(
     }))
 }
 
+/**
+ * An address this account holds that a SECOND account also holds, which stops
+ * the erasure until a human decides what it is.
+ *
+ * ⛔ Carries no address and no other uid. The whole question is about a second
+ * customer, and a refusal that names them — or hands back an address in the
+ * clear, which `emailDeliveries` is hashed precisely to avoid keeping —
+ * discloses the person the refusal exists to protect. The staff account page
+ * already lists this account's own addresses and marks the shared ones, so
+ * the operator has the specifics without this record carrying them.
+ */
+export interface SharedAddressBlocker {
+  /** `sha256(address)` — matches the delivery log's own key. Not readable. */
+  key: string
+  /** Where this account got it: `primary`, `provider`, `stored`. */
+  sources: AccountAddressSource[]
+}
+
+/**
+ * Which of an account's addresses a second account is also known to hold.
+ *
+ * Pure, and separate from the sweep, for the same reason `userErasureBlockers`
+ * is: the policy is the arguable part. The mechanical part is deleting rows.
+ *
+ * ⚠️ `shared` is evidence in ONE direction. True proves a second holder;
+ * false only means none was found, because no lookup exists for an account
+ * holding an address through a federated provider. So this finds every case
+ * we can SEE and cannot promise there is no other — which is exactly why the
+ * sweep still tombstones every address it erases.
+ */
+export function sharedAddressBlockers(
+  set: Pick<AccountAddressSet, 'addresses'>,
+): SharedAddressBlocker[] {
+  return set.addresses
+    .filter((entry) => entry.shared === true)
+    .map((entry) => ({ key: entry.key, sources: [...entry.sources] }))
+}
+
 export interface EraseUserResult {
   ok: boolean
   /** Set when the account was NOT erased. */
-  skippedReason?: 'not-found' | 'owns-orgs'
+  skippedReason?: 'not-found' | 'owns-orgs' | 'shared-address'
   /** Orgs that must be handed over or deleted first. */
   blockers?: UserErasureBlocker[]
+  /**
+   * Addresses a second account also holds. Set with
+   * `skippedReason: 'shared-address'`, and NOTHING was erased.
+   */
+  sharedAddresses?: SharedAddressBlocker[]
   /** What was actually removed, for the audit row and the caller's message. */
   deleted?: {
     subcollections: string[]
@@ -1365,8 +1409,14 @@ export interface EraseUserResult {
       resolved: number
       /** Addresses the delivery sweep actually visited. */
       erased: number
-      /** How many of those another account also holds. */
-      shared: number
+      /**
+       * Addresses left INTACT because a second account also holds them.
+       *
+       * Always 0 on a successful erasure: a contested address refuses the
+       * whole run before anything is destroyed. It is reported so the audit
+       * row states that rather than leaving a reader to infer it.
+       */
+      contested: number
       incomplete: boolean
     }
   }
@@ -1386,6 +1436,9 @@ export interface EraseUserResult {
  *
  * Order matters:
  *   1. Refuse if they own an org — see `userErasureBlockers`.
+ *   1b. Refuse if a second account holds one of their addresses — see
+ *      `sharedAddressBlockers`. Both refusals come before any delete, so a
+ *      blocked erasure leaves the account exactly as it was.
  *   2. Remove their membership from every org they belong to, so no roster
  *      keeps their email and no host projection keeps granting them access.
  *      This runs BEFORE the profile delete: a half-erased account that still
@@ -1464,6 +1517,44 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
     incomplete: true,
   }))
 
+  /*
+   * A SECOND ACCOUNT HOLDS ONE OF THESE ADDRESSES — REFUSE, HERE.
+   *
+   * The delivery log is filed under the address, so an address two accounts
+   * hold has one set of rows answering "what did you send me" for two account
+   * records. Whether that is one human with two accounts (the ordinary live
+   * shape — a federated provider address that is another account's primary)
+   * or a genuinely shared role mailbox like `billing@` decides whether
+   * erasing those rows honours a request or destroys a stranger's history,
+   * and NOTHING readable here distinguishes them. The data records that two
+   * accounts name one address; it records nothing about the humans.
+   *
+   * Both automatic answers are unacceptable, and they fail differently:
+   * erasing the second party's mail cannot be undone, while leaving it and
+   * reporting the erasure complete is the gap this whole area was opened to
+   * close. So neither is chosen — the erasure stops and says why.
+   *
+   * BEFORE the membership sweep, deliberately. A refusal raised after the
+   * account is half-deleted is not a refusal, and the uid is the only handle
+   * a human has to act on this: erase the auth record and there is no longer
+   * anything to look at, no way to see which address was contested, and no
+   * way to run the erasure once the question is settled. Refusing while the
+   * account is whole is the only version of this that stays reversible.
+   *
+   * The remedy is ordinary staff work, not a special path: decide whether the
+   * accounts are one person, detach the address from this one or merge them,
+   * then run the erasure again. `/admin/users/[uid]` already lists this
+   * account's addresses and marks the shared ones.
+   */
+  const contested = sharedAddressBlockers(addressSet)
+  if (contested.length) {
+    return {
+      ok: false,
+      skippedReason: 'shared-address',
+      sharedAddresses: contested,
+    }
+  }
+
   // Memberships first — a roster row carries their email and a host
   // projection carries their access, and both outlive the profile doc.
   for (const candidate of candidates) {
@@ -1527,8 +1618,8 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   let emailDeliveries = 0
   /** Addresses actually swept — not the same as the ones we hold, on failure. */
   let erasedAddressCount = 0
-  /** How many of them another account also holds. */
-  let sharedAddressCount = 0
+  /** Addresses left intact because a second account also holds them. */
+  let contestedAddressCount = 0
   /** Identity-index rows released, one per address that had one. */
   let emailIdentityIndex = 0
   try {
@@ -1557,7 +1648,7 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
       ).catch(() => null)
       emailDeliveries = sweep?.removed ?? 0
       erasedAddressCount = sweep?.addresses.length ?? 0
-      sharedAddressCount = sweep?.sharedAddresses.length ?? 0
+      contestedAddressCount = sweep?.contestedAddresses.length ?? 0
 
       /*
        * `emailIdentityIndex/{address}` — the SAME omission one collection
@@ -1616,7 +1707,7 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   const addressSweep = {
     resolved: addressSet.addresses.length,
     erased: erasedAddressCount,
-    shared: sharedAddressCount,
+    contested: contestedAddressCount,
     incomplete: addressSet.incomplete,
   }
 

@@ -513,6 +513,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
           {
             skippedReason: body?.skippedReason,
             blockers: body?.blockers,
+            sharedAddresses: body?.sharedAddresses,
             status: response.status,
           },
         )
