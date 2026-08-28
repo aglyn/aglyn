@@ -176,22 +176,61 @@ export function StaffEmailMessageDialog({
   userRef.current = user
   const signedIn = Boolean(user)
 
+  /*
+   * ONE REQUEST PER OPENING, BECAUSE EACH REQUEST IS AN AUDITED ACCESS.
+   *
+   * Reading a message writes an `adminAudit` row. That makes this fetch
+   * unlike any other read in the console: firing it twice does not merely
+   * waste a round trip, it records a second access to somebody's mail that
+   * nobody performed. React runs an effect twice on mount under
+   * StrictMode — on in every non-production build — and the cleanup below
+   * only discards the RESPONSE, so both requests still reached the server
+   * and both were logged.
+   *
+   * The in-flight request is therefore held by message id and REUSED rather
+   * than re-issued. A second run of the effect for the same id awaits the
+   * same promise, so one opening is one request and the second run still
+   * receives the body — a guard that merely skipped the duplicate would
+   * leave the dialog spinning, because the first run's result was already
+   * disowned by its own cleanup.
+   *
+   * Cleared when the dialog closes (`messageId` goes null), because opening
+   * the same message again IS a second access and must be recorded as one.
+   */
+  const inFlightRef = useRef<{
+    id: string
+    request: Promise<{ ok: boolean; payload: any }>
+  } | null>(null)
+  if (!messageId) inFlightRef.current = null
+
   useEffect(() => {
     if (!messageId || !signedIn) return
     let active = true
     setLoading(true)
     setError(null)
     setMessage(null)
+    if (inFlightRef.current?.id !== messageId) {
+      inFlightRef.current = {
+        id: messageId,
+        request: (async () => {
+          const idToken = await (userRef.current as any)?.getIdToken?.()
+          const response = await fetch(
+            `/api/admin/emails/message?id=${encodeURIComponent(messageId)}`,
+            { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+          )
+          return {
+            ok: response.ok,
+            payload: await response.json().catch(() => ({})),
+          }
+        })(),
+      }
+    }
+    const pending = inFlightRef.current.request
     void (async () => {
       try {
-        const idToken = await (userRef.current as any)?.getIdToken?.()
-        const response = await fetch(
-          `/api/admin/emails/message?id=${encodeURIComponent(messageId)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
-        )
-        const payload = await response.json().catch(() => ({}))
+        const { ok, payload } = await pending
         if (!active) return
-        if (!response.ok) {
+        if (!ok) {
           // The endpoint's own message. "Set RESEND_READ_API_KEY" and "the
           // provider no longer holds this message" are different problems
           // with different remedies, and a generic failure hides which.
