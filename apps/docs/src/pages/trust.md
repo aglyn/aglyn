@@ -27,7 +27,7 @@ questionnaire three weeks in.
 | **Formal 24/7 on-call rotation** | No. Support response targets by plan are documented in [Support & community](/workspace-and-billing/support-and-community). |
 
 Aglyn is a small team. Several of the above are a function of size rather than
-of intent, and we would rather say so than imply an assurance programme that
+of intent, and we would rather say so than imply an assurance program that
 does not exist.
 
 ## Where data lives
@@ -36,8 +36,10 @@ does not exist.
 | --- | --- |
 | **Google Cloud / Firebase** | Primary datastore (Firestore), authentication, file storage. US region. |
 | **Google reCAPTCHA** | App Check attestation for Firebase client SDK traffic (invisible v3). Not a user-facing challenge, and not used on site forms. |
-| **Google Analytics** | Product and site analytics for `aglyn.com`, the console and these docs — a single GA4 property. Configured for measurement only: Google Signals off, ads personalization disabled in every region, no user-provided data collection, email redaction on, 14-month retention. The three advertising consent signals (`ad_storage`, `ad_user_data`, `ad_personalization`) are denied from the first hit on all three surfaces, and every event we send server-side asserts `non_personalized_ads`. Those denials are worth separating: on the console and on these docs they are typed constants, so widening them takes a code change; on `aglyn.com` they follow the site's own consent configuration, and were last checked against the live page on 20 August 2026. The remaining settings — Signals, ads personalization, user-provided data collection, email redaction, the retention period — are GA property configuration, set and verified by hand in the Google Analytics console on 14 August 2026. Nothing in our build re-checks those five, so read them as a statement about how the property was configured rather than as a control we can demonstrate on demand. Whether this property is linked to Google Ads is stated in the row below, so there is one place to change and not two. |
-| **Google Ads** | Advertising for Aglyn's own site: buying clicks to `aglyn.com` and, once conversion measurement is turned on, counting which of them become signups. It processes no customer data — this is an advertising account we hold, not a subprocessor in the DPA sense, and it is listed here because a reviewer should not have to discover it somewhere else. As configured today: no Aglyn surface loads a Google Ads tag, the account is not linked to the GA4 property above, and enhanced conversions is off. We expect all three to change, which is why they are written as current configuration and not as an assurance. **This row used to end with an ordering argument that no longer holds, and replacing it rather than patching it is the honest move.** It said the [Privacy Policy](https://aglyn.com/legal/privacy) stated we use no advertising technology, and that the policy therefore had to be republished before any tag shipped. That republication has since happened: §3 of the published policy now describes cross-context behavioural advertising as U.S. state privacy laws define it, names Google and Meta, records that it is consent-gated in the EU, the UK and any region we cannot determine, and commits us to honouring Global Privacy Control. So the gate that sentence described is not pending — it is passed, and what remains is the register rather than the policy. See the paragraph below the table. |
+| **Google Analytics** | Product and site analytics for `aglyn.com`, the console and these docs — a single GA4 property. Property settings, set and verified by hand in the Google Analytics console on 14 August 2026: Google Signals off, ads personalization regions closed, no user-provided data collection, email redaction on, 14-month retention. The published [Cookie Policy](https://aglyn.com/legal/cookies) describes this property's advertising features as enabled; where the two disagree, the published policy governs and this line is the one to correct. **The three advertising consent signals (`ad_storage`, `ad_user_data`, `ad_personalization`) are no longer denied by default, and this row used to say that they were on all three surfaces.** What replaced that one claim differs by surface, so it is set out in [Advertising tags, per surface](#advertising-tags-per-surface) below rather than compressed back into a single sentence here. Every event we send server-side still asserts `non_personalized_ads`, which is a property of the server-side Measurement Protocol path alone and says nothing about what a tag in a browser does. Nothing in our build re-checks those five, so read them as a statement about how the property was configured rather than as a control we can demonstrate on demand. Whether this property is linked to Google Ads is stated in the row below, so there is one place to change and not two. |
+| **Google Ads** | Advertising for Aglyn's own site: buying clicks to `aglyn.com` and, once conversion measurement is turned on, counting which of them become signups. It holds none of the content or records we process on customers' behalf, so it is not a subprocessor in the DPA sense — but it is no longer true to say it learns nothing about our customers, because its tag now runs on signed-in console pages. It is listed here because a reviewer should not have to discover it somewhere else. As configured today: a Google Ads tag can load on all three Aglyn surfaces under the gates set out below the table; the account **is** linked to the GA4 property above, with personalized advertising enabled on that link; and enhanced conversions is still off. The first two of those were the opposite when this row was written, which is why they are kept as current configuration and not as an assurance. **This row used to end with an ordering argument that no longer holds, and replacing it rather than patching it is the honest move.** It said the [Privacy Policy](https://aglyn.com/legal/privacy) stated we use no advertising technology, and that the policy therefore had to be republished before any tag shipped. That republication has since happened: §3 of the published policy now describes cross-context behavioral advertising as U.S. state privacy laws define it, names Google, Meta and LinkedIn, records that it is consent-gated in the EU, the UK and any region we cannot determine, and commits us to honoring Global Privacy Control. So the gate that sentence described is not pending — it is passed, and what remains is the register rather than the policy. See the paragraph below the table. |
+| **Meta** | The Meta Pixel, on all three Aglyn surfaces, under the gates set out below the table. It receives page views and conversion events with the identifiers the pixel sets, and on the console those page views come from a signed-in account holder. It is on the published [subprocessor list](https://aglyn.com/legal/subprocessors), where its entry still describes it as something a site owner turns on for their own site — see the paragraph below. |
+| **LinkedIn** | The LinkedIn Insight Tag, on the same three surfaces and under the same gates, with the same entry problem on the published list. One difference worth knowing: LinkedIn also sets cookies on its own domain, which a page on our origin can neither read nor clear, so a withdrawal made here cannot remove those and browser controls are the only route to them. |
 | **Vercel** | Application hosting and CDN for the console, published sites and docs. |
 | **Stripe** | Payments. Card details go directly to Stripe; Aglyn never receives or stores a card number. |
 | **Resend** | Transactional email delivery. |
@@ -49,23 +51,79 @@ asking anyone. This table is the engineering view and may lag them, so where
 the two disagree the published list is the one that governs.
 
 The lag has run the other way at least once, so it is worth saying which
-direction it is running now, and there are two gaps rather than one.
+direction it is running now. Both of the gaps this section used to describe
+have moved, and neither moved the way we expected.
 
-The **Google Ads** row above is not on the published list yet, because the
-account exists and nothing is wired to it. A published register is meant to be
-exhaustive, and "we told you first on the engineering page" is not a defence
-for a register that is missing a row — so if that row is still absent from the
-published list once a tag is live, the register is wrong and we would like to
-hear about it at `privacy@aglyn.com`.
+The **Meta** gap is closed in the direction that mattered. This table now
+carries a Meta row and a LinkedIn one, and the published register names both.
 
-The second gap runs the opposite way, and this table is the one at fault. The
-platform can load a **Meta Pixel** on a surface where a pixel id is configured
-— it is a first-class advertising vendor in our own code, consent-gated, with
-its `_fbp`/`_fbc` cookies named in our cookie inventory and a documented
-teardown path — and the Privacy Policy names Meta. This table has no Meta row.
-It is listed here now; whether a pixel is configured on any Aglyn surface is a
-setting rather than something this page can demonstrate, which is exactly why
-the capability is disclosed instead of the rollout state.
+The **Google Ads** gap is still open and is now worse than the bookkeeping
+point it started as: the published register has no Google Ads row, and a Google
+Ads tag can now load on all three of our surfaces. There is a second, narrower
+gap in that same register — its Meta and LinkedIn entries describe those
+vendors as something a site owner enables on their own site, which was true
+when they were written and is no longer the whole picture, because both now
+run on Aglyn's own surfaces as well. A published register is meant to be
+exhaustive, and "we told you first on the engineering page" is not a defense
+for a register that is missing a row. Correcting both is open work. If you are
+reading this and the published list still says otherwise, the register is
+wrong and we would like to hear about it at `privacy@aglyn.com`.
+
+### Advertising tags, per surface {#advertising-tags-per-surface}
+
+Aglyn runs advertising tags on all three of its own surfaces: a Meta Pixel, a
+Google Ads tag, a LinkedIn Insight Tag, and optionally a Google Tag Manager
+container. A tag loads only where an account id is configured for that build,
+and unset means nothing loads — which is how a self-hosted deployment runs none
+of ours. Past that, the three surfaces gate them by three different mechanisms,
+and the differences are large enough to be worth one at a time rather than a
+single sentence covering all three.
+
+- **`aglyn.com`** — the marketing site runs on the same consent gate we ship to
+  customers, which is the strongest of the three: a per-visitor record, a region
+  lookup, and a tag that never loads at all for a visitor without a grant. In
+  the EU, the EEA, the UK and any region we cannot determine, nothing loads
+  until the visitor accepts. Everywhere else an implied grant is recorded on the
+  first visit and the tags run from that first paint, with "Your Privacy
+  Choices" standing as the opt-out. Global Privacy Control is honored as an
+  automatic opt-out under both postures.
+- **The console (`app.aglyn.com`, `auth.aglyn.com`)** — the same posture, decided
+  by the console's own machinery: a region endpoint, a prior-consent region set
+  which for our own surfaces adds Switzerland to the EEA/UK one, GPC, and an
+  explicit answer from the account menu or from the "Your Privacy Choices"
+  control on the signed-out pages. Denied in those regions until the visitor
+  accepts; granted on an implied record everywhere else. This includes the pages
+  you use **while signed in**, which is the part of this page a customer should
+  read twice — see below.
+- **These docs (`docs.aglyn.com`)** — the weakest gate of the three, and the
+  limit is worth stating because it cuts against us rather than for us. The docs
+  site has no consent dialog and no region lookup of its own, so for Meta,
+  LinkedIn and Google Ads it reads the console's consent record through a cookie
+  shared across `aglyn.com` subdomains. **No record means no tags at all.** A
+  reader who arrives from a search result and has never signed in to the console
+  gets none of the three, which also caps how much of our docs traffic these
+  tags can ever see. What this surface does declare for itself is a
+  region-conditional Google Consent Mode default — granted outside the EEA, the
+  UK and Switzerland, denied inside them — and that reaches the Google tags that
+  read Consent Mode and nothing else does. A withdrawal made in the console
+  reaches an already-open docs tab the next time that tab is looked at, not in
+  the same instant.
+
+**Signed-in console pages are included, and this is what that means if you are
+a customer.** The console's tags are not confined to the sign-in and signup
+pages; they run on the authenticated console too. An advertising tag reports
+the address of the page it is on, and console addresses carry your
+organization's slug, identify the site you are working in, and name the area of
+the product you are in — billing, team, plugins, a site's settings. So Google,
+Meta and LinkedIn can infer that your organization is an Aglyn customer, and
+can see roughly which parts of the product your people use. That is a decision
+taken deliberately, with that consequence understood, and it is written here
+because a customer should not have to discover it by reading a network log. Two
+things bound it, and neither is a promise about intent: the advertising grant is
+yours to withdraw at any time from "Your Privacy Choices" in the console account
+menu, which stops the tags on that pageview and clears the cookies we can reach;
+and in the EU, the EEA, the UK and Switzerland nothing loads until you accept in
+the first place.
 
 ## Hosts our customers choose, which are not on that list {#hosts-our-customers-choose-which-are-not-on-that-list}
 
