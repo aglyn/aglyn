@@ -129,3 +129,77 @@ export function validatePluginConfigValues(
   const error = schema.validate?.(merged) ?? null
   return error ? { ok: false, error } : { ok: true }
 }
+
+/**
+ * The three levels a plugin setting can be answered at.
+ *
+ * A workspace sets a value once and every site it enabled the plugin on
+ * follows it; a site that needs a different answer overrides that one field
+ * and keeps inheriting the rest. Bookings is the shape this is for — one
+ * booking horizon across a chain, with the flagship branch taking bookings
+ * further out — and it generalizes to every plugin because none of them get
+ * to invent their own inheritance.
+ */
+export interface PluginConfigSources {
+  /** `orgs/{orgId}/pluginSettings/{pluginId}` — the workspace's answer. */
+  org?: Record<string, unknown> | null
+  /** `hosts/{hostId}/pluginSettings/{pluginId}` — only the keys this site overrides. */
+  host?: Record<string, unknown> | null
+}
+
+/**
+ * Which keys a site is answering for itself.
+ *
+ * A key is an override when it is PRESENT on the host document, and inherited
+ * when it is absent. `undefined` counts as absent, deliberately: a UI that
+ * writes `{key: undefined}` to mean "stop overriding" is doing the same thing
+ * as one that never wrote the key, and treating the two differently would make
+ * "revert to the workspace value" depend on which code path cleared it.
+ *
+ * ⚠️ Which is also why clearing an override must DELETE the key rather than
+ * write an empty value. `setDoc(..., {merge: true})` leaves an existing field
+ * exactly as it is when the new object omits it, so a form that drops empty
+ * inputs cannot clear anything by saving — the override survives, invisibly,
+ * and the site keeps ignoring a workspace value the operator has since
+ * changed. Deleting is the only write that returns a field to inherited.
+ *
+ * Keys the schema does not declare are ignored, so a stale field left behind
+ * by a plugin update does not read as an override of a setting that no longer
+ * exists.
+ */
+export function pluginConfigOverrides(
+  schema: PluginConfigSchema,
+  host: Record<string, unknown> | null | undefined,
+): string[] {
+  if (!host) return []
+  return schema.fields
+    .filter((field) => field.key in host && host[field.key] !== undefined)
+    .map((field) => field.key)
+}
+
+/**
+ * What a plugin actually runs with on one site.
+ *
+ * Schema defaults, then the workspace's stored values, then only the keys the
+ * site overrides — each layer narrowing the one before it. Type coercion
+ * happens once at the end rather than per level, so a site override of the
+ * wrong type falls back to the WORKSPACE value it was trying to replace
+ * instead of skipping past it to the schema default. Getting that backwards
+ * would have one malformed site setting silently discard a workspace answer
+ * the operator can see in their own console.
+ */
+export function resolvePluginConfig(
+  schema: PluginConfigSchema,
+  sources: PluginConfigSources,
+): Record<string, unknown> {
+  const org = mergePluginConfig(schema, sources.org)
+  const overrides = pluginConfigOverrides(schema, sources.host)
+  if (!overrides.length) return org
+  const host = sources.host as Record<string, unknown>
+  const merged: Record<string, unknown> = { ...org }
+  for (const field of schema.fields) {
+    if (!overrides.includes(field.key)) continue
+    merged[field.key] = coerce(field, host[field.key], org[field.key])
+  }
+  return merged
+}
