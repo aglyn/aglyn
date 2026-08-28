@@ -214,22 +214,67 @@ export function computeReservationQuote(
 }
 
 /**
+ * How long an unpaid `pending` reservation stands between the next guest and
+ * the dates it named.
+ *
+ * A `pending` row is written before the Stripe session opens, and nothing ever
+ * clears one: `process-abandoned.ts` sweeps `checkouts`, not `reservations`.
+ * So the hold has to lapse by the clock rather than by a job, or one guest who
+ * closed the tab at the payment screen takes those dates off the market
+ * permanently.
+ */
+export const PENDING_RESERVATION_HOLD_MS = 30 * 60 * 1000
+
+/**
+ * Does this reservation still stand between a guest and its dates?
+ *
+ * THE one answer, because four surfaces ask it — the booking door, the booking
+ * transaction's re-read, the storefront availability endpoint behind the
+ * date-picker, and the console's walk-in check — and they were not asking it
+ * the same way. Only the booking door aged out a stale `pending`, so the
+ * storefront painted dates unavailable that the booking door would have sold,
+ * and the front desk was told a room was taken while it stood empty.
+ *
+ * A `pending` row carrying no `createdAtMs` releases rather than holds: an
+ * unbounded hold on a row that cannot prove its own age is the failure this
+ * lapse exists to prevent, and the booking door re-checks inside its
+ * transaction before any money moves.
+ */
+export function reservationHoldsDates(
+  reservation: Pick<HostReservation, 'status'> & { createdAtMs?: number },
+  nowMs: number = Date.now(),
+): boolean {
+  if (reservation.status === 'cancelled' || reservation.status === 'no_show') {
+    return false
+  }
+  if (reservation.status !== 'pending') return true
+  const createdAtMs = Number(reservation.createdAtMs ?? 0)
+  return createdAtMs > 0 && nowMs - createdAtMs < PENDING_RESERVATION_HOLD_MS
+}
+
+/**
  * Availability: a candidate range conflicts when it overlaps a live
  * reservation ([checkIn, checkOut) semantics — back-to-back stays touch
  * without conflict) or a manual block.
+ *
+ * `nowMs` is a parameter so the pending lapse is testable without freezing the
+ * clock. A caller passing reservations without `createdAtMs` gets the same
+ * answer as before for every status but `pending`.
  */
 export function isRangeAvailable(
   resource: Pick<HostResource, 'blocks'>,
   reservations: Array<
-    Pick<HostReservation, 'checkInDayMs' | 'checkOutDayMs' | 'status'>
+    Pick<HostReservation, 'checkInDayMs' | 'checkOutDayMs' | 'status'> & {
+      createdAtMs?: number
+    }
   >,
   checkInDayMs: number,
   checkOutDayMs: number,
+  nowMs: number = Date.now(),
 ): boolean {
   if (!(checkOutDayMs > checkInDayMs)) return false
-  const dead = new Set<ReservationStatus>(['cancelled', 'no_show'])
   for (const reservation of reservations) {
-    if (dead.has(reservation.status)) continue
+    if (!reservationHoldsDates(reservation, nowMs)) continue
     if (
       checkInDayMs < reservation.checkOutDayMs &&
       checkOutDayMs > reservation.checkInDayMs

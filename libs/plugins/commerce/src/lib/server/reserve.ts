@@ -160,34 +160,37 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Pending holds block for 30 minutes only, so abandoned checkouts
-    // release the dates.
+    // release the dates. The lapse itself lives in
+    // `reservationHoldsDates`, which `isRangeAvailable` applies — this reads
+    // the fields that rule needs and leaves the rule to the model, so the
+    // storefront's date-picker cannot answer a different question from the
+    // door that takes the money.
     //
     // Extracted so the pre-read below and the re-read inside the booking
     // transaction cannot drift apart (AGL-2450). Two copies of a filter that
     // decides whether a room is free is exactly the shape where one of them
     // quietly stops matching the other.
-    const readLive = (
-      snapshot: { docs: any[] },
-      nowMs: number,
-    ): CommerceModel.HostReservation[] =>
-      snapshot.docs
-        .map((docSnapshot) => ({
-          checkInDayMs: Number(docSnapshot.get('checkInDayMs')),
-          checkOutDayMs: Number(docSnapshot.get('checkOutDayMs')),
-          status: String(
-            docSnapshot.get('status'),
-          ) as CommerceModel.ReservationStatus,
-          createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
-        }))
-        .filter(
-          (reservation) =>
-            reservation.status !== 'pending' ||
-            nowMs - reservation.createdAtMs < 30 * 60 * 1000,
-        ) as CommerceModel.HostReservation[]
+    const readLive = (snapshot: {
+      docs: any[]
+    }): CommerceModel.HostReservation[] =>
+      snapshot.docs.map((docSnapshot) => ({
+        checkInDayMs: Number(docSnapshot.get('checkInDayMs')),
+        checkOutDayMs: Number(docSnapshot.get('checkOutDayMs')),
+        status: String(
+          docSnapshot.get('status'),
+        ) as CommerceModel.ReservationStatus,
+        createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
+      })) as CommerceModel.HostReservation[]
     const now = Date.now()
-    const live = readLive(reservationsSnapshot, now)
+    const live = readLive(reservationsSnapshot)
     if (
-      !CommerceModel.isRangeAvailable(resource, live, checkInDayMs, checkOutDayMs)
+      !CommerceModel.isRangeAvailable(
+        resource,
+        live,
+        checkInDayMs,
+        checkOutDayMs,
+        now,
+      )
     ) {
       // A GENUINE sold-out (a keyed retry replayed before reaching here). The
       // guest picks other dates or the blocking stay is cancelled; either way
@@ -307,9 +310,10 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       if (
         !CommerceModel.isRangeAvailable(
           resource,
-          readLive(fresh, Date.now()),
+          readLive(fresh),
           checkInDayMs,
           checkOutDayMs,
+          Date.now(),
         )
       ) {
         return false

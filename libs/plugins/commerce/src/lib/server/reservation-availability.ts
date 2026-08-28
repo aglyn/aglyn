@@ -76,10 +76,24 @@ export const reservationAvailabilityHandler: PluginApiHandler = async (req, res)
     const resource = resourceSnapshot.data() as CommerceModel.HostResource | undefined
     if (!resource) return res.status(404).json({ error: 'Unknown resource' })
 
-    const dead = new Set(['cancelled', 'no_show'])
+    // The SAME hold rule the booking door applies (`reserve.ts`), through the
+    // one predicate in the model. An inline dead-status set here knew nothing
+    // about the 30-minute lapse on an unpaid `pending`, and nothing ever
+    // clears such a row — so one guest abandoning the payment screen greyed
+    // those dates out on the date-picker forever, while `reserve.ts` would
+    // have sold them to the next guest who asked for them directly.
+    const nowMs = Date.now()
     const unavailable = reservationsSnapshot.docs
-      .filter(
-        (docSnapshot) => !dead.has(String(docSnapshot.get('status'))),
+      .filter((docSnapshot) =>
+        CommerceModel.reservationHoldsDates(
+          {
+            status: String(
+              docSnapshot.get('status'),
+            ) as CommerceModel.ReservationStatus,
+            createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
+          },
+          nowMs,
+        ),
       )
       .map((docSnapshot) => ({
         fromDayMs: Number(docSnapshot.get('checkInDayMs')),
