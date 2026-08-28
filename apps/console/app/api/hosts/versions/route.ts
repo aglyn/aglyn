@@ -244,7 +244,18 @@ async function handler(request: Request): Promise<Response> {
       // not a fact about when the version was made.
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
+      // WHO MADE THIS (AGL-118), on the same footing as the resource route's
+      // stamp: an artifact that does not record its creator cannot be
+      // attributed later without guessing.
+      createdBy: decoded.uid,
     })
+    // Deliberately NOT logged to the site activity feed. A page built from a
+    // template writes its screen, its first version and its route as ONE act,
+    // and /api/hosts/resources already recorded it — a second row here would
+    // be an invented event that makes the timeline look busier than the work
+    // was. A LATER version is a save, and saves are logged by the surface
+    // that performs them.
+
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {
     if (error?.code === 6 /* ALREADY_EXISTS */) {

@@ -113,6 +113,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async () => ({ orgId: 'org-1', org: state.org }),
+  // The route appends the audit entry itself now (AGL-118). This factory is
+  // a closed world, so an unnamed export is `undefined` and the route throws
+  // — a 500 that reads exactly like the behaviour under test regressing.
+  logHostActivity: async () => undefined,
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),

@@ -82,7 +82,6 @@ import {
   ceilingedWindow,
   hostArtifactQuery,
 } from '../../utils/host-artifact-queries'
-import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import createPageFromTemplate, {
   withBundleRootScreen,
 } from './create-page-from-template'
@@ -183,7 +182,6 @@ export function HostTemplatesCard({
   const { org, ready: orgReady } = useCurrentOrg()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
-  const logActivity = useHostActivityLogger(hostId)
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const router = useRouter()
@@ -561,7 +559,6 @@ export function HostTemplatesCard({
               seo: page.seo,
               slug: page.slug,
               usedSlugs: used,
-              logActivity,
             },
           )
           created += 1
@@ -594,7 +591,6 @@ export function HostTemplatesCard({
       orgReady,
       createHostResource,
       createHostVersion,
-      logActivity,
       enqueueSnackbar,
     ],
   )

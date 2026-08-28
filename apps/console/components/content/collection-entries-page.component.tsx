@@ -774,11 +774,16 @@ export function CollectionEntriesPage() {
       variant: 'success',
       persist: false,
     })
-    logActivity(authorEditor.id ? 'Updated author' : 'Created author', {
-      type: 'content',
-      id: authorEditor.id ?? name,
-      name,
-    })
+    // Updates only — the create rides /api/hosts/resources and is logged
+    // there from a verified uid (AGL-118). See the same split on the entry
+    // editor.
+    if (authorEditor.id) {
+      logActivity('Updated author', {
+        type: 'content',
+        id: authorEditor.id,
+        name,
+      })
+    }
   }, [
     authorEditor,
     authorBusy,

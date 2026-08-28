@@ -50,6 +50,19 @@ export interface ActorActivityTableProps {
   description?: string
   /** Site name by host id, so a row can say where rather than which id. */
   scopeNames?: Record<string, string | undefined>
+  /**
+   * Render an Actor column that says the actor was NOT RECORDED (AGL-118).
+   *
+   * Only the unattributed section passes it. The attributed table needs no
+   * such column — every row there is the person whose page it is, which the
+   * heading already says.
+   *
+   * It exists because an empty cell reads as a rendering fault, and a reader
+   * who assumes the column is broken falls back on the nearest available
+   * explanation: that the actor is the person whose page they are looking at.
+   * Saying "not recorded" is the entire point of the section.
+   */
+  actorNotRecorded?: boolean
 }
 
 /**
@@ -72,7 +85,8 @@ export interface ActorActivityTableProps {
  * audit log is a lie with a clean-looking face.
  */
 export function ActorActivityTable(props: ActorActivityTableProps) {
-  const { endpoint, header, help, description, scopeNames } = props
+  const { endpoint, header, help, description, scopeNames, actorNotRecorded } =
+    props
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
@@ -193,6 +207,29 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
           <Chip size="small" variant="outlined" label={scopeLabel(row)} />
         ),
       },
+      ...(actorNotRecorded
+        ? [
+            {
+              field: 'actor',
+              headerName: 'Actor',
+              flex: 0.9,
+              minWidth: 150,
+              // Nothing stored to compare: the rows in this table are exactly
+              // the ones whose `actorId` is null.
+              filterable: false,
+              sortable: false,
+              valueGetter: () => 'not recorded',
+              renderCell: () => (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  label="not recorded"
+                />
+              ),
+            } as GridColDef,
+          ]
+        : []),
       {
         field: 'createdAt',
         headerName: 'When',
@@ -212,7 +249,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
     // `scopeLabel` closes over `scopeNames`, which is the only thing that
     // moves it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scopeNames],
+    [scopeNames, actorNotRecorded],
   )
 
   return (

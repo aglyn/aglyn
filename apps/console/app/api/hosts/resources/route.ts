@@ -37,8 +37,10 @@ import {
   firebaseAdmin,
   getLockdownVerdict,
   getOrgForHost,
+  type HostActivityTarget,
   isImpersonationSession,
   lockdownJsonResponse,
+  logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
@@ -133,6 +135,17 @@ const RESOURCES: Record<string, {
   /** Human label for quota error messages. */
   label: string
   /**
+   * How a create of this resource appears in the site activity log.
+   *
+   * Declared per resource rather than derived from `label`, which is
+   * PLURAL for quota copy ("this site can run 5 screens") and reads wrong
+   * as an audit line. `type` is the `HostActivityTarget` union, so a row
+   * filters and deep-links exactly like one the console used to write;
+   * `content` is the honest fallback for the resources that union has no
+   * member for, rather than inventing one per collection.
+   */
+  activity: { type: HostActivityTarget['type']; noun: string }
+  /**
    * Keys the client may set. Anything else in `data` is dropped rather
    * than stored — including the fields the UI later presents as
    * trustworthy (provenance, counts, review verdicts), which the client
@@ -149,6 +162,7 @@ const RESOURCES: Record<string, {
     collection: 'screens',
     quotaKey: 'screensPerHost',
     label: 'screens',
+    activity: { type: 'screen', noun: 'screen' },
     fields: ['displayName', 'description', 'slug', 'seo', 'kind', 'versionId'],
   },
   // Templates (AGL-666) are inert until instantiated, so they carry no
@@ -160,6 +174,7 @@ const RESOURCES: Record<string, {
     collection: 'templates',
     quotaKey: 'templatesPerHost',
     label: 'templates',
+    activity: { type: 'template', noun: 'template' },
     fields: [
       'kind',
       'displayName',
@@ -182,18 +197,21 @@ const RESOURCES: Record<string, {
     collection: 'layouts',
     quotaKey: 'sharedLayoutsPerHost',
     label: 'shared layouts',
+    activity: { type: 'layout', noun: 'shared layout' },
     fields: ['displayName', 'description', 'versionId'],
   },
   variable: {
     collection: 'variables',
     quotaKey: 'variablesPerHost',
     label: 'variables',
+    activity: { type: 'variable', noun: 'variable' },
     fields: ['name', 'type', 'value', 'workflowId', 'workflowName'],
   },
   function: {
     collection: 'functions',
     quotaKey: 'functionsPerHost',
     label: 'functions',
+    activity: { type: 'function', noun: 'function' },
     fields: ['name', 'parameters', 'variables', 'operations', 'returnValue'],
   },
   workflow: {
@@ -201,6 +219,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'workflowsPerHost',
     entitlement: 'workflows',
     label: 'workflows',
+    activity: { type: 'workflow', noun: 'workflow' },
     fields: ['name', 'steps', 'returnValue', 'trigger'],
   },
   service: {
@@ -208,6 +227,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'servicesPerHost',
     entitlement: 'bookings',
     label: 'services',
+    activity: { type: 'content', noun: 'service' },
     fields: [
       'name',
       'description',
@@ -232,6 +252,7 @@ const RESOURCES: Record<string, {
     entitlement: 'redirects',
     requiresPublishRole: true,
     label: 'redirects',
+    activity: { type: 'content', noun: 'redirect' },
     fields: [
       'source',
       'destination',
@@ -246,6 +267,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'inventoryLocations',
     entitlement: 'commerce',
     label: 'inventory locations',
+    activity: { type: 'content', noun: 'inventory location' },
     fields: ['name', 'isDefault', 'address'],
   },
   // The whole `HostProduct` model: the editor, the duplicate action and
@@ -257,6 +279,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'productsPerHost',
     entitlement: 'commerce',
     label: 'products',
+    activity: { type: 'content', noun: 'product' },
     fields: [
       'name',
       'slug',
@@ -321,6 +344,7 @@ const RESOURCES: Record<string, {
     collection: 'components',
     entitlement: 'reusableComponents',
     label: 'reusable components',
+    activity: { type: 'component', noun: 'reusable component' },
     fields: ['displayName', 'description', 'rootId', 'nodes'],
   },
   // POS registers (AGL-472): the `posRegisters` cap becomes enforceable
@@ -336,6 +360,7 @@ const RESOURCES: Record<string, {
     quotaKey: 'posRegisters',
     entitlement: 'pos',
     label: 'POS registers',
+    activity: { type: 'content', noun: 'POS register' },
     fields: ['name', 'locationId'],
   },
   // Webhooks (AGL-1360): the cap used to be checked in the console by
@@ -362,6 +387,7 @@ const RESOURCES: Record<string, {
     maxPerHost: WEBHOOK_MAX_PER_HOST,
     softDeletes: true,
     label: 'webhooks',
+    activity: { type: 'content', noun: 'webhook' },
     fields: ['name', 'direction', 'url', 'workflowName', 'secret', 'enabled'],
   },
   /**
@@ -392,6 +418,7 @@ const RESOURCES: Record<string, {
     maxPerHost: ACTIONS_MAX_PER_HOST,
     softDeletes: true,
     label: 'interactions and actions',
+    activity: { type: 'content', noun: 'action' },
     fields: [
       'name',
       'description',
@@ -428,6 +455,7 @@ const RESOURCES: Record<string, {
     parentCollection: 'collections',
     maxPerHost: ENTRIES_MAX_PER_COLLECTION,
     label: 'entries',
+    activity: { type: 'content', noun: 'entry' },
     fields: [
       'title',
       'slug',
@@ -465,6 +493,7 @@ const RESOURCES: Record<string, {
     collection: 'authors',
     maxPerHost: AUTHORS_MAX_PER_HOST,
     label: 'authors',
+    activity: { type: 'content', noun: 'author' },
     fields: [
       'type',
       'name',
@@ -824,10 +853,44 @@ async function handler(request: Request): Promise<Response> {
         // JSON hop, so what they used to be able to send was junk anyway.
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
+        // WHO MADE THIS (AGL-118). Every artifact under a host — screens,
+        // layouts, components, templates — carried no author field of any
+        // kind, so nothing in the stored data could say who built a site.
+        // That is not a gap a later script can close: an artifact that never
+        // recorded its creator cannot be attributed afterwards without
+        // inferring a name from org ownership, which is a guess about a
+        // person written into what is read as an audit record.
+        //
+        // Stamped from `decoded.uid` and absent from every allow-list above,
+        // the `externalDestinationApprovedBy` discipline exactly: provenance
+        // the caller supplies is provenance the caller chose.
+        createdBy: decoded.uid,
       })
       return null
     })
     if (refusal) return Response.json(refusal, { status: 403 })
+    // The audit entry, written HERE rather than by whoever called this route
+    // (AGL-118). Three template surfaces created resources through this
+    // endpoint and appended nothing, so the log reported sites nobody had
+    // touched — a client-written audit trail is one the client can decline to
+    // write, and declining is silent. A create that reaches this line has
+    // committed, so the entry records something that demonstrably happened,
+    // attributed to a uid this route verified rather than one it was handed.
+    //
+    // After the transaction on purpose: a refused or rolled-back create must
+    // not leave a row claiming it succeeded.
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      `Created ${resource.activity.noun}`,
+      {
+        type: resource.activity.type,
+        id,
+        ...(typeof doc['displayName'] === 'string' && doc['displayName']
+          ? { name: doc['displayName'] as string }
+          : {}),
+      } satisfies HostActivityTarget,
+    )
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {
     if (error?.code === 6 /* ALREADY_EXISTS */) {

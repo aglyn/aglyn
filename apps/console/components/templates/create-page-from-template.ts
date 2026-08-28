@@ -22,7 +22,6 @@ import {
 } from '@aglyn/aglyn'
 import type { Firestore } from 'firebase/firestore'
 import { publishScreenRoute } from '../../constants/screen-publishing'
-import type { HostActivityTarget } from '../../hooks/use-host-activity-logger'
 
 /**
  * The address one template page claims (AGL-1575).
@@ -157,21 +156,6 @@ export async function createPageFromTemplate(
     usedSlugs: Set<string>
     /** Version label, e.g. "Installed from template". */
     versionLabel?: string
-    /**
-     * The host activity logger, so a page built from saved content records
-     * the same audit entry as one typed into the New screen form.
-     *
-     * It belongs on the helper rather than at the call sites for the reason
-     * the helper exists: all three template surfaces used to publish a route
-     * with nothing writing an activity row, so the log said a site whose
-     * every page came from a template had never been touched — the shape a
-     * new customer sees first and most. Three copies of the append would
-     * drift the same way the create-then-publish sequence did.
-     *
-     * Optional so a caller with no logger in scope still creates pages;
-     * an audit miss must not cost somebody their page.
-     */
-    logActivity?: (action: string, target: HostActivityTarget) => void
   },
 ): Promise<{ screenId: string; slug: string; requestedSlug: string }> {
   const {
@@ -222,13 +206,11 @@ export async function createPageFromTemplate(
     },
   })
   await publishScreenRoute(firestore, { hostId, screenId }, slug)
-  // After the route, not before: the entry reads "created a page" and the
-  // page is not one until it has an address. The logger never throws.
-  input.logActivity?.('Created screen from template', {
-    type: 'screen',
-    id: screenId,
-    name: displayName,
-  })
+  // No activity append here. `createHostResource` above is
+  // /api/hosts/resources, which records the create server-side from a
+  // verified uid (AGL-118) — so this path logs whether or not its caller
+  // remembers to, which is the property that was missing when three template
+  // surfaces created pages and wrote nothing.
 
   return { screenId, slug, requestedSlug }
 }

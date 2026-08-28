@@ -632,11 +632,13 @@ export function EntryDetailPage() {
       variant: 'success',
       persist: false,
     })
-    logActivity(editor.id ? 'Updated entry' : 'Created entry draft', {
-      type: 'content',
-      id,
-      name: title,
-    })
+    // Updates only. A new entry's create rides /api/hosts/resources, which
+    // logs it server-side from a verified uid (AGL-118); logging it here too
+    // would put two rows on one act. The update is a client-direct write with
+    // no route in front of it, so this call is still the only record of it.
+    if (editor.id) {
+      logActivity('Updated entry', { type: 'content', id, name: title })
+    }
   }, [
     editor,
     selected,

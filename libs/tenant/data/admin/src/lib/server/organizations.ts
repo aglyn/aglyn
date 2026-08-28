@@ -862,6 +862,62 @@ export async function logOrgActivity(
     .catch(() => undefined)
 }
 
+/** What a host activity entry points at. Mirrors `HostActivityTarget`. */
+export interface HostActivityTarget {
+  type:
+    | 'host' | 'screen' | 'layout' | 'theme' | 'media' | 'content' | 'variable'
+    | 'function' | 'workflow' | 'member' | 'component' | 'template'
+  id?: string
+  name?: string
+  versionId?: string
+}
+
+/**
+ * Append to `hosts/{hostId}/activity` with the ADMIN SDK (AGL-118).
+ *
+ * The host log's twin of {@link logOrgActivity}, and the beginning of the
+ * migration off the browser. Every entry in this collection has been written
+ * by the client since the log existed, which makes it an audit trail its
+ * subject can decline to write: three template surfaces created screens,
+ * layouts and components while calling no logger at all, and nothing noticed
+ * for months because a log that is missing an entry looks exactly like a
+ * person who did nothing.
+ *
+ * A route that already authenticated the caller has the two things the client
+ * cannot be trusted for — a VERIFIED uid, and the certainty that the write it
+ * is recording actually happened, because it performed it. So an entry from
+ * here is worth more than the one it replaces, not merely more reliable.
+ *
+ * Never throws, for the reason the client logger never throws: an audit miss
+ * must not turn a successful create into a failed request. It is `await`ed
+ * rather than floated because a serverless response ending cancels in-flight
+ * work, which would make the drop the common case rather than the rare one.
+ */
+export async function logHostActivity(
+  hostId: string,
+  actor: { uid: string; email?: string | null },
+  action: string,
+  target: HostActivityTarget,
+): Promise<void> {
+  await firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('activity')
+    .add({
+      actorId: actor.uid,
+      actorEmail: actor.email ?? null,
+      action,
+      target: {
+        type: target.type,
+        ...(target.id ? { id: target.id } : {}),
+        ...(target.name ? { name: target.name } : {}),
+        ...(target.versionId ? { versionId: target.versionId } : {}),
+      },
+      createdAt: FieldValue.serverTimestamp(),
+    })
+    .catch(() => undefined)
+}
+
 /**
  * A collaborator seat refusal, raised from INSIDE the grant transaction
  * (AGL-2068).

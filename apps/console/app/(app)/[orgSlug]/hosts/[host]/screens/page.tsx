@@ -395,13 +395,6 @@ function Screens(props) {
             ? publishScreenRoute(firestore, { hostId, screenId: newId }, path)
             : undefined,
         )
-        .then(() =>
-          logActivity('Created screen', {
-            type: 'screen',
-            id: newId,
-            name: newValues.displayName,
-          }),
-        )
         .catch((error) => {
           console.error(error)
           setError({ ...error })
