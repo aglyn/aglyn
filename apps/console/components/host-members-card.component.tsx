@@ -43,6 +43,7 @@ import {
   documentId,
   getCountFromServer,
   limit,
+  orderBy,
   query,
   where,
 } from 'firebase/firestore'
@@ -127,9 +128,35 @@ export function HostMembersCard(props: HostMembersCardProps) {
    * it grew a page at a time behind a "Load more", which is a third control
    * where the console already had too many — and one that can only ever go
    * forward.
+   *
+   * ## The window is ORDERED, and the page is not re-sorted
+   *
+   * The page carried no `orderBy` and was then sorted BY EMAIL in the
+   * browser. Firestore answers an unordered limit in document-id order and a
+   * member's id is a generated uid, so page one was ten arbitrary
+   * collaborators arranged alphabetically — which reads as the alphabetical
+   * first ten, and is not. Nobody was hidden (an id walk is total, so every
+   * member is reachable by paging) but the order the list appeared to be in
+   * was not the order it was in.
+   *
+   * `email` is safe to order on, which is the question `orderBy` always
+   * raises: it matches only documents that HAVE the field, so ordering on one
+   * a writer omits hides rows instead of arranging them. This collection has
+   * exactly one creator — `POST /api/hosts/members` — and it writes `email`
+   * unconditionally on the same `set` that brings the document into
+   * existence. There is no client write path (the rules make host
+   * subcollection membership server-only) and no import path (`members` is
+   * not in the site-bundle allow-list), so a member document without an email
+   * cannot be produced.
+   *
+   * The rows are handed on as they arrive. Sorting a server-ordered page in
+   * the browser is what produced the old illusion, and it would produce a
+   * subtler one here: Firestore collates by UTF-8 bytes, `localeCompare` does
+   * not, so the two disagree on case and accents and the page would be
+   * arranged differently from the walk it was cut from.
    */
   const {
-    rows: memberDocs,
+    rows: members,
     hasMore,
     page,
     setPage,
@@ -137,16 +164,13 @@ export function HostMembersCard(props: HostMembersCardProps) {
     setPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
-      query(collection(firestore, 'hosts', hostId, 'members'), limit(pageLimit)),
+      query(
+        collection(firestore, 'hosts', hostId, 'members'),
+        orderBy('email'),
+        limit(pageLimit),
+      ),
     [firestore, hostId],
     { idField: '$id' },
-  )
-  const members = useMemo(
-    () =>
-      [...memberDocs].sort((a, b) =>
-        String(a.email ?? '').localeCompare(String(b.email ?? '')),
-      ),
-    [memberDocs],
   )
   /**
    * SEATS USED is a server aggregate, not the length of the page window
