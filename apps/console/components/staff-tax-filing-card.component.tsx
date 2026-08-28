@@ -156,6 +156,26 @@ export default function StaffTaxFilingCard() {
   const keyValid = isTaxJurisdictionKey(proposedKey)
   const jurisdictionChanged =
     Boolean(proposedKey) && proposedKey !== data?.config.jurisdiction
+  /**
+   * Why the save is refused, or `null` when it is not.
+   *
+   * The reason field is required because every change writes an audit row and
+   * a reasonless row is worth little later. But the button enforcing that
+   * silently is a dead end: somebody who has typed their identifiers and
+   * nothing else sees a greyed control and an asterisk. Naming the blocker is
+   * what makes it a rule rather than a broken screen.
+   *
+   * The jurisdiction is named first because it is the harder one to spot — a
+   * key that cannot be a bucket key looks like an ordinary value in the field
+   * above.
+   */
+  const blockedReason = !keyValid
+    ? `“${proposedKey || '—'}” is not a filing jurisdiction — pick a country, ` +
+      'and a subdivision only where you file at that level.'
+    : !note.trim()
+      ? 'Add a reason above to save. It is written to the audit row with the ' +
+        'change, and cannot be added afterwards.'
+      : null
 
   const save = async () => {
     if (busy || !data) return
@@ -451,6 +471,18 @@ export default function StaffTaxFilingCard() {
                 placeholder="Registered in California, or: Webfile number reissued"
                 slotProps={{ htmlInput: { maxLength: data?.limits?.noteMax ?? 280 } }}
               />
+              {/*
+                * A disabled button that does not say why is a dead end: the
+                * reason is required and audited, so somebody who has typed
+                * their numbers and filled nothing else sees the save greyed
+                * out with only an asterisk to explain it. Naming the blocker
+                * is the difference between a rule and a broken screen.
+                */}
+              {blockedReason ? (
+                <Typography variant="caption" color="text.secondary">
+                  {blockedReason}
+                </Typography>
+              ) : null}
               <Stack direction="row" spacing={1}>
                 <Button
                   variant="contained"
