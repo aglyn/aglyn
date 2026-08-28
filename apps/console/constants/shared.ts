@@ -32,6 +32,22 @@ export const TABLE_ROW_HEIGHT = 48
 export const TABLE_HEAD_HEIGHT = 48
 
 /**
+ * A short form field sitting on a row with other controls — a count, a
+ * percentage, a date.
+ *
+ * MUI sizes a `TextField` from its input, not from its label, so a compact
+ * field in a `direction="row"` Stack collapses to the width of the value it
+ * holds and then TRUNCATES ITS OWN LABEL. A one-digit ceiling rendered as
+ * `Free w...`, which reads as a broken control rather than a narrow one.
+ *
+ * Wide enough for a label of a few words at `size="small"`. Named because
+ * eleven files hand-write a width in this range and each picked its own, so
+ * the console shows the same kind of field at three different sizes; this is
+ * the value they should converge on.
+ */
+export const COMPACT_FIELD_WIDTH = 200
+
+/**
  * The console's table-footer constants, which now live in the shared library
  * (see `@aglyn/shared-ui-jsx/const/table-pagination`).
  *

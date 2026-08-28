@@ -143,6 +143,24 @@ describe('once the limit has loaded', () => {
     expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('3')
   })
 
+  it('names the number field, in a label short enough to render', async () => {
+    /*
+     * The field is a compact control on a row beside a switch, and MUI sizes a
+     * `TextField` from its input rather than its label — so a one-digit value
+     * collapsed the box and the label truncated to `Free w...`, which reads as
+     * a broken control rather than a narrow one.
+     *
+     * Asserted as the ACCESSIBLE NAME rather than as a width: jsdom does no
+     * layout, so the truncation itself is untestable here, but the label being
+     * short and still attached to the input is the durable half — and it is
+     * what a screen reader announces either way.
+     */
+    global.fetch = respondingFetch(body())
+    render(<StaffFreeWorkspaceCapCard />)
+    await screen.findByText('3')
+    expect(screen.getByRole('spinbutton', { name: 'Free workspaces' })).toBeTruthy()
+  })
+
   it('says what counts, because that is what support is asked', async () => {
     global.fetch = respondingFetch(body())
     render(<StaffFreeWorkspaceCapCard />)

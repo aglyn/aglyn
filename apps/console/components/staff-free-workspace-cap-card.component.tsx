@@ -32,6 +32,7 @@ import {
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { COMPACT_FIELD_WIDTH } from '../constants/shared'
 
 interface FreeWorkspaceCapBody {
   role: string
@@ -224,9 +225,13 @@ export default function StaffFreeWorkspaceCapCard() {
             <Stack spacing={2}>
               <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                 <TextField
-                  label="Free workspaces per account"
+                  // Short of the card header it sits under, which already
+                  // says "per account" — a field label repeating its card is
+                  // noise, and it was the length that collapsed to `Free w...`.
+                  label="Free workspaces"
                   size="small"
                   type="number"
+                  sx={{ width: COMPACT_FIELD_WIDTH }}
                   value={limit}
                   onChange={(event) => setLimit(event.target.value)}
                   slotProps={{
