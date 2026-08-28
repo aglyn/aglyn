@@ -431,6 +431,16 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'origin.',
   },
   {
+    file: 'tools/scripts/check-personal-identifiers.mjs',
+    count: 1,
+    reason:
+      "The personal-identifier guard's own remediation advice: one string " +
+      'telling a developer to keep the domain on a fixture address while ' +
+      'changing the local-part to a role account. Never a constructed URL, ' +
+      'and a build tool that is never shipped — a self-hoster runs it ' +
+      'against their own tree.',
+  },
+  {
     file: 'tools/scripts/check-week-one-preflight.mjs',
     count: 11,
     reason:
