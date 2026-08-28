@@ -21,7 +21,7 @@
  */
 
 /**
- * Host Setup keeps a half-typed edit when the reader changes tab.
+ * Host Setup keeps a half-typed edit when the reader changes section.
  *
  * ## The defect
  *
@@ -61,6 +61,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
+/** The `initialValues` each form was seeded with, by schema id. */
+const mockSeeds: Record<string, Record<string, unknown>> = {}
 const mockEnqueueSnackbar = jest.fn()
 
 /** Mutable so each spec picks the host listener's verdict before rendering. */
@@ -173,58 +175,81 @@ jest.mock('../components/theme-editor/theme-overrides-card.component', () => ({
     </button>
   ),
 }))
-jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
-  FieldComponentType: new Proxy({}, { get: (_t, k) => String(k) }) as Record<
-    string,
-    string
-  >,
-  FieldValidatorType: new Proxy({}, { get: (_t, k) => String(k) }) as Record<
-    string,
-    string
-  >,
-  simpleComponentMapper: {},
-  /*
-   * One text input standing in for the whole form, seeded from
-   * `initialValues` and reporting every change through `debug` — which is the
-   * contract `react-final-form` offers for observing state without
-   * subscribing a component to it.
-   *
-   * `defaultValue` rather than a controlled value, on purpose: it is read once
-   * per MOUNT, so what this asserts is what the page seeds a REMOUNTED panel
-   * with. A controlled input would re-seed on every render and hide the bug.
-   */
-  FormRenderer: ({
-    schema,
-    initialValues,
-    onSubmit,
-    debug,
-  }: {
-    schema: { id: string }
-    initialValues: Record<string, unknown>
-    onSubmit: (values: unknown) => void
-    debug?: (state: { values: Record<string, unknown>; dirty: boolean }) => void
-  }) => (
-    <div>
-      <input
-        aria-label={`${schema.id}-displayName`}
-        defaultValue={String(initialValues?.displayName ?? '')}
-        onChange={(event) =>
-          debug?.({
-            values: { ...initialValues, displayName: event.target.value },
-            dirty: true,
+jest.mock('@aglyn/shared-ui-jsx-forms', () => {
+  const react = jest.requireActual('react')
+  return {
+    FieldComponentType: new Proxy({}, { get: (_t, k) => String(k) }) as Record<
+      string,
+      string
+    >,
+    FieldValidatorType: new Proxy({}, { get: (_t, k) => String(k) }) as Record<
+      string,
+      string
+    >,
+    simpleComponentMapper: {},
+    /*
+     * One text input standing in for the whole form, holding `initialValues`
+     * and reporting every change through `debug` — the contract
+     * `react-final-form` offers for observing state without subscribing to it.
+     *
+     * `decorators` is honoured, and that is the half this file exists for: a
+     * restored draft arrives through a decorator's `form.change`, which is the
+     * same call typing makes. Seeding the form from the draft instead would
+     * restore the text and lose the fact that it is unsaved, so a stub that
+     * ignored decorators would pass while the page told the reader their edit
+     * was already saved.
+     */
+    FormRenderer: ({
+      schema,
+      initialValues,
+      onSubmit,
+      debug,
+      decorators,
+    }: {
+      schema: { id: string }
+      initialValues: Record<string, unknown>
+      onSubmit: (values: unknown) => void
+      debug?: (state: { values: Record<string, unknown>; dirty: boolean }) => void
+      decorators?: Array<(form: unknown) => unknown>
+    }) => {
+      const [values, setValues] = react.useState(() => ({ ...initialValues }))
+      // What the form was SEEDED with, exposed so a spec can tell a restored
+      // draft (an edit on top of the stored values) from a form seeded with
+      // the draft itself (which reports as already saved).
+      mockSeeds[schema.id] = initialValues
+      react.useEffect(() => {
+        for (const decorate of decorators ?? []) {
+          decorate({
+            batch: (fn: () => void) => fn(),
+            change: (key: string, value: unknown) =>
+              setValues((prev: Record<string, unknown>) => ({
+                ...prev,
+                [key]: value,
+              })),
           })
         }
-      />
-      <button
-        onClick={() =>
-          onSubmit({ ...(initialValues as object), displayName: 'Renamed' })
-        }
-      >
-        {`Submit ${schema.id}`}
-      </button>
-    </div>
-  ),
-}))
+        // Once per mount, like the real decorator contract.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [])
+      return (
+        <div>
+          <input
+            aria-label={`${schema.id}-displayName`}
+            value={String(values.displayName ?? '')}
+            onChange={(event: { target: { value: string } }) => {
+              const next = { ...values, displayName: event.target.value }
+              setValues(next)
+              debug?.({ values: next, dirty: true })
+            }}
+          />
+          <button onClick={() => onSubmit({ ...values, displayName: 'Renamed' })}>
+            {`Submit ${schema.id}`}
+          </button>
+        </div>
+      )
+    },
+  }
+})
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   Container: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -337,8 +362,29 @@ jest.mock('@aglyn/shared-ui-next/hooks/use-tab-param', () => ({
 }))
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const HostSetup =
-  require('../app/(app)/[orgSlug]/hosts/[host]/setup/page').default
+const SETUP = '../app/(app)/[orgSlug]/hosts/[host]/setup/(sections)'
+const SetupLayout = require(`${SETUP}/layout`).default
+const SECTION_PAGES: Record<string, () => JSX.Element> = {
+  details: require(`${SETUP}/details/page`).default,
+  seo: require(`${SETUP}/seo/page`).default,
+  tracking: require(`${SETUP}/tracking/page`).default,
+  theme: require(`${SETUP}/theme/page`).default,
+  emails: require(`${SETUP}/emails/page`).default,
+}
+
+/**
+ * The layout with ONE section inside it, which is how Next mounts them
+ * (AGL-693). Setup's sections are routes, so the page under test is the
+ * section — the layout is the shared scope around it.
+ */
+const HostSetup = ({ section = 'details' }: { section?: string } = {}) => {
+  const SectionPage = SECTION_PAGES[section]
+  return (
+    <SetupLayout>
+      <SectionPage />
+    </SetupLayout>
+  )
+}
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 /** No network: a refused save must never have reached the rename API. */
@@ -370,7 +416,7 @@ const setTab = (value: string) => {
 const field = (id: string) =>
   screen.getByLabelText(`${id}-displayName`) as HTMLInputElement
 
-describe('host Setup keeps an unsaved edit across a tab switch', () => {
+describe('host Setup keeps an unsaved edit across a section change', () => {
   beforeEach(() => {
     mockCurrentTab = 'hostDetails'
     hostDoc.status = 'success'
@@ -380,51 +426,74 @@ describe('host Setup keeps an unsaved edit across a tab switch', () => {
   /**
    * The CONTROL, and it is not decoration.
    *
-   * The assertion below is "the typed value came back", and a panel that never
-   * unmounted would satisfy it while proving nothing — the edit would have
-   * survived because it was never discarded. This proves the harness really
-   * does destroy the inactive panel, so the next test is measuring the fix
-   * rather than a mock that forgot to reproduce the bug.
+   * The assertion below is "the typed value came back", and a page that never
+   * unmounted the form would satisfy it while proving nothing — the edit would
+   * have survived because it was never discarded. Sections are ROUTES, so Next
+   * mounts one page: this proves the harness really does destroy the section
+   * being left, which is both how the read cost stays flat and why a draft has
+   * to be held above it.
    */
-  it('CONTROL: the inactive panel really is unmounted', () => {
-    const { rerender } = render(<HostSetup />)
+  it('CONTROL: leaving a section really does unmount its form', () => {
+    const { rerender } = render(<HostSetup section="details" />)
     expect(screen.queryByLabelText('hostDetails-displayName')).not.toBeNull()
     expect(screen.queryByLabelText('hostSeo-displayName')).toBeNull()
 
-    setTab('hostSeo')
-    rerender(<HostSetup />)
+    rerender(<HostSetup section="seo" />)
     expect(screen.queryByLabelText('hostDetails-displayName')).toBeNull()
     expect(screen.queryByLabelText('hostSeo-displayName')).not.toBeNull()
   })
 
-  it('brings a half-typed edit back when the reader returns to the tab', () => {
-    const { rerender } = render(<HostSetup />)
+  it('brings a half-typed edit back when the reader returns to the section', () => {
+    const { rerender } = render(<HostSetup section="details" />)
 
     fireEvent.change(field('hostDetails'), {
       target: { value: 'Shop — half typed' },
     })
 
-    setTab('hostSeo')
-    rerender(<HostSetup />)
-    setTab('hostDetails')
-    rerender(<HostSetup />)
+    rerender(<HostSetup section="seo" />)
+    rerender(<HostSetup section="details" />)
 
-    // The panel was destroyed and rebuilt in between; the draft is what it was
-    // rebuilt from.
+    // The section page was destroyed and rebuilt in between; the draft, held
+    // in the LAYOUT that survives the navigation, is what it was rebuilt from.
     expect(field('hostDetails').value).toBe('Shop — half typed')
   })
 
+  /**
+   * A restored draft is still UNSAVED, and the form has to say so.
+   *
+   * Seeding the form FROM the draft would restore the text and lose that: the
+   * seed is what a form compares against to decide it is pristine, so the card
+   * would read "Up to date" over an edit nobody has written — the same
+   * misleading signal as the defect this fix is about — and Save would be
+   * disabled, so the reader could not even act on it. Caught on the running
+   * console, not in review.
+   *
+   * So the assertion is on the SEED, not on the value: the form is seeded from
+   * the stored host document, and the draft arrives on top as an edit.
+   */
+  it('restores the draft as an edit, not as the saved state', () => {
+    const { rerender } = render(<HostSetup section="details" />)
+    fireEvent.change(field('hostDetails'), { target: { value: 'Half typed' } })
+
+    rerender(<HostSetup section="seo" />)
+    rerender(<HostSetup section="details" />)
+
+    expect(field('hostDetails').value).toBe('Half typed')
+    // Seeded from the host document — 'Shop' — so the restored text reads as a
+    // change against it rather than as the stored value.
+    expect(mockSeeds['hostDetails'].displayName).toBe('Shop')
+  })
+
   /*
-   * A draft belongs to the tab that owns it. Leaking one across would show a
-   * reader their Details edit inside the SEO form, which is a different and
+   * A draft belongs to the section that owns it. Leaking one across would show
+   * a reader their Details edit inside the SEO form, which is a different and
    * worse bug than the one being fixed.
    */
-  it('keeps each tab draft to itself', () => {
-    const { rerender } = render(<HostSetup />)
+  it('keeps each section draft to itself', () => {
+    const { rerender } = render(<HostSetup section="details" />)
     fireEvent.change(field('hostDetails'), { target: { value: 'Details edit' } })
 
-    setTab('hostSeo')
-    rerender(<HostSetup />)
+    rerender(<HostSetup section="seo" />)
 
     // Seeded from the host doc, not from the Details draft.
     expect(field('hostSeo').value).toBe('Shop')
@@ -436,16 +505,14 @@ describe('host Setup keeps an unsaved edit across a tab switch', () => {
    * shown a stale copy of what they already committed.
    */
   it('drops the draft after a successful save', async () => {
-    const { rerender } = render(<HostSetup />)
+    const { rerender } = render(<HostSetup section="details" />)
     fireEvent.change(field('hostDetails'), { target: { value: 'Before save' } })
 
     fireEvent.click(screen.getByText('Submit hostDetails'))
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
 
-    setTab('hostSeo')
-    rerender(<HostSetup />)
-    setTab('hostDetails')
-    rerender(<HostSetup />)
+    rerender(<HostSetup section="seo" />)
+    rerender(<HostSetup section="details" />)
 
     expect(field('hostDetails').value).toBe('Shop')
   })

@@ -150,12 +150,12 @@ jest.mock(
 )
 
 /** The section the URL names, moved between renders to stand for a link. */
-let mockTab = ''
+let mockSection = 'details'
 
 jest.mock('next/navigation', () => ({
-  usePathname: () => '/acme/hosts/shop/setup',
+  usePathname: () => `/acme/hosts/shop/setup/${mockSection}`,
   useRouter: () => ({ replace: () => undefined, push: () => undefined }),
-  useSearchParams: () => new URLSearchParams(mockTab ? `tab=${mockTab}` : ''),
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
 }))
 
@@ -209,8 +209,20 @@ jest.mock('../components/host-display-name.component', () => ({
 }))
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const HostSetup =
-  require('../app/(app)/[orgSlug]/hosts/[host]/setup/page').default
+const SETUP = '../app/(app)/[orgSlug]/hosts/[host]/setup/(sections)'
+const HostSetupLayout = require(`${SETUP}/layout`).default
+/**
+ * The five section pages, each mounted INSIDE the layout — which is how Next
+ * mounts them, and the whole reason the measurement is meaningful: only the
+ * section being read exists in the tree.
+ */
+const SECTION_PAGES: Record<string, () => JSX.Element> = {
+  details: require(`${SETUP}/details/page`).default,
+  seo: require(`${SETUP}/seo/page`).default,
+  tracking: require(`${SETUP}/tracking/page`).default,
+  theme: require(`${SETUP}/theme/page`).default,
+  emails: require(`${SETUP}/emails/page`).default,
+}
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 function documentCeiling(listens: Array<{ path: string; limit: number }>) {
@@ -234,21 +246,26 @@ function listenedPaths(): string[] {
   return mockListens.map((listen) => listen.path)
 }
 
-function renderSetup(tab: string) {
-  mockTab = tab
+function renderSetup(section: string) {
+  mockSection = section
   mockListens.length = 0
-  return render(<HostSetup />)
+  const SectionPage = SECTION_PAGES[section]
+  return render(
+    <HostSetupLayout>
+      <SectionPage />
+    </HostSetupLayout>,
+  )
 }
 
 /** Collections only ONE section's cards read, keyed by that section. */
 const SECTION_ONLY = {
-  hostDetails: 'hosts/host-1/screens',
+  details: 'hosts/host-1/screens',
   emails: 'hosts/host-1/emailTemplates',
 } as const
 
 describe('host Setup read cost, per section (AGL-693)', () => {
   afterEach(() => {
-    mockTab = ''
+    mockSection = 'details'
     mockListens.length = 0
   })
 
@@ -261,11 +278,11 @@ describe('host Setup read cost, per section (AGL-693)', () => {
    * section is seeded from, and the open section subscribes its OWN collection.
    */
   it('CONTROL: the open section listens, and for its own collection', () => {
-    renderSetup('hostDetails')
-    summarize('hostDetails', mockListens)
+    renderSetup('details')
+    summarize('details', mockListens)
     expect(mockListens.length).toBeGreaterThan(0)
     expect(listenedPaths()).toContain('hosts/host-1')
-    expect(listenedPaths()).toContain(SECTION_ONLY.hostDetails)
+    expect(listenedPaths()).toContain(SECTION_ONLY.details)
   })
 
   /*
@@ -274,13 +291,13 @@ describe('host Setup read cost, per section (AGL-693)', () => {
    * Everything else here is a single-document read.
    */
   it('a section does not pay for another section collection', () => {
-    for (const tab of ['hostSeo', 'hostTracking', 'theme', 'emails'] as const) {
+    for (const tab of ['seo', 'tracking', 'theme', 'emails'] as const) {
       renderSetup(tab)
       summarize(tab, mockListens)
-      expect(listenedPaths()).not.toContain(SECTION_ONLY.hostDetails)
+      expect(listenedPaths()).not.toContain(SECTION_ONLY.details)
     }
 
-    for (const tab of ['hostDetails', 'hostSeo', 'hostTracking', 'theme'] as const) {
+    for (const tab of ['details', 'seo', 'tracking', 'theme'] as const) {
       renderSetup(tab)
       expect(listenedPaths()).not.toContain(SECTION_ONLY.emails)
     }
@@ -305,7 +322,7 @@ describe('host Setup read cost, per section (AGL-693)', () => {
    * It is a classification to write down, not an egress problem to chase.
    */
   it('holds each section under its document budget', () => {
-    renderSetup('hostDetails')
+    renderSetup('details')
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(260)
     renderSetup('theme')
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(20)

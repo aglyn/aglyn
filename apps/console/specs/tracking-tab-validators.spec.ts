@@ -50,7 +50,11 @@ const SOURCE = readFileSync(
     'hosts',
     '[host]',
     'setup',
-    'page.tsx',
+    // The schemas moved with the page when Setup's tabs became routed
+    // sections (AGL-693): the layout is where the shared scope — and the form
+    // schemas it hands the sections — now lives.
+    '(sections)',
+    'layout.tsx',
   ),
   'utf8',
 )

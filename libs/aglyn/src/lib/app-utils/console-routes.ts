@@ -284,6 +284,18 @@ export enum Route {
   HOST_CONTACTS = '/[orgSlug]/hosts/[host]/contacts',
   HOST_MEDIA = '/[orgSlug]/hosts/[host]/media',
   HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',
+  /*
+   * Setup SECTIONS are routes (AGL-693), so an unopened one costs neither a
+   * read nor a byte. `HOST_SETUP` stays the nav tab's href and redirects to
+   * Basic details, honouring the `?tab=` ids these sections were deep-linked
+   * by — unlike the settings and marketplace hubs, links holding those ids are
+   * demonstrably in the wild and two are built in this repo.
+   */
+  HOST_SETUP_DETAILS = '/[orgSlug]/hosts/[host]/setup/details',
+  HOST_SETUP_SEO = '/[orgSlug]/hosts/[host]/setup/seo',
+  HOST_SETUP_TRACKING = '/[orgSlug]/hosts/[host]/setup/tracking',
+  HOST_SETUP_THEME = '/[orgSlug]/hosts/[host]/setup/theme',
+  HOST_SETUP_EMAILS = '/[orgSlug]/hosts/[host]/setup/emails',
   // Host Admin area (AGL-1014): owner/admin-only controls — per-site plugin
   // enablement and the Danger zone — out of the Setup page collaborators
   // legitimately visit.
@@ -496,6 +508,11 @@ export interface RoutePayload {
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_DETAILS]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_SEO]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_TRACKING]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_THEME]: { orgSlug: string; host: string }
+  [Route.HOST_SETUP_EMAILS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGINS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGIN]: { orgSlug: string; host: string; pluginRef: string }

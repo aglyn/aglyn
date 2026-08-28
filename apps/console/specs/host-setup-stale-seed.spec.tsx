@@ -262,8 +262,29 @@ jest.mock('next/navigation', () => ({
 }))
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const HostSetup =
-  require('../app/(app)/[orgSlug]/hosts/[host]/setup/page').default
+const SETUP = '../app/(app)/[orgSlug]/hosts/[host]/setup/(sections)'
+const SetupLayout = require(`${SETUP}/layout`).default
+const SECTION_PAGES: Record<string, () => JSX.Element> = {
+  details: require(`${SETUP}/details/page`).default,
+  seo: require(`${SETUP}/seo/page`).default,
+  tracking: require(`${SETUP}/tracking/page`).default,
+  theme: require(`${SETUP}/theme/page`).default,
+  emails: require(`${SETUP}/emails/page`).default,
+}
+
+/**
+ * The layout with ONE section inside it, which is how Next mounts them
+ * (AGL-693). Setup's sections are routes, so the page under test is the
+ * section — the layout is the shared scope around it.
+ */
+const HostSetup = ({ section = 'details' }: { section?: string } = {}) => {
+  const SectionPage = SECTION_PAGES[section]
+  return (
+    <SetupLayout>
+      <SectionPage />
+    </SetupLayout>
+  )
+}
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 /** No network: a refused save must never have reached the rename API. */
@@ -286,10 +307,16 @@ beforeEach(() => {
 const click = (name: string) =>
   fireEvent.click(screen.getAllByRole('button', { name })[0])
 
+/*
+ * Sections are ROUTES (AGL-693), so a test drives the section it is about.
+ * The tab strip used to render every panel at once, which let one render serve
+ * all three of these suites; a route mounts one page, which is the property the
+ * read meter exists to hold.
+ */
 describe('Host Setup theme save (AGL-1358)', () => {
   it('REFUSES to replace the theme from an unconfirmed seed', async () => {
     hostDoc.fromCache = true
-    render(<HostSetup />)
+    render(<HostSetup section="theme" />)
 
     click('Save theme')
 
@@ -301,7 +328,7 @@ describe('Host Setup theme save (AGL-1358)', () => {
   })
 
   it('SAVES the theme once the server has confirmed the seed', async () => {
-    render(<HostSetup />)
+    render(<HostSetup section="theme" />)
 
     click('Save theme')
 
@@ -325,7 +352,7 @@ describe('Host Setup theme save (AGL-1358)', () => {
   it('does not render the theme editor when nothing ever arrived', () => {
     hostDoc.status = 'error'
     hostDoc.hasEmitted = false
-    render(<HostSetup />)
+    render(<HostSetup section="theme" />)
 
     expect(screen.queryByRole('button', { name: 'Save theme' })).toBeNull()
   })
@@ -340,7 +367,7 @@ describe('Host Setup theme save (AGL-1358)', () => {
   it('KEEPS the theme editor when the read failed but the cache is serving it', async () => {
     hostDoc.status = 'error'
     hostDoc.fromCache = true
-    render(<HostSetup />)
+    render(<HostSetup section="theme" />)
 
     expect(screen.getAllByRole('button', { name: 'Save theme' }).length)
       .toBeGreaterThan(0)
@@ -356,7 +383,7 @@ describe('Host Setup theme save (AGL-1358)', () => {
 describe('Host Setup override reset (AGL-1358)', () => {
   it('REFUSES to replace the override patch from an unconfirmed seed', async () => {
     hostDoc.fromCache = true
-    render(<HostSetup />)
+    render(<HostSetup section="theme" />)
 
     click('Reset one override')
 
@@ -371,7 +398,7 @@ describe('Host Setup override reset (AGL-1358)', () => {
   })
 
   it('WRITES the override once the server has confirmed the seed', async () => {
-    render(<HostSetup />)
+    render(<HostSetup section="theme" />)
 
     click('Reset one override')
 
