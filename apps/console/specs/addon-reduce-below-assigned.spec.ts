@@ -61,6 +61,13 @@ const mockOrgRef = {
       },
     },
   }),
+  // `orgs/{id}/datasets` (a count) and `orgs/{id}/invites` (a query). An org
+  // holding nothing: the ORG-WIDE capacity gate has to evaluate for real and
+  // permit, rather than decline to decide because the double throws.
+  collection: () => ({
+    count: () => ({ get: async () => ({ data: () => ({ count: 0 }) }) }),
+    where: () => ({ get: async () => ({ docs: [] }) }),
+  }),
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -70,7 +77,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({
         verifyIdToken: async () => ({ uid: 'user-1', email_verified: true }),
       }),
-      firestore: () => ({ collection: () => ({ doc: () => mockOrgRef }) }),
+      firestore: () => ({
+        collection: () => ({
+          doc: () => mockOrgRef,
+          // `hosts` where `orgId ==` — the site count.
+          where: () => ({
+            count: () => ({ get: async () => ({ data: () => ({ count: 0 }) }) }),
+          }),
+        }),
+      }),
     }),
   },
   emailUnverifiedResponse: () =>
@@ -80,6 +95,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   readOrgBilling: async () => ({ stripeCustomerId: 'cus_test_1' }),
   resolveOrgMembership: async () => ({ member: { role: 'owner' } }),
   isServerReleaseFlagOnForOrg: async () => true,
+  listOrgMembers: async () => [],
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -93,6 +109,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ),
+  // The REAL manager-seat counter — the org-wide capacity gate measures held
+  // seats with it, and a stub would count collaborators as manager seats.
+  countManagerSeats: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/organizations',
+  ).countManagerSeats,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
@@ -309,10 +330,14 @@ describe('CONTROL — what the guard must still let through', () => {
 
   it('an org-wide kind with NO allocation map is not gated by this', async () => {
     // Manager seats, datasets, extra sites and the Event Calendar are org-wide
-    // capacity with no per-site assignment — there is nothing a reduction can
-    // contradict. `collaboratorAllocations` is populated here on purpose: a
-    // guard that summed whichever map it found, rather than the one belonging
-    // to the kind being changed, would refuse this.
+    // capacity with no per-site assignment — there is nothing an ALLOCATION
+    // can contradict. `collaboratorAllocations` is populated here on purpose:
+    // a guard that summed whichever map it found, rather than the one
+    // belonging to the kind being changed, would refuse this.
+    //
+    // They carry a separate gate against what the capacity is CARRYING
+    // (`addon-reduce-below-in-use.spec.ts`), and this org holds nothing, so
+    // that one permits — which is why the doubles above count for real.
     const response = await setQuantity('managers', 1)
     expect(response.status).toBe(200)
     expect(updatedQuantity()).toBe('1')

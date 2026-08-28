@@ -47,6 +47,11 @@ import {
   restateExistingPhase,
   writePhaseItems,
 } from '../../../../utils/server/billing-schedule'
+import {
+  CAPACITY_ADDON_KINDS,
+  planDowngradeRefusal,
+  readCapacityCounts,
+} from '../../../../utils/server/capacity-in-use'
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
@@ -493,6 +498,36 @@ async function handler(request: Request): Promise<Response> {
         { ok: true, plan: targetPlan, releasedPendingDowngrade: released },
         { status: 200 },
       )
+    }
+
+    // A DOWNGRADE IS AN ADD-ON REDUCTION ONE LEVEL UP, and gets the same
+    // answer: you cannot drop capacity you are standing on.
+    //
+    // `/api/billing/addons` refuses shrinking a purchase below what its
+    // capacity is carrying. A plan change moves the SAME capacity by moving
+    // what the plan includes, so "buy Pro, make eight datasets, drop to
+    // Starter, keep the eight" was the identical leak through a different
+    // door. Nothing here revokes anything — the org keeps every dataset,
+    // every site and every teammate; the plan change is what waits.
+    //
+    // Measured with `over-limit.ts`, the same comparison the plan grid and the
+    // retention funnel already show the customer BEFORE they choose. Two
+    // calculations would eventually disagree, and a refusal that contradicts
+    // the warning that preceded it is worse than either alone.
+    //
+    // `switch` only. `preview` still answers, because a customer is entitled
+    // to see what a plan costs before being told they cannot have it yet, and
+    // because the surfaces that render the over-limit list call it.
+    if (action === 'switch' && downgrade) {
+      const refusal = planDowngradeRefusal(
+        await readCapacityCounts({
+          orgId,
+          org: org.data(),
+          kinds: CAPACITY_ADDON_KINDS,
+        }),
+        targetPlan as OrgPlan,
+      )
+      if (refusal) return Response.json(refusal, { status: 409 })
     }
 
     // The shared metered price (AGL-635), interval-matched to the target

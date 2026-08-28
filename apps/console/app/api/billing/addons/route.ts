@@ -51,6 +51,12 @@ import {
   restateExistingPhase,
   subscriptionItemsAsPhaseItems,
 } from '../../../../utils/server/billing-schedule'
+import {
+  capacityReductionRefusal,
+  includedCapacity,
+  isCapacityAddonKind,
+  readCapacityCounts,
+} from '../../../../utils/server/capacity-in-use'
 
 // lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
 // sessions alive PRECISELY so members can reach billing and pay; a 423
@@ -475,6 +481,40 @@ async function handler(request: Request): Promise<Response> {
           : { ok: true, quantities: addonQuantitiesFromItems(items) },
         { status: 200 },
       )
+    }
+
+    // REDUCING below what the org-wide capacity is CARRYING is refused too.
+    //
+    // The pool gate above covers the two kinds with an allocation map. These
+    // three have none — extra sites, datasets and manager seats are org-wide,
+    // and each was checked at CREATE time and nowhere else. So "buy the seat,
+    // invite the person, drop the seat" cost nothing, and `hostLimit` is worse
+    // still: it is consulted at exactly one moment in a site's life, the
+    // transaction that mints it.
+    //
+    // Refused at the reduction rather than re-checked at use, for the reason
+    // `capacity-in-use.ts` sets out at length: use-time enforcement here means
+    // ejecting a teammate or locking a dataset, which lands on customers who
+    // merely downgraded. The clamp inside `capacityReductionRefusal` is what
+    // keeps an org that is over a cap for reasons it did not choose out of
+    // this branch entirely.
+    //
+    // Counted only on an actual reduction of a gated kind. Each count is an
+    // aggregation or a roster list, and this route is hit on every billing
+    // page load.
+    if (
+      isCapacityAddonKind(kind) &&
+      currentQuantity !== null &&
+      quantity < currentQuantity
+    ) {
+      const refusal = capacityReductionRefusal({
+        kind,
+        quantity,
+        currentQuantity,
+        included: includedCapacity(kind, baseline),
+        counts: await readCapacityCounts({ orgId, org, kinds: [kind] }),
+      })
+      if (refusal) return Response.json(refusal, { status: 409 })
     }
 
     // One modified line item, shared by preview and set. Stripe treats

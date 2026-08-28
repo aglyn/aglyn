@@ -51,11 +51,32 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
+      // An org holding nothing. A downgrade is now refused while the org is
+      // over what the TARGET plan includes, so these counts have to be REAL
+      // reads that answer zero — left unimplemented they throw, the counts
+      // come back unreadable, and every downgrade below would pass because
+      // the gate declined to decide rather than because it decided to allow.
       firestore: () => ({
-        collection: () => ({ doc: () => ({ get: () => mockOrgGet() }) }),
+        collection: () => ({
+          doc: () => ({
+            get: () => mockOrgGet(),
+            // `orgs/{id}/datasets` (a count) and `orgs/{id}/invites` (a query).
+            collection: () => ({
+              count: () => ({
+                get: async () => ({ data: () => ({ count: 0 }) }),
+              }),
+              where: () => ({ get: async () => ({ docs: [] }) }),
+            }),
+          }),
+          // `hosts` where `orgId ==` — the site count.
+          where: () => ({
+            count: () => ({ get: async () => ({ data: () => ({ count: 0 }) }) }),
+          }),
+        }),
       }),
     }),
   },
+  listOrgMembers: async () => [],
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -74,6 +95,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // plan really does sell. A hand-written entitlement table in a spec is the
   // drift these fixtures exist to catch, not to create.
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
+  // The REAL manager-seat counter — the downgrade gate measures held seats
+  // with it, and a stub would count site-scoped collaborators as managers.
+  countManagerSeats: jest.requireActual('@aglyn/aglyn/app-utils/organizations')
+    .countManagerSeats,
   // The REAL predicate, not a re-typed triple (AGL-1715).
   isLiveSubscriptionStatus: jest.requireActual('@aglyn/aglyn/app-utils/org-billing-doc')
     .isLiveSubscriptionStatus,
@@ -214,6 +239,9 @@ beforeEach(() => {
   mockOrgGet.mockResolvedValue({
     // `org.get('slug')` and `org.get('plan')` both route through this.
     get: (field: string) => (field === 'plan' ? 'pro' : 'acme'),
+    // The whole document, which the downgrade gate reads the `hosts`
+    // directory map out of.
+    data: () => ({ plan: 'pro' }),
     ref: { id: 'org-1', set: async () => undefined },
   })
   mockWriteOrgBilling.mockResolvedValue(undefined)
