@@ -26,6 +26,13 @@ export interface ReversalRecoveryRow {
   $id: string
   listingId: string | null
   sellerOrgId: string | null
+  /**
+   * The seller's workspace by NAME, resolved by `/api/admin/overview` from
+   * the org snapshot it already holds. Null when the route could not name it
+   * — an org outside the capped snapshot, or one since deleted — and the row
+   * then falls back to the id, which is still a lead somebody can search.
+   */
+  sellerOrgLabel?: string | null
   buyerUid: string | null
   /** What the webhook failed to pull back. 0 when it never learned the amount. */
   owedCents: number
@@ -123,7 +130,9 @@ export default function StaffReversalRecoveryCard({
                   : 'amount unknown') +
                   ` · ${row.reason ?? 'unknown reason'}` +
                   ` · ${row.cause ?? 'unknown cause'}` +
-                  ` · seller ${row.sellerOrgId ?? 'unknown'}` +
+                  ` · seller ${
+                    row.sellerOrgLabel ?? row.sellerOrgId ?? 'unknown'
+                  }` +
                   ` · ${
                     row.failedAt
                       ? new Date(row.failedAt).toLocaleDateString()

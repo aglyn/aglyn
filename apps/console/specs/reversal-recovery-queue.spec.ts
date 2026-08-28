@@ -61,9 +61,21 @@ const mockVerifyIdToken = jest.fn()
 
 const state: {
   purchases: Record<string, Record<string, unknown>>
+  /**
+   * Orgs, and each one's monthly usage rollup by month key.
+   *
+   * Seeded because two of the route's answers are ABOUT an org rather than
+   * merely keyed on one: the recovery queue names the seller, and the anomaly
+   * detector names the workspace that spiked. Neither can be checked against
+   * an empty orgs collection.
+   */
+  orgs: Record<
+    string,
+    { data: Record<string, unknown>; usage?: Record<string, Record<string, unknown>> }
+  >
   /** Every `where(...)` the route issued, so the queue's clause is provable. */
   wheres: Array<[string, string, unknown]>
-} = { purchases: {}, wheres: [] }
+} = { purchases: {}, orgs: {}, wheres: [] }
 
 const stamp = (millis: number) => ({ toMillis: () => millis })
 
@@ -100,6 +112,50 @@ const purchaseQuery = (
   },
 })
 
+/**
+ * A listing over `state.orgs`, including each org's `usage/{month}` docs.
+ *
+ * The usage docs answer through `get(field)`, the way an Admin SDK snapshot
+ * does, and a month that was never seeded reports `exists: false` — which is
+ * what makes "no prior month, so no spike" a case the detector really sees
+ * rather than one the double smooths over.
+ */
+const orgListing = (): any => ({
+  orderBy: () => orgListing(),
+  limit: () => orgListing(),
+  where: () => orgListing(),
+  select: () => orgListing(),
+  count: () => ({
+    get: async () => ({ data: () => ({ count: Object.keys(state.orgs).length }) }),
+  }),
+  get: async () => {
+    const docs = Object.entries(state.orgs).map(([id, org]) => ({
+      id,
+      data: () => org.data,
+      get: (field: string) => org.data[field],
+      ref: {
+        collection: () => ({
+          doc: (month: string) => ({
+            get: async () => {
+              const held = org.usage?.[month]
+              return {
+                exists: Boolean(held),
+                data: () => held ?? {},
+                get: (field: string) => held?.[field],
+              }
+            },
+          }),
+        }),
+      },
+    }))
+    return { docs, size: docs.length, empty: docs.length === 0 }
+  },
+  doc: () => ({
+    get: async () => ({ exists: false, data: () => ({}), get: () => undefined }),
+    collection: () => emptyListing(),
+  }),
+})
+
 /** A listing over nothing, for the collections this file does not seed. */
 const emptyListing = (): any => ({
   orderBy: () => emptyListing(),
@@ -122,8 +178,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
       firestore: () => ({
-        collection: (name: string) =>
-          name === 'marketplacePurchases' ? purchaseQuery() : emptyListing(),
+        collection: (name: string) => {
+          if (name === 'marketplacePurchases') return purchaseQuery()
+          if (name === 'orgs') return orgListing()
+          return emptyListing()
+        },
         collectionGroup: () => emptyListing(),
       }),
     }),
@@ -165,6 +224,7 @@ const overview = (token = 'staff-token') =>
 
 beforeEach(() => {
   state.wheres = []
+  state.orgs = {}
   state.purchases = {
     // The amounts are the real ones the webhook computes for a $50 and an $80
     // refund of the AGL-1639 worked example ($100 listing, 20% platform rate,
