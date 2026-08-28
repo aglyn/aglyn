@@ -289,13 +289,18 @@ export function commerceSlug(name: string): string {
  * somebody copies rather than half-remembers — unlike a name, where the tokens
  * above buy word-prefix matching precisely because names are half-remembered.
  *
+ * `barcodes` is the same flattening for the same reason, and it is the one the
+ * register depends on: a keyboard-wedge scanner types the code and presses
+ * Enter, so the lookup has to be exact and has to reach the whole catalog. A
+ * scan is never a half-remembered value.
+ *
  * Lower-cased because the translator lower-cases the typed query before it
  * builds the `array-contains`; stored and typed have to be normalized the same
  * way or the two silently disagree.
  *
- * ⚠️ `skus` is OMITTED when a product has none, rather than written as `[]`.
- * `isNotEmpty` is served as `!= null`, and an empty array is not null — so a
- * product with no SKUs at all would answer "has a SKU" for every row.
+ * ⚠️ Each array is OMITTED when a product has none, rather than written as
+ * `[]`. `isNotEmpty` is served as `!= null`, and an empty array is not null —
+ * so a product with no SKUs at all would answer "has a SKU" for every row.
  *
  * ⚠️ Spread this at EVERY write that sets a product's name or variants. A
  * write that sets the name without it leaves the keys describing the previous
@@ -310,17 +315,21 @@ export function productSearchFields(product: {
   nameTokens: string[]
   nameReversed: string
   skus?: string[]
+  barcodes?: string[]
 } {
-  const skus = [
+  const flatten = (read: (variant: ProductVariant) => string | undefined) => [
     ...new Set(
       (product.variants ?? [])
-        .map((variant) => (variant.sku ?? '').trim().toLowerCase())
+        .map((variant) => (read(variant) ?? '').trim().toLowerCase())
         .filter(Boolean),
     ),
   ]
+  const skus = flatten((variant) => variant.sku)
+  const barcodes = flatten((variant) => variant.barcode)
   return {
     ...nameSearchFields(product.name),
     ...(skus.length ? { skus } : {}),
+    ...(barcodes.length ? { barcodes } : {}),
   }
 }
 

@@ -74,11 +74,34 @@ let payloads: any[] = []
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => path.join('/'),
+  /*
+   * `query` returns the collection path unchanged so the harness can key its
+   * fixtures off it. The constraint builders below therefore have to be inert
+   * — they are also what the REAL `listFilterConstraints` calls, so leaving
+   * one out fails as "not a function" from inside the translator rather than
+   * from the component, which reads as the translator being broken.
+   */
   query: (ref: string) => ref,
   limit: () => undefined,
+  where: () => undefined,
+  orderBy: () => undefined,
+  startAt: () => undefined,
+  endAt: () => undefined,
+  documentId: () => '__name__',
+  Timestamp: { fromDate: (date: Date) => date },
+  // The scan path. Empty is the honest answer for a catalog these specs
+  // never populate; a scan that found something here would be fiction.
+  getDocs: async () => ({ docs: [] }),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  /*
+   * The real translator, not a stub. It is a pure function of the shared
+   * declaration, and a mock that omits a barrel export does not fail as
+   * "missing" — it fails as the component being broken.
+   */
+  listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterConstraints,
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
   useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),

@@ -301,6 +301,7 @@ const RESOURCES: Record<string, {
       'nameTokens',
       'nameReversed',
       'skus',
+      'barcodes',
       // Legacy Commerce Starter fields, still written by every caller.
       'priceUsd',
       'inventory',

@@ -386,7 +386,7 @@ let productsChanged = 0
 if (!ONLY_HOST) {
   const productSnap = await firestore
     .collectionGroup('products')
-    .select('name', 'nameLower', 'nameTokens', 'nameReversed', 'skus', 'variants')
+    .select('name', 'nameLower', 'nameTokens', 'nameReversed', 'skus', 'barcodes', 'variants')
     .get()
   for (const productDoc of productSnap.docs) {
     productsScanned += 1
@@ -407,24 +407,33 @@ if (!ONLY_HOST) {
     const wantReversed = nameSearchReversed(product.name)
     // MUST match `productSearchFields` in the commerce model: trimmed,
     // lower-cased, de-duplicated, and dropped when empty.
-    const wantSkus = [
+    const flatten = (key) => [
       ...new Set(
         (Array.isArray(product.variants) ? product.variants : [])
-          .map((variant) => String(variant?.sku ?? '').trim().toLowerCase())
+          .map((variant) => String(variant?.[key] ?? '').trim().toLowerCase())
           .filter(Boolean),
       ),
     ]
+    const differs = (want, have) =>
+      want.length
+        ? !have ||
+          have.length !== want.length ||
+          want.some((value, index) => have[index] !== value)
+        : have !== null
+    const wantSkus = flatten('sku')
     const haveSkus = Array.isArray(product.skus) ? product.skus : null
-    const skusDiffer = wantSkus.length
-      ? !haveSkus ||
-        haveSkus.length !== wantSkus.length ||
-        wantSkus.some((sku, index) => haveSkus[index] !== sku)
-      : haveSkus !== null
+    const skusDiffer = differs(wantSkus, haveSkus)
+    // The register scans this one, so a product missing it cannot be sold at
+    // the till at all — the lookup is `array-contains` over the whole catalog.
+    const wantBarcodes = flatten('barcode')
+    const haveBarcodes = Array.isArray(product.barcodes) ? product.barcodes : null
+    const barcodesDiffer = differs(wantBarcodes, haveBarcodes)
     if (
       product.nameLower !== want ||
       tokensDiffer ||
       product.nameReversed !== wantReversed ||
-      skusDiffer
+      skusDiffer ||
+      barcodesDiffer
     ) {
       productsChanged += 1
       await stampFields(productDoc.ref, {
@@ -432,6 +441,7 @@ if (!ONLY_HOST) {
         nameTokens: wantTokens,
         nameReversed: wantReversed,
         skus: wantSkus.length ? wantSkus : FieldValue.delete(),
+        barcodes: wantBarcodes.length ? wantBarcodes : FieldValue.delete(),
       })
     }
   }

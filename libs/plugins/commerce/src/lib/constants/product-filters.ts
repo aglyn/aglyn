@@ -59,6 +59,16 @@ export const PRODUCT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     containsOrderBy: 'name',
     operators: ['contains', 'isNotEmpty'],
   },
+  {
+    // The register's scan path. Exact and whole, which is what a scanner
+    // produces — and it must reach the entire catalog, not a window of it.
+    column: 'barcodes',
+    kind: 'text',
+    path: 'barcodes',
+    tokensPath: 'barcodes',
+    containsOrderBy: 'name',
+    operators: ['contains', 'isNotEmpty'],
+  },
   { column: 'status', kind: 'exact', path: 'status' },
   { column: 'type', kind: 'exact', path: 'type' },
   { column: 'priceUsd', kind: 'number', path: 'priceUsd' },
@@ -70,6 +80,7 @@ export const PRODUCT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
 export const PRODUCT_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   slug: 'Slug',
   skus: 'SKU',
+  barcodes: 'Barcode',
   type: 'Type',
   priceUsd: 'Price (USD)',
   createdAt: 'Created',

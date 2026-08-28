@@ -108,7 +108,9 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
    * the case the old box got wrong — and a merchant looking for a SKU knows
    * they are looking for a SKU.
    */
-  const [searchField, setSearchField] = useState<'name' | 'skus'>('name')
+  const [searchField, setSearchField] = useState<'name' | 'skus' | 'barcodes'>(
+    'name',
+  )
   const [statusFilter, setStatusFilter] = useState('all')
   const [editing, setEditing] = useState<ProductRow | null>(null)
   const [creating, setCreating] = useState(false)
@@ -607,7 +609,11 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           <TextField
             label="Search"
             placeholder={
-              searchField === 'name' ? 'Product name' : 'Whole SKU'
+              searchField === 'name'
+                ? 'Product name'
+                : searchField === 'skus'
+                  ? 'Whole SKU'
+                  : 'Whole barcode'
             }
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -618,7 +624,9 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             label="In"
             value={searchField}
             onChange={(event) =>
-              setSearchField(event.target.value as 'name' | 'skus')
+              setSearchField(
+                event.target.value as 'name' | 'skus' | 'barcodes',
+              )
             }
             size="small"
             select
@@ -626,6 +634,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           >
             <MenuItem value="name">{'Name'}</MenuItem>
             <MenuItem value="skus">{'SKU'}</MenuItem>
+            <MenuItem value="barcodes">{'Barcode'}</MenuItem>
           </TextField>
           <TextField
             label="Status"

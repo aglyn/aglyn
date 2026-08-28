@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { PRODUCT_LIST_FILTER_FIELDS } from '../../constants/product-filters'
 import { escapeHtml } from '../../utils/escape-html'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -39,10 +40,21 @@ import {
   Typography,
 } from '@mui/material'
 import { QRCodeSVG } from 'qrcode.react'
-import { collection, limit, query } from 'firebase/firestore'
+import {
+  collection,
+  documentId,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  listFilterConstraints,
+  useFirestoreCollection,
+} from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 
 /** How a sale is being settled. Passed to `settle` explicitly (AGL-1682). */
@@ -84,9 +96,44 @@ export function PosConsolePage({
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
 
+  const [search, setSearch] = useState('')
   const { data: productDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'products'), limit(500)),
-    [firestore, hostId],
+    () => {
+      /*
+       * The till's grid, narrowed by the QUERY rather than by the rows it
+       * happened to fetch (AGL-693, AGL-2292).
+       *
+       * `limit(500)` with no `orderBy` is document-id order over
+       * `createResourceUid()` — an arbitrary five hundred. Both filters then
+       * ran over that sample: `status === 'active'` below, and the search.
+       * The status one is the quieter of the two, because a catalog of five
+       * hundred archived products and a hundred live ones would fill the
+       * window with the archived and leave the register showing almost
+       * nothing to sell.
+       *
+       * Status moves into the query, so the window is five hundred SELLABLE
+       * products; the typed search moves in beside it, so a name reaches the
+       * whole catalog. The scan does not come through here at all — see
+       * `handleSearchEnter`, which is a lookup rather than a filter.
+       */
+      const typed = listFilterConstraints(
+        PRODUCT_LIST_FILTER_FIELDS,
+        search.trim()
+          ? { field: 'name', op: 'contains', value: search.trim() }
+          : null,
+        // Status is already an equality on this query, so the translator must
+        // not add an ordering that would have to be the first `orderBy`.
+        { fixedOrderBy: 'nameLower' },
+      )
+      return query(
+        collection(firestore, 'hosts', hostId, 'products'),
+        where('status', '==', 'active'),
+        ...(typed ?? []),
+        ...(typed ? [orderBy('nameLower')] : [orderBy(documentId())]),
+        limit(500),
+      )
+    },
+    [firestore, hostId, search],
     { idField: '$id' },
   )
   const { data: locationDocs } = useFirestoreCollection<any>(
@@ -135,7 +182,6 @@ export function PosConsolePage({
     (reservation: any) => reservation.status === 'checked_in',
   )
 
-  const [search, setSearch] = useState('')
   const [lines, setLines] = useState<RegisterLine[]>([])
   const [discountPct, setDiscountPct] = useState(0)
   const [customerEmail, setCustomerEmail] = useState('')
@@ -201,27 +247,23 @@ export function PosConsolePage({
   const products = useMemo(
     () =>
       [...(productDocs ?? [])]
+        // `status` is now the query's; `deletedAt` stays here because
+        // Firestore cannot ask for documents that LACK a field.
         .filter((product: any) => !product.deletedAt)
         .map((product: any) => ({
           ...CommerceModel.liftLegacyProduct(product),
           $id: product.$id,
-        }))
-        .filter((product: any) => product.status === 'active'),
+        })),
     [productDocs],
   )
-  const visible = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    if (!needle) return products
-    return products.filter(
-      (product: any) =>
-        product.name.toLowerCase().includes(needle) ||
-        product.variants.some(
-          (variant: any) =>
-            variant.sku?.toLowerCase() === needle ||
-            variant.barcode === needle,
-        ),
-    )
-  }, [products, search])
+  /*
+   * The grid is what the query returned. Re-filtering it by the same text
+   * would narrow it AGAIN and more strictly: the server matches a word prefix
+   * ("cof" finds "Coffee"), the old compare wanted the whole typed string as a
+   * substring, so "flat white" was sent as "flat" and then hidden again by a
+   * row that never contained "flat white". Rows found, then dropped.
+   */
+  const visible = products
 
   const productsById = useMemo(
     () => new Map(products.map((product: any) => [product.$id, product])),
@@ -295,22 +337,68 @@ export function PosConsolePage({
     })
   }, [])
 
-  // Barcode wedge: scanners type + Enter; exact SKU/barcode adds it.
-  const handleSearchEnter = useCallback(() => {
+  /**
+   * The barcode wedge: a scanner types the code and presses Enter.
+   *
+   * A LOOKUP against the whole catalog, not a scan of the rows on screen
+   * (AGL-693). It used to walk `products` — the grid's `limit(500)` window —
+   * so a shop whose catalog was larger than that had items whose barcode
+   * simply did nothing when scanned. At a till, holding the goods, with a
+   * customer waiting.
+   *
+   * `barcodes` and `skus` are top-level arrays the write path flattens out of
+   * `variants`, because Firestore cannot query a field inside an array of
+   * objects. Barcode is tried first: it is what the scanner produced, and a
+   * SKU that happens to equal another product's barcode should not win over
+   * the code actually scanned.
+   *
+   * ⚠️ A MISS NOW SAYS SO. The old loop returned silently, so an unknown code
+   * and a code outside the window were indistinguishable from a scanner that
+   * had not fired — the cashier's only signal was that nothing happened.
+   */
+  const handleSearchEnter = useCallback(async () => {
     const needle = search.trim().toLowerCase()
     if (!needle) return
-    for (const product of products) {
-      const variant = product.variants.find(
-        (item: any) =>
-          item.sku?.toLowerCase() === needle || item.barcode === needle,
+    const lookup = async (field: 'barcodes' | 'skus') => {
+      const found = await getDocs(
+        query(
+          collection(firestore, 'hosts', hostId, 'products'),
+          where('status', '==', 'active'),
+          where(field, 'array-contains', needle),
+          limit(1),
+        ),
       )
-      if (variant) {
-        addProduct(product, variant)
-        setSearch('')
-        return
-      }
+      return found.docs[0]
     }
-  }, [search, products, addProduct])
+    let hit: Awaited<ReturnType<typeof lookup>>
+    try {
+      hit = (await lookup('barcodes')) ?? (await lookup('skus'))
+    } catch (error) {
+      console.error(error)
+      return void enqueueSnackbar('Could not reach the catalog — try again', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+    if (!hit || hit.data()?.['deletedAt']) {
+      return void enqueueSnackbar(`No product matches “${search.trim()}”`, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+    const product = {
+      ...CommerceModel.liftLegacyProduct(hit.data() as any),
+      $id: hit.id,
+    }
+    const variant =
+      product.variants.find(
+        (item: any) =>
+          item.barcode?.trim().toLowerCase() === needle ||
+          item.sku?.trim().toLowerCase() === needle,
+      ) ?? product.variants[0]
+    addProduct(product, variant)
+    setSearch('')
+  }, [search, firestore, hostId, addProduct, enqueueSnackbar])
 
   /**
    * Take payment. The tender is an ARGUMENT, never read back out of state
@@ -484,7 +572,7 @@ export function PosConsolePage({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') handleSearchEnter()
+              if (event.key === 'Enter') void handleSearchEnter()
             }}
             size="small"
             fullWidth
