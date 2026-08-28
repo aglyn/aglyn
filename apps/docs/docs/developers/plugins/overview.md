@@ -214,10 +214,20 @@ plugin, check it yourself before switching off something it might be built on.
 ## Configure
 
 A plugin declares the settings it takes, and the console renders the form. A workspace
-sets a value once and every site follows it; a site that needs a different answer
-overrides that one field and keeps inheriting the rest — so the same plugin can behave
-differently on each site without the author writing any inheritance of their own. See
+sets a value once and every site follows it. See
 [Plugin configuration](./reference/plugin-config.md).
+
+### Settings for one site {#configure-site}
+
+A site that needs a different answer overrides **that one field** and keeps inheriting
+the rest — including later changes the workspace makes to the fields it did not
+override. So the same plugin behaves differently on each site without the author
+writing any inheritance of their own.
+
+Each field on a site's plugin page says which state it is in, shows the workspace's own
+value beside it, and offers a one-click way back to inheriting. Editing a field is what
+overrides it; reverting deletes the site's value rather than storing a copy of the
+workspace's, so the site resumes following.
 
 ## Publish your own
 

@@ -200,7 +200,15 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
           </Button>
         </AppLink>
       }
-      help={{ topic: 'plugins', anchor: '#configure' }}
+      /*
+       * `#configure-site`, not `#configure`. The workspace page stands in
+       * front of "a plugin takes settings"; this one stands in front of
+       * "this site can answer differently" — the question an admin opening
+       * THIS page has. Two surfaces sharing a destination make their help
+       * icons interchangeable, which is the failure `docs-help-destinations`
+       * exists to catch.
+       */
+      help={{ topic: 'plugins', anchor: '#configure-site' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
