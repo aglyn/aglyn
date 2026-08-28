@@ -26,7 +26,19 @@ import {
   pluginDocsHelp,
   VARIABLE_NAME_PATTERN,
 } from '@aglyn/aglyn'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — every spec that
+ * renders this card mocks `@aglyn/tenant-feature-instance` wholesale to stage
+ * its Firestore hooks, and a query builder imported through that barrel
+ * disappears under the mock. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -45,7 +57,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -59,6 +71,14 @@ import {
   summarizeDependents,
   type WhereUsedResult,
 } from '../utils/fetch-where-used'
+
+/**
+ * How many functions the card reads.
+ *
+ * A CEILING, not a page size — see the query, which explains why this list
+ * cannot be paged by the server without making the duplicate-name check lie.
+ */
+const FUNCTION_CEILING = 100
 
 export interface HostFunctionsCardProps {
   hostId: string
@@ -135,15 +155,57 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
      */
     fromCache: functionsFromCache,
   } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693) —
+     * the same decision as the variables card beside it, for the same two
+     * reasons.
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order, so the window is a
+     * pseudo-random hundred that the `localeCompare` below dresses up as an
+     * alphabetical list, and nothing said the list was bounded.
+     *
+     * `collectionCeiling` does not change WHICH hundred — document-id order is
+     * what the bare cap already returned. What it changes is that the order is
+     * NAMED, so the obvious next edit is caught: ordering on `name` would HIDE
+     * every function written without one rather than mis-sorting the list, and
+     * `/api/hosts/resources` validates no field for presence while
+     * `IMPORTABLE_FIELDS.functions` copies one only if the export carried it.
+     *
+     * The QUERY is not paged because `nameTaken` below tests the draft against
+     * these rows: case-insensitive uniqueness is what keeps legacy
+     * `{{fn:name(...)}}` resolution unambiguous (AGL-185), and on a ten-row
+     * server page that check would compare a new function against a tenth of
+     * the site and create the duplicate it exists to prevent.
+     */
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'functions'),
+        FUNCTION_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const functions = [...(functionDocs ?? [])]
-    .filter((definition: any) => !definition.deletedAt)
-    .sort((a: any, b: any) =>
-      String(a.name ?? '').localeCompare(String(b.name ?? '')),
-    )
+  const { rows: readFunctions, truncated: functionsTruncated } =
+    ceilingedWindow<any>(functionDocs, FUNCTION_CEILING)
+  // Sorting is safe here in a way it is not on a paged list: these rows are
+  // the whole collection below the ceiling, not a slice of one.
+  const functions = useMemo(
+    () =>
+      readFunctions
+        .filter((definition: any) => !definition.deletedAt)
+        .sort((a: any, b: any) =>
+          String(a.name ?? '').localeCompare(String(b.name ?? '')),
+        ),
+    [readFunctions],
+  )
+  // The page is a SLICE: the rows are already in hand and `nameTaken` needs
+  // all of them.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleFunctions = useMemo(
+    () => functions.slice(page * pageSize, page * pageSize + pageSize),
+    [functions, page, pageSize],
+  )
   /**
    * The function HEAD-COUNT is a server aggregate, not the length of the
    * capped listener (AGL-1716, the AGL-1706 shape) — the same fix as the
@@ -466,7 +528,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
               'as the builder grows.'}
           </Typography>
         ) : (
-          functions.map((definition: any) => (
+          visibleFunctions.map((definition: any) => (
             <Stack
               key={definition.$id}
               direction="row"
@@ -515,6 +577,27 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
             </Stack>
           ))
         )}
+        {functions.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleFunctions.length}
+            // The functions the card HOLDS. Not `functionCount`, which is the
+            // site's total including soft-deleted rows and answers the quota's
+            // question rather than the reader's.
+            count={functions.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {functionsTruncated ? (
+          <Alert severity="info">
+            {`Showing ${FUNCTION_CEILING} functions, ordered by id. This site ` +
+              'has more — the duplicate-name check below only covers the ' +
+              'ones listed here, so a name may already be taken by one that ' +
+              'is not.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           color="primary"

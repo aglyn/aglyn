@@ -449,6 +449,18 @@ const withoutComments = (source: string) =>
  * a different answer. This guard is about the surfaces a reader pages
  * through.
  */
+/**
+ * A file NAMES its order when it writes an `orderBy` — or when it asks
+ * through the shared builder that carries one.
+ *
+ * The plugin cards moved their ordering into `collectionPage` /
+ * `collectionCeiling` for the same reason the console's four artifact lists
+ * moved theirs into `hostArtifactQuery`: the decision is subtle, identical
+ * everywhere, and wrong in a way nobody sees. A guard that only knew the word
+ * would have reported every one of those conversions as unordered.
+ */
+const NAMES_ITS_ORDER = /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(/
+
 const DRAWS_A_FOOTER =
   /<ListPagination|<ListTable|<DataTableComponent|<TablePagination|<DataGrid|<ScreensHierarchyTable/
 
@@ -503,9 +515,67 @@ describe('every list that DRAWS a footer names its order (AGL-693)', () => {
       .filter((path) => !UNORDERED_BY_DESIGN.includes(path))
       .filter((path) => {
         const code = withoutComments(read(path))
-        return /\blimit\(/.test(code) && !/\borderBy\(/.test(code)
+        return /\blimit\(/.test(code) && !NAMES_ITS_ORDER.test(code)
       })
     expect(unordered).toEqual([])
+  })
+
+  it('THE CONTROL: asking through the builder counts, a bare cap does not', () => {
+    // Guard the widened guard. `collectionPage`/`collectionCeiling` carry the
+    // `orderBy` for their callers, so a file that asks through one has named
+    // its order without writing the word — and a pattern that did not know
+    // that would report every converted card as unordered. A pattern that
+    // accepted anything would report none.
+    expect(NAMES_ITS_ORDER.test("orderBy('createdAt', 'desc')")).toBe(true)
+    expect(NAMES_ITS_ORDER.test('collectionPage(ref, pageLimit)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('collectionCeiling(ref, CEILING)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('query(ref, limit(200))')).toBe(false)
+  })
+})
+
+/**
+ * The plugin console lists share ONE ordering decision (AGL-693).
+ *
+ * `hostArtifactQuery` answered this for the console's four site-artifact
+ * lists and could not share the answer: an app cannot be imported from a
+ * library, so every plugin card faced the same question alone and eleven of
+ * them answered it by not ordering at all. `collectionPage` and
+ * `collectionCeiling` are that decision where a plugin can ask for it, and
+ * this asserts the decision itself rather than that a file contains a word.
+ */
+describe('the shared plugin query builder orders on the document NAME', () => {
+  const BUILDER =
+    'libs/tenant/feature/instance/src/lib/hooks/host-collection-queries.ts'
+
+  it('orders on the document id, and on no FIELD', () => {
+    const builder = withoutComments(read(BUILDER))
+    expect(builder).toContain('orderBy(documentId())')
+    // The three that look safe and are not: `/api/hosts/resources` validates
+    // no field for presence, and `IMPORTABLE_FIELDS` copies a name only if
+    // the exported document carried one — so ordering on any of these hides
+    // rows rather than mis-sorting them.
+    for (const field of ['name', 'displayName', 'createdAt', 'updatedAt']) {
+      expect(builder).not.toContain(`orderBy('${field}'`)
+    }
+  })
+
+  it('the CEILING probes one document past itself', () => {
+    // `length >= ceiling` is wrong at exactly the count that equals the
+    // ceiling, which is the one collection size where a reader is told rows
+    // are missing and none are.
+    const builder = withoutComments(read(BUILDER))
+    expect(builder).toMatch(/limit\(ceiling \+ 1\)/)
+    expect(builder).toMatch(/rows\.length > ceiling/)
+  })
+
+  it('the console re-exports the probe rather than keeping a copy', () => {
+    // Two implementations of "can this bounded list admit it is bounded" is
+    // how the two halves of the console come to disagree about it.
+    const consoleUtil = read('apps/console/utils/host-artifact-queries.ts')
+    expect(consoleUtil).toContain('host-collection-queries')
+    expect(withoutComments(consoleUtil)).not.toContain(
+      'export function ceilingedWindow',
+    )
   })
 })
 
@@ -658,6 +728,35 @@ const MAPS_ROWS_INTO_IT = /\.map\([\s\S]{0,400}?<TableRow/
 /** A grid renders its own footer unless the caller turns it off. */
 const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
 /**
+ * A capped Firestore read — which is what makes a repeated element a LIST.
+ *
+ * The `<Table>` shape above found ten plugin surfaces and the owner went on
+ * finding more, because a table is not how most of this console draws a list:
+ * a row here is a `<Stack direction="row">` in a `CardDisplay`, and the
+ * redirects, variables, functions, workflows, events and campaign lists were
+ * every one of them that shape. A check that only knew about `<TableRow>` was
+ * asking the wrong question for the third time.
+ *
+ * `limit(` is the half that keeps this from firing on everything. A row built
+ * from a constant — a menu of statuses, a set of tabs, a form's fields — is a
+ * fixed vocabulary and always was; a row built from a CAPPED COLLECTION READ
+ * is a window over something that grows, which is the entire subject of this
+ * file.
+ */
+const READS_A_CAPPED_COLLECTION = /\blimit\(/
+/**
+ * The repeated ROW elements, as this codebase actually writes them.
+ *
+ * Derived from the surfaces rather than guessed: every unpaginated plugin list
+ * mapped into one of these. `MenuItem` is deliberately absent — a picker's
+ * options are a lookup and not a list a reader pages through, which is the
+ * same line the ordering guard above draws. `Box` is absent for the opposite
+ * reason: it is the wrapper every non-list also uses, so including it bought
+ * two more files and no more lists.
+ */
+const MAPS_INTO_ROWS =
+  /\.map\([\s\S]{0,400}?<(TableRow|ListItem|ListItemButton|Card|Paper|Accordion|Stack|Grid)\b/
+/**
  * `StaffListPagination` counts: it is `ListPagination` with the page size
  * fixed by the route behind it, and a check that missed it would report three
  * already-paged staff lists as unpaginated.
@@ -669,6 +768,7 @@ const unpaginatedTable = (source: string) => {
   if (RENDERS_A_FOOTER.test(code)) return false
   return (
     (RENDERS_A_TABLE.test(code) && MAPS_ROWS_INTO_IT.test(code)) ||
+    (READS_A_CAPPED_COLLECTION.test(code) && MAPS_INTO_ROWS.test(code)) ||
     GRID_FOOTER_SWITCHED_OFF.test(code)
   )
 }
@@ -753,6 +853,100 @@ const NOT_A_LIST: Array<[string, string]> = [
     'One row per JURISDICTION inside one liability bucket, which is the same ' +
       'shape as the console’s revenue breakdowns: the cardinality belongs to ' +
       'the tax taxonomy a store sells into, not to how long it has traded.',
+  ],
+  /*========================================================================
+   * Caught by the widened shape: a row built from a CAPPED READ, with no
+   * footer. Everything below draws repeated rows and is still not a list.
+   *=======================================================================*/
+  [
+    'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
+    'The editor. Its capped reads are the layout and screen PICKERS a node ' +
+      'binds to, and the rows it maps are one screen’s node definitions — an ' +
+      'editing working set, not a collection anybody pages through.',
+  ],
+  [
+    'apps/console/components/content/content-scope.context.tsx',
+    'A provider. It reads collections, authors and screens to fill the ' +
+      'content pickers its consumers render; it draws no list of its own.',
+  ],
+  [
+    'apps/console/components/document-preview.component.tsx',
+    'One document, previewed. The rows are that document’s runtime fields ' +
+      'and its format options — bounded by the document, not by the account.',
+  ],
+  [
+    'apps/console/components/error-screens-card.component.tsx',
+    'One row per declared error slot (`HOST_ERROR_SCREEN_SLOTS`), which is a ' +
+      'fixed vocabulary the product ships. The capped `screens` read behind ' +
+      'it fills each slot’s picker rather than the rows themselves.',
+  ],
+  [
+    'apps/console/components/interaction-builder-dialog.component.tsx',
+    'A picker dialog: workflows, overlays and screens are read as the ' +
+      'OPTIONS an interaction can be bound to, which is a lookup and not a ' +
+      'surface a reader scans — the same line the ordering guard draws.',
+  ],
+  [
+    'apps/console/components/dashboard/newest-site-users-card.component.tsx',
+    'A dashboard preview at `limit(5)` with a View all link to the paged ' +
+      'list. Five rows chosen to be five, not a window that got cut short.',
+  ],
+  [
+    'apps/console/components/media/media-library.component.tsx',
+    'The DAM grid, already exempt and already explained: it completes a ' +
+      'SEARCH as it loads (AGL-1460), so "how many pages" is not a question ' +
+      'it can answer. Named here too because the widened shape reaches it.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/commerce-analytics-card.component.tsx',
+    'Revenue and conversion BREAKDOWNS — a row per period, channel or ' +
+      'status. A metric computed from a capped window is its own defect and ' +
+      'not this one; a pager over four summary rows would answer nothing.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/commerce-glance-card.component.tsx',
+    'The storefront glance: a handful of headline figures with a row each. ' +
+      'The cardinality is the set of figures, which the card declares.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/locations-card.component.tsx',
+    'One row per inventory location, and the plan bands are 1 / 1 / 2 / 4 / ' +
+      '6 against a `limit(25)` window — the ceiling is four times the largest ' +
+      'band, so the second page is empty on every plan that exists.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/registers-card.component.tsx',
+    'One row per POS register, bands 0 / 0 / 1 / 2 under the same `limit(25)`. ' +
+      'Bounded by what the plan sells, not by how long the store has traded.',
+  ],
+  [
+    'libs/plugins/data/src/lib/components/dataset-schema-dialog.component.tsx',
+    'One row per FIELD of the dataset being edited, which is the schema the ' +
+      'author is defining in the dialog above the rows.',
+  ],
+  [
+    'libs/plugins/logic/src/lib/components/host-reference-health-card.component.tsx',
+    'A diagnostic: one row per BROKEN reference found across a fixed set of ' +
+      'collections. A healthy site renders none, and a site with hundreds ' +
+      'has a bigger problem than a pager would solve.',
+  ],
+  [
+    'libs/plugins/marketing/src/lib/components/host-marketing-summary-card.component.tsx',
+    'A summary card — overlays, campaigns and experiments counted into one ' +
+      'row each, as a link to the surface that lists them properly.',
+  ],
+  [
+    'libs/plugins/marketplace/src/lib/components/listing-content.component.tsx',
+    'Registered as a WIDGET (`widgetId: marketplace-listing-content`), not a ' +
+      'console page: it renders one listing’s own content — its versions, ' +
+      'its screenshots, its install targets — inside whatever embeds it.',
+  ],
+  [
+    'libs/plugins/workflows/src/lib/components/host-webhooks-card.component.tsx',
+    'One row per inbound webhook, and `WEBHOOK_MAX_PER_HOST` is 5 while the ' +
+      'listener reads 20. The cap is enforced server-side in ' +
+      '`/api/hosts/resources`, so the window is four times a bound that ' +
+      'cannot be exceeded and the second page can never exist.',
   ],
   [
     'libs/plugins/marketing/src/lib/components/host-overlays-card.component.tsx',
@@ -839,6 +1033,105 @@ const OWES_A_FOOTER: Array<[string, string]> = [
   [
     'apps/console/components/staff-org-refund-card.component.tsx',
     'An organization’s charges, which grow with its trading.',
+  ],
+  /*========================================================================
+   * The widened shape's own tranche: real lists, still footerless, each with
+   * what stands in the way TODAY. Listed even where this pass could not fix
+   * them — a guard that omits what it cannot fix is how this became three
+   * rounds of somebody finding these by hand.
+   *=======================================================================*/
+  [
+    'apps/console/components/billing/billing-usage-history.component.tsx',
+    'Metered usage, one row per period forever. Billing is held by another ' +
+      'agent’s split of that page; the classification is not why it is ' +
+      'untouched.',
+  ],
+  [
+    'apps/console/components/site-member-drawer.component.tsx',
+    'One member’s orders and subscriptions. Bounded by that person rather ' +
+      'than by the site, which makes it small — but it grows for as long as ' +
+      'they keep buying, so it is a list and not a fixed set.',
+  ],
+  [
+    'libs/plugins/bookings/src/lib/components/bookings-console-page.tsx',
+    'Bookings, which grow with every reservation. A plugin PAGE SHELL, ' +
+      'being converted to routed sections by another agent — the list lives ' +
+      'in the shell here rather than in a card, so it cannot be paged ' +
+      'without editing across that work.',
+  ],
+  [
+    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+    'The contact roster. The same page-shell collision as the bookings ' +
+      'page, and the same reason it is named rather than converted.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/pos-page.component.tsx',
+    'The POS catalog grid, a page shell reading `limit(500)`. It is also the ' +
+      'one surface here where a pager is the wrong control — a till is ' +
+      'searched, not paged — so it wants the search-first treatment the DAM ' +
+      'grid has rather than a footer.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/catalog-organization-card.component.tsx',
+    'Product categories and collections, both unordered `limit(250)` reads. ' +
+      'A growing authored set on a card a commerce agent is working beside.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/discounts-card.component.tsx',
+    'Discount codes, an unordered `limit(100)`. A commerce agent holds the ' +
+      'discount and refund paths today; the classification is not why it is ' +
+      'untouched.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/suppliers-card.component.tsx',
+    'Suppliers, an unordered `limit(50)`. Grows with the merchant’s trading ' +
+      'relationships and nothing bounds it.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/email-screens-card.tsx',
+    'Every email template on the site, read as an unordered `limit(200)` ' +
+      'over `screens`. The email plugin’s page shell is mid-conversion.',
+  ],
+  [
+    'libs/plugins/events-calendar/src/lib/components/events-console-page.tsx',
+    'Events, an unordered `limit(200)` sorted by `startsAtMs` in the ' +
+      'browser. `startsAtMs` IS safe to order on — the only writer refuses a ' +
+      'save without it and the server feed already orders by it — so this is ' +
+      'a one-line fix inside a page shell another agent is rewriting.',
+  ],
+  [
+    'libs/plugins/redirects/src/lib/components/redirects-console-page.tsx',
+    'Redirect rules, an unordered `limit(200)`. Two defects, both in a page ' +
+      'shell another agent is rewriting: the window is a document-id sample ' +
+      'sorted by source, and `redirects.length` — that window, minus the ' +
+      'soft-deleted rows — is what feeds `checkQuota(redirectsPerHost)` and ' +
+      'the readout beside it, so the console disagrees with the enforcing ' +
+      'route in two directions at once.',
+  ],
+  [
+    'libs/plugins/marketplace/src/lib/components/host-plugins-card.component.tsx',
+    'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
+      'Bounded by the marketplace rather than by the account, but the ' +
+      'marketplace is the thing that grows.',
+  ],
+  [
+    'libs/plugins/marketplace/src/lib/components/listing-reviews.component.tsx',
+    'Reviews of one listing, an unordered `limit(100)`. A popular listing ' +
+      'accumulates them for as long as it is published.',
+  ],
+  [
+    'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
+    'Event-triggered actions, an unordered `limit(100)`. The same ' +
+      'duplicate-name check as the workflows card beside it, so it wants the ' +
+      'same ceiling-and-probe rather than a server page — a 1,700-line card ' +
+      'this pass ran out of room for.',
+  ],
+  [
+    'libs/plugins/workflows/src/lib/components/host-activity-card.component.tsx',
+    'The site activity feed. It keeps a "Show more" expander over a ' +
+      'ceilinged read with a View all link, which is a deliberate dashboard ' +
+      'shape rather than an oversight — but the expander is a fourth ' +
+      'pagination grammar and should become the shared footer.',
   ],
 ]
 
@@ -931,8 +1224,8 @@ describe('a table with rows under it has a footer under those (AGL-693)', () => 
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(13)
-    expect(NOT_A_LIST).toHaveLength(10)
+    expect(OWES_A_FOOTER).toHaveLength(28)
+    expect(NOT_A_LIST).toHaveLength(26)
   })
 })
 

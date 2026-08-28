@@ -27,7 +27,19 @@ import {
   pluginDocsHelp,
   runWorkflow,
 } from '@aglyn/aglyn'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — every spec that
+ * renders this card mocks `@aglyn/tenant-feature-instance` wholesale to stage
+ * its Firestore hooks, and a query builder imported through that barrel
+ * disappears under the mock. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -60,6 +72,14 @@ import {
   summarizeDependents,
   type WhereUsedResult,
 } from '@aglyn/plugins-logic'
+
+/**
+ * How many workflows the card reads.
+ *
+ * A CEILING, not a page size — see the query, which explains why this list
+ * cannot be paged by the server without making the duplicate-name check lie.
+ */
+const WORKFLOW_CEILING = 100
 
 export interface HostWorkflowsCardProps {
   hostId: string
@@ -102,11 +122,36 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
      */
     fromCache: workflowsFromCache,
   } = useFirestoreCollection<any>(
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693) —
+     * the same decision as the logic plugin's two cards, for the same reasons.
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order, so the window is a
+     * pseudo-random hundred that the `localeCompare` below arranges
+     * alphabetically, and nothing said the list was bounded.
+     *
+     * `collectionCeiling` does not change WHICH hundred — document-id order is
+     * what the bare cap already returned. What it changes is that the order is
+     * NAMED, so the obvious next edit is caught: ordering on `name` would HIDE
+     * every workflow written without one rather than mis-sorting the list, and
+     * `/api/hosts/resources` validates no field for presence while
+     * `IMPORTABLE_FIELDS.workflows` copies one only if the export carried it.
+     *
+     * The QUERY is not paged because `nameTaken` below tests the draft against
+     * these rows: computed variables look their workflow up BY NAME
+     * (AGL-185/AGL-261), so a duplicate silently rebinds a live binding, and a
+     * uniqueness check over a ten-row page would let one through.
+     */
     () =>
-      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'workflows'),
+        WORKFLOW_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { rows: readWorkflows, truncated: workflowsTruncated } =
+    ceilingedWindow<any>(workflowDocs, WORKFLOW_CEILING)
   const { data: functionDocs } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
@@ -119,11 +164,25 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const workflows = [...(workflowDocs ?? [])]
-    .filter((workflow: any) => !workflow.deletedAt)
-    .sort((a: any, b: any) =>
-      String(a.name ?? '').localeCompare(String(b.name ?? '')),
-    )
+  // Sorting is safe here in a way it is not on a paged list: these rows are
+  // the whole collection below the ceiling, not a slice of one.
+  const workflows = useMemo(
+    () =>
+      readWorkflows
+        .filter((workflow: any) => !workflow.deletedAt)
+        .sort((a: any, b: any) =>
+          String(a.name ?? '').localeCompare(String(b.name ?? '')),
+        ),
+    [readWorkflows],
+  )
+  // The page is a SLICE: the rows are already in hand and `nameTaken` needs
+  // all of them.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleWorkflows = useMemo(
+    () => workflows.slice(page * pageSize, page * pageSize + pageSize),
+    [workflows, page, pageSize],
+  )
   /**
    * The workflow HEAD-COUNT is a server aggregate, not the length of the
    * capped listener (AGL-1716, the AGL-1706 shape).
@@ -390,7 +449,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
               'feeds the next. Site-event triggers are coming next.'}
           </Typography>
         ) : (
-          workflows.map((workflow: any) => (
+          visibleWorkflows.map((workflow: any) => (
             <Stack
               key={workflow.$id}
               direction="row"
@@ -450,6 +509,27 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
             </Stack>
           ))
         )}
+        {workflows.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleWorkflows.length}
+            // The workflows the card HOLDS. Not `workflowCount`, which is the
+            // site's total including soft-deleted rows and answers the quota's
+            // question rather than the reader's.
+            count={workflows.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {workflowsTruncated ? (
+          <Alert severity="info">
+            {`Showing ${WORKFLOW_CEILING} workflows, ordered by id. This site ` +
+              'has more — the duplicate-name check below only covers the ' +
+              'ones listed here, so a name may already be taken by one that ' +
+              'is not.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           color="primary"

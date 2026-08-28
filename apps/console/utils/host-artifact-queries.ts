@@ -98,42 +98,22 @@ export function hostArtifactQuery(
   )
 }
 
-/** A ceilinged read, and whether the ceiling actually bit. */
-export interface CeilingedWindow<T> {
-  /** At most `ceiling` rows — the probe is never among them. */
-  rows: T[]
-  /** The collection holds MORE than the ceiling. A fact, not an estimate. */
-  truncated: boolean
-}
-
 /**
- * A read that is bounded but not paged, and can say when it is short.
+ * The ceilinged-read helper, re-exported rather than re-implemented.
  *
- * Two console lists cannot be windowed by document and must still be bounded:
- * the screens tree (slicing a hierarchy by row separates a child from its
- * parent, and the route each screen composes walks that chain) and the
- * template library (a multi-page starter collapses into ONE row, so a page
- * boundary through a bundle renders it twice, each time partial). Both read a
- * ceiling instead.
- *
- * A bare ceiling is silent, which is the half that matters. Every consequence
- * on those surfaces is computed from what was read — the tree, the routes, the
- * plan count — so a site above the ceiling is shown a partial site with
- * nothing to distinguish "I have no such screen" from "this page did not read
- * it".
- *
- * Asking for ONE document more than the ceiling turns that into a fact for the
- * price of a single read. The probe is never handed on: a caller that rendered
- * `ceiling + 1` rows would be describing a window it did not draw.
- *
- * `hasMore` in `usePagedCollection` is the same trick for a paged list, and
- * for the same reason — a comparison against the cap is wrong exactly when the
- * count is an even multiple of it.
+ * It moved to `@aglyn/tenant-feature-instance` when the plugin console cards
+ * needed the same probe (AGL-693): an app cannot be imported from a library,
+ * so a copy here would have been a second implementation of the one rule that
+ * decides whether a bounded list can admit it is bounded. The console's own
+ * callers keep importing it from this module, beside the query builder they
+ * already ask through.
  */
-export function ceilingedWindow<T>(
-  read: readonly T[] | undefined,
-  ceiling: number,
-): CeilingedWindow<T> {
-  const rows = read ?? []
-  return { rows: rows.slice(0, ceiling), truncated: rows.length > ceiling }
-}
+export {
+  ceilingedWindow,
+  type CeilingedWindow,
+  // The MODULE, not the barrel. Several console specs mock
+  // `@aglyn/tenant-feature-instance` wholesale to stage their Firestore hooks,
+  // and a re-export through the barrel would vanish under those mocks — the
+  // helper is a pure function with no hooks in it, so it has no reason to
+  // travel through a surface that gets replaced.
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'

@@ -230,7 +230,19 @@ describe('the workflows cap is a server aggregate (AGL-1716)', () => {
 
     // The cap was never the defect; fixing the count must not start
     // streaming 400 rows into this list.
-    expect(limitSpy).toHaveBeenCalledWith(100)
+    //
+    // 101, not 100: the ceiling asks for one document PAST itself so that
+    // "this site has more workflows than the card read" is a fact rather than
+    // a guess from `length === 100` (AGL-693). The probe is never rendered.
+    //
+    // Asserted as the SET of caps rather than as a single call, because this
+    // card also reads `functions` and `variables` at `limit(100)` for its step
+    // editor — so `toHaveBeenCalledWith(100)` was satisfied by queries that
+    // are not the list under test, and would have gone on passing if the list
+    // had stopped capping altogether.
+    expect(
+      [...new Set(limitSpy.mock.calls.map(([value]) => value))].sort(),
+    ).toEqual([100, 101])
     expect(countSpy).toHaveBeenCalledTimes(1)
     expect(countSpy).toHaveBeenCalledWith('workflows')
   })

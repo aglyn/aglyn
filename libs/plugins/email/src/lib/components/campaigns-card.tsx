@@ -17,10 +17,22 @@
 'use client'
 
 import { buildRoute, checkQuota, pluginDocsHelp, Route } from '@aglyn/aglyn'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — a spec that mocks
+ * `@aglyn/tenant-feature-instance` wholesale to stage its Firestore hooks
+ * would otherwise lose them, and neither is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Button,
   Chip,
   MenuItem,
@@ -31,7 +43,7 @@ import {
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { createEmailScreen } from '../utils/create-email-screen'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -61,6 +73,15 @@ const besignerHref = (
  * the env-gated Resend route (per-tier monthly caps, signed unsubscribe
  * links, suppression list). History lists past sends with stats.
  */
+/**
+ * How many campaigns the history reads.
+ *
+ * A CEILING, not a page size — see the query, which explains why this list
+ * cannot be paged by the server until a campaign carries one date field every
+ * writer stamps.
+ */
+const CAMPAIGN_CEILING = 30
+
 export function HostCampaignsCard(props: { hostId: string }) {
   const { hostId } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
@@ -76,17 +97,60 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  // No orderBy: scheduled campaigns have no sentAt yet (AGL-272), and an
-  // orderBy on a missing field would drop them from the history.
+  /*
+   * ORDERED AND CEILINGED, and not orderable on any DATE (AGL-693, AGL-272).
+   *
+   * No field here is on every campaign: a sent one is written
+   * `{status:'sent', sentAt}` and a scheduled one `{status:'scheduled',
+   * sendAtMs}`, by the two branches of `campaign-send.ts`, and there is no
+   * `createdAt` at all. `orderBy` on either would not mis-sort the history, it
+   * would DROP half of it — which is what the note this replaces was about.
+   *
+   * What that note did not say is that the alternative was not "no order": a
+   * bare `limit(30)` is answered in DOCUMENT-ID order, so the history is
+   * thirty campaigns chosen by id and then sorted by date, which reads as the
+   * most recent thirty and is not. `collectionCeiling` returns that same
+   * thirty — document-id order is what the bare cap already gave — but it says
+   * so, which is what stops the next edit reaching for `sentAt`, and it probes
+   * one past the ceiling so the reader is told the history is longer.
+   *
+   * The sort stays because these rows are the WHOLE window rather than a slice
+   * of one, and chronology is what a history list is for. Paging the query
+   * would break that: a page of an id-ordered walk re-sorted by date runs in
+   * one order within a page and another across pages. Ordering the history
+   * properly needs one field every writer stamps, which is a change to
+   * `campaign-send.ts` and a backfill, not to this card.
+   */
   const { data: campaignDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(30)),
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'campaigns'),
+        CAMPAIGN_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const campaigns = [...(campaignDocs ?? [])].sort(
-    (a: any, b: any) =>
-      (b.sentAt?.seconds ?? (b.sendAtMs ?? 0) / 1000) -
-      (a.sentAt?.seconds ?? (a.sendAtMs ?? 0) / 1000),
+  const { rows: readCampaigns, truncated: campaignsTruncated } =
+    ceilingedWindow<any>(campaignDocs, CAMPAIGN_CEILING)
+  const campaigns = useMemo(
+    () =>
+      [...readCampaigns].sort(
+        (a: any, b: any) =>
+          (b.sentAt?.seconds ?? (b.sendAtMs ?? 0) / 1000) -
+          (a.sentAt?.seconds ?? (a.sendAtMs ?? 0) / 1000),
+      ),
+    [readCampaigns],
+  )
+  // The page is a SLICE of a window the card already holds.
+  const [historyPage, setHistoryPage] = useState(0)
+  const [historyPageSize, setHistoryPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleCampaigns = useMemo(
+    () =>
+      campaigns.slice(
+        historyPage * historyPageSize,
+        historyPage * historyPageSize + historyPageSize,
+      ),
+    [campaigns, historyPage, historyPageSize],
   )
 
   // Contact segments (AGL-199) join the built-in audiences.
@@ -669,7 +733,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
         {campaigns.length ? (
           <Stack spacing={0.5}>
             <Typography variant="subtitle2">{'History'}</Typography>
-            {campaigns.map((campaign: any) => (
+            {visibleCampaigns.map((campaign: any) => (
               <Stack
                 key={campaign.$id}
                 direction="row"
@@ -731,6 +795,24 @@ export function HostCampaignsCard(props: { hostId: string }) {
                 </Stack>
               </Stack>
             ))}
+            <ListPagination
+              page={historyPage}
+              pageSize={historyPageSize}
+              rowCount={visibleCampaigns.length}
+              // The campaigns the card HOLDS — bounded by the ceiling, which
+              // the notice below owns up to when it bites.
+              count={campaigns.length}
+              onPageChange={setHistoryPage}
+              onPageSizeChange={setHistoryPageSize}
+            />
+            {campaignsTruncated ? (
+              <Alert severity="info">
+                {`Showing ${CAMPAIGN_CEILING} campaigns. This site has sent ` +
+                  'more — the ones listed are not necessarily the most ' +
+                  'recent, because a campaign carries no date field that ' +
+                  'every send stamps.'}
+              </Alert>
+            ) : null}
           </Stack>
         ) : null}
       </Stack>
