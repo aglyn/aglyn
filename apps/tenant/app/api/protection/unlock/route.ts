@@ -22,6 +22,10 @@ import {
   visitorContentRefusal,
 } from '@aglyn/tenant-data-admin'
 import { createHash, timingSafeEqual } from 'crypto'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,9 +60,12 @@ export async function POST(request: Request): Promise<Response> {
   ) {
     return json({ error: 'Invalid request' }, 400)
   }
-  const ip = String(
-    request.headers.get('x-forwarded-for') ?? 'unknown',
-  ).split(',')[0]
+  // This one guards a SECRET, so it keeps counting under the no-address bucket
+  // rather than being skipped — a screen password with no attempt cap is a
+  // password anyone can grind. The key already carries the site and the
+  // screen, so an unreadable address shares one attempt budget per protected
+  // screen and not one across the deployment.
+  const ip = readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET
   const rate = await consumeRateLimit(`unlock:${hostId}:${screenId}:${ip}`, {
     limit: MAX_ATTEMPTS,
     windowMs: WINDOW_MS,

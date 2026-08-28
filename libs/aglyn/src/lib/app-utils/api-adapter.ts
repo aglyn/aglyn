@@ -17,6 +17,7 @@
 
 import { Writable } from 'node:stream'
 import type { PluginApiRequest, PluginApiResponse } from './api-plugins'
+import { readClientIp } from './request-ip'
 
 /**
  * A node-style API handler runnable through {@link runLegacyHandler}. Both
@@ -41,11 +42,23 @@ export type LegacyApiHandler = (req: any, res: any) => unknown
  * streaming media handler's `stream.pipe(res)` works as-is.
  */
 
-/** First `x-forwarded-for` hop, else undefined. */
+/**
+ * The address a node-style handler reads as `req.socket.remoteAddress`.
+ *
+ * There is no real socket behind an App Router `Request`, so this stands in
+ * for one — which makes it a client-address reader wearing a socket's name,
+ * and every plugin handler that falls back to `req.socket?.remoteAddress`
+ * inherits whatever it decides. It goes through the shared reader for exactly
+ * that reason: the fallback has to be the same trusted hop as the header
+ * reading it falls back FROM, or a handler could be steered onto a
+ * caller-supplied value by omitting a header.
+ *
+ * `undefined` rather than a placeholder when nothing is readable — node leaves
+ * `remoteAddress` undefined on a destroyed socket, so handlers already have to
+ * cope with its absence.
+ */
 function clientIp(headers: Headers): string | undefined {
-  const forwarded = headers.get('x-forwarded-for')
-  if (!forwarded) return undefined
-  return forwarded.split(',')[0]?.trim() || undefined
+  return readClientIp(headers) ?? undefined
 }
 
 /** Parse a `Cookie` header into a flat record. */

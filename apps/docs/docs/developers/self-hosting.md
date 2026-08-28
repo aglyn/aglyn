@@ -292,17 +292,18 @@ records, the wildcard certificates, worked Caddy and nginx configurations, and
 what to do instead when you want customers' own domains registered
 automatically.
 
-:::warning Overwrite `X-Forwarded-For`, don't append to it
+:::warning Tell the product how many proxies you run
 Every rate limiter in the product — passkey sign-in, password reset, org
-creation, form submission — reads the **first** hop of `X-Forwarded-For`. A
-proxy that appends leaves a caller-supplied value in front of the real address,
-and the limiters then count whatever the caller typed: one fresh bucket per
-request, with nothing logged and no error raised.
+creation, form submission — keys on the client address, and the address is read
+from `X-Forwarded-For` at the hop `AGLYN_TRUSTED_PROXY_COUNT` names. It defaults
+to `1`, which is right for a single reverse proxy whether that proxy appends to
+the header or overwrites it: a caller-supplied value ends up to the left of the
+real address and is discarded.
 
-Caddy's `reverse_proxy` overwrites it already. For nginx use `proxy_set_header
-X-Forwarded-For $remote_addr` rather than the usual
-`$proxy_add_x_forwarded_for`; for Traefik, set `trustedIPs` and leave
-`forwardedHeaders.insecure` off.
+Set it to `2` if a CDN sits in front of your own proxy, or the reader names your
+proxy instead of the visitor and several visitors share one bucket. Traefik still
+wants `trustedIPs` set and `forwardedHeaders.insecure` left off, so its own chain
+is one you can count.
 
 The compose file publishes both containers on `127.0.0.1`, so your proxy is the
 only way in. If you move the proxy to another host, firewall the port to it
@@ -552,7 +553,7 @@ the collector's CORS allowlist reads it.
 | Legal pages & clickwrap | The signup checkbox links **Aglyn LLC's** Terms and Privacy and records acceptance against Aglyn's document hashes. Nothing breaks, but the agreement is ours, not yours, and is not yet configurable. Replace it before running this for anyone but yourself. |
 | Marketplace | Visible by default, but backed by Aglyn's Stripe Connect platform. Browsing works; purchase and payout onboarding explain themselves only after a click. Turn `release_marketplace` off in Remote Config if you don't want it. |
 | Wildcard published-site domains | Supported. The tenant runtime resolves the `Host` header itself, so a single `*.sites.example.com` rule at your proxy serves every site — see [Reverse proxy](#reverse-proxy). It needs `AGLYN_TENANT_HOST_CNAME` set and `AGLYN_STANDALONE=1` present **at runtime**; without the latter the runtime reads itself as a developer's machine, matches nothing, and redirects every visitor to the configured console. |
-| Client IP | The product trusts the first hop of `X-Forwarded-For` and has no trusted-proxy setting of its own, so **your proxy** has to overwrite that header rather than append to it — see the warning under [Reverse proxy](#reverse-proxy). Get it wrong and every rate limit silently stops counting. |
+| Client IP | One reader, configured by `AGLYN_TRUSTED_PROXY_COUNT` — how many proxies sit in front, default `1`. It takes the hop that many places from the right of `X-Forwarded-For` and ignores everything the caller may have put to its left, so an appending proxy is fine and needs nothing set. Falls back to `x-real-ip` and RFC 7239 `Forwarded`; where nothing readable arrives it returns no address rather than a placeholder, and address-keyed limits are skipped rather than collapsing every anonymous caller into one bucket. Set `2` when a CDN fronts your proxy — see [Reverse proxy](#reverse-proxy). |
 | Request geo | Sanctions screening and the consent-region default read the visitor's country from a request header, and the sign-in alert reads the city too. The defaults are Vercel's names, with fallbacks for Cloudflare, CloudFront, App Engine and the usual GeoIP-module names; set `AGLYN_GEO_COUNTRY_HEADER`, `AGLYN_GEO_REGION_HEADER` and `AGLYN_GEO_CITY_HEADER` if your proxy uses names of its own. Baked in at **build** time. With no country signal the embargo gate fails open and logs that it did, once per instance. The region header matters separately: the sub-country embargo entries match on it alone. |
 | More than one replica | Single-container is the supported shape. Published pages are ISR-cached and site data sits behind a one-hour cache, with no shared cache handler, so a publish busts only the replica that received it — other replicas keep serving the old page for up to 10 minutes. Scale out only behind a sticky-session proxy, or fan the revalidate request out yourself. |
 | Edge caching | Several endpoints send `s-maxage` and rely on a shared cache honouring it. Behind a proxy that caches nothing they are just recomputed per request. Note this also sets your real media takedown window: an asset stays reachable for as long as your cache holds it. |

@@ -39,6 +39,7 @@ import {
   claimHostForOrg,
   findSubdomainConflict,
 } from '../../../../utils/server/provision-host'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 /**
  * Creates a host (user request 2026-07-07 — the hosts page had no create
@@ -160,18 +161,24 @@ async function handler(request: Request): Promise<Response> {
     // sites. Deliberately AFTER the 401/403/423 refusals, matching
     // `orgs/create`: they win the order, and a refused request never burns a
     // token.
-    const ip = headers['x-forwarded-for']?.split(',')[0]?.trim() ?? 'unknown'
+    const ip = readClientIp(headers)
     const perUid = await consumeRateLimit(`host-create:${decoded.uid}`, {
       limit: 20,
       windowMs: 60 * 60 * 1000,
     })
-    const perIp = await consumeRateLimit(`host-create-ip:${ip}`, {
-      limit: 60,
-      windowMs: 60 * 60 * 1000,
-    })
+    // Skipped when no address is readable, and the per-uid cap above carries
+    // the control alone. A shared `host-create-ip:unknown` bucket would cap
+    // every account on the install at sixty sites an hour between them, which
+    // is a name-grab defense that grabs the names from its own customers.
+    const perIp = ip
+      ? await consumeRateLimit(`host-create-ip:${ip}`, {
+          limit: 60,
+          windowMs: 60 * 60 * 1000,
+        })
+      : null
     // `.allowed`, not the result object — a truthiness check would be
     // permanently true and the limit would never bite.
-    const overLimit = !perUid.allowed ? perUid : !perIp.allowed ? perIp : null
+    const overLimit = !perUid.allowed ? perUid : perIp && !perIp.allowed ? perIp : null
     if (overLimit) {
       return Response.json(
         {

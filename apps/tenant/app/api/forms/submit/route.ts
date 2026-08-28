@@ -29,6 +29,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 export const dynamic = 'force-dynamic'
 
@@ -209,9 +213,11 @@ export async function POST(request: Request): Promise<Response> {
   ) {
     return json({ error: 'Invalid submission' }, 400)
   }
-  const ip = String(
-    request.headers.get('x-forwarded-for') ?? 'unknown',
-  ).split(',')[0]
+  // Keeps counting under the no-address bucket rather than being skipped: a
+  // public form endpoint that stops counting is an open write, and the key
+  // already carries the site, so an unreadable address shares one budget per
+  // SITE rather than one across the deployment.
+  const ip = readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET
   const rate = await consumeRateLimit(`form:${hostId}:${ip}`, {
     limit: RATE_MAX,
     windowMs: RATE_WINDOW_MS,

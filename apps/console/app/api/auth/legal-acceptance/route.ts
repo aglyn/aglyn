@@ -25,6 +25,7 @@ import {
   LEGAL_DOCUMENT_VERSION,
   LEGAL_DOCUMENTS,
 } from '../../../../constants/legal-documents'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 // lockdown-423: exempt — records the caller's own ToS acceptance during sign-in; pre-org,
 // so the org/host/user scope verdict has nothing to bind to; the session mint carries
@@ -105,12 +106,12 @@ async function handler(request: Request): Promise<Response> {
       version: LEGAL_DOCUMENT_VERSION,
       documents: LEGAL_DOCUMENTS,
       context,
-      // Standard clickwrap evidence. Best-effort: behind a proxy the header
-      // may be absent, and a missing IP is not a reason to lose the record.
-      ipAddress:
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-        request.headers.get('x-real-ip') ||
-        null,
+      // Standard clickwrap evidence. Best-effort: a deployment whose proxy
+      // names no address supplies none, and a missing IP is not a reason to
+      // lose the record. Null rather than a placeholder, because this field is
+      // evidence — a value invented here would read as a fact about where
+      // somebody accepted the agreement.
+      ipAddress: readClientIp(request.headers),
       userAgent: request.headers.get('user-agent'),
     })
     return Response.json(

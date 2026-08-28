@@ -40,13 +40,17 @@ export const dynamic = 'force-dynamic'
 const pathKey = Aglyn.analyticsPathKey
 
 const noContent = () => new Response(null, { status: 204 })
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 // Best-effort per-instance rate limit (AGL-510): this endpoint is
 // unauthenticated and fires host automations via emitHostEvent, so cap bursts
 // from one client. Instances are ephemeral, so this only blunts spikes. The
-// store is private and size-capped (AGL-1844) because its keys come from
-// `x-forwarded-for` — the old timestamp-array map grew one entry per distinct
-// IP forever, an unbounded map reachable by anyone with a spoofable header.
+// store is private and size-capped (AGL-1844) because its keys come from the
+// client address — the old timestamp-array map grew one entry per distinct IP
+// forever, an unbounded map reachable by anyone who could vary the value.
 // Cleared wholesale like the CSP collector's keyStore: the failure mode is a
 // briefly widened limit, strictly better than an OOM on a long-lived
 // instance.
@@ -665,9 +669,12 @@ async function evaluateBandwidthLimits(hostId: string): Promise<void> {
  * sendBeacon, so errors just 204.
  */
 export async function POST(request: Request): Promise<Response> {
-  const ip = String(request.headers.get('x-forwarded-for') ?? 'unknown')
-    .split(',')[0]
-    .trim()
+  // A cost control with no second key, so it keeps counting under the
+  // no-address bucket rather than being skipped: this endpoint is
+  // unauthenticated, fires host automations and writes counters, and the
+  // deployment that cannot name its callers is the one an unbounded collector
+  // would hurt most. Every path answers 204 either way.
+  const ip = readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET
   if (rateLimited(ip)) return noContent()
   try {
     const raw = await request.text()

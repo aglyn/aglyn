@@ -67,6 +67,10 @@ async function enrollInList(options: {
 
 // Best-effort per-instance flood damper.
 const attemptsByIp = new Map<string, number[]>()
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 /**
  * Newsletter opt-in (AGL-301): footer signups and checkout opt-ins land
@@ -87,9 +91,12 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
   if (!hostId || !EMAIL_PATTERN.test(email)) {
     return res.status(400).json({ error: 'Enter a valid email' })
   }
-  const ip = String(
-    req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown',
-  ).split(',')[0]
+  // Keeps counting under the no-address bucket rather than being skipped: an
+  // unauthenticated signup endpoint that stops counting is an open write into
+  // the contacts CRM.
+  const ip =
+    readClientIp(req.headers, { remoteAddress: req.socket?.remoteAddress }) ??
+    NO_CLIENT_ADDRESS_BUCKET
   const now = Date.now()
   const attempts = (attemptsByIp.get(ip) ?? []).filter(
     (at) => now - at < 60_000,

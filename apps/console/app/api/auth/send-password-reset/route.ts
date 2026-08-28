@@ -20,6 +20,7 @@ import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { consumeRateLimit, meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { renderSystemEmail } from '../../_lib/render-system-email'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 // lockdown-423: exempt — account recovery must always work — a lockdown is not a password
 // incident, and the notice page tells locked users to contact support.
@@ -60,18 +61,24 @@ async function handler(request: Request): Promise<Response> {
   // mailbombing one person, which a single caller can do from anywhere.
   // Fails soft by design (`consumeRateLimit`), so an outage of the limiter
   // does not take password recovery down with it.
-  const ip = headers['x-forwarded-for']?.split(',')[0]?.trim() ?? 'unknown'
+  const ip = readClientIp(headers)
   const perAddress = await consumeRateLimit(`password-reset:${email}`, {
     limit: 5,
     windowMs: 60 * 60 * 1000,
   })
-  const perIp = await consumeRateLimit(`password-reset-ip:${ip}`, {
-    limit: 20,
-    windowMs: 60 * 60 * 1000,
-  })
+  // Skipped when no address is readable. The per-address cap is the one this
+  // control exists for — mailbombing one person — and it does not need to know
+  // who asked; a shared `password-reset-ip:unknown` bucket would silently take
+  // password recovery away from everyone after twenty attempts.
+  const perIp = ip
+    ? await consumeRateLimit(`password-reset-ip:${ip}`, {
+        limit: 20,
+        windowMs: 60 * 60 * 1000,
+      })
+    : null
   // `.allowed`, not the result object — a truthiness check on the result
   // would be permanently true and the limit would never bite.
-  if (!perAddress.allowed || !perIp.allowed) return ok()
+  if (!perAddress.allowed || (perIp && !perIp.allowed)) return ok()
 
   if (!isEmailConfigured()) {
     console.error('[auth/send-password-reset] email is not configured')

@@ -37,6 +37,7 @@ import {
   recordSignupRefusal,
   signupProvisioningGraceAllows,
 } from '@aglyn/tenant-data-admin'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 /**
  * Creates an organization for the signed-in user (AGL-233). Like Slack,
@@ -110,18 +111,25 @@ async function handler(request: Request): Promise<Response> {
     // outage must not block signups. Deliberately AFTER the 451/423/403
     // refusals — they win the spec-pinned order, and a refused request never
     // burns a token.
-    const ip = headers['x-forwarded-for']?.split(',')[0]?.trim() ?? 'unknown'
+    const ip = readClientIp(headers)
     const perUid = await consumeRateLimit(`org-create:${decoded.uid}`, {
       limit: 3,
       windowMs: 60 * 60 * 1000,
     })
-    const perIp = await consumeRateLimit(`org-create-ip:${ip}`, {
-      limit: 10,
-      windowMs: 60 * 60 * 1000,
-    })
+    // The per-IP half is skipped when no address is readable. It exists to
+    // catch a bot farm rotating accounts behind one address, which is a
+    // question about WHICH address; keying an unreadable one under a
+    // placeholder answers it for nobody and caps the whole install at ten orgs
+    // an hour instead.
+    const perIp = ip
+      ? await consumeRateLimit(`org-create-ip:${ip}`, {
+          limit: 10,
+          windowMs: 60 * 60 * 1000,
+        })
+      : null
     // `.allowed`, not the result object — a truthiness check would be
     // permanently true and the limit would never bite.
-    const overLimit = !perUid.allowed ? perUid : !perIp.allowed ? perIp : null
+    const overLimit = !perUid.allowed ? perUid : perIp && !perIp.allowed ? perIp : null
     if (overLimit) {
       // Make the refusal observable (AGL-1907). The AGL-1536 alarm counts
       // orgs that were CREATED, so a contained wave reads as calm — volume

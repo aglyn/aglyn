@@ -191,24 +191,35 @@ Two more addresses are set by the image rather than by you:
 
 ## Your reverse proxy, the client IP, and geo {#proxy}
 
-### `X-Forwarded-For`: your proxy must overwrite, not append {#xff}
+### `X-Forwarded-For`: tell the product how many proxies you run {#xff}
 
-:::danger Get this wrong and every rate limit silently stops counting
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `AGLYN_TRUSTED_PROXY_COUNT` | Recommended | Runtime | How many proxies sit between the internet and the container. One reverse proxy is `1`, which is also the default. A CDN in front of your own proxy is `2`. `0` means nothing is in front and forwarding headers are ignored entirely. Not a header index — you never have to work out which end of the list to count from. |
 
-Twenty-four places in the product derive the client IP, and **all twenty-four
-take the first hop** of `x-forwarded-for` — the leftmost, fully client-supplied
-value. There is no trusted-proxy hop count, no trusted-proxy CIDR list, and no
-setting anywhere that changes this. The guarantee has to come from your proxy.
+Every client address in the product is read through one reader, which takes the
+hop this number identifies and ignores everything to its left. With N proxies in
+front, the last N entries of `x-forwarded-for` were written by your proxies and
+are the only ones a caller cannot forge; the outermost of them recorded the
+address it actually saw, which is the visitor.
+
+:::danger Set this if you run more than one proxy
 
 nginx's usual `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`
 **appends**. A request arriving with a header the client typed —
-`X-Forwarded-For: 1.2.3.4` — leaves your proxy as `1.2.3.4, <real address>`, and
-the product then keys every limiter on `1.2.3.4`. Change one character per
-request and you have a fresh bucket every time. Nothing errors. Nothing is
-logged.
+`X-Forwarded-For: 1.2.3.4` — leaves your proxy as `1.2.3.4, <real address>`. At
+the default of one trusted proxy the product reads `<real address>` and the
+forged value is discarded, which is what you want. Configure `2` when a CDN sits
+in front, or the reader names your own proxy instead of the visitor — several
+visitors then share one rate-limit bucket and limits bite sooner than they
+should.
+
+Too high is the safer direction than too low: a chain shorter than the configured
+depth is clamped to its leftmost entry, which was still written by a proxy you
+trust.
 :::
 
-What that protects, when it works:
+What this protects:
 
 - **Authentication throttles** — passkey sign-in (both ceremony steps),
   password-reset mailbombing, identifier resolution, storefront member login and
@@ -224,30 +235,30 @@ What that protects, when it works:
   merely a bypass: it is what an account owner reads when deciding whether a
   sign-in was theirs.
 
-Configure your proxy to **overwrite** the header with the connecting address:
+A single reverse proxy needs no configuration at all. Either style works:
 
 ```nginx
-# nginx — note $remote_addr, NOT $proxy_add_x_forwarded_for
+# nginx — either form is correct at AGLYN_TRUSTED_PROXY_COUNT=1.
+# $proxy_add_x_forwarded_for appends, and the appended entry is the one read.
 location / {
     proxy_pass         http://127.0.0.1:4200;
     proxy_set_header   Host              $host;
-    proxy_set_header   X-Forwarded-For   $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
     proxy_set_header   X-Forwarded-Proto $scheme;
     proxy_set_header   X-Real-IP         $remote_addr;
 }
 ```
 
 ```caddy
-# Caddy — reverse_proxy already replaces X-Forwarded-For with the
-# connecting address. Do NOT add a header_up that appends to it.
+# Caddy — reverse_proxy sets X-Forwarded-For itself. Nothing to add.
 console.example.com {
     reverse_proxy 127.0.0.1:4200
 }
 ```
 
 ```yaml
-# Traefik — leave insecure OFF and name the proxies you actually trust.
-# With insecure: true, Traefik forwards whatever the client sent.
+# Traefik — leave insecure OFF and name the proxies you actually trust,
+# so Traefik's own chain is one you can count.
 entryPoints:
   websecure:
     address: ':443'
@@ -257,14 +268,23 @@ entryPoints:
         - 10.0.0.0/8        # your own load balancers only
 ```
 
-If a CDN sits in front of your own proxy, the trusted list is the CDN's egress
-ranges, and your proxy still has to reduce the chain to one authoritative hop.
+If a CDN sits in front of your own proxy, that is two hops: set
+`AGLYN_TRUSTED_PROXY_COUNT=2` and restrict your proxy to the CDN's egress ranges,
+so nothing can reach it around the CDN and shorten the chain.
+
+`x-real-ip` and RFC 7239 `Forwarded` are read too, in that order, when
+`x-forwarded-for` carries nothing usable — so a proxy that sets one of those
+instead works without configuration. When nothing readable arrives the product
+gets **no address** rather than a placeholder, and each control decides for
+itself: address-keyed rate limits are skipped rather than collapsing every
+anonymous caller into a single shared bucket, and stored evidence records that
+the address is unknown instead of recording a guess.
 
 `docker-compose.yml` publishes both containers on `127.0.0.1` so nothing can
 reach them without passing your proxy. **Do not widen that binding.** If your
 proxy runs on another host, put it on this host's network or firewall the
-published port to the proxy alone — a directly reachable container accepts
-whatever `X-Forwarded-For` the caller typed.
+published port to the proxy alone — a directly reachable container is a chain of
+zero trusted hops, and no header reading survives that.
 
 ### Geo headers {#geo}
 
@@ -1271,6 +1291,7 @@ the source does not send you looking for a value to put in it.
 | `FIREBASE_AUTH_EMULATOR_ENABLED`, `FIREBASE_FIRESTORE_EMULATOR_ENABLED`, `FIREBASE_DATABASE_EMULATOR_ENABLED`, `FIREBASE_STORAGE_EMULATOR_ENABLED`, `FIREBASE_AUTH_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, `FIREBASE_DATABASE_EMULATOR_HOST` | Firebase emulator wiring for local development. Never set these on a deployment — they point the SDK at an emulator that is not there. |
 | `LINEAR_API_KEY`, `LINEAR_CUSTOMER_REPORTS_TEAM_ID`, `LINEAR_CUSTOMER_REPORTS_PROJECT_ID` | Your own issue tracker for the console's "Report an issue" dialog. See [Self-hosting → Customer issue reports](./self-hosting.md#issue-reports). |
 | `RECAPTCHA_ADMIN_KEY_NAME` | The reCAPTCHA Enterprise key that customer custom domains are allowlisted on, as `projects/{project}/keys/{siteKey}`. Its last segment **must equal** `NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY` — naming a different key writes happily and attests nothing. Only relevant if you run App Check with reCAPTCHA Enterprise. |
+| `AGLYN_DRIVE_MOUNT` | A **workstation** path: the directory containing the shared drives' folders (`Platform Docs` and its siblings), used by repository checks that cross-reference a repo file against its counterpart on the shared drive — the pricing source of truth, the decision log, the launch runbook, the legal originals, the generated feature matrix. **No default, and unset is not an error**: each of those checks skips its shared-drive leg and says so, because CI has no such mount and a check that failed without one would be red everywhere except one machine. Nothing here assumes Google Drive — any directory with `Platform Docs` inside it works. Not read by any app or container. |
 | `NEXT_CACHE_MAX_GB` | A **workstation** disk guard used by `tools/scripts/clean-next.mjs`: over this many gigabytes, an app's `.next` directory is deleted before the dev server starts. Default `10`. Not a runtime cache setting and not read by any container. |
 | `LOCKDOWN_DRILL` | Enables the timing-sensitive cases of a lockdown test. Test-only; no runtime effect. |
 | `STRIPE_DUNNING_CHECK_KEY` | A Stripe key for a read-only CI script that compares your live dunning schedule against the committed one. Not read by any app. |

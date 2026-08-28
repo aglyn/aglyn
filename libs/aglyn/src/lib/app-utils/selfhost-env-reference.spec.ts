@@ -105,6 +105,7 @@ const INDIRECT_READS: Record<string, string> = {
   NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD:
     'libs/aglyn/src/lib/app-utils/analytics-environment.ts',
   STRIPE_LIVEMODE: 'libs/aglyn/src/lib/app-utils/stripe-deployment-mode.ts',
+  AGLYN_TRUSTED_PROXY_COUNT: 'libs/aglyn/src/lib/app-utils/request-ip.ts',
   AGLYN_REGION: 'libs/aglyn/src/lib/app-utils/deployment-shape.ts',
   FLY_REGION: 'libs/aglyn/src/lib/app-utils/deployment-shape.ts',
   AWS_REGION: 'libs/aglyn/src/lib/app-utils/deployment-shape.ts',

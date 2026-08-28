@@ -179,8 +179,14 @@ export interface MembershipRecoverThrottleResult {
 export interface MembershipRecoverAttemptOptions {
   /** The address the recovery was requested for, normalized by the caller. */
   email: string
-  /** Client IP, first `x-forwarded-for` hop. `'unknown'` when absent. */
-  ip: string
+  /**
+   * The caller's address from `readClientIp`, or `null` when nothing readable
+   * named one — in which case the per-source cap is SKIPPED rather than shared.
+   * One `recover:ip:unknown` budget would spend every site's recovery
+   * allowance on behalf of whoever tried first; the per-recipient cap above is
+   * the half that stops mailbombing one person and needs no address.
+   */
+  ip: string | null
   now?: number
   /** Injectable for tests; defaults to the Admin SDK's Firestore. */
   firestore?: unknown
@@ -234,17 +240,21 @@ export async function consumeMembershipRecoverAttempt(
     return refusal('recipient', recipient.resetMs, at, recipient)
   }
 
-  const source = await consumeRateLimit(`recover:ip:${ip || 'unknown'}`, {
-    ...shared,
-    limit: RECOVER_ATTEMPTS_PER_IP,
-  })
-  if (!source.allowed) return refusal('ip', source.resetMs, at, source)
+  const source = ip
+    ? await consumeRateLimit(`recover:ip:${ip}`, {
+        ...shared,
+        limit: RECOVER_ATTEMPTS_PER_IP,
+      })
+    : null
+  if (source && !source.allowed) {
+    return refusal('ip', source.resetMs, at, source)
+  }
 
   return {
     allowed: true,
     retryAfterSeconds: 0,
     limited: null,
-    degraded: recipient.degraded || source.degraded,
+    degraded: recipient.degraded || Boolean(source?.degraded),
     contended: false,
   }
 }

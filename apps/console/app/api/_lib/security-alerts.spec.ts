@@ -259,12 +259,18 @@ describe('describeSignInClient', () => {
         'x-vercel-ip-city': 'Denver',
         'x-vercel-ip-country-region': 'CO',
         'x-vercel-ip-country': 'US',
-        'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+        // A caller-typed value in front of the address a proxy observed. The
+        // address in this email is stored on the device record and read back
+        // by the breach-notification report, so a forged hop reaching it is a
+        // durable false claim about where somebody signed in from — not just a
+        // rate-limit bypass.
+        'x-forwarded-for': '198.51.100.66, 203.0.113.7',
       }),
     )
     expect(client.deviceName).toBe('Chrome on macOS')
     expect(client.location).toBe('Denver, CO, US')
     expect(client.ip).toBe('203.0.113.7')
+    expect(client.ip).not.toBe('198.51.100.66')
   })
 
   it('decodes URI-encoded city names', () => {

@@ -358,12 +358,17 @@ export async function POST(request: Request): Promise<Response> {
       : html(receiptHtml('AR-' + Date.now().toString(36).toUpperCase()))
   }
 
+  // Skipped when no address is readable rather than sharing one bucket: this
+  // refusal costs a person a legal remedy, and a placeholder key would spend
+  // one deployment-wide budget on their behalf. The honeypot above still runs.
   const ip = clientIp(request)
-  const rate = await consumeRateLimit(`abuse-report:${ip}`, {
-    limit: REPORT_RATE_MAX,
-    windowMs: REPORT_RATE_WINDOW_MS,
-  })
-  if (!rate.allowed) {
+  const rate = ip
+    ? await consumeRateLimit(`abuse-report:${ip}`, {
+        limit: REPORT_RATE_MAX,
+        windowMs: REPORT_RATE_WINDOW_MS,
+      })
+    : null
+  if (rate && !rate.allowed) {
     // Hand them another route rather than a wall — the refusal must not be
     // the last thing a real reporter sees.
     const contact = contactText('support')

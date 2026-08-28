@@ -341,12 +341,17 @@ export async function POST(request: Request): Promise<Response> {
       : html(receiptHtml('CN-' + Date.now().toString(36).toUpperCase()))
   }
 
+  // Skipped when no address is readable rather than sharing one bucket: this
+  // refusal costs a person a legal remedy, and a placeholder key would spend
+  // one deployment-wide budget on their behalf. The honeypot above still runs.
   const ip = clientIp(request)
-  const rate = await consumeRateLimit(`counter-notice:${ip}`, {
-    limit: COUNTER_NOTICE_RATE_MAX,
-    windowMs: COUNTER_NOTICE_RATE_WINDOW_MS,
-  })
-  if (!rate.allowed) {
+  const rate = ip
+    ? await consumeRateLimit(`counter-notice:${ip}`, {
+        limit: COUNTER_NOTICE_RATE_MAX,
+        windowMs: COUNTER_NOTICE_RATE_WINDOW_MS,
+      })
+    : null
+  if (rate && !rate.allowed) {
     // Hand them another route rather than a wall — but only a route this
     // deployment actually has. An unconfigured operator gets the advice
     // instead of a mailto with nothing behind it (AGL-2016).

@@ -43,6 +43,10 @@
 // lockdown-423: exempt — anonymous browser beacon; no caller identity, no org context.
 
 import { checkRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,8 +78,12 @@ const accepted = (): Response => new Response(null, { status: 204 })
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+    // A cost control with no second key, so it keeps counting under the
+    // no-address bucket rather than being skipped: this endpoint is
+    // unauthenticated and writes, and the deployment that cannot name its
+    // callers is the one an unbounded beacon would hurt most. The collapse
+    // costs telemetry rather than service — every path here answers 204.
+    const ip = readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET
     // Generous for a browser that reports once per page view, nothing for a
     // flood. Over-limit posts are ACCEPTED and dropped.
     if (

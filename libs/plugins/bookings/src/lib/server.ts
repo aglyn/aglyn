@@ -108,6 +108,10 @@ import {
   type LoadedHostEmail,
 } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 const BOOKING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -259,9 +263,12 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
   if (startsAtMs < Date.now()) {
     return res.status(409).json({ error: 'That time has already passed' })
   }
-  const ip = String(
-    req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown',
-  ).split(',')[0]
+  // Keeps counting under the no-address bucket rather than being skipped: an
+  // unauthenticated booking endpoint that stops counting writes reservations
+  // for anyone who can reach it.
+  const ip =
+    readClientIp(req.headers, { remoteAddress: req.socket?.remoteAddress }) ??
+    NO_CLIENT_ADDRESS_BUCKET
   if (bookingRateLimited(ip)) {
     return res.status(429).json({ error: 'Too many booking attempts' })
   }

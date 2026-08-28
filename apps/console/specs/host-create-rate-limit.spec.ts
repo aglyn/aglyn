@@ -193,7 +193,7 @@ const post = () =>
       method: 'POST',
       headers: {
         authorization: 'Bearer tok',
-        'x-forwarded-for': '203.0.113.9, 10.0.0.1',
+        'x-forwarded-for': '198.51.100.66, 203.0.113.9',
       },
       body: JSON.stringify({
         displayName: 'Squat Site',
@@ -229,8 +229,10 @@ describe('AGL-1968 · /api/hosts/create is rate limited', () => {
       limit: 20,
       windowMs: HOUR_MS,
     })
-    // First hop of x-forwarded-for only — the rest is appended by our own
-    // proxies and attacker-controllable.
+    // The trusted hop, not the first: `198.51.100.66` is the value a caller
+    // typed into their own request, and an appending proxy leaves it to the
+    // LEFT of the address it observed. Keying on it would hand every request a
+    // fresh bucket.
     expect(mockConsumeRateLimit).toHaveBeenCalledWith(
       'host-create-ip:203.0.113.9',
       { limit: 60, windowMs: HOUR_MS },

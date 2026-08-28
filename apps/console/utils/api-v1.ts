@@ -43,6 +43,10 @@ import {
   verifyApiKey,
   withResponseHeaders,
 } from '@aglyn/tenant-data-admin'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 export interface ApiV1Context {
   orgId: string
@@ -130,22 +134,20 @@ export function resetPreAuthLookupBudgetForTests(): void {
 }
 
 /**
- * Client IP, first `x-forwarded-for` hop then `x-real-ip` — the same
- * derivation `/api/orgs/create`, the passkey routes and the password-reset
- * throttle already key their IP limits on, so this control is exactly as
- * trustworthy as the ones already shipping and not a new assumption.
+ * The pre-auth budget's key: the shared client-address reader, so this
+ * control keys on the same hop every limiter in the product does and is
+ * exactly as trustworthy as they are rather than a new assumption.
  *
- * `'unknown'` when neither header is present. That shares one bucket across
- * every header-less caller, which is the safe direction to be wrong in: it
- * over-counts (refuses sooner) rather than handing each caller a fresh
- * budget. On Vercel the platform sets the header on every request, so this
- * is a local-dev and self-host path.
+ * Falls back to the no-address bucket rather than being skipped. This budget
+ * bounds READ AMPLIFICATION — work a stranger can cause before anyone has
+ * authenticated — so leaving it off where no address is readable would remove
+ * the bound on precisely the deployment that could not name its callers.
+ * Sharing one bucket over-counts (refuses sooner) rather than handing each
+ * caller a fresh budget, which is the safe direction to be wrong in. It is
+ * reached only when no source produced an address at all.
  */
-function clientIp(request: Request): string {
-  const forwarded = (request.headers.get('x-forwarded-for') ?? '')
-    .split(',')[0]
-    .trim()
-  return forwarded || request.headers.get('x-real-ip') || 'unknown'
+function clientIpKey(request: Request): string {
+  return readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET
 }
 
 /** Current billing month key, `YYYY-MM`, matching the usage rollup. */
@@ -247,7 +249,7 @@ export async function authenticateApiV1(
   // AGL-2414: bound the read amplification BEFORE spending the read. See
   // PREAUTH_LOOKUP_LIMIT for why this budget is IP-keyed, per-instance, and
   // charged only on lookups that resolve to nothing.
-  const budgetKey = `apiv1-preauth:${clientIp(request)}`
+  const budgetKey = `apiv1-preauth:${clientIpKey(request)}`
   const budgetOptions = {
     limit: PREAUTH_LOOKUP_LIMIT,
     windowMs: PREAUTH_LOOKUP_WINDOW_MS,
