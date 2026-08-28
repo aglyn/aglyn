@@ -40,6 +40,41 @@ function isTransientStripeStatus(status: number): boolean {
   return status === 429 || status >= 500
 }
 
+/**
+ * THE BUYER'S TAX JURISDICTION, from the session Stripe computed the tax on.
+ *
+ * Aglyn is a marketplace facilitator, so the tax on a facilitated sale is
+ * Aglyn's to collect and remit — and a return reports it BY STATE. Checkout
+ * already collects everything needed for that (`billing_address_collection:
+ * 'required'`, `automatic_tax[enabled]`), and Stripe states the address it
+ * computed from back on `customer_details.address`. Nothing read it, so every
+ * facilitated sale reached `tx-return.ts` with no jurisdiction and the whole
+ * of the marketplace tax could be stated only as a platform total attributable
+ * to no state.
+ *
+ * COUNTRY AND STATE ONLY, and deliberately narrower than the storefront twin.
+ * `StorefrontTaxRow` keeps `city` and `postalCode` beside them; the return
+ * reads neither, on either collection — it keys every jurisdiction bucket
+ * `COUNTRY-STATE`. A purchase document already names `buyerUid`, so anything
+ * stored here is personal data by association, and a street-grained address a
+ * filing cannot use is data held for no purpose. The two fields kept are the
+ * two the return reads.
+ *
+ * Null when the session states no country. An unstated jurisdiction is COUNTED
+ * by the return (`rowsMissingJurisdiction`) and never inferred: a jurisdiction
+ * reconstructed after the fact is a guess handed to a tax authority as a fact.
+ */
+function buyerTaxJurisdiction(
+  object: any,
+): { country: string; state: string | null } | null {
+  const address = object?.customer_details?.address
+  const country =
+    typeof address?.country === 'string' ? address.country.trim() : ''
+  if (!country) return null
+  const state = typeof address?.state === 'string' ? address.state.trim() : ''
+  return { country, state: state || null }
+}
+
 /** One authorized GET against the Stripe API, body parsed either way. */
 async function stripeGet(
   url: string,
@@ -935,6 +970,9 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       const taxCents = Number(object?.total_details?.amount_tax ?? 0)
       const sellerCents = Number(transferCents ?? 0)
       const netCents = grossCents - taxCents - sellerCents
+      // WHERE that tax is owed. Read from the session Stripe computed it
+      // from — see `buyerTaxJurisdiction`.
+      const jurisdiction = buyerTaxJurisdiction(object)
       const purchaseRef = firebaseAdmin
         .app()
         .firestore()
@@ -987,6 +1025,20 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             : {
                 createdAt:
                   firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+                // THE JURISDICTION THE TAX WAS COMPUTED FOR (AGL-2137).
+                //
+                // Here, inside the first-record branch, for a stronger reason
+                // than `createdAt`'s: a row that exists without a jurisdiction
+                // must keep not having one. Stripe redelivers this event for
+                // up to three days, and a redelivery that stamped a
+                // jurisdiction onto an older sale would restate which state a
+                // past period's tax is attributed to — a period that may
+                // already have been filed. Recording forward is an
+                // improvement; reaching backwards is a restatement.
+                //
+                // Absent, rather than null, when the session states no
+                // country: see `buyerTaxJurisdiction`.
+                ...(jurisdiction ? { customerAddress: jurisdiction } : {}),
               }),
         },
         // MERGED, like every other write on this path (AGL-2109). This one
