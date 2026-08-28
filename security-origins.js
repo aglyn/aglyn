@@ -168,6 +168,50 @@ function firstPartyDomains() {
  *
  * `isProduction` mirrors the config's own behaviour of also allowing the
  * `http://` forms off production, so local development keeps working.
+ *
+ * ## Two directives that are deliberately absent, and stay absent
+ *
+ * A Lighthouse "best practices" audit names both of these on every run, so the
+ * pressure to add them recurs. Neither is a header change on the tenant, and
+ * the reasons are properties of what a published customer site IS.
+ *
+ * ### `require-trusted-types-for 'script'` — unreachable, and not merely unbuilt
+ *
+ * Trusted Types turns every string-to-code sink into a call that must pass
+ * through a registered policy. The tenant render path has four kinds of sink,
+ * and the last one has no fix at all:
+ *
+ * 1. `new Function(step.code)()` in the marketing plugin's site runtime runs
+ *    the site owner's own JavaScript on their own page — a sold feature. TT
+ *    gates `new Function` exactly as it gates `eval`, so enforcing it deletes
+ *    the feature rather than hardening it.
+ * 2. `container.innerHTML = …` in that same runtime, plus seven
+ *    `dangerouslySetInnerHTML` sites across the tenant, typography rich text
+ *    and the Custom HTML block. Each would need a policy wrapper; React and
+ *    `next/script` (which injects `<script>` elements at `afterInteractive`)
+ *    have no Trusted Types support to hang one on.
+ * 3. The JSON-LD and animation `<script>` blocks the page emits inline.
+ * 4. Custom HTML's Embed mode is a `srcdoc` iframe carrying a RAW author
+ *    snippet. A `srcdoc` child inherits this policy — measured, and the same
+ *    inheritance the tenant relies on for `connect-src` and `frame-src`. The
+ *    snippet is third-party widget code we never see, so there is no call site
+ *    to route through a policy. This is the one an owner allowlist cannot
+ *    answer, and it is why the directive is not merely deferred.
+ *
+ * ### `script-src` — nonce and hash both fail, for recorded reasons
+ *
+ * Do not re-derive this. The tenant page is ISR at `revalidate = 600`, so its
+ * HTML is regenerated OUTSIDE any request: a per-request nonce lands in the
+ * header while the cached bytes carry `$undefined`, which was measured as two
+ * requests to one cached page returning byte-identical HTML under different
+ * nonces. Hashes cannot cover the JSON-LD (varies per page) or the RSC flight
+ * payload (varies per revalidation, and its content IS the serialized tree).
+ * The full history is in `apps/tenant/middleware.ts`, and
+ * `apps/tenant/specs/csp-no-script-src.spec.ts` fails if anyone re-adds it.
+ *
+ * The console is the opposite case and DOES carry `script-src` — it is
+ * request-rendered, so a nonce matches its bytes. Do not read the console's
+ * directive as evidence the tenant could have one.
  */
 function baseCspDirectives(isProduction) {
   const domains = firstPartyDomains()

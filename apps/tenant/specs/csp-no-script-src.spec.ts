@@ -35,29 +35,32 @@
  * "we're measuring before enforcing", and nothing about the running site
  * complains. This suite is the thing that complains.
  *
- * ## What changed, and why it is not a loosening
+ * ## Why the guarantee is worded as ingredients, not as "no header"
  *
- * This file used to assert `Content-Security-Policy-Report-Only` was **null**.
- * AGL-1703 ships one carrying a report-only `img-src`, so that assertion had to
- * go — and deleting it would have thrown away the AGL-1228 guarantee along with
- * it, because "no report-only header" was standing in for "no unsatisfiable
- * `script-src`". The two are now separated: the header may exist, and every
- * ingredient of the AGL-1228 defect is pinned by name in it.
+ * AGL-1228's header was unsatisfiable because it advertised a **per-request
+ * nonce** against **ISR-cached bytes** — two requests to one cached page
+ * returned byte-identical HTML with a different nonce in each response header,
+ * so the policy could never be met. That is the defect, and `nonce-`,
+ * `script-src` and `strict-dynamic` are its proxies. A directive with no
+ * per-request component — `img-src` was the example — is the same string on
+ * every response and agrees with the cached bytes by construction, so "is there
+ * a header" was never the question worth testing.
  *
- * The distinction is mechanical rather than stylistic. AGL-1228's header was
- * unsatisfiable because it advertised a **per-request nonce** against
- * **ISR-cached bytes** — two requests to one cached page returned byte-identical
- * HTML with a different nonce in each response header, so the policy could never
- * be met. An `img-src` has no per-request component at all: the same string on
- * every response, agreeing with the cached bytes by construction. So the test to
- * write is not "is there a header" but "does it contain anything per-request",
- * which is what `nonce-`, `script-src` and `strict-dynamic` are proxies for.
+ * AGL-1703 did briefly ship a report-only header carrying `img-src`, and this
+ * file was relaxed to accommodate it. AGL-1152 then flipped that `img-src` to
+ * enforcing and removed the second header again, which is the state asserted
+ * below.
  *
- * It still asserts absence in places, which is worth being careful about — an
- * absence test passes trivially against a middleware that returns nothing at
- * all. So the base directives that DO enforce are asserted present in the same
- * breath, and the report-only header is asserted to actually carry `img-src`
- * rather than merely to exist.
+ * ## Absence tests need a control, and one of these lost its own
+ *
+ * An absence test passes trivially against a middleware that returns nothing at
+ * all, so the base directives that DO enforce are asserted present in the same
+ * breath. That control covers the enforcing policy. It does not cover the
+ * report-only one: once that header stopped shipping, every assertion about its
+ * contents was reading `?? ''` and passing against the empty string. Its own
+ * control is now `toBeNull()` — the header's absence stated as a fact rather
+ * than relied on silently, so a reinstated header fails here and is re-read
+ * rather than waved through.
  */
 
 import { NextRequest } from 'next/server'
@@ -91,18 +94,35 @@ const headersFor = async (path = '/'): Promise<Headers> => {
 }
 
 describe('tenant CSP (AGL-1228)', () => {
-  it('sends no `script-src`, nonce or `strict-dynamic` in the REPORT-ONLY policy', async () => {
-    // This replaces `expect(...).toBeNull()`. The guarantee is unchanged in
-    // substance and narrower in wording: the header may exist — AGL-1703 needs
-    // one — but not one carrying the ingredient that made AGL-1228's version
-    // unsatisfiable. A per-request nonce cannot match ISR-cached bytes, so any
-    // of these three reappearing here recreates a policy that reports every
-    // script on every page load of every published site.
-    const reportOnly =
-      (await headersFor())?.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).not.toContain('script-src')
-    expect(reportOnly).not.toContain('strict-dynamic')
-    expect(reportOnly).not.toContain('nonce-')
+  it('sends no REPORT-ONLY policy at all, so nothing can shadow the nonce reader', async () => {
+    // The tenant sends no report-only header: AGL-1152 flipped `img-src` to
+    // enforcing and the second header went with it.
+    //
+    // Asserting that explicitly is the point. The three ingredient checks below
+    // read the header as `?? ''`, so with no header to read they pass against
+    // the empty string no matter what the middleware does — a green test
+    // measuring nothing. `toBeNull()` is what makes them honest: a reinstated
+    // report-only header trips here first and sends the reader to this file
+    // before the ingredient checks are trusted again.
+    //
+    // A second header is not merely redundant. Next resolves the nonce as
+    // `content-security-policy || …-report-only`, so a report-only policy is
+    // only ever safe while the enforcing one carries no `script-src` — the
+    // AGL-523 shadowing shape, which served `nonce="$undefined"` platform-wide.
+    const reportOnly = (await headersFor())?.get(
+      'Content-Security-Policy-Report-Only',
+    )
+    expect(reportOnly).toBeNull()
+
+    // Kept for the day one returns: the header may exist, but never carrying
+    // the ingredient that made AGL-1228's version unsatisfiable. A per-request
+    // nonce cannot match ISR-cached bytes, so any of these three reappearing
+    // recreates a policy that reports every script on every page load of every
+    // published site.
+    const policy = reportOnly ?? ''
+    expect(policy).not.toContain('script-src')
+    expect(policy).not.toContain('strict-dynamic')
+    expect(policy).not.toContain('nonce-')
   })
 
   it('sends no `script-src` in the enforcing policy either', async () => {
