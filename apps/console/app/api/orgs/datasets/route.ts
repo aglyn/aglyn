@@ -26,6 +26,7 @@ import {
   checkQuota,
   coerceDocumentValues,
   createResourceUid,
+  datasetIntegrityFields,
   effectiveDatasetModel,
   validateDocument,
 } from '@aglyn/aglyn/server'
@@ -348,6 +349,11 @@ async function handler(request: Request): Promise<Response> {
             if (!authoritative.allowed) return overRecordQuota(authoritative.limit)
             tx.create(recordsRef.doc(id), {
               values: coerced,
+              // The integrity index the delete check queries. Written on the
+              // same write as the values it describes — an index that lags
+              // them reports a reference the record no longer holds, or
+              // misses one it does.
+              ...datasetIntegrityFields(model, coerced),
               order: live,
               createdAt: Timestamp.now(),
               updatedAt: Timestamp.now(),
@@ -451,6 +457,7 @@ async function handler(request: Request): Promise<Response> {
           chunk.forEach((row, offset) => {
             tx.create(recordsRef.doc(chunkIds[offset]), {
               values: row.coerced,
+              ...datasetIntegrityFields(model, row.coerced),
               order: live + offset,
               createdAt: Timestamp.now(),
               updatedAt: Timestamp.now(),

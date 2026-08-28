@@ -25,6 +25,12 @@
 // members, contacts, and `hosts/{hostId}/products` (name keys plus the `skus`
 // array flattened out of `variants`, which Firestore cannot query in place).
 //
+// It also converges a key that is not a name at all: `referencedIds` on
+// `orgs/{orgId}/datasets/{id}/records`, the referential-integrity index the
+// console's record delete queries. Same shape, same reason — a reference the
+// query cannot reach where it is stored, denormalized into an array Firestore
+// will index. See that pass for the detail.
+//
 // ORGS WERE DELIBERATELY EXCLUDED, and are not any more (AGL-693). The
 // original reason was sound — "they stay client-filtered, so a nameLower on
 // them would be an index nothing reads" — and it stopped being true when the
@@ -447,6 +453,99 @@ if (!ONLY_HOST) {
   }
 }
 
+/*
+ * Dataset records — the referential-integrity index the console's record
+ * delete queries (`referencedIds`).
+ *
+ * The check asks every collection whose model references this one whether it
+ * still points at the record being deleted, so `restrict` can block and
+ * `setNull` can strip the FKey. It cannot ask that question of `values`:
+ * dataset fields are user-defined, so `records.values` carries a deliberate
+ * index exemption in `cloud/firebase-firestore.indexes.json` (auto-indexing an
+ * unbounded map blows Firestore's per-document index-entry limit), and
+ * `where('values.<fieldId>', '==', id)` is FAILED_PRECONDITION. Reading a page
+ * of records and filtering them in the browser answers only for that page.
+ *
+ * ⚠️ Until this has run, a record written before the field existed is
+ * INVISIBLE to that `array-contains` — and the check fails CLOSED only on a
+ * rejected query, not on a stale index, so an un-backfilled reference reads as
+ * no reference and the delete proceeds.
+ *
+ * MUST match `datasetReferencedIds` in
+ * libs/aglyn/src/lib/app-utils/dataset-models.ts: the union of every id held
+ * in the model's `reference` fields, scalar or array, trimmed, de-duplicated.
+ *
+ * ⚠️ DELETED rather than written empty when a record references nothing. An
+ * empty array is not null, so `isNotEmpty` (`!= null`) would answer "holds a
+ * reference" for a record that holds none — and a record that USED to hold one
+ * goes on refusing a delete nothing is holding until the field really goes
+ * away.
+ *
+ * Datasets whose model declares no reference field are skipped WITHOUT reading
+ * their records: nothing derives from them, and the check never queries a
+ * collection that does not reference the target, so a leftover index on one is
+ * inert. That is what keeps this pass off the record collections that are
+ * large — a dataset with references is a small hand-built one.
+ *
+ * ⛔ `--host` does NOT limit this pass. Records hang off `orgs/{orgId}` and the
+ * scan is a collection group, exactly as orgs, contacts and products already
+ * are; the flag documents itself as skipping the passes it cannot scope.
+ */
+let recordsScanned = 0
+let recordsChanged = 0
+if (!ONLY_HOST) {
+  // MUST match `effectiveDatasetModel`: a v1 dataset carries a flat
+  // `fields: string[]` whose derived model is all text, so it declares no
+  // reference field and has nothing to index.
+  const referenceFieldIds = (dataset) => {
+    const model = dataset?.model
+    if (!model?.fields || !model.order?.length) return []
+    return [...new Set([...model.order, ...Object.keys(model.fields)])].filter(
+      (fieldId) => model.fields[fieldId]?.type === 'reference',
+    )
+  }
+  const datasetSnap = await firestore
+    .collectionGroup('datasets')
+    .select('model', 'fields')
+    .get()
+  for (const datasetDoc of datasetSnap.docs) {
+    const fieldIds = referenceFieldIds(datasetDoc.data())
+    if (!fieldIds.length) continue
+    const recordSnap = await datasetDoc.ref
+      .collection('records')
+      .select('values', 'referencedIds')
+      .get()
+    for (const recordDoc of recordSnap.docs) {
+      recordsScanned += 1
+      const values = recordDoc.get('values') ?? {}
+      const want = [
+        ...new Set(
+          fieldIds
+            .flatMap((fieldId) => {
+              const stored = values[fieldId]
+              return Array.isArray(stored) ? stored : [stored]
+            })
+            .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+            .filter(Boolean),
+        ),
+      ]
+      const have = Array.isArray(recordDoc.get('referencedIds'))
+        ? recordDoc.get('referencedIds')
+        : null
+      const differs = want.length
+        ? !have ||
+          have.length !== want.length ||
+          want.some((id, index) => have[index] !== id)
+        : have !== null
+      if (!differs) continue
+      recordsChanged += 1
+      await stampFields(recordDoc.ref, {
+        referencedIds: want.length ? want : FieldValue.delete(),
+      })
+    }
+  }
+}
+
 if (COMMIT && buffered > 0) await batch.commit()
 
 console.log(`hosts:   scanned=${hostsScanned} changed=${hostsChanged}`)
@@ -454,6 +553,11 @@ console.log(`members: scanned=${membersScanned} changed=${membersChanged}`)
 console.log(`contacts:scanned=${contactsScanned} changed=${contactsChanged}`)
 console.log(`products:scanned=${productsScanned} changed=${productsChanged}`)
 console.log(`screens: scanned=${screensScanned} changed=${screensChanged}`)
+console.log(
+  ONLY_HOST
+    ? 'records: skipped (--host limits this run to one site)'
+    : `records: scanned=${recordsScanned} changed=${recordsChanged}`,
+)
 console.log(
   ONLY_HOST
     ? 'orgs:    skipped (--host limits this run to one site)'

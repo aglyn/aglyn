@@ -201,6 +201,17 @@ jest.mock('@aglyn/aglyn/server', () => ({
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).dataStorageEnforcementShape,
   checkEntitlement: () => true,
+  // The REAL referential-integrity index, for the same closed-world reason: a
+  // record create and a PATCH both derive `referencedIds` from their values,
+  // and an omitted helper is a `TypeError` the route serves as a 500 — which
+  // reads here as a DELETE answering 405, because the create it retries never
+  // returned an id.
+  datasetIntegrityFields: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+  ).datasetIntegrityFields,
+  datasetIntegrityUpdate: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+  ).datasetIntegrityUpdate,
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) =>
     values,
@@ -231,6 +242,10 @@ jest.mock('firebase-admin/firestore', () => {
   return {
     __esModule: true,
     FieldPath: { documentId: () => '__name__' },
+    // The delete sentinel a PATCH uses to CLEAR `referencedIds` when the
+    // record is left referencing nothing. Omitting it is the same closed
+    // world as omitting a helper above.
+    FieldValue: { delete: () => '__field_deleted__' },
     Timestamp: MockTimestamp,
   }
 })

@@ -30,7 +30,10 @@ import {
   type HostVariable,
   type HostWorkflow,
   buildDatasetRecordValues,
+  datasetIntegrityFields,
+  datasetIntegrityUpdate,
   describeStepOutcome,
+  effectiveDatasetModel,
   normalizeTriggerConditions,
   resolveOrgEntitlements,
   runWorkflow,
@@ -261,18 +264,23 @@ async function executeAction(
         }
         // Restrict to the model's field ids (AGL-556) — covers model-only
         // datasets whose flat v1 `fields` mirror is absent.
-        const values = buildDatasetRecordValues(
-          {
-            model: datasetDoc.get('model'),
-            fields: Array.isArray(datasetDoc.get('fields'))
-              ? datasetDoc.get('fields')
-              : [],
-          },
-          payload,
-        )
+        const appendDataset = {
+          model: datasetDoc.get('model'),
+          fields: Array.isArray(datasetDoc.get('fields'))
+            ? datasetDoc.get('fields')
+            : [],
+        }
+        const values = buildDatasetRecordValues(appendDataset, payload)
         if (Object.keys(values).length) {
           await datasetDoc.ref.collection('records').add({
             values,
+            // The integrity index the console's delete check queries —
+            // carried by every write that sets `values`, or the index
+            // describes rows this one never held.
+            ...datasetIntegrityFields(
+              effectiveDatasetModel(appendDataset),
+              values,
+            ),
             createdAt: FieldValue.serverTimestamp(),
           })
           // `saved to Leads` beats `saved to dataset` (AGL-2171). Same
@@ -295,15 +303,14 @@ async function executeAction(
           )
           continue
         }
-        const values = buildDatasetRecordValues(
-          {
-            model: datasetDoc.get('model'),
-            fields: Array.isArray(datasetDoc.get('fields'))
-              ? datasetDoc.get('fields')
-              : [],
-          },
-          payload,
-        )
+        const updateDataset = {
+          model: datasetDoc.get('model'),
+          fields: Array.isArray(datasetDoc.get('fields'))
+            ? datasetDoc.get('fields')
+            : [],
+        }
+        const updateModel = effectiveDatasetModel(updateDataset)
+        const values = buildDatasetRecordValues(updateDataset, payload)
         if (!Object.keys(values).length) continue
         const email = String((payload as any).email ?? '').trim()
         const existing = email
@@ -319,12 +326,24 @@ async function executeAction(
             ...values,
           }
           await existing.docs[0].ref.set(
-            { values: merged, updatedAt: FieldValue.serverTimestamp() },
+            {
+              values: merged,
+              // The merging form: an update that clears the last reference
+              // has to REMOVE the index rather than omit it, or a stale
+              // array refuses a delete nothing is holding.
+              ...datasetIntegrityUpdate(
+                updateModel,
+                merged,
+                FieldValue.delete(),
+              ),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
             { merge: true },
           )
         } else {
           await datasetDoc.ref.collection('records').add({
             values,
+            ...datasetIntegrityFields(updateModel, values),
             createdAt: FieldValue.serverTimestamp(),
           })
         }

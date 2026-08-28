@@ -23,6 +23,7 @@ import {
   checkEntitlement,
   checkQuota,
   coerceDocumentValues,
+  datasetIntegrityUpdate,
   datasetValueToInput,
   effectiveDatasetModel,
   formatDatasetValue,
@@ -60,6 +61,7 @@ import {
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getCountFromServer,
   getDocs,
@@ -694,8 +696,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         )
         await setDoc(
           recordRef,
-          { values: coerced, updatedAt: Timestamp.now() },
-          { mergeFields: ['values', 'updatedAt'] },
+          {
+            values: coerced,
+            // The integrity index moves with the values it describes
+            // (`datasetIntegrityUpdate`); the merging form, because clearing
+            // the last reference has to REMOVE the field rather than omit it.
+            ...datasetIntegrityUpdate(model, coerced, deleteField()),
+            updatedAt: Timestamp.now(),
+          },
+          { mergeFields: ['values', 'referencedIds', 'updatedAt'] },
         )
       } else {
         // Creates go through the quota-enforcing API (AGL-473). The legacy
@@ -740,8 +749,36 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const handleDeleteRecord = useCallback(
     (record: any) => async () => {
       if (!selected || !dataScope) return
-      // Delete integrity (AGL-180): scan collections whose models
-      // reference this one; `restrict` blocks, `setNull` strips the FKey.
+      /**
+       * Delete integrity (AGL-180): every collection whose model references
+       * this one is asked whether it still points at this record. `restrict`
+       * blocks the delete; `setNull` strips the FKey from the holders.
+       *
+       * The question is a QUERY over the denormalized `referencedIds` index,
+       * not a page of records filtered in the browser. A page answers for the
+       * rows it happened to fetch — an unordered `limit` is answered in
+       * document-id order over auto-ids, so it is an arbitrary sample — and a
+       * reference held by a row outside it reads as no reference at all: the
+       * delete goes through and `restrict` silently fails to restrict, leaving
+       * a document pointing at something that no longer exists. `values`
+       * itself cannot be queried (it carries a deliberate index exemption —
+       * see `datasetIntegrityFields`), which is why the index exists.
+       *
+       * The query narrows to the candidates; the per-field test below keeps it
+       * EXACT, since `referencedIds` is the union across every reference field
+       * and one of them may point at a different collection entirely.
+       *
+       * ⚠️ FAILS CLOSED. A query that rejects — a missing index, a rules
+       * refusal on a collection this member cannot read — refuses the delete
+       * rather than treating silence as "nothing references it". A check that
+       * fails open is worse than no check, because the UI then tells the user
+       * the record is safe to remove.
+       *
+       * ⚠️ Reaches the collections in `datasets`, which is this viewer's
+       * scoped, capped picker window. A referencing collection shared with no
+       * site this member can see is one the client may not read at all, so it
+       * is not consulted; only a server route could close that.
+       */
       for (const other of datasets) {
         const otherModel = effectiveDatasetModel(other)
         const referencing = otherModel.order.filter(
@@ -750,20 +787,29 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             otherModel.fields[fieldId]?.reference?.datasetId === selected.$id,
         )
         if (!referencing.length) continue
-        const snapshot = await getDocs(
-          query(
-            collection(
-              firestore,
-              dataScope[0],
-              dataScope[1],
-              'datasets',
-              other.$id,
-              'records',
+        let snapshot
+        try {
+          snapshot = await getDocs(
+            query(
+              collection(
+                firestore,
+                dataScope[0],
+                dataScope[1],
+                'datasets',
+                other.$id,
+                'records',
+              ),
+              where('referencedIds', 'array-contains', record.$id),
             ),
-            limit(500),
-          ),
-        ).catch(() => null)
-        if (!snapshot) continue
+          )
+        } catch {
+          return void enqueueSnackbar(
+            `Cannot delete: "${other.displayName}" could not be checked for ` +
+              'references, so removing this record could break it. Nothing ' +
+              'was deleted.',
+            { variant: 'error' },
+          )
+        }
         const hits = snapshot.docs.filter((docSnapshot) =>
           referencing.some((fieldId) => {
             const stored = docSnapshot.get('values')?.[fieldId]
@@ -784,20 +830,30 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             { variant: 'warning', persist: false },
           )
         }
-        const batch = writeBatch(firestore)
-        for (const hit of hits) {
-          const values = { ...(hit.get('values') ?? {}) }
-          for (const fieldId of referencing) {
-            const stored = values[fieldId]
-            if (Array.isArray(stored)) {
-              values[fieldId] = stored.filter((id: string) => id !== record.$id)
-            } else if (stored === record.$id) {
-              delete values[fieldId]
+        // Chunked under Firestore's 500-writes-per-batch cap. The query is no
+        // longer bounded by a page size, so the number of holders is whatever
+        // the collection really holds.
+        for (let start = 0; start < hits.length; start += 400) {
+          const batch = writeBatch(firestore)
+          for (const hit of hits.slice(start, start + 400)) {
+            const values = { ...(hit.get('values') ?? {}) }
+            for (const fieldId of referencing) {
+              const stored = values[fieldId]
+              if (Array.isArray(stored)) {
+                values[fieldId] = stored.filter(
+                  (id: string) => id !== record.$id,
+                )
+              } else if (stored === record.$id) {
+                delete values[fieldId]
+              }
             }
+            batch.update(hit.ref, {
+              values,
+              ...datasetIntegrityUpdate(otherModel, values, deleteField()),
+            })
           }
-          batch.update(hit.ref, { values })
+          await batch.commit()
         }
-        await batch.commit()
       }
       await deleteDoc(
         doc(
@@ -996,7 +1052,13 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         )
         batch.set(
           ref,
-          { values: update.values, updatedAt: Timestamp.now() },
+          {
+            values: update.values,
+            // Every write that sets `values` moves the integrity index with
+            // them, or the index describes the values this row used to hold.
+            ...datasetIntegrityUpdate(model, update.values, deleteField()),
+            updatedAt: Timestamp.now(),
+          },
           { merge: true },
         )
       })
@@ -1044,6 +1106,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     importPreview,
     importer?.keyField,
     org,
+    model,
     recordCount,
     records,
     firestore,

@@ -32,6 +32,8 @@ import {
   claimAttempt,
   coerceDocumentValues,
   createResourceUid,
+  datasetIntegrityFields,
+  datasetIntegrityUpdate,
   defaultScopeForNewResource,
   effectiveDatasetModel,
   getOrderFulfilmentService,
@@ -61,7 +63,7 @@ import {
   parseLimit,
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
-import { FieldPath, Timestamp } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
 import {
   directUploadMaxBytes,
@@ -726,6 +728,9 @@ async function createRecord(
     const recordId = createResourceUid()
     await recordsRef.doc(recordId).create({
       values: coerced,
+      // The integrity index the delete check queries, written on the same
+      // write as the values it describes.
+      ...datasetIntegrityFields(model, coerced),
       order,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
@@ -790,7 +795,14 @@ async function updateRecord(
       fields: errors,
     })
   }
-  await recordRef.update({ values: merged, updatedAt: Timestamp.now() })
+  await recordRef.update({
+    values: merged,
+    // A PATCH that clears the last reference has to REMOVE the index, not
+    // omit it: an update leaves an omitted field standing, and a stale
+    // `referencedIds` refuses a delete nothing is holding.
+    ...datasetIntegrityUpdate(model, merged, FieldValue.delete()),
+    updatedAt: Timestamp.now(),
+  })
   const updated = await recordRef.get()
   return apiJson(recordView(updated), { headers: ctx.headers })
 }

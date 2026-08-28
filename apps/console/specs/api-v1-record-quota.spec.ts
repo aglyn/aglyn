@@ -160,6 +160,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).checkEntitlement,
+  // The REAL referential-integrity index: `createRecord` derives
+  // `referencedIds` from the record's values, and a mock that omits the helper
+  // is a CLOSED WORLD — the route 500s and the refusal it is supposed to be
+  // asserting never runs.
+  datasetIntegrityFields: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+  ).datasetIntegrityFields,
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) =>
     values,

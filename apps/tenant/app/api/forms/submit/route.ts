@@ -446,6 +446,19 @@ export async function POST(request: Request): Promise<Response> {
               .collection('records')
               .add({
                 values,
+                // The integrity index the console's delete check queries.
+                // A submission can land in a reference field through a
+                // bound form, so this leg carries it like every other
+                // write that sets `values`.
+                ...Aglyn.datasetIntegrityFields(
+                  Aglyn.effectiveDatasetModel({
+                    model: datasetDoc.get('model'),
+                    fields: Array.isArray(datasetDoc.get('fields'))
+                      ? datasetDoc.get('fields')
+                      : [],
+                  }),
+                  values,
+                ),
                 createdAt: FieldValue.serverTimestamp(),
               })
             /*

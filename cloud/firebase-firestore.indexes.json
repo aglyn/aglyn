@@ -1251,6 +1251,24 @@
     },
     {
       "collectionGroup": "records",
+      "fieldPath": "referencedIds",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "records",
       "fieldPath": "values",
       "indexes": []
     },
