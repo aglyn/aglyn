@@ -1094,19 +1094,21 @@ const OWES_A_FOOTER: Array<[string, string]> = [
   ],
   [
     'libs/plugins/events-calendar/src/lib/components/events-console-page.tsx',
-    'Events, an unordered `limit(200)` sorted by `startsAtMs` in the ' +
-      'browser. `startsAtMs` IS safe to order on — the only writer refuses a ' +
-      'save without it and the server feed already orders by it — so this is ' +
-      'a one-line fix inside a page shell another agent is rewriting.',
+    'Events, a `limit(200)` window. ORDERED now — `orderBy(startsAtMs)` was ' +
+      'safe on all three counts: the only writer refuses a save without the ' +
+      'field, the server feed already orders by it, and `events` is not in ' +
+      '`IMPORTABLE_FIELDS`. So the window is the newest 200 rather than a ' +
+      'document-id sample, and what is still owed is the footer.',
   ],
   [
     'libs/plugins/redirects/src/lib/components/redirects-console-page.tsx',
-    'Redirect rules, an unordered `limit(200)`. Two defects, both in a page ' +
-      'shell another agent is rewriting: the window is a document-id sample ' +
-      'sorted by source, and `redirects.length` — that window, minus the ' +
-      'soft-deleted rows — is what feeds `checkQuota(redirectsPerHost)` and ' +
-      'the readout beside it, so the console disagrees with the enforcing ' +
-      'route in two directions at once.',
+    'Redirect rules, an unordered `limit(200)`. The QUOTA half is fixed: the ' +
+      'gate and the readout now read an aggregation count over the whole ' +
+      'collection, which is what `app/api/hosts/resources` enforces on, ' +
+      'instead of the window length minus soft-deleted rows. What remains is ' +
+      'the window itself — a document-id sample sorted by source in the ' +
+      'browser — and the footer. Ordering needs a field every writer sets, ' +
+      'and `source` is not yet checked that way.',
   ],
   [
     'libs/plugins/marketplace/src/lib/components/host-plugins-card.component.tsx',

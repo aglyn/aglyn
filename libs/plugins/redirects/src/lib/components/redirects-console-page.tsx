@@ -41,6 +41,7 @@ import {
   collection,
   deleteField,
   doc,
+  getCountFromServer,
   getDoc,
   limit,
   query,
@@ -117,6 +118,65 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       String(a.source ?? '').localeCompare(String(b.source ?? '')),
     )
 
+  /**
+   * What the ENFORCING route counts, which is not what this page was counting.
+   *
+   * `hosts/{id}/redirects` is read here as an unordered `limit(200)` window
+   * and then filtered to drop soft-deleted rows, and that filtered length was
+   * feeding both `checkQuota('redirectsPerHost')` and the readout beside it.
+   * The route in `app/api/hosts/resources` counts the collection plainly —
+   * `collectionRef.count()`, every document, soft-deleted ones included — so
+   * the two disagreed on both counts at once: a rule deleted in this console
+   * still occupies a slot on the server, and a site past 200 rules has rows
+   * the window never saw.
+   *
+   * The visible effect is the worst kind: the page shows room, the author
+   * fills in the form, and the save is refused by a server counting something
+   * else. Same shape as AGL-1716.
+   *
+   * An aggregation query, so it costs one read unit per thousand documents
+   * rather than reading them. Re-run when the document set changes, which
+   * covers an add; a soft delete leaves the document in place and so does not
+   * move this number — correctly, because it does not move the server's
+   * either.
+   *
+   * Only the COUNT is corrected here. Whether a soft-deleted rule should go on
+   * occupying a slot is the quota RULE, and that lives with the enforcing
+   * route.
+   */
+  const [enforcedCount, setEnforcedCount] = useState<number | null>(null)
+  const redirectDocCount = redirectDocs?.length ?? 0
+
+  /**
+   * `null` when the count cannot be taken, never a number.
+   *
+   * `try`, not `.catch()`: `getCountFromServer` validates its reference and
+   * THROWS synchronously on a bad one, so a rejection handler alone leaves the
+   * error to escape the effect and take the page down with it. Unreadable is
+   * also not zero — answering zero would tell an author at their cap that the
+   * whole allowance is free.
+   */
+  const countRedirects = useCallback(async (): Promise<number | null> => {
+    try {
+      const snapshot = await getCountFromServer(
+        collection(firestore, 'hosts', hostId, 'redirects'),
+      )
+      return snapshot.data().count
+    } catch {
+      return null
+    }
+  }, [firestore, hostId])
+
+  useEffect(() => {
+    let active = true
+    void countRedirects().then((count) => {
+      if (active && count != null) setEnforcedCount(count)
+    })
+    return () => {
+      active = false
+    }
+  }, [countRedirects, redirectDocCount])
+
   const [draft, setDraft] = useState<RedirectDraft | null>(null)
   const [testPath, setTestPath] = useState('')
 
@@ -172,7 +232,19 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
         { variant: 'warning', persist: false },
       )
     }
-    const quota = checkQuota(org, 'redirectsPerHost', redirects.length)
+    /*
+     * The SERVER's count, not the rows on screen — the whole point of this
+     * fix. Read from the polled value rather than re-counted on the click:
+     * this gate is a courtesy that spares the author a form they are about to
+     * be refused, the route is the actual enforcer, and making the button
+     * await an aggregation would delay the dialog on every press to sharpen a
+     * number the server re-checks anyway.
+     *
+     * `null` means the count could not be read, and that lets the add through:
+     * refusing on a number we do not have would block an author who may well
+     * be inside their cap.
+     */
+    const quota = checkQuota(org, 'redirectsPerHost', enforcedCount ?? 0)
     if (!quota.allowed) {
       return void enqueueSnackbar(
         `Redirect limit reached (${quota.limit}) — upgrade in Billing`,
@@ -191,7 +263,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       // without the field would never resolve (AGL-1372).
       enabled: true,
     })
-  }, [entitled, org, redirects.length, enqueueSnackbar])
+  }, [entitled, org, enforcedCount, enqueueSnackbar])
 
   const handleSave = useCallback(async () => {
     if (!draft) return
@@ -572,13 +644,16 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
             {'Add redirect'}
           </Button>
           {/* The cap, standing rather than only on refusal (AGL-2113).
-              `redirects.length` is the same count `handleAdd` hands to
-              `checkQuota`, so the readout and the gate cannot disagree. */}
+              `enforcedCount` is what the enforcing route counts and what
+              `handleAdd` checks against, so the readout, the gate and the
+              server cannot disagree. It is deliberately NOT the number of rows
+              on screen: a soft-deleted rule still occupies a slot, so showing
+              the visible count here would promise room the server refuses. */}
           <QuotaReadoutComponent
-            ready={org != null}
-            used={redirects.length}
+            ready={org != null && enforcedCount != null}
+            used={enforcedCount ?? 0}
             limit={
-              checkQuota(org, 'redirectsPerHost', redirects.length).limit
+              checkQuota(org, 'redirectsPerHost', enforcedCount ?? 0).limit
             }
             noun="redirect"
           />

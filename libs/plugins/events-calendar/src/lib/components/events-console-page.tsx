@@ -50,6 +50,7 @@ import {
   deleteField,
   doc,
   limit,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -110,7 +111,27 @@ function useHostEvents(hostId: string): {
   const { data, status, fromCache } = useFirestoreCollection<EventRecord>(
     () =>
       hostId
-        ? query(collection(firestore, 'hosts', hostId, 'events'), limit(200))
+        ? query(
+            collection(firestore, 'hosts', hostId, 'events'),
+            /*
+             * ORDERED, so the window is the newest 200 rather than a sample.
+             *
+             * A `limit()` with no `orderBy` returns documents in ID order, so
+             * this was reading an arbitrary 200 of the collection and then
+             * sorting them by date in the browser — which looks newest-first
+             * and is not: a site past 200 events would simply never see the
+             * ones whose ids sorted late, including the next one happening.
+             *
+             * `orderBy` DROPS documents missing the field, so it is only safe
+             * once every writer is known to set it. All three checks pass for
+             * `startsAtMs`: the only writer refuses a save without it (the
+             * guard a few lines below), the server feed already orders by it,
+             * and `events` is not in `IMPORTABLE_FIELDS`, so nothing else
+             * writes a row here.
+             */
+            orderBy('startsAtMs', 'desc'),
+            limit(200),
+          )
         : null,
     [firestore, hostId],
     { idField: '$id' },
