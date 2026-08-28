@@ -512,6 +512,19 @@ async function handler(request: Request): Promise<Response> {
       meteredPrice: metered,
     })
     const dropped = targetItems.droppedAddons
+    // Add-ons the target plan sells, but not in the quantity the org holds.
+    //
+    // Reported for the same reason `droppedAddons` is: the alternative was
+    // silence. `checkSeatQuota`/`checkDatasetQuota` apply `Math.min(…, max)`
+    // at the point of USE, so an org that moved to a smaller plan kept paying
+    // for the full quantity and received the capped one — billing for
+    // capacity that was never delivered, with nothing said anywhere.
+    //
+    // `buildTargetItems` reduces the Stripe line item itself, so the invoice
+    // follows the delivery. This carries the fact to the caller so the confirm
+    // can say it BEFORE the customer agrees, rather than leaving them to
+    // notice a smaller number later.
+    const clamped = targetItems.clampedAddons
     // Items neither path can classify. The instant switch leaves them alone
     // and the schedule now carries them through verbatim — but "carried
     // through" is a claim, and until AGL-2150 the only report on this
@@ -731,6 +744,7 @@ async function handler(request: Request): Promise<Response> {
           pendingPlan: targetPlan,
           effectiveAt: periodEndIso,
           droppedAddons: dropped,
+      clampedAddons: clamped,
           unrecognizedItems,
           clearedPendingCancel,
         }, { status: 200 })
@@ -814,6 +828,7 @@ async function handler(request: Request): Promise<Response> {
         ok: true,
         plan: targetPlan,
         droppedAddons: dropped,
+      clampedAddons: clamped,
         unrecognizedItems,
         clearedPendingCancel,
       }, { status: 200 })
@@ -833,6 +848,7 @@ async function handler(request: Request): Promise<Response> {
         currency: subscription.currency ?? 'usd',
         periodEnd: periodEndIso,
         droppedAddons: dropped,
+      clampedAddons: clamped,
         unrecognizedItems,
         downgrade: true,
       }, { status: 200 })
@@ -921,6 +937,7 @@ async function handler(request: Request): Promise<Response> {
         ? new Date(preview.period_end * 1000).toISOString()
         : null,
       droppedAddons: dropped,
+      clampedAddons: clamped,
       unrecognizedItems,
     }, { status: 200 })
   } catch (error) {

@@ -67,6 +67,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL entitlement resolver and its constants. `buildTargetItems` now
+  // clamps add-on quantities to what the TARGET plan can deliver, and the
+  // ceiling comes from here — a stubbed resolver answers zero for every kind,
+  // which reads as "the target plan sells none of this" and drops add-ons the
+  // plan really does sell. A hand-written entitlement table in a spec is the
+  // drift these fixtures exist to catch, not to create.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   // The REAL predicate, not a re-typed triple (AGL-1715).
   isLiveSubscriptionStatus: jest.requireActual('@aglyn/aglyn/app-utils/org-billing-doc')
     .isLiveSubscriptionStatus,
