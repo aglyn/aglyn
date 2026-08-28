@@ -397,12 +397,19 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
    * Policy (2026-08-20) already names Google and Meta, so the inventory is the
    * half that was behind.
    *
-   * Both entries are reached only where a visitor has explicitly allowed
-   * advertising on a site whose owner turned the question on. Nothing here is
-   * set under implied consent alone in any region, and nothing is set at all
-   * on a site that never asked. That matches what the published Cookie Policy
+   * Every entry is reached only where the visitor's recorded state grants the
+   * advertising category on a surface that asks about it. Outside the
+   * prior-consent regions that state can be `implied` — recorded on the first
+   * visit, with the persistent opt-out control as the withdrawal path — and
+   * inside them it can only ever be an explicit yes. Nothing is set at all on
+   * a site that never asked. That matches what the published Cookie Policy
    * tells visitors about `_gac`, `_gcl_au`, `_fbp` and `_fbc` — "set only
    * where you have allowed advertising cookies".
+   *
+   * ⚠️ The SURFACES widened when the console and the docs site grew
+   * advertising mounts of their own. Both rows below name them, because the
+   * question a reader of the Cookie Policy asks is "where", and an inventory
+   * that answered it for one surface only would be accurate and misleading.
    */
   'Google advertising (ad_storage)': {
     // Set by gtag's conversion linker once `ad_storage` is granted. Distinct
@@ -412,14 +419,14 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
     names: ['_gcl_au'],
     loaderToken: 'consentModeSignals',
     surface:
-      `${WORKSPACE_DOMAIN} and customer sites whose owner enabled the advertising question and configured a Google Analytics id`,
+      `${WORKSPACE_DOMAIN}, ${CONSOLE_HOST} and the docs site, and customer sites whose owner enabled the advertising question and configured a Google Analytics id. A Google Tag Manager container writes the same cookies through whatever advertising tags it carries, which is why the sweep for these does not wait to find a script element of ours`,
     purpose:
       'Attributes an ad click to what you did on the site, and measures whether an ad worked',
   },
   'Meta Pixel': {
     names: ['_fbp', '_fbc'],
     loaderToken: 'META_PIXEL_VENDOR',
-    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site only, gated by \`isPlatformMarketingHost\`; a Host operator may enable their own tag on their site`,
+    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site, gated by \`isPlatformMarketingHost\`; ${CONSOLE_HOST} and the docs site, each gated on that surface's own advertising grant; a Host operator may enable their own tag on their site`,
     purpose:
       'Shows you our ads on other sites, and measures whether they worked',
   },
@@ -433,7 +440,7 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
       'li_gc',
     ],
     loaderToken: 'LINKEDIN_INSIGHT_VENDOR',
-    surface: `${WORKSPACE_DOMAIN} and customer sites whose owner configured a LinkedIn partner id and enabled the advertising question`,
+    surface: `${WORKSPACE_DOMAIN}, ${CONSOLE_HOST} and the docs site — each gated on that surface's own advertising grant — and customer sites whose owner configured a LinkedIn partner id and enabled the advertising question`,
     purpose:
       'Shows you our ads on LinkedIn, and measures whether they worked',
   },

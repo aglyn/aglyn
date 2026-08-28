@@ -21,57 +21,51 @@
 // file joins the analytics/consent subtree that must stay independent of the
 // site-plugin gate, and `site-analytics-independence.spec.ts` walks the import
 // closure from `site-analytics.tsx` through here.
+import AdvertisingTagMounts from '@aglyn/aglyn/app-utils/advertising-tag-mounts'
 import {
-  ADVERTISING_TAG_ATTRIBUTE,
   type AdvertisingTagHost,
   resolveAdvertisingTags,
-  restoreAdvertisingTags,
-  revokeAdvertisingTags,
 } from '@aglyn/aglyn/app-utils/advertising-tags'
 import { isPlatformMarketingHost } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import {
   readStoredVisitorConsent,
   type StoredVisitorConsent,
-  VISITOR_CONSENT_CHANGED_EVENT,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
-import Script from 'next/script'
-import { Fragment, useEffect } from 'react'
+import { useCallback, type ReactElement } from 'react'
 
 /**
- * The mount point for consent-gated advertising tags — Aglyn's own
- * marketing site only.
+ * The tenant runtime's answer to "which advertising tags may load" — Aglyn's
+ * own marketing site only.
  *
- * ## Why this is a separate component from `site-analytics.tsx`
+ * ## What this file is, now that the mount is shared
  *
- * So the gate is a unit that can be rendered, and therefore failed, on its
- * own. `advertising-tag-gate.spec.tsx` drives this component directly across
- * every consent state; folding it into `SiteAnalytics` would have meant every
- * one of those cases also depending on the GA mounts, the pageview beacon and
- * the banner. It is still mounted from `SiteAnalytics`, so it inherits that
- * component's independence from the site-plugin gate (AGL-1550).
+ * The RESOLUTION and nothing else. It reads the host document, asks
+ * {@link resolveAdvertisingTags} for the verdict, and hands both the verdict
+ * and a way to re-take it to {@link AdvertisingTagMounts}, which owns the
+ * script pair and the withdrawal teardown for every surface that has one.
  *
- * ## Why it renders even when the answer is no
+ * The split is where it is because the resolution is the part that differs.
+ * The console reads a platform record and build-configured ids; the docs site
+ * reads the registrable-domain mirror of that record; this reads a Firestore
+ * host document and a per-host localStorage record. Duplicating the TEARDOWN
+ * across those three is how one surface comes to keep firing after consent is
+ * withdrawn on another, so there is one of it.
  *
- * Because the withdrawal path needs a listener. A visitor who accepts and then
- * turns advertising off from "Your Privacy Choices" must stop being tracked in
- * THAT pageview, and by then the vendor library has executed — React dropping
- * the `<Script>` does not unload it (AGL-1608). So this component stays
- * mounted and subscribes to {@link VISITOR_CONSENT_CHANGED_EVENT}; the
- * teardown runs from the event, synchronously with the visitor's click, rather
- * than waiting on a re-render.
+ * ## Why the component still renders when the answer is no
  *
- * Both paths run and they agree, which is deliberate: the render gate is what
- * keeps the tag out of a fresh pageview, the listener is what removes one that
- * is already there, and neither can do the other's job.
+ * `active` stays true for the whole of Aglyn's own marketing site, granted or
+ * not, because the withdrawal path needs a listener that is still mounted when
+ * the answer is no — see {@link AdvertisingTagMounts} for why React dropping a
+ * `<Script>` does not unload the library it already ran (AGL-1608).
  *
  * ## Why the listener is scoped by the host too
  *
- * On a customer's site this component installs NOTHING — no listener, no
- * scripts. The teardown is additionally attribute-scoped inside
- * `revokeAdvertisingTags`, so even if it did run it could not touch a pixel a
- * customer pasted into their own Custom HTML. Two independent scopes, because
- * reaching into a customer's page to kill their tag would be its own kind of
- * breach of the promise this feature is scoped by.
+ * On a customer's site this installs NOTHING — no listener, no scripts. The
+ * teardown is additionally attribute-scoped inside `revokeAdvertisingTags`, so
+ * even if it did run it could not touch a pixel a customer pasted into their
+ * own Custom HTML. Two independent scopes, because reaching into a customer's
+ * page to kill their tag would be its own kind of breach of the promise this
+ * feature is scoped by.
  */
 export interface AdvertisingTagsProps {
   /** The resolved tenant host — the GA property is the surface discriminator. */
@@ -86,92 +80,34 @@ export interface AdvertisingTagsProps {
   ready?: boolean
 }
 
-/**
- * Is a library matching `needle` already in the document?
- *
- * Read at RENDER time rather than in an effect: the decision is whether to
- * emit a `<Script>` at all, and by the time an effect could answer, Next has
- * already appended it. `document` is guarded because this component renders on
- * the server too, where nothing is mounted and the honest answer is "no" — the
- * client render then re-evaluates with the real document.
- */
-function sharedLibraryPresent(needle: string): boolean {
-  if (typeof document === 'undefined') return false
-  return Boolean(document.querySelector(`script[src*="${needle}"]`))
-}
-
 export default function AdvertisingTags({
   host,
   stored,
   ready,
-}: AdvertisingTagsProps) {
+}: AdvertisingTagsProps): ReactElement | null {
   const hostId = host?.$id
-  // Our own marketing site, or nothing at all. Evaluated before the verdict
-  // as well as inside it: this is the condition that decides whether the
-  // component has any behaviour on this site, listener included.
+  // Our own marketing site, or nothing at all. Evaluated before the verdict as
+  // well as inside it: this is the condition that decides whether this
+  // component has any behavior on this site, listener included.
   const ourSurface = isPlatformMarketingHost(host)
   const tags = ready === true ? resolveAdvertisingTags(host, stored) : []
 
-  useEffect(() => {
-    if (ourSurface === false || !hostId) return undefined
-    // Read the record FRESH rather than closing over `stored`: this fires from
-    // the visitor's own click, in the same tick as the write, and the props
-    // for this render are by definition the state before it.
-    const sync = () => {
-      const current = readStoredVisitorConsent(hostId)
-      if (resolveAdvertisingTags(host, current).length === 0) {
-        revokeAdvertisingTags()
-      } else {
-        // Symmetric: a visitor who withdrew and changed their mind inside one
-        // pageview would otherwise stay un-tracked until they navigated,
-        // because a re-rendered `<Script>` cannot re-execute a library the
-        // browser already ran.
-        restoreAdvertisingTags()
-      }
-    }
-    window.addEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
-    return () => window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+  // Read the record FRESH rather than closing over `stored`: the teardown
+  // fires from the visitor's own click, in the same tick as the write, and the
+  // props for that render are by definition the state before it.
+  const resolve = useCallback(
+    () => resolveAdvertisingTags(host, readStoredVisitorConsent(hostId)),
     // `host` participates as the surface discriminator only; its identity per
     // render is the page-props object, stable for a pageview.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostId, ourSurface])
-
-  if (tags.length === 0) return null
+    [hostId],
+  )
 
   return (
-    <>
-      {tags.map(({ vendor, accountId }) => (
-        // A PAIR per vendor, inline boot first and library second — the same
-        // shape as the `ga-init` / `ga-src` pair above it, and for the same
-        // reason: the boot defines the vendor's queue shim and declares the
-        // consent state, so nothing the library later drains was queued under
-        // a state nobody chose. Both elements carry the teardown's scope
-        // marker; only elements carrying it are ever revoked,
-        // removed or cookie-swept.
-        <Fragment key={vendor.id}>
-          <Script
-            id={`ad-tag-${vendor.id}-init`}
-            strategy="afterInteractive"
-            {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
-          >
-            {vendor.bootSnippet(accountId)}
-          </Script>
-          {/* Skipped when another loader already brought this library in
-              (AGL-1152). Google Ads shares `gtag.js` with the GA4 measurement
-              id, so a site with both configured would fetch it twice and
-              define `gtag()` twice — and the boot above would be the second
-              voice in a consent conversation the first one already had. One
-              library, two `config` calls, is how gtag carries two products. */}
-          {vendor.sharesLibrary && sharedLibraryPresent(vendor.sharesLibrary) ? null : (
-            <Script
-              id={`ad-tag-${vendor.id}-src`}
-              strategy="afterInteractive"
-              {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
-              src={vendor.scriptSrc}
-            />
-          )}
-        </Fragment>
-      ))}
-    </>
+    <AdvertisingTagMounts
+      active={ourSurface === true && Boolean(hostId)}
+      tags={tags}
+      resolve={resolve}
+    />
   )
 }

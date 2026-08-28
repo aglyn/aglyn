@@ -77,6 +77,40 @@ const docsStatusTargets = env('DOCS_STATUS_TARGETS')
  */
 const docsStatusFallbackUrl = env('DOCS_STATUS_FALLBACK_URL')
 
+/**
+ * The advertising vendors this build may load, and the container it may run.
+ *
+ * Delivered to `src/advertising-tags.ts` through `customFields`, the one
+ * channel Docusaurus offers from build config to a client module. Every one
+ * follows the AGL-2124 rule the values above are built on — **unset means OFF,
+ * never ours** — and here it matters more than for analytics: a hardcoded
+ * pixel id would put an operator's readers into AGLYN'S retargeting audiences,
+ * which is a disclosure they never made and a list we have no basis to hold.
+ * A self-host operator's own advertising tags are their business, and setting
+ * these to their own ids is how they run them.
+ *
+ * ⛔ These are the ids ONLY. Whether a tag actually loads for a given reader is
+ * decided at runtime by the consent record — see `src/advertising-tags.ts`;
+ * nothing here grants anything.
+ */
+const docsAdvertisingTagIds: Record<string, string> = {
+  meta: env('DOCS_META_PIXEL_ID') ?? '',
+  // Named for the vendor id in `ADVERTISING_VENDORS`, not for the product, so
+  // the client module can look a vendor's id up directly.
+  'google-ads': env('DOCS_ADS_CONVERSION_ID') ?? '',
+  linkedin: env('DOCS_LINKEDIN_PARTNER_ID') ?? '',
+}
+
+/**
+ * A Google Tag Manager container id.
+ *
+ * ⚠️ A container is a LOADER, and what it loads is decided in Google's UI by
+ * whoever owns it — invisible to this repository and to every spec in it.
+ * Leaving this unset is how a build runs no container; setting it is an
+ * assertion that somebody has read what is inside the one being pointed at.
+ */
+const docsGtmContainerId = env('DOCS_GTM_CONTAINER_ID')
+
 if (!docsStatusTargets) {
   console.warn(
     '\n[status] DOCS_STATUS_TARGETS is unset: /status will publish a page that' +
@@ -202,7 +236,13 @@ const config: Config = {
   // existing collector. Standalone copy of the lib beacon's wire format
   // (this app cannot import libs/ — AGL-1595); armed in production builds
   // only, PII-free by construction. See src/error-beacon.ts.
-  clientModules: ['./src/error-beacon.ts'],
+  // Consent-gated advertising tags (Meta, Google Ads, LinkedIn, and a GTM
+  // container). Standalone copy of the shared vendor descriptors and teardown
+  // for the same AGL-1595 reason as the beacon above; the gate is the console's
+  // own consent record, read through the `aglyn_consent` mirror at the
+  // registrable domain. See src/advertising-tags.ts, and
+  // `apps/console/specs/docs-advertising-tags.spec.ts` for the drift guard.
+  clientModules: ['./src/error-beacon.ts', './src/advertising-tags.ts'],
 
   // The one channel Docusaurus offers from build config to browser code
   // (AGL-2124). Read via `useDocusaurusContext().siteConfig.customFields`.
@@ -210,6 +250,8 @@ const config: Config = {
     errorBeaconEndpoint: docsErrorBeaconEndpoint ?? null,
     statusTargets: docsStatusTargets ?? null,
     statusFallbackUrl: docsStatusFallbackUrl ?? null,
+    advertisingTagIds: docsAdvertisingTagIds,
+    gtmContainerId: docsGtmContainerId ?? null,
   },
 
   // ⚠️ AN OWNED COPY of Docusaurus's default SSG template

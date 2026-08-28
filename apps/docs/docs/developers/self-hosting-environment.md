@@ -556,6 +556,13 @@ forced-failure lever for proving the alert path works.
 conversion actions inside it, so that Aglyn's own signup and subscribe events
 reach Aglyn's own advertising account.
 
+`NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_LINKEDIN_PARTNER_ID` and
+`NEXT_PUBLIC_GTM_CONTAINER_ID` are the same kind of value one step further: they
+build **retargeting audiences**, so a hardcoded one would put your users into
+Aglyn's advertising lists — a disclosure you never made about people we have no
+basis to hold. Your own advertising tags are your own business; set your own ids
+or leave every one of these blank.
+
 Nothing is compiled in, and the code fires **nothing** when they are unset — no
 tag, no request. The half-configured case is handled too: an id with an empty
 label would produce a target Google Ads accepts and files against the account's
@@ -572,6 +579,9 @@ your own.
 | `NEXT_PUBLIC_ADS_CONVERSION_ID` | Aglyn-only / your own | Build | Google Ads conversion id, `AW-` plus digits. Google Ads → **Goals** → *Conversions* → the tag's id. |
 | `NEXT_PUBLIC_ADS_SIGNUP_LABEL` | Aglyn-only / your own | Build | The opaque conversion **label** for the signup action, from the same screen. Fires only when the id is also set. |
 | `NEXT_PUBLIC_ADS_SUBSCRIBE_LABEL` | Aglyn-only / your own | Build | The conversion label for the subscribe action. |
+| `NEXT_PUBLIC_META_PIXEL_ID` | Aglyn-only / your own | Build | Meta (Facebook/Instagram) Pixel id — digits only. Loads the pixel **in the console**, and only for a visitor whose recorded consent grants the advertising category. Blank loads nothing. |
+| `NEXT_PUBLIC_LINKEDIN_PARTNER_ID` | Aglyn-only / your own | Build | LinkedIn Insight Tag partner id — digits only, from LinkedIn Campaign Manager → **Analytics** → *Insight Tag*. Same consent gate as the pixel above. Blank loads nothing. |
+| `NEXT_PUBLIC_GTM_CONTAINER_ID` | Aglyn-only / your own | Build | Google Tag Manager container, `GTM-` plus 5–10 characters. Gated on the visitor's **analytics** consent, never anything looser — a container is a loader, and it is the likeliest thing on a page to carry an advertising tag. What it loads is decided in Google's UI and is invisible to this codebase, so set it only if you know what is in the container you are pointing at. Blank loads nothing. |
 | `GA4_MEASUREMENT_ID` | Optional | Runtime | `G-XXXXXXXXXX` for **server-side** GA4 measurement-protocol events — Stripe webhook revenue, publish events, things no browser can send. Google Analytics → **Admin** → *Data streams* → your stream. |
 | `GA4_API_SECRET` | Optional | Runtime | The measurement-protocol API secret for that stream. Both are needed; with either missing, every server-side hit is dropped silently — no log, no throw. Note this path has no consent gate, and its custom dimensions must be registered in GA4 or the events land unreportable. |
 | `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD` | Development only | Build | Re-enables analytics on a non-production build. A build using it stamps `traffic_type: internal` on every hit unconditionally, so it cannot be used to collect real traffic. Leave unset. |
@@ -1243,10 +1253,23 @@ build's environment. None is `NEXT_PUBLIC_*` — Docusaurus is not Next.
 | `DOCS_GA_TRACKING_ID` | Optional | Your own GA4 measurement id, `G-XXXXXXXXXX`. Blank loads no analytics tag at all. |
 | `DOCS_ERROR_BEACON_ENDPOINT` | Optional | Where uncaught browser errors POST — e.g. `https://console.example.com/api/errors`. Blank installs no handlers. If you point it at your own console, set `NEXT_PUBLIC_DOCS_ORIGIN` on that **console** to your docs origin so its CORS grant accepts you. |
 | `DOCS_STATUS_TARGETS` | Optional | What `/status` probes, as comma-separated `name\|label\|origin` triples: `console\|Console\|https://console.example.com,sites\|Sites\|https://sites.example.com`. Blank probes nothing and says so. |
+| `DOCS_META_PIXEL_ID` | Optional | Meta Pixel id for the docs site — digits only. Loads only for a reader whose consent record grants advertising; see the note below. Blank loads nothing. |
+| `DOCS_ADS_CONVERSION_ID` | Optional | Google Ads id, `AW-` plus digits. Rides the `gtag.js` the analytics tag already loaded rather than fetching a second copy. Same consent gate. Blank loads nothing. |
+| `DOCS_LINKEDIN_PARTNER_ID` | Optional | LinkedIn Insight Tag partner id — digits only. Same consent gate. Blank loads nothing. |
+| `DOCS_GTM_CONTAINER_ID` | Optional | Google Tag Manager container, `GTM-` plus 5–10 characters. Gated on **analytics** rather than advertising, matching the analytics tag beside it. What a container loads is decided in Google's UI and is invisible to this codebase. Blank loads nothing. |
 | `DOCS_STATUS_FALLBACK_URL` | Optional | An **independent** status page to send readers to when `/status` itself will not load — `/status` is served from your own infrastructure, so an outage broad enough to take that down takes the status page with it. A single `http(s)` URL; anything else is dropped rather than rendered. |
 
-All three telemetry-shaped values are **off when unset**, and that is the point:
+Every telemetry-shaped value here is **off when unset**, and that is the point:
 unset means nothing is sent anywhere, never that it is sent to Aglyn.
+
+The four advertising values need one more thing said about them. The docs site
+is a static build with no consent dialog and no region endpoint of its own, so
+its advertising tags are gated on the consent record the **console** wrote,
+carried across on a cookie at the shared registrable domain. If your console is
+not a sibling hostname of your docs — `app.example.com` and `docs.example.com`,
+say — that cookie never arrives, no reader is ever counted as having granted
+advertising, and these tags will correctly do nothing at all. Analytics is
+unaffected; it runs on its own region-conditional default.
 
 ---
 

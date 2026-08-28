@@ -49,11 +49,17 @@
  *   description, so the 2026-08-23 measurement is once more the shape the
  *   current rule produces.
  *
- *   This module keeps declaring all three ad signals DENIED, and must. It
- *   speaks for `app.aglyn.com` and `docs.aglyn.com`, where no per-visitor
- *   record exists, nobody can be asked and no opt-out surface is reachable —
- *   the conditions the opt-out posture rests on are simply absent. An implied
- *   grant needs a visitor who COULD have said no.
+ *   This module now takes the SAME advertising posture for `app.aglyn.com`,
+ *   which stopped being the asymmetry it once was once the console grew the
+ *   surfaces an implied grant rests on: a per-visitor record, an account-menu
+ *   control, and the CCPA §7015 pill on the unauthenticated pages. An implied
+ *   grant needs a visitor who COULD have said no, and there they can.
+ *
+ *   `docs.aglyn.com` still cannot ask anybody anything, which is exactly why
+ *   its non-Google advertising tags do not run on this declaration at all —
+ *   they run on the console's record, mirrored across the registrable domain.
+ *   This declaration reaches the tags that read Consent Mode, and nothing
+ *   else does read it.
  *
  *   ⛔ Re-measure `aglyn.com` before relying on any comparison here; the
  *   numbers above are a record of what was seen, not a claim about today.
@@ -94,19 +100,31 @@
  *
  * ## The ad signals
  *
- * Denied in BOTH branches, everywhere. These two surfaces run analytics and
- * only analytics: Google Signals is off, there is no Google Ads link and
- * enhanced conversions is off.
+ * `ad_storage`, `ad_user_data` and `ad_personalization` are GRANTED in the
+ * global default and DENIED in the region-scoped one, which is the same split
+ * `analytics_storage` takes and for the same reason: outside the prior-consent
+ * regions the posture is implied consent, and Aglyn advertises, remarkets and
+ * retargets across all of its own surfaces. A visitor in the EEA, the UK or
+ * Switzerland gets all four denied until they accept.
  *
- * This deliberately no longer matches `aglyn.com`, which has since taken an
- * advertising grant (see the note above). The asymmetry is the point rather
- * than an oversight — `aglyn.com` can ASK, through the AGL-1498 gate, so a
- * grant there has a recorded basis behind it. The console and the docs cannot
- * ask at all, so an ad grant here would rest on nothing.
+ * All three signals matter separately and Google treats them separately. A
+ * declaration granting `ad_storage` alone leaves remarketing collecting
+ * nothing while the tag looks perfectly healthy in GA4 — hits are sent, the
+ * property fills up, and the audience stays empty. Read
+ * {@link PLATFORM_CONSENT_DEFAULT_COMMANDS} rather than this paragraph if the
+ * two ever disagree; the commands are what ships.
  *
- * Before this module they declared nothing, which left a freshly loaded tag
- * with ad storage UNRESTRICTED — so denying them was a tightening, not a
- * preference.
+ * The console does have a place to record an answer — a per-visitor record,
+ * an account-menu control and the CCPA §7015 pill on its unauthenticated
+ * pages — and {@link platformAsksAboutAdvertising} derives the question from
+ * these very commands, so the control and the declaration cannot drift apart.
+ * The docs site has neither, which is why the tags it mounts are gated on the
+ * console's record rather than on this declaration; see
+ * `apps/docs/src/advertising-tags.ts`.
+ *
+ * Before this module these surfaces declared nothing at all, which left a
+ * freshly loaded tag with ad storage UNRESTRICTED in every region — so the
+ * region-scoped denial below was a tightening, not a preference.
  */
 
 import { PRIOR_CONSENT_COUNTRY_CODES } from './visitor-consent'
