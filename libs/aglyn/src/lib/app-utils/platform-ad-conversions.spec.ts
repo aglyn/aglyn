@@ -1,4 +1,11 @@
 /**
+ * @jest-environment jsdom
+ *
+ * Pragma must lead the FIRST block comment — behind the license header jest
+ * silently ignores it, and this suite would then run under `node`, where
+ * `window` is undefined and every storage helper correctly returns early. The
+ * marker cases would fail without ever exercising the marker.
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -133,5 +140,109 @@ describe('reporting one', () => {
     const mod = await loadWith(AGLYN)
     expect(() => mod.reportPlatformAdConversion('signup', true)).not.toThrow()
     expect(mod.reportPlatformAdConversion('signup', true)).toBe(false)
+  })
+})
+
+/**
+ * The pending-checkout mark, which is what makes a closed tab recoverable.
+ *
+ * Stripe's `onComplete` is the only moment in the page that knows a
+ * subscription was paid for, and it is a moment a visitor can close the tab
+ * on. A missed conversion is invisible — the money was spent, the customer
+ * subscribed, and the campaign shows nothing — so the mark and the stable
+ * `transaction_id` exist together: the mark gets a second chance to report,
+ * and the id makes taking it harmless.
+ */
+describe('the pending-checkout mark', () => {
+  const ORG = 'org-abc'
+
+  beforeEach(() => {
+    try {
+      window.localStorage.clear()
+    } catch {
+      // jsdom always has storage; guarded because the module is not allowed to
+      // assume that and neither is its test.
+    }
+  })
+
+  it('THE CONTROL: nothing is pending before a checkout opens', async () => {
+    // Otherwise "pending" below could be true for every org always, and the
+    // recovery would fire for customers who never started a checkout.
+    const mod = await loadWith(AGLYN)
+    expect(mod.subscribeCheckoutPending(ORG)).toBe(false)
+  })
+
+  it('marks, reads back, and clears', async () => {
+    const mod = await loadWith(AGLYN)
+    mod.markSubscribeCheckoutPending(ORG)
+    expect(mod.subscribeCheckoutPending(ORG)).toBe(true)
+    mod.clearSubscribeCheckoutPending()
+    expect(mod.subscribeCheckoutPending(ORG)).toBe(false)
+  })
+
+  it('is scoped to the org that opened the checkout', async () => {
+    /*
+     * The case that keeps the recovery narrow. A mark left by one workspace
+     * must not report a conversion while the operator is looking at another —
+     * that would attribute a different org's subscription to whatever ad this
+     * visit came from.
+     */
+    const mod = await loadWith(AGLYN)
+    mod.markSubscribeCheckoutPending(ORG)
+    expect(mod.subscribeCheckoutPending('org-other')).toBe(false)
+  })
+
+  it('marks nothing for an empty org id', async () => {
+    // `orgId ?? ''` at the call site: an unresolved org must not write a mark
+    // that `subscribeCheckoutPending('')` would then match.
+    const mod = await loadWith(AGLYN)
+    mod.markSubscribeCheckoutPending('')
+    expect(mod.subscribeCheckoutPending('')).toBe(false)
+  })
+
+  it('survives the tab, which is the entire point', async () => {
+    /*
+     * `localStorage`, not `sessionStorage`. Closing the tab is the case being
+     * repaired, and a session store is exactly what closing the tab clears —
+     * a mark kept there would be gone precisely when it was needed.
+     */
+    const mod = await loadWith(AGLYN)
+    mod.markSubscribeCheckoutPending(ORG)
+    expect(window.localStorage.getItem(mod.PLATFORM_SUBSCRIBE_PENDING_KEY)).toBe(
+      ORG,
+    )
+    expect(window.sessionStorage.getItem(mod.PLATFORM_SUBSCRIBE_PENDING_KEY)).toBeNull()
+  })
+})
+
+describe('reporting the same subscription twice counts once', () => {
+  it('carries a stable transaction_id when given one', async () => {
+    /*
+     * Google Ads de-duplicates on `transaction_id`, which is what lets both
+     * the `onComplete` path and the later recovery fire without double
+     * counting — a guarantee the browser cannot make on its own.
+     */
+    const mod = await loadWith(AGLYN)
+    const gtag = jest.fn()
+    ;(globalThis as Record<string, unknown>)['gtag'] = gtag
+
+    mod.reportPlatformAdConversion('subscribe', true, { transactionId: 'org-abc' })
+    mod.reportPlatformAdConversion('subscribe', true, { transactionId: 'org-abc' })
+
+    expect(gtag).toHaveBeenCalledTimes(2)
+    for (const call of gtag.mock.calls) {
+      expect(call[2]).toMatchObject({ transaction_id: 'org-abc' })
+    }
+  })
+
+  it('omits the key entirely when no id is given', async () => {
+    // An empty `transaction_id` is not the same as none: sending one would
+    // make every conversion look like the same conversion.
+    const mod = await loadWith(AGLYN)
+    const gtag = jest.fn()
+    ;(globalThis as Record<string, unknown>)['gtag'] = gtag
+
+    mod.reportPlatformAdConversion('signup', true)
+    expect(gtag.mock.calls[0][2]).not.toHaveProperty('transaction_id')
   })
 })
