@@ -41,6 +41,7 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import {
+  AppLink,
   CardDisplay,
   Container,
   GridItems,
@@ -1055,15 +1056,28 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       spacing={1}
                       sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}
                     >
-                      {/* Stripe Billing Portal (AGL-275). */}
-                      <Button
+                      {/*
+                        A button that says "manage payment methods" goes to
+                        the surface that manages payment methods. It opened
+                        the Stripe Billing Portal — a different product, in a
+                        new tab — because the portal used to be the only place
+                        a card could be changed. It is not: the Settings
+                        section has the cards, in our own design, and the
+                        portal stays reachable from Outstanding where dunning
+                        recovery actually needs it. One button was doing two
+                        jobs; this is the one it is named after.
+                      */}
+                      <AppLink
+                        componentVariant="button"
                         size="small"
                         variant="outlined"
                         color="primary"
-                        onClick={() => void handleOpenPortal()}
+                        href={buildRoute(Route.MANAGE_BILLING_SETTINGS, {
+                          orgSlug,
+                        })}
                       >
                         {'Manage payment methods'}
-                      </Button>
+                      </AppLink>
                       {/* The undo for a scheduled downgrade (AGL-1862):
                           switching to the plan you are already on releases
                           the schedule. Prominent and one click, because it
@@ -1114,66 +1128,111 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               ),
             },
             {
-              // full-width item is its own band in `GridItems masonry` — so
-              // seven cards holding one sentence or an empty state each took a
-              // full page width, one under the next. `Billing history` was the
-              // same waste in the other direction: `md: 8` alone in its band
-              // left a third of the row dead.
-              //
-              // Not `GridItems masonry` again, which is what wraps this whole
-              // page: within a band it groups items by their `size`, so the
-              // seven of them declaring one width would share ONE column and
-              // leave the other half of the page empty — the staff org page
-              // hit exactly that. `CardColumns` lets the browser place the
-              // breaks instead, which is the mechanism that BALANCES.
-              //
-              // The plan grid, the Enterprise row and the top band stay
-              // outside: those earn their width.
-              size: { xs: 12 },
+              // `md: 8` beside `Current plan`'s `md: 4`, which is what makes
+              // the top band tile. It was inside the full-width `CardColumns`
+              // band below, so `Current plan` sat alone in a band of its own
+              // with two thirds of the row dead beside it — the exact hole
+              // masonry was added to close.
+              size: { xs: 12, md: 8 },
               children: (
-                <CardColumns
-                  spacing={3}
-                  items={[
-                    {
-                      key: 'open-invoices',
-                      children: (
-                        // ALSO on the Invoices section, deliberately. A
-                        // customer arriving from a dunning email is signed
-                        // out, lands on the org-agnostic entry and is dropped
-                        // HERE — making them find a tab before they can pay is
-                        // the hunting this split exists to remove. Safe to
-                        // duplicate: the route re-reads the invoice from
-                        // Stripe and answers `alreadyPaid` if it has been
-                        // settled, whichever copy the button was pressed on.
-                        <CardDisplay
-                          header={'Outstanding'}
-                          subheader={
-                            'Anything unpaid, and the button that settles it.'
-                          }
-                          help={docsHelp('billing', {
-                            anchor: '#outstanding',
-                            excerpt:
-                              'Paying an invoice that failed, including when the subscription has already been cancelled.',
-                          })}
-                          contentGutterX
-                          contentGutterY
-                        >
-                          <BillingOpenInvoicesCardComponent
-                            orgId={orgId}
-                            canManage={can('billing.manage')}
-                          />
-                        </CardDisplay>
-                      ),
-                    },
-                    ...(addonStore.visible
-                      ? [{
-                          key: 'plan-addons',
-                          children: (
+                      
+                            // ALSO on the Invoices section, deliberately. A
+                            // customer arriving from a dunning email is signed
+                            // out, lands on the org-agnostic entry and is dropped
+                            // HERE — making them find a tab before they can pay is
+                            // the hunting this split exists to remove. Safe to
+                            // duplicate: the route re-reads the invoice from
+                            // Stripe and answers `alreadyPaid` if it has been
+                            // settled, whichever copy the button was pressed on.
+                            <CardDisplay
+                              header={'Outstanding'}
+                              subheader={
+                                'Anything unpaid, and the button that settles it.'
+                              }
+                              help={docsHelp('billing', {
+                                anchor: '#outstanding',
+                                excerpt:
+                                  'Paying an invoice that failed, including when the subscription has already been cancelled.',
+                              })}
+                              contentGutterX
+                              contentGutterY
+                            >
+                              <BillingOpenInvoicesCardComponent
+                                orgId={orgId}
+                                canManage={can('billing.manage')}
+                                onOpenPortal={
+                                  can('billing.manage')
+                                    ? () => void handleOpenPortal()
+                                    : undefined
+                                }
+                              />
+                            </CardDisplay>
+                      
+              ),
+            },
+            // The quote, in the same band and only when there is a plan to
+            // quote. `quotedPlan` is null on an ordinary visit — no `?plan=`
+            // — and the card still rendered, so an empty "What you will pay"
+            // box sat at full page width under everything. A card with a
+            // header and no content reads as a thing that failed to load.
+            ...(quotedPlan
+              ? [{
+                  size: { xs: 12, md: 8 },
+                  children: (
+                    <CardDisplay
+                      header={'What you will pay'}
+                      help={docsHelp('billing', {
+                        anchor: '#plan-total',
+                        excerpt:
+                          'How the plan total is quoted with tax, and what a zero tax means.',
+                      })}
+                      subheader={
+                        'The total for the plan you are looking at, tax included, ' +
+                        'straight from Stripe.'
+                      }
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <BillingPlanQuoteComponent
+                        orgId={orgId}
+                        plan={quotedPlan}
+                        interval={interval}
+                        canManage={can('billing.manage')}
+                      />
+                    </CardDisplay>
+                  ),
+                }]
+              : []),
+            // BUY, then ASSIGN — as two bands in that order, not as three
+            // cards the masonry flow may separate.
+            //
+            // `Plan add-ons` sells collaborator seats and POS registers as
+            // ORG-LEVEL POOLS; the two cards under it put those seats on a
+            // site. That is genuinely two acts with different permissions and
+            // different consequences, so they stay two cards — but read as
+            // unrelated neighbours they look like the same thing listed twice,
+            // which is what the owner saw. A full-width purchase card with its
+            // two assignment cards directly beneath is the shape that says
+            // "these belong together" without merging them.
+            ...(addonStore.visible
+              ? [
+                  {
+                    size: { xs: 12 },
+                    children: (
+
                             // Self-serve add-ons (AGL-529); #addons anchors the
                             // point-of-need upsell links (AGL-530).
                             <Box id="addons">
                               <CardDisplay
-                                header={'Plan add-ons'}
+                                header={'Plan add-ons — buy capacity'}
+                                subheader={
+                                  'Everything here is bought for the whole ' +
+                                  'workspace. Manager seats, datasets and ' +
+                                  'extra sites apply straight away; ' +
+                                  'collaborator seats and POS registers are ' +
+                                  'pools you then assign to a site in the two ' +
+                                  'cards below.'
+                                }
                                 help={docsHelp('addOns', {
                                   anchor: '#what-you-can-add',
                                 })}
@@ -1186,11 +1245,18 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                                 />
                               </CardDisplay>
                             </Box>
-                          ),
-                        },
-                        {
-                          key: 'register-seats',
-                          children: (
+                    ),
+                  },
+                  {
+                    size: { xs: 12 },
+                    children: (
+                      <CardColumns
+                        spacing={3}
+                        items={[
+                          {
+                            key: 'register-seats',
+                            children: (
+
                             // Where purchased register seats get DEPLOYED (AGL-1947).
                             // Buying the add-on above is only half the transaction:
                             // `posRegisters` is an org-level pool since AGL-1775, and
@@ -1201,10 +1267,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                             // point at ("Billing → Add-ons").
                             <Box id="register-seats">
                               <CardDisplay
-                                header={'POS register seats'}
+                                header={'POS register seats — assign to a site'}
                                 subheader={
                                   'Each purchased seat lets one site run one more ' +
-                                  'register. Move seats between sites at any time.'
+                                  'register. Bought under Plan add-ons above; ' +
+                                  'move them between sites here at any time.'
                                 }
                                 help={docsHelp('addOns', {
                                   anchor: '#assigning-register-seats',
@@ -1218,11 +1285,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                                 />
                               </CardDisplay>
                             </Box>
-                          ),
-                        },
-                        {
-                          key: 'collaborator-seats',
-                          children: (
+                            ),
+                          },
+                          {
+                            key: 'collaborator-seats',
+                            children: (
+
                             // Where purchased COLLABORATOR seats get deployed
                             // (AGL-2439) — the register card's twin, on the key that
                             // never got the AGL-1775 fix. `seatAddons.members` is an
@@ -1233,10 +1301,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                             // capacity the product gives no way to use.
                             <Box id="collaborator-seats">
                               <CardDisplay
-                                header={'Site collaborator seats'}
+                                header={'Site collaborator seats — assign to a site'}
                                 subheader={
                                   'Each purchased seat lets one site have one more ' +
-                                  'collaborator. Move seats between sites at any time.'
+                                  'collaborator. Bought under Plan add-ons ' +
+                                  'above; move them between sites here at any ' +
+                                  'time.'
                                 }
                                 help={docsHelp('addOns', {
                                   anchor: '#assigning-collaborator-seats',
@@ -1250,13 +1320,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                                 />
                               </CardDisplay>
                             </Box>
-                          ),
-                        }]
-                      : []),
-                  ]}
-                />
-              ),
-            },
+                            ),
+                          },
+                        ]}
+                      />
+                    ),
+                  },
+                ]
+              : []),
             {
               size: { xs: 12 },
               children: (
@@ -1292,32 +1363,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 }]
               : []),
-            {
-              size: { xs: 12 },
-              children: (
-                <CardDisplay
-                  header={'What you will pay'}
-                  help={docsHelp('billing', {
-                    anchor: '#plan-total',
-                    excerpt:
-                      'How the plan total is quoted with tax, and what a zero tax means.',
-                  })}
-                  subheader={
-                    'The total for the plan you are looking at, tax included, ' +
-                    'straight from Stripe.'
-                  }
-                  contentGutterX
-                  contentGutterY
-                >
-                  <BillingPlanQuoteComponent
-                    orgId={orgId}
-                    plan={quotedPlan}
-                    interval={interval}
-                    canManage={can('billing.manage')}
-                  />
-                </CardDisplay>
-              ),
-            },
             {
               size: { xs: 12 },
               children: (

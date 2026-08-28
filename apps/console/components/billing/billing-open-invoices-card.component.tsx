@@ -48,6 +48,18 @@ export interface BillingOpenInvoicesCardProps {
   orgId?: string | null
   /** billing.manage: paying moves money. */
   canManage: boolean
+  /**
+   * Open the Stripe Billing Portal.
+   *
+   * KEPT, and kept HERE specifically. The native pay button above is new and
+   * has not yet been exercised against a real failed payment, so the portal
+   * has to stay reachable — but it belongs beside dunning recovery, which is
+   * this card, rather than behind a button labelled "manage payment methods"
+   * that should go to the surface that manages payment methods.
+   *
+   * Absent when the caller cannot open it, and then nothing renders.
+   */
+  onOpenPortal?: () => void
 }
 
 function money(cents: number, currency: string): string {
@@ -86,6 +98,7 @@ function money(cents: number, currency: string): string {
 export default function BillingOpenInvoicesCardComponent({
   orgId,
   canManage,
+  onOpenPortal,
 }: BillingOpenInvoicesCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -187,6 +200,25 @@ export default function BillingOpenInvoicesCardComponent({
     }
   }
 
+  /*
+   * Stripe's own portal, named for what it is rather than for one of the
+   * things it happens to contain. It is the fallback while the native pay
+   * button above is still unproven against a real failed payment, so it sits
+   * with dunning recovery — the one place its absence would actually cost
+   * somebody money.
+   */
+  const portalLink = onOpenPortal ? (
+    <Link
+      component="button"
+      type="button"
+      variant="caption"
+      onClick={onOpenPortal}
+      sx={{ alignSelf: 'flex-start' }}
+    >
+      {'Open the Stripe billing portal'}
+    </Link>
+  ) : null
+
   if (loadState === 'pending') {
     return (
       <Typography variant="body2" color="text.secondary">
@@ -218,9 +250,12 @@ export default function BillingOpenInvoicesCardComponent({
   }
   if (!invoices?.length) {
     return (
-      <Typography variant="body2" color="text.secondary">
-        {'Nothing outstanding.'}
-      </Typography>
+      <Stack spacing={1.5}>
+        <Typography variant="body2" color="text.secondary">
+          {'Nothing outstanding.'}
+        </Typography>
+        {portalLink}
+      </Stack>
     )
   }
 
@@ -270,6 +305,7 @@ export default function BillingOpenInvoicesCardComponent({
           </ListItem>
         ))}
       </List>
+      {portalLink}
     </Stack>
   )
 }

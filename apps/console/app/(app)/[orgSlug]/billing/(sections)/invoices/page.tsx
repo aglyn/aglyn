@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
@@ -60,6 +60,29 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
   const { data: user } = useUser()
   const { orgId } = useCurrentOrg()
   const { can, loaded: permissionsLoaded } = useOrgPermissions()
+
+  /**
+   * Stripe's billing portal, reachable from the section that recovers a failed
+   * payment.
+   *
+   * It is the fallback while the native pay button is still unproven against a
+   * real decline, and this is where its absence would cost somebody money —
+   * not behind a button labelled "manage payment methods", which now goes to
+   * the surface that manages them.
+   */
+  const openPortal = useCallback(async () => {
+    const idToken = await (user as any)?.getIdToken?.()
+    const response = await fetch('/api/billing/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
+      body: JSON.stringify({ orgId, action: 'portal' }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (payload?.url) window.location.assign(payload.url)
+  }, [orgId, user])
 
   // Invoice history (AGL-248, AGL-534), billing.view-gated server-side.
   // Cursor-paginated; "Load more" appends older invoices.
@@ -140,8 +163,20 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, user, permissionsLoaded])
 
+  /*
+   * Masonry, and the two sizes are the point: `Outstanding` is usually one
+   * sentence and `Billing history` is a table. Stacked, both took the full
+   * 1110px column and the short one wasted a row. A table earns its width, so
+   * it keeps eight of twelve and the short card takes the four beside it.
+   */
   return (
-    <Stack spacing={3}>
+    <GridItems
+      spacing={3}
+      masonry
+      items={[
+        {
+          size: { xs: 12, md: 4 },
+          children: (
       <CardDisplay
         header={'Outstanding'}
         subheader={'Anything unpaid, and the button that settles it.'}
@@ -156,8 +191,16 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
         <BillingOpenInvoicesCardComponent
           orgId={orgId}
           canManage={can('billing.manage')}
-        />
-      </CardDisplay>
+          onOpenPortal={
+            can('billing.manage') ? () => void openPortal() : undefined
+          }
+            />
+          </CardDisplay>
+          ),
+        },
+        {
+          size: { xs: 12, md: 8 },
+          children: (
       <CardDisplay
                           header={'Billing history'}
                           help={docsHelp('billing', {
@@ -286,7 +329,10 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                             </>
                           )}
                         </CardDisplay>
-    </Stack>
+          ),
+        },
+      ]}
+    />
   )
 }
 BillingInvoicesSection.displayName = 'Page:BillingInvoices'

@@ -250,7 +250,7 @@ describe('the customer billing card (AGL-2486)', () => {
     expect(screen.queryByText(NEVER_BILLED)).toBeNull()
   })
 
-  it('b. names both modes and says the history survives', async () => {
+  it('b. names both modes and points at where to look', async () => {
     // Asserted on the CONTENT, not merely on an alert being present: the
     // wrong-but-plausible message here is a vague "we could not load your
     // invoices", which is indistinguishable from a failure and would send a
@@ -265,7 +265,14 @@ describe('the customer billing card (AGL-2486)', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('live mode')
     expect(alert.textContent).toContain('test mode')
-    expect(alert.textContent).toContain('intact')
+    // It points AT the other mode without claiming what is there. The copy
+    // used to say the history was "intact", which was safe while this only
+    // fired for a MISSING customer — the other mode was then the only place
+    // anything could have been billed. It now also fires when both modes have
+    // a customer, and this deployment cannot query the other mode's key, so
+    // "intact" would be a claim about records nothing here has read.
+    expect(alert.textContent).toMatch(/expecting invoices|cannot be listed/i)
+    expect(alert.textContent).not.toContain('intact')
   })
 
   it('b. takes the deployment mode from the RESPONSE, not from a constant', async () => {
@@ -416,5 +423,58 @@ describe('the staff page is WIRED to that decision', () => {
     // a second answer that would silently win in whichever branch kept them.
     expect(source).not.toContain("'This organization has never subscribed.'")
     expect(source).not.toContain("? 'Never subscribed'")
+  })
+})
+
+/**
+ * The button that says "manage payment methods" goes to the surface that
+ * manages payment methods.
+ *
+ * It opened the Stripe Billing Portal — a different product, in a new tab —
+ * because the portal used to be the only place a card could be changed. It is
+ * not: the Settings section has those cards in our own design.
+ *
+ * The portal is NOT removed. It stays reachable from `Outstanding`, where a
+ * failed payment is actually recovered, and labelled as what it is. One button
+ * was doing two jobs.
+ */
+describe('the payment-methods button and the portal are different jobs', () => {
+  const source = readFileSync(
+    join(
+      __dirname,
+      '..',
+      'app/(app)/[orgSlug]/billing/(sections)/page.tsx',
+    ),
+    'utf8',
+  )
+  const outstanding = readFileSync(
+    join(
+      __dirname,
+      '..',
+      'components/billing/billing-open-invoices-card.component.tsx',
+    ),
+    'utf8',
+  )
+
+  it('CONTROL — the files being read are the right ones', () => {
+    expect(source).toContain('Manage payment methods')
+    expect(outstanding).toContain('Outstanding')
+  })
+
+  it('resolves to the Settings section, not the portal', () => {
+    const at = source.indexOf('Manage payment methods')
+    // The route, near the button rather than anywhere in a 1300-line file.
+    const around = source.slice(Math.max(0, at - 700), at)
+    expect(around).toContain('Route.MANAGE_BILLING_SETTINGS')
+    expect(around).not.toContain('handleOpenPortal')
+  })
+
+  it('does NOT remove the portal — it moves it to dunning recovery', () => {
+    // Removing it in the same change would take a customer in dunning from an
+    // inconsistent button to no fallback at all, while the native pay button
+    // is still unproven against a real decline.
+    expect(source).toContain('handleOpenPortal')
+    expect(outstanding).toContain('onOpenPortal')
+    expect(outstanding).toContain('Open the Stripe billing portal')
   })
 })

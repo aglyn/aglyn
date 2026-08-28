@@ -26,7 +26,7 @@ import {
   resolveOrgMembership,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
-import { describeMissingStripeCustomer } from '../../_lib/stripe-customer-mode-notice'
+import { describeStripeModeSplit } from '../../_lib/stripe-customer-mode-notice'
 // The shared shaper and the shared status list. The list is a deliberate
 // SUPERSET of `isLiveSubscriptionStatus` (it adds `unpaid`) and answers a
 // different question — "is there a subscription whose renewal would break if
@@ -283,7 +283,7 @@ async function handler(request: Request): Promise<Response> {
             customer: null,
             taxIds: [],
             paymentMethods: [],
-            ...(await describeMissingStripeCustomer(orgId)),
+            ...(await describeStripeModeSplit(orgId)),
           },
           { status: 200 },
         )
