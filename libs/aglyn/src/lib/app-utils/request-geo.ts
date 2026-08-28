@@ -86,11 +86,78 @@ function normalizeRegion(raw: string): string {
 }
 
 /** Reads the edge geo signal off a request's headers. */
+/**
+ * The country headers tried after the configured one, in order.
+ *
+ * `GEO_COUNTRY_HEADER` is a single name fixed at BUILD time (see its comment —
+ * Next inlines `process.env.NAME` into the edge bundle), so an operator who
+ * did not set it before building has no way to supply the signal afterwards,
+ * and a deployment that later moves behind a different proxy silently loses
+ * it. Every consumer then reads "no country", which is the strictest consent
+ * posture and a sanctions gate that fails open.
+ *
+ * These are the names the common edges actually send. They are tried only
+ * AFTER the configured header, so an explicit configuration always wins and
+ * nothing here can override a deliberate choice.
+ *
+ * ⛔ Header-only, and deliberately so: no IP-geolocation lookup. Sending a
+ * visitor's address to a third party to decide what to ask them about privacy
+ * would be its own disclosure, and a subprocessor.
+ */
+const FALLBACK_COUNTRY_HEADERS = [
+  // Cloudflare.
+  'cf-ipcountry',
+  // Google Cloud: App Engine, and Cloud Run behind a load balancer.
+  'x-appengine-country',
+  'x-client-geo-country',
+  // AWS CloudFront.
+  'cloudfront-viewer-country',
+  // Fastly.
+  'fastly-geo-country',
+  // What a hand-rolled nginx/Caddy/Traefik rule is most often called.
+  'x-geo-country',
+  'x-country-code',
+  'x-country',
+] as const
+
+/**
+ * `XX` is Cloudflare's answer for "unknown", and `T1` for a Tor exit node —
+ * neither is a country, and treating them as one would place the visitor in a
+ * region nobody is in. `ZZ` appears from some proxies for the same purpose.
+ */
+const NON_COUNTRIES = ['XX', 'T1', 'ZZ']
+
+/**
+ * Every header consulted for the country, in order, configured one first.
+ *
+ * Exported because a caller that varies a cached response on the country has
+ * to name ALL of them: a `Vary` that lists only the configured header is
+ * correct on the one platform whose header that is, and on every other one it
+ * lets a CDN serve a US answer to a European visitor from cache. Aglyn is
+ * self-hostable on Docker with the operator's own Firebase and no particular
+ * edge, so "the one platform" is not an assumption this may make.
+ */
+export const GEO_COUNTRY_HEADERS: readonly string[] = [
+  GEO_COUNTRY_HEADER,
+  ...FALLBACK_COUNTRY_HEADERS,
+].filter((name, index, all) => all.indexOf(name) === index)
+
+const readCountry = (headers: HeaderReader): string | null => {
+  for (const name of GEO_COUNTRY_HEADERS) {
+    const value = (headers.get(name) ?? '').trim().toUpperCase()
+    // Two letters exactly: a proxy that passes through a city name, a list or
+    // an IP under one of these names must not become a "country".
+    if (!/^[A-Z]{2}$/.test(value)) continue
+    if (NON_COUNTRIES.indexOf(value) >= 0) continue
+    return value
+  }
+  return null
+}
+
 export function readRequestGeo(headers: HeaderReader): RequestGeo {
-  const country = (headers.get(GEO_COUNTRY_HEADER) ?? '').trim().toUpperCase()
   const region = (headers.get(GEO_REGION_HEADER) ?? '').trim()
   return {
-    country: country || null,
+    country: readCountry(headers),
     region: region ? normalizeRegion(region) : null,
   }
 }

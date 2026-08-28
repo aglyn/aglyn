@@ -50,7 +50,11 @@
  */
 
 import type { NextRequest } from 'next/server'
-import { GEO_COUNTRY_HEADER, readRequestGeo } from '@aglyn/aglyn/app-utils/request-geo'
+import {
+  GEO_COUNTRY_HEADER,
+  GEO_COUNTRY_HEADERS,
+  readRequestGeo,
+} from '@aglyn/aglyn/app-utils/request-geo'
 
 const CONSENT_GEO_LOG_PREFIX = '[consent-geo]'
 const NO_SIGNAL_LOG_INTERVAL_MS = 60_000
@@ -129,7 +133,14 @@ export async function GET(req: NextRequest): Promise<Response> {
     {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate',
-        Vary: GEO_COUNTRY_HEADER,
+        /*
+         * EVERY header the reader consults, not just the configured one. A
+         * `Vary` naming one header is correct only on the platform that sends
+         * it; anywhere else a cache is free to serve one visitor's country to
+         * the next, which for this endpoint means a US answer handed to a
+         * European visitor and no banner shown.
+         */
+        Vary: GEO_COUNTRY_HEADERS.join(', '),
       },
     },
   )
