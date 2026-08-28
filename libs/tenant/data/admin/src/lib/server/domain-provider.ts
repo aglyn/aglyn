@@ -134,7 +134,7 @@ export interface ProjectDomainStatus {
 }
 
 export interface DomainProvider {
-  /** Stable id, logged and reported by `/api/health`. Never a display name. */
+  /** Stable id, used in this module's log lines. Never a display name. */
   readonly id: string
   /** Whether this deployment can actually register names for `scope`. */
   configured(scope: DomainScope): boolean

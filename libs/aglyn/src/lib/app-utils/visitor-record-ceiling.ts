@@ -19,12 +19,12 @@
  * Flat platform ceilings on the two host subcollections an ANONYMOUS VISITOR
  * can create documents in (AGL-1529).
  *
- * ## the decision, 2026-08-23, in his own words
+ * ## What this is
  *
- * > A platform-wide ceiling — **not a plan dimension**, so "unlimited member
- * > accounts on every plan" stays true, because **an abuse control is not
- * > something we sell**. Same instrument already approved twice: **AGL-1655**
- * > for forms and **AGL-2155** for bandwidth.
+ * A platform-wide ceiling, and deliberately NOT a plan dimension — so
+ * "unlimited member accounts on every plan" stays true, because an abuse
+ * control is not something we sell. The same instrument is already in place
+ * twice: AGL-1655 for forms and AGL-2155 for bandwidth.
  *
  * ## Why it is not a plan dimension, and must never become one
  *
