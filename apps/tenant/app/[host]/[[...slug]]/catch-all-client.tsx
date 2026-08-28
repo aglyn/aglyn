@@ -812,7 +812,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
               {`Made with ${brand.productName}`}
             </>
           )
-          // Marked for the attribution guard (AGL-1477), which checks after
+          // Marked for the attribution guard, which checks after
           // load that the page still presents this and repairs it into a
           // closed shadow root if it does not.
           return brand.homeUrl ? (
@@ -889,7 +889,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           Report abuse
         </a>
       ) : null}
-      {/* Keeps the two above ON the page (AGL-1477). Both are ordinary
+      {/* Keeps the two above ON the page. Both are ordinary
           elements in a document the site's own author controls, so three
           lines of theme CSS or one tag-manager container takes them off it —
           and the report control is precisely what a phishing site's author

@@ -24,7 +24,7 @@ export interface AttributionGuardProps {
 }
 
 /**
- * Mounts the attribution guard (AGL-1477). Renders nothing.
+ * Mounts the attribution guard. Renders nothing.
  *
  * From an effect rather than module scope — the opposite of the error beacon
  * beside it, and for the opposite reason. That one exists to catch failures

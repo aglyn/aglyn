@@ -2281,7 +2281,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 {
                   children: (
                     /*
-                     * The organization's own activity log (AGL-1488).
+                     * The organization's own activity log.
                      *
                      * Staff had the audit of what STAFF did to this org and
                      * no view of what the org itself did — the invites, the
@@ -2293,7 +2293,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <OrgActivityCard
                       orgId={orgId}
                       header={'Organization activity'}
-                      // The org's SITES too (AGL-1490). Without it a
+                      // The org's SITES too. Without it a
                       // brand-new organization reads as having done nothing
                       // on the day it published three pages, because the org
                       // collection holds only invites, roles and billing.

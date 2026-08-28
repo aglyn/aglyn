@@ -1167,7 +1167,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: (
                   /*
-                   * What this ACCOUNT did, everywhere (AGL-1488).
+                   * What this ACCOUNT did, everywhere.
                    *
                    * The card above is the log of STAFF actions taken against
                    * the account — a different log answering a different

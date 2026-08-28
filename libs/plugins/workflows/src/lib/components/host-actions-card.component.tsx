@@ -302,7 +302,7 @@ export function HostActionsCard(props: {
   )
   const liveActions = readActions.filter((action: any) => !action.deletedAt)
   /**
-   * Element interactions are not listed here (AGL-1478).
+   * Element interactions are not listed here.
    *
    * An ACTION is something the SITE does — an order was placed, a form was
    * submitted. An INTERACTION is something an ELEMENT does, and it belongs to
@@ -784,7 +784,7 @@ export function HostActionsCard(props: {
         >
           {'Add action'}
         </Button>
-        {/* Says where they went (AGL-1478). A list that silently drops rows
+        {/* Says where they went. A list that silently drops rows
             a reader saw last week is a list they stop trusting; this is the
             one sentence that makes the absence deliberate. */}
         {elementScoped.length ? (

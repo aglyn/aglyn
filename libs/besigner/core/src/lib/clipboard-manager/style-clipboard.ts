@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
 
 /**
- * Besigner STYLE clipboard (AGL-1480).
+ * Besigner STYLE clipboard.
  *
  * The element clipboard beside it carries whole subtrees. This carries a
  * look: everything the Styles panel writes to one element, so a heading

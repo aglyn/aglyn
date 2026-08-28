@@ -223,7 +223,7 @@ const MEDIA_CDN_ACTIVE_DOCUMENT_TYPES = new Set([
 ])
 
 /**
- * Types this CDN will serve `inline` (AGL-1476).
+ * Types this CDN will serve `inline`.
  *
  * `?download=1` has always been able to force `attachment`, but it is the
  * REQUESTER's flag — the safe disposition cannot depend on a caller asking
@@ -1079,7 +1079,7 @@ export async function serveMediaCdn(
       mediaContentDisposition(
         mediaDownloadName(snapshot.get('fileName'), mediaId),
         // `?download=1` can force a download; nothing can force an INLINE
-        // render of a type that has no inline use here (AGL-1476).
+        // render of a type that has no inline use here.
         { download: download || !servesInline(servedType) },
       ),
     )

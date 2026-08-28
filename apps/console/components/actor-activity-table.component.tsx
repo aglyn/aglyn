@@ -53,7 +53,7 @@ export interface ActorActivityTableProps {
 }
 
 /**
- * What one person did, paginated (AGL-1488).
+ * What one person did, paginated.
  *
  * The CARD, the grid, the toolbar, the empty and unreadable states and the
  * footer are `ActivityTable`'s (AGL-2501) — this owns the columns and the

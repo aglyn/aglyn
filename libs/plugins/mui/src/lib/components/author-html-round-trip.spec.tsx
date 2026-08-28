@@ -173,7 +173,7 @@ describe('sanitizeAuthorHtml is a fixed point of the parser (AGL-1901)', () => {
     ['h1', 'H1'],
     ['h2', 'H2'],
     ['h6', 'H6'],
-    // `P` since AGL-1487, deliberately: MUI's own mapping sends a subtitle
+    // `P` since deliberately: MUI's own mapping sends a subtitle
     // to `<h6>`, which on a page builder puts a label into the document
     // outline. `VARIANT_ELEMENT` is passed to MUI as `variantMapping` now, so
     // it decides rather than describes.

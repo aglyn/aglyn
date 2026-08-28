@@ -36,7 +36,7 @@ const hover = (id: string): NodeInteraction => ({
   steps: [{ type: 'openMenu' } as never],
 })
 
-describe('collectNodeInteractions (AGL-1478)', () => {
+describe('collectNodeInteractions', () => {
   it('stamps the selector from the node that owns the interaction', () => {
     const nodes: InteractionNode[] = [
       { $id: 'trigger', interactions: [hover('a')] },
@@ -210,7 +210,7 @@ describe('walkInteractionNodes', () => {
   })
 })
 
-describe('the id says where the interaction lives (AGL-1478)', () => {
+describe('the id says where the interaction lives', () => {
   it('round-trips a node and an interaction id', () => {
     const id = nodeInteractionId('leaf-1', 'open')
     expect(parseNodeInteractionId(id)).toEqual({

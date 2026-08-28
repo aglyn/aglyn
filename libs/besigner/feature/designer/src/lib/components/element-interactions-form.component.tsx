@@ -42,7 +42,7 @@ export interface ElementInteractionsFormProps {
 }
 
 /**
- * Interactions on the selected element, as its own panel tab (AGL-1486).
+ * Interactions on the selected element, as its own panel tab.
  *
  * They used to sit at the bottom of Attributes, under every field the
  * component declares — so on anything with more than a handful of attributes

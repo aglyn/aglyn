@@ -341,7 +341,7 @@ const NodeTreeItem = observer(
     const dragDisabled = Boolean(isRootNode || !dragAllowed)
 
     /**
-     * The row's eye: this element's VISIBILITY (AGL-1479).
+     * The row's eye: this element's VISIBILITY.
      *
      * `display: none`, on the canvas and on the published site, and nothing
      * reveals it. The plain "I do not want this on the page" switch every

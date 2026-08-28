@@ -351,7 +351,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 size: { xs: 12 },
                 children: (
                   /*
-                   * The site's own activity log (AGL-1488).
+                   * The site's own activity log.
                    *
                    * The same feed the owner reads on Setup → Activity, on the
                    * page staff open when they are working out what happened

@@ -47,7 +47,7 @@ export interface OrgActivityCardProps {
    * member/host/screen (AGL-389). Applied by the route, not here. */
   targetId?: string
   /**
-   * Include the org's SITES, not just its org-level events (AGL-1490).
+   * Include the org's SITES, not just its org-level events.
    *
    * Off by default because the two existing callers depend on the narrower
    * feed: "Changes to this member" filters org entries by target, and folding

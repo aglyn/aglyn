@@ -36,7 +36,7 @@ beforeEach(() => {
   window.localStorage.clear()
 })
 
-describe('style clipboard (AGL-1480)', () => {
+describe('style clipboard', () => {
   it('copies a look and pastes it onto another element', () => {
     expect(hasStyles()).toBe(false)
     copyStyles(node({ color: 'red', fontSize: 24 }))

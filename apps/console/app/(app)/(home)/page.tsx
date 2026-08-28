@@ -325,7 +325,7 @@ function OrgJump() {
                       subheader={org.slug ?? undefined}
                       actions={
                         /*
-                         * A real anchor (AGL-1484). `router.push` from an
+                         * A real anchor. `router.push` from an
                          * onClick renders a <button>, so this could not be
                          * middle-clicked, ⌘-clicked, opened in a new tab, or
                          * copied as a link — and opening one workspace beside

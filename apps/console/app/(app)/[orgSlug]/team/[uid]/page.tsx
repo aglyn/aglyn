@@ -525,7 +525,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
           {currentOrg?.$id ? (
             /*
              * Everything this member has done in THIS organization
-             * (AGL-1488) — its own sites included, not just the org-level
+             * — its own sites included, not just the org-level
              * events.
              *
              * `OrgActivityCard` filtered the org's own feed client-side, so

@@ -64,7 +64,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const { hostId } = props
   /*
    * The link context is the CUSTOMER route's params, and this table also
-   * mounts on the staff host page (AGL-1488), whose route has neither. A
+   * mounts on the staff host page, whose route has neither. A
    * target with no route to it renders as plain text rather than as an
    * anchor to a URL with a hole in it — `activityHref` already answers
    * undefined for an incomplete context, so nothing here has to decide.

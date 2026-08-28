@@ -18,7 +18,7 @@
 import type { HostAction } from './actions'
 
 /**
- * Interactions stored on the element that carries them (AGL-1478).
+ * Interactions stored on the element that carries them.
  *
  * An interaction is what an ELEMENT does — clicked, hovered, scrolled into
  * view. A host action is what the SITE does — an order was placed, a form was

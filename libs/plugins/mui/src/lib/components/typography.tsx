@@ -194,7 +194,7 @@ function sanitizeTypographyHtml(html: string): string {
  */
 /**
  * The element each variant renders as, and the ONE place that decides
- * (AGL-1487).
+ *.
  *
  * MUI's own `variantMapping` sends `subtitle1` and `subtitle2` to `<h6>`.
  * That is a typographic choice made in a component library, and on a page

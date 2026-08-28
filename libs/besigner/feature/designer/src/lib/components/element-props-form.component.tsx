@@ -1566,7 +1566,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     the form, below Save Element — now ride on the fields
                     themselves as end adornments (AGL-2236). See
                     `fieldsWithMediaPickers`. */}
-                {/* Interactions moved to their own panel tab (AGL-1486).
+                {/* Interactions moved to their own panel tab.
                     They are not attributes: a behaviour authored in a
                     dialog rather than a field, and sitting below every
                     declared attribute put them under the fold on anything
@@ -1644,7 +1644,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     Delete Element
                   </Button>
                 </FormControl>
-                {/* What this element IS (AGL-1486): the component's own
+                {/* What this element IS: the component's own
                     description and the node's ids, in two collapsed
                     accordions. They were a tab of their own, which cost every
                     reader a third of the panel's header for reference detail

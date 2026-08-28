@@ -158,7 +158,7 @@ export const Leaf = observer(
       theme?.palette,
     )
     /**
-     * Author visibility (AGL-1479) — the eye on the hierarchy row.
+     * Author visibility — the eye on the hierarchy row.
      *
      * LAST, and deliberately so. It has to override the element's own
      * display, not replace it: an author who hides a Stack laid out with

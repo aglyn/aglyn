@@ -79,7 +79,7 @@ export interface InteractionBuilderDialogProps {
    */
   existingFromCache: boolean
   /**
-   * Where the save goes, when it is not the `actions` collection (AGL-1478).
+   * Where the save goes, when it is not the `actions` collection.
    *
    * An interaction authored on an element belongs to the DOCUMENT that holds
    * the element, so the provider hands the dialog a writer that puts it on
@@ -625,7 +625,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     if (problem) return
     const id = state.id ?? Aglyn.createResourceUid()
     /**
-     * Node-scoped save (AGL-1478). Takes the whole Firestore path below with
+     * Node-scoped save. Takes the whole Firestore path below with
      * it — the server-side create, the staleness guard, the merge-set — and
      * none of that is a loss:
      *

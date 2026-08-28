@@ -1114,7 +1114,7 @@ describe('Aglyn: Screen Manager', () => {
    * directly should have been calling. Both halves matter, and both were
    * missing wherever a field was written by hand.
    */
-  describe('updateNodeFields (AGL-1480)', () => {
+  describe('updateNodeFields', () => {
     const seed = {
       [NODE_ROOT_ID]: {
         $id: NODE_ROOT_ID,
@@ -1177,7 +1177,7 @@ describe('Aglyn: Screen Manager', () => {
    * shipped. Pinned as a round trip rather than a field list, because that is
    * the property that matters: what the editor holds is what reaches storage.
    */
-  describe('interactions and hidden round-trip (AGL-1478, AGL-1479)', () => {
+  describe('interactions and hidden round-trip', () => {
     const map = {
       [NODE_ROOT_ID]: {
         $id: NODE_ROOT_ID,
