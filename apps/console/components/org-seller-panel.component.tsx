@@ -86,11 +86,11 @@ export interface OrgSellerPanelProps {
 /**
  * Seller area (AGL-44/798/801): the org's marketplace identity and its
  * published listings, folded out of the retired `/[orgSlug]/marketplace` page.
- * Each section (profile, listings, payouts, sales) is its own Marketplace tab
- * (AGL-801), so this renders exactly one card per the `section` prop. The
- * shared Firestore hooks run regardless of section — Firebase dedupes
- * identical listeners, and the marketplace HubTabs mounts tabs lazily, so only
- * the visited sections ever subscribe.
+ * Each section (profile, listings, payouts, sales) is its own Marketplace
+ * ROUTE (AGL-801/693), so this renders exactly one card per the `section`
+ * prop. The shared Firestore hooks run regardless of which section is asked
+ * for — Firebase dedupes identical listeners, and only the section the reader
+ * navigated to is mounted at all, so the others never subscribe.
  */
 export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const { orgId, section } = props

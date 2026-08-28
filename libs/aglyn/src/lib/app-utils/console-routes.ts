@@ -107,6 +107,31 @@ export enum Route {
   // forum, and a redirect stub sitting on `/marketplace` would have taken the
   // one path that feature wants.
   ORG_MARKETPLACE = '/[orgSlug]/marketplace',
+  /*
+   * Marketplace SECTIONS are routes (AGL-693), for the reason the settings
+   * and account sections are: a panel that is not open should cost nothing,
+   * and the seller half of this hub reads the organization's REVENUE.
+   *
+   * The four seller sections are the reason the layout gates rather than the
+   * rail. As tabs they were simply not rendered for a member without
+   * `publishToMarketplace`; as routes each one is reachable by typing its URL,
+   * so the refusal has to sit above them all rather than in the list that
+   * draws them.
+   *
+   * Every segment here is shorter than the ten characters `createResourceUid`
+   * emits, so none of them can ever shadow a real `[listingId]` sitting at the
+   * same level. `upload` rather than `publish` because `publish/plugin` is
+   * already a route beneath this one, and two directories contributing the
+   * same segment is a tree Next cannot resolve a layout for.
+   */
+  ORG_MARKETPLACE_BROWSE = '/[orgSlug]/marketplace/browse',
+  ORG_MARKETPLACE_INSTALLED = '/[orgSlug]/marketplace/installed',
+  ORG_MARKETPLACE_LICENCES = '/[orgSlug]/marketplace/licences',
+  ORG_MARKETPLACE_UPLOAD = '/[orgSlug]/marketplace/upload',
+  ORG_MARKETPLACE_SELLER_PROFILE = '/[orgSlug]/marketplace/profile',
+  ORG_MARKETPLACE_SELLER_LISTINGS = '/[orgSlug]/marketplace/listings',
+  ORG_MARKETPLACE_SELLER_PAYOUTS = '/[orgSlug]/marketplace/payouts',
+  ORG_MARKETPLACE_SELLER_SALES = '/[orgSlug]/marketplace/sales',
   ORG_MARKETPLACE_LISTING = '/[orgSlug]/marketplace/[listingId]',
   ORG_MARKETPLACE_PUBLISHER = '/[orgSlug]/marketplace/publisher/[handle]',
   // Publishing a plugin is a page, not a modal (AGL-1078): the most
@@ -390,6 +415,14 @@ export interface RoutePayload {
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; pluginRef: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_BROWSE]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_INSTALLED]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_LICENCES]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_UPLOAD]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_PROFILE]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_LISTINGS]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_PAYOUTS]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_SELLER_SALES]: { orgSlug: string }
   [Route.ORG_MARKETPLACE_LISTING]: { orgSlug: string; listingId: string }
   [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; handle: string }
   [Route.ORG_MARKETPLACE_PUBLISH_PLUGIN]: { orgSlug: string }

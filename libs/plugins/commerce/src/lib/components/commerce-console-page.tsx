@@ -51,6 +51,24 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
   const { hostId } = props
   return (
     <HubTabs
+      /*
+       * Mount the section being read, and no others (AGL-693).
+       *
+       * The six sections hold thirty-two Firestore listens between them, and
+       * `HubTabs` keeps every panel mounted unless told otherwise — so opening
+       * Catalog also subscribed the orders, promotions, reservations, settings
+       * and analytics cards. The `limit()` on those queries is the bill:
+       * several ask for 500, and one load reached a ceiling of ~4,460
+       * documents to render one tab. `commerce-console-read-cost.spec.tsx`
+       * meters it and refuses a section that listens before it is opened.
+       *
+       * Sections as ROUTES would make this structural rather than a flag
+       * somebody has to remember, and that is not reachable from a plugin
+       * today: the shell mounts plugin pages through its `[pluginSlug]` route,
+       * a single dynamic segment resolved by exact href match, so a section
+       * has no sub-route to occupy and the page is handed no path segments.
+       */
+      lazy
       tabs={[
         {
           id: 'catalog',

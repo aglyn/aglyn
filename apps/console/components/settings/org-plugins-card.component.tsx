@@ -48,9 +48,7 @@ export function OrgPluginsCard() {
     {'Enabling plugins, configuring them, and ' +
       'managing marketplace installs now live in '}
     <AppLink
-      href={`${buildRoute(Route.ORG_MARKETPLACE, {
-        orgSlug,
-      })}?tab=installed`}
+      href={buildRoute(Route.ORG_MARKETPLACE_INSTALLED, { orgSlug })}
     >
       {'Marketplace › Installed'}
     </AppLink>

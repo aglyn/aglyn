@@ -109,21 +109,37 @@ describe('the Stripe capability notice (AGL-2019)', () => {
   })
 })
 
-describe('the page behind the tab is release-gated (AGL-2019)', () => {
-  const pageSource = readFileSync(
-    join(__dirname, '..', 'app', '(app)', '[orgSlug]', 'marketplace', 'page.tsx'),
+describe('the hub behind the flag is release-gated (AGL-2019)', () => {
+  /*
+   * The SECTIONS LAYOUT, which is where the gate has to be now that the
+   * sections are routes (AGL-693). On the old single page the wrapper sat
+   * around the tab panels; a layout wraps every section route instead, so one
+   * gate still covers the whole hub — and a per-section copy would be eight
+   * chances to leave one out.
+   */
+  const layoutSource = readFileSync(
+    join(
+      __dirname,
+      '..',
+      'app',
+      '(app)',
+      '[orgSlug]',
+      'marketplace',
+      '(sections)',
+      'layout.tsx',
+    ),
     'utf8',
   )
 
-  // A STRUCTURAL assertion on the source, deliberately. Rendering this page
+  // A STRUCTURAL assertion on the source, deliberately. Rendering this layout
   // needs the org scope, the Firestore instance, the hosts hook and the plugin
   // widget host; a mock deep enough to reach the gate would be asserting on
   // the mock. What has to stay true is narrow and textual — the wrapper is
   // present, and the flag it names is a real one.
   it('wraps its body in <FeatureGate flag="release_marketplace">', () => {
-    expect(pageSource).toMatch(/<FeatureGate flag="release_marketplace">/)
-    expect(pageSource).toMatch(/<\/FeatureGate>/)
-    expect(pageSource).toMatch(
+    expect(layoutSource).toMatch(/<FeatureGate flag="release_marketplace">/)
+    expect(layoutSource).toMatch(/<\/FeatureGate>/)
+    expect(layoutSource).toMatch(
       /import FeatureGate from '.*components\/feature-gate\.component'/,
     )
   })

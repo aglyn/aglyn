@@ -875,6 +875,20 @@ export function CollectionEntriesPage() {
               and the small-screen collapse. */}
           <HubTabs
             navHeader="Content"
+            /*
+             * Mount the tab being read, and not the other (AGL-693).
+             *
+             * `HubTabs` keeps every panel mounted unless told otherwise, so an
+             * author browsing entries also subscribed the Authors list. Both
+             * panels stay mounted once visited, so switching between them is
+             * still instant — the deferral only covers the tab nobody opened.
+             *
+             * A route rather than a tab would make this structural, and this
+             * pair is the case where a tab is right: an author is managed
+             * ALONGSIDE the entries that reference it, and the collection and
+             * entry already own the path segments here.
+             */
+            lazy
             tabs={[
               {
                 id: ENTRIES_TAB_ID,

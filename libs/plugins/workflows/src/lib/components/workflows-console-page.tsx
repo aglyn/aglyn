@@ -36,6 +36,21 @@ export function WorkflowsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org } = props
   return (
     <HubTabs
+      /*
+       * Mount the section being read, and no others (AGL-693).
+       *
+       * `HubTabs` keeps every panel mounted unless told otherwise, so opening
+       * one section also subscribed the Firestore listeners behind all the
+       * rest and paid for every document their `limit()` allows. The reader
+       * sees one section; without this the page reads them all.
+       *
+       * Sections as ROUTES would make this structural rather than a flag
+       * somebody has to remember, and that is not reachable from a plugin
+       * today: the shell mounts plugin pages through its `[pluginSlug]` route,
+       * a single dynamic segment resolved by exact href match, so a section
+       * has no sub-route to occupy and the page is handed no path segments.
+       */
+      lazy
       tabs={[
         {
           id: 'workflows',

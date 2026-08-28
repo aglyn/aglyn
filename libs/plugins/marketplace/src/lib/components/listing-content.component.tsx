@@ -107,7 +107,6 @@ import {
   useUser,
   useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
-import HubTabs from '@aglyn/shared-ui-next/components/hub-tabs'
 import ListingReviews from './listing-reviews.component'
 import ReportTarget from './report-target.component'
 import PluginSiteSet from './plugin-site-set.component'
