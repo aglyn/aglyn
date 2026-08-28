@@ -1240,6 +1240,16 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
               props: current?.props,
               assetAlt: asset?.alt,
             }),
+            // The asset's own pixel size, so the published `<img>` can
+            // reserve its box before the bytes arrive (AGL-2486). Gated on
+            // the component id inside the helper: an element whose renderer
+            // does not read these would spread them onto the DOM.
+            ...Aglyn.intrinsicMediaSize({
+              componentId: node?.componentId,
+              propName,
+              assetWidth: asset?.width,
+              assetHeight: asset?.height,
+            }),
           })
         })
       },

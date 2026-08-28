@@ -414,3 +414,56 @@ describe('Image sizes (AGL-2486)', () => {
     expect(container.querySelector('img')!.getAttribute('sizes')).toBeNull()
   })
 })
+
+/**
+ * Intrinsic dimensions (AGL-2486).
+ *
+ * The pair exists to reserve the right box before the bytes arrive. With
+ * `width: 100%; height: auto` an `<img>` is zero-height until it decodes, so
+ * without the attributes every image on a page shifts the layout as it lands.
+ *
+ * The first assertion is load-bearing beyond this component: `Box` in some
+ * MUI versions maps `width`/`height` to CSS system props, which would turn an
+ * intrinsic pixel count into a hard CSS size and break every fluid image on
+ * every site. This version applies `styleFunctionSx` alone, and this is what
+ * says so out loud if that ever changes.
+ */
+describe('Image intrinsic dimensions (AGL-2486)', () => {
+  const img = (element: JSX.Element) =>
+    render(element).container.querySelector('img') as HTMLImageElement
+
+  it('emits the pair as HTML attributes, not as CSS', () => {
+    const element = img(
+      <Image src="https://example.com/a.png" alt="a" intrinsicWidth={1600} intrinsicHeight={900} />,
+    )
+    expect(element.getAttribute('width')).toBe('1600')
+    expect(element.getAttribute('height')).toBe('900')
+    // The placement CSS is untouched — the attributes supply a ratio, the
+    // style supplies the used size.
+    expect(element.style.width || getComputedStyle(element).width).not.toBe(
+      '1600px',
+    )
+  })
+
+  it('emits nothing when only one of the pair is known', () => {
+    const element = img(
+      <Image src="https://example.com/a.png" alt="a" intrinsicWidth={1600} />,
+    )
+    expect(element.getAttribute('width')).toBeNull()
+    expect(element.getAttribute('height')).toBeNull()
+  })
+
+  it('ignores a zero or negative capture rather than collapsing the image', () => {
+    const element = img(
+      <Image src="https://example.com/a.png" alt="a" intrinsicWidth={0} intrinsicHeight={0} />,
+    )
+    expect(element.getAttribute('width')).toBeNull()
+    expect(element.getAttribute('height')).toBeNull()
+  })
+
+  it('leaves documents that carry no dimensions exactly as they render today', () => {
+    const element = img(<Image src="https://example.com/a.png" alt="a" />)
+    expect(element.getAttribute('width')).toBeNull()
+    expect(element.getAttribute('height')).toBeNull()
+  })
+})

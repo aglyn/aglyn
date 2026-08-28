@@ -17,6 +17,7 @@
 
 import {
   inheritedMediaAlt,
+  intrinsicMediaSize,
   MEDIA_ALT_MAX_LENGTH,
   MEDIA_TAG_MAX_COUNT,
   normalizeMediaTags,
@@ -186,5 +187,83 @@ describe('inheritedMediaAlt', () => {
     expect(inheritedMediaAlt({ placementAlt: 0, assetAlt: 'Kettle' })).toBe(
       'Kettle',
     )
+  })
+})
+
+/**
+ * The pick-time copy that lets a published `<img>` reserve its box before the
+ * bytes arrive (AGL-2486). Every rule here exists because breaking it is
+ * worse than writing nothing: a lone dimension reserves the wrong shape, a
+ * zero collapses the element, an undefined key strips a good pair on the next
+ * pick, and a prop on an element that does not read it reaches the DOM.
+ */
+describe('intrinsicMediaSize', () => {
+  const asset = { assetWidth: 1600, assetHeight: 900 }
+
+  it('copies the pair for an element whose renderer reads it', () => {
+    expect(
+      intrinsicMediaSize({ componentId: 'image', propName: 'src', ...asset }),
+    ).toEqual({ intrinsicWidth: 1600, intrinsicHeight: 900 })
+  })
+
+  it('writes nothing for an element that would spread it onto the DOM', () => {
+    expect(
+      intrinsicMediaSize({ componentId: 'avatar', propName: 'src', ...asset }),
+    ).toEqual({})
+  })
+
+  it('writes nothing for an attribute that does not carry an image', () => {
+    expect(
+      intrinsicMediaSize({
+        componentId: 'image',
+        propName: 'posterSrc',
+        ...asset,
+      }),
+    ).toEqual({})
+  })
+
+  it('refuses a half-known size rather than reserving the wrong shape', () => {
+    expect(
+      intrinsicMediaSize({
+        componentId: 'image',
+        propName: 'src',
+        assetWidth: 1600,
+      }),
+    ).toEqual({})
+  })
+
+  it('refuses a zero or non-finite capture', () => {
+    for (const [assetWidth, assetHeight] of [
+      [0, 0],
+      [1600, 0],
+      [-4, 3],
+      [Number.NaN, 900],
+      [Number.POSITIVE_INFINITY, 900],
+    ]) {
+      expect(
+        intrinsicMediaSize({
+          componentId: 'image',
+          propName: 'src',
+          assetWidth,
+          assetHeight,
+        }),
+      ).toEqual({})
+    }
+  })
+
+  it('never returns a present key holding undefined', () => {
+    // `updateNodeProps` REPLACES the props object, so a key spread in with an
+    // undefined value would clear a pair an earlier pick stored correctly.
+    const result = intrinsicMediaSize({
+      componentId: 'image',
+      propName: 'src',
+      assetWidth: undefined,
+      assetHeight: 900,
+    })
+    expect(Object.keys(result)).toEqual([])
+  })
+
+  it('tolerates being called with nothing at all', () => {
+    expect(intrinsicMediaSize({})).toEqual({})
   })
 })

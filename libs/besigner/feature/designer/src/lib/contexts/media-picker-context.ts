@@ -33,16 +33,26 @@ export interface MediaPickerContextValue {
    * which is the same reason this context exists at all.
    *
    * `asset` carries the chosen asset's own authored metadata (AGL-1896) so a
-   * surface can DEFAULT a companion attribute from it — today only `alt`,
-   * which the DAM has stored since AGL-173 and which nothing ever read back.
-   * Structural and optional on purpose: the designer stays storage-agnostic,
-   * a host that supplies no metadata is unchanged, and this stays one extra
-   * argument rather than a second picker mechanism. Use
-   * `Aglyn.inheritedMediaAlt` to decide what to do with it — never inline the
-   * rule, or the override precedence drifts per surface.
+   * surface can DEFAULT a companion attribute from it — `alt`, which the DAM
+   * has stored since AGL-173 and which nothing ever read back, and the pixel
+   * `width`/`height` captured at upload. Structural and optional on purpose:
+   * the designer stays storage-agnostic, a host that supplies no metadata is
+   * unchanged, and this stays one extra argument rather than a second picker
+   * mechanism. Use `Aglyn.inheritedMediaAlt` to decide what to do with the
+   * alt — never inline the rule, or the override precedence drifts per
+   * surface.
+   *
+   * The dimensions are copied at PICK TIME because no tenant render path ever
+   * reads a media document (AGL-2486). Resolving them while rendering would
+   * put a per-image Firestore read on the hottest cached path; carrying them
+   * on the node costs two numbers and is read like any other prop. They are
+   * best-effort at upload, so either may be absent.
    */
   onPickMedia?: (
-    onPick: (value: string, asset?: { alt?: string }) => void,
+    onPick: (
+      value: string,
+      asset?: { alt?: string; width?: number; height?: number },
+    ) => void,
   ) => void
   /**
    * External image hosts this site's owner has approved (AGL-1152).
