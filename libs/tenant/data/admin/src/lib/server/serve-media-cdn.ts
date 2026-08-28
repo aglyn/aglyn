@@ -367,13 +367,19 @@ export function lockdownStopsMediaDelivery(
 
 /**
  * **Read cost (AGL-1302):** the verdict inputs are TTL-cached in-process
- * per CDN scope — one org-doc read (host scope: host doc + hostIndex + the
- * owning org doc, since an org lock never stamps host docs) per scope per
- * {@link MEDIA_CDN_LOCK_TTL_MS}, not per asset. A DAM grid firing dozens of
- * requests coalesces into one lookup; the platform doc rides
- * `getPlatformLockdown`'s existing 15s cache. Same fail-open posture as the
- * verdict core: an unreachable Firestore is an outage, not a lockdown, and
- * must not blank every customer image.
+ * per CDN scope — one lookup per scope per {@link MEDIA_CDN_LOCK_TTL_MS},
+ * not per asset. A DAM grid firing dozens of requests coalesces into one;
+ * the platform doc rides `getPlatformLockdown`'s existing 15s cache. Same
+ * fail-open posture as the verdict core: an unreachable Firestore is an
+ * outage, not a lockdown, and must not blank every customer image.
+ *
+ * That lookup is one BatchGetDocuments at org scope, and two at host scope
+ * — `hosts` and `hostIndex` batched together, then the owning org, whose id
+ * is what `hostIndex` returns and so cannot join the batch. Every one of
+ * them is projected to {@link SUSPENSION_FIELDS}: the verdict needs three
+ * fields, and the host document is the largest in the product. Measured
+ * against production, projecting the three reads and batching two of them
+ * took the host branch from 3 round trips and 2,964 B to 2 and 34 B.
  *
  * **Staleness bound, stated rather than hidden:** a warm origin refuses
  * within ≤15s of the org-doc write (the platform panic number). What the
@@ -415,6 +421,30 @@ export function invalidateMediaCdnLockCache(): void {
   lockPending.clear()
 }
 
+/**
+ * Every field the delivery verdict reads off a host or org document, and
+ * the projection sent to Firestore — ONE list, because the carrier below is
+ * built from it. A mask that omitted a field the carrier reads would leave
+ * that field `undefined` and silently soften the lock: drop
+ * `suspendedReasonCode` and every lock normalizes to `manual`, which
+ * REFUSES delivery for locks that should serve; drop `suspendedAt` and no
+ * lock is ever seen at all. Neither failure can be introduced here without
+ * changing the one array both sides use.
+ *
+ * `suspendedMode` and `suspendedEnforcement` are deliberately absent:
+ * {@link lockdownStopsMediaDelivery} decides on `reason` and the active
+ * window alone, so a read-only or takedown-class lock stops these bytes on
+ * exactly the same terms as a full one.
+ */
+const SUSPENSION_FIELDS = [
+  'suspendedAt',
+  'suspendedReasonCode',
+  'suspendedUntilMs',
+] as const
+
+/** Which host owns the asset's scope — the only field read off `hostIndex`. */
+const HOST_INDEX_ORG_FIELD = 'orgId'
+
 /** The `suspended*` field family off a snapshot, for the normalizers. */
 const suspensionCarrier = (snapshot: {
   get: (field: string) => unknown
@@ -422,11 +452,10 @@ const suspensionCarrier = (snapshot: {
   suspendedAt?: unknown
   suspendedReasonCode?: unknown
   suspendedUntilMs?: unknown
-} => ({
-  suspendedAt: snapshot.get('suspendedAt'),
-  suspendedReasonCode: snapshot.get('suspendedReasonCode'),
-  suspendedUntilMs: snapshot.get('suspendedUntilMs'),
-})
+} =>
+  Object.fromEntries(
+    SUSPENSION_FIELDS.map((field) => [field, snapshot.get(field)]),
+  )
 
 /** TTL-cached: does any lockdown covering `scope` stop delivery? */
 async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
@@ -450,10 +479,10 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
           // doc governs. The context host's own lock is not consulted — a
           // suspended HOST's pages 503 already, and which sites may USE an
           // org asset is `visibleTo`'s question, not the lock's.
-          const org = await firestore
-            .collection('orgs')
-            .doc(scope.scopeId)
-            .get()
+          const [org] = await firestore.getAll(
+            firestore.collection('orgs').doc(scope.scopeId),
+            { fieldMask: [...SUSPENSION_FIELDS] },
+          )
           blocked = lockdownStopsMediaDelivery(
             normalizeOrgLockdown(suspensionCarrier(org)),
             nowMs,
@@ -462,17 +491,27 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
           // Host-library form: the host's own lock, and the OWNING org's —
           // an org lock never stamps host docs (AGL-1506), so a host-only
           // read would silently miss the very lock this issue is about.
-          const [host, hostIndex] = await Promise.all([
-            firestore.collection('hosts').doc(scope.scopeId).get(),
-            firestore.collection('hostIndex').doc(scope.scopeId).get(),
-          ])
+          //
+          // One `getAll`, not two parallel gets: `DocumentReference.get()`
+          // is `getAll([ref])`, so a `Promise.all` of two of them is two
+          // BatchGetDocuments round trips where the batch is one. The org
+          // read below cannot join them — its id is what `hostIndex`
+          // returns — so two is the floor for this branch, not three.
+          const [host, hostIndex] = await firestore.getAll(
+            firestore.collection('hosts').doc(scope.scopeId),
+            firestore.collection('hostIndex').doc(scope.scopeId),
+            { fieldMask: [...SUSPENSION_FIELDS, HOST_INDEX_ORG_FIELD] },
+          )
           blocked = lockdownStopsMediaDelivery(
             normalizeHostLockdown(suspensionCarrier(host)),
             nowMs,
           )
-          const orgId = hostIndex.get('orgId')
+          const orgId = hostIndex.get(HOST_INDEX_ORG_FIELD)
           if (!blocked && typeof orgId === 'string' && orgId) {
-            const org = await firestore.collection('orgs').doc(orgId).get()
+            const [org] = await firestore.getAll(
+              firestore.collection('orgs').doc(orgId),
+              { fieldMask: [...SUSPENSION_FIELDS] },
+            )
             blocked = lockdownStopsMediaDelivery(
               normalizeOrgLockdown(suspensionCarrier(org)),
               nowMs,

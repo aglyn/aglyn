@@ -76,9 +76,31 @@ jest.mock('./firebase-admin', () => {
     get: (field: string) => data?.[field],
     data: () => data ?? undefined,
   })
+  /**
+   * The projection is MODELLED, not ignored — `getAll` hands back only the
+   * masked fields, exactly as Firestore does. That is what makes every case
+   * below a guard on the mask: a mask missing `suspendedAt` sees no lock at
+   * all, one missing `suspendedReasonCode` normalizes every lock to `manual`
+   * and refuses the two reasons that must keep serving, and one missing
+   * `suspendedUntilMs` keeps an expired lock alive. A mock that returned the
+   * whole document would green-light all three.
+   */
+  const project = (
+    data: Record<string, unknown> | null,
+    fieldMask: string[] | undefined,
+  ) => {
+    if (data === null || !fieldMask) return data
+    const kept: Record<string, unknown> = {}
+    for (const field of fieldMask) {
+      if (field in data) kept[field] = data[field]
+    }
+    return kept
+  }
   // The media subcollection read is what the pre-existing harnesses stub;
   // here it must be separable from the scope-doc read the lock check adds.
   const scopeDocRef = (collection: string, key: 'org' | 'host') => ({
+    __collection: collection,
+    __key: key,
     collection: (sub: string) => ({
       doc: () => ({
         get: async () => {
@@ -88,24 +110,34 @@ jest.mock('./firebase-admin', () => {
         set: async () => undefined,
       }),
     }),
-    get: async () => {
-      if (mockState.orgReadThrows) throw new Error('UNAVAILABLE')
-      mockState.reads.push(collection)
-      return snapshotFor(mockState[key])
-    },
   })
   const firestoreApi = {
+    /**
+     * One call, one entry in `reads` — the round-trip count the gate is
+     * measured on. `DocumentReference.get()` is `getAll([ref])` in the real
+     * SDK, so batching two refs here is one RPC, and the read log has to say
+     * so or the read-cost cases below cannot tell the two shapes apart.
+     */
+    getAll: async (...args: unknown[]) => {
+      const last = args[args.length - 1] as { fieldMask?: string[] } | undefined
+      const options =
+        last && typeof last === 'object' && 'fieldMask' in last ? last : undefined
+      const refs = (options ? args.slice(0, -1) : args) as {
+        __collection: string
+        __key: 'org' | 'host' | 'hostIndex'
+      }[]
+      if (mockState.orgReadThrows) throw new Error('UNAVAILABLE')
+      mockState.reads.push(refs.map((ref) => ref.__collection).join('+'))
+      return refs.map((ref) =>
+        snapshotFor(project(mockState[ref.__key], options?.fieldMask)),
+      )
+    },
     collection: (name: string) => ({
       doc: () => {
         if (name === 'orgs') return scopeDocRef('orgs', 'org')
         if (name === 'hosts') return scopeDocRef('hosts', 'host')
         if (name === 'hostIndex') {
-          return {
-            get: async () => {
-              mockState.reads.push('hostIndex')
-              return snapshotFor(mockState.hostIndex)
-            },
-          }
+          return { __collection: 'hostIndex', __key: 'hostIndex' }
         }
         if (name === 'lockdowns') {
           return {
@@ -334,6 +366,34 @@ describe('AGL-1520 · read cost and convergence', () => {
       mockState.reads.filter((read) => read === 'orgs/media').length,
     ).toBe(5)
     expect(mockState.reads.filter((read) => read === 'orgs').length).toBe(1)
+  })
+
+  it('the host branch batches: hosts + hostIndex in ONE read, then the org', async () => {
+    expect(served(await serve(['h1', 'm1']))).toBe(true)
+    // Two round trips, not three: only the org's id depends on the first.
+    expect(
+      mockState.reads.filter((read) => read !== 'hosts/media'),
+    ).toEqual(['lockdowns', 'hosts+hostIndex', 'orgs'])
+  })
+
+  it('an EXPIRED lock serves — the window field survives the projection', async () => {
+    // `suspendedUntilMs` in the past. Drop it from the mask and this lock
+    // reads as open-ended, so a lifted suspension would keep refusing.
+    mockState.org = {
+      suspendedAt: 1,
+      suspendedReasonCode: 'security',
+      suspendedUntilMs: Date.now() - 60_000,
+    }
+    expect(served(await serve(['org:acme', 'm1']))).toBe(true)
+  })
+
+  it('a lock still inside its window refuses — the control for the case above', async () => {
+    mockState.org = {
+      suspendedAt: 1,
+      suspendedReasonCode: 'security',
+      suspendedUntilMs: Date.now() + 60_000,
+    }
+    expectRefused(await serve(['org:acme', 'm1']))
   })
 
   it('an unlock restores delivery once the TTL rolls (no negative cache)', async () => {
