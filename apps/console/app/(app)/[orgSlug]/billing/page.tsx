@@ -91,7 +91,7 @@ import BillingAddressCardComponent from '../../../../components/billing/billing-
 import BillingTaxIdCardComponent from '../../../../components/billing/billing-tax-id-card.component'
 import { useBillingProfile } from '../../../../components/billing/use-billing-profile'
 import CardColumns from '../../../../components/card-columns.component'
-import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
+import EmbeddedCheckoutPanelComponent from '../../../../components/embedded-checkout-panel.component'
 import {
   clearSubscribeCheckoutPending,
   markSubscribeCheckoutPending,
@@ -1663,6 +1663,51 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 }]
               : []),
+            // In-page checkout (AGL-1132), directly above the grid whose
+            // button opened it — the one place the customer is already
+            // looking. It renders nothing unless the route handed back a
+            // client secret, so on the redirect path, which is still the
+            // default, this costs a null.
+            ...(checkoutClientSecret
+              ? [{
+                  size: { xs: 12 },
+                  children: (
+                    <EmbeddedCheckoutPanelComponent
+                      clientSecret={checkoutClientSecret}
+                      onClose={() => setCheckoutClientSecret(null)}
+                      /*
+                       * The Google Ads Subscribe conversion (AGL-1152).
+                       *
+                       * Reported HERE and not from the Stripe webhook, which
+                       * is where the `purchase` event goes: an Ads website
+                       * conversion is matched to the ad click through the
+                       * GCLID the tag holds in the browser, and a server has
+                       * neither. A webhook-reported one arrives unattributed
+                       * to the click that paid for it, which is the whole
+                       * thing being bought.
+                       *
+                       * ⚠️ Attribution only. Entitlements come from the
+                       * webhook and always will — this fires late, can be
+                       * missed entirely if the tab closes, and nothing may be
+                       * gated on it.
+                       *
+                       * `transaction_id` is the org, so this and the
+                       * pending-checkout repair above both firing counts
+                       * once. Unchanged by the move out of the dialog: the
+                       * de-duplication is the id, not the container.
+                       */
+                      onComplete={() => {
+                        reportPlatformAdConversion(
+                          'subscribe',
+                          platformAdvertisingAllowed(),
+                          { transactionId: orgId ?? undefined },
+                        )
+                        clearSubscribeCheckoutPending()
+                      }}
+                    />
+                  ),
+                }]
+              : []),
             {
               size: { xs: 12 },
               children: (
@@ -1698,34 +1743,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           ]}
         />
         )}
-        {/* In-page checkout (AGL-1132). Renders nothing unless the route
-            handed back a client secret, so on the redirect path — which is
-            still the default — this costs a null. */}
-        <EmbeddedCheckoutDialogComponent
-          clientSecret={checkoutClientSecret}
-          onClose={() => setCheckoutClientSecret(null)}
-          /*
-           * The Google Ads Subscribe conversion (AGL-1152).
-           *
-           * Reported HERE and not from the Stripe webhook, which is where the
-           * `purchase` event goes: an Ads website conversion is matched to the
-           * ad click through the GCLID the tag holds in the browser, and a
-           * server has neither. A webhook-reported one arrives unattributed to
-           * the click that paid for it, which is the whole thing being bought.
-           *
-           * ⚠️ Attribution only. Entitlements come from the webhook and always
-           * will — this fires late, can be missed entirely if the tab closes,
-           * and nothing may be gated on it.
-           */
-          onComplete={() => {
-            reportPlatformAdConversion(
-              'subscribe',
-              platformAdvertisingAllowed(),
-              { transactionId: orgId ?? undefined },
-            )
-            clearSubscribeCheckoutPending()
-          }}
-        />
         {/* The leave path (AGL-1863): survey, downsell, winback, and only
             then the cancel. */}
         <RetentionFunnelDialog

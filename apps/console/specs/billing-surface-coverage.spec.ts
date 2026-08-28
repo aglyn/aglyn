@@ -148,7 +148,7 @@ function clientCallers(route: string): string[] {
  *
  * 1. **Prose.** `usage-alerts` was satisfied by a doc comment in
  *    `billing-auto-lock.ts`, `webhook` by a comment in
- *    `embedded-checkout-dialog.component.tsx`.
+ *    `embedded-checkout-panel.component.tsx`.
  * 2. **A repo path.** `usage-email` was satisfied by
  *    `source: 'apps/console/app/api/billing/usage-email/route.ts'` in the
  *    system-email catalog — real code, on a real code line, and still not a

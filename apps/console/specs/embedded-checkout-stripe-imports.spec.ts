@@ -54,7 +54,7 @@ const COMPONENT = join(
   __dirname,
   '..',
   'components',
-  'embedded-checkout-dialog.component.tsx',
+  'embedded-checkout-panel.component.tsx',
 )
 
 /**

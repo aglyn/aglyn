@@ -69,6 +69,9 @@ const colorScheme = {
       secondary: '#FBE6FE',
       tertiary: '#EEF0F2',
     },
+    // MUI's own outlined-input border weight, promoted to a token so a field
+    // drawn outside MUI can match one drawn by it (see `PaletteOptions`).
+    inputOutline: 'rgba(0, 0, 0, 0.23)',
     background: {
       default: '#F5F5F5',
       paper: '#FFFFFF',
@@ -155,6 +158,7 @@ const colorScheme = {
       secondary: '#3D1443',
       tertiary: '#262B31',
     },
+    inputOutline: 'rgba(255, 255, 255, 0.23)',
     background: {
       default: '#161c21',
       paper: '#2a3440',

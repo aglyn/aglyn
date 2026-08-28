@@ -30,7 +30,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
-import EmbeddedCheckoutDialogComponent from '../embedded-checkout-dialog.component'
+import BillingCardFormComponent from './billing-card-form.component'
 import type { BillingPaymentMethod, BillingProfile } from './use-billing-profile'
 
 export interface BillingPaymentMethodsCardProps {
@@ -44,16 +44,18 @@ export interface BillingPaymentMethodsCardProps {
  *
  * ## The card number never touches us
  *
- * "Add new card" asks the server for a Stripe `mode=setup` Checkout session
- * and mounts its client secret in Stripe's own iframe — the same dialog the
- * upgrade path uses, which is the entire reason that dialog survives the move
- * to a native billing page. The PAN, CVC and expiry are typed into Stripe's
- * document and posted to Stripe; they are never in our DOM, never in a request
- * to our server, and never in a log. Everything around the iframe is ours.
+ * "Add new card" asks the server for a SetupIntent and mounts it in Stripe
+ * Elements, INLINE in this card. Every field is its own cross-origin iframe on
+ * Stripe's domain, so the PAN, CVC and expiry are typed into Stripe's document
+ * and posted to Stripe; they are never in our DOM, never in a request to our
+ * server, and never in a log. Everything around those fields is ours.
  *
- * Reusing Embedded Checkout rather than mounting a Payment Element also means
- * wallets, Link and 3DS do not have to be rebuilt and re-verified for a second
- * card-entry surface.
+ * Inline rather than the modal this replaced: an interface that appears
+ * unbidden, looks like a different product and then asks for payment details
+ * is a reason to stop being a customer. That objection is about PRESENTATION
+ * and is answerable without weakening anything — Elements' `appearance` takes
+ * our own theme, so the fields render at our sizes, in our type, between our
+ * own inputs, and the card-data guarantee is untouched.
  *
  * ## Why the empty state names the plan
  *
@@ -91,18 +93,17 @@ export default function BillingPaymentMethodsCardComponent({
   const [busy, setBusy] = useState(false)
 
   /**
-   * Ask the route for a Stripe `mode=setup` session and mount its client
-   * secret.
+   * Ask the route for a SetupIntent and mount its client secret.
    *
    * The secret is held in local state and nowhere else: it is a short-lived
-   * credential for ONE session, so parking it in the shared profile object
+   * credential for ONE intent, so parking it in the shared profile object
    * every card reads would keep it alive across renders with no use for it.
    */
   const openCardForm = async () => {
     setBusy(true)
     const dequeue = queueLoading()
     try {
-      const outcome = await request({ action: 'begin-card-setup' })
+      const outcome = await request({ action: 'create-setup-intent' })
       const secret = outcome.payload?.clientSecret
       if (outcome.ok && typeof secret === 'string') {
         setSetupClientSecret(secret)
@@ -110,6 +111,25 @@ export default function BillingPaymentMethodsCardComponent({
     } finally {
       dequeue()
       setBusy(false)
+    }
+  }
+
+  /**
+   * Stripe says the card is saved; the SERVER decides what that means.
+   *
+   * The intent id goes back to `finalize-card-setup`, which re-reads it from
+   * Stripe, checks it succeeded and belongs to this org's customer, and makes
+   * a first card the default. None of that is decided here — the browser is
+   * the one participant in this exchange that can lie about it.
+   */
+  const cardConfirmed = async (setupIntentId: string) => {
+    setSetupClientSecret(null)
+    const outcome = await request({
+      action: 'finalize-card-setup',
+      setupIntentId,
+    })
+    if (outcome.ok) {
+      enqueueSnackbar('Card saved.', { variant: 'success', persist: false })
     }
   }
 
@@ -232,36 +252,29 @@ export default function BillingPaymentMethodsCardComponent({
           )}
 
           {loaded.customer && canManage ? (
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={busy}
-                onClick={openCardForm}
-              >
-                {'Add new card'}
-              </Button>
-            </Stack>
+            setupClientSecret ? (
+              /*
+                Stripe's fields, inline. Nothing opens over the page and the
+                customer stays exactly where they were.
+              */
+              <BillingCardFormComponent
+                clientSecret={setupClientSecret}
+                onConfirmed={cardConfirmed}
+                onCancel={() => setSetupClientSecret(null)}
+              />
+            ) : (
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={busy}
+                  onClick={openCardForm}
+                >
+                  {'Add new card'}
+                </Button>
+              </Stack>
+            )
           ) : null}
-
-          {/*
-            Stripe's own form, in a dialog. The card number is typed into
-            Stripe's iframe and posted to Stripe — this component never sees
-            it, and there is no callback here that could.
-          */}
-          <EmbeddedCheckoutDialogComponent
-            clientSecret={setupClientSecret}
-            onClose={() => {
-              setSetupClientSecret(null)
-              // The customer may have saved a card and then closed without
-              // Stripe firing completion, so re-read rather than assume.
-              reload()
-            }}
-            onComplete={() => {
-              setSetupClientSecret(null)
-              reload()
-            }}
-          />
         </Stack>
       )}
     </BillingProfileGateComponent>

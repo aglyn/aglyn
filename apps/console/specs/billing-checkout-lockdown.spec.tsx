@@ -214,7 +214,7 @@ jest.mock(
   '../components/billing/billing-usage-budget-card.component',
   () => nullCard,
 )
-jest.mock('../components/embedded-checkout-dialog.component', () => nullCard)
+jest.mock('../components/embedded-checkout-panel.component', () => nullCard)
 
 import BillingPage from '../app/(app)/[orgSlug]/billing/page'
 

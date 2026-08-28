@@ -64,10 +64,14 @@ import { taxIdTypeLabel } from '../../../../utils/stripe-tax-id-types'
  *
  * **No card number ever reaches this handler.** There is no action here that
  * accepts a PAN, a CVC or an expiry, and there must never be one: card entry
- * happens inside Stripe's own iframe, and the only thing this route does for
- * it is mint a `mode=setup` Checkout session and hand back its client secret.
+ * happens inside Stripe Elements' own iframes, and the only thing this route
+ * does for it is mint a SetupIntent and hand back its client secret.
  * `billing-card-entry-stays-in-stripe.spec.ts` asserts that by reading this
  * file, so an action added later that took a card would fail the build.
+ *
+ * That guard matters MORE now than it did behind a hosted form, not less:
+ * inline Elements are meant to look like our own inputs, so a hand-rolled
+ * card field added beside them would look right and be catastrophic.
  *
  * **No entitlement is granted here.** Nothing writes `plan`, `entitlements`
  * or `subscription`. A plan change is requested through Stripe and applied by
@@ -432,33 +436,39 @@ async function handler(request: Request): Promise<Response> {
       return await readProfile(secretKey as string, orgId, customerId)
     }
 
-    if (action === 'begin-card-setup') {
-      // The ONLY thing this route does for card entry: mint a Stripe-hosted
-      // setup session and hand back its client secret. The dialog mounts that
-      // secret in Stripe's iframe, so the card number is typed into Stripe's
-      // document and posted to Stripe — it is never in our DOM, our request
-      // body or our logs.
+    if (action === 'create-setup-intent') {
+      // The ONLY thing this route does for card entry: mint a SetupIntent and
+      // hand back its client secret. Stripe Elements mounts that secret and
+      // renders its fields — each one its own cross-origin iframe on Stripe's
+      // domain — inside our card. The card number is typed into Stripe's
+      // document and posted to Stripe. It is never in our DOM, never in a
+      // request to this server, and never in a log.
       //
-      // `redirect_on_completion=never` keeps the customer on the settings
-      // page: this is a card being added, not a purchase, and there is
-      // nothing to return from.
+      // A SetupIntent rather than the `mode: setup` Checkout session this
+      // replaced: a session renders Stripe's whole checkout UI, which is a
+      // second visual language for what is a settings action. The intent
+      // gives the same iframe guarantee with fields we can style to match the
+      // inputs beside them.
+      //
+      // `usage: off_session` is load-bearing. The card is being saved to be
+      // charged on renewals with nobody present, and telling Stripe so at
+      // setup time is what lets the issuer authenticate it NOW instead of
+      // declining the first unattended renewal months later.
       const params = new URLSearchParams({
-        mode: 'setup',
-        ui_mode: 'embedded',
         customer: customerId,
-        currency: 'usd',
-        redirect_on_completion: 'never',
+        usage: 'off_session',
+        'automatic_payment_methods[enabled]': 'true',
         'metadata[orgId]': orgId,
       })
       const result = await stripeRequest(
         secretKey as string,
         'POST',
-        'checkout/sessions',
+        'setup_intents',
         params,
       )
       if (!result.ok || !result.payload?.client_secret) {
         console.error(
-          '[billing/profile] setup session failed',
+          '[billing/profile] setup intent failed',
           orgId,
           loggableStripeError(result.payload),
         )
@@ -471,6 +481,82 @@ async function handler(request: Request): Promise<Response> {
         { clientSecret: result.payload.client_secret },
         { status: 200 },
       )
+    }
+
+    if (action === 'finalize-card-setup') {
+      // The browser has confirmed a SetupIntent and hands back its id. Two
+      // things happen here, and both are done SERVER-SIDE against Stripe
+      // rather than on the browser's word:
+      //
+      //  1. the intent is re-read and checked — it must have succeeded, and it
+      //     must belong to THIS org's customer. A client that supplied some
+      //     other customer's intent id would otherwise attach a stranger's
+      //     card to this workspace's billing.
+      //  2. a FIRST card is made the default. Stripe does not do this on its
+      //     own, and a customer whose only card is not the default has a
+      //     subscription that renews against nothing — which surfaces weeks
+      //     later as a failed payment rather than now as a visible mistake.
+      const setupIntentId = clean(body?.setupIntentId, 80)
+      if (!setupIntentId) {
+        return Response.json({ error: 'Missing setup intent' }, { status: 400 })
+      }
+      const intent = await stripeRequest(
+        secretKey as string,
+        'GET',
+        `setup_intents/${encodeURIComponent(setupIntentId)}`,
+      )
+      const intentCustomer =
+        typeof intent.payload?.customer === 'string'
+          ? intent.payload.customer
+          : (intent.payload?.customer?.id ?? null)
+      if (
+        !intent.ok ||
+        intent.payload?.status !== 'succeeded' ||
+        intentCustomer !== customerId
+      ) {
+        console.error(
+          '[billing/profile] setup intent not usable',
+          orgId,
+          // Never the intent id or the customer id — only WHY it was refused.
+          {
+            ok: intent.ok,
+            status: intent.payload?.status ?? null,
+            customerMatches: intentCustomer === customerId,
+          },
+        )
+        return Response.json(
+          { error: 'That card could not be saved. Nothing has changed.' },
+          { status: 400 },
+        )
+      }
+      const paymentMethodId =
+        typeof intent.payload?.payment_method === 'string'
+          ? intent.payload.payment_method
+          : (intent.payload?.payment_method?.id ?? null)
+      const customer = await stripeRequest(
+        secretKey as string,
+        'GET',
+        `customers/${encodeURIComponent(customerId)}`,
+      )
+      const existingDefault =
+        customer.payload?.invoice_settings?.default_payment_method ?? null
+      if (paymentMethodId && !existingDefault) {
+        await stripeRequest(
+          secretKey as string,
+          'POST',
+          `customers/${encodeURIComponent(customerId)}`,
+          new URLSearchParams({
+            'invoice_settings[default_payment_method]': paymentMethodId,
+          }),
+        )
+      }
+      void logOrgActivity(
+        orgId,
+        { uid: decoded.uid, email: decoded.email },
+        'Added a payment method',
+        { type: 'org', id: orgId },
+      )
+      return await readProfile(secretKey as string, orgId, customerId)
     }
 
     if (action === 'set-default-card') {
