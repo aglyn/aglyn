@@ -210,6 +210,54 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
 
     const chargeCents = quote.depositCents || quote.totalCents
 
+    // NO DISCOUNT IS APPLIED HERE, AND THAT IS AN OPEN QUESTION RATHER THAN AN
+    // OVERSIGHT (AGL-305).
+    //
+    // `hosts/{hostId}/discounts` reaches the cart, buy-now, the draft-order
+    // payment link and the register. This door was deliberately left out,
+    // because unlike those four it does not take a payment for goods — it takes
+    // a DEPOSIT against a stay that is settled later, and "apply 10% off" has
+    // three different meanings against that shape:
+    //
+    //   1. Discount the STAY. `quote.totalCents` falls, the deposit falls with
+    //      it because it is a percentage of the subtotal, and the balance falls
+    //      too. This is the only reading that is actually a discount on the
+    //      booking — and it reprices a merchant's lodging inventory from a
+    //      storefront promo code, which is a larger claim than any of the four
+    //      goods doors makes.
+    //   2. Discount the DEPOSIT only. Strictly worse than doing nothing: the
+    //      balance is computed downstream as `totalCents - paidCents`, so every
+    //      cent taken off at booking is billed straight back at check-out. The
+    //      guest would be shown a discount and then charged for it, which is
+    //      the silent-reversal shape this codebase refuses elsewhere.
+    //   3. Discount the BALANCE. Nothing visible at booking; the guest finds
+    //      out at the register. A promotion nobody can see when they buy is not
+    //      a promotion.
+    //
+    // What makes this a product decision and not an implementation one is that
+    // the balance is not collected by any door this repo can teach. It is read
+    // off the console's reservations card as `totalCents - paidCents` and
+    // collected BY A HUMAN at the till, so option 1 is the only one that
+    // survives the hand-off — and it survives it by changing the stay's stored
+    // price, which is the merchant's revenue basis and what their analytics,
+    // their folio and their register all read.
+    //
+    // The tax makes it sharper still. `lodgingTax` below is an occupancy rate,
+    // not a sales rate, and its basis here is already a STATED LIMITATION — it
+    // is charged on what is collected (the deposit) rather than on the stay.
+    // Layering a discount on top asks whether occupancy tax is owed on the
+    // discounted room rate or the gross one, which differs by jurisdiction, is
+    // the merchant's own regime to answer, and is not a question this handler
+    // can decide from a promo code.
+    //
+    // So: refusing to guess. A shopper who types a code here is not told it
+    // worked — this path never reads one, so there is nothing to fall through
+    // silently, which is the failure mode that mattered. When the owner picks
+    // a reading, option 1 is the one the machinery already supports: reduce
+    // `quote.subtotalCents` before the deposit is derived from it, and the
+    // deposit, the balance, the fee and the tax all follow without further
+    // change.
+
     // LODGING TAX: the MERCHANT'S OWN RATE, off unless they set one
     // (AGL-1969, answering the decision AGL-1953 recorded here).
     //

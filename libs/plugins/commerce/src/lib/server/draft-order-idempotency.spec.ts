@@ -96,6 +96,10 @@ function makeCollectionRef(path: string): any {
     doc: (id?: string) =>
       makeDocRef(`${path}/${id ?? `auto-${++autoIdCounter}`}`),
     get: async () => ({ docs: childPaths(path).map(makeSnapshot) }),
+    // Chainable `limit()` (AGL-305): the handler reads
+    // `hosts/{id}/discounts` on every call now, and a double without it threw
+    // where Firestore would simply have returned nothing.
+    limit: () => makeCollectionRef(path),
   }
 }
 

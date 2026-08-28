@@ -2175,7 +2175,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 ? { interval: liftedForSnapshot.subscription.interval }
                 : {}),
               checkoutSessionId: String(object.id),
-              // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+              // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
               // so no revenue surface has to infer it from the session id's `cs_test_`
               // prefix — Stripe's convention rather than our data, and all that the
               // orders written before this carry. Only a literal boolean is written; an
@@ -2958,7 +2958,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 status: 'confirmed',
                 paidCents,
                 checkoutSessionId: String(object.id),
-                // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+                // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
                 // so no revenue surface has to infer it from the session id's `cs_test_`
                 // prefix — Stripe's convention rather than our data, and all that the
                 // orders written before this carry. Only a literal boolean is written; an
@@ -3249,7 +3249,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(unresolvedLines.length ? { unresolvedLines } : {}),
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
-            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
             // so no revenue surface has to infer it from the session id's `cs_test_`
             // prefix — Stripe's convention rather than our data, and all that the
             // orders written before this carry. Only a literal boolean is written; an
@@ -3964,6 +3964,33 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         if (flipped) {
           const order = paidOrder as unknown as CommerceModel.HostOrder
+          // Discounts engine redemptions (AGL-305), for this branch's BOTH
+          // tenants: a console draft order and a POS card sale, which carry the
+          // same `commerce-draft` metadata type. The cart branch has settled
+          // its redemptions since AGL-305 and these two counted nothing, so a
+          // capped promotion was bounded on the website and unbounded through a
+          // merchant's payment link and their own register.
+          //
+          // INSIDE the `flipped` guard, and that placement is load-bearing: the
+          // no-`holdKey` path in `settleRedemption` is an unconditional
+          // `increment(1)` for uncapped promotions and sessions minted before
+          // the hold existed, which Stripe's at-least-once delivery would run
+          // twice. The transition is what makes it once.
+          if (object.metadata?.discountId) {
+            await settleRedemption({
+              firestore,
+              ref: hostRef
+                .collection('discounts')
+                .doc(String(object.metadata.discountId)),
+              holdKey: String(object.metadata?.discountHoldKey ?? ''),
+              orderRef,
+              label: `discount ${object.metadata.discountId}`,
+              detail:
+                `Discount ${object.metadata.discountId} was applied to this ` +
+                'order but no longer exists, so the redemption is uncounted ' +
+                'against its limit.',
+            })
+          }
           void notifyHostManagers(String(hostId), {
             type: 'content.order',
             title: `Draft order paid — ${CommerceModel.formatOrderNumber(order, String(orderId))}`,
@@ -4215,7 +4242,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
-            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-305). A recorded fact,
             // so no revenue surface has to infer it from the session id's `cs_test_`
             // prefix — Stripe's convention rather than our data, and all that the
             // orders written before this carry. Only a literal boolean is written; an
