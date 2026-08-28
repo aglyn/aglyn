@@ -83,7 +83,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
     setPageSize,
   } = usePagedCollection<any>(
     /*
-     * SERVER-PAGED, and ordered (AGL-693).
+     * SERVER-PAGED, and ordered (AGL-2501).
      *
      * `limit(50)` alone is answered in DOCUMENT-ID order, and suppliers are
      * created with a generated id — so the fifty were a pseudo-random sample

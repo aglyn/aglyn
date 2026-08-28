@@ -66,7 +66,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
   const [filter, setFilter] = useState<ListFilterRequest | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
-   * The console's shared paging (AGL-693). "Load more" decided there was more
+   * The console's shared paging (AGL-2501). "Load more" decided there was more
    * from `length >= limit`, which is wrong exactly when the count is an even
    * multiple of the page size: a site with precisely fifty accounts offered a
    * button that fetched nothing, and one with fifty-one looked the same.
@@ -81,7 +81,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
   } = usePagedCollection<any>(
     (pageLimit) => {
       /*
-       * THE FILTER IS THE QUERY (AGL-693).
+       * THE FILTER IS THE QUERY (AGL-2501).
        *
        * This card narrowed the rows it had fetched — ten by default — so a
        * name that sat on page four answered "no site users match", which
@@ -110,7 +110,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
 
   const visible = memberDocs
 
-  /* One row grammar, the console's (AGL-693) — the same table everywhere. */
+  /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const memberColumns: GridColDef[] = useMemo(
     () => [
       {

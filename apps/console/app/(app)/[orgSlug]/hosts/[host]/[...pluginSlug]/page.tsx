@@ -58,13 +58,13 @@ function wrapInGate(
 
 /**
  * Generic host route for plugin-contributed pages (AGL-394), section by
- * section (AGL-693). Any feature plugin that registers a ConsoleExtension nav
+ * section (AGL-2501). Any feature plugin that registers a ConsoleExtension nav
  * item with a `Component` renders here — the console shell owns auth, chrome,
  * and gating, so the plugin needs no page file of its own. Named routes
  * (setup, media, …) still win over this dynamic segment; only unclaimed host
  * sub-paths reach it, and an unregistered slug renders a not-found notice.
  *
- * A CATCH-ALL segment since AGL-693, so a surface can be a hub of real URLs:
+ * A CATCH-ALL segment since AGL-2501, so a surface can be a hub of real URLs:
  * `/products/orders` is the Products nav item's `orders` section, resolved by
  * the same registry lookup and handed to the page as `section`. A nav item
  * that declares no sections is matched exactly as it always was, so the
@@ -127,7 +127,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   }, [resolved])
 
   /*
-   * The flag governing the SECTION, when it declares one of its own (AGL-693).
+   * The flag governing the SECTION, when it declares one of its own (AGL-2501).
    *
    * Applied INSIDE the surface's gate below rather than instead of it, so the
    * two compose: a section of a flagged-off surface stays refused whatever it
@@ -208,7 +208,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
 
   /**
    * Where a bare hub URL goes, when the nav item has sections and the URL
-   * names none (AGL-693).
+   * names none (AGL-2501).
    *
    * The FIRST VISIBLE section, which is the rule: a hub's landing section is
    * the first one in its rail that this reader may open. Skipping past a
@@ -236,7 +236,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   }, [sectionRedirect, router])
 
   /*
-   * The 404, after every hook and before anything renders (AGL-693).
+   * The 404, after every hook and before anything renders (AGL-2501).
    *
    * `notFound()` throws, so calling it where the check reads most naturally —
    * beside the resolver, at the top — would skip every hook below it and put
@@ -368,7 +368,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           children: title,
           ...(activeSection && basePath ? { href: basePath } : {}),
         },
-        // The section the reader is actually on (AGL-693), following the hubs
+        // The section the reader is actually on (AGL-2501), following the hubs
         // that already migrated: without it the trail names every level except
         // theirs — the one that says where they are.
         ...(activeSection ? [{ children: activeSection.label }] : []),
@@ -384,7 +384,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/*
-          Two gates, nested, never swapped (AGL-693). The section's own flag
+          Two gates, nested, never swapped (AGL-2501). The section's own flag
           sits INSIDE the surface's, so a section is refused whenever its page
           is — the surface's gate cannot be escaped by a section declaring a
           released flag of its own. A section that declares nothing is gated by

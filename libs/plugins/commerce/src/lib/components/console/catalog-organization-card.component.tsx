@@ -119,7 +119,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     fromCache: categoriesFromCache,
   } = useFirestoreCollection<any>(
     /*
-     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693).
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501).
      *
      * `limit(250)` alone is answered in DOCUMENT-ID order and the ids are
      * `createResourceUid()`, so the window was a pseudo-random sample. Naming
@@ -159,7 +159,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     fromCache: collectionsFromCache,
   } = useFirestoreCollection<any>(
     /*
-     * ORDERED AND CEILINGED, deliberately not paged (AGL-693).
+     * ORDERED AND CEILINGED, deliberately not paged (AGL-2501).
      *
      * The slug check below tests a draft against these rows — two catalog
      * collections answering `/collections/{slug}` is a storefront route that
@@ -183,7 +183,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     ceilingedWindow<any>(collectionDocs, COLLECTION_CEILING)
   const { data: productDocs } = useFirestoreCollection<any>(
     /*
-     * The catalog behind the MATCH COUNTS, ceilinged with a probe (AGL-693).
+     * The catalog behind the MATCH COUNTS, ceilinged with a probe (AGL-2501).
      *
      * `collectionCount` and the smart-collection preview both count this array
      * and print the result as a number of products. It was a bare `limit(500)`,

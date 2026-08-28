@@ -201,7 +201,7 @@ jest.mock('../components/billing/retention-funnel.dialog', () => ({
 }))
 
 // The invoice history moved to its own section when billing was split
-// (AGL-693). Same card, same states — this suite follows it rather than
+// (AGL-2501). Same card, same states — this suite follows it rather than
 // asserting against a Plan page that no longer lists invoices.
 import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/invoices/page'
 

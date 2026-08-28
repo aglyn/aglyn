@@ -17,7 +17,7 @@
 
 /**
  * The campaign history is CEILINGED, PAGED, and orderable on no date at all
- * (AGL-693, AGL-272).
+ * (AGL-2501, AGL-272).
  *
  * This is the clearest case in the sweep of a list that CANNOT be paged by the
  * server today, and the reason is in the writer: `campaign-send.ts` records a
@@ -176,7 +176,7 @@ const renderedSubjects = () =>
     .map((node) => (node.textContent ?? '').trim())
     .filter((text) => /^Campaign \d{2}$/.test(text))
 
-describe('the campaign history is bounded and paged (AGL-693)', () => {
+describe('the campaign history is bounded and paged (AGL-2501)', () => {
   it('THE CONTROL: the fixture holds both writers’ shapes', () => {
     // Without both, "no date field is on every campaign" is not a property of
     // the fixture and the trap below proves nothing.

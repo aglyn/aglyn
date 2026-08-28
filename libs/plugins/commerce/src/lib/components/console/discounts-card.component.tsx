@@ -80,7 +80,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
     setPageSize,
   } = usePagedCollection<any>(
     /*
-     * SERVER-PAGED, and ordered (AGL-693).
+     * SERVER-PAGED, and ordered (AGL-2501).
      *
      * `limit(100)` alone is answered in DOCUMENT-ID order and the ids are
      * `createResourceUid()`, so the hundred were a pseudo-random sample of the

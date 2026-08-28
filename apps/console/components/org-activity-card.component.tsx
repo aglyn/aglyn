@@ -117,7 +117,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
    * The console's shared default, not a number this card picked. Every list
    * starts at the smallest option — it is what a reader learns once, and on a
    * feed whose query is bounded by it, the smallest page is also the smallest
-   * bill (AGL-693/AGL-703). The staff org page asked for fifty at a time,
+   * bill (AGL-2501/AGL-703). The staff org page asked for fifty at a time,
    * which is fifty documents read to fill a card nobody had scrolled yet.
    */
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)

@@ -185,7 +185,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     () => {
       if (!dataScope) return null
       /*
-       * ORDERED, and filtered by the QUERY (AGL-693, AGL-2292).
+       * ORDERED, and filtered by the QUERY (AGL-2501, AGL-2292).
        *
        * Two bugs shared this one line. `limit(1000)` with no `orderBy` returns
        * documents in ID order — contacts are created with `.add()` and
@@ -364,7 +364,7 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     [contacts, filterSegment],
   )
 
-  /* One row grammar, the console's (AGL-693) — the same table everywhere. */
+  /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const contactColumns: GridColDef[] = useMemo(
     () => [
       {

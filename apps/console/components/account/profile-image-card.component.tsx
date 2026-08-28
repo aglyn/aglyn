@@ -42,7 +42,7 @@ import { useOrgScope } from '../../hooks/use-org-scope'
  * The personal avatar the console shows for this account (AGL-365).
  *
  * The Profile image section of Manage Account, its own component since the
- * sections became routes (AGL-693). Mirrors to the auth `photoURL` (app bar,
+ * sections became routes (AGL-2501). Mirrors to the auth `photoURL` (app bar,
  * comments) and to the users doc (team lists, activity), then fans out to the
  * org roster through a route, because no colleague can read another person's
  * auth record.

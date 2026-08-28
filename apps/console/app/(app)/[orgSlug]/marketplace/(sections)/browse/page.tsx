@@ -21,7 +21,7 @@ import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.co
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Browse All (AGL-693).
+ * Marketplace › Browse All (AGL-2501).
  *
  * The grid is the marketplace plugin's own widget — the app renders a slot and
  * never imports the plugin.

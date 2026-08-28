@@ -52,7 +52,7 @@ const SECTIONS: ReadonlyArray<{
 ]
 
 /**
- * The Setup hub's sections for one site, in rail order (AGL-693).
+ * The Setup hub's sections for one site, in rail order (AGL-2501).
  *
  * One list, read by everything that has to agree about it: the layout draws
  * the rail from it, `useActiveSection` resolves the breadcrumb's last crumb
@@ -70,7 +70,7 @@ export function setupSections(orgSlug: string, host: string): SetupSection[] {
 }
 
 /**
- * Where a `?tab=` link lands (AGL-693).
+ * Where a `?tab=` link lands (AGL-2501).
  *
  * Kept, unlike the settings and marketplace hubs which dropped theirs. Those
  * had no shipped links holding an id; these demonstrably do — the site

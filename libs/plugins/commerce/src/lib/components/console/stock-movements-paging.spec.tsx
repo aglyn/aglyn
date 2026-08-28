@@ -16,7 +16,7 @@
  */
 
 /**
- * The stock ledger gets a footer, and its filters keep their reach (AGL-693).
+ * The stock ledger gets a footer, and its filters keep their reach (AGL-2501).
  *
  * The card rendered a hundred rows in one wall with no control over them. The
  * read was already correct — `orderBy('atMs','desc')`, a single-field index —
@@ -140,7 +140,7 @@ const chooseReason = (label: string) => {
   fireEvent.click(screen.getByRole('option', { name: label }))
 }
 
-describe('the stock ledger pages what it holds (AGL-693)', () => {
+describe('the stock ledger pages what it holds (AGL-2501)', () => {
   it('THE CONTROL: the fixture is bigger than a page and than the ceiling', () => {
     // Otherwise "one page is on screen" and "the wall is on screen" are the
     // same assertion, and the truncation notice could never fire.

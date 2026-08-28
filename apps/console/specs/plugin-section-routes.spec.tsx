@@ -22,7 +22,7 @@
 
 /**
  * A plugin console page is a hub of real URLs, and each one is gated exactly
- * as the nav is (AGL-693).
+ * as the nav is (AGL-2501).
  *
  * The shell's plugin route is a catch-all now, so `/products/orders` is a page
  * somebody can type, link, or bookmark. Two things then have to hold that a
@@ -215,7 +215,7 @@ function mount() {
 /** Whether the plugin page component ever mounted for this URL. */
 const rendered = () => received.length > 0
 
-describe('a plugin section is a route (AGL-693)', () => {
+describe('a plugin section is a route (AGL-2501)', () => {
   /**
    * The CONTROL for every refusal below.
    *
@@ -244,7 +244,7 @@ describe('a plugin section is a route (AGL-693)', () => {
 
   /**
    * A bare hub URL is redirected by the SHELL, not by the plugin page
-   * (AGL-693).
+   * (AGL-2501).
    *
    * Where it lives is the whole point. Plugin pages are `lazy()`, so a
    * redirect inside one cannot fire until its chunk has downloaded and
@@ -370,7 +370,7 @@ describe('a plugin section is a route (AGL-693)', () => {
   })
 
   /**
-   * Parent × section, all four ways (AGL-693).
+   * Parent × section, all four ways (AGL-2501).
    *
    * The gates nest, so visibility is parent AND section. Only the last row may
    * render; the second row — parent off, section ON — is the one an `||` would
@@ -438,7 +438,7 @@ describe('a plugin section is a route (AGL-693)', () => {
 
 /**
  * The other half of the additive promise: a plugin that declares no sections
- * behaves exactly as it did before AGL-693 — its own href renders, and a path
+ * behaves exactly as it did before AGL-2501 — its own href renders, and a path
  * beneath it is a 404 rather than the same page a second time.
  */
 describe('a sectionless plugin is unchanged', () => {

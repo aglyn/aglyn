@@ -122,7 +122,7 @@ export default function IdempotencyClaimsCard() {
     }
   }, [user, reloadKey])
 
-  /* One row grammar, the console's (AGL-693). */
+  /* One row grammar, the console's (AGL-2501). */
   const claimColumns: GridColDef[] = useMemo(
     () => [
       {

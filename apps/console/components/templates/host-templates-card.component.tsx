@@ -200,7 +200,7 @@ export function HostTemplatesCard({
     Map<string, number | string>
   >(new Map())
   /**
-   * THE WHOLE LIBRARY, ordered, with the ceiling made visible (AGL-693).
+   * THE WHOLE LIBRARY, ordered, with the ceiling made visible (AGL-2501).
    *
    * The read was `limit(200)` with no `orderBy`, so a site over the ceiling
    * got a pseudo-random two hundred in document-id order, which the row memo
@@ -697,7 +697,7 @@ export function HostTemplatesCard({
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
     /*
-      The shared trailing cluster (AGL-693). A template's quick action is
+      The shared trailing cluster (AGL-2501). A template's quick action is
       Preview — it is the one artifact with no live address of its own and no
       detail worth a second icon, so "what does it look like" is the question
       the row is actually asked.

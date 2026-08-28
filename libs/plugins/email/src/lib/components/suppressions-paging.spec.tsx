@@ -17,7 +17,7 @@
 
 /**
  * The suppression list WALKS the collection, and its breakdown is not a tally
- * of the page (AGL-693).
+ * of the page (AGL-2501).
  *
  * Two defects on one card, and each hid the other.
  *
@@ -245,7 +245,7 @@ const renderedAddresses = () =>
     (row) => row.querySelector('td')?.textContent?.trim() ?? '',
   )
 
-describe('the suppression list walks the collection (AGL-693)', () => {
+describe('the suppression list walks the collection (AGL-2501)', () => {
   it('THE CONTROL: the fixture makes the two behaviours disagree', () => {
     // The comparison has to be made at the WINDOW, not over the whole
     // fixture: an unordered `limit()` and an ordered one agree completely on a
@@ -327,7 +327,7 @@ describe('the suppression list walks the collection (AGL-693)', () => {
   })
 })
 
-describe('the breakdown counts the COLLECTION, not the page (AGL-693)', () => {
+describe('the breakdown counts the COLLECTION, not the page (AGL-2501)', () => {
   it('THE CONTROL: the page and the collection hold different numbers', () => {
     // Otherwise a chip reading the page length and a chip reading the
     // aggregate would print the same value and the test could not tell them

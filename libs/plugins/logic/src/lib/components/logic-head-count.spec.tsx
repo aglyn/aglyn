@@ -239,7 +239,7 @@ describe('the variables cap is a server aggregate (AGL-1716)', () => {
     //
     // 101, not 100: the ceiling asks for one document PAST itself so that
     // "this site has more variables than the card read" is a fact rather than
-    // a guess from `length === 100` (AGL-693). The probe row is never
+    // a guess from `length === 100` (AGL-2501). The probe row is never
     // rendered, sorted or counted.
     //
     // Asserted as the FULL set of caps this card asks for, because a bare
@@ -302,7 +302,7 @@ describe('the functions cap is a server aggregate (AGL-1716)', () => {
     render(<HostFunctionsCard hostId="host-1" org={ORG} />)
     await countAnswered('functions')
 
-    // 101, not 100: the ceiling probes one document past itself (AGL-693).
+    // 101, not 100: the ceiling probes one document past itself (AGL-2501).
     // This card reads only its own collection, so the cap it asks for is
     // unambiguous — unlike the variables case above, which needed the whole
     // set asserting to stop a sibling read satisfying it.

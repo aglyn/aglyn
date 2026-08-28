@@ -594,7 +594,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   /**
    * Whether a FILTER is hiding things, as opposed to the library being empty
-   * (AGL-693).
+   * (AGL-2501).
    *
    * `currentFolder` is deliberately not one. Opening an empty folder is not a
    * filter that matched nothing — it is a folder with nothing in it, and the
@@ -3550,7 +3550,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         </Alert>
       ) : visibleFolders.length === 0 && visibleItems.length === 0 ? (
         /*
-          The same empty state every other list in the console draws (AGL-693).
+          The same empty state every other list in the console draws (AGL-2501).
 
           This was one line of grey body text where screens, layouts,
           components and templates all show an illustration, a sentence and

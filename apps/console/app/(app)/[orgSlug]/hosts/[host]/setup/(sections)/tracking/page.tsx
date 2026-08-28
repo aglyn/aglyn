@@ -21,7 +21,7 @@ import { SetupForm, useSetupScope } from '../layout'
 
 /**
  * Tracking — the measurement ids, and the consent banner that governs whether
- * they may load (AGL-693).
+ * they may load (AGL-2501).
  *
  * Beside the fields it governs (AGL-1498). The banner card lived on SEO while
  * its own comment said "same tab as the GA field": the intent was right and

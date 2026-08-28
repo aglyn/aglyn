@@ -65,7 +65,7 @@ export function registerMarketingConsole(): void {
       {
         label: 'Marketing',
         href: '/marketing',
-        // Sections as ROUTES (AGL-693): each is a real URL the shell
+        // Sections as ROUTES (AGL-2501): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read.
         sections: MARKETING_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-marketing',

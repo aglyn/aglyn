@@ -636,7 +636,7 @@ export const SETUP_TAB_IDS = [
 ] as const
 
 /**
- * Everything a Setup section needs but must not own (AGL-693).
+ * Everything a Setup section needs but must not own (AGL-2501).
  *
  * Sections are separate routes, so anything two of them share has to live in
  * the layout that survives navigation between them. Three things do, and each

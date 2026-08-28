@@ -585,12 +585,12 @@ describe('both funnel call sites pass the summary (AGL-2154)', () => {
   const APP = join(__dirname, '..', '..', 'app', '(app)', '[orgSlug]')
 
   it.each([
-    // Billing became four routed sections (AGL-693); the funnel is opened
+    // Billing became four routed sections (AGL-2501); the funnel is opened
     // from the Plan section, which is the route group's index.
     ['billing', join(APP, 'billing', '(sections)', 'page.tsx')],
     /*
      * The settings call site moved into the Delete section's own component
-     * when settings became routes (AGL-693). Same invariant, same funnel —
+     * when settings became routes (AGL-2501). Same invariant, same funnel —
      * only the file changed, and it changed because a page that renders every
      * section at once stopped being one file.
      */

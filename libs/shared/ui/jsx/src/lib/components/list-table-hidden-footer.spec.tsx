@@ -16,7 +16,7 @@
  */
 
 /**
- * A HIDDEN FOOTER STILL PAGED THE ROWS (AGL-693).
+ * A HIDDEN FOOTER STILL PAGED THE ROWS (AGL-2501).
  *
  * `hideFooter` is how a caller says "something else owns the page": a
  * server-paged staff list, a cursor feed, a card whose `ListPagination` sits

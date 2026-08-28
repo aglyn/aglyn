@@ -29,7 +29,7 @@ import type { MarketingConsoleSectionId } from './marketing-console-sections'
 
 /**
  * The body of one marketing section, built only when that section is the one
- * being read (AGL-693).
+ * being read (AGL-2501).
  *
  * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
  * would CONSTRUCT all three every render, and each card opens its Firestore
@@ -79,7 +79,7 @@ function sectionBody(
  * plan flags) off the shell's resolved `org`; the popup image picker uses the
  * shell's media browser via `useMediaPicker`.
  *
- * Sections are ROUTES (AGL-693). `HubTabs lazy` already mounted one panel, so
+ * Sections are ROUTES (AGL-2501). `HubTabs lazy` already mounted one panel, so
  * this is not a read saving — `marketing-console-read-cost.spec.tsx` was
  * written BEFORE the conversion precisely to hold that line, and reports the
  * same counts after. What routing adds is that the URL names the section: it is

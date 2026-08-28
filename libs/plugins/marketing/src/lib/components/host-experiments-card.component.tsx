@@ -122,7 +122,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
       query(
         collection(firestore, 'hosts', hostId, 'experiments'),
         /*
-         * Ordered by the server and paged (AGL-693, AGL-2292).
+         * Ordered by the server and paged (AGL-2501, AGL-2292).
          *
          * `limit(50)` with no `orderBy` is answered in DOCUMENT-ID order over
          * ids from `createResourceUid()`, so the window was an arbitrary fifty

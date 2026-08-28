@@ -83,7 +83,7 @@ const basicSchema: FormSchema = {
  * (AGL-1133).
  *
  * The Basic info section of Manage Account, its own component since the
- * sections became routes (AGL-693).
+ * sections became routes (AGL-2501).
  */
 export function BasicInfoCard() {
   const { data: user } = useUser()

@@ -39,7 +39,7 @@ const CARD = join(
   'apps/console/components/account-identities-card.component.tsx',
 )
 // Manage Account → Account, a component since the sections became routes
-// (AGL-693).
+// (AGL-2501).
 const PAGE = join(
   REPO_ROOT,
   'apps/console/components/account/account-sign-in-card.component.tsx',

@@ -16,7 +16,7 @@
  */
 
 /**
- * Run history is PAGED, and its ceiling says when it bit (AGL-693).
+ * Run history is PAGED, and its ceiling says when it bit (AGL-2501).
  *
  * The card read two hundred activity entries, filtered them down to runs, and
  * then threw away all but the newest twenty-five with `.slice(0, max)`. Run
@@ -142,7 +142,7 @@ const renderedSummaries = () =>
     (row) => row.querySelectorAll('td')[3]?.textContent?.trim() ?? '',
   )
 
-describe('the run history pages its runs (AGL-693)', () => {
+describe('the run history pages its runs (AGL-2501)', () => {
   it('THE CONTROL: the fixture holds more runs than the old slice showed', () => {
     // Without this every assertion below could pass on a fixture of fewer than
     // twenty-five runs, where a `.slice(0, 25)` and a pager are

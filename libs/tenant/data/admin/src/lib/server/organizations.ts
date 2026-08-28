@@ -273,7 +273,7 @@ export async function createOrganization(
     tx.set(db.collection('orgs').doc(orgId), {
       name,
       /*
-       * The searchable form of `name`, written beside it (AGL-693).
+       * The searchable form of `name`, written beside it (AGL-2501).
        *
        * Firestore cannot search a string it has not been given in search
        * form: a prefix range needs the normalized key to ORDER by, and
@@ -288,7 +288,7 @@ export async function createOrganization(
        */
       nameLower: nameSearchKey(name),
       // Word-prefix tokens, so the staff search can answer "contains a word
-      // starting with X" rather than only "starts with X" (AGL-693).
+      // starting with X" rather than only "starts with X" (AGL-2501).
       nameTokens: nameSearchTokens(name),
       // Reversed, so the list's "ends with" filter is a prefix range like
       // every other string operator Firestore can answer.

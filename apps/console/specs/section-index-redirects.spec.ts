@@ -16,7 +16,7 @@
  */
 
 /**
- * Hub section indexes redirect on the SERVER, and carry the query (AGL-693).
+ * Hub section indexes redirect on the SERVER, and carry the query (AGL-2501).
  *
  * Two properties, and they fail in opposite ways.
  *
@@ -52,7 +52,7 @@ const INDEX_PAGES = [
   '(app)/manage/user/page.tsx',
 ]
 
-describe('a hub index redirects on the server (AGL-693)', () => {
+describe('a hub index redirects on the server (AGL-2501)', () => {
   it.each(INDEX_PAGES)('%s is not a client component', (page) => {
     const path = join(APP, page)
     expect({ page, exists: existsSync(path) }).toEqual({ page, exists: true })
@@ -97,7 +97,7 @@ function balancedCall(code: string, from: number): string {
 }
 
 /**
- * Each index actually FEEDS its query to the helper (AGL-693).
+ * Each index actually FEEDS its query to the helper (AGL-2501).
  *
  * The helper's own tests prove it preserves what it is given, and the tests
  * above prove each page redirects — and both stayed green while one page
@@ -142,7 +142,7 @@ describe('every index passes its own query to the helper', () => {
   })
 })
 
-describe('a redirect carries the query across (AGL-693)', () => {
+describe('a redirect carries the query across (AGL-2501)', () => {
   const target = (query: SearchParams) =>
     sectionIndexTarget('/acme/marketplace/browse', query)
 

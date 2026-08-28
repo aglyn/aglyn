@@ -27,7 +27,7 @@ import type { EmailsConsoleSectionId } from './emails-console-sections'
 
 /**
  * The body of one emails section, built only when that section is the one
- * being read (AGL-693).
+ * being read (AGL-2501).
  *
  * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
  * would CONSTRUCT all four every render, and each card opens its Firestore
@@ -59,7 +59,7 @@ function sectionBody(
  * audience lists, and since AGL-2410 the suppression list, which had been
  * written by two paths and displayed by none.
  *
- * Sections are ROUTES (AGL-693). `HubTabs lazy` already mounted one panel, so
+ * Sections are ROUTES (AGL-2501). `HubTabs lazy` already mounted one panel, so
  * this is not a read saving — `emails-console-read-cost.spec.tsx` was written
  * BEFORE the conversion precisely to hold that line, and reports the same
  * counts after. What routing adds is that the URL names the section: it is

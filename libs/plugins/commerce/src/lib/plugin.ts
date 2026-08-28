@@ -165,7 +165,7 @@ export function registerCommerceConsole(): void {
         label: 'Products',
         href: '/products',
         icon: { path: mdiStorefrontOutline.path },
-        // Sections as ROUTES (AGL-693): `/products/orders` and friends are
+        // Sections as ROUTES (AGL-2501): `/products/orders` and friends are
         // real URLs the shell resolves and gates, so the page mounts the one
         // being read instead of subscribing all six.
         sections: COMMERCE_CONSOLE_SECTIONS,

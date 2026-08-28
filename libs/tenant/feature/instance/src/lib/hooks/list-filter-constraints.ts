@@ -31,7 +31,7 @@ import type {
 
 /**
  * The same filter contract, for a list that queries Firestore from the BROWSER
- * (AGL-693).
+ * (AGL-2501).
  *
  * The console's paged cards read their collections directly through
  * `usePagedCollection` rather than through a route, so the server translator —

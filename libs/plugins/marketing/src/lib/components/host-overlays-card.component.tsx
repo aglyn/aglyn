@@ -153,7 +153,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
       query(
         collection(firestore, 'hosts', hostId, 'overlays'),
         /*
-         * ORDERED AND CEILINGED, deliberately not paged (AGL-693).
+         * ORDERED AND CEILINGED, deliberately not paged (AGL-2501).
          *
          * ## Why the read is ordered
          *

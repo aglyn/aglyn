@@ -274,7 +274,7 @@ beforeEach(() => {
   checkoutCalls = []
   global.fetch = jest.fn(async (input: any, init?: any) => {
     const url = String(input)
-    // The billing profile the plan grid gates on (AGL-693 follow-up): a paid
+    // The billing profile the plan grid gates on (AGL-2501 follow-up): a paid
     // upgrade needs a stored card AND a billing address, because subscribing
     // charges the one against the other. Without this the grid correctly
     // DISABLES every Upgrade button and no confirm can ever open — which is

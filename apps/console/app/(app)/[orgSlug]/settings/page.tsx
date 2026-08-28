@@ -23,9 +23,9 @@ import {
 } from '../../../../utils/section-index-redirect'
 
 /**
- * `/settings` is the section index and renders nothing of its own (AGL-693).
+ * `/settings` is the section index and renders nothing of its own (AGL-2501).
  *
- * A SERVER component, deliberately (AGL-693). This was a client page that
+ * A SERVER component, deliberately (AGL-2501). This was a client page that
  * returned `null`, waited for hydration, resolved the org slug from a hook and
  * then client-navigated — load the index chunk, hydrate, resolve, navigate,
  * load the target chunk, render. Every step of that was a blank main area in

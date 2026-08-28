@@ -16,7 +16,7 @@
  */
 
 /**
- * Two marketing lists, two different answers (AGL-693).
+ * Two marketing lists, two different answers (AGL-2501).
  *
  * Both were `limit(50)` with no `orderBy` and a client sort on top, so both
  * were arbitrary fifty-document samples arranged into a convincing order. Both
@@ -213,7 +213,7 @@ const firstCells = () =>
     (row) => row.querySelector('td')?.textContent?.trim() ?? '',
   )
 
-describe('the experiments table walks the collection (AGL-693)', () => {
+describe('the experiments table walks the collection (AGL-2501)', () => {
   it('THE CONTROL: the two behaviours disagree at the page size', () => {
     const page = TABLE_PAGE_SIZE_DEFAULT + 1
     const oldWindow = firestoreAnswer(experimentDocs, [{ limit: page }]).sort(
@@ -252,7 +252,7 @@ describe('the experiments table walks the collection (AGL-693)', () => {
   })
 })
 
-describe('the overlays table is ceilinged, not paged (AGL-693)', () => {
+describe('the overlays table is ceilinged, not paged (AGL-2501)', () => {
   it('THE TRAP: ordering on `order` would hide most of the overlays', () => {
     // Driven through the same evaluator the card is fed, so this is a claim
     // about the query rather than about a comment. Only the two overlays

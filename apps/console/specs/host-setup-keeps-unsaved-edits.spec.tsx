@@ -374,7 +374,7 @@ const SECTION_PAGES: Record<string, () => JSX.Element> = {
 
 /**
  * The layout with ONE section inside it, which is how Next mounts them
- * (AGL-693). Setup's sections are routes, so the page under test is the
+ * (AGL-2501). Setup's sections are routes, so the page under test is the
  * section — the layout is the shared scope around it.
  */
 const HostSetup = ({ section = 'details' }: { section?: string } = {}) => {

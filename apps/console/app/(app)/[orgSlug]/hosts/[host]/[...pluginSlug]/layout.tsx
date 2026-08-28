@@ -29,7 +29,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { host, pluginSlug } = await params
   /*
-   * The SURFACE, not the section (AGL-693). The route is a catch-all now, so
+   * The SURFACE, not the section (AGL-2501). The route is a catch-all now, so
    * `pluginSlug` is every segment beneath the site — `['products', 'orders']`
    * on a section URL. The tab says "Products", because a tab strip is read to
    * tell one open site's page from another's and the section is a rail click

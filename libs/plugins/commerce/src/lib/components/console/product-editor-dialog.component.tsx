@@ -300,7 +300,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       ...currentFields,
       /*
        * `name` comes from `productSearchFields`, not from a bare assignment
-       * (AGL-693) — it returns the trimmed name ALONGSIDE the keys derived
+       * (AGL-2501) — it returns the trimmed name ALONGSIDE the keys derived
        * from it, so the two cannot drift. Writing the name here and the keys
        * anywhere else is the shape that leaves a renamed product findable
        * only by what it used to be called.

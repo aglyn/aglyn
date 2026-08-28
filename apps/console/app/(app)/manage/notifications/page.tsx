@@ -164,7 +164,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   }, [alertPrefs.desktop, setAlertPrefs])
   const { hosts } = useOrgHosts(firestore, uid, currentOrg?.$id ?? undefined)
   const [rows, setRows] = useState<any[]>([])
-  // The console's shared default and shared menu (AGL-693); this list used to
+  // The console's shared default and shared menu (AGL-2501); this list used to
   // pick 25 for itself and offer no way to change it.
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   // `hostIndex` carries the owning org alongside the subdomain, so a

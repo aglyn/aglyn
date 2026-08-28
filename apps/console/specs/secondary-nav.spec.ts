@@ -290,7 +290,7 @@ describe('isAddressableSection', () => {
 })
 
 /**
- * A plugin hub's nav tab links straight to its landing section (AGL-693).
+ * A plugin hub's nav tab links straight to its landing section (AGL-2501).
  *
  * The bare hub href redirects, and that redirect can only be a CLIENT one —
  * the plugin registry is a client-side module-global, so no server component
@@ -303,7 +303,7 @@ describe('isAddressableSection', () => {
  * skipped ahead but left the tab strip looking unselected would trade one
  * visible defect for another.
  */
-describe('plugin nav tabs point at the landing section (AGL-693)', () => {
+describe('plugin nav tabs point at the landing section (AGL-2501)', () => {
   const ORG_SLUG = 'acme'
   const HOST_SUB = 'shop'
   const BASE = `/${ORG_SLUG}/hosts/${HOST_SUB}`

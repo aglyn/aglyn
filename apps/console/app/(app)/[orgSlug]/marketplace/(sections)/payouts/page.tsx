@@ -21,7 +21,7 @@ import OrgSellerPanel from '../../../../../../components/org-seller-panel.compon
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Payouts (AGL-693).
+ * Marketplace › Payouts (AGL-2501).
  *
  * The payout account and its readiness. Reads the org's Stripe Connect
  * state, so the sections layout refuses the route outright for a member

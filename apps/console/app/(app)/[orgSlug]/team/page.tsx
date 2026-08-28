@@ -23,13 +23,13 @@ import {
 } from '../../../../utils/section-index-redirect'
 
 /**
- * `/team` is the section index and renders nothing of its own (AGL-693).
+ * `/team` is the section index and renders nothing of its own (AGL-2501).
  *
  * Every link into Team still points here, and a bookmark from before the
  * sections existed still resolves — both land on Members, which is what the
  * page opened with when it was one scrolling column.
  *
- * A SERVER component, deliberately (AGL-693). This was a client page that
+ * A SERVER component, deliberately (AGL-2501). This was a client page that
  * returned `null`, waited for hydration, resolved the org slug from a hook and
  * then client-navigated — load the index chunk, hydrate, resolve, navigate,
  * load the target chunk, render. Every step of that was a blank main area in

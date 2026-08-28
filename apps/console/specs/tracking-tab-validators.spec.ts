@@ -51,7 +51,7 @@ const SOURCE = readFileSync(
     '[host]',
     'setup',
     // The schemas moved with the page when Setup's tabs became routed
-    // sections (AGL-693): the layout is where the shared scope — and the form
+    // sections (AGL-2501): the layout is where the shared scope — and the form
     // schemas it hands the sections — now lives.
     '(sections)',
     'layout.tsx',

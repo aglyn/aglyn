@@ -129,7 +129,7 @@ jest.mock('../hooks/use-branding', () => ({
 
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(''),
-  // The section rail resolves the active tab from the path (AGL-693).
+  // The section rail resolves the active tab from the path (AGL-2501).
   usePathname: () => '/test-org/billing',
 }))
 
@@ -232,7 +232,7 @@ import BillingInvoicesPage from '../app/(app)/[orgSlug]/billing/(sections)/invoi
 
 /**
  * The gate moved to the LAYOUT when billing became four routed sections
- * (AGL-693), so the invariant is only observable through it.
+ * (AGL-2501), so the invariant is only observable through it.
  *
  * Rendering the page bare would exercise a component that, in production, is
  * never reached until the layout has decided — and would quietly stop testing
@@ -246,7 +246,7 @@ const Billing = () => (
 )
 
 /**
- * The invoice history moved to its own section (AGL-693), so the cases about
+ * The invoice history moved to its own section (AGL-2501), so the cases about
  * the invoice READ have to render THAT one. Left on the Plan section they
  * would pass for the wrong reason — Plan no longer asks for invoices at all,
  * so "it did not ask" would be true whatever the gate did.

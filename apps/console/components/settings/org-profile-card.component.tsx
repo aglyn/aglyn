@@ -40,7 +40,7 @@ import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
 /**
  * The organization's identity — logo and contact details (AGL-363).
  *
- * Extracted from the settings page when its sections became routes (AGL-693).
+ * Extracted from the settings page when its sections became routes (AGL-2501).
  * It owns its own form state and its own save: the section is a module now,
  * not a panel sharing the page's closure.
  *

@@ -21,7 +21,7 @@ import OrgLicencesPanel from '../../../../../../components/org-licences-panel.co
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Licences (AGL-693).
+ * Marketplace › Licences (AGL-2501).
  *
  * What this workspace OWNS (AGL-2331). A purchase licenses an organization, so
  * "do we already own this, or was that the other client?" was a real question

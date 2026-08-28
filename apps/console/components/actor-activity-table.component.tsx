@@ -56,7 +56,7 @@ export interface ActorActivityTableProps {
  * What one person did, paginated (AGL-1488).
  *
  * The CARD, the grid, the toolbar, the empty and unreadable states and the
- * footer are `ActivityTable`'s (AGL-693) — this owns the columns and the
+ * footer are `ActivityTable`'s (AGL-2501) — this owns the columns and the
  * cursor walk, which is the half that is actually about one person's
  * activity.
  *
@@ -79,7 +79,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
   const uid = (user as { uid?: string } | undefined)?.uid ?? null
 
   const [rows, setRows] = useState<ActorActivityEntry[]>([])
-  // Shared default, shared menu (AGL-693).
+  // Shared default, shared menu (AGL-2501).
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [cursors, setCursors] = useState<Array<string | null>>([null])
   const [page, setPage] = useState(0)
@@ -157,7 +157,7 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
     return '—'
   }
 
-  /* One row grammar, the console's (AGL-693) — the same table, no row click. */
+  /* One row grammar, the console's (AGL-2501) — the same table, no row click. */
   const activityColumns: GridColDef[] = useMemo(
     () => [
       {

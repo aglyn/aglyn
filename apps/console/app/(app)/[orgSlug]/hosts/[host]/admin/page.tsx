@@ -23,12 +23,12 @@ import {
 } from '../../../../../../utils/section-index-redirect'
 
 /**
- * `/admin` is the section index and renders nothing of its own (AGL-693).
+ * `/admin` is the section index and renders nothing of its own (AGL-2501).
  *
  * Both segments come from `params` — the org slug and the site subdomain — so
  * neither needs the host provider this page used to wait on.
  *
- * A SERVER component, deliberately (AGL-693). This was a client page that
+ * A SERVER component, deliberately (AGL-2501). This was a client page that
  * returned `null`, waited for hydration, resolved the org slug from a hook and
  * then client-navigated — load the index chunk, hydrate, resolve, navigate,
  * load the target chunk, render. Every step of that was a blank main area in

@@ -33,7 +33,7 @@ export type HostArtifactCollection =
   | 'templates'
 
 /**
- * ONE ordering decision for the site artifact lists (AGL-693).
+ * ONE ordering decision for the site artifact lists (AGL-2501).
  *
  * ## What an unordered `limit()` actually answers
  *
@@ -102,7 +102,7 @@ export function hostArtifactQuery(
  * The ceilinged-read helper, re-exported rather than re-implemented.
  *
  * It moved to `@aglyn/tenant-feature-instance` when the plugin console cards
- * needed the same probe (AGL-693): an app cannot be imported from a library,
+ * needed the same probe (AGL-2501): an app cannot be imported from a library,
  * so a copy here would have been a second implementation of the one rule that
  * decides whether a bounded list can admit it is bounded. The console's own
  * callers keep importing it from this module, beside the query builder they

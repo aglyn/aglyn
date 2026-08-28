@@ -24,7 +24,7 @@ import {
 
 /**
  * `/manage/user` is the section index and renders nothing of its own
- * (AGL-693).
+ * (AGL-2501).
  *
  * A SERVER component. This index names no dynamic segment at all — the target
  * is a constant — so as a client page it was paying a bundle, a hydration and

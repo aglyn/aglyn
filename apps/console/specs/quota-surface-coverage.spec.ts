@@ -72,11 +72,11 @@ const USAGE_SURFACES = [
   'apps/console/components/billing/billing-register-allocations-card.component.tsx',
   'apps/console/components/quota-warnings-banner.component.tsx',
   'apps/console/components/templates/host-templates-card.component.tsx',
-  // The readout moved OUT of the card and into the page header (AGL-693),
+  // The readout moved OUT of the card and into the page header (AGL-2501),
   // so the page is now a surface. The card stays on the list: it still owns
   // the count and the `templatesPerHost` check the readout is derived from.
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/page.tsx',
-  // AGL-693 gave these two keys their first standing readout.
+  // AGL-2501 gave these two keys their first standing readout.
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx',
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
   'libs/plugins/commerce/src/lib/components/console/locations-card.component.tsx',
@@ -361,7 +361,7 @@ describe('AGL-2246 · every quota key is visible somewhere', () => {
     // console is where an operator hits the cap, the grid is where a shopper
     // compares plans. Either alone leaves half the gap.
     //
-    // The two halves live in two files since AGL-693 — the CARD owns the count
+    // The two halves live in two files since AGL-2501 — the CARD owns the count
     // and the `templatesPerHost` check, the PAGE renders the readout in its
     // header beside the create button (the Sites-page arrangement). Asserted
     // separately rather than against a concatenation, so moving the readout
@@ -404,7 +404,7 @@ describe('AGL-2246 · every quota key is visible somewhere', () => {
   })
 
   /**
-   * The two quota keys AGL-693 gave a standing surface for the first time.
+   * The two quota keys AGL-2501 gave a standing surface for the first time.
    *
    * `screensPerHost` and `sharedLayoutsPerHost` were both enforced on create
    * and readable nowhere — an author learned the cap by being refused, which

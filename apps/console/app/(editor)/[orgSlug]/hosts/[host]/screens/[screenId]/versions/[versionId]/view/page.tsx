@@ -455,7 +455,7 @@ function ScreenDetails() {
    * Declared HERE, above the first callback that names it: a `useCallback`
    * dependency array is evaluated during render, so a `const` further down
    * the component is read in its temporal dead zone and throws on the way in
-   * — the same trap AGL-693 hit with `screenQuota` on the screens list.
+   * — the same trap AGL-2501 hit with `screenQuota` on the screens list.
    */
   const { data: user } = useUser()
 

@@ -263,7 +263,7 @@ const SECTION_ONLY = {
   emails: 'hosts/host-1/emailTemplates',
 } as const
 
-describe('host Setup read cost, per section (AGL-693)', () => {
+describe('host Setup read cost, per section (AGL-2501)', () => {
   afterEach(() => {
     mockSection = 'details'
     mockListens.length = 0

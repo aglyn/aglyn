@@ -241,7 +241,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // outright for a scoped collaborator, and a permanently denied listen is
   // reopened forever by the refusal loop.
   /**
-   * The records table PAGES (AGL-693). It used to be `limit(500)` with no
+   * The records table PAGES (AGL-2501). It used to be `limit(500)` with no
    * `orderBy`, every row rendered at once and no control anywhere.
    *
    * That was wrong twice. Five hundred documents were read and billed on
@@ -414,7 +414,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // Pending, denied, or answered about the PREVIOUS selection, the loaded
   // rows stand in. They can only UNDERSTATE (same collections, capped),
   // never overstate, so nothing these figures gate fires on a count larger
-  // than the truth. Since AGL-693 the record fallback is one PAGE, so it
+  // than the truth. Since AGL-2501 the record fallback is one PAGE, so it
   // understates by more — which moves it further in the safe direction and
   // changes nothing about which way it can be wrong.
   const datasetCount = serverDatasetCount ?? datasets.length
@@ -424,7 +424,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       : records.length
   // Query layer (AGL-181): the same evaluator the renderer uses, applied in
   // memory over the rows in front of the reader. That window is now one PAGE
-  // rather than a 500-row sample (AGL-693), which is a smaller claim and a
+  // rather than a 500-row sample (AGL-2501), which is a smaller claim and a
   // true one — the helper text says which, because a filter box that looks
   // like it searches the collection and does not is worse than one that says
   // so.

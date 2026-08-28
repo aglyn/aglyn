@@ -281,7 +281,7 @@ export interface StaffOrgActionsProps {
   onChanged: () => void
   /**
    * Render as a ROW's action cluster rather than a strip of buttons
-   * (AGL-693).
+   * (AGL-2501).
    *
    * A list row's actions belong behind one overflow: three inline buttons per
    * row is three chances to mis-click a suspension next to the row's own open

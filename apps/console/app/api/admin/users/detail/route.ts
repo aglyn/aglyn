@@ -348,7 +348,7 @@ async function handler(request: Request): Promise<Response> {
      * Recent audit trail: actions BY this account, ON this account, and
      * ABOUT this account.
      *
-     * Both halves are ORDERED (AGL-693). They were `limit(10)` with no
+     * Both halves are ORDERED (AGL-2501). They were `limit(10)` with no
      * `orderBy`, which Firestore answers in document-id order over generated
      * ids — so "recent" was ten arbitrary entries per half, and the sort
      * below arranged that sample newest-first, which is what made it look

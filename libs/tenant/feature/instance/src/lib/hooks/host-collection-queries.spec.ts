@@ -16,7 +16,7 @@
  */
 
 /**
- * ONE ordering decision for the plugin console lists (AGL-693).
+ * ONE ordering decision for the plugin console lists (AGL-2501).
  *
  * Eleven plugin cards capped a Firestore read with no `orderBy` and sorted the
  * result in the browser. Firestore answers an unordered limit in DOCUMENT-ID
@@ -80,7 +80,7 @@ const answer = (constraints: Array<Record<string, any>>) => {
 
 const constraintsOf = (built: any) => built.constraints as Array<Record<string, any>>
 
-describe('the shared plugin query builder (AGL-693)', () => {
+describe('the shared plugin query builder (AGL-2501)', () => {
   it('THE CONTROL: the model drops documents an orderBy cannot see', () => {
     // Without this the two assertions below would be claims about a sorter,
     // and the whole point is that `orderBy` is also a filter.
@@ -119,7 +119,7 @@ describe('the shared plugin query builder (AGL-693)', () => {
   })
 })
 
-describe('a ceilinged read knows when it was cut short (AGL-693)', () => {
+describe('a ceilinged read knows when it was cut short (AGL-2501)', () => {
   const rows = (count: number) =>
     Array.from({ length: count }, (_, index) => ({ $id: `row-${index}` }))
 

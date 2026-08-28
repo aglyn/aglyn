@@ -111,7 +111,7 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
         collection(firestore, 'hosts', hostId, 'inventoryAdjustments'),
         orderBy('atMs', 'desc'),
         /*
-         * `WINDOW + 1` is a PROBE (AGL-693). One document beyond the ceiling
+         * `WINDOW + 1` is a PROBE (AGL-2501). One document beyond the ceiling
          * turns "there are older movements than these" into a fact for the
          * price of a single read. The comparison it replaces —
          * `length >= WINDOW` — is wrong at exactly the count that equals the

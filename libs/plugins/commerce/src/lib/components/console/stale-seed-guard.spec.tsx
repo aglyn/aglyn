@@ -132,7 +132,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // the wiring removed, which is the only thing they exist to prove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
-  // The real builders (AGL-693): a stub would decide the ordering and the
+  // The real builders (AGL-2501): a stub would decide the ordering and the
   // ceiling these cards read through, rather than the cards deciding it.
   collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
     .collectionCeiling,
@@ -141,7 +141,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   collectionPage: jest.requireActual('@aglyn/tenant-feature-instance')
     .collectionPage,
   /*
-   * MODELLED rather than stubbed (AGL-693). The real hook over-fetches by one
+   * MODELLED rather than stubbed (AGL-2501). The real hook over-fetches by one
    * and hands back the page WITHOUT the probe row; a stub that returned every
    * row would render rows the component cannot be given and would hide an
    * off-by-one instead of catching it. The page state is real state, so a

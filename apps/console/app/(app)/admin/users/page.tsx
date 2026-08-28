@@ -160,7 +160,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
 
   /*
    * SEARCH AND FILTER RUN ON THE SERVER, or they are not search and filter
-   * (AGL-693).
+   * (AGL-2501).
    *
    * Both used to narrow the rows already on screen — 200 accounts, one Auth
    * page — so both answered "no such account" for everyone past it. Firebase
@@ -235,7 +235,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     enqueueSnackbar('Could not load users', { variant: 'error' })
   }, [enqueueSnackbar])
   /*
-   * TWO PAGE SIZES, and they are not the same question (AGL-693).
+   * TWO PAGE SIZES, and they are not the same question (AGL-2501).
    *
    * `AUTH_LIST_PAGE_SIZE` is the width of the WALK — a transport detail.
    * `listUsersAcrossPools` only appends tenant-pool users once the
@@ -448,7 +448,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   /*
-   * One row grammar, the console's (AGL-693). `valueGetter` on every column
+   * One row grammar, the console's (AGL-2501). `valueGetter` on every column
    * the grid must SORT by something other than what it draws — a timestamp
    * rendered as text sorts as text, which puts 12 January before 2 February.
    */
@@ -738,7 +738,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
               />
               {/*
                 The console's shared footer, driven by the DISPLAY page
-                (AGL-693). `rowCount` is the number of rows this page actually
+                (AGL-2501). `rowCount` is the number of rows this page actually
                 DREW — not the walk's length and not the collapsed total —
                 because this is the screen staff check when they think an
                 account is missing, and it must not claim a row it did not

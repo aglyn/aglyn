@@ -27,7 +27,7 @@ import { join } from 'node:path'
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 
 /**
- * A card that is a component's ROOT does not space itself (AGL-693).
+ * A card that is a component's ROOT does not space itself (AGL-2501).
  *
  * ## The bug this exists to stop coming back
  *

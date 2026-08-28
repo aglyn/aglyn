@@ -268,7 +268,7 @@ export function commerceSlug(name: string): string {
 
 /**
  * The search keys a product write carries, so the catalog can be searched by
- * the QUERY rather than by the rows a listener happened to fetch (AGL-693).
+ * the QUERY rather than by the rows a listener happened to fetch (AGL-2501).
  *
  * The hub lists `limit(500)`, and the search compared what that returned — so
  * a product past the window answered "no products match", which reads as the

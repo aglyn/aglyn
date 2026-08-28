@@ -538,7 +538,7 @@ export function CollectionEntriesPage() {
    * /{slug} routes the site publishes, which is not a content edit.
    */
   /**
-   * Entry pagination (AGL-693).
+   * Entry pagination (AGL-2501).
    *
    * The listener already caps at 200 entries — this is about the READING, not
    * the query: a collection with a hundred posts rendered as one uninterrupted
@@ -869,7 +869,7 @@ export function CollectionEntriesPage() {
           <HubTabs
             navHeader="Content"
             /*
-             * Mount the tab being read, and not the other (AGL-693).
+             * Mount the tab being read, and not the other (AGL-2501).
              *
              * `HubTabs` keeps every panel mounted unless told otherwise, so an
              * author browsing entries also subscribed the Authors list. Both

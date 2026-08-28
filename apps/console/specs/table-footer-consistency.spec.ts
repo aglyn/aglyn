@@ -16,7 +16,7 @@
  */
 
 /**
- * ONE table footer, and no call site may re-decide it (AGL-693).
+ * ONE table footer, and no call site may re-decide it (AGL-2501).
  *
  * Left to themselves the lists disagree: layouts page 5 at a time, components
  * and templates 10, the team list 10, the screens tree 25, with the size menu
@@ -206,7 +206,7 @@ const LITERAL_OPTIONS = /(?:rowsPerPage|pageSize)Options=\{\[/
  */
 const LITERAL_LABEL = /labelRowsPerPage(?:=|:\s*)(?:["']|\{\s*['"])/
 
-describe('the console has one table footer (AGL-693)', () => {
+describe('the console has one table footer (AGL-2501)', () => {
   it.each(FOOTERS)('%s takes the shared options and label', (_label, path) => {
     const source = read(path)
     expect(source).toContain('TABLE_PAGE_SIZE_OPTIONS')
@@ -278,7 +278,7 @@ describe('the console has one table footer (AGL-693)', () => {
 })
 
 /**
- * No list may grow its own pager again (AGL-693, extended).
+ * No list may grow its own pager again (AGL-2501, extended).
  *
  * A constant and a component are not enough on their own: the previous round
  * of this left four grammars standing, and every one of them began as a
@@ -341,7 +341,7 @@ function pluginComponentFiles(): string[] {
 const handRolledPager = (source: string) =>
   /\{'Previous'\}/.test(source) && /\{'Next'\}/.test(source)
 
-describe('no list hand-rolls a pager (AGL-693)', () => {
+describe('no list hand-rolls a pager (AGL-2501)', () => {
   it('THE CONTROL: the shape check catches what it is meant to catch', () => {
     // Guard the guard. A check that matched nothing would pass over a console
     // that had grown ten new two-button pagers.
@@ -373,7 +373,7 @@ describe('no list hand-rolls a pager (AGL-693)', () => {
   })
 })
 
-describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
+describe('no list keeps a bespoke "Load more" (AGL-2501)', () => {
   const CONSOLE_ROOT = join(REPO, 'apps', 'console', 'components')
   /**
    * A button that GROWS the list, in any of the spellings this repo uses.
@@ -467,7 +467,7 @@ describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
 })
 
 /**
- * A paged list names its ORDER (AGL-693, and the six times before it).
+ * A paged list names its ORDER (AGL-2501, and the six times before it).
  *
  * `limit()` with no `orderBy` is not "the first N". Firestore answers it in
  * document-id order, and every collection here is keyed by a generated id — so
@@ -549,7 +549,7 @@ function footerFiles(): string[] {
   ].filter((path) => DRAWS_A_FOOTER.test(withoutComments(readFileSync(path, 'utf8'))))
 }
 
-describe('every list that DRAWS a footer names its order (AGL-693)', () => {
+describe('every list that DRAWS a footer names its order (AGL-2501)', () => {
   const repoRelative = (path: string) => path.replace(`${REPO}/`, '')
 
   it('THE CONTROL: the footer check catches what it is meant to catch', () => {
@@ -610,7 +610,7 @@ describe('every list that DRAWS a footer names its order (AGL-693)', () => {
 })
 
 /**
- * The plugin console lists share ONE ordering decision (AGL-693).
+ * The plugin console lists share ONE ordering decision (AGL-2501).
  *
  * `hostArtifactQuery` answered this for the console's four site-artifact
  * lists and could not share the answer: an app cannot be imported from a
@@ -656,7 +656,7 @@ describe('the shared plugin query builder orders on the document NAME', () => {
 })
 
 /**
- * The four site artifact lists ask ONE query builder (AGL-693).
+ * The four site artifact lists ask ONE query builder (AGL-2501).
  *
  * They read four different collections under `hosts/{id}` and every one of
  * them faces the same question: `orderBy` matches only documents that HAVE
@@ -678,7 +678,7 @@ const ARTIFACT_LISTS: Array<[string, string]> = [
   ],
 ]
 
-describe('the site artifact lists share one ordering decision (AGL-693)', () => {
+describe('the site artifact lists share one ordering decision (AGL-2501)', () => {
   it.each(ARTIFACT_LISTS)('the %s list asks through the shared builder', (
     _label,
     path,
@@ -732,7 +732,7 @@ describe('the site artifact lists share one ordering decision (AGL-693)', () => 
   })
 })
 
-describe('a paged list names its order (AGL-693)', () => {
+describe('a paged list names its order (AGL-2501)', () => {
   it('THE CONTROL: the comment stripper reads code, not prose', () => {
     // Both halves matter. A stripper that removed nothing would let a file
     // pass on its own docblock; one that removed everything would make every
@@ -782,7 +782,7 @@ describe('a paged list names its order (AGL-693)', () => {
 
 
 /**
- * A TABLE with no footer under it (AGL-693, and the reason this kept being
+ * A TABLE with no footer under it (AGL-2501, and the reason this kept being
  * found one at a time).
  *
  * Every check above this point looks for a PAGER — a hand-rolled Previous/Next
@@ -1056,7 +1056,7 @@ const NOT_A_LIST: Array<[string, string]> = [
 const OWES_A_FOOTER: Array<[string, string]> = [
   [
     // The invoice table moved to its own section when billing was split
-    // (AGL-693). Same table, same reason, same scope decision — only the file
+    // (AGL-2501). Same table, same reason, same scope decision — only the file
     // it lives in changed.
     'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
     'Invoices, one per month forever. Billing is out of this pass’s scope.',
@@ -1188,7 +1188,7 @@ const OWES_A_FOOTER: Array<[string, string]> = [
   ],
 ]
 
-describe('a table with rows under it has a footer under those (AGL-693)', () => {
+describe('a table with rows under it has a footer under those (AGL-2501)', () => {
   it('THE CONTROL: the detector fires on a <Table> with no footer', () => {
     // The assertion this whole block turns on. The previous guards looked for
     // a pager, and a table that never had one matched nothing — so the spec
@@ -1283,7 +1283,7 @@ describe('a table with rows under it has a footer under those (AGL-693)', () => 
 })
 
 /**
- * A control that silently does nothing (AGL-693).
+ * A control that silently does nothing (AGL-2501).
  *
  * `filterMode="server"` hands the whole filter model to the caller and stops
  * the grid applying any of it. A list that answers only `quickFilterValues`

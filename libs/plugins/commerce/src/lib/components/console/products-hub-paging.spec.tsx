@@ -17,7 +17,7 @@
 
 /**
  * The products table gets a footer, and its header stops counting the rows in
- * hand (AGL-693).
+ * hand (AGL-2501).
  *
  * Two things, and the second is the one that keeps recurring across this
  * sweep: A COUNT BESIDE A LIST WAS THE LENGTH OF THE LIST. The card's header
@@ -252,7 +252,7 @@ describe('the products table pages, and its header counts the catalog', () => {
 })
 
 /**
- * The license-key pool is asked FOR THE PRODUCT, and ordered (AGL-693).
+ * The license-key pool is asked FOR THE PRODUCT, and ordered (AGL-2501).
  *
  * The read was `limit(500)` over the site's whole `licenseKeys` collection
  * with no `orderBy`, filtered by `productId` in the browser — so on a store
@@ -261,7 +261,7 @@ describe('the products table pages, and its header counts the catalog', () => {
  * hashed high showed a pool of zero while the storefront went on delivering
  * them.
  */
-describe('the license-key pool is a per-product read (AGL-693)', () => {
+describe('the license-key pool is a per-product read (AGL-2501)', () => {
   const openKeys = async () => {
     await mount()
     fireEvent.click(screen.getAllByRole('button', { name: 'Keys' })[0])

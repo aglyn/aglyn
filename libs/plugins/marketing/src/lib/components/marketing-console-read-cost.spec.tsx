@@ -18,7 +18,7 @@
  */
 
 /**
- * What one MARKETING console load actually READS (AGL-693).
+ * What one MARKETING console load actually READS (AGL-2501).
  *
  * The meter, before the conversion rather than after it. `HubTabs lazy` already
  * mounts one panel, so the question this file exists to answer is not "is the
@@ -288,7 +288,7 @@ async function renderConsole(section: string) {
   )
 }
 
-describe('marketing console read cost (AGL-693)', () => {
+describe('marketing console read cost (AGL-2501)', () => {
   afterEach(() => {
     mockSection = ''
     mockListens.length = 0
@@ -310,7 +310,7 @@ describe('marketing console read cost (AGL-693)', () => {
   })
 
   /*
-   * The surface's own URL, which names no section (AGL-693).
+   * The surface's own URL, which names no section (AGL-2501).
    *
    * The page renders nothing and reads nothing. The REDIRECT itself is the
    * shell's — it lives above the `lazy()` boundary so a bare hub URL never

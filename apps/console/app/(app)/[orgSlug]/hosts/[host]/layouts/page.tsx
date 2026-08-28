@@ -163,7 +163,7 @@ function Layouts(props) {
     [firestore, hostId],
   )
   /**
-   * The list PAGES, over an ordered walk (AGL-693).
+   * The list PAGES, over an ordered walk (AGL-2501).
    *
    * It was `limit(pageSize)` with no `orderBy` and no pager: one page-sized
    * read, and the grid's own footer paging a window that never grew. So the
@@ -189,7 +189,7 @@ function Layouts(props) {
     { idField: '$id' },
   )
   /**
-   * A deleted layout is a TOMBSTONE, not a row (AGL-693).
+   * A deleted layout is a TOMBSTONE, not a row (AGL-2501).
    *
    * Delete here stamps `deletedAt` and leaves the document in place so
    * published tenant pages keep rendering their chrome until the next
@@ -441,7 +441,7 @@ function Layouts(props) {
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
     /*
-      The trailing cluster every artifact list shares (AGL-693). Four inline
+      The trailing cluster every artifact list shares (AGL-2501). Four inline
       icons in a LEADING column put a delete two icons away from the row's own
       open handler, and make the first thing in the row a toolbar rather than
       the layout's name.

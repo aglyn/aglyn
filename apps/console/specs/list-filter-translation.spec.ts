@@ -21,7 +21,7 @@
  */
 
 /**
- * ONE translation from a grid filter to a Firestore query (AGL-693).
+ * ONE translation from a grid filter to a Firestore query (AGL-2501).
  *
  * Every paged list in the console now shares it, so a mistake here is a
  * mistake on all of them at once — and the failure mode is the quiet kind: a

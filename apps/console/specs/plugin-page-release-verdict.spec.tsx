@@ -120,7 +120,7 @@ jest.mock('firebase/remote-config', () => ({
 jest.mock('next/navigation', () => ({
   useParams: () => ({ pluginSlug: ['contacts'] }),
   useSearchParams: () => new URLSearchParams(),
-  // The shell redirects a bare hub URL to its landing section (AGL-693).
+  // The shell redirects a bare hub URL to its landing section (AGL-2501).
   // Neither surface here declares sections, so it never fires — but the
   // hook is called unconditionally, as hooks must be.
   useRouter: () => ({ replace: () => undefined, push: () => undefined }),

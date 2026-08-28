@@ -16,7 +16,7 @@
  */
 
 /**
- * AGL-693: the screens tree opens CLOSED.
+ * AGL-2501: the screens tree opens CLOSED.
  *
  * The table tracked a COLLAPSED set, so an empty set meant "everything is
  * open" and a nested site rendered its entire tree on arrival — the footer
@@ -46,7 +46,7 @@ const source = readFileSync(
   'utf8',
 )
 
-describe('the screens tree starts collapsed (AGL-693)', () => {
+describe('the screens tree starts collapsed (AGL-2501)', () => {
   it('tracks EXPANDED ids, seeded empty', () => {
     expect(source).toMatch(
       /const \[expandedIds, setExpandedIds\] = useState<Set<ScreenUid>>\(\s*new Set\(\)\s*\)/,

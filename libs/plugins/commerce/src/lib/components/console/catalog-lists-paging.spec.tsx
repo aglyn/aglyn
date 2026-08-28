@@ -17,7 +17,7 @@
 
 /**
  * Three commerce lists, two different answers, and the reason each got the one
- * it did (AGL-693).
+ * it did (AGL-2501).
  *
  * All three were the same defect — a bare `limit()` over a collection keyed by
  * `createResourceUid()`, so the window was a pseudo-random sample and every row
@@ -264,7 +264,7 @@ const textsMatching = (pattern: RegExp) =>
     .map((node) => (node.textContent ?? '').trim())
     .filter((text) => pattern.test(text))
 
-describe('the suppliers list is server-paged and ordered (AGL-693)', () => {
+describe('the suppliers list is server-paged and ordered (AGL-2501)', () => {
   it('asks the SUPPLIERS query for a page and a probe, and nothing wider', () => {
     render(<SuppliersCard hostId="host-1" />)
     // The set, keyed by collection. `toContain(11)` would be satisfied by any
@@ -290,7 +290,7 @@ describe('the suppliers list is server-paged and ordered (AGL-693)', () => {
   })
 })
 
-describe('the discounts list is server-paged and ordered (AGL-693)', () => {
+describe('the discounts list is server-paged and ordered (AGL-2501)', () => {
   it('THE TRAP: ordering on `code` would hide every automatic promotion', () => {
     const onCode = firestoreAnswer(discountDocs, [{ orderBy: 'code' }])
     const automatic = discountDocs.filter((row) => row.code === null)
@@ -316,7 +316,7 @@ describe('the discounts list is server-paged and ordered (AGL-693)', () => {
   })
 })
 
-describe('the catalog lists are ceilinged, not server-paged (AGL-693)', () => {
+describe('the catalog lists are ceilinged, not server-paged (AGL-2501)', () => {
   const mountCatalog = () => render(<CatalogOrganizationCard hostId="host-1" />)
 
   it('reads each collection ONCE, at its ceiling plus a probe', () => {

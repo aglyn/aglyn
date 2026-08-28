@@ -98,7 +98,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const { confirm } = useConfirmationContext()
 
   /*
-   * ORDERED AND CEILINGED, and not orderable on any DATE (AGL-693, AGL-272).
+   * ORDERED AND CEILINGED, and not orderable on any DATE (AGL-2501, AGL-272).
    *
    * No field here is on every campaign: a sent one is written
    * `{status:'sent', sentAt}` and a scheduled one `{status:'scheduled',

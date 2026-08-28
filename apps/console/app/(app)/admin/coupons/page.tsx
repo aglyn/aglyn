@@ -105,7 +105,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
 
   const [coupons, setCoupons] = useState<CouponRow[]>([])
   /*
-   * The list PAGES (AGL-693). Every Stripe coupon the platform has ever
+   * The list PAGES (AGL-2501). Every Stripe coupon the platform has ever
    * created rendered in one wall, and a coupon row is tall — a name, an id, a
    * chip per promotion code — so a few dozen of them is a page a reader
    * scrolls past rather than reads.

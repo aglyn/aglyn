@@ -73,7 +73,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const firestore = useFirestore()
   const [rows, setRows] = useState<any[]>([])
   // The console's shared default and the console's shared menu, so this feed
-  // is the same control as every other list (AGL-693).
+  // is the same control as every other list (AGL-2501).
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
   const [page, setPage] = useState(0)
@@ -129,7 +129,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
   }, [loadPage])
 
   /*
-   * One row grammar, the console's (AGL-693) — the same table the artifact
+   * One row grammar, the console's (AGL-2501) — the same table the artifact
    * lists use, minus the row click.
    */
   const activityColumns: GridColDef[] = useMemo(

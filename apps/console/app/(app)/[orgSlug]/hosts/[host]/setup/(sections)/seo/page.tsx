@@ -21,7 +21,7 @@ import { SetupForm, useSetupScope } from '../layout'
 
 /**
  * SEO — the metadata a search engine reads, plus the switch that decides
- * whether it may read the site at all (AGL-693).
+ * whether it may read the site at all (AGL-2501).
  *
  * The indexing switch is its own card rather than a field on the schema: a
  * toggle that writes on change does not belong inside a form that writes on

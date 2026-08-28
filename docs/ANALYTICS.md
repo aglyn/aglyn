@@ -1618,7 +1618,7 @@ never the problem; what rode alongside them was the ambient `page_title`, closed
 by AGL-2087 in §11.
 
 `manage/user/page.tsx` had the second one. Its sections are routes now
-(AGL-693), so each one reports through the shared `page_view` effect in
+(AGL-2501), so each one reports through the shared `page_view` effect in
 `firebase-app.layout.tsx` — which fires on every pathname change — rather than
 through a hand-written event a tab click had to remember to send.
 

@@ -98,7 +98,7 @@ const SETUP = read(
 const sectionIds = setupSections('acme', 'shop').map((section) => section.id)
 
 /**
- * Setup's sections are ROUTES now (AGL-693), so `?tab=` is no longer how a
+ * Setup's sections are ROUTES now (AGL-2501), so `?tab=` is no longer how a
  * section is selected — it is a compatibility map on the index redirect.
  *
  * The map is KEPT here where the settings and marketplace hubs dropped theirs,
@@ -106,7 +106,7 @@ const sectionIds = setupSections('acme', 'shop').map((section) => section.id)
  * exist. Three are built in this repo, and Setup is the most-visited page in
  * the console, so bookmarks are held by people as well as by code.
  */
-describe('a ?tab= link opens that section (AGL-2486, AGL-693)', () => {
+describe('a ?tab= link opens that section (AGL-2486, AGL-2501)', () => {
   it('THE REGRESSION: the Tracking section is reachable by the old link', () => {
     // The exact link that failed, now resolved through the map.
     expect(SETUP_TAB_SECTIONS.hostTracking).toBe('tracking')
@@ -141,7 +141,7 @@ describe('a ?tab= link opens that section (AGL-2486, AGL-693)', () => {
     expect(sectionIds[0]).toBe(DEFAULT_SETUP_SECTION)
   })
 
-  it('the shared RAIL goes through the resolver too (AGL-693)', () => {
+  it('the shared RAIL goes through the resolver too (AGL-2501)', () => {
     /*
      * `HubTabs` was the fourth answer, and the widest: it read `?tab=` into
      * `useState`, which reads once. Every hub built on it therefore ignored
@@ -195,7 +195,7 @@ describe('a ?tab= link opens that section (AGL-2486, AGL-693)', () => {
     // Three pages had three different answers and one of them was wrong.
     // Reading `?tab=` by hand is how the fourth one gets it wrong too.
     //
-    // Manage Account has left this list: its six panels are routes (AGL-693),
+    // Manage Account has left this list: its six panels are routes (AGL-2501),
     // so it selects nothing and has nothing to resolve. What it does with the
     // parameter now is forward it, which `account-section-links.spec.tsx`
     // owns.
@@ -210,7 +210,7 @@ describe('a ?tab= link opens that section (AGL-2486, AGL-693)', () => {
   })
 
   /**
-   * A page whose panels became ROUTES carries no `?tab=` map at all (AGL-693).
+   * A page whose panels became ROUTES carries no `?tab=` map at all (AGL-2501).
    *
    * The parameter existed so a panel could be linked to; a route is the link.
    * With no shipped customers there is nothing holding an old settings or
@@ -220,7 +220,7 @@ describe('a ?tab= link opens that section (AGL-2486, AGL-693)', () => {
    * What this still holds is that those pages do not go back to reading the
    * parameter by hand — the thing the resolver above exists to prevent.
    *
-   * The redirect itself moved to the SERVER (AGL-693), so the shape asserted
+   * The redirect itself moved to the SERVER (AGL-2501), so the shape asserted
    * here is `redirect(` rather than `router.replace`: a client index shipped a
    * bundle, hydrated, resolved the slug from a hook and only then navigated,
    * and the reader watched every step of that as an empty main area.

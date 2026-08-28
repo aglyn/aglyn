@@ -124,7 +124,7 @@ describe('AGL-1991 — merging the billing doc must not swap the org identity', 
   it('the billing page does not reintroduce the plain spread', () => {
     // The helper being correct proves nothing if the page stops calling it —
     // the defect was at the CALL SITE, not in any library.
-    // BOTH readers, since billing was split into sections (AGL-693): the
+    // BOTH readers, since billing was split into sections (AGL-2501): the
     // Plan section merges for the subscription status and price, and the
     // Usage section merges for the metered estimate's interval and price ids.
     // Checking one would let the other reintroduce the plain spread.

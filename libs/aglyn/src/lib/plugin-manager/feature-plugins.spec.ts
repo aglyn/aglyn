@@ -219,7 +219,7 @@ describe('console extension registry', () => {
 })
 
 /**
- * Routed sections on a plugin console page (AGL-693).
+ * Routed sections on a plugin console page (AGL-2501).
  *
  * Every assertion here is about the RESOLVED nav item and section — the
  * objects the shell mounts and gates from — rather than about anything
@@ -303,7 +303,7 @@ describe('resolveConsolePluginPage sections', () => {
    * The whole "existing plugins keep working untouched" claim, as an
    * assertion rather than an inspection. A nav item that declares no sections
    * matches its own href and nothing beneath it — so prefix matching did not
-   * quietly widen every surface written before AGL-693 into a catch-all.
+   * quietly widen every surface written before AGL-2501 into a catch-all.
    */
   it('a plugin that declares no sections is matched exactly, as before', () => {
     registerConsoleExtension({
@@ -317,7 +317,7 @@ describe('resolveConsolePluginPage sections', () => {
   })
 
   /**
-   * Which registration owns a path when two could (AGL-693).
+   * Which registration owns a path when two could (AGL-2501).
    *
    * The registry is a session-wide union across plugins from different
    * authors (AGL-758), so this is a cross-tenant correctness question: the

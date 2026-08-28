@@ -138,7 +138,7 @@ export interface ConsolePluginPageProps {
   /**
    * The absolute console path this surface is mounted at — the nav item's
    * `href` under the active org and site, e.g. `/acme/hosts/shop/products`
-   * (AGL-693).
+   * (AGL-2501).
    *
    * A plugin page is handed a host DOC ID and nothing else, so building a
    * link to itself meant resolving the org slug and subdomain from Firestore
@@ -150,7 +150,7 @@ export interface ConsolePluginPageProps {
   /**
    * The nav item's declared {@link ConsoleNavItem.sections}, resolved: an
    * absolute `href` per section, and the release-flag verdict already applied
-   * to `visible` (AGL-693).
+   * to `visible` (AGL-2501).
    *
    * The plugin DECLARES sections; the shell RESOLVES them. Release flags live
    * in `scope:app` and a `scope:lib` plugin may not import the hooks that read
@@ -161,7 +161,7 @@ export interface ConsolePluginPageProps {
   sections?: readonly ResolvedConsoleNavSection[]
   /**
    * The id of the section the URL names, or undefined on the nav item's own
-   * href (AGL-693).
+   * href (AGL-2501).
    *
    * Always one of the declared `sections` — the shell 404s an id it does not
    * recognize rather than passing it down, so a page may switch on this
@@ -170,7 +170,7 @@ export interface ConsolePluginPageProps {
   section?: string
   /**
    * Path segments beneath `basePath`, `[]` on the nav item's own href
-   * (AGL-693). `segments[0]` is `section`; anything after it is the section's
+   * (AGL-2501). `segments[0]` is `section`; anything after it is the section's
    * own, so a section can own deeper routes (`…/orders/ord_123`) without a
    * further registry change.
    */
@@ -227,7 +227,7 @@ export interface ConsolePluginPageProps {
 export type ConsolePluginPage = ComponentType<ConsolePluginPageProps>
 
 /**
- * One routed section of a plugin console page (AGL-693).
+ * One routed section of a plugin console page (AGL-2501).
  *
  * A section is a real URL beneath the nav item's `href`, not a panel: it is
  * linkable, the back button walks sections, and the page mounts the one being
@@ -284,7 +284,7 @@ export interface ConsoleNavItem {
    */
   Component?: ConsolePluginPage
   /**
-   * Routed sections of this page (AGL-693). Each becomes a URL at
+   * Routed sections of this page (AGL-2501). Each becomes a URL at
    * `${href}/${section.id}`, and the shell tells the page which one it is on.
    *
    * Optional, and omitting it is not a lesser option — it means the surface is
@@ -484,7 +484,7 @@ export interface ResolvedConsolePluginPage {
  * One nav item against one href: exact, or a declared section beneath it.
  *
  * A nav item with NO sections matches its own href and nothing else. That is
- * what keeps every plugin written before AGL-693 behaving as it did: without
+ * what keeps every plugin written before AGL-2501 behaving as it did: without
  * it, prefix matching would quietly hand `/products/anything` to the Products
  * page, which is the "it opened the wrong page" report rather than a 404.
  */
@@ -511,7 +511,7 @@ function matchNavItem(
  * within it. The shell's generic host route uses this to render plugin pages
  * without a per-plugin page file.
  *
- * ## Which registration wins (AGL-693)
+ * ## Which registration wins (AGL-2501)
  *
  * LONGEST declared `href` wins, and an exact match therefore always beats a
  * section match — an exact `href` spans the whole path, so nothing matching a

@@ -120,7 +120,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
     { idField: '$id' },
   )
   /*
-   * Paging (AGL-1124), now the console's shared one (AGL-693). This used to
+   * Paging (AGL-1124), now the console's shared one (AGL-2501). This used to
    * be a bare `limit(100)` with nothing saying so, which is the worst of
    * both: a site with 120 collaborators showed 100 and looked complete. Then
    * it grew a page at a time behind a "Load more", which is a third control

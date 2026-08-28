@@ -25,7 +25,7 @@ import {
 } from 'firebase/firestore'
 
 /**
- * ONE ordering decision for the console lists a plugin renders (AGL-693).
+ * ONE ordering decision for the console lists a plugin renders (AGL-2501).
  *
  * ## What an unordered `limit()` actually answers
  *

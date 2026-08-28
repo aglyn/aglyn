@@ -21,7 +21,7 @@ import OrgSellerPanel from '../../../../../../components/org-seller-panel.compon
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Publisher Profile (AGL-693).
+ * Marketplace › Publisher Profile (AGL-2501).
  *
  * The org's marketplace identity — the handle and the public profile a
  * buyer sees on a listing.

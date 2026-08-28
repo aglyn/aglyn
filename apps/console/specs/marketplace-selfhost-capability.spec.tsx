@@ -112,7 +112,7 @@ describe('the Stripe capability notice (AGL-2019)', () => {
 describe('the hub behind the flag is release-gated (AGL-2019)', () => {
   /*
    * The SECTIONS LAYOUT, which is where the gate has to be now that the
-   * sections are routes (AGL-693). On the old single page the wrapper sat
+   * sections are routes (AGL-2501). On the old single page the wrapper sat
    * around the tab panels; a layout wraps every section route instead, so one
    * gate still covers the whole hub — and a per-section copy would be eight
    * chances to leave one out.

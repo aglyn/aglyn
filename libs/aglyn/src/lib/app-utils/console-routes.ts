@@ -108,7 +108,7 @@ export enum Route {
   // one path that feature wants.
   ORG_MARKETPLACE = '/[orgSlug]/marketplace',
   /*
-   * Marketplace SECTIONS are routes (AGL-693), for the reason the settings
+   * Marketplace SECTIONS are routes (AGL-2501), for the reason the settings
    * and account sections are: a panel that is not open should cost nothing,
    * and the seller half of this hub reads the organization's REVENUE.
    *
@@ -140,7 +140,7 @@ export enum Route {
   ORG_MARKETPLACE_PUBLISH_PLUGIN = '/[orgSlug]/marketplace/publish/plugin',
   ORG_SETTINGS = '/[orgSlug]/settings',
   /*
-   * Settings SECTIONS are routes (AGL-693). `HubTabs` mounted every panel —
+   * Settings SECTIONS are routes (AGL-2501). `HubTabs` mounted every panel —
    * `keepMounted`, with `lazy` off by default and passed by nobody — so
    * opening General also mounted the API-keys, SSO and data-export cards and
    * ran every read in them. Routes mount one page and code-split per route.
@@ -155,7 +155,7 @@ export enum Route {
   ORG_SETTINGS_OWNERSHIP = '/[orgSlug]/settings/ownership',
   ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
   /**
-   * Billing, section by section (AGL-693).
+   * Billing, section by section (AGL-2501).
    *
    * `MANAGE_BILLING` is unchanged and is the PLAN section — it resolves to a
    * page inside a route group, which adds no path segment. That is what makes
@@ -187,7 +187,7 @@ export enum Route {
   BILLING_ENTRY = '/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
   /*
-   * Account SECTIONS are routes (AGL-693). `HubTabs` mounted every panel —
+   * Account SECTIONS are routes (AGL-2501). `HubTabs` mounted every panel —
    * `keepMounted`, with `lazy` off by default and passed by nobody — so
    * opening Account also mounted the email-addresses, passkeys, recent
    * sign-ins, data-export and close-account cards and ran every read in them.
@@ -252,7 +252,7 @@ export enum Route {
   CONTENT_ENTRY_DETAILS = '/[orgSlug]/hosts/[host]/content/[collectionSlug]/entries/[entryId]',
   MANAGE_TEAM = '/[orgSlug]/team',
   /*
-   * Team SECTIONS are routes, not tabs (AGL-693). A section's bundle then
+   * Team SECTIONS are routes, not tabs (AGL-2501). A section's bundle then
    * arrives when a reader opens it and never before, the section is linkable,
    * and the active state is a fact about the URL rather than state that has to
    * be kept in sync with it. `MANAGE_TEAM` itself redirects to members.
@@ -285,7 +285,7 @@ export enum Route {
   HOST_MEDIA = '/[orgSlug]/hosts/[host]/media',
   HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',
   /*
-   * Setup SECTIONS are routes (AGL-693), so an unopened one costs neither a
+   * Setup SECTIONS are routes (AGL-2501), so an unopened one costs neither a
    * read nor a byte. `HOST_SETUP` stays the nav tab's href and redirects to
    * Basic details, honouring the `?tab=` ids these sections were deep-linked
    * by — unlike the settings and marketplace hubs, links holding those ids are
@@ -301,7 +301,7 @@ export enum Route {
   // legitimately visit.
   HOST_ADMIN = '/[orgSlug]/hosts/[host]/admin',
   /*
-   * Site-admin SECTIONS are routes (AGL-693), so an unopened one costs neither
+   * Site-admin SECTIONS are routes (AGL-2501), so an unopened one costs neither
    * a read nor a byte. `HOST_ADMIN` redirects to Plugins and still honours the
    * `?tab=` ids these sections were deep-linked by.
    */

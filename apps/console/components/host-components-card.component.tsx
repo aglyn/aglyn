@@ -88,7 +88,7 @@ import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from './templates/save-as-template-dialog.component'
 
-/** The count and cap a components readout renders (AGL-693). */
+/** The count and cap a components readout renders (AGL-2501). */
 export interface ComponentQuotaReadout {
   ready: boolean
   used: number
@@ -135,7 +135,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
   /**
-   * The list PAGES, over an ordered walk (AGL-693).
+   * The list PAGES, over an ordered walk (AGL-2501).
    *
    * It was `limit(100)` with no `orderBy`, sorted by `displayName` in the
    * browser. That is the shape this repo has now hit eight times: Firestore
@@ -196,7 +196,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   )
 
   /**
-   * The readout the page header renders (AGL-693).
+   * The readout the page header renders (AGL-2501).
    *
    * `reusableComponents` is a BOOLEAN entitlement, which looks like a reason
    * to print no denominator at all. It is not: the denominator is exactly what
@@ -538,7 +538,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
     /*
-      ONE quick action, then the overflow (AGL-693). This list had five inline
+      ONE quick action, then the overflow (AGL-2501). This list had five inline
       icons — besigner, rename, and three behind MUI's own `showInMenu` — which
       is the arrangement the other three lists each varied in their own way.
       Everything except Preview now lives in the menu.
@@ -683,7 +683,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           ) : null
         }
         rows={components}
-        // The whole row opens the detail page (AGL-693); the action cluster
+        // The whole row opens the detail page (AGL-2501); the action cluster
         // stops propagation so a menu click never navigates underneath it.
         onOpen={(id) =>
           router.push(
@@ -698,7 +698,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         // this one did not, so the four lists that render the SAME table
         // disagreed about whether a fetch is worth mentioning — components
         // showed an empty table until the rows arrived, which reads as "you
-        // have none" rather than "these are on their way" (AGL-693).
+        // have none" rather than "these are on their way" (AGL-2501).
         loading={componentsStatus === 'loading'}
         // Paged by the footer below, so the grid must not also slice.
         hideFooter

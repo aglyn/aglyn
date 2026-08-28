@@ -17,7 +17,7 @@
 
 /**
  * The variables and functions lists are ORDERED, CEILINGED and PAGED — and
- * deliberately not paged by the query (AGL-693).
+ * deliberately not paged by the query (AGL-2501).
  *
  * Both were `limit(100)` with no `orderBy` and a `localeCompare` in the
  * browser. Firestore answers an unordered limit in DOCUMENT-ID order, so the
@@ -218,7 +218,7 @@ const renderedNames = () =>
     .map((node) => (node.textContent ?? '').trim().replace(/^\{\{|\}\}$/g, ''))
     .filter((text) => /^(alpha|fn)_\d{3}$/.test(text))
 
-describe('the variables list walks its collection (AGL-693)', () => {
+describe('the variables list walks its collection (AGL-2501)', () => {
   it('THE CONTROL: naming the order changes nothing, and that is the claim', () => {
     // Said plainly, because the opposite is the easy thing to believe.
     // Document-id order is what a bare `limit()` ALREADY returns, so
@@ -293,7 +293,7 @@ describe('the variables list walks its collection (AGL-693)', () => {
   })
 })
 
-describe('the functions list walks its collection (AGL-693)', () => {
+describe('the functions list walks its collection (AGL-2501)', () => {
   it('reads the ceiling plus a probe and pages what it holds', async () => {
     await mount(<HostFunctionsCard hostId="host-1" org={ORG} />)
     expect(mockCapsAsked).toContain(CEILING + 1)

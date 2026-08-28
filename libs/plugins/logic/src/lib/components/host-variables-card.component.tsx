@@ -204,7 +204,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     fromCache: variablesFromCache,
   } = useFirestoreCollection<any>(
     /*
-     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693).
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501).
      *
      * `limit(100)` alone is answered in DOCUMENT-ID order, so the window is a
      * pseudo-random hundred that the `localeCompare` below arranges into a

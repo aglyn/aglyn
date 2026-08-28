@@ -124,7 +124,7 @@ Those are found by blame, not by a ceiling — 84 of the 356 references to
 **AGL-1476–1490** were written by those commits and 250 are legitimate, so a
 find-and-replace over the range corrupts correct citations.
 
-⚠️ It is **not confined to that range**. `AGL-693` (Components page: real table
+⚠️ It is **not confined to that range**. `AGL-2501` (Components page: real table
 and Create button) carried the entire console list-pagination arc, and
 `AGL-2306` (a rejected plugin version stays advertised) was cited by the
 citation guard itself. Both now have real issues — AGL-2501 and AGL-2500.

@@ -315,7 +315,7 @@ jest.mock('../hooks/use-branding', () => ({
 }))
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(''),
-  // The section rail resolves the active tab from the path (AGL-693).
+  // The section rail resolves the active tab from the path (AGL-2501).
   usePathname: () => '/test-org/billing',
 }))
 jest.mock('../hooks/use-current-org', () => ({
@@ -382,7 +382,7 @@ import BillingInvoicesPage from '../app/(app)/[orgSlug]/billing/(sections)/invoi
 
 /**
  * The gate moved to the LAYOUT when billing became four routed sections
- * (AGL-693), so the invariant is only observable through it.
+ * (AGL-2501), so the invariant is only observable through it.
  *
  * Rendering the page bare would exercise a component that, in production, is
  * never reached until the layout has decided — and would quietly stop testing
@@ -395,7 +395,7 @@ const Billing = () => (
   </BillingSectionsLayout>
 )
 
-/** The section that owns the invoice read since AGL-693. */
+/** The section that owns the invoice read since AGL-2501. */
 const BillingInvoices = () => (
   <BillingSectionsLayout>
     <BillingInvoicesPage />
@@ -520,7 +520,7 @@ describe('NEGATIVE CONTROL: the page still works when the read lands', () => {
   })
 
   it('and their invoice section asks for the history', async () => {
-    // Plan no longer reads invoices (AGL-693), so the control for that read
+    // Plan no longer reads invoices (AGL-2501), so the control for that read
     // belongs on the section that does — asserting it here would be vacuous.
     render(<BillingInvoices />)
     await waitFor(() => expect(invoiceCalls().length).toBeGreaterThan(0))

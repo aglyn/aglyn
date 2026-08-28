@@ -23,7 +23,7 @@ import { segmentTitle } from '../../../page-title'
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout. The suffix comes from the root title template.
 // `segmentTitle`, not a bare string: billing has titled routes below it since
-// the split into sections (AGL-693), and a plain title here would be the one
+// the split into sections (AGL-2501), and a plain title here would be the one
 // Next stops consulting for them.
 export const metadata: Metadata = { title: segmentTitle('Billing') }
 

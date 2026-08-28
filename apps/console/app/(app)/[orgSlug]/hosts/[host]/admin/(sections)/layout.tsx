@@ -38,7 +38,7 @@ import {
 } from '../../../../../../../components/host-id-provider'
 
 /**
- * Site Admin (AGL-1014), section by section (AGL-693).
+ * Site Admin (AGL-1014), section by section (AGL-2501).
  *
  * Owner/admin-only site controls, kept out of the Setup page a collaborator
  * legitimately visits. The refusal below is a NOTICE, not the boundary — the

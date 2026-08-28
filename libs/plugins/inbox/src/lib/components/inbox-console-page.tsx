@@ -102,7 +102,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   const { confirm } = useConfirmationContext()
 
   /*
-   * The inbox WALKS its submissions instead of sampling them (AGL-693,
+   * The inbox WALKS its submissions instead of sampling them (AGL-2501,
    * AGL-2292).
    *
    * `limit(200)` carried no `orderBy`, so Firestore answered it in
@@ -415,7 +415,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
       )}
       <HubTabs
         /*
-         * Mount the section being read, and no others (AGL-693).
+         * Mount the section being read, and no others (AGL-2501).
          *
          * `HubTabs` keeps every panel mounted unless told otherwise, so
          * opening one section also subscribed the Firestore listeners behind

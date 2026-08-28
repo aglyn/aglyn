@@ -117,7 +117,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const { confirm } = useConfirmationContext()
   const [search, setSearch] = useState('')
   /*
-   * WHICH field the search box searches (AGL-693).
+   * WHICH field the search box searches (AGL-2501).
    *
    * The box used to compare four fields at once — name, slug, tag, SKU — over
    * the rows the listener had already fetched. Server-side that is not one
@@ -166,7 +166,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     () => {
       /*
        * FILTERED BY THE QUERY, and ordered rather than merely capped
-       * (AGL-693, AGL-2292).
+       * (AGL-2501, AGL-2292).
        *
        * `limit(500)` with no `orderBy` returns documents in ID order, and
        * products are created at `createResourceUid()` — so that was a
@@ -209,7 +209,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         collection(firestore, 'hosts', hostId, 'products'),
         ...(constraints ?? [orderBy(documentId())]),
         /*
-         * `CATALOG_CEILING + 1` is a PROBE (AGL-693). One document past the
+         * `CATALOG_CEILING + 1` is a PROBE (AGL-2501). One document past the
          * ceiling turns "this catalog is larger than the table" into a fact.
          * The probe row is dropped below and never rendered, exported or
          * counted.
@@ -222,7 +222,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   )
   /*
    * License key pool (AGL-308) for the open dialog's product — asked FOR that
-   * product, and ordered (AGL-693).
+   * product, and ordered (AGL-2501).
    *
    * This read `limit(500)` over the site's whole `licenseKeys` collection with
    * no `orderBy`, then filtered by `productId` in the browser. Firestore
@@ -298,7 +298,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   }, [productDocs, statusFilter])
 
   /*==========================================
-   * THE TABLE PAGES, and the READ deliberately does not (AGL-693).
+   * THE TABLE PAGES, and the READ deliberately does not (AGL-2501).
    *
    * The card rendered every row of a five-hundred-document window in one wall
    * with no footer under it — the shape this sweep is about. What it must not

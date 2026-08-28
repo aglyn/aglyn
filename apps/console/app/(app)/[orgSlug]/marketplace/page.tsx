@@ -28,7 +28,7 @@ import {
 
 /**
  * `/marketplace` is the section index and renders nothing of its own
- * (AGL-693).
+ * (AGL-2501).
  *
  * A SERVER component. This was a client page that returned `null`, waited for
  * hydration, resolved the org slug from a hook and then client-navigated, and

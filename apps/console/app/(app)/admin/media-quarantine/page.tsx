@@ -517,7 +517,7 @@ function AdminMediaQuarantine() {
       )
   }, [listing])
   /*
-   * The deny list PAGES (AGL-693). It rendered every entry in one wall — up
+   * The deny list PAGES (AGL-2501). It rendered every entry in one wall — up
    * to `maxEntries`, which is two thousand — on a table whose rows carry a
    * key, a reason, two timestamps, an origin and a note apiece.
    *

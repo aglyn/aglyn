@@ -135,7 +135,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
       if (!hostId) return null
       const base = collection(firestore, 'hosts', hostId, 'activity')
       /*
-       * `WINDOW + 1` is a PROBE, not an off-by-one (AGL-693).
+       * `WINDOW + 1` is a PROBE, not an off-by-one (AGL-2501).
        *
        * The card used to say "showing what we read" by saying nothing at all.
        * Reading one document more than the ceiling turns "there is older

@@ -170,7 +170,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { rows: orgDocs, loading, refresh } = pagination
 
   /*
-   * Search runs on the SERVER; sorting is the grid's (AGL-693).
+   * Search runs on the SERVER; sorting is the grid's (AGL-2501).
    *
    * Both used to be bespoke and both were wrong at scale: a `Sort` select
    * offering three of the table's own columns, and a text box that filtered
@@ -240,7 +240,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   /*
-   * One row grammar, the console's (AGL-693).
+   * One row grammar, the console's (AGL-2501).
    *
    * `valueGetter` on every column that is not already a plain string: the
    * grid sorts what the getter returns, so a date rendered as `7/9/2026`

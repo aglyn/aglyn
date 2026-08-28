@@ -280,7 +280,7 @@ describe('Page Activity — "could not look" is not "found nothing"', () => {
 })
 
 /**
- * The "Show N more" expander became the shared footer (AGL-693, AGL-2486).
+ * The "Show N more" expander became the shared footer (AGL-2501, AGL-2486).
  *
  * It was the console's FOURTH pagination grammar for one act, and it stood
  * beside the guard written to stop exactly that — escaping it on spelling,

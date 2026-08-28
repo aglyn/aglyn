@@ -123,7 +123,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     fromCache: workflowsFromCache,
   } = useFirestoreCollection<any>(
     /*
-     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693) —
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
      * the same decision as the logic plugin's two cards, for the same reasons.
      *
      * `limit(100)` alone is answered in DOCUMENT-ID order, so the window is a

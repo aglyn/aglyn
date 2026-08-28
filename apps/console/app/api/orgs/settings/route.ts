@@ -140,11 +140,11 @@ async function handler(request: Request): Promise<Response> {
         .set(
           {
             name,
-            // Kept in step with `name` (AGL-693) — the staff list's search
+            // Kept in step with `name` (AGL-2501) — the staff list's search
             // orders by this, so a rename that did not update it would make
             // the organization findable only under its old name.
             nameLower: nameSearchKey(name),
-            // Kept in step with `name` for the same reason (AGL-693).
+            // Kept in step with `name` for the same reason (AGL-2501).
             nameTokens: nameSearchTokens(name),
             nameReversed: nameSearchReversed(name),
             updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),

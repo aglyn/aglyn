@@ -16,7 +16,7 @@
  */
 
 /**
- * The email-list table walks the org's lists alphabetically (AGL-693).
+ * The email-list table walks the org's lists alphabetically (AGL-2501).
  *
  * The listener was `limit(50)` with no `orderBy` and a `localeCompare` in the
  * browser. Firestore answers an unordered limit in DOCUMENT-ID order over ids
@@ -156,7 +156,7 @@ const renderedNames = () =>
     (row) => row.querySelector('td')?.textContent?.trim() ?? '',
   )
 
-describe('the email-list table walks the collection (AGL-693)', () => {
+describe('the email-list table walks the collection (AGL-2501)', () => {
   it('THE CONTROL: the two behaviours disagree at the page size', () => {
     // Compared at the WINDOW, because an unordered `limit()` and an ordered
     // one agree completely on a collection smaller than the cap — the one

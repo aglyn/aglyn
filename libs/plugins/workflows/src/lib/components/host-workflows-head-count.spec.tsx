@@ -233,7 +233,7 @@ describe('the workflows cap is a server aggregate (AGL-1716)', () => {
     //
     // 101, not 100: the ceiling asks for one document PAST itself so that
     // "this site has more workflows than the card read" is a fact rather than
-    // a guess from `length === 100` (AGL-693). The probe is never rendered.
+    // a guess from `length === 100` (AGL-2501). The probe is never rendered.
     //
     // Asserted as the SET of caps rather than as a single call, because this
     // card also reads `functions` and `variables` at `limit(100)` for its step

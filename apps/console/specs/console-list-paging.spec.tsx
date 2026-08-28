@@ -16,7 +16,7 @@
  */
 
 /**
- * A console list shows ALL of its collection, in the order it says (AGL-693).
+ * A console list shows ALL of its collection, in the order it says (AGL-2501).
  *
  * The reusable-components card read `limit(100)` with no `orderBy` and sorted
  * the result by `displayName` in the browser. That is the eighth time this
@@ -303,7 +303,7 @@ const pageTo = async (index: number) => {
   }
 }
 
-describe('the components list pages an ORDERED walk (AGL-693)', () => {
+describe('the components list pages an ORDERED walk (AGL-2501)', () => {
   it('opens on the head of the walk, not on an alphabetized sample', async () => {
     render(<HostComponentsCard hostId="host-1" />)
     await waitFor(() => expect(visibleNames().length).toBeGreaterThan(0))
@@ -355,7 +355,7 @@ describe('the components list pages an ORDERED walk (AGL-693)', () => {
   })
 })
 
-describe('THE CONTROL: the Firestore model bites (AGL-693)', () => {
+describe('THE CONTROL: the Firestore model bites (AGL-2501)', () => {
   /*
    * Without these, every assertion above could pass against a model that
    * ignored `orderBy` and `limit` entirely — the fixture would be answering
@@ -413,7 +413,7 @@ describe('THE CONTROL: the Firestore model bites (AGL-693)', () => {
 })
 
 /**
- * The two lists that cannot be paged still say when they are short (AGL-693).
+ * The two lists that cannot be paged still say when they are short (AGL-2501).
  *
  * The screens tree and the template library read a CEILING rather than a page,
  * because slicing either by document breaks the thing it is drawing — a child
@@ -421,7 +421,7 @@ describe('THE CONTROL: the Firestore model bites (AGL-693)', () => {
  * time. A ceiling with nothing measuring it is a partial site drawn as a whole
  * one, which is the failure paging solves everywhere else.
  */
-describe('a ceilinged read knows when it was cut short (AGL-693)', () => {
+describe('a ceilinged read knows when it was cut short (AGL-2501)', () => {
   const rowsNamed = (count: number) =>
     Array.from({ length: count }, (_unused, index) => ({ $id: `row-${index}` }))
 

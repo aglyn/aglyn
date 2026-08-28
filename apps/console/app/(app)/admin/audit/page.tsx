@@ -266,7 +266,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
 
   /*==========================================
-   * THE WINDOW, AND WHY IT MOVES (AGL-2324, AGL-693).
+   * THE WINDOW, AND WHY IT MOVES (AGL-2324, AGL-2501).
    *
    * This read was `orderBy('at','desc').limit(200)` with no cursor, no date
    * range and no way to ask for row 201. Roughly seventy distinct action
@@ -809,7 +809,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                 })
               )}
               {/*
-                The shared footer (AGL-693). `hasMore` is a FACT here, not a
+                The shared footer (AGL-2501). `hasMore` is a FACT here, not a
                 guess off `length >= pageSize`: the hook over-fetches by one
                 and never renders the probe row, so the last page cannot
                 offer a Next that leads nowhere — nor hide one that leads

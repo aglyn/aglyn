@@ -161,7 +161,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   /**
    * Marketplace site templates (AGL-137): published bundles with previews.
    *
-   * ## Why the window is ORDERED, and why on the document name (AGL-693)
+   * ## Why the window is ORDERED, and why on the document name (AGL-2501)
    *
    * A `limit` with no ordering is answered in document-id order, so an
    * unordered cap is not "the first thirty" — it is thirty of them, and
@@ -337,7 +337,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     !savedPages.length && !starterCards.length && !marketplaceTemplates.length
 
   /*
-   * The two COLLECTION-backed shelves page (AGL-693). Both used to render
+   * The two COLLECTION-backed shelves page (AGL-2501). Both used to render
    * every card their window held, so the only limit on how much arrived at
    * once was a cap in the query — a number the reader cannot see and cannot
    * change, and one a library on an unlimited plan will exceed.

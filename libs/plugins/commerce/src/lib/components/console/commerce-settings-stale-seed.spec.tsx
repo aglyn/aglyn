@@ -171,7 +171,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // the card passed it, which is the one thing these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
-  // The real builders (AGL-693): the ordering and the ceiling belong to the
+  // The real builders (AGL-2501): the ordering and the ceiling belong to the
   // cards, not to this double.
   collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
     .collectionCeiling,

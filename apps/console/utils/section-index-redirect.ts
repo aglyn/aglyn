@@ -20,7 +20,7 @@ export type SearchParams = Record<string, string | string[] | undefined>
 
 /**
  * A hub index's redirect target, with the incoming query carried across
- * (AGL-693).
+ * (AGL-2501).
  *
  * ## Why the query has to survive
  *

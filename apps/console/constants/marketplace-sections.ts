@@ -108,7 +108,7 @@ const SECTIONS: ReadonlyArray<{
 ]
 
 /**
- * The Marketplace hub's sections for one org, in rail order (AGL-693).
+ * The Marketplace hub's sections for one org, in rail order (AGL-2501).
  *
  * One list, read by everything that has to agree about it: the layout draws
  * the rail from it, `useActiveSection` resolves the breadcrumb's last crumb
@@ -126,7 +126,7 @@ export function marketplaceSections(orgSlug: string): MarketplaceSection[] {
 }
 
 /**
- * Where a Stripe round trip lands (AGL-693).
+ * Where a Stripe round trip lands (AGL-2501).
  *
  * `connect.ts` and `checkout.ts` bake `${origin}/{orgSlug}/marketplace?…` into
  * the account-onboarding link and the checkout session, and Stripe holds those

@@ -21,7 +21,7 @@ import OrgPublishPanel from '../../../../../../components/org-publish-panel.comp
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Upload / Publish (AGL-693).
+ * Marketplace › Upload / Publish (AGL-2501).
  *
  * Seller-gated in the sections layout, which refuses the route rather than
  * only hiding the rail entry — a route can be typed whether or not a tab was

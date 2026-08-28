@@ -18,7 +18,7 @@
  */
 
 /**
- * The Marketplace hub's sections are ROUTES (AGL-693).
+ * The Marketplace hub's sections are ROUTES (AGL-2501).
  *
  * Three things follow from that and none of them followed from `?tab=`:
  * a section is reachable by typing its URL, the back button walks sections
@@ -128,7 +128,7 @@ function renderAt(pathname: string) {
   )
 }
 
-describe('Marketplace sections are routes (AGL-693)', () => {
+describe('Marketplace sections are routes (AGL-2501)', () => {
   beforeEach(() => {
     mockPathname = '/acme/marketplace/browse'
     mockPermissions = { publishToMarketplace: true }

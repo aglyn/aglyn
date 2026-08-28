@@ -73,7 +73,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
 
   /*
    * Ordered by the server and paged, rather than capped and re-sorted here
-   * (AGL-693, AGL-2292).
+   * (AGL-2501, AGL-2292).
    *
    * `limit(50)` carried no `orderBy`, so Firestore answered it in
    * DOCUMENT-ID order over ids from `createResourceUid()` — an arbitrary

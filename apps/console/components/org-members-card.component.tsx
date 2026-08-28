@@ -151,7 +151,7 @@ export function OrgMembersCard() {
   const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
 
   /**
-   * Pagination for the roster (AGL-693).
+   * Pagination for the roster (AGL-2501).
    *
    * An unbounded roster is fine at three members and is a page that never ends
    * at two hundred — and this is the one list in the console whose row count is

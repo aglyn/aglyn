@@ -54,7 +54,7 @@ export function registerWorkflowsConsole(): void {
       {
         label: 'Workflows',
         href: '/workflows',
-        // Sections as ROUTES (AGL-693): each is a real URL the shell
+        // Sections as ROUTES (AGL-2501): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read.
         sections: WORKFLOWS_CONSOLE_SECTIONS,
         // Reuse the existing release-flag nav-tab so staff-preview gating is

@@ -145,7 +145,7 @@ const countSpy = jest.fn(async (name: string) => {
  * It is here because the gate is what these cases are about: the number
  * `checkQuota` is handed is the thing a wrong count silently changes, and it
  * reaches no caption of its own. (The card's HEADER now renders the aggregate
- * too — AGL-693 — but the header is a display of the same number, not a second
+ * too — AGL-2501 — but the header is a display of the same number, not a second
  * source for it, so the spec still waits on the gate.)
  */
 const mockCheckQuota = jest.fn()
@@ -303,7 +303,7 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
     //
     // 501, not 500: the listener asks for one document PAST the ceiling so
     // that "this catalog is larger than the table" is a fact rather than a
-    // guess from `length === 500` (AGL-693). The probe row is never rendered,
+    // guess from `length === 500` (AGL-2501). The probe row is never rendered,
     // exported or counted, and the ceiling itself has not moved.
     expect(limitSpy).toHaveBeenCalledWith(501)
     expect(limitSpy).not.toHaveBeenCalledWith(3_000)

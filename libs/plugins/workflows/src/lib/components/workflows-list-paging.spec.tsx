@@ -17,7 +17,7 @@
 
 /**
  * The workflows list is ORDERED, CEILINGED and PAGED — and not paged by the
- * query (AGL-693).
+ * query (AGL-2501).
  *
  * It was `limit(100)` with no `orderBy`, every row rendered at once, and no
  * footer anywhere. Naming the order does not change WHICH hundred documents
@@ -174,7 +174,7 @@ const renderedNames = () =>
     .map((node) => (node.textContent ?? '').trim())
     .filter((text) => /^flow_\d{3}$/.test(text))
 
-describe('the workflows list is ceilinged and paged (AGL-693)', () => {
+describe('the workflows list is ceilinged and paged (AGL-2501)', () => {
   it('THE CONTROL: naming the order changes nothing, and that is the claim', () => {
     const bare = firestoreAnswer(workflowDocs, [{ limit: CEILING }])
     const named = firestoreAnswer(workflowDocs, [

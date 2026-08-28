@@ -119,7 +119,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: listener.fromCache,
   }),
   /*
-   * The experiments table pages its own query (AGL-693), and this file's
+   * The experiments table pages its own query (AGL-2501), and this file's
    * subject rides on the SAME hook result: `status` and `fromCache` are what
    * the seed guard reads, so the double has to carry them here too or every
    * case below refuses for the wrong reason.

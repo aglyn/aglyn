@@ -141,7 +141,7 @@ Run it **before** promoting to see what is owed, and again after deploying to
 confirm it converged. `PENDING DEPLOY` is the ledger; it is information, not a
 failure, until you have merged the batch and not deployed.
 
-#### ⚠️ Currently owed, and security-relevant (AGL-693)
+#### ⚠️ Currently owed, and security-relevant (AGL-2501)
 
 The live Firestore ruleset is **behind** `origin/production` and omits the
 org search-key deny-list. Until it is deployed, an org **admin or owner can

@@ -427,7 +427,7 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
              'erasureRequestedAt',
-             // AGL-693. The SEARCH KEYS behind the staff organization list.
+             // AGL-2501. The SEARCH KEYS behind the staff organization list.
              // Derived from `name` by `nameSearchFields` on every writer, so
              // there is no state in which a client should set one — and a
              // client that could would decide which name its organization is

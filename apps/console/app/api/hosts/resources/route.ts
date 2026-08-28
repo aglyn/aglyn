@@ -306,7 +306,7 @@ const RESOURCES: Record<string, {
       'createdAtMs',
       'updatedAtMs',
       /*
-       * Search keys, derived by the plugin that owns the catalog (AGL-693).
+       * Search keys, derived by the plugin that owns the catalog (AGL-2501).
        *
        * The console shell does not import the commerce plugin, so it cannot
        * flatten `variants[].sku` or normalize a name the way the products hub

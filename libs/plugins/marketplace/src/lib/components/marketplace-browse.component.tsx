@@ -467,7 +467,7 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   }, [listings, search, category, sort, publisherId, user?.uid])
 
   /*
-   * The shelf PAGES (AGL-693). It used to render every card the window held
+   * The shelf PAGES (AGL-2501). It used to render every card the window held
    * in one wall, so the only control over how much arrived at once was the
    * cap in the query — a number the reader cannot see and cannot change.
    *

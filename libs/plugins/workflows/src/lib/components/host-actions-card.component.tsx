@@ -208,7 +208,7 @@ export function HostActionsCard(props: {
     fromCache: actionsFromCache,
   } = useFirestoreCollection<any>(
     /*
-     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693) —
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
      * the same decision as the workflows card beside it.
      *
      * `limit(100)` alone is answered in DOCUMENT-ID order, so the window was a

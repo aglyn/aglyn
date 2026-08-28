@@ -164,7 +164,7 @@ export default function BookingsConsolePage({
    under `Suspense`, and applies the release-flag `FeatureGate`. Named routes
    (setup, media, …) still win over this catch-all segment.
 
-## Routed sections (AGL-693)
+## Routed sections (AGL-2501)
 
 A surface can be a hub of real URLs instead of a tab strip. Declare `sections`
 on the nav item and each becomes a route at `${href}/${section.id}`:

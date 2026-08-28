@@ -24,7 +24,7 @@ import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Installed (AGL-693).
+ * Marketplace › Installed (AGL-2501).
  *
  * A convenience, not the inventory (AGL-1011). Administering what you already
  * run belongs in the Plugins section; this stays so that uninstalling

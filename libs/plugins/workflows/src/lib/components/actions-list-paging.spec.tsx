@@ -16,7 +16,7 @@
  */
 
 /**
- * The actions list is ORDERED, CEILINGED and PAGED (AGL-693).
+ * The actions list is ORDERED, CEILINGED and PAGED (AGL-2501).
  *
  * It was `limit(100)` with no `orderBy`, every surviving row rendered at once,
  * and no footer anywhere. `ACTIONS_MAX_PER_HOST` is 500, so on a busy site the
@@ -235,7 +235,7 @@ const renderedNames = () =>
     .map((node) => (node.textContent ?? '').trim())
     .filter((text) => /^act_\d{3}$/.test(text))
 
-describe('the actions list is ceilinged and paged (AGL-693)', () => {
+describe('the actions list is ceilinged and paged (AGL-2501)', () => {
   it('THE CONTROL: naming the order changes nothing, and that is the claim', () => {
     const bare = firestoreAnswer(actionDocs, [{ limit: CEILING }])
     const named = firestoreAnswer(actionDocs, [

@@ -16,7 +16,7 @@
  */
 
 /**
- * ONE table footer, everywhere a list is paged (AGL-693).
+ * ONE table footer, everywhere a list is paged (AGL-2501).
  *
  * Left to themselves the lists disagree: layouts paged 5 at a time, components
  * and templates 10, the team list and the screens tree 25, with labels ranging

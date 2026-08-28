@@ -24,7 +24,7 @@ import { docsHelp } from '../../constants/docs-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 
 /**
- * A signpost, not a feature (AGL-693): plugin management lives on its own
+ * A signpost, not a feature (AGL-2501): plugin management lives on its own
  * page, and a reader who looks for it in Settings should be told where rather
  * than find nothing.
  */

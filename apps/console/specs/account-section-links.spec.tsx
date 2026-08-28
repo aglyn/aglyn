@@ -16,7 +16,7 @@
  */
 
 /**
- * The security-alert email's button lands on Security (AGL-693).
+ * The security-alert email's button lands on Security (AGL-2501).
  *
  * Manage Account's six panels are routes, and a route IS the link — the
  * `?tab=` parameter that let a panel be linked to is gone, along with the
@@ -56,7 +56,7 @@ jest.mock('next/navigation', () => {
   }
   return {
     ...jest.requireActual('next/navigation'),
-    // The index is a SERVER component now (AGL-693) and answers with an HTTP
+    // The index is a SERVER component now (AGL-2501) and answers with an HTTP
     // redirect instead of a client navigation. `redirect()` throws, and the
     // throw is part of the behavior — a stub that only recorded would let the
     // page carry on past a redirect it was supposed to stop at.
@@ -138,7 +138,7 @@ const arriveAt = async (Page: () => React.ReactElement | null, query: string) =>
   })
 }
 
-describe('the account sections and the links that name them (AGL-693)', () => {
+describe('the account sections and the links that name them (AGL-2501)', () => {
   beforeEach(() => {
     mockReplace.mockClear()
     mockRedirect.mockClear()
@@ -180,7 +180,7 @@ describe('the account sections and the links that name them (AGL-693)', () => {
 
   /**
    * The index is a SERVER component, so it is CALLED rather than rendered
-   * (AGL-693).
+   * (AGL-2501).
    *
    * That is the assertion, not an inconvenience: rendering it is what the old
    * client version required — ship a bundle, hydrate, resolve, navigate — and

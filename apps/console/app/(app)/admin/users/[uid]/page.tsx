@@ -230,7 +230,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const [detail, setDetail] = useState<UserDetail | null>(null)
   /*
-   * The audit trail PAGES (AGL-693). It is the one table on this page whose
+   * The audit trail PAGES (AGL-2501). It is the one table on this page whose
    * length is a function of how much the account has DONE rather than of what
    * it is: memberships and legal acceptances are a handful either way, and an
    * audited action is written every time staff act on this user or this user
@@ -274,7 +274,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     [allAuditEntries],
   )
   /**
-   * The audit trail's columns, in the console's row grammar (AGL-693).
+   * The audit trail's columns, in the console's row grammar (AGL-2501).
    *
    * This card and "Activity by this account" directly above it now render the
    * same table — `ActivityTable` owns the card, the grid, the toolbar, the

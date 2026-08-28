@@ -52,7 +52,7 @@ export interface MarketplaceScope {
 const MarketplaceScopeContext = createContext<MarketplaceScope | null>(null)
 
 /**
- * The hub state a section needs but must not own (AGL-693).
+ * The hub state a section needs but must not own (AGL-2501).
  *
  * Sections are separate routes, so anything two of them share has to live in
  * the layout that survives navigation between them. Held in context rather
@@ -69,7 +69,7 @@ export function useMarketplaceScope(): MarketplaceScope {
 }
 
 /**
- * Org marketplace (AGL-772), section by section (AGL-693).
+ * Org marketplace (AGL-772), section by section (AGL-2501).
  *
  * The app owns only the chrome — every section's body is the marketplace
  * plugin's widget or a console panel, and the app never imports the plugin.

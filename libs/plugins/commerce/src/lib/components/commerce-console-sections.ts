@@ -26,7 +26,7 @@ export type CommerceConsoleSectionId =
   | 'analytics'
 
 /**
- * The commerce console's sections, in rail order (AGL-693).
+ * The commerce console's sections, in rail order (AGL-2501).
  *
  * One list, read twice and never copied: `plugin.ts` registers it on the nav
  * item so the shell can route and gate each section, and the page switches its
@@ -51,7 +51,7 @@ export const COMMERCE_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
 
 /*
  * Rail ORDER decides where `/products` lands: the shell redirects a bare hub
- * URL to the first section in this list the reader may open (AGL-693). There
+ * URL to the first section in this list the reader may open (AGL-2501). There
  * is deliberately no separate default constant — a second place to say which
  * section is first is a second place for it to disagree with the rail.
  */

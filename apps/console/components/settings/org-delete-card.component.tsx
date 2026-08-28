@@ -34,7 +34,7 @@ import { useOrgScope } from '../../hooks/use-org-scope'
 /**
  * Self-serve organization deletion — owner-only (AGL-485).
  *
- * Extracted from the settings page when its sections became routes (AGL-693).
+ * Extracted from the settings page when its sections became routes (AGL-2501).
  * Sets the erasure flag; the hard delete runs through the guarded staff
  * pipeline after a seven-day hold and is cancelable until then.
  *

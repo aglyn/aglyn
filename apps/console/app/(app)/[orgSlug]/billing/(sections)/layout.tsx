@@ -33,7 +33,7 @@ import useCurrentOrg from '../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
 /**
- * Billing, section by section (AGL-693).
+ * Billing, section by section (AGL-2501).
  *
  * The page had grown to four unrelated jobs on one route — choosing a plan,
  * reading meters, settling invoices, and editing billing details — and mounted

@@ -26,7 +26,7 @@ import { SetupForm, useSetupScope } from '../layout'
 
 /**
  * Basic details — the site's name and address, and the cards that belong with
- * them (AGL-693).
+ * them (AGL-2501).
  *
  * Delete site is NOT here: it moved to the host Admin area's Danger zone
  * (AGL-1014), so destructive actions no longer sit in a page collaborators

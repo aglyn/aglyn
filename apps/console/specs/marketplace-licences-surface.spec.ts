@@ -38,7 +38,7 @@ import { join } from 'node:path'
 const read = (relative: string) =>
   readFileSync(join(__dirname, '..', relative), 'utf8')
 
-// Licences is a section ROUTE since AGL-693, so its wiring lives in the
+// Licences is a section ROUTE since AGL-2501, so its wiring lives in the
 // section list and its own page rather than in one page's tab array.
 const SECTIONS = 'constants/marketplace-sections.ts'
 const PAGE = 'app/(app)/[orgSlug]/marketplace/(sections)/licences/page.tsx'

@@ -156,7 +156,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     fromCache: functionsFromCache,
   } = useFirestoreCollection<any>(
     /*
-     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693) —
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-2501) —
      * the same decision as the variables card beside it, for the same two
      * reasons.
      *

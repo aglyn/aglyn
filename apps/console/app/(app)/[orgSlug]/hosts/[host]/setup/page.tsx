@@ -27,7 +27,7 @@ import {
 } from './setup-sections'
 
 /**
- * `/setup` is the section index and renders nothing of its own (AGL-693).
+ * `/setup` is the section index and renders nothing of its own (AGL-2501).
  *
  * A SERVER component, so the redirect is issued before any JavaScript ships —
  * both segments it needs are in `params`.

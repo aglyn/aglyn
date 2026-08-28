@@ -156,7 +156,7 @@ export function PendingErasuresCard() {
   const dueCount = pending?.dueCount ?? 0
   const reasonTooShort = reason.trim().length < 8
 
-  /* One row grammar, the console's (AGL-693). */
+  /* One row grammar, the console's (AGL-2501). */
   const erasureColumns: GridColDef[] = useMemo(
     () => [
       {

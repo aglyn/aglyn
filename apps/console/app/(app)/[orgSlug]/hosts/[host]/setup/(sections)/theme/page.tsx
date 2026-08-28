@@ -23,7 +23,7 @@ import { useSetupScope } from '../layout'
 
 /**
  * Theme — where the site's theme came from, what has been changed in it, and
- * the editor (AGL-693).
+ * the editor (AGL-2501).
  *
  * Gated on `hostHasEmitted` rather than on a success status (AGL-1066): a
  * refused listen can reach `'error'` while the persistent cache is still

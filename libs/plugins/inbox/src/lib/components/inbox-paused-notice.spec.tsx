@@ -59,7 +59,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
-  // The submissions table pages its own query (AGL-693). A double that stubs
+  // The submissions table pages its own query (AGL-2501). A double that stubs
   // only the collection hook leaves the page calling `undefined`, which fails
   // as a crash rather than as the notice being wrong.
   usePagedCollection: () => ({

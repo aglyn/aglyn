@@ -21,7 +21,7 @@ import OrgSellerPanel from '../../../../../../components/org-seller-panel.compon
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Sales (AGL-693).
+ * Marketplace › Sales (AGL-2501).
  *
  * The seller ledger. Reads the org's REVENUE, so the sections layout
  * refuses the route outright for a member without publish permission.

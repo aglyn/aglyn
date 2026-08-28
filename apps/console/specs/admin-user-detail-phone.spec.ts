@@ -72,7 +72,7 @@ const mockFirestore = {
     },
     /*
       The audit halves are `where(...).orderBy('at', 'desc').limit(10)` since
-      AGL-693 — an unordered `limit()` answered ten arbitrary entries and the
+      AGL-2501 — an unordered `limit()` answered ten arbitrary entries and the
       route then sorted that sample newest-first. A stub that stops at `limit`
       throws on the `orderBy` before it, and the route's 500 reads as a phone
       bug rather than a missing double.

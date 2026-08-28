@@ -380,7 +380,7 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
       ],
       { cwd: REPO_ROOT, encoding: 'utf8' },
     )
-    // The storage cap moved to the Usage section (AGL-693) — it is a control
+    // The storage cap moved to the Usage section (AGL-2501) — it is a control
     // over consumption and belongs beside the meter that shows why you would
     // want one. Same card, same wiring requirement, different file.
     expect(page).toMatch(/billing\/\(sections\)\/usage\/page\.tsx:[2-9]/)

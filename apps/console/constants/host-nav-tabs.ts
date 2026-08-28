@@ -145,7 +145,7 @@ export function hostNavTabItems(
       orgSlug,
       host,
       /*
-       * Straight to the hub's landing section when it has sections (AGL-693).
+       * Straight to the hub's landing section when it has sections (AGL-2501).
        *
        * The bare href redirects, and the redirect can only be a CLIENT one —
        * the plugin registry is a client-side module-global, so no server

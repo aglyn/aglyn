@@ -17,7 +17,7 @@
 
 /**
  * The inbox pages what it can page, and refuses to page what it cannot
- * (AGL-693).
+ * (AGL-2501).
  *
  * All three of this page's reads were `limit(200)` with no `orderBy`, each
  * followed by a client sort on `createdAt`. Firestore answers an unordered
@@ -267,7 +267,7 @@ const rowsOf = (table: Element) =>
 const nextPageButtons = () =>
   Array.from(document.querySelectorAll('button[aria-label="Go to next page"]'))
 
-describe('the submissions table walks the inbox (AGL-693)', () => {
+describe('the submissions table walks the inbox (AGL-2501)', () => {
   it('THE CONTROL: the two behaviours disagree at the page size', () => {
     const page = TABLE_PAGE_SIZE_DEFAULT + 1
     const oldWindow = firestoreAnswer(submissionDocs, [{ limit: page }]).sort(
@@ -296,7 +296,7 @@ describe('the submissions table walks the inbox (AGL-693)', () => {
   })
 })
 
-describe('the contacts table cannot be paged by the query (AGL-693)', () => {
+describe('the contacts table cannot be paged by the query (AGL-2501)', () => {
   it('THE CONTROL: the fixture puts a duplicated person on two pages', () => {
     // Without this the dedupe assertion below would hold trivially — a fixture
     // whose overlapping rows all land on page one cannot tell a whole-window

@@ -180,7 +180,7 @@ describe('the org detail page uses it', () => {
 
 describe('the billing sections pair their narrow cards (AGL-2486)', () => {
   /*
-   * Billing became four routed sections (AGL-693), so the band this describes
+   * Billing became four routed sections (AGL-2501), so the band this describes
    * is split: the wide/narrow masonry pair and the usage cards moved to the
    * Usage section, and the plan-side cards stayed with Plan. Both are read,
    * because the layout rule is about the CARDS and it has to hold wherever
@@ -360,7 +360,7 @@ describe('the billing sections pair their narrow cards (AGL-2486)', () => {
   })
 
   it('the invoices section stacks its two cards rather than banding them', () => {
-    // `billing-history` left CardColumns when billing was split (AGL-693).
+    // `billing-history` left CardColumns when billing was split (AGL-2501).
     // Invoices holds exactly two cards — an outstanding-balance card and a
     // wide history TABLE — and a table earns its width, so a balanced
     // two-column flow would be the wrong shape here. Asserted rather than

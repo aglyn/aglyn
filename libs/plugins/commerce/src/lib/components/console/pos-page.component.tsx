@@ -101,7 +101,7 @@ export function PosConsolePage({
     () => {
       /*
        * The till's grid, narrowed by the QUERY rather than by the rows it
-       * happened to fetch (AGL-693, AGL-2292).
+       * happened to fetch (AGL-2501, AGL-2292).
        *
        * `limit(500)` with no `orderBy` is document-id order over
        * `createResourceUid()` — an arbitrary five hundred. Both filters then
@@ -341,7 +341,7 @@ export function PosConsolePage({
    * The barcode wedge: a scanner types the code and presses Enter.
    *
    * A LOOKUP against the whole catalog, not a scan of the rows on screen
-   * (AGL-693). It used to walk `products` — the grid's `limit(500)` window —
+   * (AGL-2501). It used to walk `products` — the grid's `limit(500)` window —
    * so a shop whose catalog was larger than that had items whose barcode
    * simply did nothing when scanned. At a till, holding the goods, with a
    * customer waiting.

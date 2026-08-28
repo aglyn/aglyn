@@ -18,7 +18,7 @@
  */
 
 /**
- * What one commerce console load actually READS (AGL-693).
+ * What one commerce console load actually READS (AGL-2501).
  *
  * The console page is a six-SECTION hub, and the reader looks at one section.
  * The question this answers is what the other five cost, and it has to be
@@ -250,7 +250,7 @@ async function renderConsole(section: string) {
   return view
 }
 
-describe('commerce console read cost (AGL-693)', () => {
+describe('commerce console read cost (AGL-2501)', () => {
   afterEach(() => {
     mockSection = ''
     mockListens.length = 0
@@ -296,7 +296,7 @@ describe('commerce console read cost (AGL-693)', () => {
   })
 
   /*
-   * `/products` itself, which names no section (AGL-693).
+   * `/products` itself, which names no section (AGL-2501).
    *
    * The page renders nothing and reads nothing. The REDIRECT itself is the
    * shell's — it lives above the `lazy()` boundary so a bare hub URL never

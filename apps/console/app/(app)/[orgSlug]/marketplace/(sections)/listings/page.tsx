@@ -21,7 +21,7 @@ import OrgSellerPanel from '../../../../../../components/org-seller-panel.compon
 import { useMarketplaceScope } from '../layout'
 
 /**
- * Marketplace › Listings (AGL-693).
+ * Marketplace › Listings (AGL-2501).
  *
  * Everything this org has published, and the state each version is in.
  */

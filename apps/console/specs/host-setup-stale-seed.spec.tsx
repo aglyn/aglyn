@@ -274,7 +274,7 @@ const SECTION_PAGES: Record<string, () => JSX.Element> = {
 
 /**
  * The layout with ONE section inside it, which is how Next mounts them
- * (AGL-693). Setup's sections are routes, so the page under test is the
+ * (AGL-2501). Setup's sections are routes, so the page under test is the
  * section — the layout is the shared scope around it.
  */
 const HostSetup = ({ section = 'details' }: { section?: string } = {}) => {
@@ -308,7 +308,7 @@ const click = (name: string) =>
   fireEvent.click(screen.getAllByRole('button', { name })[0])
 
 /*
- * Sections are ROUTES (AGL-693), so a test drives the section it is about.
+ * Sections are ROUTES (AGL-2501), so a test drives the section it is about.
  * The tab strip used to render every panel at once, which let one render serve
  * all three of these suites; a route mounts one page, which is the property the
  * read meter exists to hold.

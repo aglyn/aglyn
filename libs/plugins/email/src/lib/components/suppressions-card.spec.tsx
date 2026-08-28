@@ -59,7 +59,7 @@ const FIRESTORE = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   /*
-   * The table pages its own query (AGL-693), and the SERVER decides the order.
+   * The table pages its own query (AGL-2501), and the SERVER decides the order.
    * The double sorts the way `orderBy('createdAt','desc')` would, so "newest
    * first" is a property of the answer rather than of a client sort the card
    * no longer performs.
@@ -95,7 +95,7 @@ jest.mock('firebase/firestore', () => ({
   where: (field: string, op: string, value: unknown) => ({ field, op, value }),
   /*
    * The reason breakdown is a SERVER AGGREGATE now, not a tally of the rows on
-   * screen (AGL-693) — a chip that counted the page would read the page size
+   * screen (AGL-2501) — a chip that counted the page would read the page size
    * on a long list. The double answers from the same fixture the table is
    * answered from, so the two cannot agree by coincidence.
    */
@@ -149,7 +149,7 @@ beforeEach(() => {
   suppressionDocs = [
     // `createdAt` on every row, because both writers stamp it when the
     // document is created — which is why the list can be ordered on it
-    // without dropping anyone (AGL-693). `suppressedAt` is the restamp.
+    // without dropping anyone (AGL-2501). `suppressedAt` is the restamp.
     {
       $id: 'hash-a',
       email: 'dana@example.com',

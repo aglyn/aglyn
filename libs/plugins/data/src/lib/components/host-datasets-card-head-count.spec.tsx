@@ -50,7 +50,7 @@
  *     600,000-document collection warned about "its 500 documents".
  *  4. THE LISTS KEEP THEIR CAPS. The count and the list are different
  *     questions; fixing the first must not start streaming the second. The
- *     record table's cap is now its PAGE (AGL-693), which is the same
+ *     record table's cap is now its PAGE (AGL-2501), which is the same
  *     contract with a smaller number — and a number that must not silently
  *     grow back into a 500-row read on a card nobody has scrolled.
  *  5. A MUTATION RE-READS THE COUNT. A one-shot goes stale exactly where
@@ -156,7 +156,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     }
   },
   /*
-   * The records table's window (AGL-693), modelled rather than stubbed: the
+   * The records table's window (AGL-2501), modelled rather than stubbed: the
    * real hook widens the query to cover page 0..n plus one probe row and
    * slices the page out of the answer, and the arithmetic between "what was
    * asked for" and "what may be rendered" is exactly what these cases read.
@@ -385,7 +385,7 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     // entire point.
     expect(limitSpy).toHaveBeenCalledWith(100)
     // The table's cap is its PAGE plus the probe row that decides `hasMore`
-    // (AGL-693). Read off the shared constant rather than written as a
+    // (AGL-2501). Read off the shared constant rather than written as a
     // number, so the rule outlives whatever the default becomes.
     expect(limitSpy).toHaveBeenCalledWith(TABLE_PAGE_SIZE_DEFAULT + 1)
     // And explicitly NOT the old window. Five hundred documents read and
@@ -425,7 +425,7 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
 
     fireEvent.click(screen.getAllByText('Delete')[0])
     await waitFor(() => expect(confirm).toHaveBeenCalled())
-    // The loaded rows still stand in — since AGL-693 that is one PAGE rather
+    // The loaded rows still stand in — since AGL-2501 that is one PAGE rather
     // than a 500-row window, which is a weaker lower bound in the same safe
     // direction. What may not happen is a defaulted 0: that would delete the
     // document warning from a destructive prompt entirely, and would answer

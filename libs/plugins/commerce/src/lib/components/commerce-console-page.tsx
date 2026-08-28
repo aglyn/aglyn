@@ -44,7 +44,7 @@ import TaxSettingsCard from './console/tax-settings-card.component'
 
 /**
  * The body of one commerce section, built only when that section is the one
- * being read (AGL-693).
+ * being read (AGL-2501).
  *
  * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
  * would CONSTRUCT all six every render, and each card opens its Firestore
@@ -170,7 +170,7 @@ function sectionBody(
  * ConsoleMediaPickerProvider (the media library is org/session coupled and
  * stays in the app).
  *
- * ## Sections are ROUTES (AGL-693)
+ * ## Sections are ROUTES (AGL-2501)
  *
  * The six sections hold thirty-two Firestore listens between them, and a tab
  * strip mounts every panel: opening Catalog also subscribed the orders,

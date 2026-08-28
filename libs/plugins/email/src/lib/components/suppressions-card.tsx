@@ -145,7 +145,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   const { confirm } = useConfirmationContext()
 
   /*
-   * The window IS the query, ordered by the server (AGL-693, AGL-2292).
+   * The window IS the query, ordered by the server (AGL-2501, AGL-2292).
    *
    * This was `limit(500)` with no `orderBy`, sorted by date in the browser.
    * Firestore answers an unordered limit in DOCUMENT-ID order, and an entry
