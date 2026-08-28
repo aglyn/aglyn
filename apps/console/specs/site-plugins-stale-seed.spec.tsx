@@ -61,8 +61,20 @@ const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
 }))
+/*
+ * Every component the card takes from this module, not just the card shell.
+ * A partial mock returns `undefined` for the rest, and React renders that as
+ * "Element type is invalid" pointing at the PARENT — so the row link and its
+ * chevron, added long after this suite was written, failed here as though the
+ * card itself were broken. `AppLink` renders an anchor so a link assertion
+ * still has something to read.
+ */
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  AppLink: ({ children, href }: { children: ReactNode; href?: string }) => (
+    <a href={href}>{children}</a>
+  ),
+  MdiIcon: () => <span aria-hidden="true" />,
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
