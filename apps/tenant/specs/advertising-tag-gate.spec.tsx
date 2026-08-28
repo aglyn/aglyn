@@ -788,10 +788,24 @@ describe('the advertising-tag gate', () => {
     const inventorySource = () =>
       readFileSync(resolve(__dirname, '../../..', INVENTORY), 'utf8')
 
-    /** Vendor prefixes with no cookie name declared for them. */
+    /**
+     * Vendor prefixes with no cookie name declared for them.
+     *
+     * Reads the `names: [...]` arrays rather than every quoted underscore in
+     * the file. The old pattern was `/'(_[A-Za-z0-9_<>]+)'/` — every
+     * advertising cookie it had ever seen began with one, and LinkedIn's do
+     * not: `li_sugr`, `bcookie`, `lidc`, `UserMatchHistory`. It failed CLOSED,
+     * which is the right direction, but it could not see a correct disclosure
+     * and so could never go green on that vendor.
+     *
+     * Scoping to the arrays is what lets the pattern widen safely. Matching
+     * any quoted word in the file would fail OPEN instead — a vendor's name
+     * mentioned in a docblock would read as a declared cookie.
+     */
     const undisclosed = (source: string): string[] => {
-      const declared = [...source.matchAll(/'(_[A-Za-z0-9_<>]+)'/g)].map(
-        (match) => match[1],
+      const declared = [...source.matchAll(/names:\s*\[([^\]]*)\]/g)].flatMap(
+        (block) =>
+          [...block[1].matchAll(/'([^']+)'/g)].map((match) => match[1]),
       )
       const missing: string[] = []
       for (const vendor of ADVERTISING_VENDORS) {

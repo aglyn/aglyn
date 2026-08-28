@@ -181,9 +181,11 @@ const trackingSchema: FormSchema = {
       such component; a schema is not the place to discover that.
     */
     subheader:
-      'Both of these load ONLY after a visitor’s consent state allows ' +
-      'analytics — set the posture under SEO → Cookie consent. Advertising ' +
-      'stays denied unless the visitor grants it, wherever they are.',
+      'These load only where a visitor’s consent state allows them — the ' +
+      'posture is the Cookie consent card below. In the UK, EU and EEA, and ' +
+      'anywhere the region cannot be determined, nothing loads until the ' +
+      'visitor accepts. Elsewhere they load from the first visit and the ' +
+      'visitor can turn them off at any time.',
     help: docsHelp('analytics', {
       anchor: '#google-analytics',
       excerpt:
@@ -238,6 +240,110 @@ const trackingSchema: FormSchema = {
           type: FieldValidatorType.PATTERN,
           pattern: Aglyn.GTM_CONTAINER_ID_PATTERN.source,
           message: 'Looks like GTM-XXXXXXX — that is the shape GTM uses',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      /*
+       * The advertising id, which had no control at all (AGL-1152).
+       *
+       * A site could reach advertising only THROUGH an analytics tool: the two
+       * fields above are the whole of this card, and the pixel id they do not
+       * carry is what the loader actually mounts on. So an operator who wanted
+       * ads and no analytics had no route, and one who wanted a Meta pixel had
+       * none at any price — the field existed on the document and nowhere in
+       * the product.
+       *
+       * It also decides the site's CONTENT SECURITY POLICY. `runsMeasurement`
+       * is what concatenates the advertising origins into `img-src`, and it
+       * reads this field: a pixel configured here is a pixel the policy then
+       * permits, and one configured nowhere is a beacon the browser refuses.
+       */
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.adTags.meta',
+      label: 'Meta pixel ID',
+      helperText:
+        'Optional — the numeric ID from Meta Events Manager. Advertising is ' +
+        'a separate choice from analytics: in the UK, EU and EEA it waits ' +
+        'for an accept; elsewhere it runs from the first visit. Withdrawing ' +
+        'removes the tag and clears its cookies.',
+      help: docsHelp('analytics', {
+        anchor: '#google-analytics',
+        excerpt:
+          'Run a Meta pixel on your site for ads and remarketing. It waits ' +
+          'for advertising consent, which is a separate choice from ' +
+          'analytics.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          // The SAME expression the loader tests before it will mount
+          // anything, so a saved id is one that will actually load.
+          pattern: Aglyn.META_PIXEL_ID_PATTERN.source,
+          message: 'A Meta pixel ID is 8–20 digits',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      /*
+       * Google Ads WITHOUT Analytics or Tag Manager (AGL-1152).
+       *
+       * This vendor used to be sweep-only — its cookies could be cleared and
+       * nothing could be mounted — so the only way to run Google Ads was to
+       * adopt one of the two products above. `gtag.js` with an `AW-` id is
+       * Google's own install for Ads on its own.
+       *
+       * A separate field from the measurement ID, because they are separate
+       * products with separate ids: one field accepting either would load an
+       * analytics id into an ads tag and report nothing.
+       */
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.adTags.google-ads',
+      label: 'Google Ads conversion ID',
+      helperText:
+        'Optional — e.g. AW-123456789, from Google Ads. Runs without ' +
+        'Analytics or Tag Manager. Consent works the same way as the pixel ' +
+        'above.',
+      help: docsHelp('analytics', {
+        anchor: '#google-analytics',
+        excerpt:
+          'Run Google Ads conversion tracking and remarketing on your site ' +
+          'without needing Google Analytics or Tag Manager.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.GOOGLE_ADS_ID_PATTERN.source,
+          message: 'Looks like AW-123456789 — that is the shape Ads uses',
+        },
+      ],
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.adTags.linkedin',
+      label: 'LinkedIn partner ID',
+      helperText:
+        'Optional — the numeric partner ID from LinkedIn Campaign Manager. ' +
+        'Consent works the same way. LinkedIn also sets cookies on its own ' +
+        'domain, which only LinkedIn can clear.',
+      help: docsHelp('analytics', {
+        anchor: '#google-analytics',
+        excerpt:
+          'Run the LinkedIn Insight Tag on your site for ads and ' +
+          'remarketing, under the same consent as the other advertising ' +
+          'tags.',
+      }),
+      type: 'text',
+      validate: [
+        {
+          type: FieldValidatorType.PATTERN,
+          pattern: Aglyn.LINKEDIN_PARTNER_ID_PATTERN.source,
+          message: 'A LinkedIn partner ID is 4–10 digits',
         },
       ],
       FormFieldGridProps: { size: { xs: 12, sm: 6 } },
@@ -1062,18 +1168,32 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                           </>
                         ) : null}
                         {schema.id === 'hostSeo' ? (
-                          <>
-                            <div style={{ marginTop: 24 }}>
-                              <SearchIndexingCard hostId={hostId} />
-                            </div>
-                            {/* Visitor consent tool (AGL-1498). Beside the
-                                GA field it governs: same tab, its own card
-                                for the same submit-validation reason as the
-                                indexing switch above. */}
-                            <div style={{ marginTop: 24 }}>
-                              <ConsentBannerCard hostId={hostId} />
-                            </div>
-                          </>
+                          <div style={{ marginTop: 24 }}>
+                            <SearchIndexingCard hostId={hostId} />
+                          </div>
+                        ) : null}
+                        {schema.id === 'hostTracking' ? (
+                          /*
+                           * Beside the fields it governs (AGL-1498).
+                           *
+                           * Its own comment always said "same tab as the GA
+                           * field" and it was on SEO — the intent was right
+                           * and the tab moved out from under it when Tracking
+                           * was split off. A reader setting a measurement id
+                           * had to be told, in the card above, to go to
+                           * another tab to decide whether it may load; that
+                           * cross-reference existed only because these two
+                           * were apart.
+                           *
+                           * Its own card rather than fields on the Tracking
+                           * schema, for the same submit-validation reason as
+                           * the indexing switch: a toggle that writes on
+                           * change does not belong inside a form that writes
+                           * on save.
+                           */
+                          <div style={{ marginTop: 24 }}>
+                            <ConsentBannerCard hostId={hostId} />
+                          </div>
                         ) : null}
                       </TabPanel>
                     ))}

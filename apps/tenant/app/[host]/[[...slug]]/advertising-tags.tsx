@@ -86,6 +86,20 @@ export interface AdvertisingTagsProps {
   ready?: boolean
 }
 
+/**
+ * Is a library matching `needle` already in the document?
+ *
+ * Read at RENDER time rather than in an effect: the decision is whether to
+ * emit a `<Script>` at all, and by the time an effect could answer, Next has
+ * already appended it. `document` is guarded because this component renders on
+ * the server too, where nothing is mounted and the honest answer is "no" — the
+ * client render then re-evaluates with the real document.
+ */
+function sharedLibraryPresent(needle: string): boolean {
+  if (typeof document === 'undefined') return false
+  return Boolean(document.querySelector(`script[src*="${needle}"]`))
+}
+
 export default function AdvertisingTags({
   host,
   stored,
@@ -142,12 +156,20 @@ export default function AdvertisingTags({
           >
             {vendor.bootSnippet(accountId)}
           </Script>
-          <Script
-            id={`ad-tag-${vendor.id}-src`}
-            strategy="afterInteractive"
-            {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
-            src={vendor.scriptSrc}
-          />
+          {/* Skipped when another loader already brought this library in
+              (AGL-1152). Google Ads shares `gtag.js` with the GA4 measurement
+              id, so a site with both configured would fetch it twice and
+              define `gtag()` twice — and the boot above would be the second
+              voice in a consent conversation the first one already had. One
+              library, two `config` calls, is how gtag carries two products. */}
+          {vendor.sharesLibrary && sharedLibraryPresent(vendor.sharesLibrary) ? null : (
+            <Script
+              id={`ad-tag-${vendor.id}-src`}
+              strategy="afterInteractive"
+              {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
+              src={vendor.scriptSrc}
+            />
+          )}
         </Fragment>
       ))}
     </>

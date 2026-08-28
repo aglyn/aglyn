@@ -948,6 +948,15 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   // Meta pixel: the beacon and the loader that installs it.
   'https://www.facebook.com',
   'https://connect.facebook.net',
+  /*
+   * LinkedIn Insight Tag (AGL-1152): the library host and the beacon it
+   * posts to. `px.ads.linkedin.com` is where the tracking pixel lands and
+   * `www.linkedin.com` is where the tag redirects it for logged-in members,
+   * so allowing only the first leaves that population reporting.
+   */
+  'https://snap.licdn.com',
+  'https://px.ads.linkedin.com',
+  'https://www.linkedin.com',
   // Every Google country domain, for the remarketing pixel. `www.google.com`
   // is the first entry of that list, so it is not repeated here.
   ...GOOGLE_CCTLD_ORIGINS,

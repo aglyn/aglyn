@@ -521,6 +521,21 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'Page views and conversion events from a site visitor who explicitly allowed advertising on a site whose owner turned the question on, with the identifiers the pixel sets.',
   },
 
+  // MARK – LinkedIn
+
+  'snap.licdn.com': {
+    disposition: 'subprocessor',
+    entity: 'LinkedIn Corporation',
+    region: 'United States',
+    purpose:
+      'Advertising measurement, where a site owner has enabled the advertising question and configured a partner id',
+    publishedOn: '2026-08-27',
+    reason:
+      'The LinkedIn Insight Tag loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`. Disclosed by CAPABILITY rather than by rollout, the same standing rule Meta is declared under — the code can load it, so the document says so.',
+    dataReceived:
+      'Page views and conversion events from a site visitor whose consent state permits advertising on a site whose owner turned the question on, with the identifiers the tag sets. LinkedIn additionally sets cookies on its own domain, which a page on our origin cannot read or clear.',
+  },
+
   // MARK – Requests that are made, and are still not Annex III rows
   //
   // Two admissible reasons only: nothing personal reaches the host, or the

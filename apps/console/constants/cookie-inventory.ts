@@ -398,6 +398,20 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
     purpose:
       'Shows you our ads on other sites, and measures whether they worked',
   },
+  'LinkedIn Insight Tag': {
+    names: [
+      'li_sugr',
+      'UserMatchHistory',
+      'AnalyticsSyncHistory',
+      'bcookie',
+      'lidc',
+      'li_gc',
+    ],
+    loaderToken: 'LINKEDIN_INSIGHT_VENDOR',
+    surface: `${WORKSPACE_DOMAIN} and customer sites whose owner configured a LinkedIn partner id and enabled the advertising question`,
+    purpose:
+      'Shows you our ads on LinkedIn, and measures whether they worked',
+  },
   Stripe: {
     names: ['__stripe_mid', '__stripe_sid'],
     loaderToken: 'loadStripe',
