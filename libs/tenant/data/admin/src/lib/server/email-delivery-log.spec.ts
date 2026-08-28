@@ -30,15 +30,27 @@ import { emailSuppressionKey } from './email-suppression'
  * A LOCAL DOUBLE, not `test-firestore`.
  *
  * That fake is deliberately thin — its own header says ordering and limits are
- * not what its specs are about — and this module depends on four things it
- * does not model: subcollections, `runTransaction`, `FieldValue.increment`,
- * and dotted field paths in a merge-set. Every one of those is load-bearing
- * here (a dotted path is what stops each event replacing the whole
- * `timestamps` map), so a double that silently ignored them would turn this
- * file into a green test over behaviour nothing checked.
+ * not what its specs are about — and this module depends on three things it
+ * does not model: subcollections, `runTransaction` and `FieldValue.increment`.
+ * All three are load-bearing here, so a double that ignored them would turn
+ * this file into a green test over behaviour nothing checked.
  *
  * Widening the shared fake instead would change the ground under every other
  * spec that uses it, which is not a trade worth making for one module.
+ *
+ * ## A DOUBLE THAT WAS WRONG THE SAME WAY THE CODE WAS
+ *
+ * This fake originally treated a dotted key in a merge-set as a field PATH,
+ * because the code under test wrote one. Real Firestore does not: `set()`
+ * with `merge` treats `'timestamps.sent'` as a field whose NAME contains a
+ * dot, and only `update()` reads it as a path. So the write landed in a
+ * top-level field nothing reads, `timestamps` stayed empty, and the staff
+ * card showed messages with no send date — while every assertion here passed,
+ * because the double reproduced the bug faithfully.
+ *
+ * It was caught by running the real import against the real database. The
+ * double now models what Firestore actually does — dots are literal, nested
+ * maps deep-merge — so the same mistake fails here first.
  *=========================================*/
 
 interface FakeDoc {
@@ -68,11 +80,22 @@ function applyWrite(
       next[key] = { serverTimestamp: true }
       continue
     }
-    if (key.includes('.')) {
-      const [head, ...rest] = key.split('.')
-      next[head] = { ...(next[head] ?? {}), [rest.join('.')]: value }
+    // Real `set({merge:true})` merges nested MAPS at depth, keeping the
+    // siblings the write did not mention.
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      next[key] &&
+      typeof next[key] === 'object' &&
+      !Array.isArray(next[key])
+    ) {
+      next[key] = { ...next[key], ...value }
       continue
     }
+    // A dot in a key is part of the NAME here, exactly as Firestore treats it
+    // in a merge-set. Reproducing that is the whole point: it is what makes a
+    // dotted write visible as the mistake it is rather than silently working.
     next[key] = value
   }
   return next
@@ -211,9 +234,11 @@ describe('recordEmailDeliveryEvent', () => {
     await recordEmailDeliveryEvent(event({ type: 'opened', at: 3_000 }), firestore)
 
     const stored = firestore.read('person@example.com', 'msg_1')
-    // A dotted field path per state. `{ timestamps: { opened } }` would
-    // REPLACE the map, so each event would erase the one before it and the
-    // row would show only whatever landed last.
+    // Every state, in one map. Written as a nested map because merge deep-
+    // merges those and keeps the siblings; a dotted key would instead create
+    // three separate fields named `timestamps.sent`, `timestamps.delivered`
+    // and `timestamps.opened` that no reader ever looks at — which is exactly
+    // what shipped, and what the live import surfaced.
     expect(stored?.timestamps).toEqual({
       sent: 1_000,
       delivered: 2_000,

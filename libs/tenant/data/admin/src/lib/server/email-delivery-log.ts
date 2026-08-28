@@ -164,7 +164,17 @@ export async function recordEmailDeliveryEvent(
         provider: event.provider,
         to: event.to,
         status: worstDeliveryStatus(existing.status, event.type),
-        [`timestamps.${event.type}`]: event.at,
+        /*
+         * A NESTED MAP, not a dotted key.
+         *
+         * `set({merge:true})` treats `'timestamps.sent'` as a field whose
+         * NAME contains a dot — only `update()` reads a dot as a path. So the
+         * dotted form wrote a top-level field nothing reads and left
+         * `timestamps` empty, which the staff card rendered as a message with
+         * no send date. What merge DOES do is merge nested maps at depth, so
+         * this form keeps every sibling state rather than replacing them.
+         */
+        timestamps: { [event.type]: event.at },
         lastEventAtMs: event.at,
         updatedAt: FieldValue.serverTimestamp(),
       }
@@ -272,9 +282,10 @@ export async function recordEmailDeliverySnapshot(
       if (snapshot.subject && !existing.subject) update.subject = snapshot.subject
       // Only when the event feed has not already dated the send itself. An
       // imported `created_at` is the provider's, and so is the webhook's, but
-      // the webhook's arrived with the rest of that message's truth.
+      // the webhook's arrived with the rest of that message's truth. Nested
+      // map rather than a dotted key, for the reason recorded above.
       if (!existing.timestamps?.sent) {
-        update['timestamps.sent'] = snapshot.sentAt
+        update.timestamps = { sent: snapshot.sentAt }
       }
 
       transaction.set(ref, update, { merge: true })
