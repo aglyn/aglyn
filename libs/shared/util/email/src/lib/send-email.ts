@@ -29,6 +29,7 @@ import {
   isRefusablePriority,
   resolveSendPriority,
 } from './send-rate'
+import { renderTextEmailHtml } from './text-email-html'
 
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -44,7 +45,14 @@ export interface SendEmailOptions {
   subject: string
   /** Plain-text body. Supply at least one of `text` or `html`. */
   text?: string
-  /** HTML body. Supply at least one of `text` or `html`. */
+  /**
+   * HTML body. Supply at least one of `text` or `html`.
+   *
+   * Omitted, one is synthesized from `text` so the message always carries an
+   * HTML part — a text-only message has no anchors, so its links are inert in
+   * the inbox and Resend's click tracking has nothing to rewrite. See
+   * `text-email-html.ts`.
+   */
   html?: string
   /** Extra MIME headers, e.g. `List-Unsubscribe`. */
   headers?: Record<string, string>
@@ -383,7 +391,16 @@ export async function sendEmail(
         to,
         subject: options.subject,
         ...(options.text ? { text: options.text } : {}),
-        ...(options.html ? { html: options.html } : {}),
+        // The HTML part, from the caller when it has one and otherwise
+        // synthesized from `text`. A message with no HTML part carries no
+        // anchors, so its links are not links in the inbox AND Resend has
+        // nothing to rewrite for click tracking — see `text-email-html.ts`.
+        // The caller always wins: this can only fill a gap, never override a
+        // designed template.
+        ...(() => {
+          const html = options.html || renderTextEmailHtml(options.text ?? '', options.subject)
+          return html ? { html } : {}
+        })(),
         ...(options.headers ? { headers: options.headers } : {}),
         // The caller's tags plus the `context` tag (AGL-2407). Caller-first
         // so a sender that stamps its own `context` keeps it: a tag list with

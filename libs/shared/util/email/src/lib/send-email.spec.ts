@@ -172,6 +172,7 @@ describe('sendEmail', () => {
         to: ['a@example.com'],
         subject: 'Hi',
         text: 'Body',
+        html: expect.stringContaining('<p style="margin:0 0 16px;">Body</p>'),
       })
     })
 
@@ -184,6 +185,49 @@ describe('sendEmail', () => {
       expect(body).not.toHaveProperty('headers')
       expect(body).not.toHaveProperty('tags')
       expect(body).not.toHaveProperty('reply_to')
+    })
+
+    /*
+     * THE SYNTHESIZED HTML PART.
+     *
+     * Every send in the product went out as `"html": ""`, because twelve
+     * senders have no HTML path and the other twenty-seven only produce one
+     * when a staff-designed template is published. A message with no HTML
+     * part has no anchors, so Resend's click tracking — which works by
+     * rewriting `<a href>` — could never record a single click no matter how
+     * long anyone waited, and the URLs arrived as inert text.
+     *
+     * Asserted on the POSTED BODY, for the same reason the `context` tag
+     * above is: HTML rendered correctly and never attached is exactly the
+     * shape the defect had.
+     */
+    it('synthesizes an html part from text when the caller supplies none', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Reset your password',
+        text: 'Choose a new one here:\n\nhttps://app.aglyn.com/reset?a=1&b=2',
+      })
+
+      const html = String(lastBody(fetchMock).html)
+      // The link is an anchor, and the query separator is an entity rather
+      // than a raw `&` — which is what an href attribute must carry.
+      expect(html).toContain(
+        '<a href="https://app.aglyn.com/reset?a=1&amp;b=2"',
+      )
+      expect(html).toContain('<title>Reset your password</title>')
+    })
+
+    it('never overrides html the caller built', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        text: 'Body https://example.com',
+        html: '<p>Designed</p>',
+      })
+
+      expect(lastBody(fetchMock).html).toBe('<p>Designed</p>')
     })
 
     it('passes through html, headers, tags and reply-to', async () => {
