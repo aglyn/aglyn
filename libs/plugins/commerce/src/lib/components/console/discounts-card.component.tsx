@@ -160,7 +160,19 @@ export function DiscountsCard(props: DiscountsCardProps) {
         : discount.kind === 'fixed'
           ? `$${((discount.valueCents ?? 0) / 100).toFixed(2)} off`
           : 'Free shipping'
+    const scopeCount = Array.isArray(discount.productIds)
+      ? discount.productIds.length
+      : 0
     const extras = [
+      // THE SCOPE, SAID OUT LOUD (AGL-2517). A discount can cover named
+      // products rather than the catalog, and the card showed no sign of it —
+      // so a merchant could not tell a store-wide discount from a scoped one,
+      // and had no way to understand why a scoped one takes less off than the
+      // basket total. "Store-wide" is stated rather than left blank, because a
+      // silent absence is what a narrower scope would also look like.
+      scopeCount > 0
+        ? `${scopeCount} product${scopeCount === 1 ? '' : 's'} only`
+        : 'store-wide',
       discount.minSubtotalCents
         ? `min $${(discount.minSubtotalCents / 100).toFixed(0)}`
         : '',

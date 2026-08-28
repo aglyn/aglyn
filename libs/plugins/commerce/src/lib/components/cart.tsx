@@ -777,9 +777,20 @@ export const schema: Aglyn.ComponentSchema<CartProps> = {
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
+      // The PROP KEY stays `showCoupon` — it is persisted in every saved page
+      // that uses this component, and renaming it would blank the control on
+      // all of them. Only what the merchant reads changes (AGL-2518).
       name: 'showCoupon',
-      label: 'Show coupon field',
-      description: 'Codes are managed on the Products page.',
+      // ONE CONTROL, TWO FEATURES, AND IT ONLY NAMED ONE. This checkbox gates
+      // the gift-card field as well as the coupon field, so a merchant who
+      // wanted gift cards had no reason to look here — gift cards are only
+      // redeemable in the cart, and this is the switch that shows the box.
+      // A control named for one feature that also gates another is how a
+      // shipped feature stays invisible.
+      label: 'Show coupon and gift card fields',
+      description:
+        'One checkbox for both. Coupon codes and gift cards are managed on ' +
+        'the Products page.',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
     {
@@ -812,7 +823,8 @@ export const presets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Cart page',
     pluginId: BUNDLE_ID,
-    description: 'Full cart with quantities, coupon, and checkout',
+    description:
+      'Full cart with quantities, coupon, gift card, and checkout',
     category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
     data: {

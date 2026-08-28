@@ -66,6 +66,15 @@ export interface DiscountContext {
   subtotalCents: number
   /** Product ids present in the cart (scope checks). */
   productIds: string[]
+  /**
+   * What each cart line is worth, for pricing a SCOPED discount (AGL-2517).
+   *
+   * Required whenever a discount carries `productIds`, and the reason is that
+   * `subtotalCents` alone cannot price one: a scope names some of the cart, so
+   * the discount is worth some of the cart. A caller that omits these gets a
+   * refusal rather than a whole-cart discount — see `discountBenefit`.
+   */
+  lines?: readonly { productId: string; amountCents: number }[]
   nowMs?: number
 }
 
@@ -160,16 +169,47 @@ export type DiscountBenefit =
 export function discountBenefit(
   discount: HostDiscount,
   subtotalCents: number,
+  lines?: readonly { productId: string; amountCents: number }[],
 ): DiscountBenefit {
   const kind = discount.kind
   if (kind === 'percent' || kind === 'fixed') {
+    // WHAT A SCOPE IS WORTH (AGL-2517).
+    //
+    // `applies` already refuses a cart containing NONE of the scoped products,
+    // so the scope was never entirely dead — but the amount was still computed
+    // against the whole subtotal. A discount scoped to three products
+    // therefore discounted the entire basket the moment one of the three was
+    // in it: the merchant chose a scope, we charged as though they had not,
+    // and the margin went with it.
+    //
+    // A scoped discount with no line detail REFUSES rather than falling back
+    // to the whole subtotal. The fallback is the defect restated, and it would
+    // be a second pricing path for one feature split by what the caller
+    // happened to pass.
+    const scope = discount.productIds
+    let base = subtotalCents
+    if (scope?.length) {
+      if (!lines) {
+        return {
+          kind: 'none',
+          reason:
+            'this discount covers only some products, and the cart did not ' +
+            'say what each item costs',
+        }
+      }
+      base = lines
+        .filter((line) => scope.includes(line.productId))
+        .reduce(
+          (sum, line) => sum + Math.max(0, Math.round(Number(line.amountCents ?? 0))),
+          0,
+        )
+    }
     const centsOff =
       kind === 'percent'
         ? Math.round(
-            (subtotalCents * Math.min(100, Math.max(0, discount.valuePct ?? 0))) /
-              100,
+            (base * Math.min(100, Math.max(0, discount.valuePct ?? 0))) / 100,
           )
-        : Math.min(subtotalCents, Math.max(0, discount.valueCents ?? 0))
+        : Math.min(base, Math.max(0, discount.valueCents ?? 0))
     // A discount configured to take nothing off — 0%, or a zero amount — is
     // worth nothing, and saying so is what stops it being applied as a
     // successful reduction of zero.
@@ -219,7 +259,7 @@ export function resolveDiscount(
         codeProblem: problem,
       }
     }
-    const benefit = discountBenefit(coded, context.subtotalCents)
+    const benefit = discountBenefit(coded, context.subtotalCents, context.lines)
     // A code the shopper TYPED that turns out to be worth nothing is reported
     // as a code problem, so it leaves through the caller's existing refusal
     // rather than as a successful discount of zero. This is the free-shipping
@@ -249,7 +289,7 @@ export function resolveDiscount(
   for (const discount of discounts) {
     if (discount.code) continue
     if (applies(discount, context)) continue
-    const benefit = discountBenefit(discount, context.subtotalCents)
+    const benefit = discountBenefit(discount, context.subtotalCents, context.lines)
     // An automatic promotion worth nothing is passed over rather than reported:
     // nobody asked for it, so there is no shopper to answer and a better one
     // may still be in the list. An entered CODE is the opposite case and

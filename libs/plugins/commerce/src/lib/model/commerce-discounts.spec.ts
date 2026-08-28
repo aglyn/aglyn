@@ -207,3 +207,112 @@ describe('resolveDiscount carries the benefit (AGL-2508)', () => {
     expect(resolved?.discountCents).toBe(500)
   })
 })
+
+/**
+ * A SCOPED DISCOUNT IS WORTH ONLY WHAT IT COVERS (AGL-2517).
+ *
+ * `applies` already refused a cart containing NONE of the scoped products, so
+ * the scope was never entirely dead — but the AMOUNT was computed against the
+ * whole subtotal. A discount scoped to three products therefore discounted the
+ * entire basket the moment one of the three was in it: the merchant chose a
+ * scope, checkout charged as though they had not, and the difference came out
+ * of their margin with nothing on any screen to explain it.
+ */
+describe('product-scoped discount pricing (AGL-2517)', () => {
+  const lines = [
+    { productId: 'in-scope', amountCents: 4000 },
+    { productId: 'out-of-scope', amountCents: 6000 },
+  ]
+  const context = {
+    subtotalCents: 10000,
+    productIds: ['in-scope', 'out-of-scope'],
+    lines,
+  }
+
+  it('takes its percentage off the scoped lines, not the basket', () => {
+    // 10% of the $40 line, never 10% of the $100 basket.
+    const resolved = resolveDiscount(
+      [
+        {
+          $id: 'd1',
+          code: 'TEN',
+          kind: 'percent',
+          valuePct: 10,
+          productIds: ['in-scope'],
+        } as never,
+      ],
+      { ...context, code: 'TEN' },
+    )
+
+    expect(resolved?.discountCents).toBe(400)
+  })
+
+  it('caps a fixed amount at what the scoped lines are worth', () => {
+    const resolved = resolveDiscount(
+      [
+        {
+          $id: 'd1',
+          code: 'FIFTY',
+          kind: 'fixed',
+          valueCents: 5000,
+          productIds: ['in-scope'],
+        } as never,
+      ],
+      { ...context, code: 'FIFTY' },
+    )
+
+    // $50 off, but only $40 of covered goods to take it off.
+    expect(resolved?.discountCents).toBe(4000)
+  })
+
+  it('CONTROL: an unscoped discount still prices against the whole basket', () => {
+    // Without this the change would look right while shrinking every ordinary
+    // store-wide discount.
+    const resolved = resolveDiscount(
+      [{ $id: 'd1', code: 'TEN', kind: 'percent', valuePct: 10 } as never],
+      { ...context, code: 'TEN' },
+    )
+
+    expect(resolved?.discountCents).toBe(1000)
+  })
+
+  it('CONTROL: a cart with none of the scoped products is still refused', () => {
+    // The eligibility gate that already worked must keep working — the change
+    // is about the amount, not about who qualifies.
+    const resolved = resolveDiscount(
+      [
+        {
+          $id: 'd1',
+          code: 'TEN',
+          kind: 'percent',
+          valuePct: 10,
+          productIds: ['something-else'],
+        } as never,
+      ],
+      { ...context, code: 'TEN' },
+    )
+
+    expect(resolved?.codeProblem).toMatch(/does not apply/)
+    expect(resolved?.discountCents).toBe(0)
+  })
+
+  it('refuses a scoped discount when the cart did not say what lines cost', () => {
+    // Falling back to the whole subtotal would be the defect restated, and a
+    // second pricing path split by what the caller happened to pass.
+    const resolved = resolveDiscount(
+      [
+        {
+          $id: 'd1',
+          code: 'TEN',
+          kind: 'percent',
+          valuePct: 10,
+          productIds: ['in-scope'],
+        } as never,
+      ],
+      { subtotalCents: 10000, productIds: ['in-scope'], code: 'TEN' },
+    )
+
+    expect(resolved?.codeProblem).toMatch(/what each item costs/)
+    expect(resolved?.discountCents).toBe(0)
+  })
+})

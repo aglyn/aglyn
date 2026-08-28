@@ -155,6 +155,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 let sessionBody: URLSearchParams | null = null
 
+/** `amount_off` on every coupon the handler minted, in call order. */
+const couponAmounts: string[] = []
 const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   const target = String(url)
   if (!target.startsWith('https://api.stripe.com')) {
@@ -174,6 +176,11 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   // object on the merchant's account. Modelled so the ordering assertion
   // below — that a refused checkout creates none — can be made at all.
   if (target.endsWith('/v1/coupons')) {
+    // The MONEY on a discount: `amount_off` is what Stripe takes off the
+    // session, so it is the assertion surface for any pricing question.
+    couponAmounts.push(
+      String(new URLSearchParams(String(init?.body ?? '')).get('amount_off')),
+    )
     return { ok: true, json: async () => ({ id: 'co_test_1' }) }
   }
   throw new Error(`Unexpected Stripe endpoint ${target}`)
@@ -229,6 +236,12 @@ interface Scenario {
    * resolve — which would hide the very failure under test.
    */
   discounts?: Array<Record<string, any> & { id: string }>
+  /**
+   * A SECOND product in the cart, so a scoped discount has something to NOT
+   * cover. With one product the scoped and unscoped answers coincide and the
+   * assertion proves nothing.
+   */
+  extraProduct?: { id: string; priceUsd: number; quantity: number }
 }
 
 function makeRequest(scenario: Scenario): PluginApiRequest {
@@ -275,6 +288,22 @@ function seedStore(
     tax: { mode: 'none' },
     ...(storeSettings ?? {}),
   })
+  if (scenario.extraProduct) {
+    const extra = scenario.extraProduct
+    const cart = docs.get('hosts/host-1/carts/cart-1') as any
+    cart.lines = [
+      ...cart.lines,
+      { productId: extra.id, variantId: `${extra.id}-v1`, quantity: extra.quantity },
+    ]
+    docs.set(`hosts/host-1/products/${extra.id}`, {
+      name: extra.id,
+      status: 'active',
+      type: 'physical',
+      variants: [
+        { id: `${extra.id}-v1`, priceUsd: extra.priceUsd, weightGrams: 10, inventory: 10 },
+      ],
+    })
+  }
   for (const discount of scenario.discounts ?? []) {
     const { id, ...fields } = discount
     docs.set(`hosts/host-1/discounts/${id}`, fields)
@@ -365,6 +394,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
 
   beforeEach(() => {
     fetchMock.mockClear()
+    couponAmounts.length = 0
   })
 
   it('declares the destination’s rate, and only that destination (AGL-1721)', async () => {
@@ -788,6 +818,64 @@ describe('cart checkout shipping options (AGL-1707)', () => {
       expect(result.status).toBe(400)
       // Nothing was opened, so nothing can be charged.
       expect(body).toBeNull()
+    })
+  })
+
+  /**
+   * A SCOPED DISCOUNT CHARGES FOR WHAT IT DOES NOT COVER (AGL-2517).
+   *
+   * `applies` refused a cart holding NONE of the scoped products, so the scope
+   * was never entirely dead — but the amount was computed against the whole
+   * subtotal, so one in-scope item discounted the entire basket. The merchant
+   * chose a scope and checkout charged as though they had not.
+   *
+   * Asserted on `amount_off` — the cents Stripe actually takes off the session
+   * — with a second, out-of-scope product in the cart so the scoped and
+   * unscoped answers cannot coincide.
+   */
+  describe('a product-scoped discount (AGL-2517)', () => {
+    // The seeded cart is 2 x $30 of `p1`; `extra` adds 1 x $50 of `p2`.
+    const extraProduct = { id: 'p2', priceUsd: 50, quantity: 1 }
+    const scoped = {
+      id: 'scoped-ten',
+      code: 'TEN',
+      kind: 'percent',
+      valuePct: 10,
+      enabled: true,
+      productIds: ['p1'],
+    }
+
+    it('takes its percentage off the scoped lines only', async () => {
+      const { result } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'TEN',
+          discounts: [scoped],
+          extraProduct,
+        },
+      )
+
+      expect(result.status).toBe(200)
+      // 10% of the $60 of `p1`, never 10% of the $110 basket.
+      expect(couponAmounts).toEqual(['600'])
+    })
+
+    it('CONTROL: the same discount unscoped still covers the basket', async () => {
+      // Without this the change would look correct while shrinking every
+      // ordinary store-wide discount.
+      const { result } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'TEN',
+          discounts: [{ ...scoped, productIds: [] }],
+          extraProduct,
+        },
+      )
+
+      expect(result.status).toBe(200)
+      expect(couponAmounts).toEqual(['1100'])
     })
   })
 })

@@ -158,6 +158,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       ]),
     )
     let itemsCents = 0
+    /** Per-line values for scoped discount pricing (AGL-2517). */
+    const discountLines: { productId: string; amountCents: number }[] = []
     let feeCents = 0
     /** Whether any line carries a fee rate above zero (AGL-2232). */
     let feeApplies = false
@@ -233,6 +235,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
+      // What THIS line is worth, so a product-scoped discount can be priced
+      // against the lines it actually covers rather than the whole basket
+      // (AGL-2517).
+      discountLines.push({
+        productId: line.productId,
+        amountCents: unitCents * line.quantity,
+      })
       totalGrams += Math.max(0, Number(variant.weightGrams ?? 0)) * line.quantity
       // A missing `type` reads as physical, exactly as the fee ladder below
       // reads it — `liftLegacyProduct` only defaults the field on docs it
@@ -355,6 +364,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         ...(couponCode ? { code: couponCode } : {}),
         subtotalCents: itemsCents,
         productIds: cart.lines.map((line) => line.productId),
+        lines: discountLines,
       },
     )
     if (resolvedDiscount?.codeProblem) {
