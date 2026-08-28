@@ -155,7 +155,7 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     const payoutsPath = orgSlug
       ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug })
       : Route.ORG_MARKETPLACE
-    // A CONNECTED PUBLISHER STILL NEEDS A DOOR INTO STRIPE (AGL-2510). The
+    // A CONNECTED PUBLISHER STILL NEEDS A DOOR INTO STRIPE. The
     // commerce twin carries the full note; the shape and the reasoning are the
     // same, and the seller panel's "Finish payout setup in Stripe" button was
     // the surface that named a problem it could not act on.

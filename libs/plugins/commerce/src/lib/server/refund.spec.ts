@@ -69,7 +69,7 @@ function resolveFieldValues(
     if (field && typeof field === 'object' && '__increment' in field) {
       resolved[key] = Number(existing?.[key] ?? 0) + Number(field.__increment)
     } else if (field && typeof field === 'object' && '__arrayUnion' in field) {
-      // ACCUMULATES, like the real thing (AGL-2515). Every line-scoped path in
+      // ACCUMULATES, like the real thing. Every line-scoped path in
       // `refund.ts` writes through `arrayUnion` — the order timeline and the
       // per-line refund record — so a fake without it threw
       // `arrayUnion is not a function`, the handler answered its generic 500,
@@ -452,7 +452,7 @@ let consoleError: jest.SpyInstance
 let consoleWarn: jest.SpyInstance
 
 /**
- * A SUITE THAT SILENCES ITS OWN DIAGNOSTICS (AGL-2515).
+ * A SUITE THAT SILENCES ITS OWN DIAGNOSTICS.
  *
  * `console.error` is spied to a no-op so a deliberate Stripe refusal does not
  * spray a stack over the run. The cost of that was invisible until it bit:
@@ -1664,7 +1664,7 @@ describe('who may refund (AGL-2372)', () => {
 })
 
 /**
- * WHAT THIS HARNESS CAN NOW REACH (AGL-2515).
+ * WHAT THIS HARNESS CAN NOW REACH.
  *
  * Every line-scoped path in `refund.ts` writes through `FieldValue.arrayUnion`
  * — the order timeline and the per-line refund record — and the fake had none,
@@ -1676,7 +1676,7 @@ describe('who may refund (AGL-2372)', () => {
  * STATE the accumulating writes produce, which is the part a replacing fake
  * would have reported green while losing one admin's work.
  */
-describe('line-scoped refunds are reachable from this suite (AGL-2515)', () => {
+describe('line-scoped refunds are reachable from this suite', () => {
   function seedTwoLineOrder() {
     docs.set('hosts/host-1/orders/order-1', {
       status: 'paid',

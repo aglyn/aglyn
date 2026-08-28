@@ -596,7 +596,7 @@ export function marketplaceCommissionCents(
  * uncovered and someone should be able to see how much of the book it is.
  */
 /**
- * Whether this order row was a test-mode rehearsal (AGL-2520).
+ * Whether this order row was a test-mode rehearsal.
  *
  * The staff twin of the commerce plugin's `orderIsTestMode`, and the same two
  * signals in the same order of trust: a recorded `livemode` wins, and the
@@ -630,7 +630,7 @@ export function commerceSettledSummary(
     truncated: truncated === true,
   }
   for (const row of rows ?? []) {
-    // A REHEARSAL IS NOT REVENUE (AGL-2520). A smoke-test checkout writes a
+    // A REHEARSAL IS NOT REVENUE. A smoke-test checkout writes a
     // real order document — Stripe never moved money for it, and its session
     // id says so — and this summary counted it as a settled storefront sale
     // that Aglyn had taken commission on. Skipped ENTIRELY rather than counted

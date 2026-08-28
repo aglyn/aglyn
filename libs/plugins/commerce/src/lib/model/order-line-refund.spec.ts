@@ -16,7 +16,7 @@
  */
 
 /**
- * The arithmetic a line refund moves money on (AGL-2509).
+ * The arithmetic a line refund moves money on.
  *
  * Specced before the route was touched, and specced on the AMOUNT rather than
  * anything rendered, because the defect is arithmetic: the route handed back
@@ -52,7 +52,7 @@ const line = (unitAmountCents: number, quantity = 1): OrderLineItem => ({
   unitAmountCents,
 })
 
-describe('apportionCents (AGL-2509)', () => {
+describe('apportionCents', () => {
   it('splits an even pot evenly', () => {
     expect(apportionCents([5000, 5000], 1000)).toEqual([500, 500])
   })
@@ -100,7 +100,7 @@ describe('apportionCents (AGL-2509)', () => {
   })
 })
 
-describe('orderLineRefundCents (AGL-2509)', () => {
+describe('orderLineRefundCents', () => {
   /** Two $50 lines, $10 off the order. The buyer paid $90. */
   const discounted = {
     lineItems: [line(5000), line(5000)],

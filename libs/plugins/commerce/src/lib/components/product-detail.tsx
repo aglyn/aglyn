@@ -71,7 +71,7 @@ export interface ProductDetailProps {
   buyLabel?: string
   /** Hide the description block (design it separately with tokens). */
   hideDescription?: boolean
-  /** Offer a discount/coupon code field before the buy button (AGL-2519). */
+  /** Offer a discount/coupon code field before the buy button. */
   showCoupon?: boolean
 }
 
@@ -178,7 +178,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     )
     const [selections, setSelections] = useState<Record<string, string>>({})
     const [quantity, setQuantity] = useState(1)
-    /** A discount or coupon code typed on the product page (AGL-2519). */
+    /** A discount or coupon code typed on the product page. */
     const [coupon, setCoupon] = useState('')
     const [activeImage, setActiveImage] = useState(0)
     // `unconfigured` is not an `error` with softer words (AGL-2019). A store
@@ -888,7 +888,7 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
       // Off by default, so no existing page changes shape on deploy. The cart
       // has carried this field all along and the product page had none, so a
       // shopper buying the same goods through Buy now had nowhere to enter a
-      // code the merchant had advertised (AGL-2519).
+      // code the merchant had advertised.
       name: 'showCoupon',
       label: 'Show discount code field',
       description: 'Lets a buyer enter a discount or coupon code before buying.',

@@ -386,7 +386,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!order || !orderId) return
     const lines = order.lineItems ?? []
     const scoped = (lineItemIds ?? []).length > 0
-    // The SERVER's figure, not a second derivation of it (AGL-2509). This was
+    // The SERVER's figure, not a second derivation of it. This was
     // the list value `unitAmountCents x quantity`, which on a discounted order
     // is more than the buyer paid — so the dialog quoted one number and the
     // route refunded another. One function answers both.

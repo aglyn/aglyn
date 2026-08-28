@@ -173,7 +173,7 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
             pluginSlug: 'products',
           })}`
         : origin
-    // A CONNECTED MERCHANT STILL NEEDS A DOOR INTO STRIPE (AGL-2510).
+    // A CONNECTED MERCHANT STILL NEEDS A DOOR INTO STRIPE.
     //
     // This route used to return here the moment `charges_enabled` was true,
     // with a status and no link of any kind, and both console cards read the

@@ -31,7 +31,7 @@
  * different revenue for one store; the disagreement, not either number alone,
  * is what makes this a defect rather than a preference.
  *
- * SCOPE, NOW SETTLED (AGL-2516). This file first pinned the cancellation rule
+ * SCOPE, NOW SETTLED. This file first pinned the cancellation rule
  * and deliberately left two neighbouring questions unasserted, because they
  * were open: this card counted `pending` orders that have taken no money while
  * the analytics card excluded them, and it dropped only fully-refunded orders
@@ -191,7 +191,7 @@ describe('CommerceGlanceCard revenue window', () => {
   })
 
   /**
-   * A REHEARSAL IS NOT REVENUE, AND IS NOT HIDDEN EITHER (AGL-2520).
+   * A REHEARSAL IS NOT REVENUE, AND IS NOT HIDDEN EITHER.
    *
    * The one order in production is a `cs_test_…` smoke-test checkout that
    * Stripe never moved money for, and it was counted here as $18.00 of
@@ -199,7 +199,7 @@ describe('CommerceGlanceCard revenue window', () => {
    * test one, because with only a test order in the fixture a filter that
    * zeroed everything would look identical to a filter that worked.
    */
-  describe('a test-mode order (AGL-2520)', () => {
+  describe('a test-mode order', () => {
     // Two live orders so the $140.00 revenue is distinct from the $70.00
     // average and from every per-order caption.
     const live = { ...order('paid', 10000), $id: 'cs_live_realsale' }

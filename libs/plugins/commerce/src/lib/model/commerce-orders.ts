@@ -458,7 +458,7 @@ const wholeCents = (value: unknown): number => {
 }
 
 /**
- * Split `totalCents` across `weights` so the parts sum to it EXACTLY (AGL-2509).
+ * Split `totalCents` across `weights` so the parts sum to it EXACTLY.
  *
  * Largest-remainder (Hamilton) apportionment. Each weight takes its exact
  * share, the shares are floored, and the cents left over by flooring are handed
@@ -504,7 +504,7 @@ export function apportionCents(
 }
 
 /**
- * What refunding the named lines is actually worth (AGL-2509).
+ * What refunding the named lines is actually worth.
  *
  * A line's LIST value is `unitAmountCents x quantity`, and that is what the
  * refund route used to hand back. It is the wrong number on any order that
@@ -556,7 +556,7 @@ export function orderLineRefundCents(
 }
 
 /**
- * A REHEARSAL IS NOT REVENUE (AGL-2520).
+ * A REHEARSAL IS NOT REVENUE.
  *
  * A smoke-test checkout writes a real order document. Stripe never moved money
  * for it — the session id is `cs_test_…` — but every surface that sums paid

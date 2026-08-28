@@ -74,7 +74,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
     const orders = [...(orderDocs ?? [])].sort(
       (a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0),
     )
-    // ONE DEFINITION OF 30-DAY REVENUE, NOT TWO (AGL-2516).
+    // ONE DEFINITION OF 30-DAY REVENUE, NOT TWO.
     //
     // This card and `commerce-analytics-card` read the same orders collection
     // over the same window and disagreed three ways, so one dashboard showed a
@@ -96,7 +96,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
         (order.createdAtMs ?? 0) >= since &&
         order.status !== 'pending' &&
         order.status !== 'cancelled' &&
-        // A rehearsal is not revenue (AGL-2520) — the same exclusion the
+        // A rehearsal is not revenue — the same exclusion the
         // analytics card applies, from the same helper.
         !orderIsTestMode(order),
     )

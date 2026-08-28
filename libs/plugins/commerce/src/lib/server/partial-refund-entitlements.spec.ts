@@ -684,7 +684,7 @@ describe('the reviews gate (AGL-2454)', () => {
 })
 
 /**
- * A LINE REFUND ON A DISCOUNTED ORDER (AGL-2509).
+ * A LINE REFUND ON A DISCOUNTED ORDER.
  *
  * The route handed back a line's LIST value — `unitAmountCents x quantity` —
  * which on a discounted order is more than the buyer ever paid for it. Both
@@ -696,7 +696,7 @@ describe('the reviews gate (AGL-2454)', () => {
  * `model/order-line-refund.spec.ts`, including that the split closes to the
  * cent; what is proved HERE is that the route actually spends that number.
  */
-describe('line refunds apportion the order discount (AGL-2509)', () => {
+describe('line refunds apportion the order discount', () => {
   /** $30 + $70 of goods, $10 off. The buyer paid $90. */
   function seedDiscount(discountCents: number) {
     const order = docs.get('hosts/host-1/orders/order-1') as any

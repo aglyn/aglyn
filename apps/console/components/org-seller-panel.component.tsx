@@ -225,7 +225,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         // about CONNECTING (AGL-1997 split the two flags; payout readiness
         // can arrive days later and is not a second activation).
         if (!chargesEnabled) trackEvent('stripe_connected', {})
-        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX (AGL-2510).
+        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX.
         //
         // "Finish payout setup in Stripe" is the label this button carries in
         // exactly this state, and it could not open Stripe: the route returned
@@ -1051,7 +1051,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                           : 'Set up payouts'}
               </Button>
               {/*
-                Where the money actually is (AGL-2510). Aglyn records no
+                Where the money actually is. Aglyn records no
                 balance, no payout schedule, and handles no `payout.failed`
                 event, so a publisher whose payout bounced cannot learn that
                 here. An Express account has no direct login, which leaves a
@@ -1104,7 +1104,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               publisher reconciles against their Stripe account, and it is the
               one this card used to get wrong.
 
-              "Sent to your Stripe account", not "net paid out" (AGL-2513).
+              "Sent to your Stripe account", not "net paid out".
               The figure sums `transferCents` — the instruction given at charge
               time — so it says the money was DISPATCHED and knows nothing
               about whether the payout from that balance to a bank succeeded.

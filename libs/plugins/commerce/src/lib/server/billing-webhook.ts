@@ -1892,7 +1892,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     return
   }
 
-  // A PAYOUT OR TRANSFER THAT NEVER LANDED (AGL-2513).
+  // A PAYOUT OR TRANSFER THAT NEVER LANDED.
   //
   // Placed beside `account.updated` because it is the same kind of event —
   // account-level, nothing to do with the `metadata.type` order sections

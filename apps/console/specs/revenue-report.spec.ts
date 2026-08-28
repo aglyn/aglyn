@@ -712,7 +712,7 @@ describe('a signup that never paid is neither revenue nor a comp', () => {
 })
 
 /**
- * A REHEARSAL IS NOT REVENUE, ON THE STAFF PAGE TOO (AGL-2520).
+ * A REHEARSAL IS NOT REVENUE, ON THE STAFF PAGE TOO.
  *
  * The only order in production is a `cs_test_…` smoke-test checkout Stripe
  * never moved money for, and this summary counted it as a settled storefront
@@ -720,7 +720,7 @@ describe('a signup that never paid is neither revenue nor a comp', () => {
  * the test one: with only a test row in the fixture, a filter that dropped
  * everything would be indistinguishable from one that worked.
  */
-describe('test-mode orders are not settled revenue (AGL-2520)', () => {
+describe('test-mode orders are not settled revenue', () => {
   const live = { id: 'cs_live_real', amountCents: 10000, feeCents: 300 }
   const test = { id: 'cs_test_smoke', amountCents: 1800, feeCents: 36 }
 

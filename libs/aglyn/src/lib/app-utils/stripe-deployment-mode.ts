@@ -51,7 +51,7 @@ export function deploymentLivemode(
 }
 
 /**
- * Whether a Stripe object id belongs to TEST mode (AGL-2520).
+ * Whether a Stripe object id belongs to TEST mode.
  *
  * Stripe stamps the environment into the id itself — `cs_test_…`, `pi_test_…`,
  * `in_test_…` — and that is the only signal a stored document carries when

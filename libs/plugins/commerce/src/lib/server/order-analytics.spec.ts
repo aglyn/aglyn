@@ -140,7 +140,7 @@ afterAll(() => {
 // ---------------------------------------------------------------------------
 
 const HOST_ID = 'host-1'
-// A LIVE session id (AGL-2521). This constant was `cs_test_…`, so every test
+// A LIVE session id. This constant was `cs_test_…`, so every test
 // in this file was exercising a rehearsal — and once test-mode sales stopped
 // being reported into the merchant's analytics, the whole suite described a
 // path no real shopper takes. A fixture whose id says "this never happened" is
@@ -509,7 +509,7 @@ describe('the id is shape-checked before it reaches Firestore', () => {
 })
 
 /**
- * A REHEARSAL MUST NOT REACH THE MERCHANT'S OWN ANALYTICS (AGL-2521).
+ * A REHEARSAL MUST NOT REACH THE MERCHANT'S OWN ANALYTICS.
  *
  * This endpoint hands the browser a `purchase` payload that
  * `use-storefront-purchase-event.ts` pushes through the MERCHANT's `gtag` into
@@ -527,7 +527,7 @@ describe('the id is shape-checked before it reaches Firestore', () => {
  * and suppressing a real sale corrupts a merchant's funnel in the direction
  * they can never spot.
  */
-describe('a test-mode sale reports no purchase (AGL-2521)', () => {
+describe('a test-mode sale reports no purchase', () => {
   const TEST_SESSION = 'cs_test_smoke_abc123'
 
   const paidOrder = {

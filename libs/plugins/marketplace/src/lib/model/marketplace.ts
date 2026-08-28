@@ -587,7 +587,7 @@ export type {
 export type PluginVersionReviewState = 'pending' | 'approved' | 'rejected'
 
 /**
- * The LISTING's cached summary of the version it currently offers (AGL-2514).
+ * The LISTING's cached summary of the version it currently offers.
  *
  * A different field from the one above and a different set of values, which is
  * the whole reason it is written down here. `reviewState` lives on the version

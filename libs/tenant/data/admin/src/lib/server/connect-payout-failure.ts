@@ -19,7 +19,7 @@ import { firebaseAdmin } from './firebase-admin'
 import { updateExisting } from './update-existing'
 
 /**
- * A PAYOUT THAT NEVER LANDED, RECORDED (AGL-2513).
+ * A PAYOUT THAT NEVER LANDED, RECORDED.
  *
  * ## What was invisible, and to whom
  *

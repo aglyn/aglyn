@@ -121,7 +121,7 @@ describe('resolveDiscount', () => {
 
 /**
  * What a discount is WORTH, and the fact that "nothing" is an answer with a
- * reason rather than the number zero (AGL-2508).
+ * reason rather than the number zero.
  *
  * `valueCents` used to return a bare `number`, and every kind it did not
  * understand returned `0`. `free_shipping` was such a kind, so it resolved
@@ -130,7 +130,7 @@ describe('resolveDiscount', () => {
  * charged full shipping without an error. These pin the distinction that makes
  * that impossible to repeat.
  */
-describe('discountBenefit (AGL-2508)', () => {
+describe('discountBenefit', () => {
   const at = (kind: string, extra: Record<string, unknown> = {}) =>
     discountBenefit({ kind, ...extra } as never, 10000)
 
@@ -168,7 +168,7 @@ describe('discountBenefit (AGL-2508)', () => {
   })
 })
 
-describe('resolveDiscount carries the benefit (AGL-2508)', () => {
+describe('resolveDiscount carries the benefit', () => {
   const context = { subtotalCents: 10000, productIds: ['p1'] }
 
   it('refuses an entered code that confers nothing', () => {
@@ -209,7 +209,7 @@ describe('resolveDiscount carries the benefit (AGL-2508)', () => {
 })
 
 /**
- * A SCOPED DISCOUNT IS WORTH ONLY WHAT IT COVERS (AGL-2517).
+ * A SCOPED DISCOUNT IS WORTH ONLY WHAT IT COVERS.
  *
  * `applies` already refused a cart containing NONE of the scoped products, so
  * the scope was never entirely dead — but the AMOUNT was computed against the
@@ -218,7 +218,7 @@ describe('resolveDiscount carries the benefit (AGL-2508)', () => {
  * scope, checkout charged as though they had not, and the difference came out
  * of their margin with nothing on any screen to explain it.
  */
-describe('product-scoped discount pricing (AGL-2517)', () => {
+describe('product-scoped discount pricing', () => {
   const lines = [
     { productId: 'in-scope', amountCents: 4000 },
     { productId: 'out-of-scope', amountCents: 6000 },

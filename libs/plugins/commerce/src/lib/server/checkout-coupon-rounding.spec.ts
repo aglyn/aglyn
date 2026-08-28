@@ -155,7 +155,7 @@ function makeCollectionRef(path: string): any {
   return {
     doc: (id: string) => makeDocRef(`${path}/${id}`),
     // Chainable `limit()` and a real `get()`: buy-now reads
-    // `hosts/{id}/discounts` on every checkout since AGL-2519, and this suite
+    // `hosts/{id}/discounts` on every checkout, and this suite
     // seeds discounts to price them, so the collection has to list its own
     // children rather than answer a convenient empty.
     limit: () => makeCollectionRef(path),
@@ -259,7 +259,7 @@ interface Scenario {
   priceUsd: number
   quantity?: number
   percentOff?: number
-  /** A `hosts/{id}/discounts` doc, for the AGL-2519 hub path. */
+  /** A `hosts/{id}/discounts` doc, for the host-level hub path. */
   discount?: Record<string, any> & { id: string; code: string }
 }
 
@@ -485,7 +485,7 @@ describe('a coupon on a multi-quantity buy-now (AGL-2159)', () => {
 })
 
 /**
- * THE DISCOUNTS HUB REACHES BUY NOW (AGL-2519).
+ * THE DISCOUNTS HUB REACHES BUY NOW.
  *
  * `hosts/{hostId}/discounts` had exactly one reader — `cart-checkout.ts` — so
  * a code created on the Discounts card worked in the cart and was refused as
@@ -496,7 +496,7 @@ describe('a coupon on a multi-quantity buy-now (AGL-2159)', () => {
  * the only arithmetic Stripe does — so it is exactly what the buyer is
  * charged.
  */
-describe('a discounts-hub code on buy-now (AGL-2519)', () => {
+describe('a discounts-hub code on buy-now', () => {
   it('takes the discount off the charged amount', async () => {
     const { result, body } = await runCheckout({
       priceUsd: 30,

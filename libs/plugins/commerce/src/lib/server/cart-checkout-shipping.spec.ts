@@ -693,7 +693,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     })
   })
   /**
-   * A FREE-SHIPPING DISCOUNT REACHES THE TOTAL (AGL-2508).
+   * A FREE-SHIPPING DISCOUNT REACHES THE TOTAL.
    *
    * The defect was a silent wrong charge, and silent is the operative word.
    * `valueCents` answered `0` for every kind it did not understand, so a
@@ -707,7 +707,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
    * rendered output. Stripe is mocked absolutely and the key is a fake test
    * key, exactly as the rest of this suite.
    */
-  describe('a free-shipping discount (AGL-2508)', () => {
+  describe('a free-shipping discount', () => {
     const freeShip = {
       id: 'ship-free',
       code: 'FREESHIP',
@@ -822,7 +822,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
   })
 
   /**
-   * A SCOPED DISCOUNT CHARGES FOR WHAT IT DOES NOT COVER (AGL-2517).
+   * A SCOPED DISCOUNT CHARGES FOR WHAT IT DOES NOT COVER.
    *
    * `applies` refused a cart holding NONE of the scoped products, so the scope
    * was never entirely dead — but the amount was computed against the whole
@@ -833,7 +833,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
    * — with a second, out-of-scope product in the cart so the scoped and
    * unscoped answers cannot coincide.
    */
-  describe('a product-scoped discount (AGL-2517)', () => {
+  describe('a product-scoped discount', () => {
     // The seeded cart is 2 x $30 of `p1`; `extra` adds 1 x $50 of `p2`.
     const extraProduct = { id: 'p2', priceUsd: 50, quantity: 1 }
     const scoped = {

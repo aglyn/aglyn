@@ -92,6 +92,43 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-08-28 — Fourteen commits cited issue ids that never existed; history stands and a guard refuses the next one
+
+- **Decided by:** the account owner — the history is not rewritten, the citations are corrected in place, and the issue-creation freeze holds.
+- **Scope:** policy, tooling
+- **Evidence:** AGL-2500; `tools/scripts/check-linear-ids.mjs`, `tools/scripts/linear-issue-ceiling.json`; commits `363d03156`…`b14b3c3b3`
+
+Fourteen commits on `main` cite **AGL-2508–2521** against a workspace whose
+highest issue is **AGL-2499**. The ids reached source comments as well, where
+they outlive the commit message that carried them. A commit citing a
+non-existent issue is worse than one citing none: citing none says there is no
+ticket, while citing AGL-2515 says there is context to find and sends the
+reader to a 404 — so the reader concludes their own access is broken, and the
+cost is paid by every future reader instead of once by the author.
+
+**History is not rewritten.** `main` is shared and 84 commits were already
+unpushed; rewriting them to fix a comment would cost more than the comment is
+worth. The citations are corrected where they live, and
+`npm run check:linear-ids` refuses the next one — comparing against a **cached
+ceiling** checked into the repo rather than the Linear API, because
+`LINEAR_API_KEY` is set nowhere and a guard built on a credential nobody has
+set is born inert.
+
+⛔ **A fabricated id may not be made real by creating the issue.** The
+issue-creation freeze stands. Retag the work to the issue that genuinely covers
+it, or drop the tag.
+
+⚠️ A **second, worse** form of this exists and the guard cannot see it: commits
+citing ids that *do* resolve and look correct, but describe unrelated work.
+Those are found by blame, not by a ceiling — 84 of the 356 references to
+**AGL-1476–1490** were written by those commits and 250 are legitimate, so a
+find-and-replace over the range corrupts correct citations.
+
+⚠️ It is **not confined to that range**. `AGL-693` (Components page: real table
+and Create button) carried the entire console list-pagination arc, and
+`AGL-2306` (a rejected plugin version stays advertised) was cited by the
+citation guard itself. Both now have real issues — AGL-2501 and AGL-2500.
+
 ## 2026-08-26 — CDN delivery moves to every plan; the feature matrix becomes a tracked, generated document
 
 - **Decided by:** the account owner — the CDN path is the cheaper one to serve, so gating it raised the cost of the tier that pays nothing; the feature matrix becomes a tracked, generated document in the same pass.

@@ -189,7 +189,7 @@ export const publisherProfileSaveHandler: PluginApiHandler = async (req, res) =>
       throw error
     }
 
-    // PRESENT-AND-EMPTY CLEARS; ABSENT LEAVES ALONE (AGL-2512).
+    // PRESENT-AND-EMPTY CLEARS; ABSENT LEAVES ALONE.
     //
     // The write below is a merge, and `bio` was spread in only when truthy, so
     // an empty one was a no-op and the stored bio survived every attempt to

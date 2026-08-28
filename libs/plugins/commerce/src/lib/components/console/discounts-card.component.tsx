@@ -192,7 +192,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
       ? discount.productIds.length
       : 0
     const extras = [
-      // THE SCOPE, SAID OUT LOUD (AGL-2517). A discount can cover named
+      // THE SCOPE, SAID OUT LOUD. A discount can cover named
       // products rather than the catalog, and the card showed no sign of it —
       // so a merchant could not tell a store-wide discount from a scoped one,
       // and had no way to understand why a scoped one takes less off than the

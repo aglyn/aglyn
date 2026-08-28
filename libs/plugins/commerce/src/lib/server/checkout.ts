@@ -291,7 +291,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // metadata so the webhook never has to re-price from the product doc.
     const listUnitAmountCents = Math.round(priceUsd * 100)
     let amountCents = listUnitAmountCents * quantity
-    // THE DISCOUNTS HUB, ON THIS PATH TOO (AGL-2519).
+    // THE DISCOUNTS HUB, ON THIS PATH TOO.
     //
     // `hosts/{hostId}/discounts` had exactly one reader — `cart-checkout.ts` —
     // so a code from the Discounts card worked in the cart and was rejected as

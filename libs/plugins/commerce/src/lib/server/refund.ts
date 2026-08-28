@@ -304,7 +304,7 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         .status(400)
         .json({ error: `Line ${invalidLine} is not on this order` })
     }
-    // NET OF THE ORDER'S DISCOUNT, not the list price (AGL-2509).
+    // NET OF THE ORDER'S DISCOUNT, not the list price.
     //
     // This was the bare `unitAmountCents x quantity`, which is what the line
     // was LISTED at rather than what the buyer paid for it. On a discounted

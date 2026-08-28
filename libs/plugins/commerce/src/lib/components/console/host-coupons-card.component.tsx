@@ -114,7 +114,7 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
             ),
           }
         : {}),
-      // THE FIELD THE CHECKOUTS ALREADY GATE ON (AGL-2511).
+      // THE FIELD THE CHECKOUTS ALREADY GATE ON.
       //
       // `checkout.ts` and `cart-checkout.ts` both refuse a coupon whose
       // `expiresAtMs` has passed, and nothing wrote it — so the gate read as

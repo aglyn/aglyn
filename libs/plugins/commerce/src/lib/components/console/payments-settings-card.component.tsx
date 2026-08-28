@@ -142,7 +142,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
         // them. Read three-valued, so only a literal `false` from Stripe
         // downgrades the claim; an absent flag means unasked, not off.
         const payoutsBlocked = payload.payoutsEnabled === false
-        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX (AGL-2510).
+        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX.
         //
         // Stripe is the only place payouts can be released — an Express
         // account has no password and no direct login — so telling the
@@ -367,7 +367,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           a connected merchant gets sent back through onboarding.
         */}
         {/*
-          WHERE THE MONEY STOPPED (AGL-2513). Mirrored onto this profile by the
+          WHERE THE MONEY STOPPED. Mirrored onto this profile by the
           `payout.failed` handler and retired by the next successful payout, so
           it names a live problem rather than a scar. Without it a merchant sold
           into an account that could not release the funds and the card said
@@ -402,7 +402,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                   : 'Set up payments'}
             </Button>
             {/*
-            Where the money actually is (AGL-2510). Aglyn records none of it —
+            Where the money actually is. Aglyn records none of it —
             no balance, no payout schedule, and no `payout.failed` handling
             anywhere — so a merchant whose payout bounced has no way to learn
             that from this console. An Express account has no direct login

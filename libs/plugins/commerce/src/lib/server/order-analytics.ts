@@ -158,7 +158,7 @@ export const orderAnalyticsHandler: PluginApiHandler = async (req, res) => {
   if (!SESSION_ID.test(sessionId)) {
     return res.status(400).json({ error: 'Invalid sessionId' })
   }
-  // A REHEARSAL MUST NOT REACH THE MERCHANT'S OWN ANALYTICS (AGL-2521).
+  // A REHEARSAL MUST NOT REACH THE MERCHANT'S OWN ANALYTICS.
   //
   // This endpoint hands the browser a `purchase` payload that
   // `use-storefront-purchase-event.ts` pushes through the MERCHANT's `gtag`,
@@ -207,7 +207,7 @@ export const orderAnalyticsHandler: PluginApiHandler = async (req, res) => {
       if (order.status !== 'paid') {
         return res.status(409).json({ error: 'Not payable' })
       }
-      // The RECORDED fact as well as the id (AGL-2521). An order the webhook
+      // The RECORDED fact as well as the id. An order the webhook
       // stamped `livemode: false` is a rehearsal whatever its id looks like,
       // and this is the stronger of the two signals.
       if (CommerceModel.orderIsTestMode({ ...order, $id: snapshot.id })) {

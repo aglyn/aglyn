@@ -67,7 +67,7 @@ export interface DiscountContext {
   /** Product ids present in the cart (scope checks). */
   productIds: string[]
   /**
-   * What each cart line is worth, for pricing a SCOPED discount (AGL-2517).
+   * What each cart line is worth, for pricing a SCOPED discount.
    *
    * Required whenever a discount carries `productIds`, and the reason is that
    * `subtotalCents` alone cannot price one: a scope names some of the cart, so
@@ -133,7 +133,7 @@ function applies(
 }
 
 /**
- * WHAT A DISCOUNT ACTUALLY CONFERS, named rather than implied (AGL-2508).
+ * WHAT A DISCOUNT ACTUALLY CONFERS, named rather than implied.
  *
  * The whole point of this type is that "nothing" is a STATED outcome with a
  * reason, not the number zero. `valueCents` used to answer a bare `number`,
@@ -173,7 +173,7 @@ export function discountBenefit(
 ): DiscountBenefit {
   const kind = discount.kind
   if (kind === 'percent' || kind === 'fixed') {
-    // WHAT A SCOPE IS WORTH (AGL-2517).
+    // WHAT A SCOPE IS WORTH.
     //
     // `applies` already refuses a cart containing NONE of the scoped products,
     // so the scope was never entirely dead — but the amount was still computed

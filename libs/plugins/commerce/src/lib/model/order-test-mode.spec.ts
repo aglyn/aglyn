@@ -16,7 +16,7 @@
  */
 
 /**
- * A REHEARSAL IS NOT REVENUE (AGL-2520).
+ * A REHEARSAL IS NOT REVENUE.
  *
  * A smoke-test checkout writes a real order document. Stripe never moved money
  * for it, but every surface summing paid orders counted it — found in
@@ -34,7 +34,7 @@
 import { orderIsTestMode } from './commerce-orders'
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 
-describe('orderIsTestMode (AGL-2520)', () => {
+describe('orderIsTestMode', () => {
   it('reads a recorded livemode:false as a rehearsal', () => {
     expect(orderIsTestMode({ livemode: false })).toBe(true)
   })
@@ -75,7 +75,7 @@ describe('orderIsTestMode (AGL-2520)', () => {
   })
 })
 
-describe('stripeIdIsTestMode (AGL-2520)', () => {
+describe('stripeIdIsTestMode', () => {
   it('matches the mode segment, not the letters anywhere', () => {
     expect(stripeIdIsTestMode('cs_test_abc')).toBe(true)
     expect(stripeIdIsTestMode('pi_test_abc')).toBe(true)

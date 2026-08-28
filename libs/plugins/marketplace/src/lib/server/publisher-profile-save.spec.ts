@@ -164,14 +164,14 @@ describe('publisherProfileSaveHandler contact/link fields (AGL-1009)', () => {
   })
 
   /**
-   * The bio obeys the same rule as the links beside it (AGL-2512).
+   * The bio obeys the same rule as the links beside it.
    *
    * It was spread into this merge only when truthy, so an empty one was a
    * no-op: the publisher could rewrite their bio but never take it down, while
    * every URL field in the very same write has cleared on empty since
    * AGL-1009. Asserted on the WRITE, which is what reaches Firestore.
    */
-  describe('clearing the bio (AGL-2512)', () => {
+  describe('clearing the bio', () => {
     it('deletes a bio the publisher explicitly empties', async () => {
       const res = makeRes()
       await publisherProfileSaveHandler(makeReq({ bio: '' }), res)

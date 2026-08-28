@@ -16,7 +16,7 @@
  */
 
 /**
- * A payout that never landed leaves a record (AGL-2513).
+ * A payout that never landed leaves a record.
  *
  * Nothing handled `payout.failed` or `transfer.failed`, so the money stopped
  * moving and no side could tell: the merchant's storefront still looked
@@ -148,7 +148,7 @@ beforeEach(() => {
   })
 })
 
-describe('recordConnectPayoutFailure (AGL-2513)', () => {
+describe('recordConnectPayoutFailure', () => {
   it('writes the history record Aglyn had nothing of', async () => {
     await recordConnectPayoutFailure('profiles', {
       kind: 'payout',
@@ -248,7 +248,7 @@ describe('recordConnectPayoutFailure (AGL-2513)', () => {
   })
 })
 
-describe('clearConnectPayoutFailure (AGL-2513)', () => {
+describe('clearConnectPayoutFailure', () => {
   it('retires the warning when a later payout succeeds', async () => {
     await recordConnectPayoutFailure('profiles', {
       kind: 'payout',

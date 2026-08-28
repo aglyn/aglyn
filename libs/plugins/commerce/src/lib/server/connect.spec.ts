@@ -288,7 +288,7 @@ describe('Storefront Connect onboarding hardening (AGL-1994)', () => {
 })
 
 /**
- * A CONNECTED MERCHANT STILL NEEDS A DOOR INTO STRIPE (AGL-2510).
+ * A CONNECTED MERCHANT STILL NEEDS A DOOR INTO STRIPE.
  *
  * The route returned the moment `charges_enabled` was true, with a status and
  * no link of any kind, and the console card read `chargesEnabled` before it
@@ -300,7 +300,7 @@ describe('Storefront Connect onboarding hardening (AGL-1994)', () => {
  *
  * Asserted on the CALL and the link it returns, never on anything rendered.
  */
-describe('a charges-enabled merchant gets a link (AGL-2510)', () => {
+describe('a charges-enabled merchant gets a link', () => {
   beforeEach(() => {
     state.profile = { stripeAccountId: 'acct_new' }
   })

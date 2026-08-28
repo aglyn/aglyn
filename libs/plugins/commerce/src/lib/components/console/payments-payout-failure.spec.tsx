@@ -16,7 +16,7 @@
  */
 
 /**
- * A merchant is TOLD when a payout did not reach their bank (AGL-2513).
+ * A merchant is TOLD when a payout did not reach their bank.
  *
  * Nothing handled `payout.failed`, so a storefront looked healthy from every
  * angle available to its owner — orders settling, this card reporting
@@ -75,7 +75,7 @@ beforeEach(() => {
   profile.status = 'success'
 })
 
-describe('payout failure on the payments card (AGL-2513)', () => {
+describe('payout failure on the payments card', () => {
   it('names the amount that did not arrive, and why', () => {
     profile.data = {
       ...CONNECTED,

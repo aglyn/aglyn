@@ -158,7 +158,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       ]),
     )
     let itemsCents = 0
-    /** Per-line values for scoped discount pricing (AGL-2517). */
+    /** Per-line values for scoped discount pricing. */
     const discountLines: { productId: string; amountCents: number }[] = []
     let feeCents = 0
     /** Whether any line carries a fee rate above zero (AGL-2232). */
@@ -237,7 +237,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       itemsCents += unitCents * line.quantity
       // What THIS line is worth, so a product-scoped discount can be priced
       // against the lines it actually covers rather than the whole basket
-      // (AGL-2517).
+      //.
       discountLines.push({
         productId: line.productId,
         amountCents: unitCents * line.quantity,
@@ -533,7 +533,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         params.set('metadata[discountHoldKey]', slot.holdKey)
       }
     }
-    // FREE SHIPPING IS A ZEROED RATE, NOT A COUPON (AGL-2508).
+    // FREE SHIPPING IS A ZEROED RATE, NOT A COUPON.
     //
     // A session-level Stripe coupon discounts LINE ITEMS; shipping is a
     // separate `shipping_options` concept and a coupon never touches it. There

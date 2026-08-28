@@ -16,7 +16,7 @@
  */
 
 /**
- * A COUPON CAN BE GIVEN AN EXPIRY (AGL-2511).
+ * A COUPON CAN BE GIVEN AN EXPIRY.
  *
  * Both checkout doors already refuse a coupon whose `expiresAtMs` has passed —
  * `checkout.ts` and `cart-checkout.ts` — and nothing ever wrote the field. So
@@ -97,7 +97,7 @@ beforeEach(() => {
   setDoc.mockClear()
 })
 
-describe('coupon expiry (AGL-2511)', () => {
+describe('coupon expiry', () => {
   it('writes the epoch the checkouts gate on', async () => {
     const written = await createCoupon({ expiresOn: '2026-09-05' })
 

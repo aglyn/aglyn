@@ -828,6 +828,32 @@ jobs:
       # `expect-absent` assertion vacuously, silently, on the happy path.
       - run: npm run test:external-facts
 
+      # AGL-2500. The third member of that family, and the only one whose
+      # CHECK can run here rather than just its self-test — which is the whole
+      # design. Both guards above are gated on LINEAR_API_KEY and so run
+      # nowhere; this one compares against a CACHED CEILING checked into the
+      # repo, needs no credential and no network, and therefore actually
+      # executes on every run.
+      #
+      # What it refuses: an `AGL-nnnn` above the highest issue that exists, in
+      # a commit message or in source. On 2026-08-28 fourteen commits landed
+      # on `main` citing AGL-2508..AGL-2521 against a workspace topping out at
+      # AGL-2499, and the same ids reached ~100 source comments. A commit
+      # citing a non-existent issue is worse than one citing none: it tells the
+      # reader there is context to find and sends them to a 404. The next
+      # release would also have published fourteen dead Linear links into
+      # CHANGELOG.md, which generates them from these very messages.
+      #
+      # ⚠️ The ceiling goes STALE by design — it starts refusing REAL issues
+      # once the workspace passes it. That is the intended trade against the
+      # alternative (fail open when Linear is unreachable, which is a guard
+      # that catches nothing), and it is handled rather than hoped about: the
+      # check prints the ceiling's age on every run and the exact hand-edit
+      # that raises it. Refresh it deliberately, from the workspace — NEVER to
+      # whatever number just failed.
+      - run: npm run test:linear-ids
+      - run: npm run check:linear-ids
+
       # AGL-1489. The four deploy scripts all SHIP SOMETHING when they run, and
       # three of them read a single flag with `process.argv.includes(...)` and
       # discarded everything else — so `deploy-firestore-rules.mjs --help`

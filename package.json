@@ -179,6 +179,8 @@
     "check:shipped-not-closed": "node tools/scripts/check-shipped-not-closed.mjs",
     "check:external-facts": "node tools/scripts/check-external-facts.mjs",
     "check:swept-commits": "node tools/scripts/check-swept-commits.mjs",
+    "check:linear-ids": "node tools/scripts/check-linear-ids.mjs",
+    "test:linear-ids": "node --test tools/scripts/lib/linear-ids.test.mjs",
     "test:deploy-args": "node --test tools/scripts/lib/deploy-args.test.mjs",
     "release:prepare": "node tools/scripts/release-prepare.mjs",
     "release:tag": "node tools/scripts/release-tag.mjs",

@@ -75,7 +75,7 @@ export interface SellerLedgerTotals {
   refundedCount: number
   /**
    * What Stripe was ASKED to move to the publisher's Connect account, net of
-   * any pull-back — not what reached their bank (AGL-2513).
+   * any pull-back — not what reached their bank.
    *
    * Named for the question it can actually answer. It is summed from
    * `transferCents`, which is the instruction given at charge time; a payout

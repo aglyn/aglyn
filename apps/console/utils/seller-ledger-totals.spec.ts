@@ -161,7 +161,7 @@ describe('the Sales card renders the payout, not the old expression (AGL-2158)',
   it('carries the copy that explains the smaller number', () => {
     // A publisher who read `net $88.25` yesterday is owed the reason on the
     // card, not in a changelog.
-    // "Sent to your Stripe account", not "net paid out" (AGL-2513). The
+    // "Sent to your Stripe account", not "net paid out". The
     // figure sums `transferCents` — the instruction given at charge time — so
     // it knows the money was DISPATCHED and nothing about whether the payout
     // from that balance to a bank succeeded. The old wording made this number
@@ -228,7 +228,7 @@ describe('partial-refund reversals (AGL-2299)', () => {
 })
 
 /**
- * WHAT THE PAYOUT FIGURE KNOWS, AND WHAT IT DOES NOT (AGL-2513).
+ * WHAT THE PAYOUT FIGURE KNOWS, AND WHAT IT DOES NOT.
  *
  * `sentToStripeCents` sums `transferCents` — the instruction given to Stripe
  * at charge time. A payout failing later on the way from the Connect balance
@@ -242,7 +242,7 @@ describe('partial-refund reversals (AGL-2299)', () => {
  * netting it in here would invent a per-sale split that does not exist; the
  * panel states it beside the figure instead.
  */
-describe('sentToStripeCents is dispatch, not arrival (AGL-2513)', () => {
+describe('sentToStripeCents is dispatch, not arrival', () => {
   const sale = {
     amountCents: 10825,
     feeCents: 2000,

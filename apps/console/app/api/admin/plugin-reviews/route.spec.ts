@@ -861,7 +861,7 @@ describe('the element-metadata criterion gates the customer-facing verdicts', ()
 })
 
 /**
- * A KILL IS NOT A REVIEW VERDICT (AGL-2514).
+ * A KILL IS NOT A REVIEW VERDICT.
  *
  * `latestVersionReviewState: 'revoked'` is written to the LISTING's summary
  * field, and only there. The version keeps the `approved` it earned, and the
@@ -879,7 +879,7 @@ describe('the element-metadata criterion gates the customer-facing verdicts', ()
  * filter expression, which is the thing that would have to change for the
  * failure above to become possible.
  */
-describe('revoking a version does not un-review it (AGL-2514)', () => {
+describe('revoking a version does not un-review it', () => {
   it('flips the listing summary while the version keeps its verdict', async () => {
     seedListing({ latestApprovedVersion: VERSION, reviewStatus: 'listed' })
     seedVersion()

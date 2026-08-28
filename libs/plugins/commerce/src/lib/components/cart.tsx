@@ -779,7 +779,7 @@ export const schema: Aglyn.ComponentSchema<CartProps> = {
     {
       // The PROP KEY stays `showCoupon` — it is persisted in every saved page
       // that uses this component, and renaming it would blank the control on
-      // all of them. Only what the merchant reads changes (AGL-2518).
+      // all of them. Only what the merchant reads changes.
       name: 'showCoupon',
       // ONE CONTROL, TWO FEATURES, AND IT ONLY NAMED ONE. This checkbox gates
       // the gift-card field as well as the coupon field, so a merchant who
