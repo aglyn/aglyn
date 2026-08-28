@@ -213,6 +213,43 @@ has the same control themselves under **Manage account → Security → Recent s
 If the card says the registry **could not be read**, that is not the same as "no other
 devices": do not tell anyone their account is clean from that screen until it loads.
 
+### Email delivery {#email-delivery}
+
+An **Email delivery** card on the same detail page answers *"they say they never got
+it."* It lists every message we sent the account's address, newest first: the subject,
+which of our senders produced it, when it was sent and delivered, and whether it was
+opened or clicked.
+
+Read it before you resend anything. The four states that change what you do next:
+
+- **Delivered, not opened.** It reached the mailbox. Check the spam folder with them
+  rather than sending it again — a second copy lands in the same place.
+- **Bounced.** The mailbox rejected it. A *permanent* bounce means the address does not
+  exist, so correct the address; a *transient* one is a full mailbox or a busy server
+  and will clear on its own. A permanent bounce also adds the address to the
+  do-not-contact list, which is why their newsletters stopped.
+- **Spam complaint.** Somebody pressed *report spam* on a message we sent. Never resend
+  marketing to that address; transactional mail still goes.
+- **Nothing at all.** See the limits below before concluding we never wrote to them.
+
+**Opens are approximate; clicks are not.** An open is recorded by a hidden image, and
+most inboxes block images by default — a message with no open was very often read. A
+click is a real action and can be trusted. Say it that way to the account holder rather
+than telling them our records show they did not read it.
+
+**What the card cannot see.** The history is built from delivery events reported by the
+sending service. It holds nothing from before that feed was connected, nothing sent
+while it was down, and nothing sent to a *different* address than the one on the account
+now — the log is filed by address, so an account whose email was changed keeps its older
+mail under the old one. An empty table is not proof that nothing was sent.
+
+If the card says the log **could not be read**, that is not the same as "we never
+emailed them": do not tell anyone their mail was or was not sent from that screen until
+it loads.
+
+The record is ours, not the sending service's. It survives that vendor's own retention
+window, and it survives replacing the vendor.
+
 ### Staff notes {#staff-notes}
 
 Free-text support/billing context on each organization's detail
@@ -431,9 +468,12 @@ the account and revoking its refresh tokens ends the session immediately.
 
 ## Break-glass access
 
-**`zachary.w.gover@gmail.com` holds `super` staff in the project pool, permanently and
-by design.** It is not an oversight, not a migration leftover, and should not be
-"tidied up" — it is the account that still works when SSO does not. If SAML is
+**One consumer Google account — outside the Workspace domain, in the project pool
+rather than the SAML tenant — holds `super` staff permanently and by design.** It is
+not an oversight, not a migration leftover, and should not be "tidied up" — it is the
+account that still works when SSO does not. Which account it is belongs in the
+password manager, not in a published page: naming it here would hand an attacker the
+one identity that is outside Workspace enforcement. If SAML is
 misconfigured, the IdP is down, or a domain rule is set wrong, this is the way back in.
 
 It is a deliberate trade, and the cost is real: an identity outside Google Workspace

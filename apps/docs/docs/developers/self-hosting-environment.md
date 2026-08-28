@@ -528,7 +528,7 @@ immediately, so enabling it cannot reach backwards and retro-bill. Format is
 | --- | --- | --- | --- |
 | `RESEND_API_KEY` | Feature | Runtime | `re_…`. Without it every outbound send — invites, receipts, password resets, campaigns, security alerts — is an inert no-op. Nothing errors; mail simply does not arrive. |
 | `USAGE_EMAIL_FROM` | Feature | Runtime | The single verified sender identity for **all** outbound mail, not just usage mail — it gates the "is email configured" check every sender consults. A bare address or `Bramble <billing@example.com>`. It has to be on a domain you verified in Resend, or Resend rejects the send. Unset, every sender no-ops or answers `501` with an actionable message; nothing throws. |
-| `RESEND_WEBHOOK_SECRET` | Optional | Runtime | Svix signing secret (`whsec_…`) verifying Resend's delivery, open, click, bounce and complaint webhooks. Unset, that endpoint answers `501` and no open/click statistics or bounce suppressions are ever recorded. |
+| `RESEND_WEBHOOK_SECRET` | Optional | Runtime | Svix signing secret (`whsec_…`) verifying Resend's delivery, open, click, bounce and complaint webhooks. Unset, that endpoint answers `501` and nothing is recorded: no open/click statistics, no bounce suppressions, and no per-recipient delivery history on the staff user page. |
 | `EMAIL_UNSUBSCRIBE_SECRET` | Feature | Runtime | See [Secrets](#secrets). |
 | `STAFF_ALERT_EMAIL` | Optional | Runtime | One internal inbox for platform-operations alarms — GDPR erasure due, Assist margin guard. **One address**, not a comma list. Unset, the alarms evaluate and mail nobody, with no error. |
 

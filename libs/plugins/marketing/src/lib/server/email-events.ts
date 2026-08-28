@@ -16,6 +16,7 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import { normalizeResendDeliveryEvents } from '@aglyn/shared-util-email'
 // AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
 // copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
 // refuse an edge between two feature plugins — every plugin carries only
@@ -30,6 +31,10 @@ import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
 // suppression writer with whatever the factory happened to list. A stub there
 // is a false green on the one behaviour AGL-2407 is about.
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
+// Same leaf-import reasoning again: the per-recipient delivery log is the only
+// record staff have of what we sent someone, and a mocked-away writer is a
+// green test over an empty log.
+import { recordEmailDeliveryEvents } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -234,6 +239,27 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
   try {
     const event = JSON.parse(payload.toString('utf8'))
     const type = String(event?.type ?? '')
+
+    /*==========================================
+     * THE PER-RECIPIENT DELIVERY LOG.
+     *
+     * FIRST, and for every event type rather than the four below, because the
+     * log is the staff answer to "did this person get their invite" and that
+     * question is mostly asked about `sent`, `delivered` and `bounced` —
+     * none of which the campaign statistics below have any use for.
+     *
+     * `normalizeResendDeliveryEvents` is the one place in the tree that reads
+     * Resend's wire format; everything downstream stores and renders our own
+     * vocabulary, so changing sender is a new adapter and nothing else.
+     *
+     * Best-effort and awaited but never fatal: a log write that fails must
+     * not turn into a non-2xx, which the provider would answer by retrying
+     * the same event forever.
+     *=========================================*/
+    await recordEmailDeliveryEvents(
+      normalizeResendDeliveryEvents(event, Date.now()),
+    ).catch(() => 0)
+
     if (
       type !== 'email.opened' &&
       type !== 'email.clicked' &&

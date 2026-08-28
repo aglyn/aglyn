@@ -296,6 +296,24 @@ const fakeFirestore = {
 // intercept, so the handler always gets the real predicate. That is the point
 // of importing it from the leaf rather than the barrel — a permissive stub
 // would turn every path-shaped tag below into a false green.
+/*
+ * The delivery log, mocked at its LEAF so the write is observable.
+ *
+ * The real module reaches the admin SDK and swallows its own failures by
+ * design — so left unmocked it would no-op here and the assertions below
+ * would pass over a handler that never called it.
+ */
+const recordedDeliveryEvents: unknown[][] = []
+jest.mock(
+  '@aglyn/tenant-data-admin/server/email-delivery-log',
+  () => ({
+    recordEmailDeliveryEvents: jest.fn(async (events: unknown[]) => {
+      recordedDeliveryEvents.push(events)
+      return events.length
+    }),
+  }),
+)
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   updateExisting: jest.requireActual(
@@ -397,6 +415,7 @@ let errors: unknown[][] = []
 
 beforeEach(() => {
   docs.clear()
+  recordedDeliveryEvents.length = 0
   updateFailure = null
   errors = []
   jest.spyOn(console, 'error').mockImplementation((...args) => {
@@ -916,5 +935,98 @@ describe('the open and click path is unchanged', () => {
 
     expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
     expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+  })
+})
+
+/*==========================================
+ * THE PER-RECIPIENT DELIVERY LOG.
+ *
+ * A different audience from everything above. The campaign statistics answer
+ * "how did this send perform"; the log answers "did THIS person get their
+ * invite" — which is a support question, and the events it needs are exactly
+ * the ones the campaign path has no use for and returns `ignored: true` on.
+ *=========================================*/
+describe('the delivery log', () => {
+  it('records a send that carries no campaign at all', async () => {
+    const result = await deliver({
+      type: 'email.sent',
+      data: {
+        email_id: 'msg_sent_1',
+        to: [RECIPIENT],
+        subject: 'Confirm your email address',
+        tags: [{ name: 'context', value: 'email-verification' }],
+      },
+    })
+
+    // `ignored: true` is about the CAMPAIGN stats. The log took it anyway,
+    // which is the whole point — a verification email has no campaign and is
+    // the mail support is most often asked about.
+    expect(result.status).toBe(200)
+    expect(result.body).toEqual({ ignored: true })
+    expect(recordedDeliveryEvents).toHaveLength(1)
+    expect(recordedDeliveryEvents[0]).toEqual([
+      expect.objectContaining({
+        type: 'sent',
+        to: RECIPIENT,
+        subject: 'Confirm your email address',
+        context: 'email-verification',
+        providerMessageId: 'msg_sent_1',
+      }),
+    ])
+  })
+
+  it('records the lifecycle states the campaign path never sees', async () => {
+    for (const type of ['email.delivered', 'email.delivery_delayed', 'email.failed']) {
+      await deliver({
+        type,
+        data: { email_id: 'msg_2', to: [RECIPIENT], subject: 'Receipt' },
+      })
+    }
+
+    expect(recordedDeliveryEvents.flat().map((e: any) => e.type)).toEqual([
+      'delivered',
+      'delayed',
+      'failed',
+    ])
+  })
+
+  it('records an open alongside the campaign stats rather than instead of them', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver({
+      type: 'email.opened',
+      data: { email_id: 'msg_3', to: [RECIPIENT], tags: TAGS },
+    })
+
+    // Both, not either: the campaign counter and the per-person row are
+    // different questions and a regression in one must not look like the
+    // other still working.
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
+    expect(recordedDeliveryEvents.flat()).toHaveLength(1)
+  })
+
+  it('records nothing for an event that is not about a message', async () => {
+    await deliver({ type: 'contact.created', data: { id: 'contact_1' } })
+    expect(recordedDeliveryEvents.flat()).toHaveLength(0)
+  })
+
+  it('is never consulted on an unsigned request', async () => {
+    const { res, result } = makeResponse()
+    await emailEventsHandler(
+      {
+        method: 'POST',
+        query: {},
+        body: {},
+        rawBody: JSON.stringify({ type: 'email.sent' }),
+        cookies: {},
+        headers: { 'svix-id': 'x', 'svix-timestamp': '1', 'svix-signature': 'v1,bad' },
+      } as any,
+      res,
+    )
+
+    // The signature check stands in front of the log, so a forged payload
+    // cannot write a row into a person's support history.
+    expect(result.status).toBe(401)
+    expect(recordedDeliveryEvents).toHaveLength(0)
   })
 })

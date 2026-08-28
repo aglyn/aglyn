@@ -29,6 +29,10 @@ import {
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
 import { type DeviceRow, readDeviceRows } from '../../../_lib/device-registry'
+// From the LEAF: the barrel above reaches the admin SDK and is mocked wholesale
+// by route specs, and a mocked-away reader renders an empty email history that
+// looks exactly like "we never mailed this person".
+import { readEmailDeliveryHistory } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 
 /**
  * Staff user detail (AGL-244): everything the console needs to answer
@@ -274,10 +278,24 @@ async function handler(request: Request): Promise<Response> {
       firestore.collection('users').doc(uid).collection('orgs').limit(50).get(),
       firestore.collection('users').doc(uid).get(),
     ])
-    const [phone, legal, devices] = await Promise.all([
+    const [phone, legal, devices, emails] = await Promise.all([
       readPhoneDisclosure(profile),
       readLegalDisclosure(uid, firestore),
       readDeviceDisclosure(uid, firestore),
+      /*
+       * WHAT WE SENT THIS PERSON, and what they did with it.
+       *
+       * Keyed on the ADDRESS rather than the uid, because that is what a
+       * mail provider reports against and what the delivery log is filed
+       * under — an account whose address was changed since a send will not
+       * show the older mail, which is the honest answer rather than a
+       * confident wrong one.
+       *
+       * Reads our own store, never the sending provider: see
+       * `email-delivery-log.ts` for why a staff screen must not depend on a
+       * vendor's list endpoint.
+       */
+      readEmailDeliveryHistory(record.email),
     ])
     const memberships = await Promise.all(
       reverse.docs.map(async (entry) => {
@@ -373,6 +391,14 @@ async function handler(request: Request): Promise<Response> {
        * on purpose — see `readDeviceDisclosure`.
        */
       devices,
+      /**
+       * Delivery history for the account's address — what was sent, whether
+       * it arrived, and whether it was opened or clicked. Same
+       * `lookupFailed` split as `devices`, for the same reason: "no mail
+       * recorded" and "the log is unreachable" send a staffer in opposite
+       * directions.
+       */
+      emails,
     }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

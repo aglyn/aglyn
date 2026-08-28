@@ -24,6 +24,7 @@ import {
   releaseConsoleDomain,
 } from './console-domains'
 import { authForPool, findUserByUidAcrossPools } from './auth-pools'
+import { eraseEmailDeliveries } from './email-delivery-log'
 import { removeOrgMember } from './organizations'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
 import { readOrgBilling } from './org-billing'
@@ -1333,6 +1334,12 @@ export interface EraseUserResult {
      * redaction could not run** — not that there was nothing to redact.
      */
     supportMessagesRedacted: number | null
+    /**
+     * Messages removed from `emailDeliveries/{sha256(address)}/messages` —
+     * the per-recipient delivery log. Zero for an account with no address on
+     * file, or one we never mailed.
+     */
+    emailDeliveries: number
   }
 }
 
@@ -1456,10 +1463,30 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   // Auth record LAST: once it is gone there is no uid to retry with, and
   // `authForPool` is required because a project-level delete cannot see an
   // SSO account at all (AGL-1122).
+  //
+  // The lookup is hoisted above the delete because the DELIVERY LOG is filed
+  // under the ADDRESS, not the uid, and the auth record is the last place the
+  // address exists. Erase it while there is still something to erase it by.
   let authRecord = false
+  let emailDeliveries = 0
   try {
     const record = await findUserByUidAcrossPools(uid)
     if (record) {
+      /*
+       * `emailDeliveries/{sha256(address)}/messages` — every subject we ever
+       * sent this person, with the times they opened and clicked. Personal
+       * data by any reading of it, and reachable from neither
+       * `recursiveDelete(users/{uid})` nor `profiles/{uid}` because it is
+       * keyed by address in a third top-level collection. The same shape as
+       * the `profiles/{uid}` omission this function already documents above:
+       * a store nothing in the sweep list would prompt a reader to notice.
+       *
+       * Best-effort, like every other step here — a log that survives must
+       * not stop the auth record from going.
+       */
+      emailDeliveries = await eraseEmailDeliveries(record.record?.email).catch(
+        () => 0,
+      )
       await authForPool(record.tenantId).deleteUser(uid)
       authRecord = true
     }
@@ -1480,6 +1507,7 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
         photo,
         profile,
         supportMessagesRedacted,
+        emailDeliveries,
       },
       at: FieldValue.serverTimestamp(),
     })
@@ -1493,6 +1521,7 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
       photo,
       profile,
       supportMessagesRedacted,
+      emailDeliveries,
     },
   }
 }

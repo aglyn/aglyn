@@ -2979,6 +2979,28 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The per-recipient DELIVERY LOG: one document per message we sent an
+    // address, carrying its subject, its lifecycle timestamps and its open
+    // and click counts. Keyed by the same `sha256(address)` the suppression
+    // lists use, so the two can never describe different people under one id.
+    //
+    // Client reads are CLOSED, staff included, and that is the difference
+    // from the two lists above. Those answer "may we mail this person", a
+    // question with one document and one answer. This is a per-person message
+    // history whose read is a QUERY — and the staff console reads it through
+    // `/api/admin/users/detail`, which has already established a staff claim
+    // AND recorded who looked. An open rule here would be the same data with
+    // neither, reachable from any browser holding a staff token.
+    //
+    // Every writer is the Admin SDK behind a signed delivery webhook, and
+    // deletes happen on the erasure path — also Admin SDK.
+    match /emailDeliveries/{emailKey} {
+      allow read, write: if false;
+      match /messages/{messageId} {
+        allow read, write: if false;
+      }
+    }
+
     // Designed templates for Aglyn's own outbound email — invites, usage
     // summaries, staff alerts (AGL-747). Platform-level, not per-org: there
     // is no membership to check, only the staff claim.

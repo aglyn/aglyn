@@ -56,6 +56,9 @@ import StaffUserDeviceSessionsCard, {
   type StaffDeviceRow,
 } from '../../../../../components/staff-user-device-sessions-card.component'
 import StaffUserEraseCard from '../../../../../components/staff-user-erase-card.component'
+import StaffUserEmailHistoryCard, {
+  type StaffEmailDeliveryRow,
+} from '../../../../../components/staff-user-email-history-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -155,6 +158,16 @@ interface UserDetail {
   devices?: {
     lookupFailed: boolean
     rows: StaffDeviceRow[]
+  }
+  /**
+   * Delivery history for the account's address (what we sent, whether it
+   * arrived, whether it was opened or clicked). Optional for the same reason
+   * `devices` is: a console deployed against an older API response must
+   * render the page rather than crash on `.rows`.
+   */
+  emails?: {
+    lookupFailed: boolean
+    rows: StaffEmailDeliveryRow[]
   }
 }
 
@@ -704,6 +717,28 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             onSignOut={async (deviceId) =>
                               callManage({ action: 'signOutDevice', deviceId })
                             }
+                          />
+                        ),
+                      },
+                      {
+                        key: 'email-history',
+                        children: (
+                          /*
+                           * What we sent this person and what they did with
+                           * it, beside the sign-in history because the two
+                           * answer the same support call from opposite ends:
+                           * one says whether they could get in, the other
+                           * whether the mail that would have let them ever
+                           * arrived.
+                           */
+                          <StaffUserEmailHistoryCard
+                            address={detail.user.email ?? null}
+                            rows={detail.emails?.rows ?? []}
+                            // A missing `emails` key is a read that did not
+                            // happen, which reads to a human exactly like a
+                            // read that failed — and NOT like "we never
+                            // emailed them".
+                            lookupFailed={detail.emails?.lookupFailed ?? true}
                           />
                         ),
                       },
