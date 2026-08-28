@@ -1032,11 +1032,10 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
  * authenticated — and Stripe stamps it about a day later. It has charged
  * nothing and never will, so it belongs here beside `incomplete`, which is the
  * same subscription an hour earlier. `LIVE_SUBSCRIPTION_STATUSES` in
- * `org-billing-doc.ts` already excludes it, `DEAD_STATUSES` in
- * `utils/subscription-period-notice.ts` already names it, and the revenue
- * report already buckets it as uncollected; this set is the one that decides
- * both what a workspace GETS and whether we count it as revenue, so it is the
- * one place the omission cost money in both directions at once.
+ * `org-billing-doc.ts` already excludes it and `DEAD_STATUSES` in
+ * `utils/subscription-period-notice.ts` already names it; this set is the one
+ * that decides both what a workspace GETS and whether we count it as revenue,
+ * so it is the one place the omission cost money in both directions at once.
  *
  * THE DENYLIST FORM IS THE HAZARD, and it is why the omission was silent: an
  * allowlist of live statuses cannot rot when Stripe adds a status, whereas a
