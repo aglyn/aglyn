@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { resolveAuthoredEventName } from './analytics-events'
+import {
+  resolveAuthoredEventName,
+  sanitizeEventParams,
+} from './analytics-events'
 import { type AuthorHtmlRemoval, sanitizeAuthorHtml } from './author-html'
 import { HOST_EVENT_TYPES } from './workflows'
 
@@ -390,6 +393,28 @@ export const ACTION_MAX_STEPS = 10
 /** Custom-event chaining depth cap (mirrors CROSS_MAX_DEPTH). */
 export const ACTION_MAX_EVENT_DEPTH = 3
 
+/**
+ * Cap on the parameters one `trackGaEvent` step may carry (AGL-1587).
+ *
+ * Not a storage concern. These pairs are the least trustworthy analytics
+ * input on the platform — both halves are typed by a site author and land in
+ * that site's own GA4 property — and a bounded list is one an author can read
+ * back in full before publishing, which is the only review a parameter ever
+ * gets. GA4 caps custom parameters per event as well and drops the overflow
+ * without saying so, so an unbounded editor would let an author configure
+ * parameters that are never delivered and never explained. Ten, the same
+ * ceiling {@link ACTION_MAX_STEPS} puts on the step list itself.
+ */
+export const ACTION_MAX_EVENT_PARAMS = 10
+
+/**
+ * Longest analytics parameter NAME GA4 accepts; it drops a longer one on
+ * arrival, so a name over this is silence rather than a truncated dimension.
+ * The value half is capped by `ANALYTICS_PARAM_MAX_LENGTH`, which truncates
+ * instead of dropping.
+ */
+export const ACTION_EVENT_PARAM_NAME_MAX_LENGTH = 40
+
 /** Self-dismiss triggers for shown elements (AGL-589). */
 export const ELEMENT_DISMISS_OPTIONS = ['escape', 'outsideClick'] as const
 export type ElementDismissOption = (typeof ELEMENT_DISMISS_OPTIONS)[number]
@@ -677,6 +702,33 @@ export function validateHostAction(action: HostAction): string | null {
       }
       if (!resolved.name) {
         return `${label}: the analytics event name must start with a letter`
+      }
+      const params = Object.entries(step.params ?? {})
+      if (params.length > ACTION_MAX_EVENT_PARAMS) {
+        return `${label}: analytics parameters are capped at ${ACTION_MAX_EVENT_PARAMS}`
+      }
+      for (const [key, value] of params) {
+        if (!key.trim()) return `${label}: name every analytics parameter`
+        if (key.trim().length > ACTION_EVENT_PARAM_NAME_MAX_LENGTH) {
+          return `${label}: the "${key.trim().slice(0, 16)}…" parameter name is over ${ACTION_EVENT_PARAM_NAME_MAX_LENGTH} characters, which GA4 drops`
+        }
+        if (!String(value ?? '').trim()) {
+          return `${label}: enter a value for the "${key.trim()}" parameter`
+        }
+      }
+      // The author-facing half of the runtime sanitizer, the same shape the
+      // reserved name above and the `showHtml` check take. `trackAuthoredEvent`
+      // strips a parameter that can carry personal data and says nothing about
+      // it, because it is executing for a VISITOR — so an author who binds a
+      // form field into a parameter gets a step that runs, reports success,
+      // and delivers an event missing the dimension it was created for. The
+      // strip is reported HERE, by running the REAL `sanitizeEventParams`
+      // rather than a second description of its rules, so the two can never
+      // disagree about which parameter survives.
+      const kept = sanitizeEventParams(step.params ?? undefined)
+      const stripped = params.find(([key]) => !(key in kept))
+      if (stripped) {
+        return `${label}: the "${stripped[0]}" parameter is never sent — an analytics parameter must not carry a visitor's own details`
       }
     }
     if (step.type === 'sendEmail') {

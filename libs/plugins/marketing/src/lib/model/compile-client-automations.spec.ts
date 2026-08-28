@@ -87,6 +87,56 @@ describe('compileClientAutomations (AGL-830)', () => {
     expect(result).toHaveLength(0)
   })
 
+  /**
+   * An authored analytics step and a basic presentational step in ONE action.
+   *
+   * The second is the control. `trackGaEvent` is an advanced client step, so
+   * an unentitled site loses it — and an action whose every step is trimmed
+   * is dropped whole, which makes "the analytics step was removed" and "the
+   * action never compiled" indistinguishable from a length assertion alone.
+   * The `openMenu` beside it runs on every plan, so it has to survive both
+   * runs, and the trim is only proved when it does.
+   */
+  const authoredAnalytics = (params?: Record<string, string>): RawHostAction =>
+    raw('ga', {
+      trigger: { event: 'elementClick', selector: '[data-aglyn="leaf:cta"]' },
+      steps: [
+        {
+          type: 'trackGaEvent',
+          eventName: 'cta_click',
+          ...(params ? { params } : {}),
+        },
+        { type: 'openMenu', menuNodeId: 'menu-1' },
+      ] as never,
+    })
+
+  it('keeps an authored analytics step, parameters intact, for an actions-entitled site', () => {
+    const [automation] = compileClientAutomations(
+      [authoredAnalytics({ plan: 'starter', placement: 'hero' })],
+      { ...opts, actionsEntitled: true },
+    )
+    // The params reach the payload byte-for-byte: the compiler passes steps
+    // through untouched, and the runtime is the only thing that sanitizes.
+    expect(automation.steps).toEqual([
+      {
+        type: 'trackGaEvent',
+        eventName: 'cta_click',
+        params: { plan: 'starter', placement: 'hero' },
+      },
+      { type: 'openMenu', menuNodeId: 'menu-1' },
+    ])
+  })
+
+  it('drops the authored analytics step — and only it — for a site without `actions`', () => {
+    const [automation] = compileClientAutomations(
+      [authoredAnalytics({ plan: 'starter' })],
+      opts,
+    )
+    expect(automation.steps).toEqual([
+      { type: 'openMenu', menuNodeId: 'menu-1' },
+    ])
+  })
+
   it('filters by pathPattern unless matchAllPaths is set', () => {
     const action = raw('p', {
       trigger: {

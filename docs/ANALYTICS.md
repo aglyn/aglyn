@@ -1058,10 +1058,36 @@ browser console. The author-facing half is `validateHostAction`, which refuses
 to **save** a name the runtime would refuse to send. A silent drop is therefore
 only possible for a step authored before AGL-1587.
 
-Not done, and why: no cap on the _number_ of authored params (GA4 ignores past
-25 and there is no privacy or pollution consequence), and no normalization of
-param _keys_ (an invalid key costs that one param, again with no safety
-consequence). Both are formatting nits on a path whose real risk was PII.
+**The params are authored in the interaction builder, under a cap.**
+`ACTION_MAX_EVENT_PARAMS` (10) bounds the list and
+`ACTION_EVENT_PARAM_NAME_MAX_LENGTH` (40) bounds each name; a value's field
+caps its input at `ANALYTICS_PARAM_MAX_LENGTH`, the very constant
+`sanitizeEventParams` truncates at, so the affordance cannot promise a length
+the delivery shortens. The cap is not a storage concern — these pairs are the
+least trustworthy analytics input on the platform, and a bounded list is one an
+author can read back in full before publishing, which is the only review a
+parameter ever gets.
+
+`validateHostAction` runs the **real** `sanitizeEventParams` over the authored
+params and refuses to save a step carrying a parameter the runtime would strip,
+naming it. Same shape as the reserved-name refusal above and the `showHtml`
+check beside it: the runtime can only drop and stay quiet, so the strip is
+reported where the person who can fix it is looking — and by running the
+shipping function rather than a second description of its rules, so the two can
+never disagree about which parameter survives.
+
+Still not done, and why: no normalization of param _keys_ beyond the length
+bound. An invalid key costs that one param, with no safety consequence — a
+formatting nit on a path whose real risk was PII.
+
+**The step is `actions`-entitled, and the builder says so.** `trackGaEvent` is
+an advanced client step, so `compileClientAutomations` trims it out of the
+published payload for a site without the `actions` feature. The picker
+therefore disables the option and names the plan that carries it, and a step
+already authored under that type explains itself in place — it is _saved_ and
+skipped, not lost, and starts running the moment the plan carries it. Which
+tier the capability sits in is untouched: the gap was a picker that advertised
+a step the compiler was about to drop, with nothing anywhere saying so.
 
 ### 7. The docs site buys its instrumentation from the tag, not from our code (AGL-1579)
 

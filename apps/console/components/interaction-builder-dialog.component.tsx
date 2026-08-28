@@ -17,6 +17,11 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+// The analytics module is not on the `@aglyn/aglyn` barrel — it is imported by
+// the plugin SERVER graph, where the barrel's React contexts break the RSC
+// build (AGL-830) — so its constants come from the subpath, as every other
+// console call site takes them.
+import { ANALYTICS_PARAM_MAX_LENGTH } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as Besigner from '@aglyn/besigner'
 import { nodeElementSelector } from '@aglyn/besigner-ui'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -45,6 +50,7 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   useFirestore,
   useHostResourceApi,
+  useOrgPlan,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
@@ -203,6 +209,137 @@ function TargetPicker(props: {
   )
 }
 
+/** Whether this site's plan runs a step type, and the plan that carries it. */
+interface StepPlanGate {
+  entitled: boolean
+  /** Cheapest plan whose base features include the step — "Pro". */
+  planLabel: string
+}
+
+/**
+ * Authored analytics parameters for a `trackGaEvent` step (AGL-1587).
+ *
+ * Nothing is sanitized here, on purpose. Every pair typed into these fields
+ * is delivered by `trackAuthoredEvent`, which runs the shared
+ * `sanitizeEventParams` over it — the one sanitizing path — and
+ * `validateHostAction` re-runs that same function so a parameter the runtime
+ * would strip is named to the author instead of vanishing on a visitor's
+ * page. A second set of rules here could only drift from those.
+ *
+ * The copy is part of the safety story rather than decoration. A parameter is
+ * the shortest route a visitor's own details have to an analytics property,
+ * so both placeholders name a FIXED label and a FIXED value — never a person,
+ * never a form field — and the helper text says so where the author is
+ * typing, not in a document they will not open.
+ */
+function EventParamsEditor(props: {
+  params: Record<string, string>
+  onChange: (params: Record<string, string> | undefined) => void
+}) {
+  const { params, onChange } = props
+  /**
+   * Rows, not the record itself. A record cannot hold two blank keys, and two
+   * blank rows are the normal intermediate state of adding a second parameter
+   * — `Object.fromEntries` would collapse them and delete a row the author is
+   * still filling in. A rename that momentarily collides with another key
+   * would do the same.
+   */
+  const [rows, setRows] = useState<Array<[string, string]>>(() =>
+    Object.entries(params),
+  )
+  const write = (next: Array<[string, string]>) => {
+    setRows(next)
+    // Only named rows are persisted; an unnamed one is reported per-row below
+    // rather than written as a key no record can represent.
+    const named = next.filter(([key]) => key.trim())
+    onChange(named.length ? Object.fromEntries(named) : undefined)
+  }
+  const full = rows.length >= Aglyn.ACTION_MAX_EVENT_PARAMS
+  return (
+    <Stack spacing={1} sx={{ pl: 0.5 }}>
+      {rows.map(([key, value], row) => (
+        <Stack
+          key={row}
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'flex-start' }}
+        >
+          <TextField
+            label="Parameter"
+            value={key}
+            onChange={(inputEvent) =>
+              write(
+                rows.map((entry, index) =>
+                  index === row ? [inputEvent.target.value, value] : entry,
+                ),
+              )
+            }
+            size="small"
+            sx={{ width: 180 }}
+            placeholder="plan"
+            error={Boolean(value.trim()) && !key.trim()}
+            helperText={
+              Boolean(value.trim()) && !key.trim()
+                ? 'Name it, or it is not sent'
+                : undefined
+            }
+            slotProps={{
+              htmlInput: {
+                maxLength: Aglyn.ACTION_EVENT_PARAM_NAME_MAX_LENGTH,
+              },
+            }}
+          />
+          <TextField
+            label="Value"
+            value={value}
+            onChange={(inputEvent) =>
+              write(
+                rows.map((entry, index) =>
+                  index === row ? [key, inputEvent.target.value] : entry,
+                ),
+              )
+            }
+            size="small"
+            sx={{ flex: 1 }}
+            placeholder="starter"
+            slotProps={{
+              htmlInput: { maxLength: ANALYTICS_PARAM_MAX_LENGTH },
+            }}
+          />
+          <Button
+            size="small"
+            color="error"
+            sx={{ mt: 0.5 }}
+            onClick={() => write(rows.filter((_entry, index) => index !== row))}
+          >
+            {'✕'}
+          </Button>
+        </Stack>
+      ))}
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+      >
+        <Button
+          size="small"
+          disabled={full}
+          onClick={() => write([...rows, ['', '']])}
+        >
+          {'Add parameter'}
+        </Button>
+        <Typography variant="caption" color="text.secondary">
+          {full
+            ? `An event carries at most ${Aglyn.ACTION_MAX_EVENT_PARAMS} parameters.`
+            : 'Fixed labels only — a parameter that carries personal ' +
+              'details is stripped before the event is sent.'}
+        </Typography>
+      </Stack>
+    </Stack>
+  )
+}
+EventParamsEditor.displayName = 'EventParamsEditor'
+
 /**
  * Fluent interaction builder (AGL-319): the whole trigger + actions +
  * frequency configuration in one dialog on the canvas — replacing the
@@ -234,6 +371,57 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
     [firestore, hostId],
     { idField: '$id' },
+  )
+
+  /**
+   * The plan that will — or will not — RUN what is authored here (AGL-577).
+   *
+   * `compileClientAutomations` trims a step this org is not entitled to out of
+   * the published payload, so a picker that offers every step regardless
+   * produces an interaction that saves, publishes, and never fires, with
+   * nothing anywhere saying why. The gate below asks the SAME predicates the
+   * compiler filters with, off the org that owns this host — one source, so
+   * the picker cannot advertise a step the compiler is about to drop.
+   */
+  const { org, ready: orgReady } = useOrgPlan(hostId)
+  const stepEntitlements = useMemo(
+    () => ({
+      actionsEntitled: Aglyn.checkEntitlement(org as never, 'actions'),
+      allowJs: Aglyn.checkEntitlement(org as never, 'webhooks'),
+    }),
+    [org],
+  )
+  /**
+   * A server step is not a client step, so `isClientStepEntitled` answers
+   * false for one whatever the plan; the compiler dispatches it only for an
+   * `actions`-entitled org, which is the arm taken here rather than a second
+   * rule written out.
+   *
+   * Never consulted before `orgReady`: `checkEntitlement(undefined)` resolves
+   * the FREE tier rather than "unknown", so claiming anything during the org
+   * doc's flight would tell a paying site its plan will not run a step it
+   * pays for.
+   */
+  const stepPlanGate = useCallback(
+    (type: string): StepPlanGate => {
+      const step = { type } as unknown as Aglyn.HostActionStep
+      return {
+        entitled: Aglyn.isClientActionStep(step)
+          ? Aglyn.isClientStepEntitled(step, stepEntitlements)
+          : stepEntitlements.actionsEntitled,
+        planLabel:
+          Aglyn.planLabelGrantingFeature(
+            type === 'runJs' ? 'webhooks' : 'actions',
+          ) ?? 'a higher plan',
+      }
+    },
+    [stepEntitlements],
+  )
+  /** The gate to render by, or null while the plan is still unknown. */
+  const readyStepPlanGate = useCallback(
+    (type: string): StepPlanGate | null =>
+      orgReady ? stepPlanGate(type) : null,
+    [orgReady, stepPlanGate],
   )
 
   const selector = nodeElementSelector(state.nodeId)
@@ -660,6 +848,10 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     overlayId: undefined,
                     url: undefined,
                     eventName: undefined,
+                    // Analytics parameters belong to the event that names
+                    // them; carrying them onto another step type would ship
+                    // a payload nothing reads.
+                    params: undefined,
                     // Drawer commands (AGL-572) default to this element
                     // when it is itself a drawer, mirroring the menu
                     // default below; anything else broadcasts to the
@@ -693,11 +885,39 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                 select
                 sx={{ minWidth: 220 }}
               >
-                {STEP_TYPES.map((entry) => (
-                  <MenuItem key={entry.value} value={entry.value}>
-                    {entry.label}
-                  </MenuItem>
-                ))}
+                {STEP_TYPES.map((entry) => {
+                  // The entitlement state where the author PICKS, not after
+                  // they have configured and saved: a plan chip beside the
+                  // label names the tier, and the option cannot be chosen by
+                  // mistake. An already-authored step of this type still
+                  // renders its label as the field's value — a disabled
+                  // option is unselectable, not invisible — and explains
+                  // itself in the notice below the row.
+                  const gate = readyStepPlanGate(entry.value)
+                  const blocked = Boolean(gate && !gate.entitled)
+                  return (
+                    <MenuItem
+                      key={entry.value}
+                      value={entry.value}
+                      disabled={blocked}
+                    >
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <span>{entry.label}</span>
+                        {blocked ? (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={gate?.planLabel}
+                          />
+                        ) : null}
+                      </Stack>
+                    </MenuItem>
+                  )
+                })}
               </TextField>
               {/* Element/class target now picked on the canvas via the
                   TargetPicker rendered below the row (AGL-574). */}
@@ -933,6 +1153,31 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                 </Button>
               ) : null}
             </Stack>
+            {/* The step is SAVED either way and starts running the moment the
+                plan carries it — so the notice says skipped, never lost. It
+                is the only place an already-authored step of an unentitled
+                type can explain itself, since its option in the picker is
+                disabled rather than removed. */}
+            {(() => {
+              const gate = readyStepPlanGate(step.type)
+              if (!gate || gate.entitled) return null
+              const label =
+                STEP_TYPES.find((entry) => entry.value === step.type)?.label ??
+                step.type
+              return (
+                <Alert severity="info">
+                  {`"${label}" is included from ${gate.planLabel}. This site's ` +
+                    'plan saves the step but the published page skips it — ' +
+                    'see Billing to upgrade.'}
+                </Alert>
+              )
+            })()}
+            {step.type === 'trackGaEvent' ? (
+              <EventParamsEditor
+                params={(step.params ?? {}) as Record<string, string>}
+                onChange={(params) => updateStep(index, { params })}
+              />
+            ) : null}
             {[
               'showElement',
               'hideElement',

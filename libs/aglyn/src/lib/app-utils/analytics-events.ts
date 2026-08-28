@@ -535,8 +535,15 @@ const DENIED_PARAM_KEYS: ReadonlySet<string> = new Set([
 /** Deliberately loose — this is a "does it smell like an address" test. */
 const EMAIL_SHAPED = /[^\s@]+@[^\s@]+\.[^\s@]+/
 
-/** GA4 truncates param values at 100 chars anyway; do it ourselves, visibly. */
-const MAX_PARAM_LENGTH = 100
+/**
+ * GA4 truncates param values at 100 chars anyway; do it ourselves, visibly.
+ *
+ * Exported because an AUTHOR types some of these (the `trackGaEvent` step's
+ * parameters), and the field they type into caps its input at the same number
+ * — the truncation point and the affordance that describes it have to be one
+ * value, or the editor promises a length the delivery quietly shortens.
+ */
+export const ANALYTICS_PARAM_MAX_LENGTH = 100
 
 function scrubValue(value: string): string | null {
   let candidate = value
@@ -557,7 +564,7 @@ function scrubValue(value: string): string | null {
   // something already protected. Testing the REDUCED value still catches an
   // address embedded in the path itself, which the reduction keeps.
   if (EMAIL_SHAPED.test(candidate)) return null
-  return candidate.slice(0, MAX_PARAM_LENGTH)
+  return candidate.slice(0, ANALYTICS_PARAM_MAX_LENGTH)
 }
 
 /**
