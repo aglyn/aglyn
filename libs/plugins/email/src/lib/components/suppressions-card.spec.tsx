@@ -50,9 +50,33 @@ import SuppressionsCard from './suppressions-card'
 /** Mutable so each case picks the rows before rendering. */
 let suppressionDocs: Array<Record<string, unknown>> = []
 
+/**
+ * ONE Firestore handle for the whole file: the aggregate effect keys on it,
+ * and a factory returning a fresh `{}` per render is an infinite loop.
+ */
+const FIRESTORE = {}
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
-  useFirestoreCollection: () => ({ data: suppressionDocs }),
+  useFirestore: () => FIRESTORE,
+  /*
+   * The table pages its own query (AGL-693), and the SERVER decides the order.
+   * The double sorts the way `orderBy('createdAt','desc')` would, so "newest
+   * first" is a property of the answer rather than of a client sort the card
+   * no longer performs.
+   */
+  usePagedCollection: () => ({
+    rows: [...suppressionDocs].sort(
+      (a: any, b: any) =>
+        (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+    ),
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: 'success',
+    fromCache: false,
+  }),
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -60,9 +84,30 @@ jest.mock('@aglyn/aglyn', () => ({
 }))
 
 jest.mock('firebase/firestore', () => ({
-  collection: (...args: unknown[]) => args,
-  query: (value: unknown) => value,
+  collection: (...args: unknown[]) => ({ args, where: undefined }),
+  query: (base: any, ...constraints: any[]) => ({
+    ...base,
+    where: constraints.find((item) => item && 'field' in item) ?? base?.where,
+  }),
   limit: () => undefined,
+  orderBy: () => undefined,
+  count: () => 'count',
+  where: (field: string, op: string, value: unknown) => ({ field, op, value }),
+  /*
+   * The reason breakdown is a SERVER AGGREGATE now, not a tally of the rows on
+   * screen (AGL-693) — a chip that counted the page would read the page size
+   * on a long list. The double answers from the same fixture the table is
+   * answered from, so the two cannot agree by coincidence.
+   */
+  getAggregateFromServer: async (built: any) => {
+    const predicate = built?.where
+    const matching = predicate
+      ? suppressionDocs.filter(
+          (row: any) => row[predicate.field] === predicate.value,
+        )
+      : suppressionDocs
+    return { data: () => ({ total: matching.length }) }
+  },
   // The DELETED PATH is what the assertions read, so the double records it
   // rather than answering an opaque token: "delete was called" and "the right
   // document was deleted" are different claims, and only the second one says
@@ -102,16 +147,21 @@ beforeEach(() => {
   confirmation.accepted = true
   confirmation.seen = []
   suppressionDocs = [
+    // `createdAt` on every row, because both writers stamp it when the
+    // document is created — which is why the list can be ordered on it
+    // without dropping anyone (AGL-693). `suppressedAt` is the restamp.
     {
       $id: 'hash-a',
       email: 'dana@example.com',
       reason: 'bounce',
-      suppressedAt: { seconds: DAY },
+      createdAt: { seconds: DAY },
+      suppressedAt: { seconds: DAY + 172_800 },
     },
     {
       $id: 'hash-b',
       email: 'sam@example.com',
       reason: 'complaint',
+      createdAt: { seconds: DAY + 86_400 },
       suppressedAt: { seconds: DAY + 86_400 },
     },
     // Written before AGL-2408: the unsubscribe handler stored no reason.
@@ -142,9 +192,15 @@ describe('SuppressionsCard (AGL-2410)', () => {
     render(<SuppressionsCard hostId="host-1" />)
 
     // "My campaign says 500 recipients and 480 sent — who were the other
-    // 20?" begins here.
-    expect(screen.getByText('Bounced: 1')).toBeTruthy()
+    // 20?" begins here. Awaited, because the breakdown is a server aggregate
+    // rather than a tally of the rendered rows: it cannot resolve in the same
+    // tick as the mount that asked for it, and a synchronous assertion would
+    // read the "could not read the breakdown" state instead.
+    await waitFor(() => expect(screen.getByText('Bounced: 1')).toBeTruthy())
     expect(screen.getByText('Marked as spam: 1')).toBeTruthy()
+    // The reasonless legacy row, counted as the REMAINDER — an equality on
+    // `reason` would exclude it, which is the same field-presence trap as
+    // ordering on a field a writer can omit.
     expect(screen.getByText('Unsubscribed: 1')).toBeTruthy()
   })
 

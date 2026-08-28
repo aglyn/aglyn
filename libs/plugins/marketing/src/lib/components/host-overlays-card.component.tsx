@@ -51,7 +51,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, deleteDoc, doc, limit, query, setDoc } from 'firebase/firestore'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  limit,
+  orderBy,
+  query,
+  setDoc,
+} from 'firebase/firestore'
 import { useState } from 'react'
 import {
   useFirestore,
@@ -67,6 +75,16 @@ export interface HostOverlaysCardProps {
 }
 
 type OverlayDraft = HostOverlay & { $id?: string }
+
+/**
+ * How many overlays the card reads.
+ *
+ * A ceiling rather than a page size — see the query, which explains why this
+ * one list is deliberately not paginated. Generous on purpose: a site runs a
+ * handful of banners and popups, and the number exists to bound a pathological
+ * collection rather than to bound a normal one.
+ */
+const CEILING = 50
 
 const EMPTY_BAR: OverlayDraft = {
   kind: 'bar',
@@ -132,15 +150,55 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     fromCache: overlaysFromCache,
   } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
+      query(
+        collection(firestore, 'hosts', hostId, 'overlays'),
+        /*
+         * ORDERED AND CEILINGED, deliberately not paged (AGL-693).
+         *
+         * ## Why the read is ordered
+         *
+         * `limit(50)` alone is answered in DOCUMENT-ID order over ids from
+         * `createResourceUid()`, so the window was a pseudo-random fifty that
+         * the client sort below arranged into a believable precedence list.
+         * `name` is the one field every overlay carries: `handleSave` writes
+         * `name: (…).trim() || null` on every save, and it is the only writer
+         * that CREATES one — the analytics beacon uses `update()` precisely so
+         * a stale page cannot mint a stats-only stray, and `overlays` is not
+         * in `IMPORTABLE_FIELDS`, so no restore path makes one either. A null
+         * name still matches an `orderBy`; an ABSENT field would not.
+         *
+         * ## Why this list is not paged
+         *
+         * The row order IS the feature: the first enabled overlay of each kind
+         * is the one a visitor sees (AGL-270), and the arrows reorder by
+         * swapping `order` with the ADJACENT row. A page boundary separates a
+         * row from the neighbor it would swap with, so the eleventh overlay
+         * could never be moved into tenth place — the same reason the console's
+         * screen tree and starter bundles are ceilinged rather than paged.
+         *
+         * `orderBy('order')` is not an option either, and that is what makes
+         * the precedence sort a client-side one: `EMPTY_BAR` and `EMPTY_POPUP`
+         * carry no `order`, and only `handleMove` ever writes one, so ordering
+         * the query on it would hide every overlay nobody has reordered rather
+         * than mis-sorting it. The client sort holds the WHOLE window, which is
+         * what makes sorting it here honest.
+         */
+        orderBy('name'),
+        // One past the ceiling, so "there are more overlays than these" is a
+        // fact rather than a guess from `length === 50`.
+        limit(CEILING + 1),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const overlays: OverlayDraft[] = [...(overlayDocs ?? [])].sort(
-    (a, b) =>
-      (a.order ?? 0) - (b.order ?? 0) ||
-      String(a.name ?? '').localeCompare(String(b.name ?? '')),
-  )
+  const truncated = (overlayDocs?.length ?? 0) > CEILING
+  const overlays: OverlayDraft[] = [...(overlayDocs ?? [])]
+    .slice(0, CEILING)
+    .sort(
+      (a, b) =>
+        (a.order ?? 0) - (b.order ?? 0) ||
+        String(a.name ?? '').localeCompare(String(b.name ?? '')),
+    )
 
   const [editor, setEditor] = useState<OverlayDraft | null>(null)
   const patch = (partial: Partial<OverlayDraft>) =>
@@ -358,6 +416,13 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
               {'New popup'}
             </Button>
           </Stack>
+          {truncated ? (
+            <Alert severity="info">
+              {`Showing ${CEILING} overlays, ordered by name. This site has ` +
+                'more than that — delete the ones you have finished with, or ' +
+                'the ones below the ceiling cannot be reordered against them.'}
+            </Alert>
+          ) : null}
           {overlays.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {'No overlays yet — the single announcement bar and popup ' +

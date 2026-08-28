@@ -673,8 +673,22 @@ const unpaginatedTable = (source: string) => {
   )
 }
 
+/**
+ * Every table in the console AND in the plugins.
+ *
+ * The walk stopped at `apps/console`, which is how a sweep that found twelve
+ * of these could report itself complete with twenty-five more standing one
+ * directory over. A plugin console card is the same surface as a console one —
+ * it renders into the same shell, under the same header, for the same reader —
+ * and the collections behind the plugin cards are the ones that grow FASTEST:
+ * a site's form submissions, its leads, its stock ledger, its suppression list.
+ */
 function tablesWithoutFooters(): string[] {
-  return [...tsxFilesUnder(CONSOLE_PAGES), ...tsxFilesUnder(CONSOLE_COMPONENTS)]
+  return [
+    ...tsxFilesUnder(CONSOLE_PAGES),
+    ...tsxFilesUnder(CONSOLE_COMPONENTS),
+    ...pluginComponentFiles(),
+  ]
     .filter((path) => unpaginatedTable(readFileSync(path, 'utf8')))
     .map((path) => path.replace(`${REPO}/`, ''))
     .sort()
@@ -725,6 +739,29 @@ const NOT_A_LIST: Array<[string, string]> = [
       'belongs to and one per legal document version it has accepted — both ' +
       'bounded by what the account IS rather than by what it has done. The ' +
       'audit trail, which was bounded by the latter, renders `ActivityTable`.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/product-editor-dialog.component.tsx',
+    'One row per VARIANT of the single product being edited, and the variant ' +
+      'set is the cross-product of the options this same dialog defines a few ' +
+      'lines above the table. Its size is the author’s own choice, made on ' +
+      'screen, and every row is an input the save reads — a page boundary ' +
+      'would hide half a form from the submit that posts all of it.',
+  ],
+  [
+    'libs/plugins/commerce/src/lib/components/console/storefront-tax-summary-card.component.tsx',
+    'One row per JURISDICTION inside one liability bucket, which is the same ' +
+      'shape as the console’s revenue breakdowns: the cardinality belongs to ' +
+      'the tax taxonomy a store sells into, not to how long it has traded.',
+  ],
+  [
+    'libs/plugins/marketing/src/lib/components/host-overlays-card.component.tsx',
+    'A PRECEDENCE list: the first enabled overlay of each kind is the one a ' +
+      'visitor sees, and the arrows reorder by swapping `order` with the ' +
+      'ADJACENT row — so a page boundary separates a row from the neighbor it ' +
+      'would trade places with and the eleventh overlay could never be moved ' +
+      'into tenth. Ceilinged and ordered instead, with a probe, exactly like ' +
+      'the console’s screen tree and starter bundles.',
   ],
 ]
 
@@ -868,12 +905,31 @@ describe('a table with rows under it has a footer under those (AGL-693)', () => 
     }
   })
 
+  it('THE CONTROL: the walk reaches the PLUGIN trees too', () => {
+    // The narrowing this widening exists to prevent, and the one that let a
+    // sweep report itself complete: every check above walked `apps/console`
+    // and stopped, so twenty-five plugin lists — the inbox, the suppression
+    // list, the stock ledger — sat outside a guard whose name says it covers
+    // a table with rows under it. A walk that lost the plugins would pass
+    // every assertion below by never looking at them.
+    const found = tablesWithoutFooters()
+    expect(found.some((path) => path.startsWith('libs/plugins/'))).toBe(true)
+    // And it reaches more than the one plugin that happens to be classified
+    // today, or the guard narrows back the moment that file is converted.
+    const plugins = new Set(
+      pluginComponentFiles().map(
+        (path) => path.replace(`${REPO}/`, '').split('/')[2],
+      ),
+    )
+    expect(plugins.size).toBeGreaterThan(4)
+  })
+
   it('the owed list only ever shrinks', () => {
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
     expect(OWES_A_FOOTER).toHaveLength(13)
-    expect(NOT_A_LIST).toHaveLength(7)
+    expect(NOT_A_LIST).toHaveLength(10)
   })
 })
 

@@ -26,6 +26,7 @@ import {
 } from '@aglyn/aglyn'
 import { compareVariants, summarizeVariantStats, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -54,6 +55,7 @@ import {
   doc,
   getDocs,
   limit,
+  orderBy,
   query,
   setDoc,
 } from 'firebase/firestore'
@@ -62,6 +64,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostActivityLogger,
+  usePagedCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 
@@ -97,7 +100,12 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
   const entitled = checkEntitlement(org, 'abTesting')
 
   const {
-    data: experimentDocs,
+    rows: experimentRows,
+    hasMore: hasMoreExperiments,
+    page: experimentPage,
+    setPage: setExperimentPage,
+    pageSize: experimentPageSize,
+    setPageSize: setExperimentPageSize,
     status: experimentsStatus,
     /**
      * The rows this editor is seeded from are unconfirmed by the server
@@ -109,17 +117,43 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
      * one, along with reverting its variant weights and goal.
      */
     fromCache: experimentsFromCache,
-  } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'experiments'), limit(50)),
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      query(
+        collection(firestore, 'hosts', hostId, 'experiments'),
+        /*
+         * Ordered by the server and paged (AGL-693, AGL-2292).
+         *
+         * `limit(50)` with no `orderBy` is answered in DOCUMENT-ID order over
+         * ids from `createResourceUid()`, so the window was an arbitrary fifty
+         * that a `localeCompare` in the browser arranged into a convincing A-to-Z
+         * page. A site past fifty experiments could not reach the rest, and
+         * the ones missing left no gap on screen.
+         *
+         * `name` is safe to order on, checked against the writers rather than
+         * assumed: this card is the only thing that creates an experiment,
+         * `newExperiment()` seeds `name: ''` and `validateExperiment` refuses
+         * a save without one, the two server paths (`email-events`,
+         * `campaign-send`) only ever `update` an existing document, and
+         * `experiments` is not in `IMPORTABLE_FIELDS`. There is no writer that
+         * can produce a nameless experiment for `orderBy` to drop.
+         */
+        orderBy('name'),
+        limit(pageLimit),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const experiments: ExperimentDraft[] = [...(experimentDocs ?? [])]
-    .filter((experiment: any) => !experiment.deletedAt)
-    .sort((a: any, b: any) =>
-      String(a.name ?? '').localeCompare(String(b.name ?? '')),
-    )
+  /*
+   * Soft-deleted rows are dropped HERE and not in the query, which is why a
+   * page can render fewer rows than its size: Firestore cannot ask for
+   * documents that LACK a field, and a live experiment has no `deletedAt` at
+   * all. The rows are not re-sorted — the server already ordered them, and
+   * re-sorting a page of a name-ordered walk is the lie the old code told.
+   */
+  const experiments: ExperimentDraft[] = experimentRows.filter(
+    (experiment: any) => !experiment.deletedAt,
+  )
   const { data: screenDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(100)),
     [firestore, hostId],
@@ -371,7 +405,8 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           >
             {'New experiment'}
           </Button>
-          {experiments.length === 0 ? null : (
+          {experiments.length === 0 && !hasMoreExperiments ? null : (
+            <>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -437,6 +472,17 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
                 ))}
               </TableBody>
             </Table>
+            <ListPagination
+              page={experimentPage}
+              pageSize={experimentPageSize}
+              // The rows LEFT after the soft-delete filter, not the page the
+              // server returned: the footer must describe what is on screen.
+              rowCount={experiments.length}
+              hasMore={hasMoreExperiments}
+              onPageChange={setExperimentPage}
+              onPageSizeChange={setExperimentPageSize}
+            />
+            </>
           )}
         </Stack>
       )}

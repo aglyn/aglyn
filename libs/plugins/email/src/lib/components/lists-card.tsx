@@ -18,6 +18,7 @@
 
 import { createResourceUid, pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -36,14 +37,15 @@ import {
   doc,
   getCountFromServer,
   limit,
+  orderBy,
   query,
   setDoc,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import {
   useFirestore,
-  useFirestoreCollection,
   useOrgDataScope,
+  usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 
@@ -69,25 +71,51 @@ export function OrgListsCard(props: OrgListsCardProps) {
   // (AGL-1050), so creating one is held rather than misdirected.
   const { scope } = useOrgDataScope({ hostId })
 
-  const { data: listDocs } = useFirestoreCollection<any>(
-    () =>
+  /*
+   * Ordered by the server and paged, rather than capped and re-sorted here
+   * (AGL-693, AGL-2292).
+   *
+   * `limit(50)` carried no `orderBy`, so Firestore answered it in
+   * DOCUMENT-ID order over ids from `createResourceUid()` — an arbitrary
+   * fifty of the org's lists, which the `localeCompare` below then arranged
+   * alphabetically. An agency past fifty lists saw a believable A-to-Z page
+   * that was missing most of the alphabet, and the campaign composer's
+   * audience picker reads the same collection.
+   *
+   * `name` is safe to order on here, which is a claim about the writers and
+   * not a preference: this card is the only thing that CREATES a list
+   * (`handleCreate` refuses an empty name), the automation step and the
+   * newsletter enrollment both resolve an existing list and deliberately
+   * never create one, and `lists` is absent from `IMPORTABLE_FIELDS`, so no
+   * restore path can produce a nameless document for `orderBy` to drop.
+   */
+  const {
+    rows: lists,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       scope
-        ? query(collection(firestore, scope[0], scope[1], 'lists'), limit(50))
+        ? query(
+            collection(firestore, scope[0], scope[1], 'lists'),
+            orderBy('name'),
+            limit(pageLimit),
+          )
         : null,
     [firestore, scope],
     { idField: '$id' },
   )
-  const lists = [...(listDocs ?? [])].sort((a, b) =>
-    String(a.name ?? '').localeCompare(String(b.name ?? '')),
-  )
   const [counts, setCounts] = useState<Record<string, number>>({})
   useEffect(() => {
-    // `listDocs` can only be non-empty when `scope` resolved, but the
+    // `lists` can only be non-empty when `scope` resolved, but the
     // effect must say so for itself — it reads `scope` outside the query.
     if (!scope) return undefined
     let active = true
     void Promise.all(
-      (listDocs ?? []).map(async (list: any) => {
+      lists.map(async (list: any) => {
         try {
           const snapshot = await getCountFromServer(
             collection(
@@ -114,7 +142,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
   }, [
     firestore,
     scope,
-    JSON.stringify((listDocs ?? []).map((l: any) => l.$id)),
+    JSON.stringify(lists.map((l: any) => l.$id)),
   ])
 
   const [name, setName] = useState('')
@@ -217,6 +245,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
           </Button>
         </Stack>
         {lists.length === 0 ? null : (
+          <>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -243,6 +272,15 @@ export function OrgListsCard(props: OrgListsCardProps) {
               ))}
             </TableBody>
           </Table>
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={lists.length}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+          </>
         )}
       </Stack>
     </CardDisplay>

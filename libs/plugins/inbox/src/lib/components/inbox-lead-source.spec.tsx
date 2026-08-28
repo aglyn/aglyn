@@ -59,6 +59,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
+  // The submissions table pages its own query (AGL-693) and is routed by the
+  // same collection name, so a lead row still reaches the contacts table
+  // whether or not any submissions exist.
+  usePagedCollection: (factory: (pageLimit: number) => string) => ({
+    rows: collections[factory(11)] ?? [],
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: 'success',
+    fromCache: false,
+  }),
 }))
 
 jest.mock('firebase/firestore', () => ({

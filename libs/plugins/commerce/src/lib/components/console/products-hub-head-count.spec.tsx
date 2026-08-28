@@ -142,11 +142,11 @@ const countSpy = jest.fn(async (name: string) => {
  * the point: `checkQuota` and `resolveOrgEntitlements` are the contract these
  * cases exist to exercise, and only the counts are staged.
  *
- * It is here because this card renders NO consequence of the count reaching
- * state — the header counts the loaded rows, so a site of 500 and a site of
- * 3,000 render the same string, and there is no caption to wait on the way
- * `locations-head-count.spec.tsx` has one. The number the gate is computed
- * from is the only thing that distinguishes them, so the spec waits on that.
+ * It is here because the gate is what these cases are about: the number
+ * `checkQuota` is handed is the thing a wrong count silently changes, and it
+ * reaches no caption of its own. (The card's HEADER now renders the aggregate
+ * too — AGL-693 — but the header is a display of the same number, not a second
+ * source for it, so the spec still waits on the gate.)
  */
 const mockCheckQuota = jest.fn()
 jest.mock('@aglyn/aglyn', () => {
@@ -300,7 +300,13 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
 
     // Fixing the head-count must not turn this table into a 3,000-row
     // stream. That the two questions now have two answers is the point.
-    expect(limitSpy).toHaveBeenCalledWith(500)
+    //
+    // 501, not 500: the listener asks for one document PAST the ceiling so
+    // that "this catalog is larger than the table" is a fact rather than a
+    // guess from `length === 500` (AGL-693). The probe row is never rendered,
+    // exported or counted, and the ceiling itself has not moved.
+    expect(limitSpy).toHaveBeenCalledWith(501)
+    expect(limitSpy).not.toHaveBeenCalledWith(3_000)
   })
 
   it('reads the count once per mount, from the products collection', async () => {

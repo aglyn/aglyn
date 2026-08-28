@@ -1688,7 +1688,6 @@ export function HostActionsCard(props: {
               hostId={hostId}
               targetId={runsFor.$id}
               header="Recent runs"
-              max={25}
             />
           ) : null}
         </DialogContent>

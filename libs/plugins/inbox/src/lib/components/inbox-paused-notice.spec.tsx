@@ -59,6 +59,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
+  // The submissions table pages its own query (AGL-693). A double that stubs
+  // only the collection hook leaves the page calling `undefined`, which fails
+  // as a crash rather than as the notice being wrong.
+  usePagedCollection: () => ({
+    rows: [],
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: 'success',
+    fromCache: false,
+  }),
   useFirestoreDoc: (ref: () => string) => ({
     data: counters[ref()],
     status: 'success',

@@ -32,12 +32,15 @@ import {
 import { default as HostCampaignsCard } from '@aglyn/plugins-email/components/campaigns-card'
 import { default as HostOrdersCard } from '@aglyn/plugins-commerce/components/console/host-orders-card.component'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { HubTabs } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
+  usePagedCollection,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -65,6 +68,7 @@ import {
   deleteDoc,
   doc,
   limit,
+  orderBy,
   query,
   updateDoc,
 } from 'firebase/firestore'
@@ -74,7 +78,16 @@ import {
   senderHue,
   submissionSender,
 } from '../model/submission-presenter'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+
+/**
+ * How many members and how many leads the contacts table reads.
+ *
+ * A ceiling rather than a page size — see the two queries, which explain why
+ * this one table cannot be paged by the server without breaking the dedupe
+ * between them.
+ */
+const CONTACT_CEILING = 200
 
 /**
  * Inbox (AGL-77/104/109 → AGL-395): form submissions reader, site members +
@@ -88,17 +101,40 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const { data: submissionDocs } = useFirestoreCollection<any>(
-    () =>
+  /*
+   * The inbox WALKS its submissions instead of sampling them (AGL-693,
+   * AGL-2292).
+   *
+   * `limit(200)` carried no `orderBy`, so Firestore answered it in
+   * DOCUMENT-ID order over ids `add()` generates — an arbitrary two hundred
+   * of the site's messages, which the client sort then arranged newest-first
+   * so the result looked like a feed. A site past two hundred submissions
+   * could not reach the rest, and the messages missing left no gap: the row
+   * dates on screen simply skipped, which reads as a quiet week rather than
+   * as an unreachable inbox.
+   *
+   * `createdAt` is safe to order on, checked against the writer rather than
+   * assumed: `apps/tenant/app/api/forms/submit/route.ts` is the only path
+   * that creates one and stamps `createdAt: serverTimestamp()` on every add,
+   * the v1 API only ever reads and deletes, and `formSubmissions` is absent
+   * from `IMPORTABLE_FIELDS`, so no restore path can make one without it.
+   */
+  const {
+    rows: submissions,
+    hasMore: hasMoreSubmissions,
+    page: submissionPage,
+    setPage: setSubmissionPage,
+    pageSize: submissionPageSize,
+    setPageSize: setSubmissionPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       query(
         collection(firestore, 'hosts', hostId, 'formSubmissions'),
-        limit(200),
+        orderBy('createdAt', 'desc'),
+        limit(pageLimit),
       ),
     [firestore, hostId],
     { idField: '$id' },
-  )
-  const submissions = [...(submissionDocs ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
   )
 
   // Submissions this site's abuse ceiling refused (AGL-1655 → AGL-1666).
@@ -186,23 +222,80 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
     ceiling: Number(leadsRefusedCounter?.['ceiling']) || undefined,
   })
 
-  // Site members + leads (AGL-109).
+  /*==========================================
+   * SITE MEMBERS + LEADS (AGL-109): ORDERED AND CEILINGED, NOT PAGED BY QUERY.
+   *
+   * Both reads were `limit(200)` with no `orderBy` and a client sort on top —
+   * the same document-id sample as the submissions above, and both now name
+   * the order the rows are rendered in. `createdAt` is safe on both:
+   * `membership-register.ts` is the only writer that CREATES a site member
+   * and stamps it inside its transaction (every other membership path
+   * updates an existing document), `recordVisitorLead` is the only writer
+   * that creates a lead and stamps it on every `tx.create`, and neither
+   * collection is in `IMPORTABLE_FIELDS`.
+   *
+   * What they must NOT do is page the query, and the reason is the dedupe two
+   * hundred lines below: a lead is hidden when a MEMBER already exists on the
+   * same address. That test is only correct while both windows are whole. On a
+   * ten-row server page it would compare a page of leads against a page of
+   * members, so somebody who signed up after leaving their address would
+   * render as a Member on one page and again as a Lead on another — one person
+   * counted twice, in a list a site owner uses to count people.
+   *
+   * So the CEILING stays and the page is a slice of the assembled rows. The
+   * probe row makes "there are more contacts than these" a fact rather than a
+   * guess from `length === CONTACT_CEILING`, which is wrong at exactly the
+   * count that equals the ceiling.
+   *=========================================*/
   const { data: memberDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'siteMembers'), limit(200)),
+      query(
+        collection(firestore, 'hosts', hostId, 'siteMembers'),
+        orderBy('createdAt', 'desc'),
+        limit(CONTACT_CEILING + 1),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const siteMembers = [...(memberDocs ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-  )
+  const siteMembers = (memberDocs ?? []).slice(0, CONTACT_CEILING)
   const { data: leadDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'leads'), limit(200)),
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'leads'),
+        orderBy('createdAt', 'desc'),
+        limit(CONTACT_CEILING + 1),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const leads = [...(leadDocs ?? [])].sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+  const leads = (leadDocs ?? []).slice(0, CONTACT_CEILING)
+  const contactsTruncated =
+    (memberDocs?.length ?? 0) > CONTACT_CEILING ||
+    (leadDocs?.length ?? 0) > CONTACT_CEILING
+  /*
+   * The contacts table is ONE list of two collections — members first, then
+   * the leads that are not already members — so the page is a window over the
+   * concatenation rather than over either read. Slicing each half by the same
+   * global offsets is what keeps a page exactly `pageSize` rows across the
+   * seam between them.
+   */
+  const dedupedLeads = useMemo(
+    () =>
+      leads.filter(
+        (lead: any) =>
+          !siteMembers.some((member: any) => member.email === lead.email),
+      ),
+    [leads, siteMembers],
+  )
+  const [contactPage, setContactPage] = useState(0)
+  const [contactPageSize, setContactPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const contactCount = siteMembers.length + dedupedLeads.length
+  const contactStart = contactPage * contactPageSize
+  const contactEnd = contactStart + contactPageSize
+  const visibleMembers = siteMembers.slice(contactStart, contactEnd)
+  const visibleLeads = dedupedLeads.slice(
+    Math.max(0, contactStart - siteMembers.length),
+    Math.max(0, contactEnd - siteMembers.length),
   )
   const handleDeleteMember = useCallback(
     (member: any) => async () => {
@@ -344,6 +437,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                 'screen — visitor messages arrive here.'}
             </Typography>
           ) : (
+            <>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -480,6 +574,15 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                 ))}
               </TableBody>
             </Table>
+            <ListPagination
+              page={submissionPage}
+              pageSize={submissionPageSize}
+              rowCount={submissions.length}
+              hasMore={hasMoreSubmissions}
+              onPageChange={setSubmissionPage}
+              onPageSizeChange={setSubmissionPageSize}
+            />
+            </>
           )}
                   </CardDisplay>
                 ),
@@ -504,6 +607,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                     'site; sign-ups also appear here as leads.'}
                 </Typography>
               ) : (
+                <>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -514,7 +618,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {siteMembers.map((member) => (
+                    {visibleMembers.map((member: any) => (
                       <TableRow key={member.$id} hover>
                         <TableCell>
                           {member.email}
@@ -547,14 +651,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {leads
-                      .filter(
-                        (lead) =>
-                          !siteMembers.some(
-                            (member) => member.email === lead.email,
-                          ),
-                      )
-                      .map((lead) => (
+                    {visibleLeads.map((lead: any) => (
                         <TableRow key={lead.$id} hover>
                           <TableCell>
                             {lead.email}
@@ -607,6 +704,25 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                       ))}
                   </TableBody>
                 </Table>
+                <ListPagination
+                  page={contactPage}
+                  pageSize={contactPageSize}
+                  rowCount={visibleMembers.length + visibleLeads.length}
+                  // The whole deduped list, which this card genuinely holds —
+                  // both reads are ceilinged and complete below the ceiling.
+                  count={contactCount}
+                  onPageChange={setContactPage}
+                  onPageSizeChange={setContactPageSize}
+                />
+                {contactsTruncated ? (
+                  <Alert severity="info" sx={{ mt: 1 }}>
+                    {`Paging the ${CONTACT_CEILING} newest members and the ` +
+                      `${CONTACT_CEILING} newest leads. This site has more ` +
+                      'than that — the campaign audiences still reach ' +
+                      'everyone, whether or not they are listed here.'}
+                  </Alert>
+                ) : null}
+                </>
               )}
                     </CardDisplay>
                     <HostOrdersCard hostId={hostId} />

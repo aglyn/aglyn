@@ -118,6 +118,22 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: listener.status,
     fromCache: listener.fromCache,
   }),
+  /*
+   * The experiments table pages its own query (AGL-693), and this file's
+   * subject rides on the SAME hook result: `status` and `fromCache` are what
+   * the seed guard reads, so the double has to carry them here too or every
+   * case below refuses for the wrong reason.
+   */
+  usePagedCollection: (build: (pageLimit: number) => unknown) => ({
+    rows: build(11) === 'experiments' ? experimentDocs : [],
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: listener.status,
+    fromCache: listener.fromCache,
+  }),
   useHostActivityLogger: () => mockLogActivity,
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the card passed it, which is the one thing these specs disprove.

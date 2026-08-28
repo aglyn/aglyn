@@ -17,6 +17,8 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   Alert,
   MenuItem,
@@ -30,7 +32,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -108,7 +110,16 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
       query(
         collection(firestore, 'hosts', hostId, 'inventoryAdjustments'),
         orderBy('atMs', 'desc'),
-        limit(WINDOW),
+        /*
+         * `WINDOW + 1` is a PROBE (AGL-693). One document beyond the ceiling
+         * turns "there are older movements than these" into a fact for the
+         * price of a single read. The comparison it replaces —
+         * `length >= WINDOW` — is wrong at exactly the count that equals the
+         * ceiling, which is the one ledger size where a merchant is told
+         * rows are missing and none are. The probe row is sliced off below
+         * and never rendered.
+         */
+        limit(WINDOW + 1),
       ),
     [firestore, hostId],
     { idField: '$id' },
@@ -130,9 +141,17 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
     return names
   }, [productDocs])
 
+  /** Read beyond the ceiling — so the ledger holds more than was read. */
+  const truncated = (movementDocs?.length ?? 0) > WINDOW
+  /** The window itself, probe row removed. */
+  const windowRows = useMemo(
+    () => ((movementDocs ?? []) as MovementRow[]).slice(0, WINDOW),
+    [movementDocs],
+  )
+
   const movements: MovementRow[] = useMemo(
     () =>
-      [...((movementDocs ?? []) as MovementRow[])]
+      [...windowRows]
         // The query already orders, but a cached snapshot can arrive before
         // the server's and the sort is what makes "newest first" a promise
         // rather than a hope.
@@ -141,22 +160,44 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
           (row) => productFilter === 'all' || row.productId === productFilter,
         )
         .filter((row) => reasonFilter === 'all' || row.reason === reasonFilter),
-    [movementDocs, productFilter, reasonFilter],
+    [windowRows, productFilter, reasonFilter],
+  )
+
+  /*
+   * The page is a SLICE of the window, and the window stays where it is.
+   *
+   * Paging the QUERY would be the cheaper read and the wrong control here,
+   * because both filters above run in the browser: on a ten-row server page
+   * "Damaged" would search ten movements instead of a hundred and answer "no
+   * stock movements" about a ledger full of them. Moving those filters to the
+   * server is what would earn a query-level page, and it cannot be done
+   * without composite indexes this feature would then ship without — see
+   * `WINDOW`. So the read is unchanged and the wall of a hundred rows becomes
+   * a footer over them.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  // A filter narrows the list under the reader's feet, and page four of the
+  // unfiltered ledger is not a position in the filtered one — MUI renders an
+  // out-of-range page as an empty table with no explanation, which reads as
+  // the filter having matched nothing.
+  useEffect(() => setPage(0), [productFilter, reasonFilter])
+  const shown = useMemo(
+    () => movements.slice(page * pageSize, page * pageSize + pageSize),
+    [movements, page, pageSize],
   )
 
   /** Products that actually appear in the window — filtering to an empty
    * option is a dead end, and the whole catalog is not the answer here. */
   const filterableProducts = useMemo(() => {
     const ids = new Set<string>()
-    for (const row of (movementDocs ?? []) as MovementRow[]) {
+    for (const row of windowRows) {
       if (row.productId) ids.add(row.productId)
     }
     return [...ids].sort((a, b) =>
       (productNames.get(a) ?? a).localeCompare(productNames.get(b) ?? b),
     )
-  }, [movementDocs, productNames])
-
-  const windowFull = (movementDocs?.length ?? 0) >= WINDOW
+  }, [windowRows, productNames])
 
   return (
     <CardDisplay header="Stock movements" help={movementsHelp} contentGutterX contentGutterY>
@@ -210,7 +251,7 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {movements.map((row) => {
+              {shown.map((row) => {
                 const delta = Number(row.delta ?? 0)
                 const applied = Number(row.appliedDelta ?? delta)
                 return (
@@ -267,9 +308,23 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
             </TableBody>
           </Table>
         )}
-        {windowFull ? (
+        {movements.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={shown.length}
+            // The movements matching the filters, which this card genuinely
+            // holds. What it does not know is how many are older than the
+            // window, and the notice below says so rather than letting the
+            // count line imply a ledger total it cannot see.
+            count={movements.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {truncated ? (
           <Alert severity="info">
-            {`Showing the ${WINDOW} most recent movements. Older rows are ` +
+            {`Paging the ${WINDOW} most recent movements. Older rows are ` +
               'kept and reachable through a data export.'}
           </Alert>
         ) : null}

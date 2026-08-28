@@ -749,7 +749,6 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
               hostId={hostId}
               targetId={runsFor.$id}
               header="Recent runs"
-              max={25}
             />
           ) : null}
         </DialogContent>
