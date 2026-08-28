@@ -369,9 +369,12 @@ const config: Config = {
         // `anonymizeIP` emits `'anonymize_ip': true` on the config call. GA4
         // IGNORES it — IP anonymization is unconditional there and cannot be
         // switched off. Kept because it is free and honest about intent, but it
-        // is NOT the privacy control: that is property-level (Google Signals
-        // off, ads personalization 0/307 regions, no Ads link, 14-month
-        // retention, email redaction on) and documented in docs/ANALYTICS.md.
+        // is NOT the privacy control, and neither is the property: it runs
+        // Google Signals and ads personalization ON in every region and is
+        // linked to Google Ads, so its data builds advertising audiences.
+        // What limits collection on this surface is the consent default
+        // emitted from `ssrTemplate` above. Property settings are documented
+        // in docs/ANALYTICS.md, which is the only current record of them.
         //
         // AGL-2124: `undefined` when `DOCS_GA_TRACKING_ID` is unset, so an
         // operator's build loads NO tag. It used to be a bare literal — our

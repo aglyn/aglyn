@@ -254,10 +254,14 @@ async function postGa4Event(options: {
           // Opaque uid only — it is what stitches this event to the
           // console's client-side events, which set the same user_id.
           ...(userId ? { user_id: userId } : {}),
-          // Analytics-only posture (AGL-1538): Google Signals and ads
-          // personalization are OFF on the property, and this asserts the
-          // same thing per hit so a future dashboard change cannot quietly
-          // opt our server-side events into ads personalization.
+          // Keeps THIS path out of ads personalization, and it is the only
+          // thing that does. The property runs Google Signals and ads
+          // personalization ON in every region, so a server event sent without
+          // this flag would join the advertising audiences the browser tags
+          // build — carrying a `client_id` that may be synthesized from a
+          // Stripe customer id, which is a stronger identifier than any cookie
+          // the browser path has. A per-hit assertion rather than a property
+          // setting, so no dashboard change can quietly opt these events in.
           non_personalized_ads: true,
           events: [{ name: eventName, params: stamped }],
         }),

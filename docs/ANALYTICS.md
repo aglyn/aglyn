@@ -1735,14 +1735,23 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
   bit it: `first_publish` was registered and sent by nothing until AGL-1588,
   which reads the same way from the report end. Registration and a producer
   are two facts, and the doc has to state both;
-- privacy posture verified: Google Signals **off**, ads personalization **0 of
-  307 regions**, user-provided data collection **off**, no Google Ads link,
-  data retention **14 months** (event and user), email redaction **on**.
-  Leave all of it that way — the live privacy policy's flat "we do not sell or
-  share" denial rests on it.
-  ⚑ **"no Google Ads link" expired on 2026-08-20** — see the coupled-controls
-  warning at the top of this doc. Everything else in this bullet was re-verified
-  on 2026-08-25 and still holds.
+- privacy posture **as configured on 2026-08-14**: Google Signals off, ads
+  personalization 0 of 307 regions, user-provided data collection off, no
+  Google Ads link, data retention 14 months (event and user), email redaction
+  on.
+  ⛔ **Every advertising line of that bullet has since been reversed on
+  purpose. Do not read it as current and do not restore it.** Signals is on in
+  307 of 307 regions, ads personalization is on in 307 of 307,
+  user-provided data collection is on, and the Google Ads link exists with
+  Personalized Advertising on — the verified table at the top of this file is
+  the only place in here that states the live posture. The two settings that
+  did not move are the retention period and email redaction.
+  ⛔ The old bullet also rested the whole posture on "the live privacy policy's
+  flat 'we do not sell or share' denial". There is no such denial and there
+  never was; see the correction at the top. Aglyn advertises, remarkets,
+  retargets and measures across all three of its own surfaces. What it does not
+  do is **sell** the data, and that narrow claim is the entire privacy
+  commitment these settings have to stay consistent with.
 
 **Bookings (AGL-2481) needs NO new custom dimension.** Stated positively so
 nobody goes looking: the booking `purchase` carries only `transaction_id`,
@@ -1787,9 +1796,11 @@ quietly comes to mean two things.
 tenant's own first-party collector already made (`apps/tenant/app/api/analytics/collect/route.ts`):
 keyword- and variant-level labels multiply cardinality without answering a
 question anyone asks of a signup, and a keyword string is the likeliest of the
-five to carry something a person typed. `gclid` is out too — it is an
-ads-click identifier and this property runs with ads personalization off in all
-307 regions.
+five to carry something a person typed. `gclid` is out too, on the cardinality
+ground alone. ⛔ The reason recorded here used to be that the property runs ads
+personalization off in all 307 regions — it is **on** in 307 of 307, so nothing
+about this exclusion rests on a privacy posture, and reading it as one would
+misstate what the property does.
 
 **The allowlist is the privacy mechanism, not a convenience.** A parser that
 copied "the campaign-ish parameters" would be one marketing link away from
@@ -2437,6 +2448,17 @@ there is the merchant's to make, not one we can make for them.
    "we do not sell or share" conclusion, both of which the GA configuration
    genuinely supports, and replace only the blanket "no third-party analytics"
    with a named, accurate description of the one analytics provider we run.
+
+   ⛔ **THAT DECISION IS SUPERSEDED AND ITS TWO "KEEP" CLAUSES ARE NOW FALSE.**
+   Do not restore either. Aglyn runs advertising technology on all three of its
+   own surfaces, and the GA4 property no longer "genuinely supports" a
+   no-adtech reading — Google Signals and ads personalization are on in every
+   region and the property is linked to Google Ads. The published Privacy
+   Policy §3 was rewritten accordingly: it describes cross-context behavioral
+   advertising outright, names Google, Meta and LinkedIn, and denies only the
+   **sale** of personal information for money. That narrow denial is the
+   surviving claim; it is not a claim that Aglyn does not track, retarget or
+   personalize, and nothing in this file should be read as one.
    **Not yet published** — the privacy page and the Cookie Policy are besigner
    content on the live marketing site, so the correction is a publication step,
    and the hashed v4 snapshot must be re-captured _after_ it, never before: a

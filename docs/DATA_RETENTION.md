@@ -308,7 +308,7 @@ Tracked as gap 5 of `DISASTER_RECOVERY.md`.
 
 | Provider | What they hold | Period | Source |
 | --- | --- | --- | --- |
-| Google Analytics (GA4) | Product/site analytics for `aglyn.com`, the console and the docs site. Signals off, ads personalization disabled, email redaction on. | **14 months** | Published Privacy Policy §3 — the only third-party number we publish |
+| Google Analytics (GA4) | Product/site analytics for `aglyn.com`, the console and the docs site. Google Signals and ads personalization are on in every region and the property is linked to Google Ads, so this data also builds advertising audiences; email redaction on. | **14 months** | Published Privacy Policy §3 — the only third-party number we publish |
 | Stripe | Customer record, payment methods, charges. Aglyn never receives a card number. | Stripe's own schedule; the customer object is deleted on erasure (`deleteStripeCustomer`, `erase.ts:130`) | |
 | Anthropic | Assist prompt inputs and site content sent for generation. | Provider's own; **we publish no number** | DPA §7.1 names them; the subprocessors row is being published under AGL-1909 |
 | Google Cloud / Firebase, Vercel, Resend | Hosting, datastore, auth, storage, email delivery. | Provider's own | Published subprocessors list |

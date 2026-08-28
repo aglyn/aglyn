@@ -184,6 +184,16 @@ export interface LegalDocumentManifestEntry {
  *     "sale" nor a "share". The Cookie Policy carried the same defect and was
  *     corrected in the same pass — it is besigner-only, has never been
  *     clickwrapped, and is NOT snapshotted here, so it has no hash to update.
+ *     ⛔ THAT BULLET IS A RECORD OF THE 2026-08-14 PASS AND BOTH OF ITS
+ *     ADVERTISING CLAIMS ARE NOW FALSE. Do not cite it as current. Aglyn runs
+ *     advertising tags on the marketing site, the console and the docs site,
+ *     so there is no "no-adtech half" left to be load-bearing; and the GA4
+ *     property runs Google Signals and ads personalization on in every region,
+ *     linked to Google Ads. Published Privacy §3 was rewritten to match and now
+ *     describes cross-context behavioral advertising outright. The claim that
+ *     survives is narrow — we do not SELL personal information — and it is not
+ *     a claim that we do not track. `docs/ANALYTICS.md` holds the verified
+ *     property settings.
  *   - AGL-1592, Privacy §11: the do-not-contact carve-out described above.
  *
  * Both edits are AUTHORED-SOURCE changes to the besigner markdown block and
