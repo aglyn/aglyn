@@ -101,14 +101,88 @@ interface ConversionWindow {
 export function reportPlatformAdConversion(
   kind: PlatformAdConversion,
   allowed: boolean,
+  options: { transactionId?: string } = {},
 ): boolean {
   if (!allowed) return false
   const target = platformAdConversionTarget(kind)
   if (!target) return false
   const scope = globalThis as ConversionWindow
   if (typeof scope.gtag !== 'function') return false
-  scope.gtag('event', 'conversion', { send_to: target })
+  /*
+   * `transaction_id` is what makes a conversion SAFE TO REPORT TWICE.
+   *
+   * Google Ads de-duplicates on it, so a caller no longer has to guarantee
+   * exactly-once delivery from the browser — which is a guarantee a browser
+   * cannot give. Without it, the only safe moment to report is the one the
+   * visitor might close the tab on, and a missed conversion is invisible: the
+   * money was spent, the customer converted, and the campaign shows nothing.
+   *
+   * ⚠️ It must be STABLE for the thing being counted, not per attempt. A fresh
+   * id on every call de-duplicates nothing and quietly restores the double
+   * count it exists to prevent.
+   */
+  scope.gtag('event', 'conversion', {
+    send_to: target,
+    ...(options.transactionId
+      ? { transaction_id: options.transactionId }
+      : {}),
+  })
   return true
+}
+
+/**
+ * Where a checkout that has STARTED but not yet been reported is remembered.
+ *
+ * The subscribe conversion can only be reported from the browser — an Ads
+ * website conversion is matched to the ad click through the GCLID the tag
+ * holds, and no webhook has one. That put the only reporting moment on
+ * Stripe's `onComplete`, which a visitor can close the tab on: the money was
+ * spent, the customer subscribed, and the campaign shows nothing. A missed
+ * conversion is invisible, which is what makes it worth repairing.
+ *
+ * So the checkout marks itself pending when it opens, and the billing page
+ * reports on the next visit if it finds the mark and a live subscription. The
+ * customer always comes back — they are a customer now.
+ *
+ * ⚠️ Scoped to the org so a mark left by one workspace cannot report a
+ * conversion for another, and paired with a stable `transaction_id` so the
+ * belt and the braces cannot double count.
+ *
+ * `localStorage`, not `sessionStorage`: closing the tab is the case being
+ * repaired, and a session store is exactly what closing the tab clears.
+ */
+export const PLATFORM_SUBSCRIBE_PENDING_KEY = 'aglyn:ads:subscribe-pending'
+
+/** Remember that this org opened checkout, so a lost tab is recoverable. */
+export function markSubscribeCheckoutPending(orgId: string): void {
+  if (!orgId || typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PLATFORM_SUBSCRIBE_PENDING_KEY, orgId)
+  } catch {
+    // Storage refused. The `onComplete` path still reports; only the repair
+    // for a closed tab is lost, which is where this started.
+  }
+}
+
+/** Whether this org has a checkout waiting to be reported. */
+export function subscribeCheckoutPending(orgId: string): boolean {
+  if (!orgId || typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(PLATFORM_SUBSCRIBE_PENDING_KEY) === orgId
+  } catch {
+    return false
+  }
+}
+
+/** Forget it, once reported — or once the org is no longer subscribing. */
+export function clearSubscribeCheckoutPending(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(PLATFORM_SUBSCRIBE_PENDING_KEY)
+  } catch {
+    // A mark that cannot be cleared is re-reported, and `transaction_id`
+    // makes that harmless. This is the reason it is not optional.
+  }
 }
 
 export default reportPlatformAdConversion

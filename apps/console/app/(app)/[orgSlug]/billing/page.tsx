@@ -87,7 +87,12 @@ import { RetentionFunnelDialog } from '../../../../components/billing/retention-
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
 import CardColumns from '../../../../components/card-columns.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
-import { reportPlatformAdConversion } from '@aglyn/aglyn/app-utils/platform-ad-conversions'
+import {
+  clearSubscribeCheckoutPending,
+  markSubscribeCheckoutPending,
+  reportPlatformAdConversion,
+  subscribeCheckoutPending,
+} from '@aglyn/aglyn/app-utils/platform-ad-conversions'
 import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import LockdownNotice from '../../../../components/lockdown-notice.component'
 import { useReleaseFlag } from '../../../../hooks/use-release-flags'
@@ -230,6 +235,35 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // direction the page sends a subscribed org to checkout and the route lets
   // it through, which is the duplicate subscription AGL-1697 closed.
   const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
+  /**
+   * Report a subscribe conversion whose checkout completed in a tab that is
+   * gone (AGL-1152).
+   *
+   * Stripe's `onComplete` is the only moment in the page that knows a
+   * subscription was paid for, and a visitor can close the confirmation on it.
+   * The conversion cannot move to the webhook — an Ads website conversion is
+   * matched to the ad click through the GCLID the tag holds, which no server
+   * has — so the repair is here: the checkout marked itself pending when it
+   * opened, and a live subscription on a later visit is the proof it went
+   * through.
+   *
+   * ⚠️ Narrow ON PURPOSE. It fires only for an org that opened checkout IN
+   * THIS BROWSER and has since become subscribed. Reporting for any active
+   * subscription would attribute a long-standing customer's ordinary visit to
+   * whatever ad they happened to click last week.
+   *
+   * `transaction_id` is the org, so this and `onComplete` both firing counts
+   * once — which is what makes a belt-and-braces repair safe at all.
+   */
+  useEffect(() => {
+    if (!orgId || !subscriptionActive) return
+    if (!subscribeCheckoutPending(orgId)) return
+    reportPlatformAdConversion('subscribe', platformAdvertisingAllowed(), {
+      transactionId: orgId,
+    })
+    clearSubscribeCheckoutPending()
+  }, [orgId, subscriptionActive])
+
   const cancelAtPeriodEnd =
     (org?.subscription as any)?.cancelAtPeriodEnd === true
   /**
@@ -694,6 +728,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           )
         }
         if (payload?.clientSecret) {
+          // Remember the attempt before showing the form: the conversion can
+          // only be reported from this browser, and this is the last moment
+          // that is guaranteed to run.
+          markSubscribeCheckoutPending(orgId ?? '')
           setCheckoutClientSecret(String(payload.clientSecret))
           return
         }
@@ -1565,12 +1603,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
            * will — this fires late, can be missed entirely if the tab closes,
            * and nothing may be gated on it.
            */
-          onComplete={() =>
+          onComplete={() => {
             reportPlatformAdConversion(
               'subscribe',
               platformAdvertisingAllowed(),
+              { transactionId: orgId ?? undefined },
             )
-          }
+            clearSubscribeCheckoutPending()
+          }}
         />
         {/* The leave path (AGL-1863): survey, downsell, winback, and only
             then the cancel. */}
