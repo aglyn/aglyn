@@ -188,8 +188,61 @@ async function handler(request: Request): Promise<Response> {
       }
     })
 
+    /*==========================================
+     * THE WORKSPACE, BY NAME.
+     *
+     * A staff reader recognizes a customer by name, never by document id,
+     * and the cost board's own column header says "Workspace" over a column
+     * of generated ids. `/api/admin/overview` fixed the same shape by
+     * building a label map from a snapshot it already held; there is no such
+     * snapshot here — this route reads `assistSignals` and nothing else — so
+     * the labels are fetched, with the same `name` → `slug` → id precedence
+     * so one workspace cannot appear under two different labels on two
+     * screens.
+     *
+     * Bounded by what is actually RENDERED, not by the fleet. Both lists the
+     * ids come from are already sliced to `limit` (25 by default, 100 at the
+     * ceiling), so this is one `getAll` over at most a couple of hundred
+     * documents — and it reads the orgs the reader can see rather than
+     * scanning a collection to name a handful of rows.
+     *
+     * An org that has been deleted keeps its id rather than going blank: an
+     * unfamiliar id is still a lead a staff member can paste into the org
+     * search, and an empty cell is not.
+     *=========================================*/
+    const orgIds = [
+      ...new Set(
+        [
+          ...report.orgs.map((row) => row.orgId),
+          ...report.proseCandidates.map((row) => row.orgId),
+        ].filter((orgId) => orgId && orgId !== '(unknown)'),
+      ),
+    ]
+    const orgLabelById = new Map<string, string>()
+    if (orgIds.length) {
+      const orgDocs = await firestore.getAll(
+        ...orgIds.map((orgId) => firestore.collection('orgs').doc(orgId)),
+      )
+      for (const doc of orgDocs) {
+        if (!doc.exists) continue
+        const data = doc.data() ?? {}
+        const label = (data['name'] ?? data['slug'] ?? '') as string
+        if (label) orgLabelById.set(doc.id, label)
+      }
+    }
+    const orgLabel = (orgId: string): string =>
+      orgLabelById.get(orgId) ?? orgId
+
     return Response.json(
-      { ...report, prose, ceiling: SCAN_CEILING },
+      {
+        ...report,
+        orgs: report.orgs.map((row) => ({
+          ...row,
+          orgLabel: orgLabel(row.orgId),
+        })),
+        prose: prose.map((row) => ({ ...row, orgLabel: orgLabel(row.orgId) })),
+        ceiling: SCAN_CEILING,
+      },
       { status: 200 },
     )
   } catch (error) {

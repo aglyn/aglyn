@@ -591,3 +591,60 @@ describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
     expect(payload.docsGaps).toHaveLength(100)
   })
 })
+
+/**
+ * A RANKING KNOWS HOW TALL IT WAS (AGL-693).
+ *
+ * `truncated` reports only that the SCAN hit its ceiling. Every ranking built
+ * from what was scanned is cut too — each is sliced to `limit` — and a table
+ * showing twenty-five of a hundred and thirty-seven cited pages looks exactly
+ * like one showing all twenty-five there are. That is the AGL-2220 shape the
+ * scan ceiling was given a banner to avoid, reproduced one layer down.
+ */
+describe('the mined report states how tall each ranking was (AGL-693)', () => {
+  const many = (count: number, make: (index: number) => AssistSignalRow) =>
+    Array.from({ length: count }, (_, index) => make(index))
+
+  it('counts the rows BEFORE the slice, not the slice', () => {
+    const report = mineAssistSignals(
+      many(30, (index) =>
+        signal({
+          orgId: `org-${index}`,
+          docsPaths: [`/page-${index}`],
+        }),
+      ),
+      { limit: 5 },
+    )
+
+    // Five on screen, thirty behind them. Counting `docsGaps.length` instead
+    // would report the cap as the total and the disclosure would agree with
+    // itself forever.
+    expect(report.docsGaps).toHaveLength(5)
+    expect(report.ranked.docsGaps).toBe(30)
+    expect(report.orgs).toHaveLength(5)
+    expect(report.ranked.orgs).toBe(30)
+  })
+
+  it('counts ungrounded routes the same way', () => {
+    const report = mineAssistSignals(
+      many(12, (index) =>
+        signal({ route: `/screen-${index}`, docsPaths: [] }),
+      ),
+      { limit: 3 },
+    )
+    expect(report.ungrounded.routes).toHaveLength(3)
+    expect(report.ranked.ungroundedRoutes).toBe(12)
+  })
+
+  it('THE CONTROL: an uncut ranking reports its own height, not the cap', () => {
+    // Otherwise the assertions above are satisfied by a field that always
+    // returns the limit, and the "Showing all N" half of the disclosure —
+    // the one a reader sees every ordinary day — would be a lie.
+    const report = mineAssistSignals(
+      many(4, (index) => signal({ docsPaths: [`/page-${index}`] })),
+      { limit: 25 },
+    )
+    expect(report.docsGaps).toHaveLength(4)
+    expect(report.ranked.docsGaps).toBe(4)
+  })
+})

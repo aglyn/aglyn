@@ -295,3 +295,181 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
     expect(screen.queryByText('$4.04')).toBeNull()
   })
 })
+
+/**
+ * A CARD THAT READS AS BROKEN OVER DATA THAT IS FINE (AGL-693).
+ *
+ * "Where the money goes" rendered two tables of `$0.0000` with an em dash in
+ * every Share cell whenever nothing had been spent. A share is a proportion
+ * of a total, and there is no proportion of nothing — so the grid could only
+ * ever print dashes, and a reader cannot tell that from a card that failed
+ * to load.
+ *
+ * The two zeros mean OPPOSITE things, which is why both are asserted here. A
+ * fully deflected sample cost nothing because nothing was bought; a turn that
+ * reached a model and still priced at zero is a model missing from the rate
+ * table, and reporting that as thrift is the more expensive mistake.
+ */
+describe('zero spend is a finding, not an empty grid (AGL-693)', () => {
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('reads a fully deflected sample as nothing bought', async () => {
+    serve(
+      report({
+        totals: {
+          estCostUsd: 0,
+          messages: 8,
+          deflected: 8,
+          deflectionRate: 1,
+          byTier: { entitled: { messages: 8, estCostUsd: 0 } },
+          byModel: { 'docs-retrieval': { messages: 8, estCostUsd: 0 } },
+        },
+      }),
+    )
+    render(<AdminAssistSignals />)
+
+    expect(
+      await screen.findByText(/Nothing spent on these 8 turns/),
+    ).toBeTruthy()
+    // And the grid of zeros is GONE, not merely joined by a sentence. A
+    // card that says "nothing was spent" above two tables of $0.0000 has
+    // explained nothing.
+    expect(screen.queryByText('$0.0000')).toBeNull()
+  })
+
+  it('calls a model turn priced at zero a hole in the rate table', async () => {
+    serve(
+      report({
+        totals: {
+          estCostUsd: 0,
+          messages: 8,
+          deflected: 5,
+          deflectionRate: 0.625,
+          byTier: { entitled: { messages: 8, estCostUsd: 0 } },
+          byModel: { 'claude-sonnet-5': { messages: 8, estCostUsd: 0 } },
+        },
+      }),
+    )
+    render(<AdminAssistSignals />)
+
+    // THE ASSERTION that separates the two zeros. Three turns reached a
+    // provider and priced at nothing, which is spend landing nowhere — the
+    // opposite conclusion from the test above, off the same `estCostUsd`.
+    expect(
+      await screen.findByText(/3 of 8 turns reached a model/),
+    ).toBeTruthy()
+    expect(screen.getByText(/gap in the rate table, not a saving/)).toBeTruthy()
+  })
+})
+
+/**
+ * THE WORKSPACE, BY NAME, AND THE RANKING'S OWN EDGE (AGL-693).
+ *
+ * The cost table's header said "Workspace" over a column of generated
+ * document ids, which is the defect `/api/admin/overview` was fixed for. And
+ * every ranking on this page is sliced to `limit` with nothing saying so — a
+ * table showing 25 of 137 cited pages looks exactly like one showing all 25
+ * there are.
+ */
+describe('the workspace is named and the ranking states its cut (AGL-693)', () => {
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  const costed = (over: Record<string, unknown>) => ({
+    ...report(),
+    ...over,
+  })
+
+  it('renders the workspace name, and falls back to the id when there is none', async () => {
+    serve(
+      costed({
+        orgs: [
+          {
+            orgId: 'jWmGooWE3L',
+            orgLabel: 'Northwind Traders',
+            messages: 8,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            estCostUsd: 0,
+            down: 0,
+          },
+          {
+            orgId: 'deleted-org-id',
+            orgLabel: null,
+            messages: 1,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            estCostUsd: 0,
+            down: 0,
+          },
+        ],
+        ranked: { docsGaps: 0, ungroundedRoutes: 0, orgs: 2 },
+      }),
+    )
+    render(<AdminAssistSignals />)
+
+    expect(await screen.findByText('Northwind Traders')).toBeTruthy()
+    // The id it replaced is not also on screen — a name printed BESIDE the
+    // id is the same column of hex with a label bolted on.
+    expect(screen.queryByText('jWmGooWE3L')).toBeNull()
+    // And a workspace the route could not name keeps its id rather than
+    // going blank: an unfamiliar id is a lead, an empty cell is not.
+    expect(screen.getByText('deleted-org-id')).toBeTruthy()
+  })
+
+  it('says how much of the ranking is on screen — cut or whole', async () => {
+    const gap = (path: string) => ({
+      path,
+      questions: 1,
+      up: 0,
+      down: 0,
+      orgs: 1,
+      estCostUsd: 0,
+      downRate: null,
+    })
+    serve(
+      costed({
+        docsGaps: [gap('/a'), gap('/b')],
+        ranked: { docsGaps: 137, ungroundedRoutes: 0, orgs: 0 },
+      }),
+    )
+    const cut = render(<AdminAssistSignals />)
+    expect(
+      await screen.findByText(/Showing the top 2 of 137 cited pages/),
+    ).toBeTruthy()
+    cut.unmount()
+
+    // The other direction, and it matters as much: a disclosure that only
+    // appears on truncation is one a reader has never seen before the day it
+    // means something.
+    serve(
+      costed({
+        docsGaps: [gap('/a'), gap('/b')],
+        ranked: { docsGaps: 2, ungroundedRoutes: 0, orgs: 0 },
+      }),
+    )
+    render(<AdminAssistSignals />)
+    expect(
+      await screen.findByText('Showing all 2 cited pages.'),
+    ).toBeTruthy()
+
+    // And a fleet of one reads as one. "Showing all 1 workspaces" is what a
+    // count line written for the plural case prints on a young install,
+    // which is every install for a while.
+    serve(
+      costed({
+        docsGaps: [gap('/a')],
+        ranked: { docsGaps: 1, ungroundedRoutes: 0, orgs: 0 },
+      }),
+    )
+    render(<AdminAssistSignals />)
+    expect(await screen.findByText('Showing all 1 cited page.')).toBeTruthy()
+  })
+})
