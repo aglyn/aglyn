@@ -28,6 +28,7 @@ import {
   Container,
   GridItems,
 } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -44,7 +45,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import CardColumns from '../../../../../components/card-columns.component'
@@ -62,7 +63,10 @@ import StaffUserEmailHistoryCard, {
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../../constants/shared'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 
@@ -183,7 +187,41 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   const auth = useAuth()
   const { enqueueSnackbar } = useSnackbar()
   const [detail, setDetail] = useState<UserDetail | null>(null)
+  /*
+   * The audit trail PAGES (AGL-693). It is the one table on this page whose
+   * length is a function of how much the account has DONE rather than of what
+   * it is: memberships and legal acceptances are a handful either way, and an
+   * audited action is written every time staff act on this user or this user
+   * acts anywhere. A long-lived account rendered the whole trail in one wall
+   * at the bottom of an already long page.
+   *
+   * `/api/admin/users/detail` returns the window it already bounds, so the
+   * footer takes a real total. Paging deeper than that window is what the
+   * Audit log page is for, and the card says so.
+   */
+  const [auditPage, setAuditPage] = useState(0)
+  const [auditPageSize, setAuditPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [error, setError] = useState<string | null>(null)
+  // Memoized rather than `detail?.audit ?? []` inline: a fresh empty array on
+  // every render re-runs the slice below forever.
+  const auditEntries = useMemo(() => detail?.audit ?? [], [detail])
+  const pagedAudit = useMemo(
+    () =>
+      auditEntries.slice(
+        auditPage * auditPageSize,
+        auditPage * auditPageSize + auditPageSize,
+      ),
+    [auditEntries, auditPage, auditPageSize],
+  )
+  // A reload that returns a shorter trail can strand a reader past the last
+  // page, which renders as an empty table with no way back.
+  useEffect(() => {
+    const lastPage = Math.max(
+      0,
+      Math.ceil(auditEntries.length / auditPageSize) - 1,
+    )
+    if (auditPage > lastPage) setAuditPage(lastPage)
+  }, [auditEntries.length, auditPage, auditPageSize])
 
   useEffect(() => {
     if (!uid || !user) return
@@ -721,28 +759,6 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         ),
                       },
                       {
-                        key: 'email-history',
-                        children: (
-                          /*
-                           * What we sent this person and what they did with
-                           * it, beside the sign-in history because the two
-                           * answer the same support call from opposite ends:
-                           * one says whether they could get in, the other
-                           * whether the mail that would have let them ever
-                           * arrived.
-                           */
-                          <StaffUserEmailHistoryCard
-                            address={detail.user.email ?? null}
-                            rows={detail.emails?.rows ?? []}
-                            // A missing `emails` key is a read that did not
-                            // happen, which reads to a human exactly like a
-                            // read that failed — and NOT like "we never
-                            // emailed them".
-                            lookupFailed={detail.emails?.lookupFailed ?? true}
-                          />
-                        ),
-                      },
-                      {
                         key: 'erase',
                         children: (
                           // AGL-1977. `eraseUser` has existed since AGL-1140 and
@@ -761,6 +777,28 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         ),
                       },
                     ]}
+                  />
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * What we sent this person and what they did with it.
+                   *
+                   * OUTSIDE `CardColumns`, with the audit table and the
+                   * sign-in history: it holds a paginated grid, and multicol
+                   * cannot span, so inside the columns it was a six-column
+                   * table squeezed into half the page with `Clicks` cut off
+                   * at the edge. Same reason those two are out here.
+                   */
+                  <StaffUserEmailHistoryCard
+                    address={detail.user.email ?? null}
+                    rows={detail.emails?.rows ?? []}
+                    // A missing `emails` key is a read that did not happen,
+                    // which reads to a human exactly like a read that failed
+                    // — and NOT like "we never emailed them".
+                    lookupFailed={detail.emails?.lookupFailed ?? true}
                   />
                 ),
               },
@@ -960,6 +998,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {'No audited actions involve this account.'}
                       </Typography>
                     ) : (
+                      <>
                       <Table size="small">
                         <TableHead>
                           <TableRow>
@@ -977,7 +1016,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {detail.audit.map((entry) => (
+                          {pagedAudit.map((entry) => (
                             <TableRow key={entry.id}>
                               <TableCell>{entry.action ?? '—'}</TableCell>
                               <TableCell>{entry.target ?? '—'}</TableCell>
@@ -1001,6 +1040,15 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           ))}
                         </TableBody>
                       </Table>
+                      <ListPagination
+                        page={auditPage}
+                        pageSize={auditPageSize}
+                        rowCount={pagedAudit.length}
+                        count={detail.audit.length}
+                        onPageChange={setAuditPage}
+                        onPageSizeChange={setAuditPageSize}
+                      />
+                      </>
                     )}
                   </CardDisplay>
                 ),

@@ -149,33 +149,58 @@ export function StaffUserEmailHistoryCard({
     [rows],
   )
 
+  /*
+   * Every cell is ONE LINE, and the numeric columns are right-aligned.
+   *
+   * The first version stacked the subject over its sender label inside the
+   * cell, which forced the grid's row height up and left the table looking
+   * loose beside every other list in the console. A sender is a value like
+   * any other and belongs in a column of its own, where it also sorts and
+   * filters — which it could not do buried in a render function.
+   */
   const columns: GridColDef[] = useMemo(
     () => [
       {
         field: 'subject',
         headerName: 'Message',
-        flex: 2,
-        minWidth: 220,
+        flex: 3,
+        minWidth: 240,
+        // `title` rather than a tooltip component: a subject is truncated by
+        // the column, and the browser's own affordance costs nothing and
+        // survives a row the grid virtualized away.
         renderCell: (params) => (
-          <Stack spacing={0.25} sx={{ py: 1 }}>
-            <Typography variant="body2">{params.row.subject}</Typography>
-            {params.row.context ? (
-              <Typography variant="caption" color="text.secondary">
-                {params.row.context}
-              </Typography>
-            ) : null}
-          </Stack>
+          <Typography variant="body2" noWrap title={params.row.subject}>
+            {params.row.subject}
+          </Typography>
         ),
+      },
+      {
+        field: 'context',
+        headerName: 'Sender',
+        width: 170,
+        renderCell: (params) =>
+          params.row.context ? (
+            <Chip size="small" variant="outlined" label={params.row.context} />
+          ) : (
+            // An imported row carries none: the provider's history has no
+            // tags, so we know what was sent and not which sender produced it.
+            <Typography variant="caption" color="text.secondary">
+              {'—'}
+            </Typography>
+          ),
       },
       {
         field: 'sentAtMs',
         headerName: 'Sent',
-        flex: 1,
-        minWidth: 170,
-        // A NUMBER in the row and a string only at render, so the column
-        // sorts chronologically rather than alphabetically — "Aug" before
-        // "Dec" before "Jan" is what a formatted string would give.
-        renderCell: (params) => formatWhen(params.row.sentAtMs),
+        width: 190,
+        // A NUMBER in the row and a string only at render, so the column sorts
+        // chronologically rather than alphabetically — a formatted string
+        // would put "Aug" before "Dec" before "Jan".
+        renderCell: (params) => (
+          <Typography variant="body2" noWrap>
+            {formatWhen(params.row.sentAtMs)}
+          </Typography>
+        ),
       },
       {
         field: 'status',
@@ -195,8 +220,24 @@ export function StaffUserEmailHistoryCard({
           )
         },
       },
-      { field: 'openCount', headerName: 'Opens', width: 90, type: 'number' },
-      { field: 'clickCount', headerName: 'Clicks', width: 90, type: 'number' },
+      // `type: 'number'` alone right-aligns the CELL and leaves the header
+      // left, which reads as a misalignment rather than as a number column.
+      {
+        field: 'openCount',
+        headerName: 'Opens',
+        width: 90,
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+      },
+      {
+        field: 'clickCount',
+        headerName: 'Clicks',
+        width: 90,
+        type: 'number',
+        align: 'right',
+        headerAlign: 'right',
+      },
     ],
     [],
   )
@@ -246,9 +287,24 @@ export function StaffUserEmailHistoryCard({
           <ListTable
             rows={gridRows}
             columns={columns}
+            /*
+             * One line per row. The grid's default 52px is sized for stacked
+             * cells; every cell here is a single line, and at the default the
+             * rows read as padded rather than as a table.
+             */
+            rowHeight={44}
+            columnHeaderHeight={44}
             onOpen={(_id, row) => setOpen(row.record as StaffEmailDeliveryRow)}
           />
-          <StaffEmailMessageDialog row={open} onClose={() => setOpen(null)} />
+          {/*
+            * Mounted only while a row is open. The dialog reads the signed-in
+            * user and fetches a message body on mount, and rendering it
+            * closed put that hook — and an error boundary's worth of failure
+            * surface — behind every card that merely LISTS mail.
+            */}
+          {open ? (
+            <StaffEmailMessageDialog row={open} onClose={() => setOpen(null)} />
+          ) : null}
         </>
       )}
     </CardDisplay>
