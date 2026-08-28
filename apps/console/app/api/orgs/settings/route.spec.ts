@@ -65,6 +65,10 @@ const mockFetch = jest.fn()
 const mockOrganizations = jest.requireActual(
   '../../../../../../libs/aglyn/src/lib/app-utils/organizations',
 )
+/** The real first-party dependency graph, for the same reason (AGL-2486). */
+const mockEnabledPlugins = jest.requireActual(
+  '../../../../../../libs/aglyn/src/lib/plugin-manager/enabled-plugins',
+)
 
 function mockMakeFirestore() {
   const makeDoc = (path: string) => ({
@@ -144,6 +148,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   isValidOrgSlug: () => true,
   normalizeAddress: () => null,
   normalizePhone: (value: string) => value,
+  /*
+   * The REAL dependency graph (AGL-2486), not a stub. A double here would
+   * make the refusal below pass against a fixture rather than against the
+   * catalog, and the whole claim is that the catalog's declared edges are what
+   * the endpoint enforces.
+   */
+  strandedDependents: mockEnabledPlugins.strandedDependents,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     body: await request.json(),
@@ -424,6 +435,77 @@ describe('org settings honour an override, not just the role (AGL-2350)', () => 
 
     const response = await POST(
       post({ orgId: ORG, action: 'rename', name: 'Renamed by a plain admin' }),
+    )
+
+    expect(response.status).toBe(200)
+  })
+})
+
+/**
+ * The dependency cascade is a BOUNDARY here, not a courtesy (AGL-2486).
+ *
+ * The console warns before a disable strands a dependent, and a warning is
+ * only as good as the surface showing it. This endpoint takes the whole array,
+ * so a stale tab posting a set assembled before the dependent was switched on,
+ * a script, or a console surface added later that forgot to ask could all
+ * store a workspace where User Accounts is on and the Commerce bundle that
+ * answers its `membership/*` POST is off — a live site serving `/signin` with
+ * nothing behind it.
+ */
+describe('set-enabled-plugins refuses a set that strands a dependent', () => {
+  it('400s a set with User Accounts on and Commerce off, storing nothing', async () => {
+    seedOrg()
+
+    const response = await POST(
+      post({
+        orgId: ORG,
+        action: 'set-enabled-plugins',
+        enabledPlugins: ['mui', 'accounts'],
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      stranded: [{ pluginId: 'accounts', missing: ['commerce'] }],
+    })
+    // Refused, not repaired: dropping the dependent silently would switch off
+    // a capability the caller never mentioned.
+    expect(mockDocs.get(`orgs/${ORG}`)?.['enabledPlugins']).toBe(undefined)
+  })
+
+  /**
+   * The CONTROL. Without it the test above passes for a branch that refuses
+   * every plugin write — which would be a far worse bug than the one it
+   * guards, and invisible from the refusal alone.
+   */
+  it('PREMISE: the same set WITH Commerce is stored', async () => {
+    seedOrg()
+
+    const response = await POST(
+      post({
+        orgId: ORG,
+        action: 'set-enabled-plugins',
+        enabledPlugins: ['mui', 'accounts', 'commerce'],
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['enabledPlugins']).toEqual([
+      'mui',
+      'accounts',
+      'commerce',
+    ])
+  })
+
+  it('a set that simply omits both is fine — nothing is stranded', async () => {
+    seedOrg()
+
+    const response = await POST(
+      post({
+        orgId: ORG,
+        action: 'set-enabled-plugins',
+        enabledPlugins: ['mui', 'redirects'],
+      }),
     )
 
     expect(response.status).toBe(200)

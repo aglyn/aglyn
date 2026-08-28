@@ -364,6 +364,13 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   settings:
     'Per-plugin settings documents — shipping, storefront, booking policy — ' +
     'each written by its own console settings card.',
+  pluginSettings:
+    'The keys ONE site answers for itself out of a plugin\'s declared config ' +
+    'schema (AGL-428, AGL-1014), written by the site plugin page\'s settings ' +
+    'form. All three lists exclude the name and the dedicated block re-grants ' +
+    'the write to a site ADMIN only — narrower than the catch-all\'s ' +
+    '`canWriteHostContent`, because this decides what a plugin does on a live ' +
+    'site with no publish step in front of it.',
   media: 'Host media library documents: alt text, tags and folder moves.',
   mediaFolders: 'Media library folders, created and renamed in the DAM.',
   activity: 'The site activity feed, appended by the tenant activity logger.',

@@ -29,8 +29,12 @@ import { join } from 'node:path'
 import {
   ACCOUNTS_PLUGIN_ID,
   FIRST_PARTY_PLUGINS,
+  pluginDependents,
+  pluginRequirements,
   PUBLISHED_SITE_IMPACT,
   resolveDisableCascade,
+  resolvePluginSiteState,
+  strandedDependents,
 } from './enabled-plugins'
 
 describe('the declared first-party dependency graph', () => {
@@ -168,5 +172,117 @@ describe('the published-site consequence of a disable', () => {
 
   it('marks a console-only plugin as console-only', () => {
     expect(PUBLISHED_SITE_IMPACT['contacts']).toBe('console-only')
+  })
+})
+
+/**
+ * The graph, read in both directions by the console's dependency card
+ * (AGL-2486). Same declared edges the cascade walks — a second traversal
+ * would be a second answer, and the two surfaces would eventually disagree
+ * about which plugins are coupled.
+ */
+describe('pluginRequirements / pluginDependents', () => {
+  it('reads the declared edge forwards and backwards', () => {
+    expect(pluginRequirements(ACCOUNTS_PLUGIN_ID)).toEqual(['commerce'])
+    expect(pluginDependents('commerce')).toEqual([ACCOUNTS_PLUGIN_ID])
+  })
+
+  it('answers empty for a plugin on neither end of an edge', () => {
+    // The CONTROL. Without it both assertions above would pass for functions
+    // that returned the whole catalog, which is what an inferred graph looks
+    // like when it goes wrong.
+    expect(pluginRequirements('redirects')).toEqual([])
+    expect(pluginDependents('redirects')).toEqual([])
+  })
+
+  it('takes a marketplace listing\'s extra edges without letting it erase one', () => {
+    const extra = { 'listing-abc': ['commerce'] }
+    expect(pluginDependents('commerce', extra)).toEqual(
+      expect.arrayContaining([ACCOUNTS_PLUGIN_ID, 'listing-abc']),
+    )
+    // A listing cannot declare away a first-party edge by omitting it.
+    expect(pluginRequirements(ACCOUNTS_PLUGIN_ID, extra)).toEqual(['commerce'])
+  })
+})
+
+/**
+ * The WRITE-side question, which is the one that can be enforced.
+ * `/api/orgs/settings` refuses a set this reports on, so the boundary does
+ * not live in a dialog any caller can skip.
+ */
+describe('strandedDependents', () => {
+  it('names a dependent left running with its requirement off', () => {
+    expect(strandedDependents(['mui', ACCOUNTS_PLUGIN_ID])).toEqual([
+      { pluginId: ACCOUNTS_PLUGIN_ID, missing: ['commerce'] },
+    ])
+  })
+
+  it('is silent on a set where the requirement is present', () => {
+    // The CONTROL: a checker that refused every set would pass the test above
+    // and would be a far worse bug than the one it guards.
+    expect(strandedDependents(['mui', ACCOUNTS_PLUGIN_ID, 'commerce'])).toEqual([])
+  })
+
+  it('is silent when the dependent is off too', () => {
+    expect(strandedDependents(['mui', 'redirects'])).toEqual([])
+  })
+
+  it('ignores a requirement naming an id nothing knows about', () => {
+    // A stale or typo\'d edge must not lock a workspace out of its own
+    // switchboard by refusing every set it can post.
+    expect(
+      strandedDependents(['listing-abc'], { 'listing-abc': ['not-a-plugin'] }),
+    ).toEqual([])
+  })
+})
+
+/**
+ * Where one plugin stands on one site — the resolution the site plugin page
+ * and its dependency card both read, rather than deriving twice.
+ */
+describe('resolvePluginSiteState', () => {
+  const org = { enabledPlugins: ['mui', 'commerce', ACCOUNTS_PLUGIN_ID, 'redirects'] }
+
+  it('always-on beats everything, including an explicit deny', () => {
+    expect(resolvePluginSiteState(org, { disabledPlugins: ['mui'] }, 'mui')).toBe(
+      'always-on',
+    )
+  })
+
+  it('an org-disabled plugin is off for the workspace, not off for the site', () => {
+    expect(resolvePluginSiteState({ enabledPlugins: ['mui'] }, {}, 'commerce')).toBe(
+      'off-for-workspace',
+    )
+  })
+
+  it('a plugin the site has not denied runs here', () => {
+    expect(resolvePluginSiteState(org, {}, 'commerce')).toBe('runs-here')
+  })
+
+  it('THE CASE: enabled at the workspace, denied by this site', () => {
+    expect(
+      resolvePluginSiteState(org, { disabledPlugins: ['commerce'] }, 'commerce'),
+    ).toBe('off-for-site')
+  })
+
+  it('a default-off plugin nobody asked for is awaiting an opt-in, not switched off', () => {
+    // Two different sentences to an operator: nobody decided, versus somebody
+    // decided against.
+    expect(resolvePluginSiteState(org, {}, ACCOUNTS_PLUGIN_ID)).toBe(
+      'awaiting-opt-in',
+    )
+    expect(
+      resolvePluginSiteState(
+        org,
+        { disabledPlugins: [ACCOUNTS_PLUGIN_ID] },
+        ACCOUNTS_PLUGIN_ID,
+      ),
+    ).toBe('off-for-site')
+  })
+
+  it('an opted-in default-off plugin runs here', () => {
+    expect(
+      resolvePluginSiteState(org, { enabledPlugins: [ACCOUNTS_PLUGIN_ID] }, ACCOUNTS_PLUGIN_ID),
+    ).toBe('runs-here')
   })
 })

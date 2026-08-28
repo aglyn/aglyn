@@ -165,6 +165,10 @@ installing.
   a site disappears from that site's navigation, editor, published pages, and API — other
   sites in the workspace are unaffected, and a site can never enable a plugin the
   workspace has switched off.
+- The site's **Admin → Plugins** page lists **both kinds** in two groups — what ships
+  with the platform, and what the workspace installed from the marketplace — because
+  which one a row is is the first thing you need to know before switching it. A
+  marketplace plugin gets the same per-site switch as a built-in one.
 - Most plugins are **on** for a site unless it turns them off. **User Accounts** is the
   exception: it is **off until a site turns it on**, because it is the one that decides
   whether the site serves `/signin`, `/signup` and `/recover` — and a sign-in page on a
@@ -211,11 +215,40 @@ dialog says this rather than implying the list is exhaustive. If you rely on a m
 plugin, check it yourself before switching off something it might be built on.
 :::
 
+Every plugin's page — at the workspace and at a site — carries a **Dependencies** card
+showing both directions: what the plugin needs, and what needs it. Each related plugin
+links to its own page at the same scope, so a site page links to site pages.
+
+### A dependency that is off for one site {#a-dependency-that-is-off-for-one-site}
+
+A site can switch off a plugin that another plugin on that same site depends on — by
+disabling it directly, or simply by never opting in. When that happens the dependent
+**stays switched on**. Nothing about it looks wrong: its workspace page is healthy, its
+own switch is on, and the site keeps serving whatever routes it registers.
+
+What is actually missing is the code. A site loads only its own enabled bundles, so a
+missing requirement's elements **stop rendering on published pages**, and the plugin API
+dispatcher answers **404** for any path belonging to a plugin that site has off. User
+Accounts with Commerce off is the shape: `/signin` is still served, and the `membership/*`
+request the form posts to has nothing behind it.
+
+The site's plugin page is the only surface that can see this, so it says so there — the
+Dependencies card marks the requirement as off for this site and warns rather than
+showing a neutral label. The fix is either to turn the requirement back on for the site
+or to turn the dependent off.
+
+
 ## Configure
 
 A plugin declares the settings it takes, and the console renders the form. A workspace
 sets a value once and every site follows it. See
 [Plugin configuration](./reference/plugin-config.md).
+
+This is the same for a marketplace plugin. A published manifest may carry a `config`
+block declaring the plugin's fields and their defaults, and the console renders it from
+the pinned manifest — the same form, the same workspace-default and per-site-override
+behavior, with nothing for the publisher to build. See
+[Plugin manifest](./reference/manifest-and-envs.md).
 
 ### Settings for one site {#configure-site}
 

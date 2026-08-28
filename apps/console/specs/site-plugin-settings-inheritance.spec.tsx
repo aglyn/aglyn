@@ -303,3 +303,96 @@ describe('the workspace form is unchanged by all of this', () => {
     expect(screen.queryByText('Inherited')).toBeNull()
   })
 })
+
+/**
+ * The same form, for a MARKETPLACE plugin (AGL-428).
+ *
+ * A third-party bundle runs sandboxed on another origin and never executes in
+ * the console process, so it can never call `registerPluginConfigSchema` — the
+ * only way a schema reached this form. Its settings therefore did not exist,
+ * however carefully its author declared them, and the inheritance model above
+ * was unreachable for every plugin a workspace installed. The manifest on the
+ * install pin is the declaration the console does hold.
+ *
+ * These tests deliberately assert the SAME behaviours as the block above
+ * rather than a parallel set: the claim is that a marketplace plugin gets what
+ * a first-party one gets, and a different set of assertions would not say so.
+ */
+const LISTING = 'listing-loyalty'
+const LISTING_ORG_PATH = `orgs/org-1/pluginSettings/${LISTING}`
+const LISTING_HOST_PATH = `hosts/host-1/pluginSettings/${LISTING}`
+
+const listingManifest = {
+  id: LISTING,
+  name: 'Loyalty Points',
+  version: '2.1.0',
+  entry: 'index.js',
+  config: {
+    fields: [
+      { key: 'pointsPerDollar', label: 'Points per dollar', type: 'number', min: 1 },
+      { key: 'welcomeBonus', label: 'Welcome bonus', type: 'number' },
+    ],
+    defaults: { pointsPerDollar: 5, welcomeBonus: 100 },
+  },
+}
+
+const renderListingSiteForm = () =>
+  render(
+    <PluginConfigCards
+      orgId="org-1"
+      hostId="host-1"
+      pluginId={LISTING}
+      manifest={listingManifest}
+      displayName="Loyalty Points"
+    />,
+  )
+
+describe('a marketplace plugin gets the same site settings', () => {
+  it('renders the manifest fields, seeded from the workspace and marked inherited', () => {
+    mockDocuments.set(LISTING_ORG_PATH, { pointsPerDollar: 10 })
+    renderListingSiteForm()
+    expect(
+      (screen.getByLabelText('Points per dollar') as HTMLInputElement).value,
+    ).toBe('10')
+    expect(screen.getAllByText('Inherited').length).toBeGreaterThan(0)
+  })
+
+  it('names the card by the plugin, never by its listing document id', () => {
+    renderListingSiteForm()
+    expect(screen.getByText('Loyalty Points settings')).toBeTruthy()
+    expect(screen.queryByText(`${LISTING} settings`)).toBeNull()
+  })
+
+  it('a site override writes ONE key to the site document', async () => {
+    mockDocuments.set(LISTING_ORG_PATH, { pointsPerDollar: 10, welcomeBonus: 250 })
+    renderListingSiteForm()
+    fireEvent.change(screen.getByLabelText('Points per dollar'), {
+      target: { value: '20' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save site settings' }))
+    await waitFor(() => expect(mockSetDocCalls.length).toBeGreaterThan(0))
+    expect(mockSetDocCalls[0].path).toBe(LISTING_HOST_PATH)
+    expect(mockSetDocCalls[0].data['pointsPerDollar']).toBe(20)
+    // The untouched field is not written at all, so the site keeps following
+    // the workspace on it — including changes made there later.
+    expect(mockSetDocCalls[0].data).not.toHaveProperty('welcomeBonus')
+  })
+
+  /**
+   * THE CONTROL. Without it every assertion above would pass for a form that
+   * rendered these fields from somewhere else entirely — and the whole claim
+   * is that the MANIFEST is what makes them exist.
+   */
+  it('renders nothing at all when the pin carries no declared config', () => {
+    const { container } = render(
+      <PluginConfigCards
+        orgId="org-1"
+        hostId="host-1"
+        pluginId={LISTING}
+        manifest={{ id: LISTING, name: 'Loyalty Points', version: '2.1.0' }}
+        displayName="Loyalty Points"
+      />,
+    )
+    expect(container.textContent).toBe('')
+  })
+})

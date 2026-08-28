@@ -338,6 +338,147 @@ export function isPluginEnabled(
 }
 
 /**
+ * Where one plugin stands ON ONE SITE (AGL-1014, AGL-2486).
+ *
+ * Three surfaces need this answer and they must not each derive it: the site
+ * plugin page's "Where it runs" card, that page's dependency list — where the
+ * same question is asked about a NEIGHBOR, and where the answer is the whole
+ * point, because a dependency the workspace enables and this site has switched
+ * off is a broken plugin behind a healthy-looking workspace page — and the
+ * per-site switchboard. A second derivation is a second chance to disagree
+ * with `resolveHostEnabledPlugins`, which is what actually runs.
+ *
+ * - `always-on`         — the base library; it cannot be switched off anywhere.
+ * - `off-for-workspace` — the org has it off, so it runs on none of its sites
+ *                         and this site cannot turn it on.
+ * - `runs-here`         — the effective host set contains it.
+ * - `awaiting-opt-in`   — a `defaultOffPerSite` plugin the org enables and
+ *                         this site has not asked for. Off, but off by
+ *                         DEFAULT rather than by a decision, which is a
+ *                         different thing to tell an operator.
+ * - `off-for-site`      — the org enables it and this site switched it off.
+ */
+export type PluginSiteState =
+  | 'always-on'
+  | 'off-for-workspace'
+  | 'runs-here'
+  | 'awaiting-opt-in'
+  | 'off-for-site'
+
+export function resolvePluginSiteState(
+  org: { enabledPlugins?: string[] } | null | undefined,
+  host: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null | undefined,
+  pluginId: string,
+): PluginSiteState {
+  if (ALWAYS_ON.includes(pluginId)) return 'always-on'
+  if (!resolveEnabledPlugins(org).includes(pluginId)) return 'off-for-workspace'
+  if (resolveHostEnabledPlugins(org, host).includes(pluginId)) return 'runs-here'
+  // A default-off plugin this site has not named is off because nobody asked
+  // for it; naming it in the deny-list is a decision, and an explicit deny
+  // beats an opt-in, so the deny-list is checked first.
+  const denied = Array.isArray(host?.disabledPlugins)
+    ? host.disabledPlugins.map(String).includes(pluginId)
+    : false
+  return !denied && isDefaultOffPerSite(pluginId)
+    ? 'awaiting-opt-in'
+    : 'off-for-site'
+}
+
+/**
+ * The declared dependency graph, both directions, built once (AGL-2486).
+ *
+ * `requires` on the catalog is the forward edge — what a plugin cannot run
+ * without — and every consumer so far wanted the reverse one. Building both
+ * here keeps the cascade, the console's dependency card and the server-side
+ * refusal reading the SAME edges: a graph assembled a second time is a graph
+ * that can disagree with itself about which plugins are coupled, and the
+ * disagreement would show up as a warning shown on one surface and not on the
+ * one that writes.
+ *
+ * `extraRequirements` extends the catalog and cannot shrink it, exactly as it
+ * does for {@link resolveDisableCascade} — a third-party id can add edges of
+ * its own but can never declare away a first-party one.
+ */
+function dependencyEdges(
+  extraRequirements?: Readonly<Record<string, readonly string[]>>,
+): {
+  /** Keyed by a required id; holds the ids that depend on it. */
+  dependents: Map<string, string[]>
+  /** Keyed by a dependent id; holds the ids it requires. */
+  requires: Map<string, string[]>
+} {
+  const dependents = new Map<string, string[]>()
+  const requires = new Map<string, string[]>()
+  const addEdge = (dependent: string, required: string) => {
+    const reverse = dependents.get(required)
+    if (reverse) reverse.push(dependent)
+    else dependents.set(required, [dependent])
+    const forward = requires.get(dependent)
+    if (forward) forward.push(required)
+    else requires.set(dependent, [required])
+  }
+  for (const plugin of FIRST_PARTY_PLUGINS)
+    for (const required of plugin.requires ?? []) addEdge(plugin.id, required)
+  for (const [dependent, required] of Object.entries(extraRequirements ?? {}))
+    for (const one of required ?? []) addEdge(dependent, String(one))
+  return { dependents, requires }
+}
+
+/** What `pluginId` declares it cannot run without — DIRECT edges only. */
+export function pluginRequirements(
+  pluginId: string,
+  extraRequirements?: Readonly<Record<string, readonly string[]>>,
+): string[] {
+  return [...(dependencyEdges(extraRequirements).requires.get(pluginId) ?? [])]
+}
+
+/** What declares it cannot run without `pluginId` — DIRECT edges only. */
+export function pluginDependents(
+  pluginId: string,
+  extraRequirements?: Readonly<Record<string, readonly string[]>>,
+): string[] {
+  return [...(dependencyEdges(extraRequirements).dependents.get(pluginId) ?? [])]
+}
+
+/**
+ * Which of `enabledIds` would be left running with a requirement switched off
+ * (AGL-2486) — the same question the cascade dialog asks, phrased so a WRITER
+ * can refuse instead of a reader warning.
+ *
+ * The dialog is a courtesy: it stands in front of the console's own switches
+ * and nothing else. A direct API call, a stale tab that posts an older set, or
+ * a second console surface that forgot to ask can still store a set where
+ * User Accounts is on and the Commerce bundle that answers its sign-in POST is
+ * not. This is what a write path calls to reject that set outright, so the
+ * boundary does not live in a dialog anyone can skip.
+ *
+ * Only DECLARED requirements are checked, with the same limit
+ * {@link PLUGIN_CASCADE_IS_DECLARED_ONLY} states: an undeclared coupling is
+ * invisible here too. A requirement naming an id outside the catalog is
+ * ignored rather than treated as unmet — a stale edge must not lock a
+ * workspace out of its own switchboard.
+ */
+export function strandedDependents(
+  enabledIds: readonly string[],
+  extraRequirements?: Readonly<Record<string, readonly string[]>>,
+): Array<{ pluginId: string; missing: string[] }> {
+  const enabled = new Set(enabledIds.map(String))
+  const known = new Set<string>([
+    ...FIRST_PARTY_PLUGINS.map((plugin) => plugin.id),
+    ...enabled,
+  ])
+  const { requires } = dependencyEdges(extraRequirements)
+  const stranded: Array<{ pluginId: string; missing: string[] }> = []
+  for (const pluginId of enabled) {
+    const missing = (requires.get(pluginId) ?? []).filter(
+      (required) => known.has(required) && !enabled.has(required),
+    )
+    if (missing.length) stranded.push({ pluginId, missing })
+  }
+  return stranded
+}
+
+/**
  * Everything that must ALSO be switched off when `pluginId` is (AGL-2486) —
  * the transitive closure over reverse `requires` edges, restricted to what is
  * currently on.
@@ -364,17 +505,7 @@ export function resolveDisableCascade(
   extraRequirements?: Readonly<Record<string, readonly string[]>>,
 ): string[] {
   const enabled = new Set(enabledIds.map(String))
-  // Reverse index: required id -> ids that depend on it.
-  const dependents = new Map<string, string[]>()
-  const addEdge = (dependent: string, required: string) => {
-    const list = dependents.get(required)
-    if (list) list.push(dependent)
-    else dependents.set(required, [dependent])
-  }
-  for (const plugin of FIRST_PARTY_PLUGINS)
-    for (const required of plugin.requires ?? []) addEdge(plugin.id, required)
-  for (const [dependent, required] of Object.entries(extraRequirements ?? {}))
-    for (const one of required ?? []) addEdge(dependent, String(one))
+  const dependents = dependencyEdges(extraRequirements).dependents
 
   // Breadth-first over reverse edges. `seen` is seeded with the origin so a
   // cycle back to it terminates and the plugin being disabled is never listed

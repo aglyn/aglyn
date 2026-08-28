@@ -130,6 +130,119 @@ export function validatePluginConfigValues(
   return error ? { ok: false, error } : { ok: true }
 }
 
+const MANIFEST_CONFIG_FIELD_LIMIT = 50
+const FIELD_TYPES: ReadonlySet<string> = new Set([
+  'string',
+  'number',
+  'boolean',
+  'select',
+])
+
+/**
+ * A plugin's declared fields, read from its MANIFEST rather than the registry
+ * (AGL-428).
+ *
+ * The registry is a module-scope map, filled by `registerPluginConfigSchema`
+ * at import time. A marketplace plugin cannot fill it: its bundle runs in a
+ * sandboxed frame on a separate origin and never executes in the console
+ * process, so there is no moment at which its registration could happen. The
+ * settings form therefore rendered NOTHING for every plugin a workspace
+ * installed, and `resolvePluginConfig` — which is entirely plugin-agnostic and
+ * would have layered a third-party plugin's org default under a per-site
+ * override without changing a line — was never reached for one.
+ *
+ * The manifest is denormalized onto every install pin, so it is the one
+ * declaration of a marketplace plugin the console already holds.
+ *
+ * Everything here is re-validated rather than trusted. The manifest is
+ * publisher-authored, it is stored on a client-readable document, and a form
+ * built from it is a form an org manager saves through — so a junk `type`
+ * drops the field rather than rendering an unknown control, and the field
+ * count is capped so one manifest cannot turn a settings page into thousands
+ * of inputs. Being reviewed once is not the same as being safe to render
+ * verbatim forever.
+ *
+ * Returns `undefined` when the manifest declares nothing usable, which callers
+ * must treat as "this plugin has no settings" rather than as an error: most
+ * plugins take none.
+ */
+export function pluginConfigSchemaFromManifest(
+  pluginId: string,
+  manifest: unknown,
+): PluginConfigSchema | undefined {
+  if (!pluginId) return undefined
+  const declared = (manifest as { config?: unknown } | null | undefined)?.config
+  const rawFields = (declared as { fields?: unknown } | undefined)?.fields
+  if (!Array.isArray(rawFields)) return undefined
+  const seen = new Set<string>()
+  const fields: PluginConfigField[] = []
+  for (const raw of rawFields) {
+    if (fields.length >= MANIFEST_CONFIG_FIELD_LIMIT) break
+    const entry = raw as Record<string, unknown> | null
+    const key = typeof entry?.['key'] === 'string' ? entry['key'].trim() : ''
+    // A duplicate key would give two controls one storage slot, so the second
+    // is dropped rather than allowed to shadow the first.
+    if (!key || seen.has(key)) continue
+    const type = String(entry?.['type'] ?? 'string')
+    if (!FIELD_TYPES.has(type)) continue
+    const options = Array.isArray(entry?.['options'])
+      ? (entry['options'] as unknown[])
+          .map((option) => option as Record<string, unknown> | null)
+          .filter(
+            (option) =>
+              typeof option?.['value'] === 'string' &&
+              typeof option?.['label'] === 'string',
+          )
+          .map((option) => ({
+            value: String(option?.['value']),
+            label: String(option?.['label']),
+          }))
+      : undefined
+    // A `select` with nothing to select is a dropdown that cannot be answered,
+    // so it is dropped rather than rendered empty.
+    if (type === 'select' && !options?.length) continue
+    seen.add(key)
+    fields.push({
+      key,
+      label:
+        typeof entry?.['label'] === 'string' && entry['label'].trim()
+          ? String(entry['label']).slice(0, 120)
+          : key,
+      type: type as PluginConfigField['type'],
+      description:
+        typeof entry?.['description'] === 'string'
+          ? String(entry['description']).slice(0, 400)
+          : undefined,
+      options,
+      min: typeof entry?.['min'] === 'number' ? entry['min'] : undefined,
+      max: typeof entry?.['max'] === 'number' ? entry['max'] : undefined,
+    })
+  }
+  if (!fields.length) return undefined
+  const rawDefaults = (declared as { defaults?: unknown } | undefined)?.defaults
+  const defaults: Record<string, unknown> = {}
+  for (const field of fields) {
+    // Defaults are coerced through the same path stored values take, so a
+    // manifest default of the wrong type cannot become the value a site
+    // inherits. An absent one falls back to the type's empty value rather than
+    // `undefined`, which `pluginConfigOverrides` reads as "not answered".
+    const supplied =
+      rawDefaults && typeof rawDefaults === 'object'
+        ? (rawDefaults as Record<string, unknown>)[field.key]
+        : undefined
+    const empty =
+      field.type === 'boolean'
+        ? false
+        : field.type === 'number'
+          ? (field.min ?? 0)
+          : field.type === 'select'
+            ? (field.options?.[0]?.value ?? '')
+            : ''
+    defaults[field.key] = coerce(field, supplied, empty)
+  }
+  return { pluginId, fields, defaults }
+}
+
 /**
  * The three levels a plugin setting can be answered at.
  *

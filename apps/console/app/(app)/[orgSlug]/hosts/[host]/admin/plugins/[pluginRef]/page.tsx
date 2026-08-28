@@ -20,13 +20,13 @@ import {
   ACCOUNTS_PLUGIN_ID,
   FIRST_PARTY_PLUGINS,
   isDefaultOffPerSite,
-  isHostPluginEnabled,
   resolveEnabledPlugins,
+  resolvePluginSiteState,
 } from '@aglyn/aglyn'
 import { mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
+import { Alert, Button, Chip, Stack, Switch, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
@@ -34,11 +34,14 @@ import AuthScreensCard from '../../../../../../../../components/auth-screens-car
 import DashboardLayout from '../../../../../../../../components/layouts/dashboard.layout'
 import HostDisplayNameComponent from '../../../../../../../../components/host-display-name.component'
 import PluginConfigCards from '../../../../../../../../components/plugin-config-card.component'
+import PluginDependenciesCard from '../../../../../../../../components/plugin-dependencies-card.component'
+import PluginDisableCascadeDialog from '../../../../../../../../components/plugin-disable-cascade-dialog.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
 import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
+import { useSitePluginSwitchboard } from '../../../../../../../../hooks/use-plugin-switchboard'
 import {
   useHostId,
   useHostSubdomain,
@@ -107,12 +110,6 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
         : null,
     [firestore, orgId, listingId],
   )
-  // The site's own plugin policy, which is what decides whether it runs here.
-  const { data: hostDoc } = useFirestoreDoc<any>(
-    () => (hostId ? doc(firestore, 'hosts', hostId) : null),
-    [firestore, hostId],
-  )
-
   // Either pin will name the thing: they carry the same denormalized display
   // name, version and manifest, and the site's is preferred because it is the
   // one governing this page.
@@ -124,38 +121,73 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
     ? firstParty.label
     : String(pin?.displayName ?? pluginRef)
 
+  /**
+   * The site's switch, from the SAME writer the Site plugins list uses.
+   *
+   * It writes on change here: the list is a whole switchboard behind one Save,
+   * and this page is about ONE plugin, where a Save button for a switch the
+   * reader just flipped reads as a second, unexplained step. The cascade check
+   * sits inside the shared hook, in front of the write, so this entry point
+   * cannot skip it any more than the list can.
+   */
+  const switchboard = useSitePluginSwitchboard(hostId, {
+    autoSave: true,
+    readOnly: !isAdmin,
+    labelFor: (id) =>
+      FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === id)?.label ??
+      (id === pluginRef ? displayName : id),
+  })
+  /**
+   * The site's plugin policy as the switch above currently reads it. This page
+   * used to listen to `hosts/{hostId}` a second time for the same two fields,
+   * which is a second answer waiting to disagree with the control beside it —
+   * and the surface that disagreed would have been the sentence explaining
+   * what the switch does.
+   */
+  const hostDoc = switchboard.siteDoc
+
+  /**
+   * Where this plugin stands on THIS site — from the shared resolver, not from
+   * a second reading of the same two documents. The dependency card below asks
+   * exactly this question about each neighbor, and two derivations of it could
+   * disagree with `resolveHostEnabledPlugins`, which is what actually runs.
+   */
+  const siteState = resolvePluginSiteState(org, hostDoc, pluginRef)
   const orgEnabled = resolveEnabledPlugins(org).includes(pluginRef)
-  const runsHere = isHostPluginEnabled(org, hostDoc, pluginRef)
-  const alwaysOn = Boolean(firstParty?.alwaysOn)
-  const defaultOff = isDefaultOffPerSite(pluginRef)
+  const runsHere = siteState === 'runs-here' || siteState === 'always-on'
+  const alwaysOn = siteState === 'always-on'
 
   const whereItRuns = () => {
-    if (alwaysOn) {
-      return (
-        'Always on. It is what sites are built out of, so it cannot be ' +
-        'turned off for one site any more than for the workspace.'
-      )
-    }
-    if (!orgEnabled) {
-      return (
-        'The workspace has this plugin switched off, so it runs on none of ' +
-        'its sites. A site can never turn on what the workspace has turned ' +
-        'off.'
-      )
-    }
-    if (runsHere) {
-      return defaultOff
-        ? 'This site has opted in, so the plugin runs here. Other sites in ' +
-            'the workspace stay off until they opt in too.'
-        : 'The workspace enables this plugin and this site has not turned ' +
-            'it off, so it runs here.'
-    }
-    return defaultOff
-      ? 'The workspace enables this plugin, but it stays off for a site ' +
+    switch (siteState) {
+      case 'always-on':
+        return (
+          'Always on. It is what sites are built out of, so it cannot be ' +
+          'turned off for one site any more than for the workspace.'
+        )
+      case 'off-for-workspace':
+        return (
+          'The workspace has this plugin switched off, so it runs on none of ' +
+          'its sites. A site can never turn on what the workspace has turned ' +
+          'off.'
+        )
+      case 'runs-here':
+        return isDefaultOffPerSite(pluginRef)
+          ? 'This site has opted in, so the plugin runs here. Other sites in ' +
+              'the workspace stay off until they opt in too.'
+          : 'The workspace enables this plugin and this site has not turned ' +
+              'it off, so it runs here.'
+      case 'awaiting-opt-in':
+        return (
+          'The workspace enables this plugin, but it stays off for a site ' +
           'until that site opts in — and this one has not.'
-      : 'The workspace enables this plugin, but this site has turned it ' +
+        )
+      default:
+        return (
+          'The workspace enables this plugin, but this site has turned it ' +
           'off: it is gone from this site’s navigation, editor, published ' +
           'pages and API.'
+        )
+    }
   }
 
   return (
@@ -281,40 +313,92 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
                 </Typography>
               ) : null}
               {/*
-                The SWITCH stays on the list, deliberately. Per-site
-                enablement is a boundary rather than a preference —
-                `resolveHostEnabledPlugins` is the single enforcement point
-                for navigation, the editor, published pages and API dispatch —
-                and turning one off cascades to the plugins that depend on it.
-                A second writer of that state would be a second place for the
-                cascade to be forgotten.
+                The SWITCH, on the page about the thing it switches.
+
+                Per-site enablement is a boundary rather than a preference —
+                `resolveHostEnabledPlugins` is the single enforcement point for
+                navigation, the editor, published pages and API dispatch — and
+                turning one off cascades to the plugins that depend on it. That
+                is the reason this control has to be shared, not the reason to
+                withhold it: `useSitePluginSwitchboard` is the one writer, and
+                the list calls the same one, so there is no second place for
+                the cascade to be forgotten.
+
+                A plugin the WORKSPACE has switched off is rendered disabled
+                rather than hidden, with the sentence above saying why: a site
+                can never turn on what the workspace has turned off, and a
+                missing control does not say that.
               */}
               {alwaysOn ? null : (
-                <Stack direction="row">
-                  <AppLink
-                    href={buildRoute(Route.HOST_ADMIN_PLUGINS, {
-                      orgSlug,
-                      host,
-                    })}
-                  >
-                    <Button size="small" component="span">
-                      {'Change on Site plugins'}
-                    </Button>
-                  </AppLink>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Switch
+                    checked={runsHere}
+                    disabled={
+                      !isAdmin ||
+                      !orgEnabled ||
+                      switchboard.busy ||
+                      !switchboard.ready
+                    }
+                    onChange={() =>
+                      switchboard.requestToggle(pluginRef, !runsHere)
+                    }
+                    slotProps={{
+                      input: {
+                        'aria-label': `Toggle ${displayName} on this site`,
+                      },
+                    }}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {runsHere ? 'On for this site' : 'Off for this site'}
+                  </Typography>
+                  {orgEnabled ? null : (
+                    <AppLink
+                      href={buildRoute(Route.ORG_PLUGIN_INSTALLATION, {
+                        orgSlug,
+                        pluginRef,
+                      })}
+                    >
+                      <Button size="small" component="span">
+                        {'Switch it on for the workspace'}
+                      </Button>
+                    </AppLink>
+                  )}
                 </Stack>
               )}
             </Stack>
           </CardDisplay>
 
+          {/* What it needs and what needs it, resolved FOR THIS SITE. The
+              workspace page answers the structural question; only this one can
+              say whether a requirement is actually running here — and a
+              requirement the workspace enables while this site has it off is a
+              broken plugin behind a workspace page that looks fine. */}
+          <PluginDependenciesCard
+            pluginId={pluginRef}
+            orgSlug={orgSlug}
+            site={{ host, hostDoc }}
+          />
+
           {/* Settings — the reason this page exists. The same form the
               workspace page renders, in its site-scoped mode: every field
               says whether this site follows the workspace or answers for
-              itself, and offers the one action back to following it. */}
+              itself, and offers the one action back to following it.
+
+              `manifest` is what gives a MARKETPLACE plugin settings here at
+              all: first-party schemas register at module scope, which a
+              sandboxed third-party bundle cannot do, so the pin's own manifest
+              is the only place its fields can come from. */}
           {pluginId && orgId && hostId ? (
             <PluginConfigCards
               orgId={orgId}
               hostId={hostId}
               pluginId={pluginId}
+              manifest={pin?.manifest}
+              displayName={displayName}
               disabled={!isAdmin}
             />
           ) : null}
@@ -343,6 +427,7 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
             <AuthScreensCard hostId={hostId} />
           ) : null}
         </Stack>
+        <PluginDisableCascadeDialog {...switchboard.dialogProps} />
       </Container>
     </DashboardLayout>
   )

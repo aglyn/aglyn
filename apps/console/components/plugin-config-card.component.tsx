@@ -21,6 +21,7 @@ import {
   listPluginConfigSchemas,
   mergePluginConfig,
   pluginConfigOverrides,
+  pluginConfigSchemaFromManifest,
   resolvePluginConfig,
   validatePluginConfigValues,
   type PluginConfigField,
@@ -68,11 +69,14 @@ function SchemaForm({
   hostId,
   schema,
   disabled,
+  displayName,
 }: {
   orgId: string
   hostId?: string
   schema: PluginConfigSchema
   disabled?: boolean
+  /** The plugin's own name, for a schema the first-party catalog cannot name. */
+  displayName?: string
 }) {
   const firestore = useFirestore()
   const { data: user } = useUser()
@@ -287,9 +291,17 @@ function SchemaForm({
     }
   }
 
+  /*
+   * The catalog names a bundle; a marketplace plugin is not in it, and falling
+   * through to `schema.pluginId` put a Firestore document id in a card header.
+   * The caller passes the pin's `displayName`, which is what every other
+   * surface calls the same plugin.
+   */
   const label =
     FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === schema.pluginId)
-      ?.label ?? schema.pluginId
+      ?.label ??
+    displayName ??
+    schema.pluginId
 
   const control = (field: PluginConfigField) => {
     const value = values[field.key]
@@ -475,6 +487,8 @@ export default function PluginConfigCards({
   hostId,
   disabled,
   pluginId,
+  manifest,
+  displayName,
 }: {
   orgId: string
   /**
@@ -491,10 +505,34 @@ export default function PluginConfigCards({
    * rather than show the one every plugin already gets for free.
    */
   pluginId?: string
+  /**
+   * The install pin's manifest, for a MARKETPLACE plugin (AGL-428).
+   *
+   * `listPluginConfigSchemas` reads a module-scope registry that only code
+   * running in this process can fill, and a sandboxed third-party bundle never
+   * runs here — so this card rendered nothing for every plugin a workspace
+   * installed, however carefully its author declared their settings. The
+   * manifest is the declaration the console does hold. It is a FALLBACK, not a
+   * merge: a plugin that registered a schema in-process has already said what
+   * its fields are, and letting a manifest override that would let a pinned
+   * document restate a first-party contract.
+   */
+  manifest?: unknown
+  /** How to name a plugin the first-party catalog does not know. */
+  displayName?: string
 }) {
-  const schemas = listPluginConfigSchemas().filter(
+  const registered = listPluginConfigSchemas().filter(
     (schema) => !pluginId || schema.pluginId === pluginId,
   )
+  const fromManifest =
+    !registered.length && pluginId
+      ? pluginConfigSchemaFromManifest(pluginId, manifest)
+      : undefined
+  const schemas = registered.length
+    ? registered
+    : fromManifest
+      ? [fromManifest]
+      : []
   if (!schemas.length) return null
   return (
     <>
@@ -505,6 +543,7 @@ export default function PluginConfigCards({
           hostId={hostId}
           schema={schema}
           disabled={disabled}
+          displayName={displayName}
         />
       ))}
     </>

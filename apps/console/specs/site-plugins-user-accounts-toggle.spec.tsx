@@ -41,6 +41,12 @@ const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHost: () => ({ doc: mockHost, setDoc: mockSetDoc }),
+  // The card also lists the workspace's MARKETPLACE installs, which it reads
+  // through this module. A partial mock leaves these `undefined` and the card
+  // dies calling one — the same trap the component mock below documents, one
+  // module over.
+  useFirestore: () => ({}),
+  useFirestoreCollection: () => ({ data: [] }),
   // The card renders the AGL-2486 disable-cascade dialog, which reads the
   // signed-in user to authorize its impact scan.
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),

@@ -32,6 +32,7 @@ import {
   isValidOrgSlug,
   normalizeAddress,
   normalizePhone,
+  strandedDependents,
 } from '@aglyn/aglyn/server'
 import {
   OrgSlugTakenError,
@@ -213,6 +214,39 @@ async function handler(request: Request): Promise<Response> {
           raw.map((id: unknown) => String(id).trim().slice(0, 60)).filter(Boolean),
         ),
       )
+      /**
+       * THE BOUNDARY, not the dialog (AGL-2486).
+       *
+       * The console warns before a disable strands a dependent, and a warning
+       * is only ever as good as the surface that shows it. This endpoint takes
+       * the WHOLE array, so any caller that skipped the dialog — a stale tab
+       * posting a set assembled before the dependent was switched on, a
+       * script, a console surface added later that forgot to ask — could store
+       * a workspace where User Accounts is on and the Commerce bundle that
+       * answers its `membership/*` POST is off. That is a live site serving
+       * `/signin` with no server behind it, so it is refused here rather than
+       * merely discouraged one layer up.
+       *
+       * Refusing the WRITE, not repairing it: silently dropping the stranded
+       * dependent would switch off a capability the caller never mentioned,
+       * and the caller cannot tell a repaired save from an applied one.
+       */
+      const stranded = strandedDependents(enabledPlugins)
+      if (stranded.length) {
+        return Response.json(
+          {
+            error:
+              'These plugins depend on ones this set switches off: ' +
+              stranded
+                .map(
+                  (entry) => `${entry.pluginId} needs ${entry.missing.join(', ')}`,
+                )
+                .join('; '),
+            stranded,
+          },
+          { status: 400 },
+        )
+      }
       await firebaseAdmin
         .app()
         .firestore()

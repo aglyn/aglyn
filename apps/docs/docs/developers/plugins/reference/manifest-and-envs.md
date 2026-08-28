@@ -23,7 +23,16 @@ description: The plugin manifest schema, the marketplace listing/version documen
     "size": { "height": 240 } // declared frame size
   },
   "restrictParent": [],       // besigner lineal rules
-  "restrictChildren": []
+  "restrictChildren": [],
+  "config": {                 // settings the console renders a form for
+    "fields": [
+      { "key": "pointsPerDollar", "label": "Points per dollar",
+        "type": "number", "min": 1 },
+      { "key": "tier", "label": "Tier", "type": "select",
+        "options": [{ "value": "basic", "label": "Basic" }] }
+    ],
+    "defaults": { "pointsPerDollar": 5, "tier": "basic" }
+  }
 }
 ```
 
@@ -31,6 +40,29 @@ Validation is server-side (`validatePluginManifest`) — invalid manifests
 never publish. `capabilities` are enforced by the sandbox tier: the plugin
 origin stamps a CSP from `network`, the bridge drops undeclared props and
 events.
+
+### `config` — settings without writing a settings screen
+
+A first-party plugin registers its settings schema by calling
+`registerPluginConfigSchema` at module scope. Your bundle cannot: it runs
+sandboxed on its own origin and never executes in the console process, so
+there is no moment at which that call could happen. Declaring `config` in the
+manifest is how you get the same thing.
+
+The console reads it from the **pinned** manifest on the install, so the fields
+a workspace sees are the fields the version it installed declared. Your plugin
+reads the resolved values with `usePluginConfig(orgId, pluginId)` on the client
+or `getPluginConfig(orgId, pluginId)` on the server — the same two calls a
+first-party plugin uses — and gets the same two-level behavior for free: the
+workspace answers once, and any one site can override a single field and keep
+inheriting the rest.
+
+Field `type` is one of `string`, `number`, `boolean` or `select`; a `select`
+needs `options`, and a `number` may set `min`/`max`. Anything else is dropped
+rather than rendered, at most 50 fields are read, and every default is coerced
+to its declared type — so a manifest cannot put a control the console does not
+have in front of a customer, and a mistyped default cannot become the value
+every site inherits.
 
 ## Listing & version documents
 

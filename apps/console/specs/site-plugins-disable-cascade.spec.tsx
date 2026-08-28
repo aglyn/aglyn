@@ -44,6 +44,12 @@ const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHost: () => ({ doc: mockHost, setDoc: mockSetDoc }),
+  // The card also lists the workspace's MARKETPLACE installs, which it reads
+  // through this module. A partial mock leaves these `undefined` and the card
+  // dies calling one — the same trap the component mock below documents, one
+  // module over.
+  useFirestore: () => ({}),
+  useFirestoreCollection: () => ({ data: [] }),
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,

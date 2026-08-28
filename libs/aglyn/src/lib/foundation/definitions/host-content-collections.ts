@@ -221,6 +221,7 @@ export const PLUGIN_CONTENT_COLLECTIONS = [
   'locations',
   'memberPosts',
   'overlays',
+  'pluginSettings',
   'productCategories',
   'products',
   'redirects',

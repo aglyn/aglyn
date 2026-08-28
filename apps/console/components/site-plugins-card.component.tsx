@@ -19,18 +19,14 @@
 import {
   classifyEnabledPlugins,
   FIRST_PARTY_PLUGINS,
-  isDefaultOffPerSite,
-  resolveDisableCascade,
   resolveEnabledPlugins,
 } from '@aglyn/aglyn'
-import PluginDisableCascadeDialog, {
-  type CascadeEntry,
-} from './plugin-disable-cascade-dialog.component'
+import PluginDisableCascadeDialog from './plugin-disable-cascade-dialog.component'
 import { mdiChevronRight } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
+  Chip,
   List,
   ListItem,
   ListItemText,
@@ -38,23 +34,33 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
-import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import { useMemo } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgSlug } from '../hooks/use-org-scope'
+import { useSitePluginSwitchboard } from '../hooks/use-plugin-switchboard'
+import { useSiteMarketplacePlugins } from '../hooks/use-site-marketplace-plugins'
 import { useHostSubdomain } from './host-id-provider'
 
 /**
  * Per-site plugin switchboard (AGL-1014), the host-level counterpart of
  * OrgPluginsCard: the org decides what the workspace may use; this card
  * narrows it for ONE site by writing the host doc's `disabledPlugins`
- * deny-list. A site can never widen beyond the org — org-disabled plugins
- * are simply not listed — and always-on plugins render locked, exactly as
- * they do on the org switchboard. `resolveHostEnabledPlugins` is the single
- * enforcement point (console nav, editor pages, published sites, API
- * dispatch), so a toggle here is a boundary, not a preference.
+ * deny-list and its `enabledPlugins` opt-in list. A site can never widen
+ * beyond the org — org-disabled plugins are simply not listed — and always-on
+ * plugins render locked, exactly as they do on the org switchboard.
+ * `resolveHostEnabledPlugins` is the single enforcement point (console nav,
+ * editor pages, published sites, API dispatch), so a toggle here is a
+ * boundary, not a preference — which is why the write, its seed guard and its
+ * dependency cascade all live in `useSitePluginSwitchboard`, shared with the
+ * site's plugin detail page rather than reimplemented on each.
+ *
+ * The list is in two GROUPS, the same split the workspace's Plugins page
+ * makes across two cards: what ships with the platform, and what this
+ * workspace installed from the marketplace. Merging them would leave a site
+ * admin unable to tell reviewed platform code from a third party's, which is
+ * the first thing they need to know about a row before switching it.
  */
 export default function SitePluginsCard(props: { hostId: string }) {
   const { hostId } = props
@@ -63,66 +69,13 @@ export default function SitePluginsCard(props: { hostId: string }) {
   // first-party plugin — so an unready org lists MORE rows than the loaded
   // one, never fewer, and no row here is a claim about a plan. The dangerous
   // half of this card is the write, and it is not seeded from `org` at all:
-  // `disabled` comes from the HOST doc, whose own staleness is already
-  // guarded by `writeGuardedBySeed` below (AGL-1356/1358). Gating the list
-  // on `ready` would only add a flash to a card that cannot lie.
+  // the switchboard hook seeds from the HOST doc, whose own staleness is
+  // guarded by `writeGuardedBySeed` (AGL-1356/1358). Gating the list on
+  // `ready` would only add a flash to a card that cannot lie.
   // eslint-disable-next-line aglyn/no-unguarded-loading-hook
-  const { org } = useCurrentOrg()
+  const { org, orgId } = useCurrentOrg()
   const orgSlug = useOrgSlug()
   const hostSlug = useHostSubdomain()
-  const { enqueueSnackbar } = useSnackbar()
-  const {
-    doc: {
-      data: host,
-      status: hostStatus,
-      /**
-       * The host doc the switch list is seeded from is unconfirmed by the
-       * server (AGL-1358). This save writes the WHOLE `disabledPlugins`
-       * array — `mergeFields` replaces it atomically, deliberately, because
-       * a deep merge could never remove an id — so a cached seed re-enables
-       * every plugin disabled since that snapshot.
-       *
-       * That is not a preference being lost. `resolveHostEnabledPlugins` is
-       * the single enforcement point for navigation, the editor, published
-       * pages and API dispatch, so a plugin switched back on here is running
-       * again on a live site, with nobody having asked for it.
-       */
-      fromCache: hostFromCache,
-    },
-    setDoc,
-  } = useHost({ hostId })
-  const [disabled, setDisabled] = useState<string[]>([])
-  /**
-   * The AGL-2486 OPT-IN list: `defaultOffPerSite` ids this site has turned
-   * ON. Held separately from `disabled` because it is the other half of the
-   * same switchboard read in the other direction — a deny-list cannot say
-   * "off until asked", which is precisely what a member sign-in page needs
-   * to be on a site that has no members.
-   */
-  const [optedIn, setOptedIn] = useState<string[]>([])
-  const [dirty, setDirty] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (!dirty)
-      setDisabled(
-        Array.isArray(host?.disabledPlugins)
-          ? host.disabledPlugins.map(String)
-          : [],
-      )
-    // Reset from the live doc until the user starts editing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host?.disabledPlugins])
-
-  useEffect(() => {
-    if (!dirty)
-      setOptedIn(
-        Array.isArray(host?.enabledPlugins)
-          ? host.enabledPlugins.map(String)
-          : [],
-      )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host?.enabledPlugins])
 
   // Only ORG-ENABLED plugins are listed: what the org has switched off does
   // not exist for any of its sites, so there is nothing to toggle here.
@@ -135,128 +88,116 @@ export default function SitePluginsCard(props: { hostId: string }) {
     () => new Map(FIRST_PARTY_PLUGINS.map((plugin) => [plugin.id, plugin])),
     [],
   )
+  const marketplace = useSiteMarketplacePlugins(orgId ?? '', hostId, listings)
 
   /**
-   * One switch, two fields. A `defaultOffPerSite` row records CONSENT in
-   * `enabledPlugins`; every other row records refusal in `disabledPlugins`.
-   * Which list a row writes follows from the catalog, never from the row's
-   * position or label, so adding a second default-off plugin needs no edit
-   * here.
+   * A plugin id as an operator reads it. The catalog answers for a bundle;
+   * a marketplace install answers with the `displayName` denormalized onto
+   * its pin. Without this the cascade dialog would name a Firestore document
+   * id in a sentence about what stops working.
    */
-  const applyToggle = (id: string) => {
-    setDirty(true)
-    const flip = (current: string[]) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
-    if (isDefaultOffPerSite(id)) setOptedIn(flip)
-    else setDisabled(flip)
-  }
+  const labelFor = useMemo(() => {
+    const names = new Map(
+      marketplace.map((install) => [install.listingId, install.displayName]),
+    )
+    return (id: string) => catalog.get(id)?.label ?? names.get(id) ?? id
+  }, [catalog, marketplace])
 
-  /** Is this row's switch in the ON position? */
-  const isOn = (id: string, alwaysOn: boolean) =>
-    alwaysOn || (isDefaultOffPerSite(id) ? optedIn.includes(id) : !disabled.includes(id))
+  const switchboard = useSitePluginSwitchboard(hostId, { labelFor })
+  const { busy, dirty, isOn, isLocked, requestToggle, save } = switchboard
 
-  /**
-   * The pending cascade (AGL-2486). Held rather than applied, so Cancel is a
-   * genuine no-op: nothing is written and no local state moves, which is what
-   * makes the switch spring back to ON rather than merely looking reverted.
-   */
-  const [pending, setPending] = useState<{
+  const builtIn = bundles.map((id) => {
+    const plugin = catalog.get(id)
+    return {
+      id,
+      label: plugin?.label ?? id,
+      description: plugin?.description,
+      trailing: undefined as string | undefined,
+    }
+  })
+  const installed = marketplace.map((install) => ({
+    id: install.listingId,
+    label: install.displayName,
+    description:
+      install.scope === 'org'
+        ? 'Installed by your workspace on every site.'
+        : 'Installed on this site.',
+    trailing: install.version ? `v${install.version}` : undefined,
+  }))
+
+  const rowFor = (row: {
     id: string
     label: string
-    cascade: CascadeEntry[]
-  } | null>(null)
-
-  const labelFor = (id: string) => catalog.get(id)?.label ?? id
-
-  const toggle = (id: string) => {
-    // Only a DISABLE can strand a dependent. Turning one on cannot.
-    if (!isOn(id, false)) return void applyToggle(id)
-    const enabledNow = [...bundles, ...listings].filter((candidate) =>
-      isOn(candidate, Boolean(catalog.get(candidate)?.alwaysOn)),
+    description?: string
+    trailing?: string
+  }) => {
+    const locked = isLocked(row.id)
+    return (
+      <ListItem
+        key={row.id}
+        disableGutters
+        secondaryAction={
+          <Switch
+            edge="end"
+            checked={isOn(row.id)}
+            disabled={locked || busy}
+            onChange={() => requestToggle(row.id, !isOn(row.id))}
+            slotProps={{
+              input: { 'aria-label': `Toggle ${row.label} on this site` },
+            }}
+          />
+        }
+      >
+        {/*
+          The row opens the plugin's page for THIS site (AGL-428, AGL-1014),
+          the way a workspace plugin row opens its own. The link wraps only the
+          text: the switch is the list item's `secondaryAction` and sits
+          outside it, so flipping one never navigates.
+        */}
+        <AppLink
+          href={buildRoute(Route.HOST_ADMIN_PLUGIN, {
+            orgSlug,
+            host: hostSlug,
+            pluginRef: row.id,
+          })}
+          color="inherit"
+          underline="none"
+          sx={{ flex: 1, minWidth: 0, display: 'block' }}
+        >
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{
+              alignItems: 'center',
+              px: 1,
+              mx: -1,
+              borderRadius: 1,
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
+          >
+            <ListItemText
+              primary={row.label}
+              secondary={
+                locked
+                  ? `${row.description ?? ''} Always on.`.trim()
+                  : row.description
+              }
+            />
+            {row.trailing ? (
+              <Typography variant="caption" color="text.secondary">
+                {row.trailing}
+              </Typography>
+            ) : null}
+            <MdiIcon
+              path={mdiChevronRight.path}
+              color="disabled"
+              sx={{ fontSize: 20 }}
+            />
+          </Stack>
+        </AppLink>
+      </ListItem>
     )
-    const cascade = resolveDisableCascade(id, enabledNow)
-    if (!cascade.length) return void applyToggle(id)
-    setPending({
-      id,
-      label: labelFor(id),
-      cascade: cascade.map((one) => ({ id: one, label: labelFor(one) })),
-    })
   }
-
-  /**
-   * Apply the whole cascade at once. Every id here is ON by construction —
-   * `resolveDisableCascade` filters to the enabled set — so each flip is a
-   * disable. The WRITE stays atomic: this only moves local state, and `save`
-   * puts both lists in one `setDoc`.
-   */
-  const confirmCascade = () => {
-    if (!pending) return
-    applyToggle(pending.id)
-    for (const entry of pending.cascade) applyToggle(entry.id)
-    setPending(null)
-  }
-
-  const save = async () => {
-    setBusy(true)
-    try {
-      // The guard WRAPS the write (AGL-1356): an early return is a shape you
-      // can keep while losing the protection.
-      const verdict = await writeGuardedBySeed(
-        {
-          subject: 'site plugin list',
-          unreadable: hostStatus === 'error',
-          fromCache: hostFromCache,
-        },
-        async () => {
-          // mergeFields replaces the array atomically — a deep merge could
-          // never REMOVE an id, so re-enabling would silently not persist.
-          // Which is also why a stale seed is dangerous rather than merely
-          // wasteful: the array it replaces is the whole deny-list.
-          //
-          // Both lists go in ONE write (AGL-2486). They are two halves of a
-          // single switchboard state, and saving them separately would let a
-          // failure land between them — leaving a site opted into member
-          // pages by a field the other half was meant to qualify.
-          await setDoc(
-            { disabledPlugins: disabled, enabledPlugins: optedIn },
-            { mergeFields: ['disabledPlugins', 'enabledPlugins'] },
-          )
-        },
-      )
-      if (!verdict.ok) {
-        // `dirty` stays true and the switches keep their positions, so the
-        // user can retry once the page reloads rather than discovering later
-        // that nothing was saved.
-        return void enqueueSnackbar(verdict.message, { variant: 'warning' })
-      }
-      enqueueSnackbar('Site plugins saved', { variant: 'success' })
-      setDirty(false)
-    } catch (error) {
-      enqueueSnackbar(`Error: ${JSON.stringify(error)}`, { variant: 'error' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const rows = [
-    ...bundles.map((id) => {
-      const plugin = catalog.get(id)
-      return {
-        id,
-        label: plugin?.label ?? id,
-        description: plugin?.description,
-        alwaysOn: Boolean(plugin?.alwaysOn),
-      }
-    }),
-    ...listings.map((id) => ({
-      id,
-      label: id,
-      description: 'Marketplace plugin installed by your workspace.',
-      alwaysOn: false,
-    })),
-  ]
 
   return (
     <CardDisplay
@@ -290,68 +231,36 @@ export default function SitePluginsCard(props: { hostId: string }) {
             'sites in the workspace are unaffected, and a site can never ' +
             'enable a plugin the workspace has switched off.'}
         </Typography>
+
+        <Typography variant="overline" color="text.secondary">
+          {'Built in'}
+        </Typography>
         <List dense disablePadding>
-          {rows.map((row) => (
-            <ListItem
-              key={row.id}
-              disableGutters
-              secondaryAction={
-                <Switch
-                  edge="end"
-                  checked={isOn(row.id, row.alwaysOn)}
-                  disabled={row.alwaysOn || busy}
-                  onChange={() => toggle(row.id)}
-                  slotProps={{
-                    input: { 'aria-label': `Toggle ${row.label} on this site` },
-                  }}
-                />
-              }
-            >
-              {/*
-                The row opens the plugin's page for THIS site (AGL-428,
-                AGL-1014), the way a workspace plugin row opens its own. The link wraps only
-                the text: the switch is the list item's `secondaryAction` and
-                sits outside it, so flipping one never navigates.
-              */}
-              <AppLink
-                href={buildRoute(Route.HOST_ADMIN_PLUGIN, {
-                  orgSlug,
-                  host: hostSlug,
-                  pluginRef: row.id,
-                })}
-                color="inherit"
-                underline="none"
-                sx={{ flex: 1, minWidth: 0, display: 'block' }}
-              >
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{
-                    alignItems: 'center',
-                    px: 1,
-                    mx: -1,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'action.hover' },
-                  }}
-                >
-                  <ListItemText
-                    primary={row.label}
-                    secondary={
-                      row.alwaysOn
-                        ? `${row.description ?? ''} Always on.`.trim()
-                        : row.description
-                    }
-                  />
-                  <MdiIcon
-                    path={mdiChevronRight.path}
-                    color="disabled"
-                    sx={{ fontSize: 20 }}
-                  />
-                </Stack>
-              </AppLink>
-            </ListItem>
-          ))}
+          {builtIn.map((row) => rowFor(row))}
         </List>
+
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'center', mt: 1 }}
+        >
+          <Typography variant="overline" color="text.secondary">
+            {'Installed from the marketplace'}
+          </Typography>
+          <Chip size="small" variant="outlined" label={`${installed.length}`} />
+        </Stack>
+        {installed.length ? (
+          <List dense disablePadding>
+            {installed.map((row) => rowFor(row))}
+          </List>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {'Nothing installed from the marketplace runs on this site. A ' +
+              'marketplace plugin your workspace installs appears here with ' +
+              'its own switch.'}
+          </Typography>
+        )}
+
         <Stack direction="row" spacing={1}>
           <Button
             variant="contained"
@@ -362,16 +271,7 @@ export default function SitePluginsCard(props: { hostId: string }) {
           </Button>
         </Stack>
       </Stack>
-      <PluginDisableCascadeDialog
-        open={Boolean(pending)}
-        pluginId={pending?.id ?? ''}
-        pluginLabel={pending?.label ?? ''}
-        cascade={pending?.cascade ?? []}
-        scope="site"
-        hostId={hostId}
-        onCancel={() => setPending(null)}
-        onConfirm={confirmCascade}
-      />
+      <PluginDisableCascadeDialog {...switchboard.dialogProps} />
     </CardDisplay>
   )
 }
