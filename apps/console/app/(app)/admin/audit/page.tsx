@@ -19,6 +19,7 @@
 import { orgOverrideReasonSummary } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Button,
@@ -30,14 +31,20 @@ import {
 } from '@mui/material'
 import {
   collection,
+  getDocs,
   limit,
   orderBy,
   query,
+  type QueryConstraint,
   Timestamp,
   where,
 } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  usePagedCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -45,7 +52,6 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 
 /**
  * THE ARCHIVE, GIVEN A DOOR (AGL-2324).
@@ -239,6 +245,17 @@ function ArchiveCard() {
 }
 
 /**
+ * How many rows one compliance export may carry.
+ *
+ * High enough that a normal range comes back whole, bounded because an
+ * unbounded fleet-wide read from a browser is how a staff page becomes an
+ * outage. When the range holds more, the page says so and the auditor
+ * narrows the dates — a capped export that announced nothing would be the
+ * same silence the paging fix exists to end.
+ */
+const EXPORT_CEILING = 5000
+
+/**
  * Staff audit log viewer (AGL-203): every admin mutation writes an
  * append-only `adminAudit` entry (AGL-42) — this page finally makes them
  * readable: newest first, client-side filtering over actor/action/target,
@@ -249,7 +266,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
 
   /*==========================================
-   * THE WINDOW, AND WHY IT MOVES (AGL-2324).
+   * THE WINDOW, AND WHY IT MOVES (AGL-2324, AGL-693).
    *
    * This read was `orderBy('at','desc').limit(200)` with no cursor, no date
    * range and no way to ask for row 201. Roughly seventy distinct action
@@ -261,61 +278,84 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
    * `org.override`: the lowest-frequency, highest-consequence entry in the
    * log, and the one this page has bespoke handling for.
    *
+   * It then grew a page at a time behind a "Load older" button — a control
+   * that only ever goes forward, offers no way to change the page size, and
+   * is a fourth pagination grammar in a console that already had too many.
+   * This is the shared one: `usePagedCollection` for the window,
+   * `ListPagination` for the footer, so an auditor learns the control once
+   * and reads the same count line here as on every other list.
+   *
    * TWO CONTROLS, both chosen because they run on the SINGLE-FIELD index
    * that already exists:
    *
-   *  - `pageSize` grows the window in steps. A growing limit re-reads what
-   *    is already on screen, which is the cost of not holding a
-   *    `DocumentSnapshot` cursor across a declarative hook; at these sizes
-   *    it buys pagination for no schema change at all.
+   *  - The page window is `orderBy('at','desc')` plus a limit the hook
+   *    sizes. Ordering is what makes the limit mean "the newest N": an
+   *    unordered `limit()` is answered in document-id order, and every row
+   *    here is keyed by a generated id, so the window would be an arbitrary
+   *    sample of the log arranged to look like its newest page.
    *  - `from`/`to` are a RANGE on `at`, the same field the query orders by,
    *    so Firestore serves it from the single-field index too.
+   *
+   * ⚠️ `orderBy('at')` matches only documents that HAVE `at`, so ordering
+   * on a field a writer omits hides rows instead of arranging them. Every
+   * writer of this collection sets it: the ~60 `adminAudit` call sites all
+   * write `at` on the same `add`/`set` that creates the document, most as
+   * `FieldValue.serverTimestamp()`, and there is no client write path —
+   * the rules make `adminAudit` server-only.
    *
    * ⚠️ What is deliberately NOT here: a server-side `where('scope','==',x)`.
    * That needs a composite `adminAudit (scope ASC, at DESC)` index, which is
    * absent from `cloud/firebase-firestore.indexes.json` and from production,
    * and shipping the query before the index throws at runtime for every
-   * staff member. The scope facet therefore stays client-side over the
-   * window, exactly as AGL-2287 left it. See the issue for the follow-up.
+   * staff member. The scope facet therefore stays client-side over the page,
+   * as does the free-text filter — see the filter block below.
    *=========================================*/
-  const PAGE_STEP = 200
-  const [pageSize, setPageSize] = useState(PAGE_STEP)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
-  const { data: entryDocs } = useFirestoreCollection<any>(
-    () => {
-      const constraints: any[] = [orderBy('at', 'desc')]
-      // A range on `at` and an order by `at`. Same field, so no composite
-      // index — and `to` is EXCLUSIVE of the following day rather than
-      // inclusive of midnight, or "to 2026-03-31" would silently drop every
-      // row written on the 31st.
-      const fromDate = from ? new Date(`${from}T00:00:00`) : null
-      const toDate = to ? new Date(`${to}T00:00:00`) : null
-      if (fromDate && !Number.isNaN(fromDate.getTime())) {
-        constraints.push(where('at', '>=', Timestamp.fromDate(fromDate)))
-      }
-      if (toDate && !Number.isNaN(toDate.getTime())) {
-        toDate.setDate(toDate.getDate() + 1)
-        constraints.push(where('at', '<', Timestamp.fromDate(toDate)))
-      }
-      constraints.push(limit(pageSize))
-      return query(collection(firestore, 'adminAudit'), ...constraints)
-    },
-    [firestore, from, to, pageSize],
+  /**
+   * The ordering and the date range, in ONE place.
+   *
+   * Shared by the paged window and by the CSV export so the two cannot
+   * disagree about which rows the range covers. An export built from its own
+   * copy of these constraints is an export that quietly drifts from the
+   * screen it was taken off.
+   */
+  const rangeConstraints = useMemo((): QueryConstraint[] => {
+    const constraints: QueryConstraint[] = [orderBy('at', 'desc')]
+    // A range on `at` and an order by `at`. Same field, so no composite
+    // index — and `to` is EXCLUSIVE of the following day rather than
+    // inclusive of midnight, or "to 2026-03-31" would silently drop every
+    // row written on the 31st.
+    const fromDate = from ? new Date(`${from}T00:00:00`) : null
+    const toDate = to ? new Date(`${to}T00:00:00`) : null
+    if (fromDate && !Number.isNaN(fromDate.getTime())) {
+      constraints.push(where('at', '>=', Timestamp.fromDate(fromDate)))
+    }
+    if (toDate && !Number.isNaN(toDate.getTime())) {
+      toDate.setDate(toDate.getDate() + 1)
+      constraints.push(where('at', '<', Timestamp.fromDate(toDate)))
+    }
+    return constraints
+  }, [from, to])
+
+  const {
+    rows: entryDocs,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      query(
+        collection(firestore, 'adminAudit'),
+        ...rangeConstraints,
+        limit(pageLimit),
+      ),
+    [firestore, from, to],
     { idField: '$id' },
   )
-
-  /**
-   * True when the read came back FULL — which means there are almost
-   * certainly more rows behind it.
-   *
-   * Surfaced rather than inferred. A page that shows its last row with no
-   * indication that the window ended there looks exactly like a page showing
-   * the whole log, and that indistinguishability is the defect: the log had
-   * been evicting its most important rows for as long as nobody counted.
-   */
-  const windowFull = (entryDocs?.length ?? 0) >= pageSize
 
   const [filter, setFilter] = useState('')
   /*==========================================
@@ -338,6 +378,12 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
    * vocabulary here would drift the first time a route audits a new scope, and
    * would offer facets that match nothing — the phantom-filter half of the
    * same defect. What is offered is exactly what is present.
+   *
+   * "In view" now means THE PAGE, not a 200-row window, and the labels say
+   * so. Both facets are client-side because neither has an index behind it,
+   * and a client-side filter can only narrow rows the client already holds —
+   * so a page-scoped filter is the only honest one until `scope` gets its
+   * composite index. The DATE RANGE is the control that narrows the read.
    *=========================================*/
   const scopes = useMemo(
     () =>
@@ -351,6 +397,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     [entryDocs],
   )
   const [scope, setScope] = useState('')
+  /** The page, narrowed by the two page-scoped facets. */
   const entries = useMemo(() => {
     const term = filter.trim().toLowerCase()
     const all = (entryDocs ?? []).filter(
@@ -384,8 +431,58 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
 
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  // Compliance export (AGL-206): CSV of the current filter.
-  const handleExport = () => {
+  /*==========================================
+   * COMPLIANCE EXPORT (AGL-206), AND WHY IT READS FOR ITSELF.
+   *
+   * The export used to serialize whatever was on screen, which was fine
+   * while the screen held 200 rows and stopped being fine the moment the
+   * list started at ten. A compliance export cut to a page size chosen for
+   * READING is not a smaller export, it is a different document — and one
+   * that looks complete, because a CSV carries no footer saying which page
+   * it came off.
+   *
+   * So it runs its own one-shot `getDocs` over the SAME ordering and date
+   * range the screen is showing, independent of the page and of the two
+   * page-scoped facets. That is an expensive read, and it happens on a
+   * CLICK: nothing here reads the range on mount.
+   *
+   * Bounded, and the bound is reported. Fetching the ceiling PLUS ONE is
+   * what makes truncation a fact rather than a guess — the alternative is a
+   * short CSV that reads as the whole range, which is the 200-row window's
+   * defect one layer down.
+   *=========================================*/
+  const [exporting, setExporting] = useState(false)
+  const [exportNote, setExportNote] = useState<string | null>(null)
+
+  const handleExport = async () => {
+    setExporting(true)
+    setExportNote(null)
+    let exported: any[]
+    try {
+      const snapshot = await getDocs(
+        query(
+          collection(firestore, 'adminAudit'),
+          ...rangeConstraints,
+          limit(EXPORT_CEILING + 1),
+        ),
+      )
+      const capped = snapshot.size > EXPORT_CEILING
+      exported = snapshot.docs
+        .slice(0, EXPORT_CEILING)
+        .map((entry) => ({ $id: entry.id, ...entry.data() }))
+      setExportNote(
+        capped
+          ? `Exported the newest ${EXPORT_CEILING.toLocaleString()} entries in this range — there are more. Narrow the dates to export the rest.`
+          : `Exported ${exported.length.toLocaleString()} entries.`,
+      )
+    } catch {
+      // A refused or failed read must not hand the auditor a short CSV. No
+      // file is a state they can act on; a truncated one is not.
+      setExportNote('Could not read the range to export. Nothing was written.')
+      return
+    } finally {
+      setExporting(false)
+    }
     const escape = (value: unknown) => {
       const text =
         typeof value === 'object' && value !== null
@@ -415,7 +512,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         'before',
         'after',
       ],
-      ...entries.map((entry: any) => [
+      ...exported.map((entry: any) => [
         entry.at?.seconds
           ? new Date(entry.at.seconds * 1000).toISOString()
           : '',
@@ -475,7 +572,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <TextField
                   size="small"
-                  label="Filter (actor, email, action, target)"
+                  label="Filter this page (actor, email, action, target)"
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
                   sx={{ width: 360 }}
@@ -527,42 +624,27 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   slotProps={{ inputLabel: { shrink: true } }}
                   sx={{ width: 170 }}
                 />
-                <Button
-                  size="small"
-                  onClick={handleExport}
-                  disabled={!entries.length}
-                >
-                  {'Export CSV'}
+                {/*
+                  Enabled off the DATE RANGE, never off the page. The export
+                  reads for itself, so a page filtered down to nothing still
+                  has a range to export — disabling on `entries` would refuse
+                  the whole log because the current ten rows did not match a
+                  search term.
+                */}
+                <Button size="small" onClick={handleExport} disabled={exporting}>
+                  {exporting ? 'Exporting…' : 'Export CSV'}
                 </Button>
               </Stack>
-              {/*
-                The end of the window, said out loud. `windowFull` means the
-                read came back at its ceiling, so there is more behind it —
-                the state in which this page used to show its last row and
-                look complete.
-              */}
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-              >
+              {exportNote ? (
                 <Typography variant="caption" color="text.secondary">
-                  {windowFull
-                    ? `Showing the newest ${pageSize.toLocaleString()} entries — there are older ones.`
-                    : `Showing all ${(entryDocs?.length ?? 0).toLocaleString()} entries in range.`}
+                  {exportNote}
                 </Typography>
-                {windowFull ? (
-                  <Button
-                    size="small"
-                    onClick={() => setPageSize((size) => size + PAGE_STEP)}
-                  >
-                    {'Load older'}
-                  </Button>
-                ) : null}
-              </Stack>
+              ) : null}
               {entries.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  {'No audit entries match.'}
+                  {(entryDocs ?? []).length
+                    ? 'Nothing on this page matches the filter.'
+                    : 'No audit entries in this range.'}
                 </Typography>
               ) : (
                 entries.map((entry: any) => {
@@ -695,6 +777,24 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   )
                 })
               )}
+              {/*
+                The shared footer (AGL-693). `hasMore` is a FACT here, not a
+                guess off `length >= pageSize`: the hook over-fetches by one
+                and never renders the probe row, so the last page cannot
+                offer a Next that leads nowhere — nor hide one that leads
+                somewhere, which is what a full final page used to do.
+
+                `rowCount` is the FILTERED count, so the count line describes
+                what the reader is looking at rather than what was fetched.
+              */}
+              <ListPagination
+                page={page}
+                pageSize={pageSize}
+                rowCount={entries.length}
+                hasMore={hasMore}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
             </Stack>
           </CardDisplay>
 
