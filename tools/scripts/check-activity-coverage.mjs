@@ -162,18 +162,22 @@ const NOT_LOGGED = {
   // ⛔ Do NOT fall back to attributing a dunning cancellation to the last
   // person who touched billing. That is the org-owner inference wearing a
   // different hat, and it puts a name on an act nobody performed.
+  //
+  // Both console routes are now CORRECTLY SILENT rather than pending: the
+  // webhook logs the lifecycle, and each of these stamps `metadata[actorUid]`
+  // and `metadata[actorAction]` on the Stripe call so the webhook can name
+  // the person without inferring one. The reader is
+  // `webhook/subscription-activity.ts`.
   'apps/console/app/api/billing/subscription/route.ts':
-    'PENDING (AGL-118). Correctly silent — the webhook is the authority; see ' +
-    'the note above. Also BLOCKED: billing is held by another change.',
+    'Correctly silent. It reports what was ATTEMPTED; the webhook reports ' +
+    'what happened. It carries the acting uid to the webhook in Stripe ' +
+    'metadata and writes no entry of its own.',
   'apps/console/app/api/billing/checkout/route.ts':
-    'PENDING (AGL-118). Correctly silent for the reason above; also BLOCKED.',
-  'apps/console/app/api/billing/webhook/route.ts':
-    'PENDING (AGL-118). THIS is the route that should log, per the decision ' +
-    'above. BLOCKED until the billing files are clean.',
+    'Correctly silent for the same reason, and carries the same stamp.',
 }
 
 /** How many exclusions are allowed. It may fall; it may not rise. */
-const RATCHET = 5
+const RATCHET = 4
 
 const read = (relative) => {
   const path = `${repoRoot}${relative}`

@@ -336,6 +336,15 @@ async function handler(request: Request): Promise<Response> {
           `subscriptions/${subscription.id}`,
           new URLSearchParams({
             cancel_at_period_end: action === 'cancel' ? 'true' : 'false',
+            // Re-stamped on THIS call (AGL-118), not left as whoever last
+            // switched plans. The stamp names the person who performed the
+            // most recent console act on this subscription and says which
+            // act it was; a cancel that inherited a `switch` stamp would
+            // hand the webhook a uid it must not attribute, and one that
+            // inherited nothing would leave a deliberate cancellation
+            // looking Stripe-initiated.
+            'metadata[actorUid]': decoded.uid,
+            'metadata[actorAction]': action,
           }),
         )
       } catch (error) {
@@ -749,6 +758,14 @@ async function handler(request: Request): Promise<Response> {
         // doc's plan never moves.
         params.set('phases[1][metadata][plan]', targetPlan)
         params.set('phases[1][metadata][orgId]', orgId)
+        // On the PHASE, so the actor rides the flip (AGL-118). The event the
+        // webhook logs happens at period end, weeks after this request is
+        // over and with nobody present — and the person who scheduled it is
+        // genuinely its actor. Phase metadata replaces the subscription's at
+        // the flip, so this also retires the stamp that authorized whatever
+        // came before it.
+        params.set('phases[1][metadata][actorUid]', decoded.uid)
+        params.set('phases[1][metadata][actorAction]', 'downgrade')
         // Same tax posture as an instant switch (AGL-1537).
         params.set('phases[1][automatic_tax][enabled]', 'true')
         await stripeRequest(
@@ -824,6 +841,11 @@ async function handler(request: Request): Promise<Response> {
         'automatic_tax[enabled]': 'true',
         'metadata[plan]': targetPlan,
         'metadata[orgId]': orgId,
+        // AGL-118, as at checkout: the uid and the act it authorized, so the
+        // webhook can attribute the plan change this call causes and nothing
+        // else.
+        'metadata[actorUid]': decoded.uid,
+        'metadata[actorAction]': 'switch',
       })
       itemChanges.forEach((change, index) => {
         for (const [key, value] of change) {

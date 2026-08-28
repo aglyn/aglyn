@@ -486,6 +486,26 @@ async function handler(request: Request): Promise<Response> {
       'expand[]': 'latest_invoice.payment_intent',
       'metadata[orgId]': orgId,
       'metadata[plan]': plan,
+      /*==========================================
+       * WHO CLICKED (AGL-118), carried to the only writer that logs.
+       *
+       * The subscription lifecycle is logged FROM THE WEBHOOK, because the
+       * webhook reports what HAPPENED and this route reports what was
+       * ATTEMPTED — and because Stripe ends subscriptions on its own, which
+       * this route never hears about at all. The cost of that choice is that
+       * the webhook has no session and no idea who a person is, so the actor
+       * has to travel with the object.
+       *
+       * `actorAction` travels WITH the uid and is not decoration. Stripe
+       * metadata persists on the subscription forever, so a bare `actorUid`
+       * stamped here would still be sitting on the object a year later when
+       * dunning cancels it — and the webhook would name this person as having
+       * cancelled a subscription they did nothing to. Pairing the uid with
+       * the act it authorized means a stamp can only ever sign the kind of
+       * event it was written for; see the reader in the webhook.
+       *=========================================*/
+      'metadata[actorUid]': decoded.uid,
+      'metadata[actorAction]': 'subscribe',
     })
     // The SAME metered item the session attached, resolved the same way, so
     // the interval-matching rule (AGL-1340) holds identically: Stripe rejects

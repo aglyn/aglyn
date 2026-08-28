@@ -41,6 +41,7 @@ import {
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
+  logOrgActivity,
   sendGa4Purchase,
   sendGa4Refund,
   sendGa4SubscriptionCancelled,
@@ -49,6 +50,10 @@ import {
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+// The branch decision, kept in its own module so it can be exercised without
+// a signed payload, an idempotency claim and a Firestore double standing
+// between a test and the question it is asking (AGL-118).
+import { subscriptionActivityEntry } from './subscription-activity'
 import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import {
   INTERNAL_TRAFFIC_PARAM,
@@ -736,6 +741,70 @@ async function handler(request: Request): Promise<Response> {
               ...(downgradeLanded ? { pendingDowngrade: null } : {}),
             },
           } as never)
+        }
+
+        /*==========================================
+         * THE SUBSCRIPTION LIFECYCLE, IN THE CUSTOMER'S OWN FEED (AGL-118).
+         *
+         * Until this, none of it was anywhere a customer could see: signing
+         * up, upgrading, downgrading and being cancelled by Stripe all
+         * mirrored onto the org doc and appeared in no log at all. An org
+         * whose plan silently became `free` had nothing to read that said
+         * when, or why, or whether a person did it.
+         *
+         * WHY THIS LINE. It is past both mirrors, so the entry describes a
+         * state that has landed — `updateExisting` has moved `plan` and
+         * `writeOrgBilling` has moved the commercial record. It is inside the
+         * org-resolved block, so a tenant shopper's product subscription
+         * (which carries no `metadata.orgId` naming one of OUR workspaces)
+         * can never write into a merchant's workspace feed. And it is gated
+         * on `mirrored`, because a workspace erased mid-handler has no feed
+         * left to file anything under.
+         *
+         * WHY MOST DELIVERIES WRITE NOTHING. `subscriptionActivityEntry`
+         * answers null unless the plan actually moved or the subscription
+         * ended. Stripe re-delivers `customer.subscription.updated` for every
+         * renewal, metered item attach and payment-method change, and a row
+         * on each would bury the four events a year that matter under a
+         * monthly drip saying nothing changed.
+         *
+         * Redelivery is covered upstream: this route claims each event id in
+         * `stripeEvents` before dispatch, so a retried delivery short-circuits
+         * and cannot write the entry twice.
+         *=========================================*/
+        if (mirrored) {
+          const entry = subscriptionActivityEntry({
+            canceled,
+            previousPlan,
+            plan: String(plan),
+            cancellationReason:
+              typeof object?.cancellation_details?.reason === 'string'
+                ? object.cancellation_details.reason
+                : null,
+            metadata: object?.metadata,
+          })
+          if (entry) {
+            await logOrgActivity(
+              String(orgId),
+              // NO EMAIL, on any of these. The webhook holds a uid at best
+              // and never an address, and resolving one would mean a lookup
+              // that answers with whoever holds that uid TODAY — a different
+              // claim from "this is the address that acted".
+              { uid: entry.actorUid, email: null },
+              entry.action,
+              {
+                type: 'subscription',
+                ...(object?.id ? { id: String(object.id) } : {}),
+                name: entry.plan,
+              },
+            )
+            // No `ledger.effect()` beside it, per the AGL-1954 rule this file
+            // states above: `logOrgActivity` swallows its own failures and
+            // resolves either way, so a hand-written claim here would go on
+            // asserting a write that had silently stopped landing. The
+            // delivery is already `acted` — this branch runs only when the
+            // org mirror committed through the observed handle.
+          }
         }
 
         // GA4 churn (AGL-1851): the funnel instruments every step INTO

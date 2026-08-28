@@ -843,14 +843,16 @@ export const syncHostMemberRoles = syncOrgAuthProjections
 /** What an org activity entry points at; `id` lets detail views filter. */
 export interface OrgActivityTarget {
   /**
-   * `host` is a fact about a workspace that no host feed can hold (AGL-118).
+   * `host` and `subscription` are the two facts about a workspace that no
+   * host feed can hold (AGL-118).
    *
    * A site's own log lives at `hosts/{hostId}/activity` and is destroyed with
    * the site — `eraseHost` recursive-deletes the whole tree — so "this site
    * was deleted" written there is an entry with no reader by construction.
-   * It is an org-level event, and this is the only feed that outlives it.
+   * A subscription belongs to no single site at all. Both are org-level
+   * events, and this is the only feed that outlives them.
    */
-  type: 'org' | 'member' | 'invite' | 'host'
+  type: 'org' | 'member' | 'invite' | 'host' | 'subscription'
   id?: string
   name?: string
 }
@@ -863,7 +865,16 @@ export interface OrgActivityTarget {
  */
 export async function logOrgActivity(
   orgId: string,
-  actor: { uid: string; email?: string | null },
+  /**
+   * `uid` is nullable because some org events HAVE no actor (AGL-118). Stripe
+   * cancels a subscription after a month of failed retries with nobody
+   * present, and the honest record of that says so. Naming the last person
+   * who touched billing instead would put a real name on an act nobody
+   * performed — and `actorId` is a filterable field, so the invented
+   * attribution would then show up under that person when somebody asks what
+   * they have done.
+   */
+  actor: { uid: string | null; email?: string | null },
   action: string,
   target: OrgActivityTarget,
 ): Promise<void> {
@@ -872,7 +883,7 @@ export async function logOrgActivity(
     .doc(orgId)
     .collection('activity')
     .add({
-      actorId: actor.uid,
+      actorId: actor.uid ?? null,
       actorEmail: actor.email ?? null,
       action,
       target: {
