@@ -1418,9 +1418,28 @@ service cloud.firestore {
           // hurt most: `approvedConnectHosts` decides where a page may send
           // what a visitor typed, and `approvedFrameHosts` decides whose login
           // form it may embed.
+          //
+          // `authScreens` (AGL-553) belongs in this tier for the reason
+          // `enabledPlugins` is in it, one step further along. That key
+          // decides whether `/signin`, `/signup` and `/recover` EXIST; this
+          // one decides what they RENDER. A site member who can write it
+          // points the address a site's members type their password into at
+          // any screen they like — the credential-confusion hazard the
+          // capability exists to close, reached through the slot instead of
+          // the switch.
+          //
+          // It is also the one live-content surface that does not pass
+          // through `screens`. The tenant loader resolves the slot straight
+          // to a screen document and `screenClaimsToBeAPage` asks only
+          // whether it is deleted, so freezing the routing map for an
+          // `author` never reached it: the role sold as "edit content but
+          // not publish" could put a screen on the site's sign-in address
+          // while publishing nothing. The console card writes this key from
+          // the Admin -> Plugins page, which is already admin-only, so the
+          // tier matches the surface that sets it.
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['disabledPlugins', 'enabledPlugins',
+              .hasAny(['disabledPlugins', 'enabledPlugins', 'authScreens',
                        'approvedImageHosts', 'approvedMediaHosts',
                        'approvedFontHosts', 'approvedFormActions',
                        'approvedConnectHosts', 'approvedFrameHosts'])) &&

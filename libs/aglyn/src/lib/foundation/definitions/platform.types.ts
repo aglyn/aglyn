@@ -328,6 +328,28 @@ export interface AglynHost extends AglynDocument {
    * `notFoundScreenId` (kept in sync for back-compat).
    */
   errorScreens?: HostErrorScreens
+  /**
+   * Designable membership screens (AGL-553): which besigner-built screen
+   * renders at `/signin`, `/signup` and `/recover`. An empty slot falls back
+   * to the built-in form.
+   *
+   * ADMIN TIER, not authoring — the one thing that separates it from its
+   * sibling `errorScreens`, which is a binding to screens the editor already
+   * controls and serves only their own visitors. These three addresses are
+   * where a site's members type their password, so the field decides what a
+   * sign-in page IS. `enabledPlugins` is denied to an editor one tier down
+   * for deciding merely whether those addresses EXIST; the field that
+   * decides what they render cannot sit in a weaker tier than the field that
+   * opens them.
+   *
+   * It is also a live-content surface that does not go through the routing
+   * map: the tenant loader resolves the slot straight to a screen document,
+   * and `screenClaimsToBeAPage` asks only whether that screen is deleted. So
+   * `screens` being frozen for an `author` does not reach it, and an author
+   * — the role sold as "edit content but not publish" — could otherwise put
+   * a screen on the site's sign-in address without publishing anything.
+   */
+  authScreens?: HostAuthScreens
   /** Maintenance mode (AGL-131): every path renders the 503 screen. */
   maintenance?: boolean
   /**
@@ -522,6 +544,18 @@ export interface HostErrorScreens {
   unauthorized?: ScreenUid
   forbidden?: ScreenUid
   unavailable?: ScreenUid
+}
+
+/**
+ * The membership screen slots (AGL-553), keyed as the console card and the
+ * tenant loader spell them. The names carry the `ScreenId` suffix because
+ * that is how they are persisted; the console writes them as dotted field
+ * paths (`authScreens.signinScreenId`).
+ */
+export interface HostAuthScreens {
+  signinScreenId?: ScreenUid
+  signupScreenId?: ScreenUid
+  recoveryScreenId?: ScreenUid
 }
 
 /**

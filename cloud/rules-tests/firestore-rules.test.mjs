@@ -1170,6 +1170,105 @@ describe('hosts', () => {
   })
 
   /**
+   * AGL-553. `authScreens` designates the screen rendered at `/signin`,
+   * `/signup` and `/recover`. It was persisted, written by the console and
+   * read by the tenant loader while appearing in NO deny-list and on NO
+   * TypeScript interface, so it fell through every tier: any site member who
+   * could write content could repoint the address a site's members type
+   * their password into.
+   *
+   * It is the sharper twin of `enabledPlugins`, which sits in this same
+   * admin tier for deciding whether those three addresses exist at all. And
+   * unlike every other live-content surface it does not go through the
+   * `screens` routing map — the loader resolves the slot straight to a
+   * screen document — so freezing that map for an `author` in AGL-2334 never
+   * reached it.
+   *
+   * THE DOTTED PATH IS THE TEST. The console writes
+   * `authScreens.signinScreenId`, not a whole `authScreens` map, and a rule
+   * naming the top-level key only bites here because `affectedKeys()` reports
+   * the top-level key for a dotted merge. Asserting against a whole-map write
+   * would prove the rule fires on a shape the product never sends.
+   */
+  it('only a site admin may designate the sign-in screen (AGL-553)', async () => {
+    // The fixture reaches the tier under test only if these are the roles the
+    // projection really writes. A deny proved against an invented role name
+    // proves the rule rejects nonsense and nothing more.
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      const roles = (await getDoc(doc(db, 'hosts', HOST))).data().memberRoles
+      assert.equal(
+        roles[AUTHOR], 'author',
+        'the AUTHOR principal is no longer projected as `author` on the ' +
+          'host, so this test can no longer reproduce the hole it covers.',
+      )
+      assert.equal(
+        roles[EDITOR], 'editor',
+        'the EDITOR principal is no longer projected as `editor`, so the ' +
+          'middle tier this test exists to pin is no longer being exercised.',
+      )
+      assert.equal(
+        roles[OWNER], 'admin',
+        'the OWNER principal is no longer projected as `admin`, so the ' +
+          'positive control below would pass for the wrong reason.',
+      )
+    })
+
+    // ── The hole itself ────────────────────────────────────────────────────
+    await mustDeny(
+      'an AUTHOR repointing /signin — the role sold as "edit content but ' +
+        'not publish", putting a screen on the site\'s sign-in address',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST), {
+        'authScreens.signinScreenId': 'screen-forged',
+      }),
+    )
+    await mustDeny(
+      'an EDITOR repointing /signin — an editor may publish pages, but ' +
+        '/signin is the address visitors trust with a password, and the ' +
+        'switch that opens it is admin-only one tier down',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'authScreens.signinScreenId': 'screen-forged',
+      }),
+    )
+    await mustDeny(
+      'an EDITOR repointing /recover, the slot that mails a reset link',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'authScreens.recoveryScreenId': 'screen-forged',
+      }),
+    )
+    // A whole-map overwrite is the other spelling of the same act, and it
+    // must not be the way around the dotted-path deny.
+    await mustDeny(
+      'an EDITOR replacing the whole authScreens map at once',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        authScreens: { signinScreenId: 'screen-forged' },
+      }),
+    )
+
+    // ── The controls ───────────────────────────────────────────────────────
+    // A deny that also refuses the admin is not a tier, it is an outage: the
+    // console card writes this key from Admin -> Plugins and has to keep
+    // working.
+    await mustAllow(
+      'a site ADMIN designating the sign-in screen, which is what the ' +
+        'Sign-in & sign-up pages card does',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        'authScreens.signinScreenId': 'screen-designed',
+      }),
+    )
+    // The sibling slot stays authoring, so this deny must not have widened
+    // into `errorScreens`: that one binds screens the editor already owns and
+    // serves only their own visitors.
+    await mustAllow(
+      'an EDITOR designating a 404 screen — errorScreens is authoring and ' +
+        'is deliberately NOT in the admin tier',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'errorScreens.notFound': 'screen-404',
+      }),
+    )
+  })
+
+  /**
    * AGL-1050. Datasets moved to the org in AGL-237, and the ORG block has
    * enforced API-only create/delete since AGL-473/945 so the per-plan
    * `datasets` quota has somewhere to be checked. The host catch-all never
