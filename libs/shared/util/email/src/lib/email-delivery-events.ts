@@ -28,19 +28,31 @@
  *    staff card, a future export — reads a provider's field names or its event
  *    strings. Swapping the sender changes exactly one function in this file
  *    and nothing else in the tree.
- * 2. **The history is ours.** The log is written into our own Firestore from
- *    these events, not fetched from the provider on demand. A provider's list
+ * 2. **The history is ours.** The log is written into our own Firestore and
+ *    read from there, never from the provider on render. A provider's list
  *    endpoint is a different shape per vendor, has its own retention window,
  *    and disappears entirely with the account; a record we keep survives the
  *    migration that the seam exists to make possible.
  *
+ *    That is a rule about the READ PATH, not a rule against ever reading the
+ *    provider. The event feed only knows mail sent after it was connected, so
+ *    a log fed by events alone is empty for all existing history — which is
+ *    precisely the mail a support question is about. The second half of this
+ *    module (see THE READ SIDE OF THE SEAM below) imports that history
+ *    through the same neutral vocabulary, once, into the same store.
+ *
  * ## Pure on purpose
  *
- * No Firestore, no admin SDK, no `fetch`. `system-email-catalog` is imported
- * by console CLIENT components through this library's barrel, so anything
- * reachable from it that touched `firebase-admin` would drag the admin SDK
- * into a browser bundle. Normalisation is a pure function of a payload; the
- * writing lives in `@aglyn/tenant-data-admin/server/email-delivery-log`.
+ * No Firestore and no admin SDK. `system-email-catalog` is imported by console
+ * CLIENT components through this library's barrel, so anything reachable from
+ * it that touched `firebase-admin` would drag the admin SDK into a browser
+ * bundle. Normalisation is a pure function of a payload; the writing lives in
+ * `@aglyn/tenant-data-admin/server/email-delivery-log`.
+ *
+ * The one `fetch` is `resendDeliveryHistorySource`, which is a function that
+ * must be CALLED with a key to do anything — it holds no module state and is
+ * unreachable from a client component, unlike an admin-SDK import, which
+ * executes on load.
  */
 
 /**
@@ -229,4 +241,179 @@ export function normalizeResendDeliveryEvents(
     detail:
       String(data.bounce?.message ?? data.failed?.reason ?? '').trim() || null,
   }))
+}
+
+/*==========================================
+ * THE READ SIDE OF THE SEAM.
+ *
+ * The event feed above only ever knows about mail sent AFTER it was
+ * connected. That is correct for the steady state and useless for the
+ * question the staff card exists to answer, which is asked about mail that
+ * has already gone out — so a delivery log fed only by events is empty
+ * exactly when somebody needs it.
+ *
+ * A provider also holds the history, and reading it is not lock-in as long as
+ * it happens through an interface. {@link EmailDeliverySnapshot} is that
+ * interface: one message as the provider currently sees it, in our
+ * vocabulary. `normalizeResendSentEmails` is the Resend implementation and
+ * the second (and last) function in the tree that knows Resend's wire format.
+ *
+ * WHAT A SNAPSHOT DELIBERATELY DOES NOT CARRY
+ *
+ * Open and click COUNTS. Resend's list endpoint reports a single
+ * `last_event` per message and no engagement detail, so a snapshot can say
+ * "this was opened at least once" and can never say "three times". The
+ * writer therefore treats a snapshot as a floor, never as truth that
+ * overwrites what the event feed recorded — see `recordEmailDeliverySnapshot`.
+ *=========================================*/
+
+/** One message as the provider currently reports it, in our vocabulary. */
+export interface EmailDeliverySnapshot {
+  provider: string
+  providerMessageId: string
+  to: string
+  subject: string | null
+  /** Epoch ms the provider says the message was created. */
+  sentAt: number
+  /** Furthest state the provider reports. Never richer than the event feed. */
+  status: EmailDeliveryEventType
+}
+
+/**
+ * A provider's `last_event` string, mapped onto our lifecycle.
+ *
+ * Deliberately the bare state names rather than the `email.*` event names:
+ * the list endpoint reports `"delivered"`, the webhook reports
+ * `"email.delivered"`, and they are two different vocabularies for one
+ * concept. Both are accepted here so a provider that unifies them later
+ * needs no change.
+ */
+const RESEND_LAST_EVENTS: Record<string, EmailDeliveryEventType> = {
+  sent: 'sent',
+  delivered: 'delivered',
+  delivery_delayed: 'delayed',
+  opened: 'opened',
+  clicked: 'clicked',
+  bounced: 'bounced',
+  complained: 'complained',
+  failed: 'failed',
+  canceled: 'failed',
+  queued: 'sent',
+  scheduled: 'sent',
+}
+
+/**
+ * Turns one entry from Resend's `GET /emails` list into zero or more
+ * snapshots — one per recipient, for the same reason the event adapter fans
+ * out: the staff view is keyed on a person.
+ *
+ * An unrecognised `last_event` falls back to `sent` rather than being
+ * dropped. The message demonstrably exists and was addressed to somebody, and
+ * "we sent this and cannot characterise what happened next" is a far more
+ * useful row than no row — which is the state that sent a staffer to the
+ * vendor dashboard in the first place.
+ */
+export function normalizeResendSentEmails(
+  raw: unknown,
+): EmailDeliverySnapshot[] {
+  const record = (raw ?? {}) as Record<string, any>
+  const providerMessageId = String(record.id ?? '').trim()
+  if (!providerMessageId) return []
+
+  const recipients = (Array.isArray(record.to) ? record.to : [record.to])
+    .map((address: unknown) => String(address ?? '').trim().toLowerCase())
+    .filter((address: string) => address.includes('@'))
+  if (!recipients.length) return []
+
+  const parsed = Date.parse(String(record.created_at ?? ''))
+  const sentAt = Number.isFinite(parsed) ? parsed : 0
+  // A snapshot with no timestamp cannot be ordered, and the log's read drops
+  // any document missing its sort key — so it is refused rather than written
+  // somewhere nothing will look for it.
+  if (!sentAt) return []
+
+  const status =
+    RESEND_LAST_EVENTS[
+      String(record.last_event ?? '')
+        .trim()
+        .toLowerCase()
+    ] ?? 'sent'
+
+  return recipients.map((to: string) => ({
+    provider: 'resend',
+    providerMessageId,
+    to,
+    subject: String(record.subject ?? '').trim() || null,
+    sentAt,
+    status,
+  }))
+}
+
+/** One page of provider history, in our vocabulary. */
+export interface EmailDeliveryHistoryPage {
+  snapshots: EmailDeliverySnapshot[]
+  /** Cursor for the next page, or null at the end. */
+  nextCursor: string | null
+}
+
+/**
+ * Reads one page of already-sent mail from a provider.
+ *
+ * The shape a second provider would implement. Cursor-based rather than
+ * offset- or date-based because that is the lowest common denominator, and
+ * NOT filtered by recipient: Resend's list endpoint has no recipient
+ * parameter, so filtering is the caller's job and the import is a sweep
+ * rather than a per-person lookup. That is the right shape regardless — a
+ * staff page must not fan out to a third party on render.
+ */
+export type EmailDeliveryHistorySource = (options: {
+  cursor?: string | null
+  limit?: number
+}) => Promise<EmailDeliveryHistoryPage>
+
+/** Resend's list endpoint. Paginates with `after=<id>`; caps at 100. */
+export const RESEND_EMAILS_ENDPOINT = 'https://api.resend.com/emails'
+
+/**
+ * {@link EmailDeliveryHistorySource} for Resend.
+ *
+ * Needs a FULL-ACCESS key: a sending-scoped key answers every read on this
+ * endpoint with `401 restricted_api_key`, which is the correct posture for
+ * the key that sends mail and the reason this takes its own.
+ */
+export function resendDeliveryHistorySource(
+  apiKey: string,
+): EmailDeliveryHistorySource {
+  return async ({ cursor, limit } = {}) => {
+    const params = new URLSearchParams({
+      limit: String(Math.min(Math.max(1, limit ?? 100), 100)),
+    })
+    if (cursor) params.set('after', cursor)
+    const response = await fetch(`${RESEND_EMAILS_ENDPOINT}?${params}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(
+        `email history read failed: HTTP ${response.status} ${detail.slice(0, 200)}`,
+      )
+    }
+    const body = (await response.json()) as {
+      data?: unknown[]
+      has_more?: boolean
+    }
+    const entries = Array.isArray(body?.data) ? body.data : []
+    const snapshots = entries.flatMap((entry) => normalizeResendSentEmails(entry))
+    // The cursor is the LAST RAW entry's id, not the last snapshot's: a page
+    // whose final entry fanned out to zero snapshots (no recipient, no
+    // timestamp) would otherwise rewind the cursor to an earlier message and
+    // loop over the same page forever.
+    const lastId = String(
+      (entries[entries.length - 1] as { id?: unknown })?.id ?? '',
+    ).trim()
+    return {
+      snapshots,
+      nextCursor: body?.has_more && lastId ? lastId : null,
+    }
+  }
 }

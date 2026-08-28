@@ -238,10 +238,35 @@ click is a real action and can be trusted. Say it that way to the account holder
 than telling them our records show they did not read it.
 
 **What the card cannot see.** The history is built from delivery events reported by the
-sending service. It holds nothing from before that feed was connected, nothing sent
-while it was down, and nothing sent to a *different* address than the one on the account
-now — the log is filed by address, so an account whose email was changed keeps its older
-mail under the old one. An empty table is not proof that nothing was sent.
+sending service, which only start when that feed is connected. Nothing sent before then
+appears on its own — see *Import delivery history* below. Nor does mail sent to a
+*different* address than the one on the account now: the log is filed by address, so an
+account whose email was changed keeps its older mail under the old one. An empty table is
+not proof that nothing was sent.
+
+### Import delivery history {#import-delivery-history}
+
+On **Staff → System emails** there is an **Import delivery history** card. It reads the
+sending service's own record of already-sent mail and files each message under its
+recipient, which is what puts pre-existing mail on the Email delivery cards.
+
+Run it once after connecting the delivery feed, and again any time the feed was down for
+a stretch. It is safe to run as often as you like: a message the live feed already
+recorded is left untouched, and no open or click counts are invented — the history only
+reports a final status per message, so an imported row shows *delivered* or *bounced* but
+never "opened three times".
+
+Two things imported rows do not carry, because the history does not include them:
+
+- **Which of our senders produced the message.** That comes from a tag on the send, so an
+  imported row shows the subject and no sender label.
+- **Open and click counts.** Only the live feed reports those. A message that arrived
+  through the import shows engagement only from the moment the feed picked it up.
+
+It needs its own credential — a full-access API key in `RESEND_READ_API_KEY`. The key
+that sends your mail is scoped to sending and cannot read message history, which is the
+correct posture for it: a leaked sending key should not be able to list everyone you have
+ever emailed. Without that variable the card says so and changes nothing.
 
 If the card says the log **could not be read**, that is not the same as "we never
 emailed them": do not tell anyone their mail was or was not sent from that screen until

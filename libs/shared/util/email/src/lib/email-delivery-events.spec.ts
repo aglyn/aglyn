@@ -18,6 +18,8 @@
 import {
   normalizeEventTags,
   normalizeResendDeliveryEvents,
+  normalizeResendSentEmails,
+  resendDeliveryHistorySource,
   worstDeliveryStatus,
 } from './email-delivery-events'
 
@@ -195,5 +197,163 @@ describe('worstDeliveryStatus', () => {
   it('keeps a failure once it has one', () => {
     expect(worstDeliveryStatus('bounced', 'delivered')).toBe('bounced')
     expect(worstDeliveryStatus('opened', 'complained')).toBe('complained')
+  })
+})
+
+describe('normalizeResendSentEmails', () => {
+  /*
+   * The import adapter. This is the half that was missing: a log fed only by
+   * webhook events knows nothing about mail sent before the webhook existed,
+   * which is all of the mail anybody asks a support question about.
+   */
+  const ENTRY = {
+    id: 'msg_hist_1',
+    to: ['William.Hymes@HitechProductions.com'],
+    from: 'Aglyn <noreply@aglyn.com>',
+    subject: 'Confirm your email address',
+    created_at: '2026-08-26T04:48:46.000Z',
+    last_event: 'delivered',
+  }
+
+  it('translates a listed message into a snapshot', () => {
+    expect(normalizeResendSentEmails(ENTRY)).toEqual([
+      {
+        provider: 'resend',
+        providerMessageId: 'msg_hist_1',
+        to: 'william.hymes@hitechproductions.com',
+        subject: 'Confirm your email address',
+        sentAt: Date.parse('2026-08-26T04:48:46.000Z'),
+        status: 'delivered',
+      },
+    ])
+  })
+
+  it('reads the bare state names the list uses, not the webhook event names', () => {
+    // `"delivered"` here, `"email.delivered"` on the webhook. Two vocabularies
+    // for one concept, and only this file may know that.
+    expect(
+      normalizeResendSentEmails({ ...ENTRY, last_event: 'opened' })[0].status,
+    ).toBe('opened')
+    expect(
+      normalizeResendSentEmails({ ...ENTRY, last_event: 'bounced' })[0].status,
+    ).toBe('bounced')
+  })
+
+  it('keeps a message whose state it cannot characterise', () => {
+    // A row saying "we sent this and do not know what happened next" is far
+    // more useful than no row — no row is what sent a staffer to the vendor
+    // dashboard in the first place.
+    expect(
+      normalizeResendSentEmails({ ...ENTRY, last_event: 'teleported' })[0]
+        .status,
+    ).toBe('sent')
+  })
+
+  it('fans out to one snapshot per recipient', () => {
+    expect(
+      normalizeResendSentEmails({
+        ...ENTRY,
+        to: ['a@example.com', 'b@example.com'],
+      }).map((s) => s.to),
+    ).toEqual(['a@example.com', 'b@example.com'])
+  })
+
+  it('refuses a message it cannot place in time', () => {
+    // `firstSeenAtMs` is the log's sort key and `orderBy` drops documents that
+    // lack it, so a snapshot with no timestamp would be written somewhere
+    // nothing ever reads.
+    expect(normalizeResendSentEmails({ ...ENTRY, created_at: null })).toEqual([])
+    expect(normalizeResendSentEmails({ ...ENTRY, id: '' })).toEqual([])
+    expect(normalizeResendSentEmails({ ...ENTRY, to: [] })).toEqual([])
+  })
+})
+
+describe('resendDeliveryHistorySource', () => {
+  const page = (ids: string[], hasMore: boolean) => ({
+    ok: true,
+    json: async () => ({
+      object: 'list',
+      has_more: hasMore,
+      data: ids.map((id) => ({
+        id,
+        to: [`${id}@example.com`],
+        subject: `Subject ${id}`,
+        created_at: '2026-08-26T04:48:46.000Z',
+        last_event: 'delivered',
+      })),
+    }),
+  })
+
+  afterEach(() => {
+    delete (globalThis as { fetch?: unknown }).fetch
+  })
+
+  it('asks for a page and returns snapshots plus a cursor', async () => {
+    const fetchMock = jest.fn(async () => page(['a', 'b'], true))
+    ;(globalThis as { fetch?: unknown }).fetch = fetchMock
+
+    const result = await resendDeliveryHistorySource('re_full')({})
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, any]
+    expect(url).toContain('limit=100')
+    expect(init.headers.Authorization).toBe('Bearer re_full')
+    expect(result.snapshots).toHaveLength(2)
+    expect(result.nextCursor).toBe('b')
+  })
+
+  it('stops when the provider says there is no more', async () => {
+    ;(globalThis as { fetch?: unknown }).fetch = jest.fn(async () =>
+      page(['a'], false),
+    )
+    expect((await resendDeliveryHistorySource('re_full')({})).nextCursor).toBeNull()
+  })
+
+  it('passes the cursor through as `after`', async () => {
+    const fetchMock = jest.fn(async () => page(['c'], false))
+    ;(globalThis as { fetch?: unknown }).fetch = fetchMock
+    await resendDeliveryHistorySource('re_full')({ cursor: 'b' })
+    expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toContain(
+      'after=b',
+    )
+  })
+
+  /*
+   * The cursor is the last RAW entry's id, not the last SNAPSHOT's. A page
+   * whose final entry fans out to nothing — no recipient, no timestamp — would
+   * otherwise rewind the cursor to an earlier message and page the same
+   * results forever.
+   */
+  it('advances past a trailing entry that produced no snapshot', async () => {
+    ;(globalThis as { fetch?: unknown }).fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        has_more: true,
+        data: [
+          {
+            id: 'good',
+            to: ['a@example.com'],
+            created_at: '2026-08-26T04:48:46.000Z',
+            last_event: 'delivered',
+          },
+          { id: 'unusable', to: [], created_at: null },
+        ],
+      }),
+    }))
+
+    const result = await resendDeliveryHistorySource('re_full')({})
+    expect(result.snapshots).toHaveLength(1)
+    expect(result.nextCursor).toBe('unusable')
+  })
+
+  it('throws with the status when the key cannot read', async () => {
+    ;(globalThis as { fetch?: unknown }).fetch = jest.fn(async () => ({
+      ok: false,
+      status: 401,
+      text: async () => '{"name":"restricted_api_key"}',
+    }))
+    // The sending key answers exactly this. The operator has to see it —
+    // swallowing it would present an empty history as a complete one.
+    await expect(resendDeliveryHistorySource('re_send_only')({})).rejects.toThrow(
+      /401.*restricted_api_key/,
+    )
   })
 })

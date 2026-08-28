@@ -26,19 +26,27 @@
  * that until now could only be answered by signing into the sending provider
  * and searching a list that is not scoped to the account being discussed.
  *
- * ## Why a store and not a provider lookup
+ * ## Why a store, and where the provider still comes in
  *
- * Reading the history back out of the ESP would put a vendor at the centre of
- * a staff screen. Three specific costs:
+ * The READ is always local. Fanning out to the ESP on render would put a
+ * vendor at the centre of a staff screen, at three specific costs: lock-in to
+ * a per-vendor list shape, a rolling retention window our own record outlives,
+ * and a third-party round trip on every page view. Resend's list endpoint also
+ * has no recipient filter at all, so a per-person lookup would mean paging the
+ * whole account's history on each render.
  *
- *  - **Lock-in.** A provider's list endpoint is a per-vendor shape; the screen
- *    would be rewritten by any change of sender. The event vocabulary in
- *    `@aglyn/shared-util-email/email-delivery-events` exists precisely so this
- *    file never learns one.
- *  - **Retention.** The dashboards keep a rolling window. Ours is the record
- *    that outlives it — and outlives the account entirely.
- *  - **Cost and latency.** A staff page must not fan out to a third party per
- *    render.
+ * The WRITE has two sources, and the second exists because the first is not
+ * enough on its own:
+ *
+ *  - **The event feed** ({@link recordEmailDeliveryEvent}) — live, complete,
+ *    and the only source of open and click counts. It knows nothing about
+ *    mail sent before it was connected.
+ *  - **A history import** ({@link importEmailDeliveryHistory}) — a one-off
+ *    (and re-runnable) sweep of the provider's own list, through the same
+ *    neutral vocabulary. Without it the log is empty for every message that
+ *    predates the webhook, which is exactly the mail a support question is
+ *    about. A card that shows nothing for a person we demonstrably emailed is
+ *    the failure this whole file exists to remove.
  *
  * ## Shape
  *
@@ -69,6 +77,8 @@ import { FieldValue } from 'firebase-admin/firestore'
 import {
   type EmailDeliveryEvent,
   type EmailDeliveryEventType,
+  type EmailDeliveryHistorySource,
+  type EmailDeliverySnapshot,
   worstDeliveryStatus,
 } from '@aglyn/shared-util-email'
 import { emailSuppressionKey } from './email-suppression'
@@ -202,6 +212,84 @@ export async function recordEmailDeliveryEvent(
   }
 }
 
+/**
+ * Records one message the PROVIDER already knows about — the history import.
+ *
+ * ## Why this is not just `recordEmailDeliveryEvent` with a made-up event
+ *
+ * A snapshot is weaker evidence than an event, in two specific ways, and
+ * writing it as an event would silently promote it:
+ *
+ *  - **It carries no counts.** A provider's list reports one `last_event` per
+ *    message and no engagement detail, so `opened` means "at least once" and
+ *    can never mean "three times". Incrementing `openCount` from a snapshot
+ *    would invent a number, and re-running the import would invent it again.
+ *  - **It can be STALER than what we already hold.** The event feed is live;
+ *    an import is a page of results fetched some time ago. So the status is
+ *    merged with {@link worstDeliveryStatus} rather than assigned, and a row
+ *    the webhook has already advanced is never walked backwards.
+ *
+ * Everything else it fills is a gap-fill only: `subject` and `sentAt` are
+ * written when absent and left alone when present. The net effect is that
+ * importing history is idempotent and can be run as often as you like, and a
+ * message the event feed has covered is untouched by it.
+ *
+ * `context` is deliberately NOT recoverable here. It comes from a send tag,
+ * and the list endpoint does not return tags — so an imported row shows the
+ * subject and the status but cannot say which of our senders produced it. The
+ * card renders that absence rather than guessing.
+ *
+ * @returns whether a row was written or updated.
+ */
+export async function recordEmailDeliverySnapshot(
+  snapshot: EmailDeliverySnapshot,
+  firestore?: any,
+): Promise<boolean> {
+  const key = emailSuppressionKey(snapshot.to)
+  if (!key || !snapshot.providerMessageId || !snapshot.sentAt) return false
+
+  try {
+    const db = firestore ?? defaultFirestore()
+    const ref = db
+      .collection(EMAIL_DELIVERIES_COLLECTION)
+      .doc(key)
+      .collection(EMAIL_DELIVERY_MESSAGES_COLLECTION)
+      .doc(snapshot.providerMessageId)
+
+    await db.runTransaction(async (transaction: any) => {
+      const stored = await transaction.get(ref)
+      const existing = (stored.exists ? stored.data() : null) ?? {}
+
+      const update: Record<string, unknown> = {
+        messageId: snapshot.providerMessageId,
+        provider: snapshot.provider,
+        to: snapshot.to,
+        status: worstDeliveryStatus(existing.status, snapshot.status),
+        importedAtMs: Date.now(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+      if (!stored.exists) update.firstSeenAtMs = snapshot.sentAt
+      if (snapshot.subject && !existing.subject) update.subject = snapshot.subject
+      // Only when the event feed has not already dated the send itself. An
+      // imported `created_at` is the provider's, and so is the webhook's, but
+      // the webhook's arrived with the rest of that message's truth.
+      if (!existing.timestamps?.sent) {
+        update['timestamps.sent'] = snapshot.sentAt
+      }
+
+      transaction.set(ref, update, { merge: true })
+    })
+    return true
+  } catch (error) {
+    console.error(
+      '[email-delivery-log] snapshot write failed',
+      snapshot.providerMessageId,
+      error,
+    )
+    return false
+  }
+}
+
 /** Records a batch, independently — one bad event must not lose the others. */
 export async function recordEmailDeliveryEvents(
   events: EmailDeliveryEvent[],
@@ -211,6 +299,75 @@ export async function recordEmailDeliveryEvents(
     events.map((event) => recordEmailDeliveryEvent(event, firestore)),
   )
   return results.filter(Boolean).length
+}
+
+/** What one {@link importEmailDeliveryHistory} run did. */
+export interface EmailDeliveryImportResult {
+  /** Provider messages read. */
+  scanned: number
+  /** Per-recipient rows written or refreshed. */
+  recorded: number
+  pages: number
+  /** Cursor to resume from, or null when the history was exhausted. */
+  nextCursor: string | null
+  /** True when the page budget ran out before the history did. */
+  truncated: boolean
+}
+
+/** Default page budget for one import run. 100 messages per page. */
+export const EMAIL_DELIVERY_IMPORT_MAX_PAGES = 20
+
+/**
+ * Imports already-sent mail from a provider into the log.
+ *
+ * Bounded by PAGES rather than run to completion: this is called from a
+ * request handler, and an account with a large history would otherwise hold
+ * one open until it timed out — losing every page it had already written,
+ * because a partial import that reports nothing is indistinguishable from one
+ * that did nothing. Instead it stops at the budget, returns `nextCursor`, and
+ * the caller resumes. Every page is written before the next is fetched, so an
+ * interrupted run keeps its work.
+ *
+ * Idempotent by construction — see {@link recordEmailDeliverySnapshot}: a
+ * message the event feed already covered is not walked backwards, and
+ * re-running invents no counts.
+ *
+ * The `source` is injected rather than constructed here. This module may not
+ * know which provider is in use, and a test must be able to run the whole
+ * loop — pagination, cursor handling, the stop condition — without a network.
+ */
+export async function importEmailDeliveryHistory(options: {
+  source: EmailDeliveryHistorySource
+  cursor?: string | null
+  maxPages?: number
+  firestore?: any
+}): Promise<EmailDeliveryImportResult> {
+  const maxPages = Math.max(1, options.maxPages ?? EMAIL_DELIVERY_IMPORT_MAX_PAGES)
+  let cursor = options.cursor ?? null
+  let scanned = 0
+  let recorded = 0
+  let pages = 0
+
+  while (pages < maxPages) {
+    const page = await options.source({ cursor })
+    pages += 1
+    scanned += page.snapshots.length
+    for (const snapshot of page.snapshots) {
+      if (await recordEmailDeliverySnapshot(snapshot, options.firestore)) {
+        recorded += 1
+      }
+    }
+    cursor = page.nextCursor
+    if (!cursor) break
+  }
+
+  return {
+    scanned,
+    recorded,
+    pages,
+    nextCursor: cursor,
+    truncated: Boolean(cursor),
+  }
 }
 
 /**

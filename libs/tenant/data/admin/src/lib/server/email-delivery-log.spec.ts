@@ -18,9 +18,11 @@
 import type { EmailDeliveryEvent } from '@aglyn/shared-util-email'
 import {
   eraseEmailDeliveries,
+  importEmailDeliveryHistory,
   readEmailDeliveries,
   readEmailDeliveryHistory,
   recordEmailDeliveryEvent,
+  recordEmailDeliverySnapshot,
 } from './email-delivery-log'
 import { emailSuppressionKey } from './email-suppression'
 
@@ -400,5 +402,220 @@ describe('eraseEmailDeliveries', () => {
   it('erases nothing, and reports nothing, for an account with no address', async () => {
     const firestore = fakeDeliveryFirestore()
     expect(await eraseEmailDeliveries(null, firestore)).toBe(0)
+  })
+})
+
+/*==========================================
+ * THE IMPORT, END TO END.
+ *
+ * The gap these cover is the one that shipped: the log is written from
+ * delivery-webhook events, which exist only for mail sent after the webhook
+ * was connected — so the staff card answered "no delivery events recorded"
+ * for a person the sending dashboard plainly showed two delivered emails to.
+ *
+ * Every test below therefore ends at `readEmailDeliveries`, the call the
+ * staff route actually makes. Asserting on the written document would have
+ * passed for a row the card can never reach.
+ *=========================================*/
+
+function snapshot(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    provider: 'resend',
+    providerMessageId: 'msg_hist_1',
+    to: 'william.hymes@hitechproductions.com',
+    subject: 'Confirm your email address',
+    sentAt: 1_756_182_526_000,
+    status: 'delivered' as const,
+    ...overrides,
+  }
+}
+
+/** A provider whose history is `pages`, served one page at a time. */
+function fakeSource(pages: Array<Array<ReturnType<typeof snapshot>>>) {
+  const source = async ({ cursor }: { cursor?: string | null } = {}) => {
+    const index = cursor ? Number(cursor) : 0
+    return {
+      snapshots: pages[index] ?? [],
+      nextCursor: index + 1 < pages.length ? String(index + 1) : null,
+    }
+  }
+  return jest.fn(source)
+}
+
+describe('importEmailDeliveryHistory', () => {
+  it('makes history the staff card can read', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await importEmailDeliveryHistory({
+      source: fakeSource([
+        [
+          snapshot(),
+          snapshot({
+            providerMessageId: 'msg_hist_2',
+            subject: 'Welcome to Aglyn',
+            sentAt: 1_756_182_000_000,
+          }),
+        ],
+      ]),
+      firestore,
+    })
+
+    // The exact read the detail route performs, for the exact address in the
+    // screenshot that started this.
+    const rows = await readEmailDeliveries(
+      'william.hymes@hitechproductions.com',
+      { firestore },
+    )
+    expect(rows.map((row) => row.subject)).toEqual([
+      'Confirm your email address',
+      'Welcome to Aglyn',
+    ])
+    expect(rows[0].status).toBe('delivered')
+    expect(rows[0].timestamps.sent).toBe(1_756_182_526_000)
+  })
+
+  it('walks every page and stops when the provider runs out', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const source = fakeSource([
+      [snapshot({ providerMessageId: 'a' })],
+      [snapshot({ providerMessageId: 'b' })],
+      [snapshot({ providerMessageId: 'c' })],
+    ])
+
+    const result = await importEmailDeliveryHistory({ source, firestore })
+    expect(result).toMatchObject({
+      scanned: 3,
+      recorded: 3,
+      pages: 3,
+      nextCursor: null,
+      truncated: false,
+    })
+    expect(
+      await readEmailDeliveries('william.hymes@hitechproductions.com', {
+        firestore,
+      }),
+    ).toHaveLength(3)
+  })
+
+  /*
+   * Bounded by pages because this runs inside a request. An unbounded loop
+   * over a large history times the request out and loses every page it had
+   * already written — a partial import that reports nothing is
+   * indistinguishable from one that did nothing.
+   */
+  it('stops at the page budget and reports where to resume', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const source = fakeSource([
+      [snapshot({ providerMessageId: 'a' })],
+      [snapshot({ providerMessageId: 'b' })],
+      [snapshot({ providerMessageId: 'c' })],
+    ])
+
+    const first = await importEmailDeliveryHistory({
+      source,
+      maxPages: 2,
+      firestore,
+    })
+    expect(first).toMatchObject({ pages: 2, truncated: true, nextCursor: '2' })
+    // Work already done survives the stop.
+    expect(
+      await readEmailDeliveries('william.hymes@hitechproductions.com', {
+        firestore,
+      }),
+    ).toHaveLength(2)
+
+    const second = await importEmailDeliveryHistory({
+      source,
+      cursor: first.nextCursor,
+      firestore,
+    })
+    expect(second).toMatchObject({ truncated: false })
+    expect(
+      await readEmailDeliveries('william.hymes@hitechproductions.com', {
+        firestore,
+      }),
+    ).toHaveLength(3)
+  })
+
+  it('is safe to run twice', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const pages = [[snapshot()]]
+    await importEmailDeliveryHistory({ source: fakeSource(pages), firestore })
+    await importEmailDeliveryHistory({ source: fakeSource(pages), firestore })
+
+    // One message, one row — not a duplicate per run.
+    expect(
+      await readEmailDeliveries('william.hymes@hitechproductions.com', {
+        firestore,
+      }),
+    ).toHaveLength(1)
+  })
+})
+
+describe('recordEmailDeliverySnapshot', () => {
+  /*
+   * A snapshot is weaker evidence than an event: the list endpoint reports one
+   * `last_event` and no engagement detail. Letting an import overwrite what
+   * the live feed recorded would turn "opened three times, then bounced" into
+   * "delivered", which is a worse answer than the empty card.
+   */
+  it('never walks a status backwards from what the event feed recorded', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(
+      event({ type: 'bounced', bounceType: 'permanent' }),
+      firestore,
+    )
+    await recordEmailDeliverySnapshot(
+      snapshot({
+        providerMessageId: 'msg_1',
+        to: 'person@example.com',
+        status: 'delivered',
+      }),
+      firestore,
+    )
+
+    expect(firestore.read('person@example.com', 'msg_1')?.status).toBe('bounced')
+  })
+
+  it('invents no open or click counts', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliverySnapshot(
+      snapshot({ providerMessageId: 'm', to: 'person@example.com', status: 'opened' }),
+      firestore,
+    )
+    await recordEmailDeliverySnapshot(
+      snapshot({ providerMessageId: 'm', to: 'person@example.com', status: 'opened' }),
+      firestore,
+    )
+
+    const stored = firestore.read('person@example.com', 'm')
+    // "Opened at least once" is all the provider said. Re-running the import
+    // must not turn that into a number that grows.
+    expect(stored?.status).toBe('opened')
+    expect(stored?.openCount).toBeUndefined()
+  })
+
+  it('does not overwrite the send time the event feed already recorded', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ type: 'sent', at: 1_000 }), firestore)
+    await recordEmailDeliverySnapshot(
+      snapshot({
+        providerMessageId: 'msg_1',
+        to: 'person@example.com',
+        sentAt: 9_999,
+      }),
+      firestore,
+    )
+
+    expect(firestore.read('person@example.com', 'msg_1')?.timestamps?.sent).toBe(
+      1_000,
+    )
+  })
+
+  it('writes nothing for a snapshot it cannot place in time', async () => {
+    const firestore = fakeDeliveryFirestore()
+    expect(
+      await recordEmailDeliverySnapshot(snapshot({ sentAt: 0 }), firestore),
+    ).toBe(false)
+    expect(firestore.size()).toBe(0)
   })
 })

@@ -40,6 +40,7 @@ import { useCallback, useState } from 'react'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffEmailSendRateCard from '../../../../components/staff-email-send-rate-card.component'
+import StaffEmailHistoryImportCard from '../../../../components/staff-email-history-import-card.component'
 import SystemEmailTestDrawer from '../../../../components/system-email-test-drawer.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -188,6 +189,10 @@ function AdminEmails() {
                 the mail below actually leaves — and the one an operator opens
                 this page for during a warm-up or a deliverability incident. */}
             <StaffEmailSendRateCard />
+            {/* Fills the per-person delivery log with mail that predates the
+                delivery feed. Beside the send-rate control because both are
+                about the mail pipeline rather than about one template. */}
+            <StaffEmailHistoryImportCard />
             <CardDisplay
               header={'System emails'}
               help={docsHelp('staffConsole')}
