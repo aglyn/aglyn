@@ -135,7 +135,11 @@ function bookingRateLimited(ip: string): boolean {
  * open times. Server-side because bookings (names/emails) must never be
  * client-readable — only the derived busy intervals are used here.
  */
-const slotsHandler: PluginApiHandler = async (req, res) => {
+// Exported for `bookings-slot-window.spec.ts`: the query's bounds are a
+// read-cost and correctness property of THIS handler, and asserting them
+// through the route registry would test the registry instead. Its siblings
+// (`bookHandler`, the refund and analytics handlers) are exported already.
+export const slotsHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -188,10 +192,20 @@ const slotsHandler: PluginApiHandler = async (req, res) => {
     )
     const maxDaysAhead = Number(config.maxDaysAhead ?? BOOKING_MAX_DAYS_AHEAD)
     const toMs = fromMs + maxDaysAhead * 24 * 60 * 60_000
+    // Bounded at BOTH ends, to the window the slots are actually computed
+    // over. `computeOpenSlots` below is handed `fromMs`/`toMs` and ignores
+    // anything outside them, so a booking past the horizon was read, billed
+    // and discarded — and worse, it competed for the 500 with the bookings
+    // that do matter, so a service booked far ahead could push the near-term
+    // stays out of its own availability check and offer a taken slot.
+    //
+    // A second range on `startsAtMs` needs no new index: the field already
+    // carries one, and the range it narrows is the one already here.
     const bookedSnapshot = await hostRef
       .collection('bookings')
       .where('serviceId', '==', serviceId)
       .where('startsAtMs', '>=', fromMs - 24 * 60 * 60_000)
+      .where('startsAtMs', '<=', toMs)
       .limit(500)
       .get()
     const booked: BookedInterval[] = bookedSnapshot.docs
