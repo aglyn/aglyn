@@ -132,6 +132,9 @@ function makeCollectionRef(path: string): any {
   return {
     doc: (id?: string) =>
       makeDocRef(`${path}/${id ?? `auto-${++autoIdCounter}`}`),
+    // Chainable, so the AGL-2519 discounts read resolves through the same
+    // `get()` below rather than throwing on a missing method.
+    limit: () => makeCollectionRef(path),
     get: async () => ({ docs: childPaths(path).map(makeSnapshot) }),
     where: (field: string, op: string, value: unknown) =>
       makeQuery(path, []).where(field, op, value),

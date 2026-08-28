@@ -291,10 +291,55 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // metadata so the webhook never has to re-price from the product doc.
     const listUnitAmountCents = Math.round(priceUsd * 100)
     let amountCents = listUnitAmountCents * quantity
+    // THE DISCOUNTS HUB, ON THIS PATH TOO (AGL-2519).
+    //
+    // `hosts/{hostId}/discounts` had exactly one reader — `cart-checkout.ts` —
+    // so a code from the Discounts card worked in the cart and was rejected as
+    // invalid on Buy now. Same goods, same code, two prices depending on which
+    // button the shopper pressed, which is the disagreement AGL-1953 already
+    // closed for TAX on these same two paths.
+    //
+    // Resolved through the SAME `resolveDiscount` the cart uses, so one code
+    // cannot mean two amounts. The legacy AGL-96 coupons below stay as the
+    // fallback for a code the hub does not know, exactly as the cart orders
+    // them.
+    //
+    // Applied by reducing the AMOUNT rather than by minting a session-level
+    // Stripe coupon, which is how this path already applies its legacy coupon.
+    // That difference is load-bearing: buy-now carries its manual tax as a
+    // real `line_items[1]` product line, and a session coupon spreads across
+    // every line — so minting one here would discount the tax line too.
+    const buyNowDiscountLines = [
+      { productId, amountCents: listUnitAmountCents * quantity },
+    ]
+    const hubDiscounts = await hostRef.collection('discounts').limit(100).get()
+    const resolvedDiscount = CommerceModel.resolveDiscount(
+      hubDiscounts.docs.map((docSnapshot) => ({
+        ...(docSnapshot.data() as CommerceModel.HostDiscount),
+        $id: docSnapshot.id,
+      })),
+      {
+        ...(couponCode ? { code: couponCode } : {}),
+        subtotalCents: listUnitAmountCents * quantity,
+        productIds: [productId],
+        lines: buyNowDiscountLines,
+      },
+    )
+    if (resolvedDiscount?.codeProblem) {
+      return res.status(400).json({ error: resolvedDiscount.codeProblem })
+    }
+    let appliedDiscountId = ''
+    if (resolvedDiscount && resolvedDiscount.benefit.kind !== 'none') {
+      // Stripe's charge minimum is 50c — never discount below it, the same
+      // floor the legacy coupon path applies.
+      amountCents = Math.max(50, amountCents - resolvedDiscount.discountCents)
+      appliedDiscountId = resolvedDiscount.discountId
+    }
     // Coupons (AGL-96): host-defined percent-off codes; invalid codes are
-    // a visible 400, never a silent full-price charge.
+    // a visible 400, never a silent full-price charge. Only consulted when the
+    // hub did not already answer for this code.
     let appliedCoupon = ''
-    if (couponCode) {
+    if (couponCode && !resolvedDiscount) {
       const couponSnapshot = await hostRef
         .collection('coupons')
         .doc(couponCode)
@@ -513,12 +558,19 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     //
     // Buy-now runs no automatic-discount path — `resolveDiscount` is the cart's
     // — so the typed coupon is the only counter this handler can burn.
-    if (appliedCoupon) {
+    if (appliedCoupon || appliedDiscountId) {
       const slot = await holdPromotionSlot({
         firestore,
-        ref: hostRef.collection('coupons').doc(appliedCoupon),
+        // The hub discount and the legacy coupon are two counters and only one
+        // of them can be in play — the hub answers first and the legacy block
+        // is skipped when it did.
+        ref: appliedDiscountId
+          ? hostRef.collection('discounts').doc(appliedDiscountId)
+          : hostRef.collection('coupons').doc(appliedCoupon),
         holdKey: promotionHoldKey(claimed.claim.stripeKey),
-        label: `coupon ${appliedCoupon}`,
+        label: appliedDiscountId
+          ? `discount ${appliedDiscountId}`
+          : `coupon ${appliedCoupon}`,
       })
       if (!slot.ok) {
         // Nothing has been minted yet, so this is retryable and the key goes
@@ -929,6 +981,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[taxCents]': String(isSubscription ? 0 : taxCents),
       'metadata[discountCents]': String(discountCents),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
+      ...(appliedDiscountId
+        ? { 'metadata[discountId]': appliedDiscountId }
+        : {}),
       // Set only when a slot was actually reserved (AGL-2453). Its ABSENCE is
       // what tells the webhook to fall back to the unconditional increment,
       // which is right for an uncapped coupon and for a session minted before
@@ -966,7 +1021,17 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         params,
         shippingPlan.countries,
       )
-      CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
+      CommerceModel.appendCheckoutShippingParams(
+        params,
+        // Free shipping is a zeroed rate, never a coupon — see the cart's note
+        // for why a session coupon cannot reach `shipping_options` at all.
+        resolvedDiscount?.freeShipping === true
+          ? shippingPlan.options.map((option) => ({
+              ...option,
+              amountCents: 0,
+            }))
+          : shippingPlan.options,
+      )
     }
     // The Payment Element (AGL-1944), and the LAST thing done to the params on
     // purpose. Everything above — price, coupon, tax, shipping, the Connect

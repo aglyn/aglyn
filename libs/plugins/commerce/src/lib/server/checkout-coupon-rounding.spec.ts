@@ -152,7 +152,23 @@ function makeDocRef(path: string): any {
 }
 
 function makeCollectionRef(path: string): any {
-  return { doc: (id: string) => makeDocRef(`${path}/${id}`) }
+  return {
+    doc: (id: string) => makeDocRef(`${path}/${id}`),
+    // Chainable `limit()` and a real `get()`: buy-now reads
+    // `hosts/{id}/discounts` on every checkout since AGL-2519, and this suite
+    // seeds discounts to price them, so the collection has to list its own
+    // children rather than answer a convenient empty.
+    limit: () => makeCollectionRef(path),
+    get: async () => ({
+      docs: [...docs.keys()]
+        .filter(
+          (key) =>
+            key.startsWith(`${path}/`) &&
+            !key.slice(path.length + 1).includes('/'),
+        )
+        .map(makeSnapshot),
+    }),
+  }
 }
 
 const fakeFirestore = {
@@ -243,6 +259,8 @@ interface Scenario {
   priceUsd: number
   quantity?: number
   percentOff?: number
+  /** A `hosts/{id}/discounts` doc, for the AGL-2519 hub path. */
+  discount?: Record<string, any> & { id: string; code: string }
 }
 
 async function runCheckout(scenario: Scenario) {
@@ -267,6 +285,10 @@ async function runCheckout(scenario: Scenario) {
       enabled: true,
     })
   }
+  if (scenario.discount) {
+    const { id, ...fields } = scenario.discount
+    docs.set(`hosts/host-1/discounts/${id}`, fields)
+  }
   sessionBody = null
   const { res, result } = makeResponse()
   const req = {
@@ -277,6 +299,7 @@ async function runCheckout(scenario: Scenario) {
       variantId: 'v1',
       quantity: scenario.quantity ?? 1,
       ...(scenario.percentOff ? { couponCode: 'SAVE' } : {}),
+      ...(scenario.discount ? { couponCode: scenario.discount.code } : {}),
     },
     cookies: {},
     headers: { host: 'shop.example.com' },
@@ -458,5 +481,65 @@ describe('a coupon on a multi-quantity buy-now (AGL-2159)', () => {
     expect(result.status).toBe(200)
     expect(chargedCents(body)).toBe(50)
     expect(recordedCents(body)).toBe(50)
+  })
+})
+
+/**
+ * THE DISCOUNTS HUB REACHES BUY NOW (AGL-2519).
+ *
+ * `hosts/{hostId}/discounts` had exactly one reader — `cart-checkout.ts` — so
+ * a code created on the Discounts card worked in the cart and was refused as
+ * invalid on Buy now. Same goods, same code, two prices depending on which
+ * button the shopper pressed.
+ *
+ * Asserted on `line_items[0][price_data][unit_amount]`, which on this path is
+ * the only arithmetic Stripe does — so it is exactly what the buyer is
+ * charged.
+ */
+describe('a discounts-hub code on buy-now (AGL-2519)', () => {
+  it('takes the discount off the charged amount', async () => {
+    const { result, body } = await runCheckout({
+      priceUsd: 30,
+      discount: {
+        id: 'ten-off',
+        code: 'TEN',
+        kind: 'percent',
+        valuePct: 10,
+        enabled: true,
+      },
+    })
+
+    expect(result.status).toBe(200)
+    // $30.00 less 10% — the same money the cart takes for the same code.
+    expect(body?.get('line_items[0][price_data][unit_amount]')).toBe('2700')
+    // And the hub row is the counter that gets burned, not a legacy coupon.
+    expect(body?.get('metadata[discountId]')).toBe('ten-off')
+  })
+
+  it('CONTROL: no code still charges the list price', async () => {
+    const { body } = await runCheckout({ priceUsd: 30 })
+
+    expect(body?.get('line_items[0][price_data][unit_amount]')).toBe('3000')
+    expect(body?.get('metadata[discountId]')).toBeNull()
+  })
+
+  it('refuses a hub code that does not apply, rather than charging in full', async () => {
+    // A scoped discount naming some other product. The refusal is visible;
+    // the silent full-price charge is the defect class this whole path has
+    // been cleared of.
+    const { result, body } = await runCheckout({
+      priceUsd: 30,
+      discount: {
+        id: 'other-only',
+        code: 'TEN',
+        kind: 'percent',
+        valuePct: 10,
+        enabled: true,
+        productIds: ['some-other-product'],
+      },
+    })
+
+    expect(result.status).toBe(400)
+    expect(body).toBeNull()
   })
 })

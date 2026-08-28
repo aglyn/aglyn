@@ -67,7 +67,15 @@ function makeDocRef(path: string): any {
 }
 
 function makeCollectionRef(path: string): any {
-  return { doc: (id: string) => makeDocRef(`${path}/${id}`) }
+  return {
+    doc: (id: string) => makeDocRef(`${path}/${id}`),
+    // `limit()` is chainable and `get()` answers an empty collection: buy-now
+    // reads `hosts/{id}/discounts` on every checkout since AGL-2519, and a
+    // double without these throws where Firestore would simply return nothing.
+    // This suite seeds no discounts, so empty IS the faithful answer.
+    limit: () => makeCollectionRef(path),
+    get: async () => ({ docs: [] as unknown[] }),
+  }
 }
 
 /**
