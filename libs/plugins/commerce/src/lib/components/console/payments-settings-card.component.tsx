@@ -125,10 +125,26 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
         // `chargesEnabled` is the state read from the profile BEFORE this
         // request, so the event fires only when onboarding actually completed.
         if (!chargesEnabled) trackEvent('stripe_connected', {})
-        return void enqueueSnackbar('Payments are enabled', {
-          variant: 'success',
-          persist: false,
-        })
+        // CHARGES AND PAYOUTS ARE TWO FLAGS, AND ONLY ONE OF THEM IS THIS
+        // SENTENCE (AGL-1997). `chargesEnabled` says Stripe will let the
+        // account take money; whether the money can LEAVE is `payoutsEnabled`,
+        // which the route answers alongside it. Charges-yes/payouts-no is an
+        // ordinary Stripe state — verification pending or lapsed, no payout
+        // method — and announcing "Payments are enabled" in it is false in the
+        // direction that costs the merchant: they sell believing they are
+        // paid, and the funds sit in a Connect account that cannot release
+        // them. Read three-valued, so only a literal `false` from Stripe
+        // downgrades the claim; an absent flag means unasked, not off.
+        const payoutsBlocked = payload.payoutsEnabled === false
+        return void enqueueSnackbar(
+          payoutsBlocked
+            ? 'Connected — payouts are not released yet'
+            : 'Payments are enabled',
+          {
+            variant: payoutsBlocked ? 'warning' : 'success',
+            persist: false,
+          },
+        )
       }
       if (payload.url) window.location.assign(payload.url)
     } catch (error) {
