@@ -312,7 +312,7 @@ describe('a withdrawal silences the already-loaded tag (AGL-1608)', () => {
       const tag = residentTagHonoring('ga-disable')
 
       fireEvent.click(pill() as Element)
-      fireEvent.click(screen.getByRole('checkbox'))
+      fireEvent.click(screen.getByRole('switch'))
       fireEvent.click(screen.getByText('Save choices'))
       tag.fire()
 

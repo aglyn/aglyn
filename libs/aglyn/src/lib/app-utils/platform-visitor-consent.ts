@@ -82,6 +82,7 @@ import {
   hasGlobalPrivacyControl,
   isExplicitConsentStatus,
   readStoredVisitorConsent,
+  refusalStatusFor,
   registrableCookieDomain,
   type StoredVisitorConsent,
   storeVisitorConsent,
@@ -574,9 +575,7 @@ export function platformRefusalStatus(
   stored: StoredVisitorConsent | null,
   posture: VisitorConsentPosture | null,
 ): VisitorConsentStatus {
-  return stored?.status === 'implied' || posture === 'opt-out'
-    ? 'opted-out'
-    : 'declined'
+  return refusalStatusFor(stored, posture)
 }
 
 /**

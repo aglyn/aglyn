@@ -427,6 +427,26 @@ describe('the console privacy control where there is no account menu', () => {
     expect(document.querySelector('[data-aglyn-consent-pill]')).toBeNull()
   })
 
+  it('draws the SHARED component, not a console copy of it', () => {
+    // The consolidation, pinned where it can regress: the console used to have
+    // its own dialog and the published sites their own card, and the two had
+    // already become different designs for one product decision. What stops
+    // that returning is not a convention — it is that this file contains no
+    // overlay of its own to drift.
+    const component = readFileSync(
+      resolve(__dirname, '../components/visitor-consent.component.tsx'),
+      'utf8',
+    )
+    expect(component).toMatch(
+      /from '@aglyn\/aglyn\/app-utils\/consent-banner-ui'/,
+    )
+    expect(component).toMatch(/<ConsentBannerUi/)
+    // …and none of the pieces it would need to draw one itself.
+    for (const own of ['<Dialog', '<DialogTitle', '<Switch', '<Paper']) {
+      expect(component).not.toContain(own)
+    }
+  })
+
   it('is mounted by the signed-out SHELL, not page by page', () => {
     // The placement rule, pinned as source because that is what it is a claim
     // about: every unauthenticated route renders through this layout, so the

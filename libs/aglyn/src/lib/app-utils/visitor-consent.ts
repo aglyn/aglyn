@@ -166,6 +166,27 @@ export function isExplicitConsentStatus(
   )
 }
 
+/**
+ * Which refusal a "no" is, for a visitor in this state.
+ *
+ * `opted-out` when they were defaulted in, `declined` when they were asked
+ * first. The GATE does not care — both refuse — but the RECORD does: "how many
+ * visitors were tracked before they said no" is a question only these two
+ * answers separate, and it is a question a regulator can ask.
+ *
+ * Lives here rather than in either surface that needs it. Both the consent
+ * overlay and the console's own module were deriving it, and a rule with two
+ * derivations is a rule that eventually means two different things.
+ */
+export function refusalStatusFor(
+  stored: { status?: VisitorConsentStatus } | null | undefined,
+  posture: VisitorConsentPosture | null | undefined,
+): VisitorConsentStatus {
+  return stored?.status === 'implied' || posture === 'opt-out'
+    ? 'opted-out'
+    : 'declined'
+}
+
 /** Whether a status grants the analytics category. */
 export function analyticsGrantedByStatus(
   status: VisitorConsentStatus,
