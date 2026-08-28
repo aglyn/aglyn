@@ -83,6 +83,17 @@ export interface InvoiceAmounts {
   currency: string
   /** True when Stripe actually finished computing tax for this address. */
   taxComplete: boolean
+  /**
+   * Stripe's own `taxability_reason` for the first tax line, when there is
+   * one — `reverse_charge`, `customer_exempt`, `standard_rated`,
+   * `taxable_basis_reduced` and so on.
+   *
+   * Carried because a ZERO has four meanings and the customer who cares most
+   * cannot tell them apart without it. Reported, never inferred: this is
+   * Stripe's verdict, and inventing one of our own would put OUR number in
+   * front of a tax authority.
+   */
+  taxReason: string | null
 }
 
 /**
@@ -97,12 +108,21 @@ export interface InvoiceAmounts {
  * caller is told whether it is trustworthy rather than left to infer it.
  */
 export function describeInvoiceAmounts(invoice: any): InvoiceAmounts {
+  // Both spellings: `total_tax_amounts` on the pinned 2024-06-20 version,
+  // `total_taxes` on newer ones. Read defensively so a version bump degrades
+  // to "no reason given" rather than to a wrong one.
+  const taxLines = Array.isArray(invoice?.total_tax_amounts)
+    ? invoice.total_tax_amounts
+    : Array.isArray(invoice?.total_taxes)
+      ? invoice.total_taxes
+      : []
   return {
     subtotalCents: Number(invoice?.subtotal ?? 0),
     taxCents: Number(invoice?.tax ?? 0),
     totalCents: Number(invoice?.total ?? 0),
     currency: String(invoice?.currency ?? 'usd'),
     taxComplete: invoice?.automatic_tax?.status === 'complete',
+    taxReason: taxLines[0]?.taxability_reason ?? null,
   }
 }
 
@@ -310,6 +330,22 @@ async function handler(request: Request): Promise<Response> {
       if (!existingCustomerId) {
         return Response.json({ needsBillingDetails: true }, { status: 200 })
       }
+      // The ADDRESS is a prerequisite of the QUOTE, not only of the purchase.
+      //
+      // Subscribe already refused without one. The preview needed only a
+      // customer id, so a quote could be produced for an addressless customer
+      // — `automatic_tax` then answers `requires_location_inputs`, the tax is
+      // `0`, and the total silently excludes it. Stated as its own check so a
+      // future reordering cannot reintroduce an addressless quote by
+      // accident.
+      const quoteCustomer = await fetch(
+        `https://api.stripe.com/v1/customers/${encodeURIComponent(existingCustomerId)}`,
+        { headers: { Authorization: `Bearer ${secretKey}` } },
+      )
+      const quoteCustomerRecord = await quoteCustomer.json()
+      if (!quoteCustomerRecord?.address?.country) {
+        return Response.json({ needsBillingAddress: true }, { status: 200 })
+      }
       const preview = new URLSearchParams({
         customer: existingCustomerId,
         'subscription_details[items][0][price]': priceId,
@@ -345,6 +381,10 @@ async function handler(request: Request): Promise<Response> {
       return Response.json(
         {
           preview: describeInvoiceAmounts(invoice),
+          // Never read anywhere before this. `exempt` and `reverse` are why a
+          // legitimately zero tax is zero, and without them the customer who
+          // is specifically checking cannot tell it from a bug.
+          customerTaxExempt: quoteCustomerRecord?.tax_exempt ?? null,
           promotionCodeApplied: promo.id ? promo.code : null,
         },
         { status: 200 },

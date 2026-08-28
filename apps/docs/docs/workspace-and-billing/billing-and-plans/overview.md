@@ -255,6 +255,36 @@ Your billing details live on the **Billing** page in the console, one card per t
 might want to change. Each card saves on its own, so editing your address never touches
 your tax ID and vice versa.
 
+### Paying an outstanding invoice {#outstanding}
+
+If a payment fails, the invoice stays **open** and the Billing page shows it with a
+**Pay now** button.
+
+- **It works even if the subscription has already been cancelled.** Dunning cancels
+  subscriptions after enough failed retries; the invoice is still owed and still
+  payable, and paying it does not require a plan.
+- **Your bank may ask you to confirm the payment.** That step is your bank's, not
+  ours, and it appears for the same reason it does anywhere else.
+- **We do not mark it paid because the button worked.** The invoice updates when
+  Stripe confirms the money arrived, so what you see is the settled state rather
+  than an optimistic one.
+- The amount is the amount the invoice was issued for. Tax on an invoice is fixed
+  when it is issued and is never recalculated later.
+
+### What a plan will cost {#plan-total}
+
+Before you subscribe, the Billing page quotes the plan you are looking at with tax
+included, taken from Stripe's own invoice preview rather than worked out here.
+
+- **A total is only shown as final once tax has been calculated**, which needs your
+  billing address. Until then the page says so rather than showing a total that
+  quietly leaves tax out.
+- **A zero tax is explained**, because a zero has several meanings: reverse charge
+  applies and you account for the tax under your own registration; your account is
+  registered as tax-exempt; or nothing is charged in your location.
+- **Promotion codes are applied here.** An invalid or expired code is refused
+  immediately, with the reason — not at the moment you are charged.
+
 ### Billing email {#billing-email}
 
 **Invoices are sent to the billing email**, along with receipts and — the one that

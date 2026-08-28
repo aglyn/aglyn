@@ -281,3 +281,40 @@ export const LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS = {
  * subdomain would name an org the mail cannot know.
  */
 export const BILLING_ENTRY_URL = 'https://app.aglyn.com/billing'
+
+/**
+ * WHERE Stripe's own dunning emails send a customer.
+ *
+ * ## Why this constant exists rather than a check
+ *
+ * Stripe's failed-payment emails carry a link configured by pasting a URL into
+ * the Dashboard — Settings → Billing → Subscriptions and emails. That value is
+ * held PER MODE, exactly like the retry schedule beside it, and it is the same
+ * test/live split this module was written to stop people getting wrong.
+ *
+ * It is also **not readable through the Stripe API**. Measured against
+ * test-mode Stripe: `GET /v1/account` exposes `settings.branding`,
+ * `card_payments`, `dashboard`, `invoices`, `payments` and `payouts`, and none
+ * of them carries the customer-email link; `billing_portal/configurations`
+ * carries only the portal's own `default_return_url`. So nothing in the
+ * repository, and nothing in the health check, can read where a customer in
+ * dunning is actually being sent right now.
+ *
+ * What CAN be done is to write down where it should point, so that the value
+ * to paste is reviewed, versioned, and the same in both modes. That is this
+ * constant. `/api/health/billing` reports it so an operator comparing the two
+ * has our expectation in front of them rather than in someone's memory.
+ *
+ * The destination is the ORG-AGNOSTIC billing entry, deliberately: the link
+ * arrives by email, so the recipient is routinely signed out or signed in to
+ * the wrong workspace, and a slug-scoped URL would 404 or land them somewhere
+ * that is not theirs. That route resolves the workspace after sign-in.
+ */
+export const DUNNING_EMAIL_RETURN_PATH = '/billing'
+
+/** The absolute URL to paste into the Stripe Dashboard, per deployment. */
+export function dunningEmailReturnUrl(
+  origin = 'https://app.aglyn.com',
+): string {
+  return `${origin.replace(/\/+$/, '')}${DUNNING_EMAIL_RETURN_PATH}`
+}

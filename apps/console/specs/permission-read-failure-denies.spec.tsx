@@ -373,6 +373,7 @@ jest.mock('../components/billing/retention-funnel.dialog', () => ({
   RetentionFunnelDialog: () => null,
 }))
 
+import { subscriptionPeriodNotice } from '../utils/subscription-period-notice'
 import BillingPage from '../app/(app)/[orgSlug]/billing/page'
 
 /** A real paying workspace — every field below paints as a visible figure. */
@@ -385,9 +386,17 @@ const PAYING_PRO_ORG = {
     currentPeriodEnd: Date.UTC(2027, 0, 14),
   },
 }
-const RENEWAL_TEXT = `Renews ${new Date(
-  PAYING_PRO_ORG.subscription.currentPeriodEnd,
-).toLocaleDateString()}`
+/**
+ * The renewal sentence exactly as the page formats it.
+ *
+ * Derived from `subscriptionPeriodNotice` rather than restated, so it cannot
+ * keep asserting "Renews" on a subscription that is cancelling — the date is
+ * the same field in both states and only the verb differs.
+ */
+const RENEWAL_TEXT = subscriptionPeriodNotice({
+  status: PAYING_PRO_ORG.subscription.status,
+  currentPeriodEnd: PAYING_PRO_ORG.subscription.currentPeriodEnd,
+}).sentence as string
 const REFUSAL =
   'You do not have permission to view billing for this ' +
   'organization — ask an organization admin for access.'

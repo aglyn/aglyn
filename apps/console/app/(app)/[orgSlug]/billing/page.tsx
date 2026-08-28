@@ -89,6 +89,8 @@ import BillingEmailCardComponent from '../../../../components/billing/billing-em
 import BillingPaymentMethodsCardComponent from '../../../../components/billing/billing-payment-methods-card.component'
 import BillingAddressCardComponent from '../../../../components/billing/billing-address-card.component'
 import BillingTaxIdCardComponent from '../../../../components/billing/billing-tax-id-card.component'
+import BillingOpenInvoicesCardComponent from '../../../../components/billing/billing-open-invoices-card.component'
+import BillingPlanQuoteComponent from '../../../../components/billing/billing-plan-quote.component'
 import { useBillingProfile } from '../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../utils/browser-stripe'
 import { subscriptionPeriodNotice } from '../../../../utils/subscription-period-notice'
@@ -242,6 +244,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // the console must not be the hop that loses it. No price moved here — this
   // only decides which of the two already-published prices is on screen.
   const intervalStated = planIntent?.intervalStated === true
+
+  /**
+   * The plan the quote prices.
+   *
+   * The one the visitor arrived intending, which is also the one the grid
+   * emphasizes — so the total on screen belongs to the card they are looking
+   * at. Null when nothing is being considered, and the quote renders nothing
+   * rather than pricing a plan nobody asked about: the preview is a Stripe
+   * call, and making it on every billing page view would be a read nobody
+   * requested.
+   */
+  const quotedPlan = planIntent?.plan ?? null
+
   // The toggle starts on the live subscription's interval (AGL-532) so
   // annual orgs see their real prices and switches keep their interval.
   //
@@ -1289,6 +1304,29 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   spacing={3}
                   items={[
                     {
+                      key: 'open-invoices',
+                      children: (
+                        <CardDisplay
+                          header={'Outstanding'}
+                          help={docsHelp('billing', {
+                            anchor: '#outstanding',
+                            excerpt:
+                              'Paying an invoice that failed, including when the subscription has already been cancelled.',
+                          })}
+                          subheader={
+                            'Anything unpaid, and the button that settles it.'
+                          }
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <BillingOpenInvoicesCardComponent
+                            orgId={orgId}
+                            canManage={can('billing.manage')}
+                          />
+                        </CardDisplay>
+                      ),
+                    },
+                    {
                       key: 'billing-email',
                       children: (
                         <CardDisplay
@@ -1738,6 +1776,32 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 }]
               : []),
+            {
+              size: { xs: 12 },
+              children: (
+                <CardDisplay
+                  header={'What you will pay'}
+                  help={docsHelp('billing', {
+                    anchor: '#plan-total',
+                    excerpt:
+                      'How the plan total is quoted with tax, and what a zero tax means.',
+                  })}
+                  subheader={
+                    'The total for the plan you are looking at, tax included, ' +
+                    'straight from Stripe.'
+                  }
+                  contentGutterX
+                  contentGutterY
+                >
+                  <BillingPlanQuoteComponent
+                    orgId={orgId}
+                    plan={quotedPlan}
+                    interval={interval}
+                    canManage={can('billing.manage')}
+                  />
+                </CardDisplay>
+              ),
+            },
             {
               size: { xs: 12 },
               children: (
