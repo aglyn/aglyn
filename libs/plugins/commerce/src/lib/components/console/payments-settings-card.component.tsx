@@ -366,6 +366,25 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           action offered, because acting on a setup we could not read is how
           a connected merchant gets sent back through onboarding.
         */}
+        {/*
+          WHERE THE MONEY STOPPED (AGL-2513). Mirrored onto this profile by the
+          `payout.failed` handler and retired by the next successful payout, so
+          it names a live problem rather than a scar. Without it a merchant sold
+          into an account that could not release the funds and the card said
+          "Payments are enabled" the whole time — the storefront looked healthy
+          from every angle available to them.
+        */}
+        {stripeState === 'loaded' && profile?.lastPayoutFailureAtMs ? (
+          <Alert severity="warning" variant="outlined">
+            {`A payout of $${(
+              Number(profile.lastPayoutFailureCents ?? 0) / 100
+            ).toFixed(2)} did not reach your bank on ${new Date(
+              Number(profile.lastPayoutFailureAtMs),
+            ).toLocaleDateString()} — ${String(
+              profile.lastPayoutFailureReason ?? 'Stripe did not say why',
+            )} The money is still in your Stripe account. Open Stripe to fix your payout details.`}
+          </Alert>
+        ) : null}
         {!planReady || stripeState !== 'loaded' ? null : isOwner ? (
           <>
             <Button

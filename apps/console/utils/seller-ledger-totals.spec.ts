@@ -55,11 +55,11 @@ describe('summarizeSellerLedger (AGL-2158)', () => {
   it('reports the TRANSFER as net, not gross minus fee', () => {
     const totals = summarizeSellerLedger([sale()])
     // What Stripe moved to the Connect account.
-    expect(totals.netPaidCents).toBe(8000)
+    expect(totals.sentToStripeCents).toBe(8000)
     // The old expression, pinned so the difference is explicit: it would have
     // reported $88.25 — the payout plus $8.25 of Aglyn's sales tax.
     expect(10825 - 2000).toBe(8825)
-    expect(totals.netPaidCents).not.toBe(8825)
+    expect(totals.sentToStripeCents).not.toBe(8825)
   })
 
   it('breaks the buyer’s payment into the three parts that explain it', () => {
@@ -69,11 +69,11 @@ describe('summarizeSellerLedger (AGL-2158)', () => {
       buyersPaidCents: 21650,
       salesTaxCents: 1650,
       platformFeeCents: 4000,
-      netPaidCents: 16000,
+      sentToStripeCents: 16000,
     })
     // The identity the card's copy asserts: buyers paid = tax + fee + payout.
     expect(
-      totals.salesTaxCents + totals.platformFeeCents + totals.netPaidCents,
+      totals.salesTaxCents + totals.platformFeeCents + totals.sentToStripeCents,
     ).toBe(totals.buyersPaidCents)
   })
 
@@ -84,7 +84,7 @@ describe('summarizeSellerLedger (AGL-2158)', () => {
     ])
     expect(totals.paidCount).toBe(1)
     expect(totals.refundedCount).toBe(1)
-    expect(totals.netPaidCents).toBe(8000)
+    expect(totals.sentToStripeCents).toBe(8000)
     // Netted, not merely filtered: what came back out of the PUBLISHER's
     // account is its own line, so a total that shrank is reconcilable.
     expect(totals.returnedCents).toBe(8000)
@@ -96,7 +96,7 @@ describe('summarizeSellerLedger (AGL-2158)', () => {
     const totals = summarizeSellerLedger([
       sale({ refundedAt: 'NOW', reversedTransferCents: 8000 }),
     ])
-    expect(totals.netPaidCents).toBe(0)
+    expect(totals.sentToStripeCents).toBe(0)
     expect(totals.buyersPaidCents).toBe(0)
   })
 
@@ -120,7 +120,7 @@ describe('summarizeSellerLedger (AGL-2158)', () => {
     const totals = summarizeSellerLedger([
       sale({ reversedTransferCents: 3000 }),
     ])
-    expect(totals.netPaidCents).toBe(5000)
+    expect(totals.sentToStripeCents).toBe(5000)
   })
 
   it('reads a pre-AGL-1544 row, whose amount WAS the pre-tax price', () => {
@@ -129,7 +129,7 @@ describe('summarizeSellerLedger (AGL-2158)', () => {
     const totals = summarizeSellerLedger([
       { amountCents: 10000, feeCents: 2000 },
     ])
-    expect(totals.netPaidCents).toBe(8000)
+    expect(totals.sentToStripeCents).toBe(8000)
     expect(totals.salesTaxCents).toBe(0)
   })
 
@@ -137,10 +137,10 @@ describe('summarizeSellerLedger (AGL-2158)', () => {
     expect(summarizeSellerLedger([])).toMatchObject({
       paidCount: 0,
       refundedCount: 0,
-      netPaidCents: 0,
+      sentToStripeCents: 0,
       returnedCents: 0,
     })
-    expect(summarizeSellerLedger(undefined).netPaidCents).toBe(0)
+    expect(summarizeSellerLedger(undefined).sentToStripeCents).toBe(0)
   })
 })
 
@@ -161,8 +161,18 @@ describe('the Sales card renders the payout, not the old expression (AGL-2158)',
   it('carries the copy that explains the smaller number', () => {
     // A publisher who read `net $88.25` yesterday is owed the reason on the
     // card, not in a changelog.
-    expect(source).toContain('Net paid out $')
-    expect(source).toContain('what reached your Stripe account')
+    // "Sent to your Stripe account", not "net paid out" (AGL-2513). The
+    // figure sums `transferCents` — the instruction given at charge time — so
+    // it knows the money was DISPATCHED and nothing about whether the payout
+    // from that balance to a bank succeeded. The old wording made this number
+    // assert an arrival it cannot observe, which is what a publisher read
+    // while a payout was failing.
+    expect(source).toContain('Sent to your Stripe account $')
+    expect(source).not.toContain('Net paid out $')
+    // The composition is still explained on the card, and the caption now
+    // also states the distinction the rename exists for.
+    expect(source).toContain('the pre-tax price less the')
+    expect(source).toContain('not the same as reaching your bank')
     expect(source).toContain('marketplace-provider')
   })
 })
@@ -188,7 +198,7 @@ describe('partial-refund reversals (AGL-2299)', () => {
     ])
     expect(totals.paidCount).toBe(1)
     expect(totals.refundedCount).toBe(0)
-    expect(totals.netPaidCents).toBe(8000 - 3695)
+    expect(totals.sentToStripeCents).toBe(8000 - 3695)
     // The sale still happened: the buyer paid, the tax is still owed, and the
     // platform still earned its fee.
     expect(totals.buyersPaidCents).toBe(10825)
@@ -197,7 +207,7 @@ describe('partial-refund reversals (AGL-2299)', () => {
   })
 
   it('leaves a sale with no partial reversal exactly as it was', () => {
-    expect(summarizeSellerLedger([sale]).netPaidCents).toBe(8000)
+    expect(summarizeSellerLedger([sale]).sentToStripeCents).toBe(8000)
   })
 
   it('adds both pull-backs on a sale that was partly refunded and then fully', () => {
@@ -213,6 +223,53 @@ describe('partial-refund reversals (AGL-2299)', () => {
     ])
     expect(totals.refundedCount).toBe(1)
     expect(totals.returnedCents).toBe(8000)
-    expect(totals.netPaidCents).toBe(0)
+    expect(totals.sentToStripeCents).toBe(0)
+  })
+})
+
+/**
+ * WHAT THE PAYOUT FIGURE KNOWS, AND WHAT IT DOES NOT (AGL-2513).
+ *
+ * `sentToStripeCents` sums `transferCents` — the instruction given to Stripe
+ * at charge time. A payout failing later on the way from the Connect balance
+ * to a bank leaves every field here untouched, which is correct arithmetic and
+ * was a false sentence under the old name: "net paid out" asserted an arrival
+ * this figure cannot observe, and a publisher read it while their payout was
+ * failing.
+ *
+ * The rename is the fix, so these pin the MEANING rather than a new number.
+ * An account-level payout failure cannot be attributed to any one sale, so
+ * netting it in here would invent a per-sale split that does not exist; the
+ * panel states it beside the figure instead.
+ */
+describe('sentToStripeCents is dispatch, not arrival (AGL-2513)', () => {
+  const sale = {
+    amountCents: 10825,
+    feeCents: 2000,
+    taxCents: 825,
+    transferCents: 8000,
+  }
+
+  it('reports what Stripe was asked to move', () => {
+    expect(summarizeSellerLedger([sale]).sentToStripeCents).toBe(8000)
+  })
+
+  it('is unchanged by a payout that later failed, and says so by name', () => {
+    // CONTROL for the rename: the arithmetic is deliberately identical, so
+    // nothing here should move. What changed is that the figure no longer
+    // claims the money landed — the claim lived in the label.
+    const totals = summarizeSellerLedger([sale])
+    expect(totals.sentToStripeCents).toBe(8000)
+    expect(totals).not.toHaveProperty('netPaidCents')
+  })
+
+  it('still subtracts what was actually pulled back', () => {
+    // CONTROL that the rename did not quietly drop the reversal handling the
+    // figure has always done.
+    expect(
+      summarizeSellerLedger([
+        { ...sale, partialReversedTransferCents: 3695 },
+      ]).sentToStripeCents,
+    ).toBe(8000 - 3695)
   })
 })

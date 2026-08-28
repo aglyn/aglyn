@@ -1079,9 +1079,9 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         help={docsHelp('publishAPlugin', {
           anchor: '#paid-listings',
           excerpt:
-            'Net paid out is your share after the platform fee — sales tax ' +
-            `is collected on ${PLATFORM_BRAND_LEGAL_NAME}’s registration and ` +
-            'is never yours.',
+            'Sent to your Stripe account is your share after the platform ' +
+            `fee — sales tax is collected on ${PLATFORM_BRAND_LEGAL_NAME}’s ` +
+            'registration and is never yours.',
         })}
         contentGutterX
         contentGutterY
@@ -1103,10 +1103,36 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               The payout FIRST, and named for what it is. It is the number a
               publisher reconciles against their Stripe account, and it is the
               one this card used to get wrong.
+
+              "Sent to your Stripe account", not "net paid out" (AGL-2513).
+              The figure sums `transferCents` — the instruction given at charge
+              time — so it says the money was DISPATCHED and knows nothing
+              about whether the payout from that balance to a bank succeeded.
+              A publisher reading "net paid out" during a failed payout was
+              told their money had landed by the one surface that should have
+              warned them. The notice below carries the arrival.
             */}
             <Typography variant="body2">
-              {`Net paid out $${(totals.netPaidCents / 100).toFixed(2)}`}
+              {`Sent to your Stripe account $${(
+                totals.sentToStripeCents / 100
+              ).toFixed(2)}`}
             </Typography>
+            {/*
+              WHERE IT STOPPED, when it stopped. Mirrored onto the publisher
+              profile by the `payout.failed` handler, and retired by the next
+              successful payout — so this is a live problem, not a scar.
+            */}
+            {profile?.lastPayoutFailureAtMs ? (
+              <Alert severity="warning" variant="outlined">
+                {`A payout of $${(
+                  Number(profile.lastPayoutFailureCents ?? 0) / 100
+                ).toFixed(2)} did not reach your bank on ${new Date(
+                  Number(profile.lastPayoutFailureAtMs),
+                ).toLocaleDateString()} — ${String(
+                  profile.lastPayoutFailureReason ?? 'Stripe did not say why',
+                )} The money is still in your Stripe account. Open Stripe to fix your payout details.`}
+              </Alert>
+            ) : null}
             <Typography variant="body2" color="text.secondary">
               {`Buyers paid $${(totals.buyersPaidCents / 100).toFixed(2)} · ` +
                 `sales tax $${(totals.salesTaxCents / 100).toFixed(2)} · ` +
@@ -1124,11 +1150,12 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               today is owed the reason on the same card, not in a changelog.
             */}
             <Typography variant="caption" color="text.secondary">
-              {'Net paid out is what reached your Stripe account: the ' +
-                'pre-tax price less the platform fee. Sales tax is collected ' +
-                `and remitted by ${PLATFORM_BRAND_LEGAL_NAME} under its ` +
-                'marketplace-provider registration and was never part of ' +
-                'your share.'}
+              {'Sent to your Stripe account is the pre-tax price less the ' +
+                'platform fee. Sales tax is collected and remitted by ' +
+                `${PLATFORM_BRAND_LEGAL_NAME} under its marketplace-provider ` +
+                'registration and was never part of your share. Reaching ' +
+                'your Stripe balance is not the same as reaching your bank — ' +
+                'a failed payout is called out above.'}
             </Typography>
           </Stack>
         )}
