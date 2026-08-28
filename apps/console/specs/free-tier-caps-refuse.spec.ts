@@ -244,7 +244,14 @@ const DIMENSIONS: Record<string, Dimension> = {
     refusedAt: 1,
     allowedAt: 0,
     relax: raiseSeats('managersPerOrg', 'maxManagersPerOrg'),
-    enforcedIn: 'apps/console/app/api/orgs/invites/route.ts',
+    // Moved off the routes and into the grant transaction (AGL-2068 on the
+    // manager key), like `membersPerHost` above. All four doors read the
+    // roster and then wrote, so N concurrent admissions all measured the same
+    // roster and all passed; `assertManagerSeats` now decides inside the
+    // transaction that writes. `/api/orgs/invites` keeps a pre-flight for the
+    // one door that never reaches `upsertOrgMember`, but the enforcement this
+    // row pins is here.
+    enforcedIn: 'libs/tenant/data/admin/src/lib/server/organizations.ts',
     decider: 'checkSeatQuota',
   },
   posRegisters: {

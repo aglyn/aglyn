@@ -24,7 +24,9 @@
 
 import {
   checkHostCollaboratorQuota,
+  checkSeatQuota,
   countCollaboratorSeats,
+  countManagerSeatsExcluding,
   createResourceUid,
   generateOrgSlug,
   resolveOrgPermissions,
@@ -1156,6 +1158,206 @@ export async function collaboratorSeatRefusal(options: {
   return null
 }
 
+/**
+ * The refusal string, taken from `/api/orgs/members`.
+ *
+ * The four doors each phrased this differently — "upgrade your plan to invite
+ * more members", "to add more members", "This organization is out of team
+ * seats", "This workspace has used all N of its team seats" — which is what a
+ * gate copied four times produces. One wording now, from the one place the
+ * refusal is built. Nothing matches these strings but a human, so the
+ * consolidation costs no caller.
+ */
+function managerSeatMessage(quota: {
+  limit: number
+  upgradeRequired: boolean
+  addonPriceUsd: number | null
+}): string {
+  return quota.upgradeRequired
+    ? `Team seat limit reached (${quota.limit}) — upgrade your ` +
+        'plan to add more members'
+    : `Team seats full (${quota.limit}) — add seats for ` +
+        `$${quota.addonPriceUsd}/mo each from Billing`
+}
+
+/**
+ * A manager seat refused, thrown rather than returned, for the reason
+ * {@link CollaboratorSeatLimitError} is thrown: it has to travel out of
+ * `upsertOrgMember`, whose contract is "make it so" and which three routes
+ * already call as a bare `await`. A verdict would be silently discarded by
+ * every one of them, which is the shape of the bug being fixed.
+ */
+export class ManagerSeatLimitError extends Error {
+  readonly limit: number
+  readonly upgradeRequired: boolean
+  readonly addonPriceUsd: number | null
+  /**
+   * Seats the org holds ABOVE `limit`. Non-zero means it is GRANDFATHERED:
+   * those managers keep their access and only the NEXT one is refused, so the
+   * console can say that instead of letting an admin read a 403 as "somebody
+   * was removed".
+   */
+  readonly retainedOverCap: number
+  constructor(quota: {
+    limit: number
+    upgradeRequired: boolean
+    addonPriceUsd: number | null
+    retainedOverCap?: number
+  }) {
+    super(managerSeatMessage(quota))
+    this.name = 'ManagerSeatLimitError'
+    this.limit = quota.limit
+    this.upgradeRequired = quota.upgradeRequired
+    this.addonPriceUsd = quota.addonPriceUsd
+    this.retainedOverCap = Math.max(0, quota.retainedOverCap ?? 0)
+  }
+}
+
+/**
+ * The manager cap, evaluated against the POST-state and inside the same
+ * transaction that performs the grant (AGL-2068, on the manager key).
+ *
+ * The collaborator cap above learned this the hard way and this is the same
+ * defect one key over: all four doors that admit a manager — invite create,
+ * invite accept, direct member add and SSO-JIT — read the roster, decided,
+ * and then wrote, with nothing between the read and the write. N concurrent
+ * accepts all measured against the same roster, all passed, and all landed.
+ * Reading THROUGH the transaction is the fix: Firestore tracks the read set,
+ * so a second grant that measured the same roster cannot commit — it retries,
+ * re-reads a roster that now holds the first, and refuses.
+ *
+ * PENDING INVITES COUNT, AT EVERY DOOR. Only invite-create counted them
+ * before, so the cap was enforced against a different population depending on
+ * which door was used — and the doors that ignored them are the ones that
+ * actually grant access. An invite reserves the seat it will become, and a
+ * cap that only bites on acceptance is walked past by mailing N invitations
+ * first. `readSeatEntries` is shared with the collaborator gate precisely so
+ * the two populations cannot drift apart again.
+ *
+ * `checkSeatQuota(org, 'managers', used)` and NOT the per-host collaborator
+ * quota: `managersPerOrg` really is org-level, so purchased add-ons raise it
+ * (AGL-2439 removed that only for the per-site `members` key).
+ *
+ * THE GRANDFATHER LIVES HERE, in what this does NOT do. It charges only the
+ * TRANSITION into an org-wide seat — `becomesManager` is false when the
+ * membership already held one — so an org already above its cap keeps every
+ * manager it has, can still have their role or profile rewritten, and is
+ * merely refused the next one. There is no sweep and no revocation, and none
+ * may be added: the cap binds ADMISSION, never ACCESS.
+ */
+async function assertManagerSeats(options: {
+  orgRef: FirebaseFirestore.DocumentReference
+  org: Partial<AglynOrgBilling>
+  /** Is this write ADMITTING a manager who was not one already? */
+  becomesManager: boolean
+  self: {
+    uid?: string | null
+    email?: string | null
+    emails?: readonly (string | null | undefined)[] | null
+  }
+  read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>
+}): Promise<void> {
+  const { orgRef, org, becomesManager, self, read } = options
+  if (!becomesManager) return
+  const entries = await readSeatEntries(orgRef, read)
+  const used = countManagerSeatsExcluding(entries, self)
+  const quota = checkSeatQuota(org, 'managers', used)
+  if (!quota.allowed) {
+    throw new ManagerSeatLimitError({
+      ...quota,
+      retainedOverCap: Math.max(0, used - quota.limit),
+    })
+  }
+}
+
+/**
+ * Is this write admitting a manager who was not one already?
+ *
+ * The manager analogue of `newlyScopedHosts`, and it exists for the same
+ * reason: a seat is charged when it is TAKEN, not every time the row holding
+ * it is rewritten. Re-saving an existing manager's title, or moving them from
+ * `editor` to `admin`, re-writes a seat they already hold — charging that
+ * would strand an over-cap org unable to even demote its way back down.
+ *
+ * A scoped collaborator being promoted to org-wide DOES take a manager seat,
+ * and gives one up on the collaborator side; that is a real transition and is
+ * charged.
+ */
+function becomesOrgManager(options: {
+  role: OrgRole
+  allHosts: boolean
+  hostAccess: Record<string, HostAccessRole>
+  existing: Partial<AglynOrgMember> | undefined
+}): boolean {
+  const next = isOrgWideMember({
+    role: options.role,
+    allHosts: options.allHosts,
+    hostAccess: options.hostAccess,
+  } as Partial<AglynOrgMember>)
+  if (!next) return false
+  // An ABSENT row is not a manager, and `isOrgWideMember(undefined)` is
+  // already false — but saying so explicitly keeps the "was it one before?"
+  // question readable next to the legacy shape that predates `allHosts`.
+  return !options.existing || !isOrgWideMember(options.existing)
+}
+
+/**
+ * Turn a manager-seat refusal into the 403 the admitting routes return, or
+ * null when the error is something else and must keep propagating to the 500.
+ *
+ * Sits beside `collaboratorSeatRefusalResponse` and stacks with it in a
+ * route's catch block, each returning null for a non-match.
+ */
+export function managerSeatRefusalResponse(error: unknown): Response | null {
+  if (!(error instanceof ManagerSeatLimitError)) return null
+  return Response.json(
+    {
+      error: error.message,
+      code: 'manager_seat_limit',
+      limit: error.limit,
+      upgradeRequired: error.upgradeRequired,
+      // How many seats the org is over by. NOBODY was removed — the client
+      // renders this as retention, not as a loss.
+      retainedOverCap: error.retainedOverCap,
+    },
+    { status: 403 },
+  )
+}
+
+/**
+ * The same cap, asked BEFORE anything is written.
+ *
+ * Not the enforcement — the transaction inside `upsertOrgMember` is. This
+ * exists for the one door that never calls it: `/api/orgs/invites` create
+ * writes an invite document directly, so it refuses at the point the admin is
+ * looking at rather than mailing someone a link that will be refused when
+ * they click it. A race here over-reserves invites; it cannot over-grant
+ * access, because access is only ever granted through the transactional path.
+ */
+export async function managerSeatRefusal(options: {
+  orgId: string
+  org: Partial<AglynOrgBilling>
+  becomesManager: boolean
+  self?: { uid?: string | null; email?: string | null }
+}): Promise<Response | null> {
+  const { orgId, org, becomesManager, self } = options
+  if (!becomesManager) return null
+  try {
+    await assertManagerSeats({
+      orgRef: firestore().collection('orgs').doc(orgId),
+      org,
+      becomesManager,
+      self: self ?? {},
+      read: (query) => query.get(),
+    })
+  } catch (error) {
+    const refusal = managerSeatRefusalResponse(error)
+    if (refusal) return refusal
+    throw error
+  }
+  return null
+}
+
 export interface UpsertOrgMemberOptions {
   orgId: string
   uid: string
@@ -1331,6 +1533,24 @@ export async function upsertOrgMember(
       orgRef: db.collection('orgs').doc(orgId),
       org: orgSnapshot.data() as Partial<AglynOrgBilling>,
       hostIds: newlyScopedHosts({
+        role,
+        allHosts: allHosts ?? false,
+        hostAccess: hostAccess ?? {},
+        existing: existing.data() as Partial<AglynOrgMember> | undefined,
+      }),
+      self: { uid, email, emails: seatAliasEmails },
+      read: (query) => tx.get(query),
+    })
+    // Manager seat cap, in the same read slot and for the same reason. This
+    // is the door invite ACCEPTANCE, `/api/orgs/members` and SSO-JIT all come
+    // through, and all three read the roster outside any transaction before
+    // this — so concurrent accepts measured one roster and every one of them
+    // passed. The read below joins this transaction's read set, which is what
+    // serialises them.
+    await assertManagerSeats({
+      orgRef: db.collection('orgs').doc(orgId),
+      org: orgSnapshot.data() as Partial<AglynOrgBilling>,
+      becomesManager: becomesOrgManager({
         role,
         allHosts: allHosts ?? false,
         hostAccess: hostAccess ?? {},
