@@ -859,3 +859,88 @@ describe('the element-metadata criterion gates the customer-facing verdicts', ()
     expect(listed.status).toBe(200)
   })
 })
+
+/**
+ * A KILL IS NOT A REVIEW VERDICT (AGL-2514).
+ *
+ * `latestVersionReviewState: 'revoked'` is written to the LISTING's summary
+ * field, and only there. The version keeps the `approved` it earned, and the
+ * staff surface shows "Disabled" beside that verdict rather than instead of
+ * it — collapsing the two would erase what the publisher earned and would make
+ * a deliberate kill indistinguishable from a rejection.
+ *
+ * The consequence worth guarding is in the QUEUE. It keys on the VERSION's
+ * `reviewState`, so a revoked version stays out of it. Were it ever switched
+ * to the listing's summary field, every revoked version would reappear looking
+ * exactly like one awaiting its first review, and a reviewer trusting the queue
+ * could approve something somebody had deliberately killed.
+ *
+ * Asserted on the RECORDED STATE of both documents, and on the queue's own
+ * filter expression, which is the thing that would have to change for the
+ * failure above to become possible.
+ */
+describe('revoking a version does not un-review it (AGL-2514)', () => {
+  it('flips the listing summary while the version keeps its verdict', async () => {
+    seedListing({ latestApprovedVersion: VERSION, reviewStatus: 'listed' })
+    seedVersion()
+    const path = `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`
+    docs.set(path, {
+      ...(docs.get(path) as Record<string, unknown>),
+      reviewState: 'approved',
+    })
+
+    const response = await POST(
+      post({ listingId: LISTING, action: 'revoke-version', version: VERSION }),
+    )
+    expect(response.status).toBe(200)
+
+    // The listing's cached summary is the ONLY thing that flips.
+    expect(
+      (docs.get(`marketplaceListings/${LISTING}`) as Record<string, unknown>)[
+        'latestVersionReviewState'
+      ],
+    ).toBe('revoked')
+    // The verdict the publisher earned survives, which is what keeps a kill
+    // and a rejection distinguishable in the audit trail.
+    expect(
+      (docs.get(path) as Record<string, unknown>)['reviewState'],
+    ).toBe('approved')
+  })
+
+  it('CONTROL: revoking an OLDER version leaves the summary alone', async () => {
+    // The summary describes the version on offer, so revoking something else
+    // must not touch it — and without this control the assertion above would
+    // pass against a handler that flipped the summary unconditionally.
+    seedListing({ latestVersion: '2.0.0', latestApprovedVersion: '2.0.0' })
+    seedVersion('1.2.0')
+
+    const response = await POST(
+      post({ listingId: LISTING, action: 'revoke-version', version: '1.2.0' }),
+    )
+    expect(response.status).toBe(200)
+
+    expect(
+      (docs.get(`marketplaceListings/${LISTING}`) as Record<string, unknown>)[
+        'latestVersionReviewState'
+      ],
+    ).toBe(undefined)
+  })
+
+  it('SOURCE PIN: the queue keys on the version state, never the summary', () => {
+    // The one-line change that would resurrect every killed version into the
+    // review queue as though it had never been read.
+    const source = require('node:fs').readFileSync(
+      require('node:path').join(__dirname, 'route.ts'),
+      'utf8',
+    ) as string
+    expect(source).toContain(
+      "rows.filter((row) => row.latestReviewState !== 'approved')",
+    )
+    expect(source).toContain(
+      "latestReviewState: String(latest?.get('reviewState') ?? 'pending')",
+    )
+    expect(source).not.toContain(
+      "row.latestVersionReviewState !== 'approved'",
+    )
+  })
+})

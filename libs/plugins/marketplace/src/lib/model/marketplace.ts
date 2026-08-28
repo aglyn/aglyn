@@ -586,6 +586,36 @@ export type {
  */
 export type PluginVersionReviewState = 'pending' | 'approved' | 'rejected'
 
+/**
+ * The LISTING's cached summary of the version it currently offers (AGL-2514).
+ *
+ * A different field from the one above and a different set of values, which is
+ * the whole reason it is written down here. `reviewState` lives on the version
+ * document and is a verdict about specific bytes;
+ * `latestVersionReviewState` lives on the LISTING and exists so browse cards
+ * and the listing page can answer "have the bytes on offer been read?" without
+ * a per-listing subcollection read.
+ *
+ * `'revoked'` is the value that only ever appears HERE. A kill is not a review
+ * verdict: the version keeps the `'approved'` it earned — the staff surface
+ * shows "Disabled" beside that verdict rather than instead of it, because
+ * collapsing the two would erase what the publisher earned — and it is only
+ * this listing-level summary that flips, so the "Reviewed" chip drops and the
+ * caution alert raises while the audit trail stays intact.
+ *
+ * The practical consequence, and the reason this is a type rather than a
+ * comment: the staff review QUEUE keys on the version's `reviewState`, never
+ * on this field. Were it to key on this one, every revoked version would
+ * reappear in the queue indistinguishable from one awaiting its first review,
+ * and a reviewer acting in good faith on a queue they trusted could approve a
+ * version somebody had deliberately killed. The two fields are not
+ * interchangeable and this names why.
+ */
+export type ListingLatestVersionReviewState =
+  | PluginVersionReviewState
+  | 'revoked'
+
+
 export interface ReviewableVersion {
   version?: string
   reviewState?: string
