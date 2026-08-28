@@ -49,6 +49,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
+  Alert,
   Button,
   Chip,
   Stack,
@@ -61,8 +62,6 @@ import {
   doc,
   getCountFromServer,
   getDoc,
-  limit,
-  query,
   updateDoc,
 } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
@@ -79,10 +78,23 @@ import { useHostSubdomain } from '../host-id-provider'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import {
+  ceilingedWindow,
+  hostArtifactQuery,
+} from '../../utils/host-artifact-queries'
 import createPageFromTemplate, {
   withBundleRootScreen,
 } from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
+
+/**
+ * How many template documents one open of this card reads.
+ *
+ * A ceiling rather than a page — see the read below for why this list cannot
+ * be windowed. Comfortably above the largest FINITE `templatesPerHost` (50),
+ * so only a site on an unlimited plan can reach it.
+ */
+const TEMPLATE_WINDOW = 200
 
 /**
  * Row order for the table's default sort. The three kinds are used in
@@ -187,10 +199,35 @@ export function HostTemplatesCard({
   const [latestByListing, setLatestByListing] = useState<
     Map<string, number | string>
   >(new Map())
-  const { data: templateDocs, status } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'templates'), limit(200)),
+  /**
+   * THE WHOLE LIBRARY, ordered, with the ceiling made visible (AGL-693).
+   *
+   * The read was `limit(200)` with no `orderBy`, so a site over the ceiling
+   * got a pseudo-random two hundred in document-id order, which the row memo
+   * below then sorted by kind and name — the arrangement that makes a sample
+   * read as a complete, alphabetized library.
+   *
+   * It is deliberately NOT server-paged, unlike the layouts and components
+   * lists. A row here is a page GROUP: a multi-page starter materializes one
+   * document per screen and collapses into one row keyed by
+   * `source.starterId`. Document-ordered ids scatter a bundle's pages across
+   * the walk, so a page-sized window would render the same starter as a
+   * separate, partial row on two different pages — and "use this bundle"
+   * would apply whichever pages that page happened to hold.
+   *
+   * So the read stays whole and gains the two things it owed: an order that
+   * drops nothing (`hostArtifactQuery` explains why it is the document id and
+   * not `displayName`), and one PROBE document past the ceiling, so a site
+   * over it can be told rather than quietly shown a fraction of its library.
+   */
+  const { data: templateWindow, status } = useFirestoreCollection<any>(
+    () => hostArtifactQuery(firestore, hostId, 'templates', TEMPLATE_WINDOW + 1),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  const { rows: templateDocs, truncated: templatesTruncated } = useMemo(
+    () => ceilingedWindow<any>(templateWindow, TEMPLATE_WINDOW),
+    [templateWindow],
   )
 
   /**
@@ -786,6 +823,21 @@ export function HostTemplatesCard({
 
   return (
     <CardDisplay>
+      {/*
+        The ceiling, said out loud. A starter's pages are grouped across the
+        WHOLE window, so a library cut short does not merely hide rows — it can
+        present a bundle by the pages that made the cut. Naming the number lets
+        a reader tell "I have no such template" from "this card did not read
+        it".
+      */}
+      {templatesTruncated ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {`This site holds more than ${TEMPLATE_WINDOW} templates. The ` +
+            `library below shows the first ${TEMPLATE_WINDOW} in document ` +
+            'order, and a multi-page starter is only complete if all of its ' +
+            'pages are among them.'}
+        </Alert>
+      ) : null}
       {/* The readout moved OUT of this card and into the page header, beside
           the create button, matching the Sites page (AGL-2113). It read as a
           caption on a list here; opposite the heading it is a fact about the

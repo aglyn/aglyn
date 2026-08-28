@@ -81,6 +81,26 @@ import { type AuthPersistenceClass } from './auth-persistence'
  * origin would have resumed from disk, and multiple tabs no longer share one
  * backend connection through `persistentMultipleTabManager`. That is the right
  * trade for an Enterprise-only feature, but it is a trade.
+ *
+ * ## `Failed to obtain primary lease for action '…'` is not a bug to fix
+ *
+ * Exactly one open tab holds the IndexedDB primary lease and applies remote
+ * events; the rest read the results it writes. When the lease changes hands —
+ * a tab opening, closing, or coming back to the foreground — a transaction
+ * already in flight on the losing tab finds itself no longer primary, and the
+ * SDK `logError`s that message immediately before throwing a
+ * `failed-precondition` that its OWN multi-tab sync engine catches
+ * (`ignoreIfPrimaryLeaseLoss`) and downgrades to a debug line. The tab then
+ * continues as a secondary. Nothing is dropped and no listener stops.
+ *
+ * It is therefore noise from a handled handoff, and it scales with how many
+ * tabs are churning rather than with anything the console does. The message
+ * names a lease, so the obvious reading is that the multi-tab manager is
+ * missing and should be added — it is already here, which is why the message
+ * appears at all: `persistentSingleTabManager` refuses the second tab's
+ * persistence outright instead of sharing it. Confirmed at runtime by the
+ * `owner` record in `firestore/<app>/<project>/main`, which carries
+ * `allowTabSynchronization: true`.
  */
 export function localCacheFor(
   originClass: AuthPersistenceClass,

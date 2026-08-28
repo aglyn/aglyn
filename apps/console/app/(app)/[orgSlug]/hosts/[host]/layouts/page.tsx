@@ -44,6 +44,7 @@ import {
   useLoading,
 } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import ListTable, {
@@ -60,21 +61,14 @@ import DocumentPresenceChips from '../../../../../../components/document-presenc
 import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
 import { type GridColDef } from '@mui/x-data-grid'
-import {
-  collection,
-  doc,
-  getDoc,
-  limit,
-  query,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
+  usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
@@ -93,10 +87,10 @@ import { useHostId, useHostSubdomain } from '../../../../../../components/host-i
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import {
   CONTENT_MAX_WIDTH,
-  TABLE_PAGE_SIZE_DEFAULT,
   TABLE_ROW_HEIGHT,
 } from '../../../../../../constants/shared'
-import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
+import { hostArtifactQuery } from '../../../../../../utils/host-artifact-queries'
+import useLiveArtifactCount from '../../../../../../hooks/use-live-artifact-count'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -127,10 +121,6 @@ function Layouts(props) {
   const handleFormClose = useCallback(() => {
     setQuickDrawerOpen(false)
   }, [])
-  // The console's shared default (AGL-693). Load-bearing here beyond the
-  // footer: it bounds the listener below, so the page size and the number of
-  // documents read are the same number.
-  const [pageSize, setPageSize] = useState<number>(TABLE_PAGE_SIZE_DEFAULT)
   const firestore = useFirestore()
   const { org, ready: orgReady } = useCurrentOrg()
   // The where-used scan is an authenticated POST (host admin only).
@@ -172,19 +162,63 @@ function Layouts(props) {
     }),
     [firestore, hostId],
   )
-  const { status, data } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'layouts'), limit(pageSize)),
-    [firestore, hostId, pageSize],
+  /**
+   * The list PAGES, over an ordered walk (AGL-693).
+   *
+   * It was `limit(pageSize)` with no `orderBy` and no pager: one page-sized
+   * read, and the grid's own footer paging a window that never grew. So the
+   * "next page" button led to an empty grid on a site with more layouts than
+   * the page size, and the rows on the first page were a pseudo-random sample
+   * — Firestore answers an unordered limit in document-id order.
+   *
+   * `hostArtifactQuery` holds the ordering decision and the reason it is the
+   * document id rather than `displayName`; the walk it produces is total, so
+   * every layout is reachable by paging.
+   */
+  const {
+    status,
+    rows: layoutWindow,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) => hostArtifactQuery(firestore, hostId, 'layouts', pageLimit),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const layouts = data || []
+  /**
+   * A deleted layout is a TOMBSTONE, not a row (AGL-693).
+   *
+   * Delete here stamps `deletedAt` and leaves the document in place so
+   * published tenant pages keep rendering their chrome until the next
+   * revalidate. Nothing filtered them out, so a deleted layout stayed in this
+   * list forever — the screens page and the components card have always
+   * dropped theirs, and this was the one artifact list that did not.
+   *
+   * Client-side because it has to be: Firestore cannot ask for the ABSENCE of
+   * a field, and the two live shapes are not one value — a layout created
+   * through the resources route carries no `deletedAt`, one installed from the
+   * marketplace carries an explicit `null`. The cost is that a tombstone still
+   * spends a slot in the page it falls in, so a page can render fewer rows
+   * than its size; `hasMore` and the walk are unaffected.
+   */
+  const layouts = layoutWindow.filter((layout: any) => !layout.deletedAt)
   /**
    * `sharedLayoutsPerHost` is enforced by `/api/hosts/resources` and had no
    * standing surface here — an author learned the cap by being refused a
-   * create. The count is the listener's, which is the same source the create
-   * gate uses, so the readout and the refusal cannot disagree.
+   * create. The count is a server aggregate over the same LIVE documents the
+   * route counts (AGL-1716), because the page it sits beside holds ten rows:
+   * `10/10 layouts on your plan` on a site with sixty of them reads as room
+   * to spare, right up until the create is refused.
    */
-  const layoutQuota = checkOrgQuota(org, 'sharedLayoutsPerHost', layouts.length)
+  const liveLayoutCount = useLiveArtifactCount(hostId, 'layouts')
+  // Pending or refused, the page window stands in. It can only UNDERSTATE the
+  // site's layouts, never overstate them, so nothing this figure gates fires
+  // on a count larger than the truth.
+  const layoutsUsed = liveLayoutCount ?? layouts.length
+  const layoutQuota = checkOrgQuota(org, 'sharedLayoutsPerHost', layoutsUsed)
   const { enqueueSnackbar } = useSnackbar()
 
   const [error, setError] = useState(null)
@@ -534,7 +568,7 @@ function Layouts(props) {
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
             <QuotaReadoutComponent
               ready={orgReady}
-              used={layouts.length}
+              used={layoutsUsed}
               limit={layoutQuota.limit}
               noun="layout"
             />
@@ -611,8 +645,16 @@ function Layouts(props) {
                 )
               }
               loading={status === 'loading'}
-              initialState={{ pagination: { paginationModel: { pageSize } } }}
-              onPaginationModelChange={(model) => setPageSize(model.pageSize)}
+              // Paged by the footer below, so the grid must not also slice.
+              hideFooter
+            />
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={layouts.length}
+              hasMore={hasMore}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </CardDisplay>
         </Container>

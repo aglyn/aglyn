@@ -96,6 +96,26 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostVersionApi: () => jest.fn(),
   useHostResourceApi: () => jest.fn(),
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
+  /*
+   * The components card reads a PAGE now (AGL-693), so its rows and — the
+   * part these cases turn on — its `fromCache` flag arrive through the window
+   * hook rather than the collection hook.
+   *
+   * The window arithmetic is not what is under test here; `fromCache` is. So
+   * the page is the fixture verbatim, and the flag is the one the listener
+   * mock is set to, which is what the seed guard reads.
+   */
+  usePagedCollection: () => ({
+    data: mockComponentDocs,
+    rows: mockComponentDocs,
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: mockListener.status,
+    fromCache: mockListener.fromCache,
+  }),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the card passed it, which is the one thing these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -159,6 +179,13 @@ jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
+  // The components card's head-count (AGL-1716) is two server aggregates on
+  // mount. Left real they receive this file's stand-in collection — a bare
+  // string — and throw before the card renders at all.
+  where: (field: string, op: string, value: unknown) => ({ field, op, value }),
+  getCountFromServer: jest
+    .fn()
+    .mockResolvedValue({ data: () => ({ count: 0 }) }),
 }))
 
 const mockEnqueueSnackbar = jest.fn()

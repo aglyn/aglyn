@@ -81,9 +81,31 @@ const SHARED_FOOTER: Array<[string, string]> = [
   ['site activity', 'apps/console/components/host-activity-table.component.tsx'],
   ['actor activity', 'apps/console/components/actor-activity-table.component.tsx'],
   ['notifications', 'apps/console/app/(app)/manage/notifications/page.tsx'],
+  /*
+   * The staff audit log, which kept a "Load older" of its own — a fifth
+   * grammar that escaped both walks below, because it is a page rather than
+   * a component and because its button did not say "Load more". It grew a
+   * 200-row window 200 rows at a time and could only ever go forward.
+   */
+  ['audit log', 'apps/console/app/(app)/admin/audit/page.tsx'],
   ['staff lists', 'apps/console/components/staff-list-pagination.component.tsx'],
   ['site collaborators', 'apps/console/components/host-members-card.component.tsx'],
   ['site accounts', 'apps/console/components/site-accounts-card.component.tsx'],
+  // The console's OWN artifact lists. The sweep that converted the plugin
+  // cards never walked `apps/console`, so these three carried the same defect
+  // one directory over from the guard that was supposed to cover it.
+  [
+    'site layouts',
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
+  ],
+  [
+    'reusable components',
+    'apps/console/components/host-components-card.component.tsx',
+  ],
+  [
+    'per-screen traffic',
+    'apps/console/components/analytics/screens-analytics-table.component.tsx',
+  ],
   // Plugin console cards are lists too, and were the worst of the four
   // grammars: a big read sliced small, with no control at all.
   ...(
@@ -190,8 +212,13 @@ describe('the console has one table footer (AGL-693)', () => {
       'apps/console/components/screens-hierarchy-table.component.tsx',
       'apps/console/components/org-members-card.component.tsx',
       'apps/console/components/content/collection-entries-page.component.tsx',
-      'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
+      'apps/console/components/analytics/screens-analytics-table.component.tsx',
       'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
+      // The shared window hook, which is where a server-paged list gets its
+      // default now — the layouts page used to hold this state itself and no
+      // longer does, so the constant has to be asserted where it moved to or
+      // the rule quietly stops covering every list that adopts the hook.
+      'libs/tenant/feature/instance/src/lib/hooks/use-paged-collection.ts',
     ]) {
       expect(read(path)).toContain('TABLE_PAGE_SIZE_DEFAULT')
     }
@@ -219,6 +246,17 @@ describe('the console has one table footer (AGL-693)', () => {
  * version of the guard that survives the next list.
  */
 const CONSOLE_COMPONENTS = join(__dirname, '..', 'components')
+/**
+ * The console's PAGES, which no walk in this file used to reach.
+ *
+ * Every check here walked `apps/console/components` and the plugin trees and
+ * stopped there — so the layouts page, the screens page and every other list
+ * that lives in the route tree sat outside a guard whose name says it covers
+ * the console. Three of them were still on the unordered `limit()` this file
+ * exists to catch, one directory over from the assertion that would have
+ * caught them.
+ */
+const CONSOLE_PAGES = join(__dirname, '..', 'app')
 
 function tsxFilesUnder(dir: string): string[] {
   const found: string[] = []
@@ -275,6 +313,7 @@ describe('no list hand-rolls a pager (AGL-693)', () => {
   it('no console or plugin component renders its own Previous/Next pair', () => {
     const offenders = [
       ...tsxFilesUnder(CONSOLE_COMPONENTS),
+      ...tsxFilesUnder(CONSOLE_PAGES),
       ...pluginComponentFiles(),
     ]
       .filter((path) => handRolledPager(readFileSync(path, 'utf8')))
@@ -312,6 +351,7 @@ describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
   it('only the two documented grids still grow instead of paging', () => {
     const offenders = [
       ...tsxFilesUnder(CONSOLE_ROOT),
+      ...tsxFilesUnder(join(REPO, 'apps', 'console', 'app')),
       ...pluginComponentFiles(),
     ]
       .filter((path) => LOADS_MORE.test(readFileSync(path, 'utf8')))
@@ -389,6 +429,158 @@ const withoutComments = (source: string) =>
   source
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/.*$/gm, (_match, before) => before)
+
+/**
+ * A list is a file that DRAWS one, not a file somebody remembered to list.
+ *
+ * The check above walked two hand-written arrays, so it could only ever ask
+ * the question of surfaces already converted — which is how four console
+ * lists (the layouts page, the components card, the templates library and the
+ * screens tree's read) stayed on an unordered `limit()` while this file read
+ * as complete. The walk asks every file that renders a footer.
+ *
+ * A file that caps a query and draws NO footer is out of scope here on
+ * purpose: it is a lookup — a picker's option list, a provider's cache, an
+ * editor's working set — and those are a different question from a list, with
+ * a different answer. This guard is about the surfaces a reader pages
+ * through.
+ */
+const DRAWS_A_FOOTER =
+  /<ListPagination|<ListTable|<DataTableComponent|<TablePagination|<DataGrid|<ScreensHierarchyTable/
+
+/** Every file in the console and the plugins that renders a paginated list. */
+function footerFiles(): string[] {
+  return [
+    ...tsxFilesUnder(CONSOLE_COMPONENTS),
+    ...tsxFilesUnder(CONSOLE_PAGES),
+    ...pluginComponentFiles(),
+  ].filter((path) => DRAWS_A_FOOTER.test(withoutComments(readFileSync(path, 'utf8'))))
+}
+
+describe('every list that DRAWS a footer names its order (AGL-693)', () => {
+  const repoRelative = (path: string) => path.replace(`${REPO}/`, '')
+
+  it('THE CONTROL: the footer check catches what it is meant to catch', () => {
+    // Guard the guard. A pattern that matched nothing would leave the walk
+    // below with an empty set and every assertion vacuously true.
+    expect(DRAWS_A_FOOTER.test(`<ListPagination page={0} />`)).toBe(true)
+    expect(DRAWS_A_FOOTER.test(`<ListTable rows={rows} />`)).toBe(true)
+    expect(DRAWS_A_FOOTER.test(`<Stack><Button>More</Button></Stack>`)).toBe(false)
+  })
+
+  it('THE CONTROL: the walk reaches the console PAGES, not only components', () => {
+    // The narrowing this widening exists to prevent. A walk that lost the
+    // route tree would pass every assertion below by never looking at the
+    // three lists that were broken.
+    const reached = footerFiles().map(repoRelative)
+    expect(
+      reached.some((path) => path.startsWith('apps/console/app/')),
+    ).toBe(true)
+    expect(
+      reached.some((path) => path.startsWith('apps/console/components/')),
+    ).toBe(true)
+    expect(
+      reached.some((path) => path.startsWith('libs/plugins/')),
+    ).toBe(true)
+  })
+
+  it('THE CONTROL: some of those lists really do cap a query', () => {
+    // Otherwise the filter below is satisfied by a set of files that never
+    // touch Firestore, and the guard passes by never testing anything.
+    const capped = footerFiles().filter((path) =>
+      /\blimit\(/.test(withoutComments(readFileSync(path, 'utf8'))),
+    )
+    expect(capped.length).toBeGreaterThan(5)
+  })
+
+  it('no list caps a query it has not ordered', () => {
+    const unordered = footerFiles()
+      .map(repoRelative)
+      .filter((path) => !UNORDERED_BY_DESIGN.includes(path))
+      .filter((path) => {
+        const code = withoutComments(read(path))
+        return /\blimit\(/.test(code) && !/\borderBy\(/.test(code)
+      })
+    expect(unordered).toEqual([])
+  })
+})
+
+/**
+ * The four site artifact lists ask ONE query builder (AGL-693).
+ *
+ * They read four different collections under `hosts/{id}` and every one of
+ * them faces the same question: `orderBy` matches only documents that HAVE
+ * the field, so ordering on `displayName` — the field all four are sorted by
+ * on screen — hides every artifact a writer created without one. Four call
+ * sites answering that separately is how three of them answered it by not
+ * ordering at all.
+ *
+ * `hostArtifactQuery` is where the answer lives, so this asserts the surfaces
+ * ASK through it rather than merely that they contain an `orderBy` somewhere.
+ */
+const ARTIFACT_LISTS: Array<[string, string]> = [
+  ['screens', 'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'],
+  ['layouts', 'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx'],
+  ['components', 'apps/console/components/host-components-card.component.tsx'],
+  [
+    'templates',
+    'apps/console/components/templates/host-templates-card.component.tsx',
+  ],
+]
+
+describe('the site artifact lists share one ordering decision (AGL-693)', () => {
+  it.each(ARTIFACT_LISTS)('the %s list asks through the shared builder', (
+    _label,
+    path,
+  ) => {
+    const code = withoutComments(read(path))
+    expect(code).toContain('hostArtifactQuery(')
+    // And does not go around it. A second capped query written beside the
+    // shared one is how a list ends up with two orderings, only one of which
+    // anybody reviews — so these files build no `limit()` of their own at
+    // all. (Uncapped reads are untouched: the templates card counts screens
+    // with a server aggregate, which is a different question from a list.)
+    expect(code).not.toMatch(/\blimit\(/)
+  })
+
+  it('the builder orders on the document NAME, which cannot be absent', () => {
+    // The decision itself, asserted where it lives. `orderBy('displayName')`
+    // here would not mis-sort these lists, it would silently drop every
+    // artifact created without a name — a worse failure, and an invisible one.
+    const builder = withoutComments(
+      read('apps/console/utils/host-artifact-queries.ts'),
+    )
+    expect(builder).toContain('orderBy(documentId())')
+    expect(builder).not.toMatch(/orderBy\('displayName'/)
+  })
+
+  it('none of them re-sorts the window it was handed', () => {
+    // Sorting a server-ordered page in the browser is what made the original
+    // bug invisible: the rows run in a believable order and are the wrong
+    // rows. The two lists that read a CEILING rather than a page may sort —
+    // they hold the whole collection — so this covers the paged two.
+    for (const path of [
+      'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
+      'apps/console/components/host-components-card.component.tsx',
+    ]) {
+      expect(withoutComments(read(path))).not.toMatch(/\.sort\(/)
+    }
+  })
+
+  it('the two ceilinged reads probe for what they could not read', () => {
+    // A tree and a template bundle cannot be sliced by document, so both read
+    // a ceiling. A ceiling with no probe is a partial site rendered as a whole
+    // one, which is the failure the pager solves for every other list.
+    for (const path of [
+      'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx',
+      'apps/console/components/templates/host-templates-card.component.tsx',
+    ]) {
+      const code = withoutComments(read(path))
+      expect(code).toContain('ceilingedWindow')
+      expect(code).toMatch(/WINDOW \+ 1/)
+    }
+  })
+})
 
 describe('a paged list names its order (AGL-693)', () => {
   it('THE CONTROL: the comment stripper reads code, not prose', () => {

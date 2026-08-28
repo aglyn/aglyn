@@ -512,9 +512,10 @@ export function ScreensHierarchyTableComponent(
    * honest: ten roots on the page is ten rows until a reader asks for more.
    *
    * NOTE this bounds what is RENDERED, not what is read. The page still
-   * fetches the whole collection in one query (`limit(200)` in screens/page),
-   * so the children were already on the client either way — closing them by
-   * default costs no extra fetch when a reader opens one.
+   * fetches the whole collection in one ordered, ceilinged query
+   * (`SCREEN_WINDOW` in screens/page), so the children were already on the
+   * client either way — closing them by default costs no extra fetch when a
+   * reader opens one.
    *
    * A closed parent renders its children's `Collapse` and nothing inside it:
    * `unmountOnExit` keeps a closed subtree out of the DOM, out of React, and
