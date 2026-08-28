@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Publish a plugin
-description: Ship your own plugin to the marketplace marketplace with version pinning.
+description: Ship your own plugin to the marketplace with version pinning.
 ---
 
 # Publish a plugin

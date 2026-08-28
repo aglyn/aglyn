@@ -287,6 +287,11 @@ A customer's own custom domain works the same way — point it at your proxy and
 route it to the tenant container. The runtime treats any hostname it does not
 recognize as a candidate custom domain and looks it up.
 
+[Domain providers](./domain-providers.md) has the whole picture: the DNS
+records, the wildcard certificates, worked Caddy and nginx configurations, and
+what to do instead when you want customers' own domains registered
+automatically.
+
 :::warning Overwrite `X-Forwarded-For`, don't append to it
 Every rate limiter in the product — passkey sign-in, password reset, org
 creation, form submission — reads the **first** hop of `X-Forwarded-For`. A
@@ -542,7 +547,7 @@ the collector's CORS allowlist reads it.
 | Area | Self-hosted behavior |
 | --- | --- |
 | Firebase | Required — Auth, Firestore, Storage, RTDB, and Remote Config run in your project. |
-| Custom-domain self-service | Behind the [domain driver](./self-hosting-environment.md#domains). `webhook` registers a customer's domain automatically through your own proxy's API. `wildcard` cannot — nobody's wildcard covers somebody else's apex — so it answers `501` and you route the name by hand; the site still serves, because the domain claim is written before the refusal. DNS **verification** works everywhere. [Per-driver detail](./self-hosting-environment.md#domains-custom). |
+| Custom-domain self-service | Behind the [domain driver](./domain-providers.md). `webhook` registers a customer's domain automatically through your own proxy's API. `wildcard` cannot — nobody's wildcard covers somebody else's apex — so it answers `501` and you route the name by hand; the site still serves, because the domain claim is written before the refusal. DNS **verification** works everywhere. [Per-driver detail](./self-hosting-environment.md#domains-custom). |
 | Custom-domain verification | The verify step requires an exact CNAME match, or an apex address match when the name carries no CNAME at all. There is a soft pass that accepts *any* CNAME, for local development where no DNS points at a tenant edge. It used to be enabled by the absence of a hosting vendor's environment variable — which a container never sets — so it was **on in production on every self-host install**, and any domain carrying any CNAME to anywhere verified. A user of your platform could claim a domain they do not control. It now keys on `NODE_ENV`, which both Dockerfiles set to `production` in the image that actually runs. **If you run an image built before this fix, upgrade.** |
 | Legal pages & clickwrap | The signup checkbox links **Aglyn LLC's** Terms and Privacy and records acceptance against Aglyn's document hashes. Nothing breaks, but the agreement is ours, not yours, and is not yet configurable. Replace it before running this for anyone but yourself. |
 | Marketplace | Visible by default, but backed by Aglyn's Stripe Connect platform. Browsing works; purchase and payout onboarding explain themselves only after a click. Turn `release_marketplace` off in Remote Config if you don't want it. |
@@ -551,7 +556,7 @@ the collector's CORS allowlist reads it.
 | Request geo | Sanctions screening and the consent-region default read the visitor's country from a request header, and the sign-in alert reads the city too. The defaults are Vercel's names, with fallbacks for Cloudflare, CloudFront, App Engine and the usual GeoIP-module names; set `AGLYN_GEO_COUNTRY_HEADER`, `AGLYN_GEO_REGION_HEADER` and `AGLYN_GEO_CITY_HEADER` if your proxy uses names of its own. Baked in at **build** time. With no country signal the embargo gate fails open and logs that it did, once per instance. The region header matters separately: the sub-country embargo entries match on it alone. |
 | More than one replica | Single-container is the supported shape. Published pages are ISR-cached and site data sits behind a one-hour cache, with no shared cache handler, so a publish busts only the replica that received it — other replicas keep serving the old page for up to 10 minutes. Scale out only behind a sticky-session proxy, or fan the revalidate request out yourself. |
 | Edge caching | Several endpoints send `s-maxage` and rely on a shared cache honouring it. Behind a proxy that caches nothing they are just recomputed per request. Note this also sets your real media takedown window: an asset stays reachable for as long as your cache holds it. |
-| Workspace subdomains | Managed by whichever [domain driver](./self-hosting-environment.md#domains) you choose. `AGLYN_DOMAIN_PROVIDER=wildcard` is the ordinary Docker answer: point one wildcard DNS record for `*.<workspace domain>` at your console, hold one wildcard certificate, and every workspace URL resolves the moment it is created with nothing to register. `webhook` drives your own proxy's API instead. Left unset with no Vercel token the driver is `none`, which registers nothing — the console still advertises `{slug}.<workspace domain>`, so that name has to resolve some other way. |
+| Workspace subdomains | Managed by whichever [domain driver](./domain-providers.md) you choose. `AGLYN_DOMAIN_PROVIDER=wildcard` is the ordinary Docker answer: point one wildcard DNS record for `*.<workspace domain>` at your console, hold one wildcard certificate, and every workspace URL resolves the moment it is created with nothing to register. `webhook` drives your own proxy's API instead. Left unset with no Vercel token the driver is `none`, which registers nothing — the console still advertises `{slug}.<workspace domain>`, so that name has to resolve some other way. |
 | Stripe / Resend / AI assist | Optional keys (see above); the related features degrade gracefully when absent. |
 | Operator identity | Set `NEXT_PUBLIC_OPERATOR_NAME` and `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — the public abuse and §512 intakes, the lockdown 503, the quarantine notice and the sanctions 451 all name them, there is no Aglyn fallback, and unset renders "not configured". Baked in at image build time. |
 | DMCA designated agent | Not inherited from Aglyn. Register your own with the U.S. Copyright Office; the product asserts a registration only when you set `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true`. |
@@ -564,6 +569,7 @@ the collector's CORS allowlist reads it.
 ## Related
 
 - [Environment variables](./self-hosting-environment.md) — the complete per-variable reference
+- [Domain providers](./domain-providers.md) — choosing a driver, the wildcard path end to end, and the webhook contract
 - [White-label](../workspace-and-billing/white-label.md)
 - [Report an issue](../workspace-and-billing/report-an-issue.md)
 - [Billing & plans](../workspace-and-billing/billing-and-plans/overview.md)

@@ -147,7 +147,7 @@ claim) is one this route can safely re-run.
 | --- | --- |
 | `resolveEnabledPlugins(org)` | The org switchboard: absent field → all first-party; always-on unioned in; unknown (marketplace) ids kept. |
 | `filterPluginsByReleaseFlags(ids, isFlagOn, {staffBypass})` | Subtracts release-flagged-off first-party plugins (AGL-422). |
-| `registerPluginConfigSchema(schema)` / `mergePluginConfig` / `validatePluginConfigValues` | Per-plugin settings: declared once, generic form + typed defaults-merged reads everywhere (AGL-428). |
+| `registerPluginConfigSchema(schema)` / `mergePluginConfig` / `resolvePluginConfig` / `pluginConfigOverrides` / `validatePluginConfigValues` | Per-plugin settings: declared once, generic form + typed reads everywhere, resolved across schema defaults → workspace → per-site override (AGL-428). Full contract: [Plugin configuration](./plugin-config.md). |
 | `registerCustomFieldType(fieldType)` / `validateCustomFieldValue` | Dataset field types riding existing storage types (AGL-434). |
 | `registerPluginPermissions(list)` | Role-resolved permission keys with per-tier defaults (AGL-435). |
 | `registerPluginJob(job)` / `runPluginJobs(due?)` | Scheduled jobs run by the guarded `/api/plugins/run-jobs` route (AGL-435). `job.lockdown` is required; the runner injects a `PluginJobHostGate` into every handler (AGL-2495). |

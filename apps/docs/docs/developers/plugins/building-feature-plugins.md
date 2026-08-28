@@ -230,9 +230,13 @@ template + the catalog entry).
   `registerPluginConfigSchema` (pure-data schema module, registered from
   BOTH the client barrel and `/server` entry) and the platform provides
   the rest: a generic settings form on the Plugins & add-ons hub, storage
-  in `orgs/{orgId}/pluginSettings/{pluginId}`, defaults-merged type-coerced
-  reads via `getPluginConfig` (server) and `usePluginConfig` (client).
-  Reference adopter: bookings' `maxDaysAhead` horizon.
+  in `orgs/{orgId}/pluginSettings/{pluginId}` with per-site overrides in
+  `hosts/{hostId}/pluginSettings/{pluginId}`, and defaults-merged
+  type-coerced reads via `getPluginConfig` (server) and `usePluginConfig` /
+  `useSitePluginConfig` (client). Pass `hostId` to `getPluginConfig`
+  wherever you have one, or the site's override is ignored. Reference
+  adopter: bookings' `maxDaysAhead` horizon. Full contract:
+  [Plugin configuration](./reference/plugin-config.md).
 
 ## Remote bundles: the trusted realm tier (AGL-420)
 

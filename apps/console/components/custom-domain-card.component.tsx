@@ -242,7 +242,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
       })
       if (attachResponse.status === 501) {
         enqueueSnackbar(
-          'Domain saved — platform attachment pending (Vercel env not set)',
+          'Domain saved — platform attachment pending (no domain provider configured)',
           { variant: 'info', persist: false },
         )
       } else if (attachResponse.status === 409) {

@@ -213,8 +213,11 @@ plugin, check it yourself before switching off something it might be built on.
 
 ## Configure
 
-Plugins expose a **settings** field for per-plugin configuration, so the same plugin can
-behave differently on each site.
+A plugin declares the settings it takes, and the console renders the form. A workspace
+sets a value once and every site follows it; a site that needs a different answer
+overrides that one field and keeps inheriting the rest — so the same plugin can behave
+differently on each site without the author writing any inheritance of their own. See
+[Plugin configuration](./reference/plugin-config.md).
 
 ## Publish your own
 

@@ -387,6 +387,47 @@ the signing secrets, and **Product catalogue** → each price → its price id.
 `.env.selfhost` into a development checkout, swap in test keys.
 :::
 
+#### Which events to subscribe {#stripe-webhook-events}
+
+A signing secret only proves the delivery is real. If the endpoint is not
+**subscribed** to an event, Stripe never sends it, the handler answers nothing,
+your dashboard stays green, and the state it drives simply never moves — a
+refund that never revokes an entitlement looks exactly like a healthy
+integration.
+
+Subscribe your platform endpoint to **all ten**:
+
+```
+customer.subscription.created
+customer.subscription.updated
+customer.subscription.deleted
+checkout.session.completed
+invoice.finalized
+invoice.paid
+invoice.payment_failed
+charge.refunded
+charge.dispute.created
+charge.dispute.closed
+```
+
+**Connect is a second destination, not more events on the first one.**
+Connected-account events are delivered only to an endpoint created with
+`connect: true`, it carries its own signing secret
+(`STRIPE_CONNECT_WEBHOOK_SECRET`), and it needs one event:
+
+```
+account.updated
+```
+
+Without it, a merchant whose Stripe account is later restricted keeps selling
+against a stale readiness flag, and the shopper meets the failure at payment
+time. Create that destination with the metadata `aglyn_scope=connect` — Stripe's
+API does not report the `connect` flag back, so that marker is how the health
+check recognizes it.
+
+`/api/health/billing` reports what is missing under `unsubscribedRequiredEvents`.
+Check it after any change to your Stripe account, not only at setup.
+
 ### Plan and add-on price ids {#stripe-prices}
 
 Only needed if you **sell platform plans to your own users**. A single-tenant
@@ -855,6 +896,12 @@ Registering a name used to be a call to Vercel's API, so a Docker install had no
 way to make a workspace subdomain resolve at all — it advertised a URL and
 skipped the registration. The hosting vendor is a **driver** now, and you pick
 one.
+
+This section is the per-variable reference. [Domain providers](./domain-providers.md)
+is the runbook beside it: how to choose a driver, the wildcard path end to end
+with worked Caddy and nginx configurations, a complete worked webhook endpoint,
+what each status state means for you, and how to migrate from one driver to
+another.
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |

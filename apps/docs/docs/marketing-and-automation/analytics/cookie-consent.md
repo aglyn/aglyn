@@ -1,21 +1,22 @@
 ---
 sidebar_position: 2
 title: Cookie consent
-description: Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Google Analytics never loads for a visitor whose recorded state does not grant it.
+description: Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Your Google Analytics and Tag Manager tags never load for a visitor whose recorded state does not grant them.
 ---
 
 # Cookie consent
 
-If your site uses **Google Analytics**, Aglyn manages visitor consent for you. The
-control is real, not decoration: whenever a visitor's recorded state does not grant
-analytics, the Google Analytics script **never loads** — it is not loaded and then
-suppressed.
+If your site uses **Google Analytics** or **Google Tag Manager**, Aglyn manages
+visitor consent for you. The control is real, not decoration: whenever a
+visitor's recorded state does not grant analytics, the script **never loads** —
+it is not loaded and then suppressed.
 
 ## How it works
 
 Consent UI appears only on sites that use a **consent-gated feature** — today, a
-configured Google Analytics ID. A site with no analytics has nothing to consent to,
-so its visitors never see anything.
+configured Google Analytics measurement ID or a Google Tag Manager container ID.
+Either one is enough. A site with neither has nothing to consent to, so its
+visitors never see anything.
 
 Your site's **consent mode** (Site setup → SEO → Cookie consent) decides how
 visitors are handled:
@@ -37,9 +38,9 @@ on.** By default Aglyn asks your visitors about analytics and nothing else, and
 tells Google that advertising storage is denied for every visitor, in both
 directions. If you have Google Ads linked to your GA4 property and you need a
 basis for advertising storage, turn on **Also ask visitors about advertising
-storage** in **Site setup → SEO → Cookie consent**. The switch needs a
-configured Google Analytics ID to do anything — there is no advertising storage
-to ask about without a tag.
+storage** in **Site setup → SEO → Cookie consent**. The switch needs a Google
+tag of some kind — a measurement ID or a container ID — to do anything; there is
+no advertising storage to ask about without one.
 
 Turning it on **grants nothing by itself**. It adds a second question, with its
 own checkbox, to the banner and to the preferences panel, so that a visitor has
@@ -53,11 +54,19 @@ Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
 
 **Consent-gated** — held back unless the visitor's recorded state grants analytics:
 
-- **Google Analytics** (your configured measurement ID), including the overlay and
-  experiment events Aglyn mirrors into it.
+- **Google Analytics** (your configured measurement ID) and every event Aglyn
+  sends to it — see [Google Analytics events](./google-analytics.md).
+- **Google Tag Manager** (your configured container ID). The container is gated
+  the same way and never more loosely, so it cannot be used to install a tag
+  that runs before consent.
+- **Core Web Vitals reporting**. Page-speed metrics reach your property only
+  through the same tag, and are discarded rather than held if consent is
+  refused while a page is open.
 - **Cross-visit A/B test identity**: without an analytics grant, experiment variant
   assignment is remembered only for the visit (sessionStorage) instead of across
   visits.
+- **Remembering the campaign a visitor first arrived from.** Reading the
+  campaign on the click itself needs no grant; keeping it across visits does.
 - **Advertising storage** (`ad_storage`, `ad_user_data`, `ad_personalization`),
   on sites that have turned the advertising question on. **Where it starts
   depends on the visitor's region**, and it is the same split analytics uses:
@@ -110,6 +119,28 @@ individual site could get wrong.
 
 You can also link any element (a footer link, for example) to `#aglyn-consent` —
 clicking it opens the same preferences panel.
+
+## Where the choice is kept {#where-the-choice-is-kept}
+
+A visitor's choice is stored in their **browser's local storage**, under a key
+that includes your site's id. Three consequences worth knowing before you answer
+a visitor's question about it:
+
+- **It is per site.** A yes on one site is not a yes on another, even when the
+  two share a preview address.
+- **It does not expire.** Nothing re-asks a visitor on a schedule. Clearing site
+  data resets them to undecided, and they are then handled by your consent mode
+  as if for the first time.
+- **What was granted is re-derived from the recorded decision on every read**,
+  never trusted as a stored flag. That is why turning the advertising question
+  off makes existing advertising grants stop counting immediately.
+
+**Withdrawing consent removes the cookies too.** When a visitor opts out or
+declines, Aglyn deletes the Google analytics and advertising cookies it can
+reach (`_ga`, `_gid`, `_gcl` and their variants) across your domain and its
+parent, and tells any tag still resident on the page to stop measuring. A
+visitor who checks their cookie list after opting out sees them gone, which is
+the behavior to describe if one asks.
 
 ## Global Privacy Control
 

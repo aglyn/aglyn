@@ -110,10 +110,21 @@ average is the whole of what the feature needs.
 
 ## Google Analytics
 
-Prefer your own tooling? Add a **Google Analytics** ID and Aglyn injects it alongside the
-built-in tracking.
+Prefer your own tooling? Add a **Google Analytics** measurement ID under
+**Site → Setup → Tracking** and Aglyn injects it alongside the built-in
+tracking. There is a **Google Tag Manager** container field beside it, and both
+are gated on the visitor's analytics consent — the tag never loads for a visitor
+whose recorded state does not grant it.
+
+Your site then sends a defined set of events to your own property: form
+submissions, CTA and outbound clicks, the full ecommerce funnel, overlay and A/B
+events, and Core Web Vitals.
+[Google Analytics events](./google-analytics.md) lists every one of them with
+the exact parameters it carries — read it before you build a report, because
+GA4 will not surface a custom dimension you have not registered.
 
 ## Related
 
+- [Google Analytics events](./google-analytics.md)
 - [SEO toolkit](../../building-sites/seo/overview.md)
 - [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md)
