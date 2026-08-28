@@ -178,7 +178,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
               {(data.anomalies as any[])
                 .map(
                   (anomaly) =>
-                    `${anomaly.orgId} (${anomaly.spikes.join('; ')})`,
+                    `${anomaly.orgLabel ?? anomaly.orgId} (${anomaly.spikes.join('; ')})`,
                 )
                 .join(' · ')}
             </Alert>
@@ -400,7 +400,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                               noWrap
                               sx={{ maxWidth: '50%' }}
                             >
-                              {usage.orgId}
+                              {usage.orgLabel ?? usage.orgId}
                             </Typography>
                             <Typography
                               variant="caption"
