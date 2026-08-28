@@ -19,6 +19,7 @@ import {
   ACTION_MAX_EVENT_DEPTH,
   ACTION_MAX_STEPS,
   checkEntitlement,
+  checkQuota,
   type HostWebhook,
   WEBHOOK_URL_PATTERN,
   evaluateExpression,
@@ -40,6 +41,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
+  dataStorageRefusal,
   firebaseAdmin,
   getOrgForHost,
   meterHostEmail,
@@ -62,6 +64,17 @@ interface ActionRunEnv {
   alerts: HostActionAlert[]
   webhooksAllowed: boolean
   depth: number
+  /**
+   * The owning org's billing doc, already read by the entitlement gate that
+   * admitted this run, and the org's id beside it.
+   *
+   * Carried rather than re-read: both entry points resolve `getOrgForHost`
+   * before they build this, so the dataset caps below cost no extra org read.
+   * Null only when the host has no resolvable org, which the gate treats as
+   * the free plan.
+   */
+  org: unknown
+  orgId: string | null
   loadWorkflowContext: () => Promise<{
     functions: Record<string, HostFunction>
     variables: Record<string, HostVariable>
@@ -103,6 +116,64 @@ function makeWorkflowContextLoader(
     }
     return workflowContext
   }
+}
+
+/**
+ * Whether this dataset may take ANOTHER record, on the plan of the org that
+ * owns the site — the row band and the byte band, in that order. Null when
+ * the append may proceed; a reason string when it may not.
+ *
+ * ## Why an append needs a gate at all
+ *
+ * Every other door onto `datasets/{id}/records` already has one: the console
+ * route re-checks `recordsPerDataset` inside the creating transaction, the
+ * `/v1` record route checks it below its idempotency claim, and the public
+ * form-submission leg checks the rows and the bytes. A workflow step wrote
+ * with no check of either — and it is the door a visitor drives hardest,
+ * because an action fires per event on a published site. A cap enforced at
+ * three of four doors is not a cap; it is the shape of the one that is left.
+ *
+ * ## What it does NOT do
+ *
+ * It refuses the WRITE, never the dataset. A dataset already holding more
+ * rows than the plan includes keeps every row it has and keeps being read —
+ * nothing here deletes, truncates, or hides anything, and nothing may be
+ * added that does. What is refused is the next row, which is the same
+ * boundary the other three doors draw, and the reason a plan change cannot
+ * cost a customer data they already have.
+ *
+ * The update leg of `updateDataset` is deliberately NOT gated: merging fields
+ * into a record that already exists adds no row, so refusing it would refuse
+ * the state of being over rather than the raise.
+ *
+ * ## What it costs
+ *
+ * Nothing on the plans that sell the data store. The row count is read only
+ * when `recordsPerDataset` is FINITE, so an uncapped plan pays nothing; and
+ * `dataStorageRefusal` answers null with no read at all whenever the plan
+ * carries an `extraDataGbMonthlyUsd` rate, which every metered plan does. The
+ * reads are paid on the shapes that can actually refuse.
+ */
+async function datasetAppendRefusal(
+  env: ActionRunEnv,
+  datasetRef: FirebaseFirestore.DocumentReference,
+): Promise<string | null> {
+  const limit = resolveOrgEntitlements(env.org as never).recordsPerDataset
+  if (Number.isFinite(limit)) {
+    const used = (
+      await datasetRef.collection('records').count().get()
+    ).data().count
+    if (!checkQuota(env.org as never, 'recordsPerDataset', used).allowed) {
+      return `dataset is full (${limit} records on this plan)`
+    }
+  }
+  if (!env.orgId) return null
+  const bytes = await dataStorageRefusal(
+    env.org as never,
+    firebaseAdmin.app().firestore().collection('orgs').doc(env.orgId),
+  )
+  if (!bytes) return null
+  return `dataset storage is full (${bytes.includedMb} MB on this plan)`
 }
 
 /**
@@ -272,6 +343,11 @@ async function executeAction(
         }
         const values = buildDatasetRecordValues(appendDataset, payload)
         if (Object.keys(values).length) {
+          const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
+          if (refusal) {
+            stepErrors.push(refusal)
+            continue
+          }
           await datasetDoc.ref.collection('records').add({
             values,
             // The integrity index the console's delete check queries —
@@ -341,6 +417,14 @@ async function executeAction(
             { merge: true },
           )
         } else {
+          // The APPEND leg of update-or-append, and the only one of the two
+          // that adds a row — the merge above rewrites a record that already
+          // counts against the band.
+          const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
+          if (refusal) {
+            stepErrors.push(refusal)
+            continue
+          }
           await datasetDoc.ref.collection('records').add({
             values,
             ...datasetIntegrityFields(updateModel, values),
@@ -570,9 +654,11 @@ export async function runEventActions(
     // Webhook steps take the higher `webhooks` gate (AGL-149); plan gates
     // ride the owning org's doc (AGL-238).
     let webhooksAllowed = true
+    // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
+    // the rest of the run so the dataset caps below cost no second read.
+    const owner = await getOrgForHost(hostId)
     {
-      // Plan-less orgs resolve as free (AGL-247) — gates always run.
-      const org = (await getOrgForHost(hostId))?.org
+      const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
       const limit = resolveOrgEntitlements(
@@ -589,6 +675,8 @@ export async function runEventActions(
       alerts,
       webhooksAllowed,
       depth,
+      org: owner?.org ?? null,
+      orgId: owner?.orgId ?? null,
       loadWorkflowContext: makeWorkflowContextLoader(hostRef),
     }
 
@@ -664,8 +752,10 @@ export async function runSingleAction(
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     let webhooksAllowed = true
+    // Held for the rest of the run, as in `runEventActions` above.
+    const owner = await getOrgForHost(hostId)
     {
-      const org = (await getOrgForHost(hostId))?.org
+      const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
       const limit = resolveOrgEntitlements(
@@ -682,6 +772,8 @@ export async function runSingleAction(
       alerts,
       webhooksAllowed,
       depth: 0,
+      org: owner?.org ?? null,
+      orgId: owner?.orgId ?? null,
       loadWorkflowContext: makeWorkflowContextLoader(hostRef),
     }
     await executeAction(env, doc.id, action, event, payload)
