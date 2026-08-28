@@ -581,7 +581,15 @@ Notes that keep these honest:
   Every other log-match policy here can report only the *presence* of an
   entry: the `Client error beacon` policy fires when a browser error appears,
   so if the beacon stops writing, that policy goes quiet — and quiet is the
-  reading it also gives on a healthy day. **A dead beacon is
+  reading it also gives on a healthy day. That policy's filter excludes
+  `localhost` and `127.0.0.1` in `jsonPayload.context.httpRequest.url`,
+  because `/api/errors` on a developer's machine writes to the same production
+  log through the same credential, and those reports outnumbered the deployed
+  ones 219 to 17 over a week — 87 of the last 100 alert-violation events in
+  the project. The exclusion is on the URL rather than on the absence of
+  `serviceContext.version`, which separates the two just as cleanly today but
+  fails the wrong way: a deployment that stopped stamping a commit ref would
+  go silently unwatched, whereas a dev report with no URL merely stays noisy. **A dead beacon is
   indistinguishable from zero errors**, and all three failure paths in
   `reportClientErrors` end in a `console.warn` to a log that retains an hour
   and drains nowhere. The endpoint writes one INFO entry to the separate
@@ -847,11 +855,11 @@ gcloud monitoring uptime list-configs --project=aglyn-main \
 ```
 
 :::caution `--validate-ssl` defaults to FALSE on the CLI
-All eleven existing checks have `validateSsl: true`, because the console
+All twelve existing checks have `validateSsl: true`, because the console
 checkbox is on by default — the CLI's is not. Omitting the flag creates the
 one check in the set that would keep reporting green through an expired or
 invalid certificate on `app.aglyn.com`. Verified against the live configs on
-2026-08-23 (AGL-2486): 11 of 11 `true`.
+2026-08-28: 12 of 12 `true`.
 :::
 
 Then create the policy, substituting the id from step 2:
@@ -1445,41 +1453,53 @@ step 5 onward costs money and is a decision, not a task.
      agent or referer. The route *pattern*, status, host, region, project and
      a 1 KB-clamped message — the last is where `Task timed out after 10.01
      seconds` lives, which is the entire triage value of the platform-5xx case.
-6. **After the drain, the policy this issue originally specified.** A log-based
-   counter metric on
-
-   ```
-   resource.type="global" AND logName=~"vercel" AND httpRequest.status>=500
-   ```
-
-   with a threshold policy — proposed `> 5` in 5 minutes, `ALIGN_DELTA` /
-   `REDUCE_SUM`, grouped by project. Re-tune against the beta baseline; the
-   point of the beta window is to get one.
-
-   The receiver populates `httpRequest.status` and writes under
-   `resource.type="global"` to a log id containing `vercel` precisely so this
-   filter works as written. **One caveat:** a crashed lambda (`statusCode:
-   -1`) and a `fatal` entry have no HTTP status to report, so they land with
-   `httpRequest.status` absent and this filter misses them — which is the
-   subset the other two arms are worst at seeing. Prefer
+6. **The policy this issue originally specified — LIVE.**
+   `projects/aglyn-main/alertPolicies/14031689508473384486`, "Server errors:
+   Vercel runtime 5xx via log drain (AGL-1921)", a `conditionMatchedLog` on
 
    ```
    resource.type="global" AND logName=~"vercel" AND severity>=ERROR
    ```
 
-   unless the 5xx-only volume turns out to need the narrower form; every entry
-   in this log is already a server error by construction, so `severity>=ERROR`
-   is not the blunt instrument it would be on a raw log.
+   notifying `.../notificationChannels/7043898327231541746`, rate-limited to
+   one notification an hour with a seven-day auto-close — the same strategy
+   the two sibling log-match policies use. It extracts `route`, `status`,
+   `vercel_project` and `environment` as labels so the mail names the failing
+   route without a console round trip.
+
+   **`severity>=ERROR` and not `httpRequest.status>=500`, deliberately.** A
+   crashed lambda (`statusCode: -1`) and a `fatal` entry have no HTTP status
+   to report, so they land with `httpRequest.status` absent and the narrower
+   filter misses them — the subset the other two arms are worst at seeing.
+   Every entry in this log is already a server error by construction (the
+   receiver's gate discards the rest before writing), so `severity>=ERROR` is
+   not the blunt instrument it would be on a raw log. Both forms were measured
+   against the live log before the policy was created and matched the same 180
+   entries; the severity form is the one that also covers the crash class.
+
+   A threshold policy over a log-based counter metric was the original
+   proposal. The match form was taken instead because it needs no derived
+   metric to exist first, and because the volume does not warrant a rate
+   threshold: 180 entries in seven days, against ~20K drain deliveries a day.
+   If that ratio changes, a counter metric grouped by project is the next
+   step, not a tighter match filter.
 7. **Then reconcile the three.** With the drain live it sees a superset of what
    the hook sees, and keeping every arm at page level would triple-page. Keep
    them all — the hook and its endpoint survive a Vercel outage and a plan
    downgrade — but let the drain's policy be the one that pages, and demote the
    other two to the counter form.
 
-Until the two drains in step 5 are actually created, AGL-1921's platform-5xx
-blind spot stays open and this section is the honest statement of how much of
-the server tier is watched. The receiver being deployed changes nothing on its
-own: an endpoint nobody is delivering to is a monitor that reports silence.
+All three arms are live. Both drains exist and are enabled —
+`aglyn-console-runtime-5xx` and `aglyn-tenant-runtime-5xx`, on team
+`team_JFfQodGE8VhCAZM6usYTu54M`, both delivering to the Cloud Run receiver —
+and step 6's policy pages on what they deliver. Verify the drains by their
+`delivery.endpoint` and `status`, never by assuming: an endpoint nobody is
+delivering to is a monitor that reports silence.
+
+Only `aglyn-console` has actually produced entries so far. That is the tenant
+runtime having no 5xx, not the tenant drain being dead — the two are
+indistinguishable from Cloud Logging alone, so read the drain list to tell
+them apart.
 
 **What stays blind even with all three arms live**, so nobody reads this
 section as "the server tier is covered":
@@ -1488,11 +1508,12 @@ section as "the server tier is covered":
   cannot deliver a drain; the external uptime monitors are the only arm that
   survives that, which is why steps 1–4 stay in place rather than being
   replaced by the drain.
-- **The console being down.** The receiver lives on `aglyn-console`, so a
-  console outage silences the *tenant's* drain too. Vercel retries and then
-  disables a drain that keeps failing, so a long console outage can require
+- **The receiver being down.** Both drains deliver to the one Cloud Run
+  service, so an outage there silences both at once. Vercel retries and then
+  disables a drain that keeps failing, so a long receiver outage can require
   re-enabling the drains by hand afterwards — check the Drains page after any
-  console incident.
+  receiver incident. Nothing watches the receiver itself; it is the one arm
+  with no monitor of its own.
 - **Anything below 500.** A route answering 200 with a broken body, a 403 storm
   from a bad rule, a 404 spike from a lost route: none is a server error and
   none of the three arms sees it.
@@ -1530,13 +1551,22 @@ they are not the same quantity:
   a 30-day window, i.e. this project ingests nothing chargeable.
 - **Executions are the billable dimension** — 1M free per project per month —
   and the point count above does **not** settle how many there are. Read one
-  way (one request per location per period) the eleven checks come to roughly
+  way (one request per location per period) the checks come to roughly
   430k/month, about 43% of the allowance; read the other (one request per
   sample) they come to ~2.1M and we would be 1.1M over, which at $0.30/1,000
   is roughly $330/month. **The bill decides between those, and the bill says
   the first one.** A $330 line would have been shouting through the
   `aglyn-main monthly spend` $20 budget alert every month; it has not. Treat
   the headroom as real but not precisely known.
+- **Re-read 2026-08-28, and the config had moved underneath the numbers
+  above.** There are now **twelve** checks, not eleven, and every one is
+  pinned to three regions (`USA_VIRGINIA`, `EUROPE`, `ASIA_PACIFIC`) rather
+  than the six the sample-density figure assumes. On the low reading that is
+  `12 × 3 × (30d / period)` = **224,640 executions/month, ~22% of the
+  allowance** — roughly half the 43% above, because halving the regions
+  halved the executions. Count the regions from `selectedRegions` on the live
+  configs before re-deriving any of this; the default is all of them and the
+  flag that narrows it is `--set-regions`.
 - Consequently the proposed `marketing-home` / `customer-site` 300s → 600s
   relaxation is **not worth making for cost reasons**. If we are on the low
   reading it saves nothing billable at all; if we are on the high reading it

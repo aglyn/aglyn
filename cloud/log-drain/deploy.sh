@@ -23,7 +23,11 @@ node prepare.mjs
 
 echo "==> deploying to Cloud Run (${PROJECT}/${REGION})"
 # max-instances is a deliberate blast-radius cap, not a capacity estimate:
-# measured steady state is ~230 requests/hour, ~8% of the free request tier.
+# measured steady state is ~840 requests/hour (~20K/day, ~604K/month), about
+# 30% of the free request tier. A drain delivers EVERY request log for both
+# projects and the gate discards the non-5xx, so this volume tracks total site
+# traffic, not the error rate — ~20K deliveries a day currently carry ~180
+# writes a week.
 gcloud run deploy log-drain-receiver \
   --project "$PROJECT" \
   --region "$REGION" \

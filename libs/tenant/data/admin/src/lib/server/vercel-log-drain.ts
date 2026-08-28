@@ -87,8 +87,10 @@ async function defaultLoggingTarget(): Promise<{
 }
 
 /**
- * The log id the drain writes to. Contains "vercel" on purpose: the proposed
- * alert policy matches `logName=~"vercel"`, so the name is load-bearing.
+ * The log id the drain writes to. Contains "vercel" on purpose: the alert
+ * policy `projects/aglyn-main/alertPolicies/14031689508473384486` matches
+ * `logName=~"vercel"`, so the name is load-bearing. Renaming this log without
+ * repointing that policy silences the platform-5xx arm.
  */
 export const VERCEL_RUNTIME_LOG_ID = 'vercel-runtime'
 
