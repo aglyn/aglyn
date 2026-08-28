@@ -20,16 +20,17 @@
  */
 
 /**
- * The console's two consent surfaces: the account-menu panel, and the banner
- * that reaches a page which has no account menu.
+ * The console's consent surfaces, and WHERE each one belongs.
  *
- * Three things are pinned here, and the second is the one that can be got
- * wrong silently.
+ * Four things are pinned here, and the second is the one that can be got wrong
+ * silently.
  *
- * 1. **Reachability.** A signed-in person's persistent path to their own
- *    privacy choices is the account menu — there is no floating pill on this
- *    surface. The menu has to actually open the panel, so the case clicks
- *    through the real menu rather than asserting a row exists.
+ * 1. **Reachability, and placement.** The persistent control follows the
+ *    account menu: signed in it is a row in that menu and nothing floats over
+ *    the page; on the unauthenticated pages, which have no menu at all, it is
+ *    the pill. Both cases click the real control rather than asserting one
+ *    exists, and the pill's own case pairs with "no pill where the menu is",
+ *    so neither placement can drift into the other.
  *
  * 2. **The switch is DERIVED from the resolved verdict.** Same component, two
  *    regions, opposite default states:
@@ -61,18 +62,30 @@
  *     uishable from a correct ON if that is the only case you have.
  *  2. Pin it OFF → the opposite 2 fail. Between them the two mutations leave
  *     no constant that satisfies this file.
- *  3. Rename the account-menu row → all 6 fail, because every case reaches
- *     the panel through the menu rather than through the event the menu
- *     dispatches. That is deliberate: an event can be dispatched by a test
- *     whether or not anything in the product dispatches it.
+ *  3. Rename the account-menu row → every account-menu case fails, because
+ *     they reach the panel through the menu rather than through the event the
+ *     menu dispatches. That is deliberate: an event can be dispatched by a
+ *     test whether or not anything in the product dispatches it.
+ *  4. Unmount the pill from the signed-out shell → 1 fails, the shell case,
+ *     and the behavioural pill cases do not. That is the point of having both:
+ *     the control can be perfectly correct and mounted nowhere.
+ *  5. Draw the pill whenever the panel is closed, ignoring the request and the
+ *     banner → 9 fail. Six are the account-menu cases, because a pill nobody
+ *     asked for puts a second copy of the regulated title on the page and the
+ *     menu row stops being unambiguous — which is the collision itself, in the
+ *     accessibility tree rather than in pixels.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PLATFORM_CONSENT_SUBJECT } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import { CONSENT_OPT_OUT_TITLE } from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { visitorConsentStorageKey } from '@aglyn/aglyn/app-utils/visitor-consent'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { ReactNode } from 'react'
-import VisitorConsent from '../components/visitor-consent.component'
+import VisitorConsent, {
+  VisitorConsentPill,
+} from '../components/visitor-consent.component'
 import { UserMenu } from '../components/user-menu.component'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -133,6 +146,18 @@ jest.mock('@mui/material/styles', () => ({
   useColorScheme: () => ({ mode: 'light', setMode: jest.fn() }),
 }))
 
+/**
+ * The zone the browser reports, driven per case. Only the READING is mocked;
+ * the zone-to-posture mapping stays real.
+ */
+let mockTimeZone = 'Etc/GMT+3'
+jest.mock('@aglyn/aglyn/app-utils/timezone-geo-hint', () => ({
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/timezone-geo-hint',
+  ),
+  readBrowserTimeZone: () => mockTimeZone,
+}))
+
 const savedFetch = (global as unknown as { fetch?: unknown }).fetch
 
 /** Answer the region endpoint with one country, as the edge would. */
@@ -146,6 +171,7 @@ function serveRegion(country: string | null): void {
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
+  mockTimeZone = 'Etc/GMT+3'
 })
 afterAll(() => {
   ;(global as unknown as { fetch?: unknown }).fetch = savedFetch
@@ -212,8 +238,9 @@ describe('the console privacy control in the account menu', () => {
   })
 
   it('reads OFF for an unknown region too', async () => {
-    // The headerless visit — local dev, a self-hosted install, a stripped
-    // proxy. It resolves to the strict side, so the control has to agree.
+    // No geo header AND a zone that says nothing. It resolves to the strict
+    // side, so the control has to agree.
+    mockTimeZone = 'Etc/GMT+3'
     await mountConsole(null)
     await openPanelFromAccountMenu()
     expect(analyticsSwitch().checked).toBe(false)
@@ -306,24 +333,113 @@ describe('the console consent banner', () => {
     })
   })
 
-  it('never renders a persistent on-screen pill', async () => {
-    // The explicit product decision, and the one thing this surface does
-    // differently from a published customer site: the persistent control is
-    // the account-menu row, not a floating widget. A regression here looks
-    // like a working feature, which is why it is asserted rather than assumed.
+  it('floats no pill over a page that has an account menu', async () => {
+    // Where the persistent control lives is decided by whether the page has
+    // an account menu, and a signed-in console page does. Nothing floats over
+    // it — the control is the menu row the cases above click through.
     serveRegion('US')
     await act(async () => {
-      render(<VisitorConsent />)
+      render(
+        <>
+          <VisitorConsent />
+          <UserMenu />
+        </>,
+      )
     })
     expect(document.querySelector('[data-aglyn-consent-pill]')).toBeNull()
+  })
+})
 
-    // …and the panel is still reachable without one, which is what makes its
-    // absence acceptable rather than a removal.
+describe('the console privacy control where there is no account menu', () => {
+  // The unauthenticated pages — sign-in, sign-up, account recovery, SSO,
+  // email verification, sign-out. `/signin` is the console's most-collected
+  // page and it has no menu to put a row in, so the same control takes the
+  // form a page with no chrome can carry.
+
+  it('is reachable, and opens the same panel', async () => {
+    // Implied posture, so there is no banner and this control is the only
+    // thing on the page a visitor can use to change their mind.
+    serveRegion('US')
     await act(async () => {
-      window.dispatchEvent(new CustomEvent('aglyn:consent:open'))
+      render(
+        <>
+          <VisitorConsent />
+          <VisitorConsentPill />
+        </>,
+      )
     })
+    const pill = document.querySelector('[data-aglyn-consent-pill]')
+    expect(pill).not.toBeNull()
+
+    fireEvent.click(pill as Element)
     expect(
       screen.getByRole('heading', { name: CONSENT_OPT_OUT_TITLE }),
     ).toBeTruthy()
+  })
+
+  it('carries the words and the mark the regulation specifies', async () => {
+    // CCPA regs §7015 fixes the title of a single combined opt-out control and
+    // requires the opt-out icon immediately to its left. Both come from the
+    // shared overlay rather than being restated here, so this fails if either
+    // is swapped for a local approximation.
+    serveRegion('US')
+    await act(async () => {
+      render(
+        <>
+          <VisitorConsent />
+          <VisitorConsentPill />
+        </>,
+      )
+    })
+    const pill = document.querySelector('[data-aglyn-consent-pill]') as Element
+    expect(pill.textContent).toContain(CONSENT_OPT_OUT_TITLE)
+    expect(pill.querySelector('svg')).not.toBeNull()
+  })
+
+  it('yields to the banner rather than stacking under it', async () => {
+    // Both are fixed to the bottom of the viewport, and a visitor being asked
+    // does not also need a control telling them they may choose. The ask wins;
+    // the control returns the moment it is answered.
+    serveRegion('DE')
+    await act(async () => {
+      render(
+        <>
+          <VisitorConsent />
+          <VisitorConsentPill />
+        </>,
+      )
+    })
+    expect(document.querySelector('[data-aglyn-consent-banner]')).not.toBeNull()
+    expect(document.querySelector('[data-aglyn-consent-pill]')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow all' }))
+    await waitFor(() =>
+      expect(document.querySelector('[data-aglyn-consent-pill]')).not.toBeNull(),
+    )
+  })
+
+  it('is drawn for a page that asks, and for no other — the control', () => {
+    // The pill is a request, not a widget: a page with an account menu never
+    // mounts one, and the owner draws nothing. Without this the "no pill where
+    // the menu is" case above could pass for the wrong reason.
+    serveRegion('US')
+    render(<VisitorConsent />)
+    expect(document.querySelector('[data-aglyn-consent-pill]')).toBeNull()
+  })
+
+  it('is mounted by the signed-out SHELL, not page by page', () => {
+    // The placement rule, pinned as source because that is what it is a claim
+    // about: every unauthenticated route renders through this layout, so the
+    // control is inherited rather than remembered. A page-by-page mount would
+    // pass every behaviour test above and still leave the next auth route
+    // without a control.
+    const layout = readFileSync(
+      resolve(__dirname, '../components/layouts/authenticating.layout.tsx'),
+      'utf8',
+    )
+    expect(layout).toMatch(/<VisitorConsentPill \/>/)
+    expect(layout).toMatch(
+      /from '\.\.\/visitor-consent\.component'/,
+    )
   })
 })

@@ -16,7 +16,10 @@
  */
 'use client'
 
-import { CONSENT_OPT_OUT_TITLE } from '@aglyn/aglyn/app-utils/consent-banner-ui'
+import {
+  CcpaOptOutIcon,
+  CONSENT_OPT_OUT_TITLE,
+} from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import {
   VISITOR_CONSENT_CHANGED_EVENT,
   VISITOR_CONSENT_OPEN_EVENT,
@@ -59,28 +62,29 @@ import { LEGAL_REFERENCE_URLS, LEGAL_URLS } from '../constants/shared'
  * while data is already flowing is worse than no banner, because it documents
  * a choice the visitor never actually got.
  *
- * ## Two surfaces, and why they are not the same surface
+ * ## Three surfaces, one owner, and only ever one of them up
+ *
+ * They are mutually exclusive by construction rather than by arrangement: all
+ * three are fixed to the bottom of the viewport, and a visitor being asked
+ * does not also need a control telling them they may choose. The shared
+ * overlay that ships on customer sites resolves the same three the same way.
  *
  * - **The prior-consent banner.** Shown only to a visitor the posture says
  *   must be ASKED FIRST — the UK, the EU/EEA, Switzerland, and anyone whose
  *   region cannot be determined — and only while they are undecided. It
- *   disappears the moment they answer and never comes back.
+ *   disappears the moment they answer and never comes back. Everywhere else
+ *   consent is implied and no banner renders at all.
  *
- *   It is deliberately not gated on being signed out. The console's
- *   most-collected public page is `/signin`, where there is no account menu
- *   and no signed-in user, so a menu-only design would leave a European
- *   visitor there with no way to accept and no way to refuse. Leaving it up
- *   for signed-in visitors too costs nothing (it is gone as soon as they
- *   answer) and buys the property that no console route can present an
- *   undecided prior-consent visitor with nothing to click.
+ * - **The persistent control.** "Your Privacy Choices", the CCPA §7015 opt-out
+ *   link. Where it lives is decided by whether the page has an account menu:
+ *   signed in it is a row in that menu and NOTHING floats over the page; on
+ *   the unauthenticated pages, which have no menu, the shell asks for the pill
+ *   drawn below. See {@link VisitorConsentPill}.
  *
  * - **The preferences panel.** The change-your-mind path in BOTH directions,
  *   with no trigger of its own. It opens on
  *   {@link VISITOR_CONSENT_OPEN_EVENT} — dispatched by the account menu's row
- *   — and on a click of any `#aglyn-consent` link. There is deliberately NO
- *   persistent on-screen pill here, unlike a published customer site: the
- *   console has an account menu, and that is where a signed-in person looks
- *   for their own settings.
+ *   — on the pill, and on a click of any `#aglyn-consent` link.
  *
  * ## Checkbox state is DERIVED, never defaulted
  *
@@ -100,6 +104,80 @@ import { LEGAL_REFERENCE_URLS, LEGAL_URLS } from '../constants/shared'
  * users would fabricate a consent nobody gave, and in a prior-consent region
  * it would fabricate the one kind that is unlawful to assume.
  */
+
+/**
+ * Pages with no account menu ask for the persistent control by mounting this.
+ *
+ * ## Why it is a declaration and not the control itself
+ *
+ * Which of the consent surfaces is up has to have ONE owner. The banner, the
+ * preferences panel and the persistent control are mutually exclusive — a
+ * visitor being asked does not also need a pill telling them they may choose,
+ * and two fixed elements at the bottom of a narrow viewport collide. The
+ * shared overlay that ships on customer sites resolves that in one component
+ * for the same reason; this does the same across a tree it cannot be a parent
+ * of, because the shell that knows the page has no account menu sits BELOW the
+ * component that knows the visitor's consent state.
+ *
+ * So this registers presence and renders nothing. {@link VisitorConsent} draws
+ * the control, and only when nothing else is up.
+ *
+ * ## Where it belongs, and why that is a placement rule rather than a taste
+ *
+ * A signed-in console page carries the account menu, and a person looks for
+ * their own settings there — so the control is a row in that menu and nothing
+ * floats over the page. The unauthenticated pages have no such menu: sign-in,
+ * sign-up, account recovery, SSO, email verification and sign-out are the
+ * console's public surface, `/signin` is its most-collected page, and a
+ * visitor there would otherwise have no reachable control at all.
+ *
+ * Mounted from `authenticating.layout.tsx`, the shell every one of those
+ * routes renders through, rather than page by page. That is what makes it
+ * structural: a new unauthenticated route inherits the control instead of
+ * needing someone to remember it, and a page that grows an account menu stops
+ * getting it by construction.
+ */
+export function VisitorConsentPill(): null {
+  useEffect(() => {
+    pillRequests += 1
+    notifyPillRequests()
+    return () => {
+      pillRequests -= 1
+      notifyPillRequests()
+    }
+  }, [])
+  return null
+}
+VisitorConsentPill.displayName = 'VisitorConsentPill'
+VisitorConsentPill.aglyn = true
+
+/**
+ * How many mounted pages are asking for the persistent control.
+ *
+ * A COUNT rather than a boolean: React can hold the outgoing tree alongside
+ * the incoming one across a navigation, so an unmount and a mount overlap, and
+ * a boolean set false by the departing shell would hide the control on the
+ * arriving one.
+ */
+let pillRequests = 0
+const pillListeners = new Set<() => void>()
+
+function notifyPillRequests(): void {
+  for (const listener of pillListeners) listener()
+}
+
+function useConsentPillRequested(): boolean {
+  const [requested, setRequested] = useState(false)
+  useEffect(() => {
+    const sync = () => setRequested(pillRequests > 0)
+    sync()
+    pillListeners.add(sync)
+    return () => {
+      pillListeners.delete(sync)
+    }
+  }, [])
+  return requested
+}
 
 /** Open the console's privacy-choices panel from anywhere in the app. */
 export function openVisitorConsentPanel(): void {
@@ -131,6 +209,7 @@ export function VisitorConsent(): ReactElement | null {
   const [analyticsOn, setAnalyticsOn] = useState(false)
   const [advertisingOn, setAdvertisingOn] = useState(false)
   const asksAboutAdvertising = platformAsksAboutAdvertising()
+  const pillRequested = useConsentPillRequested()
   // Read from a listener that must not re-subscribe when the panel opens, so
   // it is a ref rather than the state value in the effect's dependency list.
   const panelOpenRef = useRef(false)
@@ -210,6 +289,19 @@ export function VisitorConsent(): ReactElement | null {
     setPanelOpen(false)
   }
 
+  // The banner asks; it does not persist. It renders only for a visitor whose
+  // posture is prior consent — the UK, the EU/EEA, Switzerland, and anyone
+  // whose region cannot be determined — and only while they are undecided.
+  //
+  // ⚠️ It is deliberately NOT suppressed for a signed-in visitor, and that is
+  // the one place this diverges from "the console's control is the account
+  // menu". In a prior-consent region analytics may not run until the visitor
+  // has agreed, and an account-menu row is not an ask: it is a control they
+  // would have to go looking for, which leaves the console either untracked
+  // for every European user or tracking them without a basis. Everywhere else
+  // the posture is implied consent and nothing renders here at all — a
+  // signed-in visitor outside those regions sees no banner, which is the
+  // requirement this satisfies rather than the one it breaks.
   const askBanner = state.ready && !state.stored && state.posture === 'opt-in'
 
   const policyLinks = (
@@ -261,10 +353,17 @@ export function VisitorConsent(): ReactElement | null {
           >
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2">
-                {'This console would like to use analytics (Google ' +
-                  'Analytics) to understand how it is used. It does not run ' +
-                  'unless you allow it — signing in and everything else here ' +
-                  'works either way.'}
+                {asksAboutAdvertising
+                  ? 'This console would like to use analytics (Google ' +
+                    'Analytics) to understand how it is used, and advertising ' +
+                    'cookies to personalize ads and measure how they perform. ' +
+                    'Neither runs unless you allow it — signing in and ' +
+                    'everything else here works either way. Use Preferences ' +
+                    'to choose them separately.'
+                  : 'This console would like to use analytics (Google ' +
+                    'Analytics) to understand how it is used. It does not run ' +
+                    'unless you allow it — signing in and everything else ' +
+                    'here works either way.'}
               </Typography>
               <Box sx={{ mt: 0.5 }}>{policyLinks}</Box>
             </Box>
@@ -289,6 +388,39 @@ export function VisitorConsent(): ReactElement | null {
             </Stack>
           </Stack>
         </Paper>
+      ) : null}
+
+      {/* The persistent control, drawn here and nowhere else.
+
+          Requested by a page with no account menu (see
+          {@link VisitorConsentPill}) and suppressed while either other surface
+          is up: a visitor being asked does not also need a pill telling them
+          they may choose, and two fixed elements at the bottom of a narrow
+          viewport collide. The shared overlay resolves the same three surfaces
+          the same way, in one place, for the same reason. */}
+      {pillRequested && !askBanner && !panelOpen ? (
+        <Button
+          type="button"
+          data-aglyn-consent-pill=""
+          aria-label={CONSENT_OPT_OUT_TITLE}
+          onClick={() => setPanelOpen(true)}
+          variant="outlined"
+          size="small"
+          startIcon={<CcpaOptOutIcon />}
+          sx={{
+            position: 'fixed',
+            left: 0,
+            bottom: 0,
+            m: 2,
+            zIndex: 'snackbar',
+            color: 'text.secondary',
+            borderColor: 'divider',
+            backgroundColor: 'surface.main',
+            textTransform: 'none',
+          }}
+        >
+          {CONSENT_OPT_OUT_TITLE}
+        </Button>
       ) : null}
 
       <Dialog

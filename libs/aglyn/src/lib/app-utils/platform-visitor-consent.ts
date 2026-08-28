@@ -74,14 +74,20 @@ import {
   PLATFORM_PRIOR_CONSENT_REGIONS,
 } from './platform-consent-default'
 import {
+  geoHintFromTimeZone,
+  readBrowserTimeZone,
+} from './timezone-geo-hint'
+import {
   analyticsGrantedByStatus,
   hasGlobalPrivacyControl,
   isExplicitConsentStatus,
   readStoredVisitorConsent,
+  registrableCookieDomain,
   type StoredVisitorConsent,
   storeVisitorConsent,
   type VisitorConsentPosture,
   type VisitorConsentStatus,
+  visitorConsentStorageKey,
 } from './visitor-consent'
 
 /**
@@ -164,6 +170,156 @@ export function platformConsentPosture(
     : 'opt-out'
 }
 
+/**
+ * The cookie that carries a console visitor's answer between the sibling
+ * subdomains the console is served on.
+ *
+ * ## The defect this closes
+ *
+ * `localStorage` is per ORIGIN, and the console is one application served on
+ * several hostnames of one registrable domain: `app.<domain>` and
+ * `auth.<domain>`, which is where interactive sign-in is delegated to. So a
+ * record written on one is invisible to the other.
+ *
+ * For an accept that is only a second ask — annoying, and fail-safe, since an
+ * unread record means untracked. For a REFUSAL it is worse than annoying and
+ * not fail-safe at all: outside the prior-consent regions the sibling host
+ * finds no record, resolves the posture afresh and writes `implied`, so an
+ * explicit opt-out reverts to implied consent on the next hop. A visitor
+ * cannot be expected to say no once per hostname of an application they
+ * experience as one.
+ *
+ * ## Why a cookie, and why it carries the whole record
+ *
+ * A cookie is the only client-side store that spans subdomains, and the
+ * consent record is itself strictly necessary storage — it is how a "no" is
+ * remembered — so it needs no consent of its own. It carries the whole record
+ * rather than a flag because the record is what the shared reader validates:
+ * the mirror is re-read through `readStoredVisitorConsent`, never trusted, so
+ * a hand-edited cookie cannot grant what its status does not.
+ */
+export const PLATFORM_CONSENT_COOKIE = 'aglyn_consent'
+
+/**
+ * How long the mirror lives. Thirteen months is the field convention for a
+ * consent record and the ceiling several supervisory authorities name; the
+ * record's own `at` stamp is what any future re-ask would be judged against.
+ */
+const PLATFORM_CONSENT_COOKIE_MAX_AGE_SECONDS = 13 * 30 * 24 * 60 * 60
+
+/**
+ * Whether this origin may share a visitor's answer with its sibling
+ * subdomains.
+ *
+ * OFF by default and switched on by the surface, which is the same polarity
+ * `originPersistenceClass` uses and for the same asymmetry. Writing at the
+ * registrable domain is only correct where the whole registrable domain is
+ * ours: on a CUSTOM console domain it would put our cookie on the customer's
+ * apex, beside their own site, on an origin the console is deliberately not
+ * allowed to keep durable state on. A surface that says nothing gets a
+ * host-only record, which is complete on its own because there are no
+ * siblings to disagree with.
+ */
+let sharesAcrossSubdomains = false
+
+export function setPlatformConsentSharesAcrossSubdomains(
+  shares: boolean,
+): void {
+  sharesAcrossSubdomains = shares
+}
+
+/** The raw mirror value for this browser, or null when there is none. */
+function readPlatformConsentMirror(): string | null {
+  if (typeof document === 'undefined') return null
+  try {
+    for (const pair of String(document.cookie ?? '').split(';')) {
+      const cut = pair.indexOf('=')
+      if (cut < 0) continue
+      if (pair.slice(0, cut).trim() !== PLATFORM_CONSENT_COOKIE) continue
+      return decodeURIComponent(pair.slice(cut + 1).trim())
+    }
+  } catch {
+    // Cookies disabled or a hostile `document.cookie`: no mirror, and the
+    // per-origin record still stands.
+  }
+  return null
+}
+
+/**
+ * Write the mirror at the registrable domain, so the sibling host can read it.
+ *
+ * A no-op while sharing is off, and a no-op when the hostname has no
+ * registrable domain (`localhost`, an IP literal) — a host-only cookie there
+ * would duplicate the localStorage record and carry to nothing.
+ */
+function writePlatformConsentMirror(stored: StoredVisitorConsent): void {
+  if (!sharesAcrossSubdomains || typeof document === 'undefined') return
+  try {
+    const hostname =
+      typeof window === 'undefined' ? '' : window.location?.hostname
+    const domain = registrableCookieDomain(hostname)
+    if (!domain) return
+    const secure = window.location?.protocol === 'https:' ? '; Secure' : ''
+    document.cookie =
+      `${PLATFORM_CONSENT_COOKIE}=${encodeURIComponent(JSON.stringify(stored))}` +
+      `; Max-Age=${PLATFORM_CONSENT_COOKIE_MAX_AGE_SECONDS}` +
+      `; Path=/; Domain=.${domain}; SameSite=Lax${secure}`
+  } catch {
+    // A refusal to write the mirror costs the carry-over, never the decision:
+    // the per-origin record is already stored by the caller.
+  }
+}
+
+/**
+ * Adopt a sibling host's answer into this origin, if this origin has none.
+ *
+ * Called ONCE at boot rather than from {@link readPlatformConsent}, because
+ * that reader is consulted synchronously from the analytics gate — during the
+ * services provider's first render, and again on every consent change — and a
+ * reader with a write in it would put a storage write in a render path and
+ * repeat it forever. Boot is also early enough by construction: module scope
+ * runs before the first render, so the gate's first read already sees it.
+ *
+ * The value is written into localStorage and then read back through
+ * {@link readPlatformConsent}, which is the whole reason this is safe. The
+ * shared reader re-derives both grants from the status and rejects an
+ * unrecognized shape, so a hand-edited cookie can only ever produce a record
+ * the status supports — the same guarantee the per-origin path has.
+ *
+ * Returns whether a record was adopted, which is what makes it assertable.
+ */
+export function hydratePlatformConsentFromMirror(): boolean {
+  if (!sharesAcrossSubdomains || typeof window === 'undefined') return false
+  // This origin's own answer always wins. It is the more recent statement by
+  // definition — a decision made here is mirrored outward on the way in.
+  if (readStoredVisitorConsent(PLATFORM_CONSENT_SUBJECT)) return false
+  const raw = readPlatformConsentMirror()
+  if (!raw) return false
+  try {
+    window.localStorage.setItem(
+      visitorConsentStorageKey(PLATFORM_CONSENT_SUBJECT),
+      raw,
+    )
+  } catch {
+    // Private mode: no adoption, and the visitor is asked again on this host.
+    return false
+  }
+  // Validated, not assumed: a cookie whose shape or status the shared reader
+  // refuses leaves this origin with nothing, which is the undecided state.
+  if (readStoredVisitorConsent(PLATFORM_CONSENT_SUBJECT)) return true
+  try {
+    // …and the refused value does not stay behind. The reader already answers
+    // null for it, but a key holding something unreadable is what the next
+    // person debugging this will find and believe.
+    window.localStorage.removeItem(
+      visitorConsentStorageKey(PLATFORM_CONSENT_SUBJECT),
+    )
+  } catch {
+    // Nothing to clean up if storage is refusing us.
+  }
+  return false
+}
+
 /** The console visitor's stored record, or null when there is none. */
 export function readPlatformConsent(): StoredVisitorConsent | null {
   return readStoredVisitorConsent(PLATFORM_CONSENT_SUBJECT)
@@ -184,7 +340,14 @@ export function storePlatformConsent(state: {
   country?: string | null
   advertising?: boolean
 }): StoredVisitorConsent {
-  return storeVisitorConsent(PLATFORM_CONSENT_SUBJECT, state)
+  const stored = storeVisitorConsent(PLATFORM_CONSENT_SUBJECT, state)
+  // Mirrored on EVERY decision, including the refusals. A mirror that only
+  // carried grants would leave the worst case uncovered: an explicit opt-out
+  // on one host, then the sibling host finding nothing and writing `implied`
+  // from the posture — which is the visitor's refusal being overturned by a
+  // hop they did not make.
+  writePlatformConsentMirror(stored)
+  return stored
 }
 
 /**
@@ -218,33 +381,87 @@ export interface ResolvedPlatformConsent {
 }
 
 /**
- * Ask the region endpoint which country this visitor is in, once per visit.
+ * The country this visitor is in, or null when nothing can name one.
  *
- * A successful `null` is cached too — "the edge sends no geo here" is an
- * answer, and re-asking cannot improve it this session. A network failure is
- * NOT cached and reads as unknown region, which resolves to the strict side.
+ * The country half of {@link resolvePlatformConsentRegion}, kept because a
+ * caller that only wants a country should not have to know that a posture can
+ * arrive without one.
  */
 export async function resolvePlatformConsentCountry(): Promise<string | null> {
-  if (typeof window === 'undefined') return null
+  return (await resolvePlatformConsentRegion()).country
+}
+
+/**
+ * The region signal for this visit: a country when anything can name one, and
+ * a posture when the only signal available carries one without a country.
+ *
+ * Three sources, in strict order of authority, and the order is the whole
+ * design:
+ *
+ * 1. **The session cache** — a country already resolved this visit.
+ * 2. **The region endpoint** — an edge header, which is the only source that
+ *    knows where the request actually came from.
+ * 3. **The browser's time zone** — {@link geoHintFromTimeZone}, and ONLY when
+ *    the first two produced nothing. It exists for a deployment with no geo
+ *    header at all: a self-hosted container behind a plain reverse proxy,
+ *    where every visitor would otherwise be treated as unlocatable and asked
+ *    to opt in. It is never consulted while a header answers, and a zone it
+ *    does not recognize (`null`) is treated exactly as a missing header —
+ *    strictest posture, never permission.
+ */
+export interface ResolvedConsentRegion {
+  /** The country, when a source could honestly name one. */
+  country: string | null
+  /**
+   * A posture the country cannot express, or null to derive it from the
+   * country. Set only by the time-zone hint, which can say "not a
+   * prior-consent region" while refusing to name which country that is —
+   * `America/Chicago` is the United States in almost every case and is also
+   * Canadian and Mexican territory in places, and a country that is merely
+   * probable is worse on a stored record than an absent one.
+   */
+  posture: VisitorConsentPosture | null
+}
+
+export async function resolvePlatformConsentRegion(): Promise<ResolvedConsentRegion> {
+  if (typeof window === 'undefined') return { country: null, posture: null }
   try {
     const cached = window.sessionStorage.getItem(
       PLATFORM_CONSENT_REGION_CACHE_KEY,
     )
     if (cached) {
       const parsed = JSON.parse(cached)
-      if (parsed && 'country' in parsed) {
-        return typeof parsed.country === 'string' ? parsed.country : null
+      // A cached entry counts only when it NAMES a country. Anything else —
+      // including `{"country":null}` written by a build from before this rule
+      // — is treated as a miss, which is what lets a tab that cached a failure
+      // heal itself on the next pageview instead of carrying it to the end of
+      // the session.
+      if (typeof parsed?.country === 'string' && parsed.country) {
+        return { country: parsed.country, posture: null }
       }
     }
   } catch {
     // No storage — ask every pageview; correct, just less frugal.
   }
+  let country: string | null = null
   try {
     const response = await fetch(PLATFORM_CONSENT_REGION_ENDPOINT)
-    if (!response.ok) return null
-    const payload = await response.json().catch((): null => null)
-    const country = typeof payload?.country === 'string' ? payload.country : null
+    if (response.ok) {
+      const payload = await response.json().catch((): null => null)
+      country = typeof payload?.country === 'string' ? payload.country : null
+    }
+  } catch {
+    // Network failure reads as no signal, which falls through exactly as an
+    // absent header does.
+  }
+  if (country) {
     try {
+      // ONLY a resolved country is cached, and the asymmetry is the point. A
+      // cached country is a fact; a cached absence is a FAILURE, and caching a
+      // failure pins the outcome that failure produces. One cold edge, one
+      // request that skipped the proxy, and the visitor would spend the rest
+      // of the session on the strictest posture with nothing re-asking — a
+      // banner they cannot get rid of, and analytics that never resume.
       window.sessionStorage.setItem(
         PLATFORM_CONSENT_REGION_CACHE_KEY,
         JSON.stringify({ country }),
@@ -252,10 +469,19 @@ export async function resolvePlatformConsentCountry(): Promise<string | null> {
     } catch {
       // Best-effort cache only.
     }
-    return country
-  } catch {
-    // Network failure reads as unknown region, which is the opt-in side.
-    return null
+    return { country, posture: null }
+  }
+  // No header anywhere. The time zone is the last thing left, and it is not
+  // cached either: it costs no request, so re-reading it is free, and it must
+  // never outrank a header that appears on the next pageview.
+  const hint = geoHintFromTimeZone(readBrowserTimeZone())
+  if (!hint) return { country: null, posture: null }
+  // `priorConsent` is honoured directly rather than re-derived from the
+  // country, because the hint's whole point is that it can carry a posture
+  // with no country attached.
+  return {
+    country: hint.country,
+    posture: hint.priorConsent ? 'opt-in' : 'opt-out',
   }
 }
 
@@ -314,8 +540,12 @@ export async function decidePlatformConsent(): Promise<ResolvedPlatformConsent> 
   if (stored) {
     return { stored, posture: null, country: stored.country ?? null }
   }
-  const country = await resolvePlatformConsentCountry()
-  const posture = platformConsentPosture(country)
+  const region = await resolvePlatformConsentRegion()
+  const country = region.country
+  // The signal's own posture wins where it has one, and only the time-zone
+  // hint sets it — a header names a country and the country decides. Falling
+  // back to `platformConsentPosture(null)` keeps unknown on the strict side.
+  const posture = region.posture ?? platformConsentPosture(country)
   if (posture === 'opt-out') {
     return {
       // Implied consent, recorded as such. `storeVisitorConsent` re-derives
@@ -386,4 +616,5 @@ export function primePlatformConsent(): void {
 /** Test seam: forget which pageviews have already been primed. */
 export function resetPlatformConsentPriming(): void {
   primed.clear()
+  sharesAcrossSubdomains = false
 }

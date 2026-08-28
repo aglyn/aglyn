@@ -169,7 +169,14 @@ const OPT_OUT_ICON_WHITE = '#FFFFFF'
  * exactly the surface this artwork was published against — so it needs no
  * light/dark variant and must not be given one.
  */
-function CcpaOptOutIcon(): ReactElement {
+/**
+ * Exported so a surface that renders its own opt-out control gets the
+ * REGULATOR'S artwork rather than an approximation of it. §7015(f) points at
+ * published artwork, and the console's unauthenticated pages need the same
+ * mark this overlay draws — a second, hand-drawn toggle would be a different
+ * mark wearing the same name.
+ */
+export function CcpaOptOutIcon(): ReactElement {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

@@ -323,6 +323,31 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
     note: 'Consent engine. It only ever CLEARS cookies (expires them) — the analytics prefixes, and any prefix set an advertising vendor is registered with; it sets none of its own, the consent record itself lives in web storage.',
     cookies: [],
   },
+  'libs/aglyn/src/lib/app-utils/platform-visitor-consent.ts': {
+    note:
+      "Mirrors the console visitor's own consent record between the hostnames " +
+      'the console is served on. `app.` and `auth.` are one application on two ' +
+      'origins — interactive sign-in is delegated to the auth host — and web ' +
+      'storage is per origin, so without this an explicit opt-out on one is ' +
+      'invisible to the other, which then writes an implied default from the ' +
+      'posture. STRICTLY NECESSARY: it is how a "no" is remembered, so it is ' +
+      'exempt from the consent it records. Written only where the whole ' +
+      'registrable domain is ours; a custom console domain gets none.',
+    cookies: [
+      {
+        name: 'aglyn_consent',
+        token: 'PLATFORM_CONSENT_COOKIE',
+        surface: `${CONSOLE_HOST} and the auth host, at .${WORKSPACE_DOMAIN}`,
+        purpose:
+          'Remembers your privacy choice across the console hostnames, so an ' +
+          'answer given while signing in still applies once you are inside',
+        duration: '13 months',
+        // Readable by the page, and it has to be: the analytics gate consults
+        // the record synchronously in the browser, before any request goes out.
+        httpOnly: false,
+      },
+    ],
+  },
   'libs/shared/util/http/src/lib/cookie-set-user-id-token.ts': {
     note: 'A pre-Firebase-session-cookie helper.',
     dead: 'No call site outside its own module and reader — grep `cookieSetUserIdToken`. Nothing reaches a browser, so `aglyn-user-token` must NOT appear in the Cookie Policy.',

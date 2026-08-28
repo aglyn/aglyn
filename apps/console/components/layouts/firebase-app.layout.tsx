@@ -27,8 +27,10 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
+  hydratePlatformConsentFromMirror,
   platformAnalyticsAllowed,
   primePlatformConsent,
+  setPlatformConsentSharesAcrossSubdomains,
 } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import { configureAnalyticsTransport } from '@aglyn/aglyn/app-utils/analytics-events'
 import { analyticsEnvironmentForcesInternal } from '@aglyn/aglyn/app-utils/analytics-environment'
@@ -143,6 +145,38 @@ watchSessionHeal()
  * resolves them, and outside the prior-consent regions it records implied
  * consent and the provider boots the tag a moment later, in the same document.
  */
+/**
+ * One console, several hostnames — so a visitor's answer has to travel between
+ * them.
+ *
+ * `app.<workspace domain>` and `auth.<workspace domain>` are the same
+ * application: `auth` is a reserved label served by this deployment, and
+ * interactive sign-in is DELEGATED there for mobile visitors and for every
+ * workspace subdomain, so a person can answer the consent question on one and
+ * arrive on the other a moment later. `localStorage` is per origin, which
+ * makes those two answers invisible to each other — harmless for an accept
+ * (they are asked twice), and not harmless at all for a refusal: outside the
+ * prior-consent regions the sibling host finds no record and writes `implied`
+ * from the posture, quietly overturning an opt-out the visitor did make.
+ *
+ * `currentOriginPersistenceClass()` is the right question already answered
+ * elsewhere: `durable` means the whole registrable domain is ours, which is
+ * exactly the condition under which a `.<domain>` cookie is ours to write. A
+ * CUSTOM console domain answers `ephemeral` and gets no mirror — it has no
+ * sibling console origin to carry to, and its registrable domain belongs to
+ * the customer.
+ *
+ * Hydrated at module scope, before the gate below reads storage for the first
+ * time. The reader itself stays a pure read for the reason the gate is
+ * synchronous at all: it is consulted from inside the services provider's
+ * render, and a read with a storage write in it would repeat that write on
+ * every consent change forever.
+ */
+setPlatformConsentSharesAcrossSubdomains(
+  currentOriginPersistenceClass() === 'durable',
+)
+hydratePlatformConsentFromMirror()
+
 setAnalyticsConsentGate(platformAnalyticsAllowed)
 
 /**

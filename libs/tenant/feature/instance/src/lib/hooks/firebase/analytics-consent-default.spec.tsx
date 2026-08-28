@@ -175,7 +175,7 @@ describe('the console consent default (AGL-1597)', () => {
     expect(regional.region).toEqual(PLATFORM_PRIOR_CONSENT_REGIONS)
   })
 
-  it('denies ad storage in BOTH declarations', () => {
+  it('moves the ad signals TOGETHER with analytics, in both declarations', () => {
     mountProvider()
 
     const commands = consentCommands(queueAtInit)
@@ -185,10 +185,21 @@ describe('the console consent default (AGL-1597)', () => {
     // precisely the state it is here to rule out.
     expect(commands).toHaveLength(2)
     for (const command of commands) {
-      expect(command.ad_storage).toBe('denied')
-      expect(command.ad_user_data).toBe('denied')
-      expect(command.ad_personalization).toBe('denied')
+      // The relation, not the values. Aglyn advertises, remarkets and
+      // retargets on this surface and the Privacy Policy names it, so the ad
+      // signals follow the same posture analytics does — granted where consent
+      // is implied, denied where it must be asked for first. What must never
+      // be reachable is advertising running while analytics does not: the
+      // visitor's refusal is one refusal, and every surface clamps it that way.
+      expect(command.ad_storage).toBe(command.analytics_storage)
+      expect(command.ad_user_data).toBe(command.analytics_storage)
+      expect(command.ad_personalization).toBe(command.analytics_storage)
     }
+    // …and the two declarations really do differ, so the relation above is not
+    // satisfied by a declaration that denies everything everywhere.
+    const [globalDefault, regional] = commands
+    expect(globalDefault.ad_storage).toBe('granted')
+    expect(regional.ad_storage).toBe('denied')
   })
 
   it('queues `arguments` objects, which is the only form gtag.js reads', () => {

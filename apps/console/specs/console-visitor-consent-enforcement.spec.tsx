@@ -202,6 +202,18 @@ function mountConsole(): void {
   )
 }
 
+/**
+ * The zone the browser reports, driven per case. Only the READING is mocked;
+ * the zone-to-posture mapping stays real.
+ */
+let mockTimeZone = 'Etc/GMT+3'
+jest.mock('@aglyn/aglyn/app-utils/timezone-geo-hint', () => ({
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/timezone-geo-hint',
+  ),
+  readBrowserTimeZone: () => mockTimeZone,
+}))
+
 /** Answer the region endpoint with one country, as the edge would. */
 function serveRegion(country: string | null): void {
   ;(global as unknown as { fetch: unknown }).fetch = jest.fn(async () => ({
@@ -242,6 +254,7 @@ beforeEach(() => {
   mockInitializeAnalytics.mockClear()
   resetAnalyticsTransport()
   resetPlatformConsentPriming()
+  mockTimeZone = 'Etc/GMT+3'
   // The console's real wiring, registered exactly as
   // `firebase-app.layout.tsx` registers it at module scope.
   setAnalyticsConsentGate(platformAnalyticsAllowed)
@@ -292,9 +305,11 @@ describe('console visitor consent stops collection', () => {
   })
 
   it('sends NOTHING when the region cannot be determined', async () => {
-    // The edge sends no geo — local dev, a self-hosted install, a stripped
-    // proxy. Unknown resolves to the strict side, because the asymmetry is a
-    // few lost events against pre-consent tracking of a European visitor.
+    // No geo header AND a zone that says nothing — a locked-down browser, a
+    // fixed UTC offset, a visitor hiding their clock. Unknown resolves to the
+    // strict side, because the asymmetry is a few lost events against
+    // pre-consent tracking of a European visitor.
+    mockTimeZone = 'Etc/GMT+3'
     serveRegion(null)
     await act(async () => {
       await decidePlatformConsent()
@@ -304,6 +319,23 @@ describe('console visitor consent stops collection', () => {
 
     expect(mockInitializeAnalytics).not.toHaveBeenCalled()
     expect(collected()).toEqual({ gtag: 0, transport: 0 })
+  })
+
+  it('sends for a headerless visit whose ZONE places it outside those regions', async () => {
+    // The self-hosted shape: a container behind a plain reverse proxy sets no
+    // geo header on any request, so every visitor would otherwise read as
+    // unlocatable and be asked to opt in — a banner the operator cannot switch
+    // off and cannot diagnose. The zone is the last resort and it only ever
+    // decides the posture; no country is claimed on the record.
+    mockTimeZone = 'America/Chicago'
+    serveRegion(null)
+    await act(async () => {
+      await decidePlatformConsent()
+    })
+    mountConsole()
+    trackEvent('login', { method: 'password' })
+
+    expect(collected().transport).toBe(1)
   })
 
   it('stops sending when a rest-of-world visitor WITHDRAWS', async () => {

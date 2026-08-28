@@ -1,5 +1,6 @@
 /**
  * @jest-environment jsdom
+ * @jest-environment-options {"url": "https://app.aglyn.com/"}
  *
  * @license
  * Copyright 2026 Aglyn LLC
@@ -24,8 +25,9 @@
  * This module is deliberately thin — every grant rule, record shape and sweep
  * belongs to `visitor-consent.ts` — so what is worth pinning is exactly the
  * seams: which region set it answers over, what it writes (and does not write)
- * for a first-time visitor, and that the advertising question is DERIVED from
- * what this surface declares rather than set by hand beside it.
+ * for a first-time visitor, that the advertising question is DERIVED from what
+ * this surface declares rather than set by hand beside it, and that an answer
+ * given on one of the console's hostnames reaches the other.
  *
  * PLANTED REDS (all four run, counts observed):
  *  1. Answer the posture over the TENANT's `PRIOR_CONSENT_COUNTRY_CODES`
@@ -40,7 +42,48 @@
  *     stopped losing to a real choice.
  *  4. Hardcode `platformAsksAboutAdvertising` to `true` → 2 fail, the
  *     derivation and the "grants nothing today" case together.
+ *
+ * PLANTED REDS for the cross-hostname mirror (all four run, counts observed):
+ *  5. Drop the mirror write from `storePlatformConsent` → 2 fail, the refusal
+ *     and the accept; the "does not share" control stays green, which is what
+ *     says the two are not the same assertion.
+ *  6. Let `hydratePlatformConsentFromMirror` overwrite a local record → 1
+ *     fails, and it is the one about a fresh answer surviving a stale sibling.
+ *  7. Default sharing to ON → 1 fails, the polarity case, and only it: every
+ *     other case sets the flag itself, so without that case the default could
+ *     be flipped unnoticed.
+ *  8. Return `true` from the hydrate without re-reading through the shared
+ *     reader → 1 fails, the unreadable-mirror case. That is the whole reason
+ *     the value goes through storage instead of being parsed here.
+ *
+ * PLANTED REDS for the region resolver (all four run, counts observed):
+ *  9. Restore the defect exactly — cache every answer AND read a cached null
+ *     as a hit → 5 fail, the headline case among them. Worth stating that it
+ *     takes BOTH halves: the write guard and the read guard each cover for the
+ *     other, which is deliberate, because the read guard is also what heals a
+ *     tab that cached a null before this rule existed.
+ * 10. Cache the answer unconditionally, read guard intact → 3 fail, all of
+ *     them time-zone cases: a cached null starves the fallback of the "no
+ *     header" state it exists for.
+ * 11. Read a cached null as a hit, write guard intact → 1 fails, the
+ *     older-build case, which is the migration this has to survive.
+ * 12. Consult the time zone BEFORE the endpoint → 1 fails, and it is the
+ *     control that says a header outranks a clock.
  */
+
+/**
+ * The zone the browser reports, driven per case.
+ *
+ * Only the READING is mocked; `geoHintFromTimeZone` stays real, so these cases
+ * exercise the actual zone-to-posture mapping rather than a stub of it. The
+ * jest process pins `TZ` before any worker forks and V8 realizes the zone when
+ * the context is created, so a zone cannot be moved from inside a test at all.
+ */
+let mockTimeZone = ''
+jest.mock('./timezone-geo-hint', () => ({
+  ...jest.requireActual('./timezone-geo-hint'),
+  readBrowserTimeZone: () => mockTimeZone,
+}))
 
 import {
   PLATFORM_CONSENT_DEFAULT_COMMANDS,
@@ -48,6 +91,8 @@ import {
 } from './platform-consent-default'
 import {
   decidePlatformConsent,
+  hydratePlatformConsentFromMirror,
+  PLATFORM_CONSENT_COOKIE,
   platformAdvertisingAllowed,
   platformAnalyticsAllowed,
   platformAsksAboutAdvertising,
@@ -55,7 +100,10 @@ import {
   platformConsentPosture,
   platformRefusalStatus,
   readPlatformConsent,
+  PLATFORM_CONSENT_REGION_CACHE_KEY,
   resetPlatformConsentPriming,
+  resolvePlatformConsentRegion,
+  setPlatformConsentSharesAcrossSubdomains,
   storePlatformConsent,
 } from './platform-visitor-consent'
 import {
@@ -79,11 +127,38 @@ function setGlobalPrivacyControl(on: boolean): void {
   })
 }
 
+function clearCookies(): void {
+  for (const pair of document.cookie.split(';')) {
+    const name = pair.split('=')[0].trim()
+    if (!name) continue
+    document.cookie = `${name}=; Max-Age=0; Path=/`
+    document.cookie = `${name}=; Max-Age=0; Path=/; Domain=.aglyn.com`
+  }
+}
+
+/**
+ * Land on the SIBLING origin: same cookie jar, empty `localStorage`.
+ *
+ * jsdom gives one document per suite, so a second origin cannot be visited —
+ * but the only thing that differs between `app.` and `auth.` is which store
+ * has the record, and that is exactly what this drops. The cookie survives,
+ * as it would in the browser.
+ */
+function arriveOnSiblingHost(): void {
+  window.localStorage.clear()
+}
+
 beforeEach(() => {
   window.localStorage.clear()
   window.sessionStorage.clear()
+  clearCookies()
   setGlobalPrivacyControl(false)
   resetPlatformConsentPriming()
+  // An unrecognized zone, which the hint answers `null` for — i.e. no signal,
+  // exactly like a missing header. Cases that want the fallback say so.
+  mockTimeZone = 'Etc/GMT+3'
+  // `resetPlatformConsentPriming` switches sharing back OFF, which is the
+  // module's own default; the cases that need it say so.
 })
 
 describe('the console consent posture', () => {
@@ -243,5 +318,218 @@ describe('the advertising question on this surface', () => {
 
     storePlatformConsent({ status: 'accepted', country: 'DE', advertising: true })
     expect(platformAdvertisingAllowed()).toBe(true)
+  })
+})
+
+describe('carrying an answer between the console hostnames', () => {
+  // `app.<domain>` and `auth.<domain>` are one application on two origins —
+  // interactive sign-in is delegated to the auth host for mobile visitors and
+  // for every workspace subdomain — and `localStorage` is per origin. Without
+  // a mirror the second host finds no record at all.
+
+  it('carries a REFUSAL, which is the case that is not fail-safe', () => {
+    // An accept that does not carry costs a second ask. A refusal that does
+    // not carry is overturned: outside the prior-consent regions the sibling
+    // host finds nothing, resolves the posture afresh and writes `implied`.
+    setPlatformConsentSharesAcrossSubdomains(true)
+    storePlatformConsent({ status: 'opted-out', country: 'US' })
+
+    arriveOnSiblingHost()
+    expect(readPlatformConsent()).toBeNull()
+    expect(hydratePlatformConsentFromMirror()).toBe(true)
+    expect(readPlatformConsent()?.status).toBe('opted-out')
+    expect(platformAnalyticsAllowed()).toBe(false)
+  })
+
+  it('carries an accept too', () => {
+    setPlatformConsentSharesAcrossSubdomains(true)
+    storePlatformConsent({ status: 'accepted', country: 'DE' })
+
+    arriveOnSiblingHost()
+    expect(hydratePlatformConsentFromMirror()).toBe(true)
+    expect(platformAnalyticsAllowed()).toBe(true)
+  })
+
+  it('shares NOTHING until a surface asks it to', () => {
+    // The polarity, pinned on a module nobody has registered anything with —
+    // the same asymmetry `originPersistenceClass` uses. Writing at the
+    // registrable domain is only correct where the whole registrable domain is
+    // ours, so the default has to be the narrow one; every case below sets the
+    // flag, so without this the default could be flipped and none of them
+    // would notice.
+    let fresh: typeof import('./platform-visitor-consent')
+    jest.isolateModules(() => {
+      fresh = require('./platform-visitor-consent')
+    })
+    fresh.storePlatformConsent({ status: 'opted-out', country: 'US' })
+    expect(document.cookie).not.toContain(PLATFORM_CONSENT_COOKIE)
+    expect(fresh.hydratePlatformConsentFromMirror()).toBe(false)
+  })
+
+  it('carries nothing when the origin does not share — the control', () => {
+    // A custom console domain answers `ephemeral`: it has no sibling console
+    // origin to carry to, and its registrable domain is the customer's. Left
+    // out, every case above would pass against a mirror that always wrote.
+    setPlatformConsentSharesAcrossSubdomains(false)
+    storePlatformConsent({ status: 'opted-out', country: 'US' })
+    expect(document.cookie).not.toContain(PLATFORM_CONSENT_COOKIE)
+
+    arriveOnSiblingHost()
+    expect(hydratePlatformConsentFromMirror()).toBe(false)
+    expect(readPlatformConsent()).toBeNull()
+  })
+
+  it("lets this origin's own answer win over the mirror", () => {
+    // A decision made here is mirrored outward on the way in, so a local
+    // record is the more recent statement by definition. Adopting over it
+    // would let a stale sibling answer undo a fresh one.
+    setPlatformConsentSharesAcrossSubdomains(true)
+    storePlatformConsent({ status: 'opted-out', country: 'US' })
+    arriveOnSiblingHost()
+    storePlatformConsent({ status: 'accepted', country: 'US' })
+
+    expect(hydratePlatformConsentFromMirror()).toBe(false)
+    expect(readPlatformConsent()?.status).toBe('accepted')
+  })
+
+  it('VALIDATES the mirror rather than trusting it', () => {
+    // The cookie is readable and writable by anything on the registrable
+    // domain, so it is re-read through the shared reader, which re-derives
+    // both grants from the status. A record claiming a grant its status
+    // cannot carry adopts as the refusal it actually is.
+    setPlatformConsentSharesAcrossSubdomains(true)
+    document.cookie =
+      `${PLATFORM_CONSENT_COOKIE}=` +
+      encodeURIComponent(
+        JSON.stringify({
+          v: 1,
+          at: 1,
+          status: 'declined',
+          analytics: true,
+          advertising: true,
+          country: 'DE',
+        }),
+      ) +
+      '; Path=/; Domain=.aglyn.com'
+
+    expect(hydratePlatformConsentFromMirror()).toBe(true)
+    expect(readPlatformConsent()?.status).toBe('declined')
+    expect(platformAnalyticsAllowed()).toBe(false)
+    expect(platformAdvertisingAllowed()).toBe(false)
+  })
+
+  it('adopts nothing from an unreadable mirror', () => {
+    setPlatformConsentSharesAcrossSubdomains(true)
+    document.cookie = `${PLATFORM_CONSENT_COOKIE}=not-json; Path=/; Domain=.aglyn.com`
+    expect(hydratePlatformConsentFromMirror()).toBe(false)
+    expect(readPlatformConsent()).toBeNull()
+    // And it leaves nothing behind. The reader already answers null for an
+    // unreadable value, but a key holding one is what the next person
+    // debugging this finds and believes.
+    expect(
+      window.localStorage.getItem(
+        visitorConsentStorageKey(PLATFORM_CONSENT_SUBJECT),
+      ),
+    ).toBeNull()
+  })
+})
+
+describe('resolving the region signal', () => {
+  const fetchMock = () => (global as unknown as { fetch: jest.Mock }).fetch
+
+  it('re-asks after a response with no country, and takes the next one', () => {
+    // The defect this closes. A miss used to be cached as `{country: null}`
+    // and read back as a hit, so ONE headerless response — a cold edge, a
+    // request that skipped the proxy, a blip — pinned the strictest posture
+    // for the rest of the session with nothing left to re-ask. The banner
+    // could not be got rid of and analytics never resumed.
+    serveRegion(null)
+    return resolvePlatformConsentRegion()
+      .then((first) => {
+        expect(first.country).toBeNull()
+        serveRegion('US')
+        return resolvePlatformConsentRegion()
+      })
+      .then((second) => {
+        expect(second.country).toBe('US')
+        expect(platformConsentPosture(second.country)).toBe('opt-out')
+      })
+  })
+
+  it('asks once for a country it DID resolve — the control', () => {
+    // Without this, "do not cache" could be satisfied by not caching at all,
+    // which is a fetch per pageview for every visitor forever.
+    serveRegion('FR')
+    return resolvePlatformConsentRegion()
+      .then(() => resolvePlatformConsentRegion())
+      .then((again) => {
+        expect(again.country).toBe('FR')
+        expect(fetchMock()).toHaveBeenCalledTimes(1)
+      })
+  })
+
+  it('ignores a null already cached by an older build', async () => {
+    // The migration case, and the one that was actually observed: a tab that
+    // cached the failure before this rule existed must heal on its next
+    // pageview rather than carry it to the end of the session.
+    window.sessionStorage.setItem(
+      PLATFORM_CONSENT_REGION_CACHE_KEY,
+      JSON.stringify({ country: null }),
+    )
+    serveRegion('US')
+    expect((await resolvePlatformConsentRegion()).country).toBe('US')
+  })
+
+  it('falls back to the time zone only when no header answers', async () => {
+    // A self-hosted container behind a plain reverse proxy: no geo header on
+    // any request, so every visitor would otherwise read as unlocatable and be
+    // asked to opt in.
+    serveRegion(null)
+    mockTimeZone = 'America/Chicago'
+    const region = await resolvePlatformConsentRegion()
+    // No country named, because the zone cannot name one honestly — and the
+    // posture does not need it.
+    expect(region.country).toBeNull()
+    expect(region.posture).toBe('opt-out')
+  })
+
+  it('lets a header outrank the zone — the control', async () => {
+    // The zone is the LAST resort. A visitor on a US clock behind an edge that
+    // reports Germany is in Germany.
+    serveRegion('DE')
+    mockTimeZone = 'America/Chicago'
+    const region = await resolvePlatformConsentRegion()
+    expect(region.country).toBe('DE')
+    expect(region.posture).toBeNull()
+  })
+
+  it('keeps a European zone on the strict side, with no country claimed', async () => {
+    serveRegion(null)
+    mockTimeZone = 'Europe/Berlin'
+    const region = await resolvePlatformConsentRegion()
+    expect(region.posture).toBe('opt-in')
+    // The record must not carry a country the zone only made probable.
+    expect(region.country).toBeNull()
+  })
+
+  it('treats a zone it does not recognize as a missing header', async () => {
+    // `null` from the hint is not permission. A visitor hiding their zone gets
+    // the same answer as a visitor with no header at all.
+    serveRegion(null)
+    mockTimeZone = 'Etc/GMT+3'
+    const region = await resolvePlatformConsentRegion()
+    expect(region.posture).toBeNull()
+    expect(platformConsentPosture(region.country)).toBe('opt-in')
+  })
+
+  it('never caches what the zone said', async () => {
+    // It costs no request, so re-reading is free — and caching it would let a
+    // guess outrank a header that appears on the very next pageview.
+    serveRegion(null)
+    mockTimeZone = 'America/Chicago'
+    await resolvePlatformConsentRegion()
+    expect(
+      window.sessionStorage.getItem(PLATFORM_CONSENT_REGION_CACHE_KEY),
+    ).toBeNull()
   })
 })
