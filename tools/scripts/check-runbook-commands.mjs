@@ -48,18 +48,16 @@ import {
   evaluateRunbookCommands,
   formatFinding,
 } from './lib/runbook-commands.mjs'
+import { DRIVE_MOUNT_ENV, driveDocPath } from './lib/drive-mount.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-const DEFAULT_LAUNCH_DIR = join(
-  process.env['HOME'] ?? '',
-  'Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/Platform Docs',
-  'Release & Launch',
-)
+const DEFAULT_LAUNCH_DIR = driveDocPath('Platform Docs', 'Release & Launch')
 
+const launchDir = process.env['AGLYN_LAUNCH_DOCS'] || DEFAULT_LAUNCH_DIR
 const runbookPath =
   process.env['AGLYN_RUNBOOK'] ||
-  join(process.env['AGLYN_LAUNCH_DOCS'] || DEFAULT_LAUNCH_DIR, 'LAUNCH_DAY_RUNBOOK.md')
+  (launchDir ? join(launchDir, 'LAUNCH_DAY_RUNBOOK.md') : null)
 
 /** package.json script names. */
 function scriptNames() {
@@ -172,12 +170,13 @@ function main() {
   const argv = process.argv.slice(2)
   if (argv.includes('--self-test')) return selfTest()
 
-  if (!existsSync(runbookPath)) {
+  if (!runbookPath || !existsSync(runbookPath)) {
     console.error(
-      `\n❓ INCONCLUSIVE — could not read the runbook.\n\n  ${runbookPath}\n\n` +
+      `\n❓ INCONCLUSIVE — could not read the runbook.\n\n  ${runbookPath ?? '(no path configured)'}\n\n` +
         'This is exit 2, not a pass. The document lives in the "Platform Docs"\n' +
         'shared drive (Release & Launch), so an unmounted drive looks exactly\n' +
-        'like a clean run. Mount the drive, or point AGLYN_RUNBOOK at a copy.\n',
+        `like a clean run. Set ${DRIVE_MOUNT_ENV} to the directory containing\n` +
+        '"Platform Docs", or point AGLYN_RUNBOOK at a copy.\n',
     )
     process.exit(2)
   }

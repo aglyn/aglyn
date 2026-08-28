@@ -100,7 +100,7 @@ describe('planAccount', () => {
  * up until the IdP stops answering, and then nobody can sign in and we cannot
  * let them back in either.
  *
- * That is not hypothetical. `zach@aglyn.com` is in it now: present only in
+ * That is not hypothetical. `staff@aglyn.com` is in it now: present only in
  * GCIP tenant `aglyn-org-y5v14`, `auth/user-not-found` at project level, no
  * password. A lapsed certificate or a deleted SAML app reaches the same place
  * from any org, which is why this is a control and not a one-off repair.
@@ -151,7 +151,7 @@ describe('assessSsoLockoutRisk', () => {
     records.map((record) => planAccount(record, SAML, new Set(breakGlass)))
 
   it('is UNSAFE when every account keeps only the IdP', () => {
-    // The `zach@aglyn.com` shape, and the default outcome of enforcing without
+    // The `staff@aglyn.com` shape, and the default outcome of enforcing without
     // designating anybody.
     const accounts = planned([user('u1', [SAML]), user('u2', [SAML])], [])
     expect(assessSsoLockoutRisk(accounts, SAML, [])).toEqual({

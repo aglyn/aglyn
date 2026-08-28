@@ -247,8 +247,9 @@ async function handler(request: Request): Promise<Response> {
         // This block also runs for an EXISTING member — `upsert` is the
         // role-change path — and `upsertOrgMember` documents `null` as "clear
         // the stored value" while `undefined` leaves it alone. An SSO member's
-        // tenant auth record holds neither name nor photo (measured on
-        // `zach@aglyn.com`: `displayName: null`, `photoURL: undefined`), so
+        // tenant auth record holds neither name nor photo (measured on an
+        // SSO account in the `aglyn-org-y5v14` tenant: `displayName: null`,
+        // `photoURL: undefined`), so
         // `?? null` meant changing someone's role silently erased the roster
         // identity `backfillMemberIdentity` had put there for them (AGL-1131)
         // — the only copy any member surface can read (AGL-1122).

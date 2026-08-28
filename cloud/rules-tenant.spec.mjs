@@ -27,7 +27,7 @@ const ORG = 'jWmGooWE3L'
 
 /** Shaped from the real decoded token measured on production 2026-08-01. */
 const TENANT_CLAIMS = {
-  email: 'zach@aglyn.com',
+  email: 'member@example.com',
   email_verified: true,
   firebase: {
     tenant: 'aglyn-org-y5v14',

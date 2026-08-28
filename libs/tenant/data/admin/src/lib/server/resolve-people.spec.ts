@@ -65,12 +65,12 @@ describe('resolveUidsToPeople (AGL-938)', () => {
     const people = await resolveUidsToPeople(['u1'], {
       orgId: 'org1',
       firestore,
-      findUser: async (uid) => pooled(uid, 'zach@aglyn.com', 'Zach Gover'),
+      findUser: async (uid) => pooled(uid, 'ada@example.com', 'Ada Lovelace'),
     })
     expect(people['u1']).toEqual({
       uid: 'u1',
-      email: 'zach@aglyn.com',
-      displayName: 'Zach Gover',
+      email: 'ada@example.com',
+      displayName: 'Ada Lovelace',
       source: 'auth',
     })
     // A pool hit must not cost a roster read.

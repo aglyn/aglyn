@@ -129,13 +129,12 @@ export function UserMenu() {
   ) => (orgSlug ? buildRoute(route, { orgSlug }) : orgHome)
 
   // `useUserName`, not `user.displayName` (AGL-2486). That field is empty for
-  // every SSO account — `zach@aglyn.com` has no `displayName` on its auth
-  // record at all — so this menu was showing the EMAIL as the person's name,
-  // repeating it as the address on the line below, and handing
-  // `memberInitials` an address with no space in it, which yields the single
-  // letter `Z` while the presence stack two inches away showed `ZG`. The name
-  // was never missing: `users/{uid}` has held `firstName`/`lastName` for this
-  // account the whole time.
+  // every SSO account — a tenant auth record carries no `displayName` at all —
+  // so this menu was showing the EMAIL as the person's name, repeating it as
+  // the address on the line below, and handing `memberInitials` an address
+  // with no space in it, which yields ONE letter where the presence stack two
+  // inches away showed two. The name was never missing: `users/{uid}` has held
+  // `firstName`/`lastName` for these accounts the whole time.
   const resolvedName = useUserName()
   const name = resolvedName || 'Account'
   const email = user?.email ?? ''
@@ -280,7 +279,7 @@ export function UserMenu() {
             </Typography>
             {/* Only when it ADDS something (AGL-2486). With no profile name
                 the line above falls back to the address, and printing it
-                again underneath rendered `zach@aglyn.com` twice — which is
+                again underneath rendered the same address twice — which is
                 what a missing name looks like, and what sent this bug
                 hunting in the wrong place. */}
             {email && email !== name ? (

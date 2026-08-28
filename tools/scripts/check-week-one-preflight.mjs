@@ -47,11 +47,12 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { withProbeHeaders } from './lib/probe-headers.mjs'
+import { DRIVE_MOUNT_ENV, driveDocPath } from './lib/drive-mount.mjs'
 
-const DEFAULT_DOCS = join(
-  process.env['HOME'] ?? '',
-  'Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/Platform Docs',
-  'Pricing & Packaging/07-GTM-and-Marketing',
+const DEFAULT_DOCS = driveDocPath(
+  'Platform Docs',
+  'Pricing & Packaging',
+  '07-GTM-and-Marketing',
 )
 
 const args = process.argv.slice(2)
@@ -547,11 +548,11 @@ async function runSelfTest() {
 if (selfTest) {
   await runSelfTest()
 } else {
-  if (!existsSync(docsDir)) {
+  if (!docsDir || !existsSync(docsDir)) {
     console.error(
-      `Pre-flight docs folder not found:\n  ${docsDir}\n\n` +
-        'This is UNKNOWN, not a pass. Mount the "Platform Docs" shared drive, ' +
-        'or pass --docs <path>.',
+      `Pre-flight docs folder not found:\n  ${docsDir ?? '(no path configured)'}\n\n` +
+        'This is UNKNOWN, not a pass. Set ' + DRIVE_MOUNT_ENV + ' to the ' +
+        'directory containing "Platform Docs", or pass --docs <path>.',
     )
     process.exit(2)
   }

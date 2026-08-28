@@ -128,11 +128,11 @@ describe('evaluatePrimaryChange: the ordinary rules', () => {
 
 describe('THE ESCAPE: a governed primary cannot be demoted', () => {
   /**
-   * The attack, concretely. `zach@aglyn.com` is required to sign in through
+   * The attack, concretely. `staff@aglyn.com` is required to sign in through
    * the Workspace SAML tenant — that is what `ssoRequiredDomains` says, and
    * the session mint enforces it by reading `decoded.email`.
    *
-   * Add `zach@personal.test`, confirm it, promote it, and `decoded.email` is
+   * Add `staff@personal.test`, confirm it, promote it, and `decoded.email` is
    * now an ungoverned address. `evaluateSsoDomainPolicy` returns
    * `allow-ungoverned` and the account is outside Workspace MFA and
    * offboarding for good — with no IdP involved, and nothing in the org's
@@ -140,8 +140,8 @@ describe('THE ESCAPE: a governed primary cannot be demoted', () => {
    */
   it('refuses moving the primary off a governed domain', () => {
     const decision = evaluatePrimaryChange({
-      current: verified('zach@aglyn.com', true),
-      next: verified('zach@personal.test'),
+      current: verified('staff@aglyn.com', true),
+      next: verified('staff@personal.test'),
       requiredDomains: GOVERNED,
       tenantId: 'aglyn-staff-tenant',
       enforcementEnabled: true,
@@ -159,8 +159,8 @@ describe('THE ESCAPE: a governed primary cannot be demoted', () => {
     // and the audit trail would record nothing, because from the policy's
     // point of view there is no longer anything to record.
     const decision = evaluatePrimaryChange({
-      current: verified('zach@aglyn.com', true),
-      next: verified('zach@personal.test'),
+      current: verified('staff@aglyn.com', true),
+      next: verified('staff@personal.test'),
       requiredDomains: GOVERNED,
       tenantId: 'aglyn-staff-tenant',
       enforcementEnabled: false,
@@ -174,7 +174,7 @@ describe('THE ESCAPE: a governed primary cannot be demoted', () => {
     // org's governed set changes nothing about who governs the account, and
     // refusing it would be the policy misfiring on its own customers.
     const decision = evaluatePrimaryChange({
-      current: verified('zach@aglyn.com', true),
+      current: verified('staff@aglyn.com', true),
       next: verified('zach@aglyn.dev'),
       requiredDomains: { 'aglyn.com': 'tenant-a', 'aglyn.dev': 'tenant-a' },
       tenantId: 'tenant-a',
@@ -188,8 +188,8 @@ describe('THE ESCAPE: a governed primary cannot be demoted', () => {
     // control that fired on an unconfigured deployment would lock self-host
     // users out of their own settings page.
     const decision = evaluatePrimaryChange({
-      current: verified('zach@aglyn.com', true),
-      next: verified('zach@personal.test'),
+      current: verified('staff@aglyn.com', true),
+      next: verified('staff@personal.test'),
       requiredDomains: {},
       tenantId: null,
       enforcementEnabled: true,

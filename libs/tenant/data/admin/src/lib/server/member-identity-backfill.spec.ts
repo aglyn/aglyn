@@ -51,7 +51,7 @@ describe('backfillMemberIdentity', () => {
   it('fills a blank roster row', async () => {
     // The measured production state: a real owner whose row carried an email
     // and nothing else, so every member surface rendered them nameless.
-    const db = fakeDb({ role: 'owner', email: 'zach@aglyn.com' })
+    const db = fakeDb({ role: 'owner', email: 'owner@example.com' })
     const written = await backfillMemberIdentity(
       'jWmGooWE3L',
       'QQ7fixtureUid0000000000000001',

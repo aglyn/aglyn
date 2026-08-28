@@ -554,6 +554,19 @@ jobs:
 
       - run: npm run check:residential-address
 
+      # A named individual's account identifiers. Same two-step order and the
+      # same digest design as the two above, and it exists because neither of
+      # them — nor check:contact-addresses — could see this class at all: one
+      # guards Comptroller numbers, one guards a street address, and the third
+      # EXEMPTS every spec and test path, which is where twenty-five of the
+      # sixty leaking files were.
+      #
+      # It scans every tracked file, specs included, so its trigger is the same
+      # widened apps/libs/cloud/docs filter the two above rely on.
+      - run: npm run test:personal-identifiers
+
+      - run: npm run check:personal-identifiers
+
       # AGL-1956. On 2026-08-24 Aglyn accepted marketplace-facilitator status
       # and published ToS §10.7, which tells every merchant that on a
       # storefront sale the tax "is collected into Aglyn's processor account,

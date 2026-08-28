@@ -32,7 +32,7 @@
  *
  * `upsertOrgMember` documents `undefined` as "leave the stored value alone"
  * and `null` as "clear it". An SSO member's tenant auth record carries
- * neither field — measured on `zach@aglyn.com` 2026-08-18: `displayName:
+ * neither field — measured on `staff@aglyn.com` 2026-08-18: `displayName:
  * null`, `photoURL: undefined`, sole provider `saml.aglyn-workspace` with
  * `photoURL: null` — so the mirror resolved to `null` and a role change wrote
  * `null` over the very fields `backfillMemberIdentity` had filled in for them
@@ -127,7 +127,7 @@ function applyUpsert(
 /** The roster row AGL-1131's backfill left for the one live SSO account. */
 const SSO_ROSTER_ROW = {
   role: 'viewer',
-  email: 'zach@aglyn.com',
+  email: 'staff@aglyn.com',
   displayName: 'Zach Gover',
   photoURL: 'https://cdn.example/zach.png',
 }
@@ -138,7 +138,7 @@ const SSO_ROSTER_ROW = {
  */
 const SSO_AUTH_RECORD = {
   uid: 'QQ7fixtureUid0000000000000001',
-  email: 'zach@aglyn.com',
+  email: 'staff@aglyn.com',
   displayName: null,
   photoURL: undefined,
 }

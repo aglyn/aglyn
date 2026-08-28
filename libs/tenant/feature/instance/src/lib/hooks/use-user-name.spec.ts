@@ -36,12 +36,12 @@ describe('the SSO account, whose auth record carries no name', () => {
   it('is named from its profile document, not its email address', () => {
     expect(
       resolveUserName({
-        profileFirstName: 'Zach',
-        profileLastName: 'Gover',
+        profileFirstName: 'Grace',
+        profileLastName: 'Hopper',
         authDisplayName: undefined,
-        email: 'zach@aglyn.com',
+        email: 'grace@example.com',
       }),
-    ).toBe('Zach Gover')
+    ).toBe('Grace Hopper')
   })
 })
 

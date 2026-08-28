@@ -208,7 +208,7 @@ const post = (body: Record<string, unknown>, token = 'staff-token') =>
 const asSuper = () =>
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
-    email: 'zach@aglyn.com',
+    email: 'staff@aglyn.com',
     email_verified: true,
     staff: true,
     staffRole: 'super',
@@ -457,7 +457,7 @@ describe('acting on a report leaves a record', () => {
     const row = state.audit[0]
     expect(row.action).toBe('abuseReport.actioned')
     expect(row.actorUid).toBe('staff-1')
-    expect(row.actorEmail).toBe('zach@aglyn.com')
+    expect(row.actorEmail).toBe('staff@aglyn.com')
     expect((row.before as any).status).toBe('open')
     expect((row.after as any).status).toBe('actioned')
     // The reported URL rides the row, because a year later it is the only

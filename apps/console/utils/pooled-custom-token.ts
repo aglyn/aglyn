@@ -31,15 +31,16 @@ import { signInWithCustomToken, type Auth, type UserCredential } from 'firebase/
  * token exchanged on an instance still pointing at the project pool is a
  * cross-pool exchange.
  *
- * That is the whole of AGL-1993. `zach@aglyn.com` lives in GCIP tenant
- * `aglyn-org-y5v14` and its record carries `staff: true` / `staffRole: super`
- * — verified against both pools on 2026-08-19. The claim was never missing.
+ * That is the whole of AGL-1993. The staff account this was found on lives in
+ * GCIP tenant `aglyn-org-y5v14` and its record carries `staff: true` /
+ * `staffRole: super` — verified against both pools on 2026-08-19. The claim
+ * was never missing.
  * The silent cross-subdomain restore in `useSessionCookie` dropped the
  * `tenantId` the exchange response hands it, so the session that reached
  * `useIsStaff` was not the tenant session that holds the claim, and
  * `StaffGuard` 404'd a real staff member. The server even documented the
  * client contract it was relying on ("the client sets `auth.tenantId` from
- * the same sidecar") — a comment asserting behaviour that never existed.
+ * the same sidecar") — a comment asserting behavior that never existed.
  *
  * Assigned UNCONDITIONALLY, never `if (tenantId)`. `tenantId` is sticky
  * instance state: the SSO sign-in page sets it and nothing clears it, so a

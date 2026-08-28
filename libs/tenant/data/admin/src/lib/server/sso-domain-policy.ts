@@ -269,12 +269,13 @@ export function evaluateSsoDomainPolicy(
  *
  * **Precondition for flipping it — written down so it is not re-litigated:**
  *  1. SSO staff access verified working through a REAL sign-in (not a token
- *     inspection): `zach@aglyn.com` reaches `/admin/*` via the SAML tenant.
+ *     inspection): a staff account reaches `/admin/*` via the SAML tenant.
  *  2. Every identity on a governed domain has been migrated into its tenant or
  *     retired. Measured on aglyn-main 2026-08-18: TWO would have been refused,
- *     neither of them staff — `zachary.gover@aglyn.com` (consumer `google.com`
- *     provider) and `zach+e2e-smoke@aglyn.com` (`password`, an AUTOMATION
- *     account). Flipping before migrating breaks the e2e smoke sign-in.
+ *     neither of them staff — one on a consumer `google.com` provider, and the
+ *     e2e smoke account on `password`. Flipping before migrating breaks the
+ *     e2e smoke sign-in, which is the one that bites without warning: it is an
+ *     AUTOMATION account, so nobody is watching a sign-in page when it fails.
  *
  * A second staff identity is NOT a precondition: the permanent break-glass
  * account is on an ungoverned domain, so this rule can never refuse it.

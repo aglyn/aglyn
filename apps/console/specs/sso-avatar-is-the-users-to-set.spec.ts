@@ -19,7 +19,7 @@
  * AGL-2486 item 38 — the SSO account renders an initial, and the answer is
  * the console, not a mapping.
  *
- * THE MEASUREMENT THAT DECIDED IT. `zach@aglyn.com` lives in GCIP tenant
+ * THE MEASUREMENT THAT DECIDED IT. `staff@aglyn.com` lives in GCIP tenant
  * `aglyn-org-y5v14` behind `saml.aglyn-workspace`. Read directly from the
  * tenant pool on 2026-08-23: the auth record carries no `photoURL` and no
  * `displayName`, its single provider entry (`saml.aglyn-workspace`) carries

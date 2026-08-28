@@ -113,13 +113,14 @@
 //      (unshared Doc, Drive API disabled, missing creds, network, dead page)
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSign } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { loadLocalEnv, readServiceAccount } from './lib/firebase-rules-api.mjs'
 import { renderUnifiedDiff } from './lib/rules-drift.mjs'
 import { withProbeHeaders } from './lib/probe-headers.mjs'
+import { driveDocPath } from './lib/drive-mount.mjs'
 import {
   collectTocFromMarkdownLite,
   compareLegalDocument,
@@ -135,26 +136,21 @@ const LEGAL_ORIGIN = 'https://aglyn.com'
 const SA_EMAIL_HINT =
   'firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com'
 /**
- * Where the local copies of the legal documents live.
+ * Where the local copies of the legal documents live (AGL-2029).
  *
- * `LEGAL_DOCS_DIR` first (AGL-2029). This was an absolute path into one
- * developer's home directory — which only ever worked on that machine, and, in
- * a PUBLIC repository, published the layout of a private Drive mount along with
- * the account it is mounted under. The fallback is now relative to `homedir()`,
- * so it still resolves for anyone with the same Drive mount without naming a
- * user; set the env var for any other layout.
+ * `LEGAL_DOCS_DIR` names the directory outright and wins. Absent that, the
+ * documents are located relative to the configured shared-drive mount, which
+ * is itself per-workstation — see `lib/drive-mount.mjs`. Neither is a repo
+ * constant: a mount path depends on the operating system, the sync client and
+ * the account it is signed in as, so a literal here works on exactly one
+ * machine and, in a PUBLIC repository, publishes that machine's layout.
+ *
+ * `null` when neither is set. `resolveFromPointerFiles` reports that as
+ * CANNOT CHECK (exit 2), which is the honest answer — an unreadable original
+ * is not a document that matches.
  */
 const DEFAULT_LEGAL_DIR =
-  process.env['LEGAL_DOCS_DIR'] ||
-  join(
-    homedir(),
-    'Library',
-    'CloudStorage',
-    'GoogleDrive-zach@aglyn.com',
-    'Shared drives',
-    'Platform Docs',
-    'Legal',
-  )
+  process.env['LEGAL_DOCS_DIR'] || driveDocPath('Platform Docs', 'Legal')
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
 function parseArgs(argv) {

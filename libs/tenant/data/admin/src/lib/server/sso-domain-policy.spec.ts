@@ -61,7 +61,7 @@ const SELF_HOST_ON = { [SSO_DOMAIN_ENFORCEMENT_ENV]: 'on' }
 describe('the five identities that must stay valid', () => {
   it('1. @aglyn.com through the designated tenant is allowed', () => {
     const decision = evaluateSsoDomainPolicy(
-      { email: 'zach@aglyn.com', tenantId: DESIGNATED },
+      { email: 'staff@aglyn.com', tenantId: DESIGNATED },
       AGLYN_OPERATED,
     )
     expect(decision.verdict).toBe('allow-designated-tenant')
@@ -70,7 +70,7 @@ describe('the five identities that must stay valid', () => {
 
   it('2. the permanent break-glass — a personal address, project pool — is allowed', () => {
     const decision = evaluateSsoDomainPolicy(
-      { email: 'zachary.w.gover@gmail.com', tenantId: null },
+      { email: 'break-glass@example.net', tenantId: null },
       AGLYN_OPERATED,
     )
     expect(decision.verdict).toBe('allow-ungoverned')
@@ -97,7 +97,7 @@ describe('the five identities that must stay valid', () => {
 
   it('5. @aglyn.com with NO tenant is the one refusal', () => {
     const decision = evaluateSsoDomainPolicy(
-      { email: 'zachary.gover@aglyn.com', tenantId: null },
+      { email: 'consumer-idp@aglyn.com', tenantId: null },
       AGLYN_OPERATED,
     )
     expect(decision.verdict).toBe('refuse-sso-required')
@@ -111,7 +111,7 @@ describe('self-hosting — the rule is policy, not a hardcoded assumption', () =
    * The case an open-source reviewer looks for first. Identical identity,
    * identical enforcement switch; only the operator's configuration differs.
    */
-  const identity = { email: 'zachary.gover@aglyn.com', tenantId: null }
+  const identity = { email: 'consumer-idp@aglyn.com', tenantId: null }
 
   it('a self-host install (no configured domains) governs nothing', () => {
     const decision = evaluateSsoDomainPolicy(identity, SELF_HOSTED)
@@ -169,11 +169,11 @@ describe('the policy never reads the staff claim', () => {
    * moves is the one that fails here.
    */
   const identities = [
-    { email: 'zach@aglyn.com', tenantId: DESIGNATED },
-    { email: 'zachary.w.gover@gmail.com', tenantId: null },
+    { email: 'staff@aglyn.com', tenantId: DESIGNATED },
+    { email: 'break-glass@example.net', tenantId: null },
     { email: 'someone@example.com', tenantId: null },
     { email: 'staffer@customer-co.example', tenantId: CUSTOMER_TENANT },
-    { email: 'zachary.gover@aglyn.com', tenantId: null },
+    { email: 'consumer-idp@aglyn.com', tenantId: null },
   ]
 
   it.each(identities)('verdict for %o ignores every staff permutation', (identity) => {
@@ -202,7 +202,7 @@ describe('the policy never reads the staff claim', () => {
       ssoDomainRefusal({ email: 'break-glass@personal.example', tenantId: null }, AGLYN_ON),
     ).toBeNull()
     expect(
-      ssoDomainRefusal({ email: 'zachary.w.gover@gmail.com', tenantId: null }, AGLYN_ON),
+      ssoDomainRefusal({ email: 'break-glass@example.net', tenantId: null }, AGLYN_ON),
     ).toBeNull()
   })
 })
@@ -263,14 +263,14 @@ describe('the enforcement switch', () => {
   })
 
   it('OFF: the refusal is still computed but nobody is turned away', () => {
-    const identity = { email: 'zachary.gover@aglyn.com', tenantId: null }
+    const identity = { email: 'consumer-idp@aglyn.com', tenantId: null }
     expect(evaluateSsoDomainPolicy(identity, AGLYN_OPERATED).refused).toBe(true)
     expect(ssoDomainRefusal(identity, AGLYN_OFF)).toBeNull()
   })
 
   it('ON: refuses the project-pool @aglyn.com identity with a 403', async () => {
     const refusal = ssoDomainRefusal(
-      { email: 'zachary.gover@aglyn.com', tenantId: null },
+      { email: 'consumer-idp@aglyn.com', tenantId: null },
       AGLYN_ON,
     )
     expect(refusal).not.toBeNull()
@@ -284,7 +284,7 @@ describe('the enforcement switch', () => {
     // POOL, not the address, so migrating the account is a real fix.
     expect(
       ssoDomainRefusal(
-        { email: 'zachary.gover@aglyn.com', tenantId: DESIGNATED },
+        { email: 'consumer-idp@aglyn.com', tenantId: DESIGNATED },
         AGLYN_ON,
       ),
     ).toBeNull()
@@ -302,9 +302,9 @@ describe('the enforcement switch', () => {
 
 describe('domain parsing', () => {
   it.each([
-    ['zach@aglyn.com', 'aglyn.com'],
-    ['  ZACH@AGLYN.COM  ', 'aglyn.com'],
-    ['zach+e2e-smoke@aglyn.com', 'aglyn.com'],
+    ['staff@aglyn.com', 'aglyn.com'],
+    ['  STAFF@AGLYN.COM  ', 'aglyn.com'],
+    ['staff+e2e-smoke@aglyn.com', 'aglyn.com'],
   ])('%p resolves to %p', (email, expected) => {
     expect(domainOf(email)).toBe(expected)
   })
@@ -355,7 +355,7 @@ describe('domain parsing', () => {
 describe('foreign-tenant visibility', () => {
   it('flags an @aglyn.com identity in a tenant Aglyn does not control', () => {
     const decision = evaluateSsoDomainPolicy(
-      { email: 'zach@aglyn.com', tenantId: CUSTOMER_TENANT },
+      { email: 'staff@aglyn.com', tenantId: CUSTOMER_TENANT },
       AGLYN_OPERATED,
     )
     // Allowed — they DID use SSO — but surfaced, because the IdP governing
@@ -368,7 +368,7 @@ describe('foreign-tenant visibility', () => {
   it('is not refused even with enforcement ON', () => {
     expect(
       ssoDomainRefusal(
-        { email: 'zach@aglyn.com', tenantId: CUSTOMER_TENANT },
+        { email: 'staff@aglyn.com', tenantId: CUSTOMER_TENANT },
         AGLYN_ON,
       ),
     ).toBeNull()

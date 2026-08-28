@@ -96,18 +96,18 @@ describe('Google OAuth provider construction (AGL-1415)', () => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
     } = require('./oauth-providers')
 
-    const google = createAuthProvider(null, 'zach@aglyn.com')
+    const google = createAuthProvider(null, 'staff@aglyn.com')
     expect(google.getCustomParameters()).toEqual({
       prompt: 'select_account',
-      login_hint: 'zach@aglyn.com',
+      login_hint: 'staff@aglyn.com',
     })
 
     // SAML is the flow the hint exists for: without it Google resolves the
     // request against `authuser=0` and answers app_not_configured_for_user.
-    const saml = createAuthProvider('saml.aglyn-workspace', 'zach@aglyn.com')
+    const saml = createAuthProvider('saml.aglyn-workspace', 'staff@aglyn.com')
     expect(saml.providerId).toBe('saml.aglyn-workspace')
     expect(saml.getCustomParameters()).toEqual({
-      login_hint: 'zach@aglyn.com',
+      login_hint: 'staff@aglyn.com',
     })
   })
 

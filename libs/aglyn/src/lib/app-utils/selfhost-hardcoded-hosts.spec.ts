@@ -423,22 +423,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'this ratchet red on main.',
   },
   {
-    file: 'tools/scripts/check-decision-log.mjs',
-    count: 1,
-    reason:
-      'AGL-1908. The pricing change-control guard. The single literal is the ' +
-      "Google Drive MOUNT PATH of Aglyn's own Pricing Decision Log — a local " +
-      'filesystem path, not a network host, and the same shape already ' +
-      'allowed for check-pricing-drift.mjs and legal-doc-diff.mjs. The ' +
-      'script makes no network call: its only subprocess is `git`, against ' +
-      'the local repo. Internal CI guard, run from package.json and imported ' +
-      'by no app; the Drive leg is explicitly NOT a gate and is skipped with ' +
-      'a note when the drive is unmounted, because CI has no Drive — so a ' +
-      "self-hoster who ran it would simply skip that leg. Landed unlisted in " +
-      '5265ca437, which left this ratchet red on main — the SIXTH such red ' +
-      'on 2026-08-24, and the one that landed while AGL-1533 was being fixed.',
-  },
-  {
     file: 'tools/scripts/check-legal-index-dates.mjs',
     count: 1,
     reason:
@@ -447,30 +431,10 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'origin.',
   },
   {
-    file: 'tools/scripts/check-runbook-commands.mjs',
-    count: 1,
-    reason:
-      'AGL-1533. The launch-day runbook checker. The single literal is the ' +
-      "Google Drive MOUNT PATH of Aglyn's own Platform Docs shared drive, " +
-      'where LAUNCH_DAY_RUNBOOK.md lives — a local filesystem path, not a ' +
-      'network host. The script makes NO network call of any kind (its only ' +
-      '`http` string is the Apache-2.0 licence header), so it cannot reach ' +
-      "our infrastructure from anyone's deployment, which is the AGL-2124 " +
-      'failure this ratchet exists to prevent. It is also ALREADY ' +
-      'configurable, which is why the literal is only a default: ' +
-      'AGLYN_RUNBOOK points at a copy of the document, AGLYN_LAUNCH_DOCS at ' +
-      'a different folder. Internal CI guard — run from ' +
-      '.github/workflows/tools-guards.yml, imported by no app, never ' +
-      'shipped. A self-hoster has no Aglyn launch runbook for it to read and ' +
-      'never runs it; were they to, an unmounted drive is exit 2 ' +
-      '(INCONCLUSIVE), not a false pass. Landed unlisted in b8dfe7f04, which ' +
-      'left this ratchet red on main.',
-  },
-  {
     file: 'tools/scripts/check-week-one-preflight.mjs',
-    count: 12,
+    count: 11,
     reason:
-      "Aglyn's own launch-week pre-flight (AGL-1617). Never shipped and never imported by an app: it reads OUR Drive folder, OUR five live legal pages and the five demo hosts by name, because the thing it checks IS our launch. A self-hoster has no use for it, so there is nothing here to make configurable. Landed unlisted in 3247f379b, which left this ratchet red on main until AGL-1617 added this entry.",
+      "Aglyn's own launch-week pre-flight (AGL-1617). Never shipped and never imported by an app: it reads OUR five live legal pages and the five demo hosts by name, because the thing it checks IS our launch. A self-hoster has no use for it, so there is nothing here to make configurable. The twelfth occurrence was the shared drive's mount path, which named a workstation account rather than a host and now comes from AGLYN_DRIVE_MOUNT.",
   },
   {
     file: 'tools/scripts/check-retired-colours.mjs',
@@ -483,18 +447,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       'Renders Aglyn own marketing blog covers. Internal tool.',
-  },
-  {
-    file: 'tools/scripts/legal-doc-diff.mjs',
-    count: 1,
-    reason:
-      'A path inside Aglyn own Google shared drive, plus our legal origin. Internal tool.',
-  },
-  {
-    file: 'tools/scripts/check-pricing-drift.mjs',
-    count: 1,
-    reason:
-      'The mount path of Aglyn own Google shared drive, where the pricing source-of-truth doc lives. Internal tool, and the leg that reads it is skipped entirely when the drive is not mounted (AGL-1885).',
   },
   {
     file: 'tools/scripts/lib/contact-addresses.mjs',

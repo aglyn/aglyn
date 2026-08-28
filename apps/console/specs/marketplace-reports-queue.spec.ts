@@ -168,7 +168,7 @@ const post = (body: Record<string, unknown>) =>
 const asSuper = () =>
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
-    email: 'zach@aglyn.com',
+    email: 'staff@aglyn.com',
     email_verified: true,
     staff: true,
     staffRole: 'super',
@@ -273,14 +273,14 @@ describe('THE STATUS CHANGE IS WHAT THE QUEUE WRITES BACK', () => {
     expect(state.reports[PHISHING]).toMatchObject({
       status: 'actioned',
       resolution: 'Listing unpublished; publisher emailed.',
-      resolvedByEmail: 'zach@aglyn.com',
+      resolvedByEmail: 'staff@aglyn.com',
     })
     // And the audit row can answer "from what, by whom" a year later.
     expect(state.audit).toHaveLength(1)
     expect(state.audit[0]).toMatchObject({
       action: 'marketplace-report-status',
       targetId: PHISHING,
-      actorEmail: 'zach@aglyn.com',
+      actorEmail: 'staff@aglyn.com',
       before: { status: 'open' },
       after: {
         status: 'actioned',

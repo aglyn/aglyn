@@ -72,9 +72,9 @@ export interface PooledUserRecord {
  * An address or a provider entry is the evidence. `signInWithCustomToken`
  * mints an account out of nothing when the uid is absent from the pool the
  * token was minted in, and the record it manufactures has neither: measured
- * on production, the `IHumyGGhGxZKjVV26qCRx5Okf573` project-pool twin had
- * `email: null` and `providerData: []` while the real SSO record carried
- * `zach@aglyn.com` and `saml.aglyn-workspace`.
+ * on production, a project-pool twin of a tenant uid had `email: null` and
+ * `providerData: []` while the real SSO record carried both an address and
+ * `saml.aglyn-workspace`.
  *
  * `displayName` and custom claims deliberately do NOT count. Both can be
  * written onto any record after the fact — `updateProfile` and `grantStaff`
@@ -464,8 +464,8 @@ export interface StaffClaimWrite {
  * grant aimed at the wrong pool does not error — on the project pool it
  * either throws `user-not-found` (loud, fine) or, when a phantom shadow record
  * shares the uid, silently succeeds against the WRONG record. That is not
- * hypothetical: on 2026-08-18 uid `IHumyGGhGxZKjVV26qCRx5Okf573` existed in
- * both the project pool and `aglyn-org-y5v14`. That phantom won every lookup
+ * hypothetical: on 2026-08-18 a staff account's uid existed in both the
+ * project pool and `aglyn-org-y5v14` at once. That phantom won every lookup
  * until AGL-2005 made {@link findUserByUidAcrossPools} rank an IDENTIFIED
  * record above an unidentified one rather than taking the first pool to
  * answer.

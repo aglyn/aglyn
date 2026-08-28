@@ -576,7 +576,7 @@ describe('analytics-events (AGL-1561)', () => {
     it('drops identity-bearing param keys outright', () => {
       const safe = sanitizeEventParams({
         form_name: 'Contact',
-        email: 'zach@aglyn.com',
+        email: 'person@example.com',
         first_name: 'Zach',
         org_name: 'Aglyn LLC',
         phone: '+1 555 0100',
@@ -611,7 +611,7 @@ describe('analytics-events (AGL-1561)', () => {
 
     it('scrubs URLs to origin + pathname so a query string cannot smuggle a token', () => {
       const safe = sanitizeEventParams({
-        content_id: 'https://aglyn.com/pricing?email=zach@aglyn.com&token=secret',
+        content_id: 'https://aglyn.com/pricing?email=person@example.com&token=secret',
       })
 
       expect(safe).toEqual({ content_id: 'https://aglyn.com/pricing' })
@@ -648,7 +648,7 @@ describe('analytics-events (AGL-1561)', () => {
         form_name: 'Contact',
         // @ts-expect-error deliberately smuggling a denied key past the types,
         // which is exactly how it would arrive from a careless call site.
-        email: 'zach@aglyn.com',
+        email: 'person@example.com',
       })
 
       expect(calls[0][2]).toEqual({ form_name: 'Contact' })
@@ -674,7 +674,7 @@ describe('analytics-events (AGL-1561)', () => {
       // into the step's params and a customer's address heads for GA.
       trackAuthoredEvent('quote_requested', {
         plan: 'pro',
-        email: 'zach@aglyn.com',
+        email: 'person@example.com',
         contact: 'someone@example.com',
       })
 

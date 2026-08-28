@@ -43,12 +43,12 @@ export {}
  *
  * So this drives the handler with the production shape: the same uid in the
  * project pool with nothing on it and in `aglyn-org-y5v14` with
- * `zach@aglyn.com`. It asserts the wiring, the choice of survivor, and that
+ * `staff@aglyn.com`. It asserts the wiring, the choice of survivor, and that
  * the collision still reaches the client — a merge that says nothing is
  * indistinguishable from a real duplicate being quietly dropped.
  */
 
-const SHADOW_UID = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+const SHADOW_UID = 'SsoTenantUidFixture000000000'
 const SSO_TENANT = 'aglyn-org-y5v14'
 
 const authRecord = (over: Record<string, unknown>) => ({
@@ -72,7 +72,7 @@ const shadowRow = {
 /** The account the human actually signs in as. */
 const ssoRow = {
   record: authRecord({
-    email: 'zach@aglyn.com',
+    email: 'staff@aglyn.com',
     providerData: [{ providerId: 'saml.aglyn-workspace' }],
   }),
   tenantId: SSO_TENANT as string | null,
@@ -160,7 +160,7 @@ describe('AGL-2005 · one row per human', () => {
    */
   it('keeps the identified record, never the emailless artifact', async () => {
     const payload = await listUsers()
-    expect(payload.users[0].email).toBe('zach@aglyn.com')
+    expect(payload.users[0].email).toBe('staff@aglyn.com')
     expect(payload.users[0].tenantId).toBe(SSO_TENANT)
     expect(payload.users[0].providers).toEqual(['saml.aglyn-workspace'])
   })

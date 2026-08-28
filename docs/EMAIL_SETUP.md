@@ -37,12 +37,12 @@ without re-plumbing.
 
 | Address | Promised in | Delivers to |
 | --- | --- | --- |
-| `privacy@aglyn.com` | Privacy Policy §7, §9, §11, §13; DPA Annex A data-importer contact; `/legal/subprocessors` | `zach@aglyn.com` |
-| `legal@aglyn.com` | Terms §18.1, §18.5 (arbitration opt-out), §19.8, §19.11; Marketplace Publisher Agreement §14 | `zach@aglyn.com` |
-| `security@aglyn.com` | Privacy Policy §6; Terms §3.3; `docs.aglyn.com/trust` | `zach@aglyn.com` |
-| `abuse@aglyn.com` | Acceptable Use Policy | `zach@aglyn.com` |
-| `dmca@aglyn.com` | Copyright/DMCA Policy | `zach@aglyn.com` |
-| `support@aglyn.com` | **No legal document, as of 2026-08-24** — see below. The value of `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`, printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | `zach@aglyn.com` |
+| `privacy@aglyn.com` | Privacy Policy §7, §9, §11, §13; DPA Annex A data-importer contact; `/legal/subprocessors` | the account owner's mailbox |
+| `legal@aglyn.com` | Terms §18.1, §18.5 (arbitration opt-out), §19.8, §19.11; Marketplace Publisher Agreement §14 | the account owner's mailbox |
+| `security@aglyn.com` | Privacy Policy §6; Terms §3.3; `docs.aglyn.com/trust` | the account owner's mailbox |
+| `abuse@aglyn.com` | Acceptable Use Policy | the account owner's mailbox |
+| `dmca@aglyn.com` | Copyright/DMCA Policy | the account owner's mailbox |
+| `support@aglyn.com` | **No legal document, as of 2026-08-24** — see below. The value of `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`, printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | the account owner's mailbox |
 
 > ⚠️ **`support@` acquired a legal obligation on 2026-08-18 and lost it again on
 > 2026-08-24.** This row read "No legal document" until AGL-1648 caught the first change;
@@ -94,7 +94,8 @@ Note that the Groups **"All groups"** listing is *not* a complete enumeration �
 above is conclusive.
 
 Last verified **2026-08-19** (AGL-1911): all six accept unmoderated posts from
-anyone on the web and deliver each message to `zach@aglyn.com`. Each has a
+anyone on the web and deliver each message to the account owner's mailbox.
+Each has a
 single member and no auto-acknowledgement — AGL-2400.
 
 ### Auto-acknowledgement: what each intake owes a stranger (AGL-2400)
@@ -272,7 +273,7 @@ automatically.
 4. Paste the block above into the body — the four paragraphs only, without the
    `>` quote markers.
 5. Leave *…to members outside the organization* alone unless you want a reply to
-   your own mail; `zach@aglyn.com` is the only member today.
+   your own mail; the account owner is the only member today.
 6. **Save changes.**
 7. Verify by reloading the settings page and reading the checkbox and body back.
    **Do not test by emailing `security@`** — a fake vulnerability report in that
@@ -323,7 +324,7 @@ that silence stops being ambiguous.
 
 ### The second member — also the account owner's, and not fixed by anything above
 
-Every one of the six has exactly one member, `zach@aglyn.com`. Because *Who can
+Every one of the six has exactly one member, the account owner. Because *Who can
 post* is "Anyone on the web" with no moderation, mail is **accepted** the whole
 time that account is unavailable — so a DSAR, a breach report and a §512 notice
 all land silently unread, with no bounce telling the sender to escalate. The

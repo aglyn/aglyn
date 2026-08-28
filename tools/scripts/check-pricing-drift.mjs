@@ -44,6 +44,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { driveDocPath } from './lib/drive-mount.mjs'
 import {
   parsePlanRecord,
   parseUnitRates,
@@ -87,10 +88,13 @@ const LOCKED = {
   },
 }
 
-/** Where the source-of-truth doc is mounted, when Drive is available. */
-const SOURCE_OF_TRUTH_MD =
-  `${process.env.HOME}/Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/` +
-  `Platform Docs/Pricing & Packaging/00-Pricing-Source-of-Truth/Pricing-Source-of-Truth.md`
+/** Where the source-of-truth doc lives, when the shared drive is mounted. */
+const SOURCE_OF_TRUTH_MD = driveDocPath(
+  'Platform Docs',
+  'Pricing & Packaging',
+  '00-Pricing-Source-of-Truth',
+  'Pricing-Source-of-Truth.md',
+)
 
 
 /**
@@ -277,7 +281,9 @@ if (args.stripe) {
 // a machine where Drive had simply evicted the file.
 let sourceOfTruthMd = null
 try {
-  if (existsSync(SOURCE_OF_TRUTH_MD)) sourceOfTruthMd = readFileSync(SOURCE_OF_TRUTH_MD, 'utf8')
+  if (SOURCE_OF_TRUTH_MD && existsSync(SOURCE_OF_TRUTH_MD)) {
+    sourceOfTruthMd = readFileSync(SOURCE_OF_TRUTH_MD, 'utf8')
+  }
 } catch {
   sourceOfTruthMd = null
 }

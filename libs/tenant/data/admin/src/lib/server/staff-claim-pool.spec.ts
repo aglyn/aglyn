@@ -114,10 +114,10 @@ beforeEach(() => {
 
 describe('a staff grant lands in the pool the identity lives in', () => {
   it("grants to Aglyn's SSO tenant identity, and the project pool receives nothing", async () => {
-    // The live shape: zach@aglyn.com exists ONLY in the SAML tenant.
+    // The live shape: staff@aglyn.com exists ONLY in the SAML tenant.
     tenantUsers.set(
       AGLYN_TENANT,
-      new Map([['sso-uid', userRecord('sso-uid', 'zach@aglyn.com')]]),
+      new Map([['sso-uid', userRecord('sso-uid', 'staff@aglyn.com')]]),
     )
     const write = await setClaimsInOwningPool('sso-uid', STAFF)
 
@@ -142,7 +142,7 @@ describe('a staff grant lands in the pool the identity lives in', () => {
   it('grants to a project-pool identity — the permanent break-glass shape', async () => {
     projectUsers.set(
       'break-glass',
-      userRecord('break-glass', 'zachary.w.gover@gmail.com'),
+      userRecord('break-glass', 'break-glass@example.net'),
     )
     tenantUsers.set(AGLYN_TENANT, new Map())
     const write = await setClaimsInOwningPool('break-glass', STAFF)
@@ -174,7 +174,7 @@ describe('a staff grant lands in the pool the identity lives in', () => {
   it('revoking also targets the owning pool', async () => {
     tenantUsers.set(
       AGLYN_TENANT,
-      new Map([['sso-uid', userRecord('sso-uid', 'zach@aglyn.com', STAFF)]]),
+      new Map([['sso-uid', userRecord('sso-uid', 'staff@aglyn.com', STAFF)]]),
     )
     await setClaimsInOwningPool('sso-uid', { staff: false })
     expect(claimsIn(tenantUsers.get(AGLYN_TENANT), 'sso-uid')).toEqual({
@@ -186,8 +186,8 @@ describe('a staff grant lands in the pool the identity lives in', () => {
 describe('the phantom shadow record (AGL-1962) is reported, not silently preferred', () => {
   it('the SSO identity wins even while the shadow still exists (AGL-2005)', async () => {
     // Both pools hold the SAME uid — the state measured on production on
-    // 2026-08-18, where `IHumyGGhGxZKjVV26qCRx5Okf573` existed in the project
-    // pool and in `aglyn-org-y5v14` at once.
+    // 2026-08-18, where one staff account's uid existed in the project pool
+    // and in `aglyn-org-y5v14` at once.
     //
     // This test used to pin the OPPOSITE outcome and called it "the
     // documented hazard": the project pool was checked first, so the empty
@@ -208,7 +208,7 @@ describe('the phantom shadow record (AGL-1962) is reported, not silently preferr
     projectUsers.set('dual-uid', userRecord('dual-uid', null as any))
     tenantUsers.set(
       AGLYN_TENANT,
-      new Map([['dual-uid', userRecord('dual-uid', 'zach@aglyn.com')]]),
+      new Map([['dual-uid', userRecord('dual-uid', 'staff@aglyn.com')]]),
     )
     const write = await setClaimsInOwningPool('dual-uid', STAFF)
 
@@ -224,7 +224,7 @@ describe('the phantom shadow record (AGL-1962) is reported, not silently preferr
     // and that the test is measuring the shadow, not something else.
     tenantUsers.set(
       AGLYN_TENANT,
-      new Map([['dual-uid', userRecord('dual-uid', 'zach@aglyn.com')]]),
+      new Map([['dual-uid', userRecord('dual-uid', 'staff@aglyn.com')]]),
     )
     const write = await setClaimsInOwningPool('dual-uid', STAFF)
 

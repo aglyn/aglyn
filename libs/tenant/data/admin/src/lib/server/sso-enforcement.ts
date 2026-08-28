@@ -45,8 +45,9 @@
  *     one account at a time and is blind to the org-level failure: strip every
  *     account down to the SAML link and the pool is perfectly consistent right
  *     up until the IdP stops answering, at which point nobody can sign in and
- *     we cannot let them back in either. `zach@aglyn.com` is in that state
- *     today. So enforcement REFUSES unless the org keeps a way in that does
+ *     we cannot let them back in either. The `aglyn-org-y5v14` tenant is in
+ *     that state today. So enforcement REFUSES unless the org keeps a way in
+ *     that does
  *     not depend on the IdP: either a DESIGNATED break-glass account inside
  *     the pool, or an org owner who lives OUTSIDE it
  *     ({@link findBreakGlassOrgOwners}). The second is what makes the first
@@ -343,9 +344,10 @@ export function planAccount(
   //
   // This IS a standing bypass of SSO enforcement, and it is meant to be —
   // that is what makes it a way back in when the IdP stops answering. The
-  // alternative is the state `zach@aglyn.com` is in today: every account in
-  // the pool holds nothing but a SAML link, and a lapsed certificate or a
-  // deleted SAML app locks the organization out of itself permanently.
+  // alternative is the state the `aglyn-org-y5v14` tenant is in today: every
+  // account in the pool holds nothing but a SAML link, and a lapsed
+  // certificate or a deleted SAML app locks the organization out of itself
+  // permanently.
   //
   // Checked AFTER the orphan rule so the two cannot disagree about an account
   // that is both, and it changes nothing for a break-glass account that has

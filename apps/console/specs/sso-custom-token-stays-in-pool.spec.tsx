@@ -16,10 +16,10 @@
  */
 
 /**
- * AGL-1993 — the staff console 404 for `zach@aglyn.com`.
+ * AGL-1993 — the staff console 404 for `staff@aglyn.com`.
  *
  * The claim was never missing. Verified against BOTH pools on 2026-08-19:
- * `zach@aglyn.com` lives in GCIP tenant `aglyn-org-y5v14` (provider
+ * `staff@aglyn.com` lives in GCIP tenant `aglyn-org-y5v14` (provider
  * `saml.aglyn-workspace`) carrying `{"staff":true,"staffRole":"super"}`, and
  * there is no project-pool twin. The break is on the READ side: the silent
  * cross-subdomain restore exchanged the tenant-minted custom token on an auth

@@ -20,7 +20,7 @@ escalation path.**
 
 This is stated first because every other line in this document depends on it,
 and because pretending otherwise would make the rest of it useless. Every alert
-policy on `aglyn-main` emails `zach@aglyn.com` and nothing else. There is no
+policy on `aglyn-main` emails one person's mailbox and nothing else. There is no
 pager, no secondary, no follow-the-sun. `docs.aglyn.com/trust` publishes this
 in the "what we do not have" table — *"Formal 24/7 on-call rotation: No"* —
 which is the right call: a reviewer who finds it in the table is better served

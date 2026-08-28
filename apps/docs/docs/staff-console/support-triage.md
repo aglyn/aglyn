@@ -145,7 +145,7 @@ worse than one that admits the gap:
   mechanism.
 - **`security@`, `abuse@` and `dmca@` deliver** — confirmed 2026-08-19
   (AGL-1911) from Google Workspace group configuration: each is a Google Group
-  accepting posts from anyone on the web, unmoderated, with `zach@aglyn.com`
+  accepting posts from anyone on the web, unmoderated, with a single member
   subscribed to every message. What is *not* closed is that each has exactly one
   member and sends no auto-acknowledgement (AGL-2400) — so mail is accepted and
   archived whether or not anyone is reading. `security@` is the declared primary

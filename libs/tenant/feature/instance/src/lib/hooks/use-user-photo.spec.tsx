@@ -124,7 +124,7 @@ describe('useUserPhoto (AGL-1961)', () => {
   })
 
   it('CONTROL — nothing anywhere is undefined, so callers draw initials', () => {
-    // The measured state of `zach@aglyn.com` on 2026-08-18. This is the case
+    // The measured state of `staff@aglyn.com` on 2026-08-18. This is the case
     // that must keep returning falsy: `MemberAvatar` and the account chip
     // treat any truthy value as an `<img src>`, and AGL-1683 removed the
     // vendor that used to make this branch unreachable.

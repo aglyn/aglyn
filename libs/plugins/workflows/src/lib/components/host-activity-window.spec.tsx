@@ -83,7 +83,7 @@ const busy: FakeDoc[] = [
   id: id as string,
   data: {
     action,
-    actorEmail: 'zach@aglyn.com',
+    actorEmail: 'actor@example.com',
     target: { type: 'screen', id: BUSY_SCREEN, name: 'Press — Entry Template' },
     createdAt: { seconds },
   },

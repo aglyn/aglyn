@@ -2029,7 +2029,8 @@ validates a payload and stores nothing.
 > GMT-5, and the property now reads **30 event-scoped dimensions and 5 custom
 > metrics**. Counted row by row off Admin → Data display → Custom definitions
 > (both tabs, both pages of the dimension list), and corroborated by Account
-> change history, which logs each `Created` with a timestamp and `zach@aglyn.com`.
+> change history, which logs each `Created` with a timestamp and the account
+> that made it.
 >
 > | Registry | Used (2026-08-24 AM) | Used (2026-08-24 PM) | Cap |
 > | -- | -- | -- | -- |

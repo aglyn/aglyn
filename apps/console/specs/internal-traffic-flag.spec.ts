@@ -46,7 +46,7 @@ describe('isInternalTrafficSession (AGL-1582)', () => {
       isInternalTrafficSession({
         staff: false,
         impersonatedBy: 'staff-uid-1',
-        impersonatedByEmail: 'zach@aglyn.com',
+        impersonatedByEmail: 'staff@aglyn.com',
       }),
     ).toBe(true)
   })

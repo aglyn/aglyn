@@ -228,7 +228,7 @@ beforeEach(() => {
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
-    email: 'zach@aglyn.com',
+    email: 'staff@aglyn.com',
     email_verified: true,
     staff: true,
   })

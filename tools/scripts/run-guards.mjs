@@ -122,6 +122,7 @@ const REPO_WIDE = new Set([
   'check:hardcoded-colours',
   'check:no-tax-identifiers',
   'check:residential-address',
+  'check:personal-identifiers',
   'check:provider-key-exposure',
   'check:next-public-access',
   'check:contact-addresses',

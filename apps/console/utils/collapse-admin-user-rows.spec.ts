@@ -35,7 +35,7 @@ import {
  * change to how pages are joined shows up here.
  */
 
-const SHADOW_UID = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+const SHADOW_UID = 'SsoTenantUidFixture000000000'
 const SSO_TENANT = 'aglyn-org-y5v14'
 
 interface Row {
@@ -71,7 +71,7 @@ const shadowOnPageOne = row({ uid: SHADOW_UID })
 /** The account the human actually signs in as, appended on the LAST page. */
 const ssoOnLastPage = row({
   uid: SHADOW_UID,
-  email: 'zach@aglyn.com',
+  email: 'staff@aglyn.com',
   displayName: 'Zach Gover',
   providers: ['saml.aglyn-workspace'],
   tenantId: SSO_TENANT,
@@ -97,7 +97,7 @@ describe('collapseAdminUserRows — one row per human across pages (AGL-2005)', 
     expect(collapsed[0].uid).toBe(SHADOW_UID)
     // The survivor is the record that identifies the human, never the
     // artifact — the display must not tell staff this person has no email.
-    expect(collapsed[0].email).toBe('zach@aglyn.com')
+    expect(collapsed[0].email).toBe('staff@aglyn.com')
     expect(collapsed[0].tenantId).toBe(SSO_TENANT)
   })
 
@@ -120,8 +120,8 @@ describe('collapseAdminUserRows — one row per human across pages (AGL-2005)', 
     const ssoFirst = collapseAdminUserRows(
       accumulate([ssoOnLastPage], [shadowOnPageOne]),
     )
-    expect(shadowFirst[0].email).toBe('zach@aglyn.com')
-    expect(ssoFirst[0].email).toBe('zach@aglyn.com')
+    expect(shadowFirst[0].email).toBe('staff@aglyn.com')
+    expect(ssoFirst[0].email).toBe('staff@aglyn.com')
   })
 
   /**
@@ -261,7 +261,7 @@ describe('adminUserRowIdentityStrength (AGL-2005)', () => {
     })
     const realAccount = row({
       uid: SHADOW_UID,
-      email: 'zach@aglyn.com',
+      email: 'staff@aglyn.com',
       providers: ['saml.aglyn-workspace'],
       tenantId: SSO_TENANT,
     })

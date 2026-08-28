@@ -154,9 +154,9 @@ describe('findUserByEmailAcrossPools (AGL-1122)', () => {
     // project pool, present in the org's SSO tenant.
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([['u1', userRecord('u1', 'zach@aglyn.com')]]),
+      new Map([['u1', userRecord('u1', 'staff@aglyn.com')]]),
     )
-    const found = await findUserByEmailAcrossPools('zach@aglyn.com')
+    const found = await findUserByEmailAcrossPools('staff@aglyn.com')
     expect(found?.record.uid).toBe('u1')
     expect(found?.tenantId).toBe('aglyn-org-y5v14')
   })
@@ -214,9 +214,9 @@ describe('findUserByUidAcrossPools (AGL-1122)', () => {
    * still routes `grantStaff` / `disable` / `revokeRefreshTokens` to a ghost
    * is worse than two honest rows.
    *
-   * This is the production shape: uid `IHumyGGhGxZKjVV26qCRx5Okf573` in the
+   * This is the production shape: one uid present in the
    * project pool with nothing on it, and the same uid in `aglyn-org-y5v14`
-   * carrying `zach@aglyn.com` and the SAML provider. The old lookup returned
+   * carrying `staff@aglyn.com` and the SAML provider. The old lookup returned
    * the project pool's answer because it asked first, so every staff action
    * on that person mutated the forgery — a `revokeRefreshTokens` really did
    * land there on 2026-08-14 while the real account's sessions stayed live.
@@ -226,15 +226,15 @@ describe('findUserByUidAcrossPools (AGL-1122)', () => {
    * `tenantId` reads null and `record.email` undefined.
    */
   it('returns the IDENTIFIED record, not whichever pool answers first', async () => {
-    const uid = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+    const uid = 'SsoTenantUidFixture000000000'
     projectUsers.set(uid, shadowRecord(uid))
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([[uid, ssoRecord(uid, 'zach@aglyn.com')]]),
+      new Map([[uid, ssoRecord(uid, 'staff@aglyn.com')]]),
     )
     const found = await findUserByUidAcrossPools(uid)
     expect(found?.tenantId).toBe('aglyn-org-y5v14')
-    expect(found?.record.email).toBe('zach@aglyn.com')
+    expect(found?.record.email).toBe('staff@aglyn.com')
     // And it says the twin exists, so a caller is never silently redirected.
     expect(found?.uidAlsoInPools).toEqual([null])
   })
@@ -393,7 +393,7 @@ describe('listUsersAcrossPools (AGL-1122)', () => {
     projectUsers.set(uid, userRecord(uid, undefined as any))
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([[uid, userRecord(uid, 'zach@aglyn.com')]]),
+      new Map([[uid, userRecord(uid, 'staff@aglyn.com')]]),
     )
     const page = await listUsersAcrossPools(200)
 
@@ -454,7 +454,7 @@ describe('markCrossPoolUidCollisions (AGL-1962)', () => {
  * ever "simplifies" this to dedupe on address.
  */
 describe('collapseCrossPoolUidRows (AGL-2005)', () => {
-  const uid = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+  const uid = 'SsoTenantUidFixture000000000'
   const row = (record: any, tenantId: string | null) => ({ record, tenantId })
 
   /**
@@ -465,21 +465,21 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   it('collapses one uid in two pools to ONE row, and keeps the identified one', () => {
     const collapsed = collapseCrossPoolUidRows([
       row(shadowRecord(uid), null),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
     ])
     expect(collapsed).toHaveLength(1)
-    expect(collapsed[0].record.email).toBe('zach@aglyn.com')
+    expect(collapsed[0].record.email).toBe('staff@aglyn.com')
     expect(collapsed[0].tenantId).toBe('aglyn-org-y5v14')
   })
 
   /** Order of arrival must not decide it — the same pair, listed the other way. */
   it('picks the identified record whichever order the pools arrive in', () => {
     const collapsed = collapseCrossPoolUidRows([
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
       row(shadowRecord(uid), null),
     ])
     expect(collapsed).toHaveLength(1)
-    expect(collapsed[0].record.email).toBe('zach@aglyn.com')
+    expect(collapsed[0].record.email).toBe('staff@aglyn.com')
   })
 
   /**
@@ -494,7 +494,7 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   it('leaves the collision visible on the row it keeps', () => {
     const collapsed = collapseCrossPoolUidRows([
       row(shadowRecord(uid), null),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
     ])
     expect(collapsed[0].uidAlsoInPools).toEqual([null])
   })
@@ -535,7 +535,7 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
       row(userRecord('a', 'a@x.com'), null),
       row(shadowRecord(uid), null),
       row(userRecord('z', 'z@x.com'), null),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
     ])
     expect(collapsed.map((entry) => entry.record.uid)).toEqual([
       'a',
@@ -543,14 +543,14 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
       'z',
     ])
     // Position of the first copy, content of the identified one.
-    expect(collapsed[1].record.email).toBe('zach@aglyn.com')
+    expect(collapsed[1].record.email).toBe('staff@aglyn.com')
   })
 
   it('reduces a uid found in three pools to one row and names both others', () => {
     const collapsed = collapseCrossPoolUidRows([
       row(shadowRecord(uid), null),
       row(shadowRecord(uid), 't1'),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 't2'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 't2'),
     ])
     expect(collapsed).toHaveLength(1)
     expect(collapsed[0].tenantId).toBe('t2')
@@ -566,14 +566,14 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
     projectUsers.set(uid, shadowRecord(uid))
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([[uid, ssoRecord(uid, 'zach@aglyn.com')]]),
+      new Map([[uid, ssoRecord(uid, 'staff@aglyn.com')]]),
     )
     const page = await listUsersAcrossPools(200)
     // The data layer still reports both — nothing is destroyed upstream.
     expect(page.users).toHaveLength(2)
     const rows = collapseCrossPoolUidRows(page.users)
     expect(rows).toHaveLength(1)
-    expect(rows[0].record.email).toBe('zach@aglyn.com')
+    expect(rows[0].record.email).toBe('staff@aglyn.com')
     expect(rows[0].uidAlsoInPools).toEqual([null])
   })
 })
@@ -601,7 +601,7 @@ describe('isIdentifiedUserRecord / identityStrength (AGL-2005)', () => {
     expect(isIdentifiedUserRecord(dressed as any)).toBe(false)
     // And it still loses the merge to the record with the actual address.
     expect(identityStrength(dressed as any)).toBeLessThan(
-      identityStrength(ssoRecord('x', 'zach@aglyn.com') as any),
+      identityStrength(ssoRecord('x', 'staff@aglyn.com') as any),
     )
   })
 

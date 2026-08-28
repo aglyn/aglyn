@@ -403,8 +403,8 @@ support-social-engineering hole with an audit log attached. This is a
 is the real reason phase 1 is 5–7 days and not 3.
 
 **Lockout risk is not hypothetical here.** `sso-enforcement.ts` already
-refuses to run without a designated break-glass account because
-`zach@aglyn.com` is in a permanent-lockout state today (AGL-1888). If staff
+refuses to run without a designated break-glass account because the
+`aglyn-org-y5v14` tenant is in a permanent-lockout state today (AGL-1888). If staff
 accounts enrol TOTP and the staff who can run `clearMfa` are the same people,
 the recovery path can be locked behind the thing it recovers. Before any staff
 account enrols: at least two staff, at least one with a passkey, and the
