@@ -414,6 +414,21 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
         ) : null,
       )}
       <HubTabs
+        /*
+         * Mount the section being read, and no others (AGL-693).
+         *
+         * `HubTabs` keeps every panel mounted unless told otherwise, so
+         * opening one section also subscribed the Firestore listeners behind
+         * all the rest and paid for every document their `limit()` allows.
+         * The reader sees one section; without this the page reads them all.
+         *
+         * Sections as ROUTES make this structural rather than a flag somebody
+         * has to remember, and plugin pages can carry them now: the shell's
+         * route is a catch-all and a nav item's `sections` are resolved by
+         * longest-prefix match. This page has not been converted yet, so the
+         * flag stays until it is.
+         */
+        lazy
             tabs={[
               {
                 id: 'submissions',
