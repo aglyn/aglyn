@@ -224,10 +224,25 @@ const trackingSchema: FormSchema = {
       component: FieldComponentType.TEXT_FIELD,
       name: 'analytics.gtmContainerId',
       label: 'Google Tag Manager container ID',
+      /*
+       * The warning about double counting is in the helper text, not in a
+       * doc somebody reads afterwards.
+       *
+       * The fields above load Google Analytics and Google Ads directly, and a
+       * container carrying its own GA4 or Ads tag loads a SECOND copy of the
+       * same measurement — every pageview counted twice, every conversion
+       * counted twice, and bidding trained on the doubled figure. Nothing in
+       * the page can detect it: the container's contents live in Tag Manager,
+       * not here, so the only place this can be said is beside the field that
+       * turns the container on.
+       */
       helperText:
         'Optional — e.g. GTM-XXXXXXX. A container is a LOADER: whatever ' +
         'tags it carries load with it, so it waits for the same consent, and ' +
-        'advertising tags stay denied unless the visitor grants advertising.',
+        'advertising tags stay denied unless the visitor grants advertising. ' +
+        'Do not put an Analytics or Google Ads tag in the container if you ' +
+        'have filled in the fields above — that loads the same measurement ' +
+        'twice and counts every visit and conversion twice.',
       help: docsHelp('analytics', {
         anchor: '#google-analytics',
         excerpt:

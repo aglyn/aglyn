@@ -43,22 +43,39 @@ Choices" and Global Privacy Control. It is a **sale** denial, not a **share**
 denial. Anyone reasoning from the old sentence will conclude retargeting is
 legally blocked when it is not. ⚑ Read the master, not this file's summary of it.
 
-**Current state, verified 2026-08-25:** Google Signals **OFF** (leave it — that
-is cross-device identity on signed-in Google users, a bigger step than cookie
-retargeting and nothing here needs it). Ads personalization is now **307 of 307
-regions**, opened in the Ads console. The server-side sender still asserts
-`non_personalized_ads` per hit.
+⛔ **AND THE REPLACEMENT SENTENCE WAS WRONG TOO.** It said Google Signals was
+off and should stay off. Read from the property's own Data collection page on
+2026-08-27 (`302497406`, toggle blue and `aria-checked="true"`), **Google
+Signals is ON**, allowed in 307 of 307 regions. The lesson the block above
+teaches is the one this file kept failing: ⚑ read the setting, not the note
+about the setting.
 
-**The AGL-1559 posture line "no Google Ads link" expired on 2026-08-20** — the
-link to account `841-500-9958` exists, with **Personalized Advertising ON**, and
-**ads personalization is now 307 of 307 regions** (opened 2026-08-25). GA4
-audiences therefore export to Google Ads. That is intended: it is what makes
-Google remarketing possible at all, and both legal masters describe it.
+**Current state, verified 2026-08-27 in the GA4 admin:**
 
-Google Signals remains **off** and should stay off — it is cross-device identity
-built on signed-in Google users, a materially bigger step than cookie
-retargeting, and nothing in the current setup needs it. Turning it on is a fresh
-decision, not a continuation of this one.
+| Setting | State |
+| --- | --- |
+| Google Signals | **ON**, allowed in 307 of 307 regions |
+| Ads personalization | **307 of 307 regions** |
+| Google Ads link | account `841-500-9958`, **Personalized Advertising ON** |
+| Granular location and device data | **ON** |
+| User-provided data collection | **ON**, auto-detection ON, receiving on 0 of 1 streams |
+| Data retention | 14 months, event and user, reset on new activity |
+
+Signals being on is what the *published* subprocessor disclosure now describes,
+so the two agree — but nothing recorded WHY it was turned on, and this file had
+said to leave it off. It is cross-device identity built on signed-in Google
+users, materially more than cookie retargeting. Whether that is the intended
+posture is a decision to take deliberately rather than inherit; turning it back
+off is a one-toggle change on the page linked above, and the legal masters would
+then need the same correction in the other direction.
+
+The server-side sender still asserts `non_personalized_ads: true` per hit
+(`ga4-measurement-protocol.ts`), which is a per-event flag and does not depend
+on any of the property settings above.
+
+**The AGL-1559 posture line "no Google Ads link" expired on 2026-08-20.** GA4
+audiences export to Google Ads, which is what makes Google remarketing possible
+at all, and both legal masters describe it.
 
 Cross-domain measurement is configured on the tag (Contains `aglyn.com`, which
 matches `app.aglyn.com` too; plus legacy `aglyn.io`), and `aglyn.com` is listed

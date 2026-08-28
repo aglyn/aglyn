@@ -31,6 +31,7 @@
 import {
   ADVERTISING_TAG_ATTRIBUTE,
   ADVERTISING_VENDORS,
+  GOOGLE_ADS_VENDOR,
   META_PIXEL_VENDOR,
   resolveAdvertisingTags,
   revokeAdvertisingTags,
@@ -836,5 +837,140 @@ describe('the advertising-tag gate', () => {
         .replace(/'_fbc'/g, "'x'")
       expect(undisclosed(stripped).join(' ')).toContain('Meta')
     })
+  })
+})
+
+/**
+ * ONE `gtag.js`, however many Google products are configured (AGL-1152).
+ *
+ * This is the case that costs money if it is wrong, and it is invisible when
+ * it is: two copies of the same library both work. The page renders, the
+ * network tab shows two 200s, and nothing anywhere reports an error — the only
+ * symptom is that every pageview and every conversion is counted twice, so the
+ * reported cost per conversion is half the real one and Smart Bidding is
+ * trained on the doubled figure.
+ *
+ * Google Ads and GA4 are served by the SAME library at
+ * `googletagmanager.com/gtag/js`; two products on one page is two `config`
+ * calls, not two script tags. The vendor declares that with `sharesLibrary`
+ * and the component skips its own `<script>` when a matching one is already
+ * in the document.
+ *
+ * ⚠️ Asserted on the DOCUMENT, not on a flag. `sharedLibraryPresent` reads
+ * `document.querySelector`, so a test that stubbed it would be testing the
+ * stub; these cases put a real `<script src=…>` in the document and count what
+ * the component adds beside it.
+ */
+describe('a shared library is fetched once, not once per product', () => {
+  const ADS_ID = 'AW-18401436785'
+  const withAds = {
+    ...OUR_HOST,
+    analytics: {
+      ...OUR_HOST.analytics,
+      adTags: { ...OUR_HOST.analytics.adTags, 'google-ads': ADS_ID },
+    },
+  }
+  /** Every element this vendor is answerable for. */
+  const adsScripts = () =>
+    Array.from(
+      document.querySelectorAll(
+        `script[${ADVERTISING_TAG_ATTRIBUTE}="${GOOGLE_ADS_VENDOR.id}"]`,
+      ),
+    )
+  const adsLibrary = () =>
+    adsScripts().filter((element) =>
+      String((element as HTMLScriptElement).getAttribute('src') ?? '').includes(
+        GOOGLE_ADS_VENDOR.scriptMatch,
+      ),
+    )
+  /** What the GA gate itself puts on the page, before this component runs. */
+  const placeGaLoader = () => {
+    const existing = document.createElement('script')
+    existing.src =
+      `https://www.googletagmanager.com/gtag/js?id=${PLATFORM_GA_MEASUREMENT_ID}`
+    document.head.append(existing)
+    return existing
+  }
+
+  it('THE CONTROL: with no GA loader present, Ads brings its own', () => {
+    // Without this the skip below is indistinguishable from Google Ads never
+    // rendering a library at all.
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    return renderGate(withAds).then(() => {
+      expect(adsLibrary().length).toBe(1)
+    })
+  })
+
+  it('skips its own copy when the GA loader is already in the document', async () => {
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    placeGaLoader()
+    await renderGate(withAds)
+    // The library the browser fetches: exactly the one GA put there.
+    expect(adsLibrary().length).toBe(0)
+    expect(
+      document.querySelectorAll(
+        `script[src*="${GOOGLE_ADS_VENDOR.scriptMatch}"]`,
+      ).length,
+    ).toBe(1)
+  })
+
+  it('still boots, so the second product is configured on the one library', async () => {
+    /*
+     * The skip must drop the LIBRARY and keep the BOOT. Dropping both would
+     * leave `gtag.js` loaded with no `config` for the Ads id — no double
+     * count, and no measurement either, which is the failure that looks like
+     * success.
+     */
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    placeGaLoader()
+    await renderGate(withAds)
+    const boots = adsScripts().filter((element) => !element.getAttribute('src'))
+    expect(boots.length).toBe(1)
+    expect(boots[0].textContent).toContain(ADS_ID)
+  })
+
+  it('the boot pushes a consent UPDATE and never a default', async () => {
+    /*
+     * A `consent default` arriving from the second product would re-deny what
+     * the GA loader granted moments earlier, in the same pageview — the tags
+     * would be present and silently collecting nothing.
+     */
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    await renderGate(withAds)
+    const boot = adsScripts().find((element) => !element.getAttribute('src'))
+    expect(boot).toBeTruthy()
+    expect(boot?.textContent).toContain("'update'")
+    expect(boot?.textContent).not.toContain("'default'")
+  })
+
+  it('the vendor names the library it shares, and it is gtag', () => {
+    // The skip is keyed on this string; a typo would silently never match and
+    // the double fetch would come back with no test turning red.
+    expect(GOOGLE_ADS_VENDOR.sharesLibrary).toBe('googletagmanager.com/gtag/js')
+    expect(GOOGLE_ADS_VENDOR.scriptSrc).toContain(
+      GOOGLE_ADS_VENDOR.sharesLibrary as string,
+    )
+  })
+
+  it('Meta does NOT share it, so its own library is never skipped', () => {
+    // The skip is per-vendor. A pixel that inherited it would stop loading on
+    // any site that also runs Google Analytics — which is most of them.
+    expect(META_PIXEL_VENDOR.sharesLibrary).toBeUndefined()
   })
 })
