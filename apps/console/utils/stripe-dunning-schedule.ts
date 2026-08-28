@@ -349,9 +349,15 @@ export const BILLING_ENTRY_URL = 'https://app.aglyn.com/billing'
  */
 export const DUNNING_EMAIL_RETURN_PATH = '/billing'
 
-/** The absolute URL to paste into the Stripe Dashboard, per deployment. */
-export function dunningEmailReturnUrl(
-  origin = 'https://app.aglyn.com',
-): string {
+/**
+ * The absolute URL to paste into the Stripe Dashboard, per deployment.
+ *
+ * `origin` is REQUIRED. It defaulted to Aglyn's own console, which is the
+ * wrong answer for every self-host and a silent one: an operator calling this
+ * with no argument got a URL pointing at somebody else's deployment, and the
+ * dunning email is the only door out of a failed payment. A caller that does
+ * not know its own origin should not be guessing it here.
+ */
+export function dunningEmailReturnUrl(origin: string): string {
   return `${origin.replace(/\/+$/, '')}${DUNNING_EMAIL_RETURN_PATH}`
 }
