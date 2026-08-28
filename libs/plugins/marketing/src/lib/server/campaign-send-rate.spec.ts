@@ -263,7 +263,7 @@ beforeEach(() => {
   mockState.reserved = []
   mockState.reconciled = []
   mockState.rate = { perHour: 100_000, enabled: true, used: 0 }
-  process.env.CAMPAIGN_UNSUBSCRIBE_SECRET = 'test-secret'
+  process.env.EMAIL_UNSUBSCRIBE_SECRET = 'test-secret'
   process.env.CRON_SECRET = 'cron-secret'
   global.fetch = (async (url: any) => {
     throw new Error(`Blocked outbound request in a spec: ${String(url)}`)

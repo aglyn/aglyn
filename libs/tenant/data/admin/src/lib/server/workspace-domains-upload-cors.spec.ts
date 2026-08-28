@@ -47,6 +47,10 @@ jest.mock('./upload-cors-reconcile', () => ({
 const ENV = {
   VERCEL_TOKEN: 'tok_test',
   VERCEL_CONSOLE_PROJECT_ID: 'prj_test',
+  // Both projects, or `configured('tenant')` is false and every tenant-scope
+  // attach comes back `skipped` — which would pass the "does not reconcile"
+  // cases below for the wrong reason entirely.
+  VERCEL_TENANT_PROJECT_ID: 'prj_tenant_test',
   VERCEL_TEAM_ID: 'team_test',
   NEXT_PUBLIC_WORKSPACE_DOMAIN: 'aglyn.com',
 }
@@ -121,6 +125,44 @@ describe('attachProjectDomain reconciles upload CORS (AGL-1452)', () => {
     expect(result.uploadCors ?? null).toBeNull()
   })
 
+  it('does NOT reconcile a TENANT name, however it was attached', async () => {
+    // A published site is not a page that uploads. The signed direct-to-GCS
+    // path has one client — the console's media library — and it ships only in
+    // the console bundle, so a customer's own domain issues no signed `PUT`.
+    // An entry for it would be standing permission on a bucket where the
+    // signed URL is the authorization, held by a host somebody else controls.
+    fetchMock.mockResolvedValue(respond(200))
+    const { attachProjectDomain } = await load()
+    const result = await attachProjectDomain('shop.acme.com', {}, 'tenant')
+    expect(result.outcome).toBe('attached')
+    expect(reconcile).not.toHaveBeenCalled()
+    expect(result.uploadCors ?? null).toBeNull()
+  })
+
+  it('does NOT reconcile a tenant name that was ALREADY attached', async () => {
+    // The re-register in `/api/domains/detach` lands here: it puts the platform
+    // subdomain back as a plain serving entry after dropping its redirect. That
+    // must not be the thing that quietly grants a tenant origin.
+    fetchMock.mockResolvedValue(
+      respond(409, { error: { code: 'domain_already_in_use' } }),
+    )
+    const { attachProjectDomain } = await load()
+    const result = await attachProjectDomain('acme.aglyn.app', {}, 'tenant')
+    expect(result.outcome).toBe('already-exists')
+    expect(reconcile).not.toHaveBeenCalled()
+  })
+
+  it('still reconciles CONSOLE scope when it is passed explicitly', async () => {
+    // Anti-vacuity for the two above: they must be passing because the SCOPE
+    // is tenant, not because passing a third argument at all suppresses the
+    // grant. Workspace subdomains serve the console and genuinely need entries.
+    fetchMock.mockResolvedValue(respond(200))
+    const { attachProjectDomain } = await load()
+    const result = await attachProjectDomain('acme.example.com', {}, 'console')
+    expect(reconcile).toHaveBeenCalledWith('acme.example.com')
+    expect(result.uploadCors).toEqual(PERMITTED)
+  })
+
   it('does not reconcile when the attach itself failed', async () => {
     fetchMock.mockResolvedValue(respond(400, { error: { code: 'invalid_domain' } }))
     const { attachProjectDomain } = await load()
@@ -192,6 +234,19 @@ describe('detachProjectDomain reclaims the upload origin (AGL-1452)', () => {
       revoked: true,
       detail: null,
     })
+  })
+
+  it('releases a TENANT name even though attach no longer grants one', async () => {
+    // The deliberate asymmetry with the attach half. Bucket state outlives a
+    // release: every tenant origin an earlier build added is still on the
+    // allowlist, and this is the only path that takes one back off. Mirroring
+    // the scope narrowing here would strand exactly those entries.
+    fetchMock.mockResolvedValue(respond(200))
+    const { detachProjectDomain } = await load()
+    const result = await detachProjectDomain('shop.acme.com', 'tenant')
+
+    expect(result.outcome).toBe('detached')
+    expect(release).toHaveBeenCalledWith('shop.acme.com')
   })
 
   it('does NOT release for a name that was never on the project', async () => {

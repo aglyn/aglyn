@@ -134,6 +134,25 @@ async function handler(request: Request): Promise<Response> {
     // name is left unregistered rather than redirecting to a domain that is
     // gone — a wildcard still serves it, and the site keeps an address either
     // way; a stale redirect would leave it with none.
+    //
+    // ⛔ Do NOT collapse these back into one call. This was a single
+    // `PATCH {redirect: null}` against the hosting vendor's API, and that is
+    // precisely what the provider seam exists to not have. The contract in
+    // `domain-provider.ts` is three operations — attach, detach, status — and
+    // an in-place mutate is a fourth that every driver would owe: the wildcard
+    // driver registers nothing and has no entry to patch, and the webhook
+    // driver would need a new verb in an operator's already-deployed endpoint.
+    // A fourth operation across three drivers is a real cost, and it is not
+    // worth what it buys here.
+    //
+    // What it would buy is closing a window whose worst case is already
+    // covered. The entry being dropped exists ONLY because a custom domain was
+    // connected — `upsertSubdomainRedirect` is what created it — so the state
+    // this restores is the one every site without a custom domain is already
+    // in: unregistered, and served by the wildcard on the tenant apex. The
+    // re-register is belt-and-braces for a name that resolves without it. A
+    // lost one costs nothing a visitor can see, which is why this may stay two
+    // calls and stay best-effort.
     const subdomain = String(hostSnapshot.get('subdomain') ?? '')
       .trim()
       .toLowerCase()

@@ -141,7 +141,7 @@ export async function attachProjectDomain(
     return result
   }
   const redirect = options.redirectTo ? redirectHostname(options.redirectTo) : null
-  return { ...result, ...(await uploadCorsFor(result.domain, redirect)) }
+  return { ...result, ...(await uploadCorsFor(result.domain, redirect, scope)) }
 }
 
 /**
@@ -152,14 +152,39 @@ export async function attachProjectDomain(
  * permission granted for nothing. Every unnecessary origin is one more site
  * that could spend a leaked signed URL.
  *
+ * Nothing for a TENANT name either, for the same reason one step further out:
+ * a published site is not a page that uploads. The signed direct-to-GCS path
+ * has exactly one client — the console's media library, which mints at
+ * `/api/media/upload-url` and `PUT`s the returned URL for files over 3 MB —
+ * and that component ships only in the console bundle. The besigner reaches
+ * media through a picker seam whose one implementation is also console-side,
+ * and no tenant surface carries a file input at all. So a customer's
+ * `shop.acme.com` issues no signed `PUT`, and an entry for it is permission
+ * that buys nothing on a bucket where the signed URL IS the authorization —
+ * held, for a white-label domain, by a host somebody else controls.
+ *
+ * The shape of the system says the same thing independently: a platform
+ * subdomain with no custom domain is never registered at all, because the
+ * wildcard already serves it. It has therefore never had a bucket entry. Were
+ * tenant pages really uploading, every such site would already be failing on
+ * large files, and none is.
+ *
+ * Console scope keeps the grant, and needs it: `app.<domain>` and every
+ * workspace subdomain (`acme.<domain>`) serve the console itself, media
+ * library included.
+ *
+ * ⚠️ The release side is deliberately NOT scoped to match — see
+ * {@link uploadCorsReleaseFor}.
+ *
  * Swallows its own failures for the same reason everything else in this file
  * does: a domain must not fail to attach because a storage API was slow.
  */
 async function uploadCorsFor(
   domain: string,
   redirect: string | null,
+  scope: DomainScope,
 ): Promise<{ uploadCors?: UploadCorsVerdict | null }> {
-  if (redirect) return {}
+  if (redirect || scope !== 'console') return {}
   try {
     const verdict = await reconcileUploadCors(domain)
     // The key appears only when there is something to say. A deployment with
@@ -181,6 +206,15 @@ async function uploadCorsFor(
  * time and a name can have been changed since, and `releaseUploadCors` is a
  * no-op for an origin that is not on the bucket anyway. Guessing wrong in the
  * other direction leaves the permission standing.
+ *
+ * Unconditional across SCOPE too, and that asymmetry with
+ * {@link uploadCorsFor} is the point rather than an oversight. Attach stopped
+ * granting to tenant names, but bucket state outlives a release: every tenant
+ * origin an earlier build added is still on the allowlist, and this is the
+ * only path that takes one back off. Narrowing release to console scope to
+ * mirror the grant would strand exactly the entries the narrowing was meant to
+ * be rid of. A release for a name that never held an entry costs one read and
+ * reports `revoked` on an origin that was already absent.
  *
  * Swallows its own failures like everything else here — a domain must not fail
  * to detach because a storage API was slow — but reports them, because an

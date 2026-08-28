@@ -128,6 +128,14 @@ the tenant runtime, the cloud functions or the setup scripts looks at them:
 `FIREBASE_AUTH_URI` · `FIREBASE_TOKEN_URI` ·
 `FIREBASE_AUTH_PROVIDER_X509_CERT_URL` · `FIREBASE_CLIENT_X509_CERT_URL`
 
+Nor does the Admin SDK read them behind our backs — the recurring guess, and it
+is wrong. Every `initializeApp` in the product builds its credential with
+`cert({ projectId, clientEmail, privateKey })`, an explicit three-field object;
+that overload accepts no other fields, and no code path hands the SDK a whole
+service-account object assembled from the environment. The setup scripts that
+use `applicationDefault()` instead read `GOOGLE_APPLICATION_CREDENTIALS`, a
+path to a JSON file, not these variables.
+
 Leaving them blank changes nothing. They are in the template so the block reads
 as a whole service account and a copy-paste from the JSON does not look
 half-done.
@@ -1207,7 +1215,6 @@ the source does not send you looking for a value to put in it.
 | `AGLYN_TENANT_DEMO` | The tenant host id served when the request host is the console apex or `localhost:4500`. Default `demo`. Aglyn's own demo deployment. |
 | `AGLYN_CANARY_SITE_HOST`, `AGLYN_CANARY_MARKETING_HOST` | Which hosts the render canary at `/api/health/render` renders. The site one falls through to `AGLYN_TENANT_DEMO` then `demo`, so an install with no `demo` host gets a canary reporting red on a host that was never meant to exist. The marketing one derives from your workspace domain and grades `not-configured` — a deliberate failure, not a pass — when it cannot. |
 | `AGLYN_TENANT_HOST_ID`, `AGLYN_TENANT_HOST_HOST`, `AGLYN_TENANT_HOST_HOSTNAME`, `AGLYN_TENANT_HOST_URL` | Single-host tenant pinning, for a one-site deployment. Not used by the multi-tenant compose shape. |
-| `AGLYN_TENANT_PUBLIC_KEY` | Mapped into the tenant bundle and read by nothing. Dead configuration. |
 | `AGLYN_HOST`, `AGLYN_HOSTNAME`, `AGLYN_PORT`, `AGLYN_PROTOCOL`, `AGLYN_URL` | Build-time origin overrides in the shared Next config. Leave at the defaults. |
 | `AGLYN_DISABLE_BOOT_WARMUP` | Skips the tenant's boot warm-up. A debugging aid. |
 | `CONSENT_DEV_COUNTRY` | On a non-production build only, the country the consent endpoint answers when no geo header is present — the default is `US`, so the implied-consent path is testable on a laptop. Hard-gated off when `NODE_ENV=production`, so it can do nothing on a real deployment. |
