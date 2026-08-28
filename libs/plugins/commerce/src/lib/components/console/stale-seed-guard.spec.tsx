@@ -132,6 +132,43 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // the wiring removed, which is the only thing they exist to prove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // The real builders (AGL-693): a stub would decide the ordering and the
+  // ceiling these cards read through, rather than the cards deciding it.
+  collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionCeiling,
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
+  collectionPage: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionPage,
+  /*
+   * MODELLED rather than stubbed (AGL-693). The real hook over-fetches by one
+   * and hands back the page WITHOUT the probe row; a stub that returned every
+   * row would render rows the component cannot be given and would hide an
+   * off-by-one instead of catching it. The page state is real state, so a
+   * card that pages is exercised as one rather than pinned to page zero.
+   */
+  usePagedCollection: (
+    build: (pageLimit: number) => unknown,
+    _deps: unknown,
+    options: { pageSize?: number } = {},
+  ) => {
+    const react = jest.requireActual('react')
+    const [page, setPage] = react.useState(0)
+    const [pageSize, setPageSize] = react.useState(options.pageSize ?? 10)
+    const windowSize = pageSize * (page + 1)
+    const data = collections[build(windowSize + 1) as string] ?? []
+    return {
+      rows: data.slice(page * pageSize, windowSize),
+      hasMore: data.length > windowSize,
+      page,
+      setPage,
+      pageSize,
+      setPageSize,
+      data,
+      status: listener.status,
+      fromCache: listener.fromCache,
+    }
+  },
 }))
 
 // Only the ref builders are stubbed; the real module rides along because

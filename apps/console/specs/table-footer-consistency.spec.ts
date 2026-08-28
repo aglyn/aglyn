@@ -1153,22 +1153,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'grid has rather than a footer.',
   ],
   [
-    'libs/plugins/commerce/src/lib/components/console/catalog-organization-card.component.tsx',
-    'Product categories and collections, both unordered `limit(250)` reads. ' +
-      'A growing authored set on a card a commerce agent is working beside.',
-  ],
-  [
-    'libs/plugins/commerce/src/lib/components/console/discounts-card.component.tsx',
-    'Discount codes, an unordered `limit(100)`. A commerce agent holds the ' +
-      'discount and refund paths today; the classification is not why it is ' +
-      'untouched.',
-  ],
-  [
-    'libs/plugins/commerce/src/lib/components/console/suppliers-card.component.tsx',
-    'Suppliers, an unordered `limit(50)`. Grows with the merchant’s trading ' +
-      'relationships and nothing bounds it.',
-  ],
-  [
     'libs/plugins/email/src/lib/components/email-screens-card.tsx',
     'Every email template on the site, read as an unordered `limit(200)` ' +
       'over `screens`. The email plugin’s page shell is mid-conversion.',
@@ -1293,7 +1277,7 @@ describe('a table with rows under it has a footer under those (AGL-693)', () => 
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(25)
+    expect(OWES_A_FOOTER).toHaveLength(22)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })

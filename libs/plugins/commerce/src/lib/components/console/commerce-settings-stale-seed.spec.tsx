@@ -155,6 +155,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       hasMore: data.length > pageSize,
       loadMore: () => undefined,
       windowSize: pageSize,
+      // The footer's own state. Absent, `page` reached `ListPagination` as
+      // undefined and every card that reads it rendered a broken control.
+      page: 0,
+      setPage: () => undefined,
+      pageSize,
+      setPageSize: () => undefined,
       data,
       status: listener.status,
       fromCache: listener.fromCache,
@@ -165,6 +171,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // the card passed it, which is the one thing these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // The real builders (AGL-693): the ordering and the ceiling belong to the
+  // cards, not to this double.
+  collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionCeiling,
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
+  collectionPage: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionPage,
 }))
 
 // Only the ref builders are stubbed; the real module rides along because
