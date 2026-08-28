@@ -145,6 +145,23 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
 }))
 
+/*
+ * The subject resolver, a DEEP import outside the barrel mock above.
+ *
+ * `subjectUid` is no longer "the first account whose primary matched" — that
+ * is a guess whenever a second account holds the same address, and a
+ * provider-supplied address never enters the uniqueness index, so the clash
+ * can exist with nothing recording it. The resolver answers null for "more
+ * than one" as well as for "nobody", and this double is driven per address so
+ * both branches are exercised against the real writer.
+ */
+const mockAttributableAccount = jest.fn()
+jest.mock('@aglyn/tenant-data-admin/server/account-addresses', () => ({
+  __esModule: true,
+  attributableAccountForAddress: (address: unknown) =>
+    mockAttributableAccount(address),
+}))
+
 jest.mock('@aglyn/shared-util-email', () => ({
   __esModule: true,
   resendDeliveryMessageSource: () => (id: string) => mockMessage(id),
@@ -200,6 +217,7 @@ beforeEach(() => {
     record: { uid: 'customer_uid_1' },
     tenantId: null,
   })
+  mockAttributableAccount.mockReset().mockResolvedValue('customer_uid_1')
 })
 
 async function viewMessage(id = 'msg_1'): Promise<Response> {
@@ -273,17 +291,49 @@ describe('the row names the person it is about', () => {
     // match `users/{uid}`, so without this the access is invisible on the
     // page of the person whose mail was read.
     expect(auditRows()[0]).toMatchObject({ subjectUid: 'customer_uid_1' })
-    expect(mockUserByEmail).toHaveBeenCalledWith('casey@customer.example')
+    expect(mockAttributableAccount).toHaveBeenCalledWith(
+      'casey@customer.example',
+    )
   })
 
   it('leaves the subject absent when the recipient has no account', async () => {
     // CONTROL. Most of our outbound mail goes to site members, prospects and
     // plain contacts. An absent subject is the correct answer for them, and
     // inventing one would file a staff access under an innocent person.
-    mockUserByEmail.mockResolvedValue(null)
+    mockAttributableAccount.mockResolvedValue(null)
     await viewMessage()
 
     expect(auditRows()[0]).not.toHaveProperty('subjectUid')
+  })
+
+  it('NAMES NOBODY when the address belongs to more than one account', async () => {
+    /*
+     * The resolver answers null for an ambiguous address, and this is the
+     * reason the whole change exists: an address can be one account's primary
+     * and another's provider-supplied address, with nothing recording the
+     * clash. Naming one of them is not a weaker answer to "who read my data"
+     * — it is a false one, on an innocent account's page.
+     */
+    mockAttributableAccount.mockResolvedValue(null)
+    await viewMessage()
+
+    expect(auditRows()[0]).not.toHaveProperty('subjectUid')
+    // But the access is NOT lost: the hashed recipient still reaches every
+    // account holding that address, which is what makes refusing to guess
+    // affordable.
+    expect(String(auditRows()[0]['subjectAddressKey'])).toHaveLength(64)
+  })
+
+  it('always records the hashed recipient, even when a subject WAS resolved', async () => {
+    await viewMessage()
+    const row = auditRows()[0]
+    expect(row).toMatchObject({ subjectUid: 'customer_uid_1' })
+    // Both facts, always. The uid answers the common case; the key is what
+    // keeps a shared address answerable on every page that holds it.
+    expect(String(row['subjectAddressKey'])).toHaveLength(64)
+    // ⛔ And it is a HASH, never the address: `adminAudit` is readable by any
+    // staff role, and a dump of it must not yield a mailing list.
+    expect(String(row['subjectAddressKey'])).not.toContain('casey')
   })
 
   it('does not store the recipient address in the clear', async () => {

@@ -80,7 +80,15 @@ interface UserDetail {
     disabled: boolean
     staff: boolean
     staffRole: string | null
-    providers: string[]
+    /**
+     * Each sign-in provider AND the address it carries.
+     *
+     * Was `string[]` of provider ids alone, which showed that an account had
+     * a Google provider and not which mailbox it was for — while that address
+     * receives real mail and, never having entered the uniqueness index, is
+     * the one most likely to be quietly shared with another account.
+     */
+    providers: Array<{ providerId: string; email: string | null }>
     createdAt: string | null
     lastSignInAt: string | null
     /**
@@ -185,7 +193,28 @@ interface UserDetail {
   emails?: {
     lookupFailed: boolean
     rows: StaffEmailDeliveryRow[]
+    /** The addresses the history was actually read under. */
+    addressesRead?: string[]
+    /**
+     * Addresses whose delivery records were destroyed under an erasure
+     * request. Kept apart from "no mail" for the same reason `lookupFailed`
+     * is: all three render as an empty table and mean different things.
+     */
+    erasures?: Record<string, { at: number; count: number }>
   }
+  /**
+   * Every address this account holds — primary, provider-supplied, and the
+   * ones it has been moved off — with whether another account holds it too.
+   */
+  addresses?: Array<{
+    address: string
+    sources: string[]
+    shared: boolean
+    /** A provider asserted this address but another account already held it. */
+    indexConflict: boolean
+  }>
+  /** A source was unreadable, so `addresses` may be short. */
+  addressesIncomplete?: boolean
 }
 
 /**
@@ -630,7 +659,20 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 ].join(' · ')}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {`Providers: ${detail.user.providers.join(', ') || '—'}`}
+                                {`Providers: ${
+                                  detail.user.providers
+                                    .map((provider) =>
+                                      // The address is the point of showing
+                                      // this at all; a provider carrying none
+                                      // (phone, anonymous) still renders as
+                                      // itself rather than as a dangling
+                                      // separator.
+                                      provider.email
+                                        ? `${provider.providerId} (${provider.email})`
+                                        : provider.providerId,
+                                    )
+                                    .join(', ') || '—'
+                                }`}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 {`Created ${formatStaffTimestamp(
@@ -962,6 +1004,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     // which reads to a human exactly like a read that failed
                     // — and NOT like "we never emailed them".
                     lookupFailed={detail.emails?.lookupFailed ?? true}
+                    // Every address the rows were gathered from, so a staffer
+                    // can see they are looking at mail sent to an address
+                    // that is no longer this account's primary.
+                    addresses={detail.addresses ?? []}
+                    addressesIncomplete={detail.addressesIncomplete === true}
+                    erasures={detail.emails?.erasures ?? {}}
                   />
                 ),
               },

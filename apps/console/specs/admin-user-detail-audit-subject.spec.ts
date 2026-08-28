@@ -53,6 +53,8 @@ interface SeedRow {
   at: string
   repeatCount?: number
   lastAt?: string
+  /** `sha256(recipient)` — the half that needs no uid to resolve. */
+  subjectAddressKey?: string
 }
 
 let auditSeed: SeedRow[] = []
@@ -70,6 +72,9 @@ function auditDoc(row: SeedRow) {
     target: row.target ?? null,
     at: { toDate: () => new Date(row.at) },
     ...(row.subjectUid ? { subjectUid: row.subjectUid } : {}),
+    ...(row.subjectAddressKey
+      ? { subjectAddressKey: row.subjectAddressKey }
+      : {}),
     ...(row.repeatCount ? { repeatCount: row.repeatCount } : {}),
     ...(row.lastAt ? { lastAt: { toDate: () => new Date(row.lastAt) } } : {}),
   }
@@ -87,9 +92,14 @@ function auditDoc(row: SeedRow) {
 function auditQuery(field: string, value: unknown) {
   auditQueries.push(`${field}=${String(value)}`)
   let limit = Number.POSITIVE_INFINITY
+  // `in` as well as `==`: the address half queries a LIST of keys, and a
+  // double that only understood equality would answer it empty — which reads
+  // exactly like the route never asking.
+  const holds = (candidate: unknown) =>
+    Array.isArray(value) ? value.includes(candidate) : candidate === value
   const matched = () =>
     auditSeed
-      .filter((row) => (row as unknown as Record<string, unknown>)[field] === value)
+      .filter((row) => holds((row as unknown as Record<string, unknown>)[field]))
       .sort((a, b) => b.at.localeCompare(a.at))
       .slice(0, limit)
       .map(auditDoc)
@@ -187,7 +197,47 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // the audit halves, and the real reader would reach an uninitialized SDK.
 jest.mock('@aglyn/tenant-data-admin/server/email-delivery-log', () => ({
   __esModule: true,
-  readEmailDeliveryHistory: async () => ({ lookupFailed: false, rows: [] }),
+  readEmailDeliveryHistoryForAddresses: async () => ({
+    lookupFailed: false,
+    rows: [],
+    addressesRead: [],
+    erasures: {},
+  }),
+}))
+
+/*
+ * The address resolver, also a DEEP import and also outside the barrel mock.
+ *
+ * Returns the account's two addresses so the fourth audit half has keys to
+ * query with. `addressKeys` is the real derivation — stubbing it to something
+ * arbitrary would let the half "work" against a key the writer never
+ * produces, which is the shape of a test passing without reaching the code.
+ */
+jest.mock('@aglyn/tenant-data-admin/server/account-addresses', () => ({
+  __esModule: true,
+  resolveAccountAddresses: async () => ({
+    uid: 'casey_uid',
+    primary: 'casey@customer.example',
+    addresses: [
+      {
+        address: 'casey@customer.example',
+        sources: ['primary'],
+        key: 'key_primary',
+        shared: false,
+        indexConflict: false,
+      },
+      {
+        address: 'former@customer.example',
+        sources: ['stored'],
+        key: 'key_former',
+        shared: false,
+        indexConflict: false,
+      },
+    ],
+    incomplete: false,
+  }),
+  addressKeys: (set: { addresses: { key: string }[] }) =>
+    set.addresses.map((entry) => entry.key),
 }))
 
 const route = require('../app/api/admin/users/detail/route') as {
@@ -235,6 +285,62 @@ describe('an entry about a person reaches that person’s page', () => {
     expect(auditQueries).toContain('subjectUid=casey_uid')
     expect(auditQueries).toContain('target=users/casey_uid')
     expect(auditQueries).toContain('actorUid=casey_uid')
+  })
+
+  /*
+   * THE FOURTH HALF, on the hashed ADDRESS.
+   *
+   * `subjectUid` can only be written when a recipient resolves to exactly one
+   * account, and an address is not reliably resolvable to one — a
+   * provider-supplied address never enters the uniqueness index, so two
+   * accounts can hold it with nothing recording the clash. The writer now
+   * omits the subject rather than guessing, and this half is what keeps the
+   * access reachable without one.
+   */
+  it('asks the ADDRESS question too, with every key the account holds', async () => {
+    await detail()
+    // Both keys — a half that queried only the current primary would leave an
+    // access about a former address invisible, which is the whole bug.
+    expect(auditQueries).toContain('subjectAddressKey=key_primary,key_former')
+  })
+
+  it('reaches an access that names NO subject uid, by its address key', async () => {
+    auditSeed = [
+      {
+        id: 'audit_shared',
+        action: 'email.message-viewed',
+        actorUid: 'staff_1',
+        target: 'emailDeliveries/msg_shared',
+        // No `subjectUid`: the recipient is held by two accounts, so naming
+        // one of them would put one customer on another's data access.
+        subjectAddressKey: 'key_former',
+        at: '2026-08-20T10:00:00.000Z',
+      },
+    ]
+    const payload = await detail()
+
+    const entry = payload.audit.find((row: any) => row.id === 'audit_shared')
+    // Before this half, an entry with no subject appeared on NOBODY's page —
+    // strictly worse than the guess it replaced.
+    expect(entry).toBeDefined()
+    expect(entry.subjectUid).toBeNull()
+  })
+
+  it('CONTROL: an access about an address this account does not hold stays away', async () => {
+    auditSeed = [
+      {
+        id: 'audit_stranger',
+        action: 'email.message-viewed',
+        actorUid: 'staff_1',
+        target: 'emailDeliveries/msg_stranger',
+        subjectAddressKey: 'key_someone_else',
+        at: '2026-08-20T10:00:00.000Z',
+      },
+    ]
+    const payload = await detail()
+    expect(
+      payload.audit.find((row: any) => row.id === 'audit_stranger'),
+    ).toBeUndefined()
   })
 
   it('returns a staff read of this account’s mail', async () => {

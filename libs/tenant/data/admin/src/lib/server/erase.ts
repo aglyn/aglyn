@@ -24,7 +24,12 @@ import {
   releaseConsoleDomain,
 } from './console-domains'
 import { authForPool, findUserByUidAcrossPools } from './auth-pools'
-import { eraseEmailDeliveries } from './email-delivery-log'
+import { eraseEmailDeliveriesForAddresses } from './email-delivery-log'
+import {
+  type AccountAddressSet,
+  resolveAccountAddresses,
+} from './account-addresses'
+import { EMAIL_IDENTITY_INDEX_COLLECTION } from './account-emails'
 import { removeOrgMember } from './organizations'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
 import { readOrgBilling } from './org-billing'
@@ -1338,8 +1343,32 @@ export interface EraseUserResult {
      * Messages removed from `emailDeliveries/{sha256(address)}/messages` —
      * the per-recipient delivery log. Zero for an account with no address on
      * file, or one we never mailed.
+     *
+     * Across EVERY address the account held, not just the current primary.
      */
     emailDeliveries: number
+    /**
+     * `emailIdentityIndex/{address}` rows released — the address-keyed
+     * uniqueness claims, which no `recursiveDelete` of the user can reach.
+     */
+    emailIdentityIndex: number
+    /**
+     * How wide the address sweep actually was.
+     *
+     * ⚠️ `incomplete` is the field a compliance answer turns on: true means a
+     * source could not be read and an address the account held may have been
+     * missed, so this was not a complete erasure and must not be reported as
+     * one. Counts only — never the addresses, which is the data being erased.
+     */
+    addressSweep: {
+      /** Addresses found across the Auth record, its providers and the store. */
+      resolved: number
+      /** Addresses the delivery sweep actually visited. */
+      erased: number
+      /** How many of those another account also holds. */
+      shared: number
+      incomplete: boolean
+    }
   }
 }
 
@@ -1408,6 +1437,33 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   // record that has to be right. Measured 2026-08-01 (AGL-1140).
   const subcollections = (await userRef.listCollections()).map((c) => c.id)
 
+  /*
+   * EVERY ADDRESS, RESOLVED BEFORE ANY OF THEM IS DESTROYED.
+   *
+   * Two of the three sources are erased by this function itself:
+   * `users/{uid}/emails` goes with the `recursiveDelete` below, and the Auth
+   * record — the only place the primary lives — goes at the very end. Reading
+   * them afterwards is reading nothing, and an erasure that resolves an empty
+   * address set sweeps nothing while reporting success. That is the exact
+   * shape of a spec passing because its fixture never reached the code, and
+   * here it would be a live erasure reporting a completeness it does not have.
+   *
+   * `detectShared` because the SHARED case changes what the caller is told,
+   * not what is destroyed — see `eraseEmailDeliveriesForAddresses`.
+   */
+  const pooledForAddresses = await findUserByUidAcrossPools(uid).catch(() => null)
+  const addressSet: AccountAddressSet = await resolveAccountAddresses({
+    uid,
+    record: pooledForAddresses?.record ?? null,
+    detectShared: true,
+    firestore,
+  }).catch(() => ({
+    uid,
+    primary: null,
+    addresses: [],
+    incomplete: true,
+  }))
+
   // Memberships first — a roster row carries their email and a host
   // projection carries their access, and both outlive the profile doc.
   for (const candidate of candidates) {
@@ -1469,6 +1525,12 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   // address exists. Erase it while there is still something to erase it by.
   let authRecord = false
   let emailDeliveries = 0
+  /** Addresses actually swept — not the same as the ones we hold, on failure. */
+  let erasedAddressCount = 0
+  /** How many of them another account also holds. */
+  let sharedAddressCount = 0
+  /** Identity-index rows released, one per address that had one. */
+  let emailIdentityIndex = 0
   try {
     const record = await findUserByUidAcrossPools(uid)
     if (record) {
@@ -1481,17 +1543,81 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
        * the `profiles/{uid}` omission this function already documents above:
        * a store nothing in the sweep list would prompt a reader to notice.
        *
+       * EVERY ADDRESS, not the current primary. Passing one address left a
+       * prior or provider-supplied address holding its full history —
+       * recipient, subjects, open and click times — after the request had
+       * been honoured and reported complete.
+       *
        * Best-effort, like every other step here — a log that survives must
        * not stop the auth record from going.
        */
-      emailDeliveries = await eraseEmailDeliveries(record.record?.email).catch(
-        () => 0,
-      )
+      const sweep = await eraseEmailDeliveriesForAddresses(
+        addressSet.addresses,
+        firestore,
+      ).catch(() => null)
+      emailDeliveries = sweep?.removed ?? 0
+      erasedAddressCount = sweep?.addresses.length ?? 0
+      sharedAddressCount = sweep?.sharedAddresses.length ?? 0
+
+      /*
+       * `emailIdentityIndex/{address}` — the SAME omission one collection
+       * over.
+       *
+       * A top-level collection keyed by the address IN THE CLEAR, holding
+       * `{uid, address, claimedAt}`. `recursiveDelete(users/{uid})` cannot
+       * see it for exactly the reason it cannot see the delivery log, so an
+       * erased account left a readable address still pointing at its uid.
+       *
+       * Released rather than tombstoned, unlike the delivery log: this is a
+       * uniqueness claim, and `removeAccountEmail` already argues that
+       * holding one after the address is gone burns the address for whoever
+       * might legitimately want it next.
+       *
+       * ⛔ Only rows this uid actually owns. The index is the guard against
+       * two accounts holding one address, and deleting another account's
+       * claim would hand their sign-in identifier to the next taker.
+       */
+      for (const entry of addressSet.addresses) {
+        try {
+          const ref = firestore
+            .collection(EMAIL_IDENTITY_INDEX_COLLECTION)
+            .doc(entry.address)
+          const indexed = await ref.get()
+          if (indexed.exists && indexed.get('uid') === uid) {
+            await ref.delete()
+            emailIdentityIndex += 1
+          }
+        } catch (error) {
+          console.error(`eraseUser: identity index release failed for ${uid}`, error)
+        }
+      }
       await authForPool(record.tenantId).deleteUser(uid)
       authRecord = true
     }
   } catch (error) {
     console.error(`eraseUser: auth record delete failed for ${uid}`, error)
+  }
+
+  /*
+   * WHAT THE ADDRESS SWEEP ACTUALLY COVERED.
+   *
+   * Counts, never the addresses themselves: this collection is readable by
+   * any staff role and `maskEmailAddress` exists because an audit row holding
+   * a readable address made `adminAudit` the leakier of the two stores for
+   * the same data. An erasure record listing the addresses it destroyed would
+   * be the sharpest version of that — it would preserve, in the clear, the
+   * exact set the request existed to remove.
+   *
+   * `addressesIncomplete` is the one that matters to a reader. It says a
+   * source could not be read, so the sweep may have missed an address the
+   * account held — the difference between "erased everywhere" and "erased
+   * everywhere we could see", which is the difference a regulator asks about.
+   */
+  const addressSweep = {
+    resolved: addressSet.addresses.length,
+    erased: erasedAddressCount,
+    shared: sharedAddressCount,
+    incomplete: addressSet.incomplete,
   }
 
   await firestore
@@ -1508,6 +1634,8 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
         profile,
         supportMessagesRedacted,
         emailDeliveries,
+        emailIdentityIndex,
+        addressSweep,
       },
       at: FieldValue.serverTimestamp(),
     })
@@ -1522,6 +1650,8 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
       profile,
       supportMessagesRedacted,
       emailDeliveries,
+      emailIdentityIndex,
+      addressSweep,
     },
   }
 }

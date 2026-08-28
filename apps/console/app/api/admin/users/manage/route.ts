@@ -201,6 +201,59 @@ async function handler(request: Request): Promise<Response> {
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return Response.json({ error: 'Enter a valid email' }, { status: 400 })
       }
+      /*
+       * THE ADDRESS BEING REPLACED, KEPT — or the mail under it is lost.
+       *
+       * The delivery log and the suppression list are both keyed by
+       * `sha256(address)`. The moment this `updateUser` lands, the Auth record
+       * is the only place the OLD address existed, and after it there is no
+       * way to derive the hash its history is filed under. The staff card
+       * would then show an empty table for a person we demonstrably emailed,
+       * and erasure would walk straight past that history.
+       *
+       * Written into `users/{uid}/emails` — the store that already exists for
+       * this (AGL-2486) — rather than a new `previousEmail` field. It is
+       * bounded, it is already server-write-only, and `recursiveDelete` on
+       * erasure already clears it, so the retained address does not become a
+       * third place personal data outlives a deletion request.
+       *
+       * `verified: false` and NO index claim: this is a record that the
+       * account held the address, not a live identifier. Marking it verified
+       * would make a removed address match invitations.
+       *
+       * ⚠️ Only from here forward. Addresses changed before this existed left
+       * nothing behind and their history is not recoverable by inference —
+       * the old hash cannot be derived from an address nobody kept.
+       */
+      const replacing = email && email !== target.email ? target.email : null
+      if (replacing) {
+        await firebaseAdmin
+          .app()
+          .firestore()
+          .collection('users')
+          .doc(uid)
+          .collection('emails')
+          .doc(replacing)
+          .set(
+            {
+              address: replacing,
+              verified: false,
+              primary: false,
+              source: 'former-primary',
+              retainedAtMs: Date.now(),
+            },
+            { merge: true },
+          )
+          .catch((error: unknown) => {
+            // Best-effort: a staff identity edit must not fail because a
+            // bookkeeping write did. Loud, because what is lost is the only
+            // handle on that address's mail.
+            console.error(
+              '[admin/users/manage] retaining the replaced address failed',
+              error,
+            )
+          })
+      }
       await targetAuth.updateUser(uid, {
         displayName: displayName || undefined,
         photoURL: photoUrl || undefined,

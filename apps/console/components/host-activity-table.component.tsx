@@ -162,9 +162,24 @@ export function HostActivityTable(props: HostActivityTableProps) {
       },
       {
         field: 'actorEmail',
-        headerName: 'Who',
+        /*
+         * "Who (then)", not "Who".
+         *
+         * `actorEmail` is a SNAPSHOT taken when the row was written, and an
+         * account's address can change afterwards. The stored value is
+         * evidence and must not be rewritten to match the current address —
+         * an audit trail that mutates is worth less than one that is stale —
+         * but a column headed "Who" presents that old address as the person's
+         * address today, which is the reading a staffer acts on.
+         *
+         * So the header carries the tense and the data is left alone.
+         */
+        headerName: 'Who (then)',
         flex: 1,
         minWidth: 160,
+        description:
+          'The address this account had when the entry was written. It is ' +
+          'not updated if the address changes later.',
         valueGetter: (_value, row: any) => row.actorEmail ?? 'Someone',
       },
       {

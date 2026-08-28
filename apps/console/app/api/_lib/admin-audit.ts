@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
-import {
-  findUserByEmailAcrossPools,
-  firebaseAdmin,
-} from '@aglyn/tenant-data-admin'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+// From the LEAVES: the barrel reaches the admin SDK and route specs mock it
+// wholesale. A mocked-away resolver silently answers "no subject", which is
+// indistinguishable from the refusal-to-guess this module now relies on.
+import { attributableAccountForAddress } from '@aglyn/tenant-data-admin/server/account-addresses'
+import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 /**
  * THE STAFF AUDIT TRAIL: WHO A ROW IS ABOUT, AND HOW MANY TIMES IT HAPPENED.
@@ -101,6 +103,45 @@ export interface AdminAuditWrite {
    * person's page.
    */
   subjectUid?: string | null
+  /**
+   * `sha256` of the recipient address the act was about, when it had one.
+   *
+   * ## Why a hash and not the address
+   *
+   * The SAME derivation `emailSuppressionKey` uses, so this joins the
+   * delivery log without a second key space. It is hashed for the reason
+   * {@link maskEmailAddress} exists: `adminAudit` is readable by any staff
+   * role, and a dump of it must not yield a mailing list.
+   *
+   * ## Why it exists at all, next to `subjectUid`
+   *
+   * `subjectUid` can only be written when the address resolves to exactly one
+   * account, and an address is not reliably resolvable to one — a
+   * provider-supplied address may be held by a second account with nothing
+   * recording it. So the subject is now OMITTED whenever the answer is
+   * ambiguous, and omitting it alone would make the access invisible on every
+   * page, which is worse than the guess it replaced.
+   *
+   * This is the fact that needs no guess. The account page queries it with
+   * the keys of every address that account holds, so one access appears on
+   * the page of each account holding the address — which is the honest answer
+   * when the mail went to a mailbox rather than to a uid.
+   *
+   * ## It opens no tier side-door
+   *
+   * `adminAudit` is `allow read, create: if isStaff()` with NO tier gate, so
+   * anything written here is readable by every staff session whatever its
+   * role — which makes an audit row a way around a tier restriction on the
+   * surface the value came from. Checked, and it is not one here: the writer
+   * is the message route, which gates on `staff` alone and nothing finer, so
+   * this field is no more widely readable than its source.
+   *
+   * The hash adds no reach of its own either. It is the document id
+   * `emailDeliveries` is already filed under, so any staff session that can
+   * read this row could already derive the same value from an address it
+   * guessed. A field whose source DID restrict by tier would not belong here.
+   */
+  subjectAddressKey?: string | null
   /** Human-readable context. ⚠️ Never a raw address — see `maskEmailAddress`. */
   note?: string | null
 }
@@ -175,6 +216,11 @@ export async function recordAdminAudit(entry: AdminAuditWrite): Promise<void> {
        * the index to the rows that can actually answer a subject question.
        */
       ...(entry.subjectUid ? { subjectUid: entry.subjectUid } : {}),
+      // Omitted rather than null on the same reasoning as `subjectUid`: the
+      // address query matches only documents that HAVE the field.
+      ...(entry.subjectAddressKey
+        ? { subjectAddressKey: entry.subjectAddressKey }
+        : {}),
       note: entry.note ?? null,
       at: now,
       /*
@@ -234,14 +280,48 @@ export async function resolveSubjectUidByEmail(
   const email = String(address ?? '').trim()
   if (!email) return null
   try {
-    const pooled = await findUserByEmailAcrossPools(email)
-    return pooled?.record?.uid ?? null
+    /*
+     * AMBIGUITY RESOLVES TO NOBODY.
+     *
+     * This was `findUserByEmailAcrossPools(...).uid` — the first account
+     * whose PRIMARY matched. That is a guess whenever a second account holds
+     * the same address, which is a real shape: a federated provider's address
+     * never entered the uniqueness index, so an account can hold one that is
+     * also somebody else's primary with nothing recording the clash.
+     *
+     * `attributableAccountForAddress` returns null for "more than one" as
+     * well as for "nobody". Both are the same instruction to this writer:
+     * name no subject. A row naming the wrong customer is not a weaker answer
+     * to "who read my data" — it is a false one, and it puts one customer's
+     * name on another's data access.
+     *
+     * The access is still reachable: `subjectAddressKey` carries the hashed
+     * recipient, and the account page finds it from the addresses it holds.
+     */
+    return await attributableAccountForAddress(email)
   } catch {
     // A lookup that could not run leaves the row without a subject, which is
     // the same answer as "no account" and is safe: it under-reports rather
     // than attributing an access to the wrong person.
     return null
   }
+}
+
+/**
+ * The hashed recipient for {@link AdminAuditWrite.subjectAddressKey}.
+ *
+ * The FIRST recipient, matching `resolveSubjectUidForRecipients` — one scalar
+ * cannot represent a multi-recipient message, and the masked note carries the
+ * full list either way.
+ */
+export function subjectAddressKeyForRecipients(
+  addresses: readonly string[] | null | undefined,
+): string | null {
+  for (const address of addresses ?? []) {
+    const key = emailSuppressionKey(address)
+    if (key) return key
+  }
+  return null
 }
 
 /**

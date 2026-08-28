@@ -569,6 +569,24 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
             contentGutterY
           >
             <Stack spacing={2}>
+              {/*
+                * SAID ONCE, ABOUT EVERY ROW.
+                *
+                * `actorEmail` is a snapshot taken when the entry was written,
+                * and an account's address can change afterwards. The stored
+                * value is evidence and is never rewritten to match a current
+                * address — an audit trail that mutates is worth less than one
+                * that is stale — but a reader who assumes the address is
+                * current will contact the wrong mailbox. One statement here
+                * covers the whole list; a per-row suffix would repeat it on
+                * every line of a page that is historical by definition.
+                */}
+              <Typography variant="caption" color="text.secondary">
+                {'Each entry shows the actor’s address as it was when the ' +
+                  'action was recorded. It is not updated if that account’s ' +
+                  'address changes later — the uid beside it is the ' +
+                  'identifier that does not go out of date.'}
+              </Typography>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <TextField
                   size="small"
@@ -719,6 +737,19 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                         color="text.secondary"
                         sx={{ ml: 'auto' }}
                       >
+                        {/*
+                          * The address AS IT WAS when the entry was written,
+                          * and never re-resolved from the account: the row is
+                          * evidence, and rewriting stored history to match a
+                          * current address would make the trail worth less
+                          * than leaving it stale.
+                          *
+                          * Not suffixed per row — the page says it once, above
+                          * the list, and every row here is historical by
+                          * definition. The uid beside it is the identifier
+                          * that does not go out of date, which is why it is
+                          * always rendered.
+                          */}
                         {`${
                           entry.actorEmail
                             ? `${entry.actorEmail} (${entry.actorUid})`

@@ -26,6 +26,7 @@ import {
   maskEmailAddresses,
   recordAdminAudit,
   resolveSubjectUidForRecipients,
+  subjectAddressKeyForRecipients,
 } from '../../../_lib/admin-audit'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
@@ -126,6 +127,15 @@ async function handler(request: Request): Promise<Response> {
       action: 'email.message-viewed',
       target: `emailDeliveries/${messageId}`,
       subjectUid,
+      /*
+       * The hashed recipient, ALWAYS — including when `subjectUid` came back
+       * null. Null now covers "more than one account holds this address" as
+       * well as "no account", because naming one of two accounts would put
+       * one customer's name on another's data access. This key is what keeps
+       * the access findable without that guess: each holder's page queries it
+       * from the addresses that account holds.
+       */
+      subjectAddressKey: subjectAddressKeyForRecipients(message.to),
       // MASKED. The delivery log hashes addresses so we do not hold a
       // readable list of who we mail; a row echoing the address in full made
       // this collection — readable by any staff role — the leakier of the two.

@@ -453,6 +453,205 @@ export async function readEmailDeliveryHistory(
   }
 }
 
+/*==========================================
+ * ACROSS EVERY ADDRESS AN ACCOUNT HOLDS.
+ *
+ * The single-address functions above are the primitive and stay exactly as
+ * they were — one address, one document. What was wrong was never the
+ * primitive; it was that every CALLER passed the Auth record's current
+ * primary and nothing else, so a changed address orphaned the history and an
+ * erasure missed the mail sitting under the other addresses.
+ *
+ * The address list is resolved ONCE, by `account-addresses.ts`, and passed
+ * in. This module deliberately does not resolve it: a store keyed by a hash
+ * should not also own the rule for which hashes describe a person, and a copy
+ * of that rule here is the second copy the whole change exists to prevent.
+ *=========================================*/
+
+/**
+ * A record that delivery data WAS held for an address and has been erased.
+ *
+ * Written into the parent `emailDeliveries/{emailKey}` document, which the
+ * messages subcollection otherwise leaves empty.
+ *
+ * ⚠️ It carries no address, no subject, no message id and no uid — nothing
+ * the erasure was performed to destroy. `count` is a magnitude, which is what
+ * makes the row honest without reconstituting anything: it says data existed
+ * and is gone, and nothing about what it was.
+ */
+export interface EmailDeliveryErasure {
+  /** Epoch ms. */
+  at: number
+  /** How many messages were removed. */
+  count: number
+}
+
+/** One account's mail, gathered from every address it holds. */
+export interface EmailDeliveryHistory {
+  lookupFailed: boolean
+  rows: EmailDeliveryRecord[]
+  /**
+   * The addresses actually read, in the order they were given.
+   *
+   * The card names them. A staffer looking at mail sent to an address that is
+   * no longer this account's primary has to be able to see that that is what
+   * they are looking at.
+   */
+  addressesRead: string[]
+  /**
+   * Erasure tombstones found, keyed by address.
+   *
+   * An address whose records were erased under somebody's request reads as an
+   * empty table otherwise — which is the precise failure this card's copy
+   * warns about, recreated by the fix for it.
+   */
+  erasures: Record<string, EmailDeliveryErasure>
+}
+
+/** The tombstone on one address, or null. Never throws. */
+export async function readEmailDeliveryErasure(
+  email: string | null | undefined,
+  firestore?: any,
+): Promise<EmailDeliveryErasure | null> {
+  const key = emailSuppressionKey(email)
+  if (!key) return null
+  try {
+    const db = firestore ?? defaultFirestore()
+    const doc = await db.collection(EMAIL_DELIVERIES_COLLECTION).doc(key).get()
+    if (!doc.exists) return null
+    const at = Number(doc.get('erasedAtMs') ?? 0)
+    if (!at) return null
+    return { at, count: Number(doc.get('erasedCount') ?? 0) }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Every message sent to any address this account holds, newest first.
+ *
+ * Merged and re-sorted rather than concatenated: the rows are one person's
+ * mail and a staffer reads them as a timeline, so grouping them by which
+ * address happened to receive them would put the answer in two places and
+ * make "what was the last thing we sent them" a question about two tables.
+ * Each row keeps its own `to`, so the card can still say which address.
+ *
+ * `lookupFailed` is true when ANY address failed. A partial read of a
+ * delivery log is the same hazard as an empty one — it under-reports mail we
+ * sent — and reporting it as a clean result is how a staffer comes to tell a
+ * customer something untrue.
+ */
+export async function readEmailDeliveryHistoryForAddresses(
+  addresses: readonly string[],
+  options?: { limit?: number; firestore?: any },
+): Promise<EmailDeliveryHistory> {
+  const limit = Math.max(1, options?.limit ?? EMAIL_DELIVERY_READ_LIMIT)
+  const addressesRead: string[] = []
+  const erasures: Record<string, EmailDeliveryErasure> = {}
+  const rows: EmailDeliveryRecord[] = []
+  let lookupFailed = false
+
+  for (const address of addresses) {
+    const key = emailSuppressionKey(address)
+    if (!key) continue
+    addressesRead.push(address)
+    try {
+      rows.push(...(await readEmailDeliveries(address, { limit, ...options })))
+    } catch (error) {
+      console.error('[email-delivery-log] read failed', error)
+      lookupFailed = true
+    }
+    const erasure = await readEmailDeliveryErasure(address, options?.firestore)
+    if (erasure) erasures[address] = erasure
+  }
+
+  rows.sort((a, b) => b.firstSeenAtMs - a.firstSeenAtMs)
+  return { lookupFailed, rows: rows.slice(0, limit), addressesRead, erasures }
+}
+
+/** What one multi-address erasure did. */
+export interface EmailDeliveryErasureResult {
+  /** Messages removed, across every address. */
+  removed: number
+  /** The addresses swept. */
+  addresses: string[]
+  /**
+   * An address the account holds that ANOTHER account also holds.
+   *
+   * Reported rather than skipped — see {@link eraseEmailDeliveriesForAddresses}
+   * for why the data still goes.
+   */
+  sharedAddresses: string[]
+}
+
+/**
+ * Erase the delivery log for every address an account holds.
+ *
+ * ## The shared-address decision
+ *
+ * The log describes an ADDRESS, not an account. When two accounts hold one
+ * address the mail went to one mailbox, and in every shape we can construct
+ * — including the live one, where an account's federated provider address is
+ * another account's primary — that mailbox is one human.
+ *
+ * So the data GOES. Withholding it would leave a subject's mail intact after
+ * an erasure we reported as complete, which is both the worse failure and the
+ * legally sharper one. What must not happen is the other account's card
+ * silently going blank, because "no mail recorded" is exactly the reading
+ * this whole surface exists to prevent — so a tombstone replaces the rows.
+ *
+ * ⚠️ The tombstone is written for EVERY address, not only shared ones. We
+ * cannot reliably tell which are shared: there is no lookup for an account
+ * holding an address through a federated provider (see
+ * `account-addresses.ts`), so "not shared" is only ever the absence of
+ * evidence. Writing it unconditionally costs one small document and removes
+ * the case where the blank table comes back through the gap in the probe.
+ *
+ * ⛔ Only addresses the account HOLDS, resolved through the one resolver. An
+ * address arriving here that the account does not hold erases a stranger's
+ * mail, which no erasure request authorises.
+ */
+export async function eraseEmailDeliveriesForAddresses(
+  addresses: readonly { address: string; shared?: boolean }[],
+  firestore?: any,
+): Promise<EmailDeliveryErasureResult> {
+  const db = firestore ?? defaultFirestore()
+  const swept: string[] = []
+  const sharedAddresses: string[] = []
+  let removed = 0
+
+  for (const entry of addresses) {
+    const key = emailSuppressionKey(entry.address)
+    if (!key) continue
+    swept.push(entry.address)
+    if (entry.shared === true) sharedAddresses.push(entry.address)
+
+    const count = await eraseEmailDeliveries(entry.address, db).catch(() => 0)
+    removed += count
+
+    // The tombstone lands whether or not anything was removed: an address we
+    // erased and found empty is still an address whose records this request
+    // covered, and a later import must not be able to refill it silently.
+    try {
+      await db
+        .collection(EMAIL_DELIVERIES_COLLECTION)
+        .doc(key)
+        .set(
+          {
+            erasedAtMs: Date.now(),
+            erasedCount: FieldValue.increment(count),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+    } catch (error) {
+      console.error('[email-delivery-log] tombstone write failed', error)
+    }
+  }
+
+  return { removed, addresses: swept, sharedAddresses }
+}
+
 /**
  * Deletes everything recorded for one address.
  *
