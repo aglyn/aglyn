@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiSitemap } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { HostActivityCard } from './components/host-activity-card.component'
+import { WORKFLOWS_CONSOLE_SECTIONS } from './components/workflows-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Workflows console page only loads when opened. */
@@ -53,6 +54,9 @@ export function registerWorkflowsConsole(): void {
       {
         label: 'Workflows',
         href: '/workflows',
+        // Sections as ROUTES (AGL-693): each is a real URL the shell
+        // resolves and gates, so the page mounts the one being read.
+        sections: WORKFLOWS_CONSOLE_SECTIONS,
         // Reuse the existing release-flag nav-tab so staff-preview gating is
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-workflows',

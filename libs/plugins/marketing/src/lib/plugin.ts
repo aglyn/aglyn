@@ -20,6 +20,7 @@ import { registerSiteRuntime } from '@aglyn/aglyn'
 import { MarketingSiteRuntime } from './components/site-runtime'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
+import { MARKETING_CONSOLE_SECTIONS } from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -64,6 +65,9 @@ export function registerMarketingConsole(): void {
       {
         label: 'Marketing',
         href: '/marketing',
+        // Sections as ROUTES (AGL-693): each is a real URL the shell
+        // resolves and gates, so the page mounts the one being read.
+        sections: MARKETING_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-marketing',
         icon: { path: mdiBullhornOutline.path },
         header: {

@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailEditOutline, mdiEmailOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import * as Blocks from './components/email-blocks'
+import { EMAILS_CONSOLE_SECTIONS } from './components/emails-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /** Code-split: the Emails console page only loads when opened. */
@@ -64,6 +65,10 @@ export function registerEmailConsole(): void {
         label: 'Emails',
         href: '/emails',
         icon: { path: mdiEmailOutline.path },
+        // Sections as ROUTES (AGL-693): `/emails/campaigns` and friends are
+        // real URLs the shell resolves and gates, so the page mounts the one
+        // being read instead of subscribing all four.
+        sections: EMAILS_CONSOLE_SECTIONS,
         header: {
           title: 'Emails',
           icon: { path: mdiEmailOutline.path },

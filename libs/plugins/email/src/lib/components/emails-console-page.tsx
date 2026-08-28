@@ -17,66 +17,94 @@
 'use client'
 
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
-import { HubTabs } from '@aglyn/shared-ui-next'
+import { HubSections } from '@aglyn/shared-ui-next'
+import { useRouter } from 'next/navigation'
+import { useEffect, type ReactNode } from 'react'
 import CampaignsCard from './campaigns-card'
 import EmailScreensCard from './email-screens-card'
 import ListsCard from './lists-card'
 import SuppressionsCard from './suppressions-card'
+import {
+  DEFAULT_EMAILS_CONSOLE_SECTION,
+  type EmailsConsoleSectionId,
+} from './emails-console-sections'
+
+/**
+ * The body of one emails section, built only when that section is the one
+ * being read (AGL-693).
+ *
+ * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
+ * would CONSTRUCT all four every render, and each card opens its Firestore
+ * listens on mount — which is the entire cost this page exists to stop paying.
+ * Only the returned branch is ever built.
+ */
+function sectionBody(
+  section: EmailsConsoleSectionId,
+  hostId: string,
+): ReactNode {
+  switch (section) {
+    case 'campaigns':
+      return <CampaignsCard hostId={hostId} />
+    case 'designs':
+      return <EmailScreensCard hostId={hostId} />
+    case 'audiences':
+      return <ListsCard hostId={hostId} />
+    case 'suppressions':
+      return <SuppressionsCard hostId={hostId} />
+    default:
+      return null
+  }
+}
 
 /**
  * Emails page (AGL-395): the console surface owned by the email plugin,
- * rendered by the shell's generic plugin route. Uses the host-setup
- * vertical-tab pattern (shared `HubTabs`) — Campaigns composer/history,
- * the designed-email list (which no longer clutters the main Screens
- * list), audience lists — the marketing "Email" section, relocated — and,
- * since AGL-2410, the suppression list, which had been written by two paths
- * and displayed by none.
+ * rendered by the shell's generic plugin route — Campaigns composer/history,
+ * the designed-email list (which no longer clutters the main Screens list),
+ * audience lists, and since AGL-2410 the suppression list, which had been
+ * written by two paths and displayed by none.
+ *
+ * Sections are ROUTES (AGL-693). `HubTabs lazy` already mounted one panel, so
+ * this is not a read saving — `emails-console-read-cost.spec.tsx` was written
+ * BEFORE the conversion precisely to hold that line, and reports the same
+ * counts after. What routing adds is that the URL names the section: it is
+ * linkable, the back button walks sections, the breadcrumb says where you are,
+ * and "mount only what is open" is structural rather than a `lazy` flag
+ * somebody has to remember on the next surface.
  */
 export function EmailsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId } = props
+  const { hostId, section, sections, basePath } = props
+  const router = useRouter()
+
+  /*
+   * `/emails` names no section, so it lands on the first one the reader may
+   * open. The FIRST VISIBLE one, not the default outright: a section can be
+   * held behind its own release flag, and redirecting to one this viewer is
+   * refused would answer the nav tab with a "coming soon" notice.
+   *
+   * `replace`, not `push`: a redirect the reader did not ask for must not
+   * become a history entry their back button bounces off.
+   */
+  const landing =
+    sections?.find(
+      (item) => item.visible && item.id === DEFAULT_EMAILS_CONSOLE_SECTION,
+    ) ?? sections?.find((item) => item.visible)
+
+  useEffect(() => {
+    if (section || !landing) return
+    router.replace(landing.href)
+  }, [section, landing, router])
+
+  /*
+   * Nothing, deliberately, while the redirect is in flight. Rendering the
+   * default section here would issue its listens on a URL about to be
+   * replaced — on every arrival at `/emails`, which is every nav-tab click.
+   */
+  if (!section || !sections?.length || !basePath) return null
+
   return (
-    <HubTabs
-      /*
-       * Mount the section being read, and no others (AGL-693).
-       *
-       * `HubTabs` keeps every panel mounted unless told otherwise, so opening
-       * one section also subscribed the Firestore listeners behind all the
-       * rest and paid for every document their `limit()` allows. The reader
-       * sees one section; without this the page reads them all.
-       *
-       * Sections as ROUTES would make this structural rather than a flag
-       * somebody has to remember, and that is not reachable from a plugin
-       * today: the shell mounts plugin pages through its `[pluginSlug]` route,
-       * a single dynamic segment resolved by exact href match, so a section
-       * has no sub-route to occupy and the page is handed no path segments.
-       */
-      lazy
-      tabs={[
-        {
-          id: 'campaigns',
-          label: 'Campaigns',
-          content: <CampaignsCard hostId={hostId} />,
-        },
-        {
-          id: 'designs',
-          label: 'Designs',
-          content: <EmailScreensCard hostId={hostId} />,
-        },
-        {
-          id: 'audiences',
-          label: 'Audiences',
-          content: <ListsCard hostId={hostId} />,
-        },
-        {
-          // Beside the audiences rather than inside them (AGL-2410): a
-          // suppression is not a list you build, it is the reason a list you
-          // built did not all get mailed.
-          id: 'suppressions',
-          label: 'Suppressions',
-          content: <SuppressionsCard hostId={hostId} />,
-        },
-      ]}
-    />
+    <HubSections sections={sections}>
+      {sectionBody(section as EmailsConsoleSectionId, hostId)}
+    </HubSections>
   )
 }
 EmailsConsolePage.displayName = 'EmailsConsolePage'
