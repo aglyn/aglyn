@@ -114,7 +114,7 @@ const getDocsSpy = jest.fn(async (built: unknown) => {
     __built: built,
   }
 })
-const deleteDocSpy = jest.fn(async () => undefined)
+const deleteDocSpy = jest.fn(async (_ref: unknown) => undefined)
 const batchUpdate = jest.fn()
 const batchCommit = jest.fn(async () => undefined)
 
