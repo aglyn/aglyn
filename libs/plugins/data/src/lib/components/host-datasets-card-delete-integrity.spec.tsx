@@ -141,6 +141,34 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       fromCache: false,
     }
   },
+  /*
+   * The records table pages (AGL-693). Modelled the way the real hook works —
+   * a window over page 0..n plus a probe row — because a page is precisely
+   * what the delete check must NOT be answered from: the whole contract below
+   * is that the reference question is a query over the collection and not a
+   * scan of the rows that happen to be on screen.
+   */
+  usePagedCollection: (build: (pageLimit: number) => any) => {
+    const { useState } = require('react')
+    const [page, setPage] = useState(0)
+    const [pageSize, setPageSizeState] = useState(10)
+    const windowSize = pageSize * (page + 1)
+    const built = build(windowSize + 1)
+    const all = String(built?.path ?? '').endsWith('/records') ? recordDocs : []
+    return {
+      rows: all.slice(page * pageSize, windowSize),
+      hasMore: all.length > windowSize,
+      page,
+      setPage,
+      pageSize,
+      setPageSize: (next: number) => {
+        setPageSizeState(next)
+        setPage(0)
+      },
+      status: 'success',
+      fromCache: false,
+    }
+  },
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -151,6 +179,10 @@ jest.mock('firebase/firestore', () => ({
   query: (path: string, ...constraints: unknown[]) => ({ path, constraints }),
   where: (field: string, op: string, value: unknown) => ({ field, op, value }),
   limit: (value: number) => ({ limit: value }),
+  // The records walk orders on the document NAME, which is the one ordering
+  // that cannot drop a row for lacking a field — see the listener's comment.
+  orderBy: (field: unknown) => ({ orderBy: field }),
+  documentId: () => '__name__',
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => DELETE_FIELD,
   getCountFromServer: async () => ({ data: () => ({ count: 2 }) }),

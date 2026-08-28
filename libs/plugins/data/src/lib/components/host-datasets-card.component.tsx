@@ -33,11 +33,11 @@ import {
   parseDatasetFilter,
   parseDatasetSort,
   pluginDocsHelp,
-  sortDatasetRecords,
   validateDocument,
 } from '@aglyn/aglyn'
 import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -63,9 +63,11 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  documentId,
   getCountFromServer,
   getDocs,
   limit,
+  orderBy,
   query,
   where,
   setDoc,
@@ -77,6 +79,7 @@ import {
   useFirestoreCollection,
   useHostActivityLogger,
   useOrgDataScope,
+  usePagedCollection,
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -98,6 +101,21 @@ export interface HostDatasetsCardProps {
    */
   org?: Partial<AglynOrgBilling>
 }
+
+/**
+ * How many existing records a keyed CSV import may consult.
+ *
+ * The upsert has to ask "does a record with this key already exist", which no
+ * page can answer — so it reads its own window, once, when a key field is
+ * chosen. The window is bounded because `recordsPerDataset` is unlimited on
+ * the agency plan and an unbounded client read is a browser hang behind a
+ * dialog button; it is the same ceiling the listener used to carry, moved from
+ * every mount of the card to the one moment it is needed.
+ *
+ * A dataset larger than this is not silently mis-imported: the import says
+ * which keys it could consult, measured against the server's exact count.
+ */
+const IMPORT_KEY_WINDOW = 500
 
 /**
  * Datasets editor (AGL-102): org-shared document collections at
@@ -222,8 +240,59 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // an empty read for everyone — the AGL-1044 scoped-sharing rules deny it
   // outright for a scoped collaborator, and a permanently denied listen is
   // reopened forever by the refusal loop.
-  const { data: recordDocs } = useFirestoreCollection<any>(
-    () =>
+  /**
+   * The records table PAGES (AGL-693). It used to be `limit(500)` with no
+   * `orderBy`, every row rendered at once and no control anywhere.
+   *
+   * That was wrong twice. Five hundred documents were read and billed on
+   * every mount of a card nobody had scrolled — and past five hundred the
+   * remaining rows were not merely unrendered, they were UNREACHABLE, because
+   * nothing showed them and nothing asked for more. Firestore answers an
+   * unordered limit in document-id order over auto-ids, so which five hundred
+   * a reader got was arbitrary and could differ between two loads of the same
+   * dataset; `sortDatasetRecords` then sorted that sample by `order`, which
+   * made the table look ordered while being a sample. The export leg
+   * (AGL-2335) fixed exactly this shape for the file and left the table.
+   *
+   * ## Why the walk orders on the document id, and not on a field
+   *
+   * The usual fix is `orderBy` on the field the rows are sorted by. It cannot
+   * be used here: `orderBy` matches only documents that HAVE the field, so
+   * ordering on one that any writer omits does not mis-order the list, it
+   * hides rows from it — a worse failure than the one being fixed, and a
+   * silent one. Every candidate on this collection is omitted by some writer:
+   *
+   *  * `order` — set by `/api/orgs/datasets` and by `POST /v1/datasets/{id}
+   *    /records`, and NOT by the tenant form-submit leg or by the workflow
+   *    `appendDataset`/`updateDataset` actions, which write `values` and
+   *    `createdAt` only. Ordering on it would drop every row a public form or
+   *    an automation ever produced — the rows a lead dataset is mostly made
+   *    of.
+   *  * `createdAt` — written by all four of those, and NOT by a site import:
+   *    `IMPORTABLE_FIELDS.records` is `['values', 'order']`, so a restored
+   *    record carries no `createdAt` at all.
+   *  * `updatedAt` — the mirror image: the import stamps it, the form and
+   *    automation legs do not.
+   *
+   * A document's NAME is not a field and cannot be absent, so ordering on it
+   * drops nothing and the walk is total: every record is reachable by paging,
+   * which is the property the old query lacked. It is not insertion order —
+   * ids are random — so the rows are not claimed to be in one. What they are
+   * is stable, complete, and the same on every load.
+   *
+   * `sortDatasetRecords` is deliberately NOT applied to the page. Re-sorting a
+   * window of an id-ordered walk by `order` is the same lie the old code told:
+   * rows would run in one order within a page and another across pages.
+   */
+  const {
+    rows: records,
+    hasMore: hasMoreRecords,
+    page: recordPage,
+    setPage: setRecordPage,
+    pageSize: recordPageSize,
+    setPageSize: setRecordPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       dataScope && selected?.$id
         ? query(
             collection(
@@ -234,15 +303,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               selected.$id,
               'records',
             ),
-            limit(500),
+            orderBy(documentId()),
+            limit(pageLimit),
           )
         : null,
     [firestore, dataScope, selected?.$id],
     { idField: '$id' },
-  )
-  const records = useMemo(
-    () => sortDatasetRecords([...(recordDocs ?? [])]),
-    [recordDocs],
   )
   /**
    * The two HEAD-COUNTS on this card are server aggregates, not the lengths
@@ -348,15 +414,20 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // Pending, denied, or answered about the PREVIOUS selection, the loaded
   // rows stand in. They can only UNDERSTATE (same collections, capped),
   // never overstate, so nothing these figures gate fires on a count larger
-  // than the truth.
+  // than the truth. Since AGL-693 the record fallback is one PAGE, so it
+  // understates by more — which moves it further in the safe direction and
+  // changes nothing about which way it can be wrong.
   const datasetCount = serverDatasetCount ?? datasets.length
   const recordCount =
     serverRecordCount && serverRecordCount.datasetId === countedDatasetId
       ? serverRecordCount.count
       : records.length
-  // Query layer (AGL-181): the same evaluator the renderer uses, applied
-  // in memory over the loaded window (explicitly bounded, never silently
-  // unbounded — the helper text says so).
+  // Query layer (AGL-181): the same evaluator the renderer uses, applied in
+  // memory over the rows in front of the reader. That window is now one PAGE
+  // rather than a 500-row sample (AGL-693), which is a smaller claim and a
+  // true one — the helper text says which, because a filter box that looks
+  // like it searches the collection and does not is worse than one that says
+  // so.
   const [filterText, setFilterText] = useState('')
   const [sortText, setSortText] = useState('')
   const visibleRecords = useMemo(() => {
@@ -997,10 +1068,53 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     let updates: Array<{ id: string; values: Record<string, unknown> }> = []
     let creates = validRows
     if (keyField) {
+      /*
+       * The key index is its OWN read, not the table's window.
+       *
+       * It used to be built from the card's live listener, which is now a
+       * PAGE — and a page cannot answer "does this key already exist". An
+       * upsert that consults ten rows would turn nearly every update into a
+       * create: duplicate rows, and quota spent on them.
+       *
+       * So it is read here, once, at the moment a key field is actually
+       * chosen — which is also strictly cheaper than the listener it replaces,
+       * since that one paid for five hundred documents on every mount of a
+       * card nobody had scrolled.
+       *
+       * ⚠️ STILL BOUNDED, and the bound is honest rather than hidden. An
+       * unbounded client read is what AGL-2335 refused for the export, for the
+       * same reason: `recordsPerDataset` is unlimited on the agency plan, so
+       * "read them all" is a browser hang behind a dialog button. Past the
+       * ceiling the reader is TOLD which keys could be consulted instead of
+       * being handed silent duplicates — `recordCount` is the server
+       * aggregate, so that comparison is exact.
+       */
       const existingByKey = new Map<string, string>()
-      for (const record of records as any[]) {
-        const key = keyOf(record.values ?? {})
-        if (key) existingByKey.set(key, record.$id)
+      const keyWindow = await getDocs(
+        query(
+          collection(
+            firestore,
+            dataScope[0],
+            dataScope[1],
+            'datasets',
+            selected.$id,
+            'records',
+          ),
+          orderBy(documentId()),
+          limit(IMPORT_KEY_WINDOW),
+        ),
+      ).catch(() => null)
+      for (const snapshot of keyWindow?.docs ?? []) {
+        const key = keyOf((snapshot.get('values') as Record<string, unknown>) ?? {})
+        if (key) existingByKey.set(key, snapshot.id)
+      }
+      if (recordCount > IMPORT_KEY_WINDOW) {
+        enqueueSnackbar(
+          `Matching on "${keyField}" read the first ` +
+            `${IMPORT_KEY_WINDOW.toLocaleString()} of ${recordCount.toLocaleString()} ` +
+            'records — rows keyed beyond that will be added rather than updated.',
+          { variant: 'warning', persist: true },
+        )
       }
       const deduped = new Map<string, (typeof validRows)[number]>()
       const keyless: typeof validRows = []
@@ -1108,7 +1222,6 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     org,
     model,
     recordCount,
-    records,
     firestore,
     dataScope,
     callDatasetApi,
@@ -1216,7 +1329,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               label="Filter"
               value={filterText}
               onChange={(event) => setFilterText(event.target.value)}
-              helperText={'e.g. price <= 20 · applies to loaded records'}
+              helperText={'e.g. price <= 20 · applies to this page'}
               sx={{ minWidth: 220 }}
             />
             <TextField
@@ -1229,7 +1342,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             />
           </Stack>
         ) : null}
-        {selected && records.length > 0 ? (
+        {selected && (records.length > 0 || recordPage > 0) ? (
+          <>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -1285,6 +1399,22 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               ))}
             </TableBody>
           </Table>
+          {/* The count line is the PAGE's, deliberately. `recordCount` is the
+              dataset's real size and it already has its own readout above —
+              handing it to the footer as `count` would tell MUI the walk is
+              that long and leave Next live past the end of it whenever a rule
+              or a scope has narrowed what this reader may list. `hasMore` is
+              a fact from the probe row, so the footer answers for the walk it
+              is actually paging. */}
+          <ListPagination
+            page={recordPage}
+            pageSize={recordPageSize}
+            rowCount={records.length}
+            hasMore={hasMoreRecords}
+            onPageChange={setRecordPage}
+            onPageSizeChange={setRecordPageSize}
+          />
+          </>
         ) : selected ? (
           <Typography variant="body2" color="text.secondary">
             {'No records yet.'}
