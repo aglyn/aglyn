@@ -170,9 +170,19 @@ export default function BillingOpenInvoicesCardComponent({
             { variant: 'warning', persist: false },
           )
         }
-        const confirmed = await stripe.confirmPayment({
+        // `handleNextAction`, because the route already confirmed the intent
+        // server-side and it is sitting at `requires_action` — the only step
+        // left belongs to the bank. This is the one Stripe.js method defined
+        // for that status, and it throws on any other.
+        //
+        // `confirmPayment` is a different verb: it CONFIRMS an intent from
+        // Payment Element data or an explicit `confirmParams.payment_method`.
+        // Neither exists on this path — the card is the customer's saved
+        // default, attached by Stripe when the invoice was paid — so there is
+        // nothing for it to confirm with, and the intent is already past the
+        // status it accepts.
+        const confirmed = await stripe.handleNextAction({
           clientSecret: String(outcome.body.paymentClientSecret),
-          redirect: 'if_required',
         })
         if (confirmed.error) {
           return void enqueueSnackbar(

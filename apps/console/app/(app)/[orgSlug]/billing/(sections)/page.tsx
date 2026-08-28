@@ -832,8 +832,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         markSubscribeCheckoutPending(orgId ?? '')
 
         // A card the issuer wants authenticated. The ONLY Stripe-rendered step
-        // left in this flow, and it belongs to the bank: `confirmPayment`
+        // left in this flow, and it belongs to the bank: `handleNextAction`
         // shows the challenge and returns.
+        //
+        // That method, and not `confirmPayment`: checkout confirms the
+        // subscription's intent server-side and reports `requiresAction` only
+        // when Stripe answers `requires_action`, which is the single status
+        // `handleNextAction` is defined for. `confirmPayment` confirms an
+        // intent from Payment Element data or an explicit
+        // `confirmParams.payment_method`, and this flow has neither — the card
+        // is the one already on the customer.
         //
         // Handled here rather than left to the webhook because a subscription
         // stuck at `incomplete` is a customer who believes they subscribed and
@@ -848,9 +856,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               { variant: 'warning', persist: false },
             )
           }
-          const outcome = await stripe.confirmPayment({
+          const outcome = await stripe.handleNextAction({
             clientSecret: String(payload.paymentClientSecret),
-            redirect: 'if_required',
           })
           if (outcome.error) {
             return void enqueueSnackbar(
