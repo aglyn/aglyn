@@ -78,6 +78,18 @@ export interface RevalidateLivePagesResult {
   pathsDropped: number
   /** The console-side dependent scan hit its limit and stopped early. */
   scanTruncated: boolean
+  /**
+   * Why the drop is not a plain success, or `'ok'` — passed straight through
+   * from the console route.
+   *
+   * Dropping this was its own quiet failure: `revalidated: 0` reads the same
+   * for "this screen is not routed, so there was nothing to drop" as it does
+   * for "the tenant refused the call", and only the second means the live page
+   * is now stale for the rest of its window. Both used to arrive as a plain
+   * success, which is how a publish came to report itself complete while the
+   * page it published kept serving the old HTML.
+   */
+  reason: string
 }
 
 /**
@@ -92,7 +104,23 @@ export function describeRevalidateShortfall(
   result: RevalidateLivePagesResult | null,
 ): string | null {
   if (!result) return null
-  const { pathsDropped, scanTruncated } = result
+  const { pathsDropped, scanTruncated, reason } = result
+  /**
+   * A REFUSED drop, which is the only case where the live pages are stale for
+   * the whole revalidate window rather than for a moment.
+   *
+   * `not-routed` is deliberately not in here: a screen with no route has no
+   * live page to be stale, so saying anything would be alarming and wrong.
+   */
+  if (reason && reason !== 'ok' && reason !== 'not-routed') {
+    // Says what it means for THEM. The publish itself landed — only the cache
+    // hint did not — so the honest sentence is that the site catches up on its
+    // own, with a bound rather than a shrug.
+    return (
+      'Published. The live pages could not be refreshed just now, so they ' +
+      'may show the previous version for up to an hour.'
+    )
+  }
   if (!pathsDropped && !scanTruncated) return null
   // Deliberately says what to DO. "Truncated" is accurate and useless: the
   // reader's question is whether their site is broken, and the answer is that
@@ -132,12 +160,14 @@ export async function revalidateLivePages(
       revalidated?: unknown
       pathsDropped?: unknown
       truncated?: unknown
+      reason?: unknown
     } | null
     if (!body) return null
     return {
       revalidated: Array.isArray(body.revalidated) ? body.revalidated.length : 0,
       pathsDropped: Number(body.pathsDropped ?? 0) || 0,
       scanTruncated: Boolean(body.truncated),
+      reason: typeof body.reason === 'string' ? body.reason : 'ok',
     }
   } catch {
     // Best effort by design — see above. A cache hint that could not be sent

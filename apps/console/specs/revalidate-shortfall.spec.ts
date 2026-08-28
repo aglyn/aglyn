@@ -39,6 +39,7 @@ const result = (
   revalidated: 48,
   pathsDropped: 0,
   scanTruncated: false,
+  reason: 'ok',
   ...over,
 })
 
@@ -76,5 +77,36 @@ describe('describeRevalidateShortfall (AGL-1239)', () => {
     const message = describeRevalidateShortfall(result({ scanTruncated: true }))
     expect(message).toBeTruthy()
     expect(message).toContain('Some pages')
+  })
+})
+
+/**
+ * A drop the tenant never accepted (AGL-1483).
+ *
+ * `revalidated: 0` cannot carry this on its own: it is equally what an
+ * unrouted screen returns, where there is no live page to go stale. Only the
+ * refusal means the published change waits out the whole revalidate window,
+ * and a publish that reports plain success through that is the confusion this
+ * whole message exists to remove.
+ */
+describe('describeRevalidateShortfall on a refused drop', () => {
+  it('says the live pages may lag when the tenant refused the call', () => {
+    for (const reason of ['tenant-401', 'tenant-503', 'error', 'not-configured']) {
+      const message = describeRevalidateShortfall(
+        result({ revalidated: 0, reason }),
+      )
+      expect(message).toContain('could not be refreshed')
+      expect(message).toContain('up to an hour')
+    }
+  })
+
+  it('stays silent for a screen that has no live page to go stale', () => {
+    expect(
+      describeRevalidateShortfall(result({ revalidated: 0, reason: 'not-routed' })),
+    ).toBeNull()
+  })
+
+  it('still says nothing on an ordinary complete drop', () => {
+    expect(describeRevalidateShortfall(result({ reason: 'ok' }))).toBeNull()
   })
 })
