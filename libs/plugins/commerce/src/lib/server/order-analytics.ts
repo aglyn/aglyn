@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
+import * as CommerceModel from '../model'
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { toStorefrontPurchaseSource } from '../model/purchase-analytics'
@@ -156,6 +158,37 @@ export const orderAnalyticsHandler: PluginApiHandler = async (req, res) => {
   if (!SESSION_ID.test(sessionId)) {
     return res.status(400).json({ error: 'Invalid sessionId' })
   }
+  // A REHEARSAL MUST NOT REACH THE MERCHANT'S OWN ANALYTICS (AGL-2521).
+  //
+  // This endpoint hands the browser a `purchase` payload that
+  // `use-storefront-purchase-event.ts` pushes through the MERCHANT's `gtag`,
+  // into the MERCHANT's GA4 property. A smoke-test checkout therefore writes a
+  // fake sale into a real merchant's funnel — the same pollution as the
+  // revenue cards, except it lands somewhere Aglyn does not control and
+  // cannot later correct.
+  //
+  // Refused HERE rather than at the webhook, because this is not a webhook.
+  // The billing route's AGL-2040 livemode gate already refuses cross-mode
+  // events, so every per-sale effect driven by it — the buyer receipt, the
+  // merchant notification, the dropship purchase order — is covered. This
+  // route is a plain GET the storefront calls on its own success page, so it
+  // reads an order that already exists and is reached by no gate at all.
+  //
+  // The SESSION ID is the discriminator and it covers both branches below: a
+  // Checkout Session id states its mode (`cs_test_…`), while the invoice id
+  // the subscription branch reports on does NOT, so checking the invoice
+  // would miss every recurring sale.
+  //
+  // 409, matching the "Not payable" refusals below: the client retries only a
+  // 404 and treats everything else as terminal, so this fires nothing and
+  // polls nothing.
+  //
+  // FAILING TOWARDS FIRING. An unrecognised id is live: suppressing a real
+  // sale would corrupt a merchant's funnel in the one direction they can
+  // never spot, exactly as counting one would corrupt their revenue.
+  if (stripeIdIsTestMode(sessionId)) {
+    return res.status(409).json({ error: 'Not payable', reason: 'test-mode' })
+  }
   try {
     const hostRef = firebaseAdmin
       .app()
@@ -173,6 +206,12 @@ export const orderAnalyticsHandler: PluginApiHandler = async (req, res) => {
       // sale in the merchant's report that has not happened.
       if (order.status !== 'paid') {
         return res.status(409).json({ error: 'Not payable' })
+      }
+      // The RECORDED fact as well as the id (AGL-2521). An order the webhook
+      // stamped `livemode: false` is a rehearsal whatever its id looks like,
+      // and this is the stronger of the two signals.
+      if (CommerceModel.orderIsTestMode({ ...order, $id: snapshot.id })) {
+        return res.status(409).json({ error: 'Not payable', reason: 'test-mode' })
       }
       return res
         .status(200)
