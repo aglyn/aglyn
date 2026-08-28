@@ -189,6 +189,31 @@ const mockVerifyIdToken = jest.fn(async () => ({
   email_verified: true,
 }))
 
+/**
+ * Stands in for `FreeWorkspaceCapError` — the class the route's catch arm
+ * discriminates on (AGL-2265).
+ *
+ * Declared here rather than reached through `jest.requireActual`, because the
+ * defining file imports `firebase-admin.ts`, which initializes the admin app
+ * on load.
+ */
+class MockFreeWorkspaceCapError extends Error {
+  limit: number
+  held: number
+  constructor(limit: number, held: number) {
+    super(`Free workspace ceiling reached: ${held} of ${limit}`)
+    this.name = 'FreeWorkspaceCapError'
+    this.limit = limit
+    this.held = held
+  }
+}
+
+/** What `ensureOrgForUser` does when a create arrives with no `orgId`. */
+const mockEnsureOrgForUser = jest.fn(async () => ({
+  orgId: 'org-1',
+  member: { role: 'owner' },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -207,7 +232,40 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     orgId,
     member: { role: 'owner' },
   }),
-  ensureOrgForUser: async () => ({ orgId: 'org-1', member: { role: 'owner' } }),
+  ensureOrgForUser: () => mockEnsureOrgForUser(),
+  /**
+   * The AGL-2265 ceiling refusal, MODELED rather than stubbed.
+   *
+   * The route's catch arm BRANCHES on this return value, and both lazy stubs
+   * read green while removing a guard. A constant `null` sends a real ceiling
+   * refusal into the generic "Site creation failed" 500, which any assertion
+   * looser than an exact status still accepts. A constant `Response` is worse:
+   * every unrelated fault in the handler would answer 403 and this file's
+   * quota assertions would report a working cap over a crashing route.
+   *
+   * So it discriminates on what the real one discriminates on — that error
+   * class and nothing else — and answers with the same status and `code`.
+   */
+  freeWorkspaceCapRefusalResponse: (error: unknown) =>
+    error instanceof MockFreeWorkspaceCapError
+      ? Response.json(
+          {
+            error:
+              `You already have ${error.held} free workspaces, which is the ` +
+              `limit of ${error.limit}.`,
+            code: 'free_workspace_limit',
+            limit: error.limit,
+            held: error.held,
+          },
+          { status: 403 },
+        )
+      : null,
+  // The route writes the new site's first activity entry (AGL-118). The real
+  // one swallows its own failures and resolves with nothing, and the route
+  // does not branch on it, so a no-op IS the contract. Named explicitly
+  // because this factory is a closed world: an absent export is `undefined`,
+  // and the route throws on the success path this file's controls depend on.
+  logHostActivity: async () => undefined,
   lockdownRefusal: async () => null,
   registerOrgHost: async () => undefined,
   /**
@@ -254,6 +312,23 @@ const create = (subdomain: string) =>
     }),
   )
 
+/**
+ * The same create with NO `orgId` — the shape that makes the route auto-create
+ * the workspace through `ensureOrgForUser`, and so the only shape that can
+ * reach the free-workspace ceiling.
+ */
+const createWithoutOrg = (subdomain: string) =>
+  POST(
+    new Request('https://console.aglyn.com/api/hosts/create', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ displayName: 'Site', subdomain }),
+    }),
+  )
+
 const siteCount = () =>
   [...mockDocs.keys()].filter(
     (path) => path.startsWith('hosts/') && path.split('/').length === 2,
@@ -262,6 +337,7 @@ const siteCount = () =>
 beforeEach(() => {
   mockDocs = new Map()
   mockTxChain = Promise.resolve()
+  mockEnsureOrgForUser.mockClear()
 })
 
 describe('a free org cannot exceed hostLimit, however many creates race', () => {
@@ -328,5 +404,55 @@ describe('a free org cannot exceed hostLimit, however many creates race', () => 
     mockDocs.set(`orgs/${ORG}`, {})
     expect((await create('alpha')).status).toBe(200)
     expect((await create('beta')).status).toBe(403)
+  })
+})
+
+/**
+ * The OTHER free-tier ceiling this one route can hit (AGL-2265).
+ *
+ * A create that carries no `orgId` makes a workspace on its way to making a
+ * site, so the free-workspace ceiling is refused from inside `hosts/create`
+ * and arrives as a thrown `FreeWorkspaceCapError`, not a return value. The
+ * route turns it back into the ceiling's own 403 in its catch block — one
+ * line, sitting next to the generic 500, which is exactly where a guard goes
+ * quiet without anything going red.
+ */
+describe('the free WORKSPACE ceiling refuses from here too', () => {
+  it('answers the ceiling’s own 403, not "Site creation failed"', async () => {
+    mockDocs.set(`orgs/${ORG}`, { plan: 'free' })
+    mockEnsureOrgForUser.mockRejectedValueOnce(
+      new MockFreeWorkspaceCapError(3, 3),
+    )
+
+    const response = await createWithoutOrg('gamma')
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'free_workspace_limit',
+      limit: 3,
+      held: 3,
+    })
+    expect(siteCount()).toBe(0)
+  })
+
+  it('does NOT launder an unrelated fault into a ceiling refusal', async () => {
+    // The inverse fixture. Without it the assertion above is satisfied by a
+    // catch block that answers 403 to everything, which would report a
+    // working ceiling over a route that had stopped working at all.
+    mockDocs.set(`orgs/${ORG}`, { plan: 'free' })
+    mockEnsureOrgForUser.mockRejectedValueOnce(new Error('firestore is down'))
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    try {
+      const response = await createWithoutOrg('delta')
+
+      expect(response.status).toBe(500)
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'Site creation failed',
+      })
+      expect(siteCount()).toBe(0)
+    } finally {
+      logged.mockRestore()
+    }
   })
 })

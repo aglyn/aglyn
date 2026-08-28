@@ -192,6 +192,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     firestore: { FieldValue: { delete: () => '__deleted__' } },
   },
   getOrgForHost: async () => ({ orgId: 'org-1', org: mockOrg }),
+  // The route writes the site's own audit entry for a create (AGL-118). The
+  // real one swallows its own failures and resolves with nothing, and the
+  // route does not branch on it, so a no-op IS the contract rather than a
+  // convenience. Named explicitly because this factory is a closed world: an
+  // absent export is `undefined`, the route throws on the success path, and
+  // the resulting 500 reads exactly like the cap under test regressing.
+  logHostActivity: async () => undefined,
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
