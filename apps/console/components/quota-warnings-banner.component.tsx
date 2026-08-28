@@ -366,6 +366,55 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // that watches the setting at all. So this says what is true under every
   // configuration that screen can hold: access continues while Stripe
   // retries, and the plan stops if the retries run out.
+  // A subscription whose FIRST payment never completed — the customer's bank
+  // asked to confirm it and the confirmation was abandoned or refused.
+  //
+  // A third state, before the two below, because both of their sentences are
+  // actively false here. `past_due` promises access continues while Stripe
+  // retries: nothing is retrying, and there is no access to continue since
+  // the plan never started. `unpaid` says the payments failed and the plan
+  // "has stopped": it never began.
+  //
+  // Entitlements are already correct — `incomplete` is in
+  // `DEAD_SUBSCRIPTION_STATUSES`, so the workspace resolves to Free. That was
+  // the whole defect: correct entitlements and NOTHING on screen saying why,
+  // for a customer who believes they subscribed. They pressed Upgrade, their
+  // bank asked a question, and from their side it simply did not work.
+  //
+  // `incomplete_expired` is deliberately NOT matched. Stripe expires these on
+  // its own, and once it has there is nothing to complete — the subscription
+  // is gone and the plan grid is the honest next step, not a banner nagging
+  // about something unrecoverable.
+  if (billingStatus === 'incomplete') {
+    return (
+      <Alert
+        severity="warning"
+        sx={{ borderRadius: 0 }}
+        action={
+          orgWideViewer ? (
+            <AppLink
+              componentVariant="button"
+              color="inherit"
+              size="small"
+              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+            >
+              {'Finish payment'}
+            </AppLink>
+          ) : undefined
+        }
+      >
+        {scopedViewer
+          ? "This workspace's subscription is waiting on a payment that was " +
+            'never completed, so its paid features have not started. A ' +
+            'workspace admin needs to finish it.'
+          : 'Your subscription is waiting on a payment that was never ' +
+            'completed — your bank asked to confirm it and that step did not ' +
+            'finish. Your paid plan has not started yet. Finish the payment ' +
+            'from Billing, or it expires and you can start again.'}
+      </Alert>
+    )
+  }
+
   const lapsed = billingStatus === 'unpaid'
   if (billingStatus === 'past_due' || lapsed) {
     return (
