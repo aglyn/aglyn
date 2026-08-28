@@ -282,6 +282,25 @@ const RESOURCES: Record<string, {
       'lowStockThreshold',
       'createdAtMs',
       'updatedAtMs',
+      /*
+       * Search keys, derived by the plugin that owns the catalog (AGL-693).
+       *
+       * The console shell does not import the commerce plugin, so it cannot
+       * flatten `variants[].sku` or normalize a name the way the products hub
+       * queries them — `CommerceModel.productSearchFields` is the one place
+       * that knows both, and it runs on the payload the caller builds. That
+       * makes these allow-listed rather than stamped here like a screen's
+       * `nameLower` below.
+       *
+       * They index a host's own catalog, so a caller writing its own values is
+       * no worse than the same caller writing its own product names; the
+       * failure that matters is the keys going MISSING, which is what
+       * `product-search-keys-travel-with-the-name.spec` exists to catch.
+       */
+      'nameLower',
+      'nameTokens',
+      'nameReversed',
+      'skus',
       // Legacy Commerce Starter fields, still written by every caller.
       'priceUsd',
       'inventory',

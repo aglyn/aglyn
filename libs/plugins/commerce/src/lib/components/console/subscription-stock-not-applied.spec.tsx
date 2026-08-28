@@ -104,6 +104,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // Modelling the resolved shape here would fabricate a link the real
   // render cannot have yet (AGL-2080 added this call).
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
+  /*
+   * The real translator, not a stub. It is a pure function of the shared
+   * declaration, and a mock that omits a barrel export does not fail as
+   * "missing" — it fails as the component being broken.
+   */
+  listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterConstraints,
   // A paying, settled plan, so the entitlement gate never refuses for the
   // AGL-1064 reason instead of the subscription-stock one under test.
   useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),

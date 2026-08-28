@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { PRODUCT_LIST_FILTER_FIELDS } from '../../constants/product-filters'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -44,14 +45,17 @@ import {
   addDoc,
   collection,
   doc,
+  documentId,
   getCountFromServer,
   limit,
+  orderBy,
   query,
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
+  listFilterConstraints,
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -90,6 +94,21 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const { org, ready: planReady } = useOrgPlan(hostId)
   const { confirm } = useConfirmationContext()
   const [search, setSearch] = useState('')
+  /*
+   * WHICH field the search box searches (AGL-693).
+   *
+   * The box used to compare four fields at once — name, slug, tag, SKU — over
+   * the rows the listener had already fetched. Server-side that is not one
+   * query: Firestore allows a single `array-contains` per query and cannot OR
+   * across fields, so four fields at once means four queries and a merge, and
+   * a merged result cannot be paged or capped coherently.
+   *
+   * Naming the field is the honest trade. It buys a search that reaches the
+   * WHOLE catalog instead of an arbitrary five hundred rows of it, which is
+   * the case the old box got wrong — and a merchant looking for a SKU knows
+   * they are looking for a SKU.
+   */
+  const [searchField, setSearchField] = useState<'name' | 'skus'>('name')
   const [statusFilter, setStatusFilter] = useState('all')
   const [editing, setEditing] = useState<ProductRow | null>(null)
   const [creating, setCreating] = useState(false)
@@ -120,9 +139,55 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
      */
     fromCache: productsFromCache,
   } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'products'), limit(500)),
-    [firestore, hostId],
+    () => {
+      /*
+       * FILTERED BY THE QUERY, and ordered rather than merely capped
+       * (AGL-693, AGL-2292).
+       *
+       * `limit(500)` with no `orderBy` returns documents in ID order, and
+       * products are created at `createResourceUid()` — so that was a
+       * pseudo-random SAMPLE of five hundred, which the client `.sort()` by
+       * name below dressed up as a reliable alphabetical page. The search then
+       * ran over that sample, so a product on the wrong side of the cap
+       * answered "no products match": the one answer a search must never get
+       * wrong, on the list a merchant uses to find one item in their catalog.
+       *
+       * The cap STAYS — a 25,000-product catalog does not belong in a table,
+       * and the head-count has been a server aggregate since AGL-1716. What
+       * changes is that a filter now reaches the whole collection BEFORE the
+       * cap applies.
+       *
+       * ONE request, because Firestore allows one `array-contains` and the
+       * shared translator builds one predicate. Whichever control is set alone
+       * is answered entirely by the server; with BOTH set the name reaches the
+       * whole catalog and the status narrows those matches client-side below,
+       * which is complete unless a single name matches more than five hundred
+       * products.
+       *
+       * ⚠️ The default ordering is by DOCUMENT ID, not by `nameLower`.
+       * Ordering by a denormalized key drops every document that lacks it, and
+       * an unfiltered list must not be able to hide a product — a catalog
+       * imported before the search keys existed, or written by a path that
+       * forgot them, would simply stop appearing. Under a name filter the
+       * ordering does move to `nameLower`, and there it is safe: a document
+       * without the key has no `nameTokens` either, so the `array-contains`
+       * has already excluded it.
+       */
+      const constraints = listFilterConstraints(
+        PRODUCT_LIST_FILTER_FIELDS,
+        search.trim()
+          ? { field: searchField, op: 'contains', value: search.trim() }
+          : statusFilter !== 'all'
+            ? { field: 'status', op: 'equals', value: statusFilter }
+            : null,
+      )
+      return query(
+        collection(firestore, 'hosts', hostId, 'products'),
+        ...(constraints ?? [orderBy(documentId())]),
+        limit(500),
+      )
+    },
+    [firestore, hostId, search, searchField, statusFilter],
     { idField: '$id' },
   )
   // License key pool (AGL-308) for the open dialog's product.
@@ -144,31 +209,35 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     { idField: '$id' },
   )
   const products = useMemo(() => {
-    const needle = search.trim().toLowerCase()
+    /*
+     * The SEARCH is gone from here — it is the query's job now, and running it
+     * twice would be worse than redundant. A server `contains` matches a word
+     * PREFIX ("cof" finds "Coffee"), while the old `includes` matched a raw
+     * substring, so a two-word search would have been sent to the server as
+     * its first word and then dropped again here by a whole-string compare
+     * that the matching row never satisfies: rows found, then hidden.
+     *
+     * The status narrowing stays, and only earns its keep when a name search
+     * is also active — that is the one combination the single predicate above
+     * cannot express, and here it runs over rows the server already matched by
+     * name across the whole catalog rather than over an arbitrary window.
+     *
+     * Soft-deleted products are still dropped here rather than in the query:
+     * `deletedAt` is absent on a live product, and Firestore cannot ask for
+     * documents that LACK a field.
+     */
     return [...(productDocs ?? [])]
       .filter((product: any) => !product.deletedAt)
       .map((product: any) => ({
         ...CommerceModel.liftLegacyProduct(product),
         $id: product.$id,
       }))
-      .filter((product: ProductRow) => {
-        if (statusFilter !== 'all' && product.status !== statusFilter) {
-          return false
-        }
-        if (!needle) return true
-        return (
-          product.name.toLowerCase().includes(needle) ||
-          product.slug.includes(needle) ||
-          (product.tags ?? []).some((tag) =>
-            tag.toLowerCase().includes(needle),
-          ) ||
-          product.variants.some((variant) =>
-            variant.sku?.toLowerCase().includes(needle),
-          )
-        )
-      })
+      .filter(
+        (product: ProductRow) =>
+          statusFilter === 'all' || product.status === statusFilter,
+      )
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [productDocs, search, statusFilter])
+  }, [productDocs, statusFilter])
 
   /**
    * A CLOCK, because a hold lapses without anybody writing anything
@@ -393,6 +462,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           resource: 'product',
           data: {
             ...product,
+            // Search keys travel with the name on the IMPORT path too — a
+            // catalog arrives here in bulk, which is exactly the catalog the
+            // 500-row window cannot show and the search has to reach.
+            ...CommerceModel.productSearchFields(product),
             slug,
             priceUsd: product.variants[0]?.priceUsd ?? 0,
             inventory: CommerceModel.productInventory(product),
@@ -533,12 +606,27 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField
             label="Search"
-            placeholder="Name, slug, tag, or SKU"
+            placeholder={
+              searchField === 'name' ? 'Product name' : 'Whole SKU'
+            }
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             size="small"
             sx={{ flex: 1 }}
           />
+          <TextField
+            label="In"
+            value={searchField}
+            onChange={(event) =>
+              setSearchField(event.target.value as 'name' | 'skus')
+            }
+            size="small"
+            select
+            sx={{ minWidth: 110 }}
+          >
+            <MenuItem value="name">{'Name'}</MenuItem>
+            <MenuItem value="skus">{'SKU'}</MenuItem>
+          </TextField>
           <TextField
             label="Status"
             value={statusFilter}

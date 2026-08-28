@@ -20,8 +20,10 @@
 // only ones created/renamed after the write-path change shipped.
 //
 // Scope: `hosts/{hostId}` and `hosts/{hostId}/screens` (both from
-// displayName, `nameLower` only), and `orgs/{orgId}` (from name — `nameLower`
-// AND the `nameTokens` word-prefix array the staff search matches on).
+// displayName, `nameLower` only), `orgs/{orgId}` (from name — `nameLower`
+// AND the `nameTokens` word-prefix array the staff search matches on), site
+// members, contacts, and `hosts/{hostId}/products` (name keys plus the `skus`
+// array flattened out of `variants`, which Firestore cannot query in place).
 //
 // ORGS WERE DELIBERATELY EXCLUDED, and are not any more (AGL-693). The
 // original reason was sound — "they stay client-filtered, so a nameLower on
@@ -46,7 +48,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
 // Load admin creds from the repo's local env files so this script is
 // self-contained. Already-set process.env wins.
@@ -357,11 +359,90 @@ if (!ONLY_HOST) {
   }
 }
 
+/*
+ * Products — the products hub searches these on the server (AGL-693).
+ *
+ * A collection-group read, so one pass covers every host's catalog. Two keys
+ * are being converged, not one:
+ *
+ *   - `nameLower`/`nameTokens`/`nameReversed` from the product name, the same
+ *     three shapes every other collection here carries.
+ *   - `skus`, the variant SKUs flattened to a top-level array. Firestore
+ *     cannot query a field inside `variants`, an array of OBJECTS, so a SKU
+ *     search has nothing to match until this exists.
+ *
+ * ⚠️ `skus` is DELETED rather than written empty when a product has no variant
+ * SKU. `isNotEmpty` is served as `!= null` and an empty array is not null, so
+ * a product stamped with `[]` would answer "has a SKU" for a catalog that has
+ * none — and a product that USED to have one keeps answering after the SKU is
+ * removed unless the field actually goes away.
+ *
+ * ⛔ `--host` does NOT limit this pass. The scan is a collection group, and
+ * narrowing it by host would mean walking hosts again; the flag documents
+ * itself as skipping the passes it cannot scope, as orgs already does.
+ */
+let productsScanned = 0
+let productsChanged = 0
+if (!ONLY_HOST) {
+  const productSnap = await firestore
+    .collectionGroup('products')
+    .select('name', 'nameLower', 'nameTokens', 'nameReversed', 'skus', 'variants')
+    .get()
+  for (const productDoc of productSnap.docs) {
+    productsScanned += 1
+    const product = productDoc.data()
+    // A product with no name has nothing to key on. Skipped rather than
+    // stamped with an empty string, which `orderBy` would sort to the front
+    // of every prefix range it does not belong to.
+    if (typeof product.name !== 'string' || !product.name.trim()) continue
+    const want = nameSearchKey(product.name)
+    const wantTokens = nameSearchTokens(product.name)
+    const haveTokens = Array.isArray(product.nameTokens)
+      ? product.nameTokens
+      : null
+    const tokensDiffer =
+      !haveTokens ||
+      haveTokens.length !== wantTokens.length ||
+      wantTokens.some((token, index) => haveTokens[index] !== token)
+    const wantReversed = nameSearchReversed(product.name)
+    // MUST match `productSearchFields` in the commerce model: trimmed,
+    // lower-cased, de-duplicated, and dropped when empty.
+    const wantSkus = [
+      ...new Set(
+        (Array.isArray(product.variants) ? product.variants : [])
+          .map((variant) => String(variant?.sku ?? '').trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ]
+    const haveSkus = Array.isArray(product.skus) ? product.skus : null
+    const skusDiffer = wantSkus.length
+      ? !haveSkus ||
+        haveSkus.length !== wantSkus.length ||
+        wantSkus.some((sku, index) => haveSkus[index] !== sku)
+      : haveSkus !== null
+    if (
+      product.nameLower !== want ||
+      tokensDiffer ||
+      product.nameReversed !== wantReversed ||
+      skusDiffer
+    ) {
+      productsChanged += 1
+      await stampFields(productDoc.ref, {
+        nameLower: want,
+        nameTokens: wantTokens,
+        nameReversed: wantReversed,
+        skus: wantSkus.length ? wantSkus : FieldValue.delete(),
+      })
+    }
+  }
+}
+
 if (COMMIT && buffered > 0) await batch.commit()
 
 console.log(`hosts:   scanned=${hostsScanned} changed=${hostsChanged}`)
 console.log(`members: scanned=${membersScanned} changed=${membersChanged}`)
 console.log(`contacts:scanned=${contactsScanned} changed=${contactsChanged}`)
+console.log(`products:scanned=${productsScanned} changed=${productsChanged}`)
 console.log(`screens: scanned=${screensScanned} changed=${screensChanged}`)
 console.log(
   ONLY_HOST

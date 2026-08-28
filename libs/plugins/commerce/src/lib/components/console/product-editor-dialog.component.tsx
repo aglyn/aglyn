@@ -298,7 +298,17 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     const { $id: _syntheticId, ...currentFields } = seeded
     const base = {
       ...currentFields,
-      name: current.name.trim().slice(0, 120),
+      /*
+       * `name` comes from `productSearchFields`, not from a bare assignment
+       * (AGL-693) — it returns the trimmed name ALONGSIDE the keys derived
+       * from it, so the two cannot drift. Writing the name here and the keys
+       * anywhere else is the shape that leaves a renamed product findable
+       * only by what it used to be called.
+       */
+      ...CommerceModel.productSearchFields({
+        name: current.name.trim().slice(0, 120),
+        variants: current.variants,
+      }),
       slug: current.slug || CommerceModel.commerceSlug(current.name),
       priceUsd: primaryVariant?.priceUsd ?? 0,
       inventory: CommerceModel.productInventory(current),
