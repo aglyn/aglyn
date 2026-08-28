@@ -18,6 +18,8 @@
 
 import { mdiCheckDecagram } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   Chip,
   Tooltip,
@@ -28,7 +30,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildRoute,
@@ -190,9 +200,37 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
    * already consume slots and get filtered below, so this is the same class of
    * consumption, nudged up to leave room for soft-deleted rows. Measured on
    * production 2026-08-03: 7 listings, 0 soft-deleted, 0 missing the field.
+   *
+   * ## The cap DOES take an `orderBy`, and it is not the same decision
+   *
+   * A `limit` with no ordering is answered in document-id order, and listing
+   * ids are random — so the ninety this loaded were an arbitrary ninety, and
+   * the client sort below then arranged that sample by date and called it
+   * "Newest". The window is now the newest ninety, which is what the default
+   * sort already claimed it was.
+   *
+   * `orderBy` carries the drop the `where` above was removed to avoid — it
+   * matches only documents that HAVE the field, so a listing without
+   * `createdAt` would not be mis-ordered, it would be invisible. That is safe
+   * here for a reason the `deletedAt` predicate could not offer: a listing is
+   * created by exactly two paths, `publish.ts` and `publish-plugin.ts`, and
+   * both stamp `createdAt` in the same `set` that brings the document into
+   * existence. Every other writer resolves an EXISTING listing by id and
+   * refuses when it is absent, so none of them can produce one without the
+   * field.
+   *
+   * It also cannot reproduce the tombstone (AGL-827/929) that made a mutable
+   * `where` unsafe: `createdAt` is written under `existing.empty` and never
+   * rewritten, so no document can stop matching mid-session and leave a
+   * `noDocument` cached at a path the detail page reads by id.
    */
   const { data: listings } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'marketplaceListings'), limit(90)),
+    () =>
+      query(
+        collection(firestore, 'marketplaceListings'),
+        orderBy('createdAt', 'desc'),
+        limit(90),
+      ),
     [firestore],
     { idField: '$id' },
   )
@@ -428,6 +466,34 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     })
   }, [listings, search, category, sort, publisherId, user?.uid])
 
+  /*
+   * The shelf PAGES (AGL-693). It used to render every card the window held
+   * in one wall, so the only control over how much arrived at once was the
+   * cap in the query — a number the reader cannot see and cannot change.
+   *
+   * Client-side, deliberately, and this is the case `ListPagination`'s
+   * `count` prop exists for. The search box, the category chips and the
+   * owner/review gates are all resolved in memory, so a server page would be
+   * a page of CANDIDATES: a reader filtering to one category would get pages
+   * that were mostly empty and a count that meant nothing. Paging what is
+   * left after the filter is the only version whose numbers are about what is
+   * on screen.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  /*
+   * A new query starts at page one. Page four of a category with two pages
+   * does not exist, and an out-of-range page renders as an empty grid with
+   * nothing saying why — which reads as the filter having broken.
+   */
+  useEffect(() => {
+    setPage(0)
+  }, [search, category, sort, pageSize])
+  const shown = useMemo(
+    () => items.slice(page * pageSize, (page + 1) * pageSize),
+    [items, page, pageSize],
+  )
+
   return (
     <CardDisplay
       header={'Marketplace components'}
@@ -476,8 +542,9 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             'reusable components from the Setup page to be the first.'}
         </Typography>
       ) : (
+        <>
         <Grid container spacing={2}>
-          {items.map((listing: any) => {
+          {shown.map((listing: any) => {
             const artifactType = listingArtifactType(listing)
             const isPlugin = artifactType === 'plugin'
             const pluginState = resolvePluginInstallState(
@@ -769,6 +836,18 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             )
           })}
         </Grid>
+        {/* `count` is the FILTERED total, which this list genuinely knows —
+            it is the array it just sliced. Handing MUI the window's size
+            instead would count listings the reader has filtered out. */}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={shown.length}
+          count={items.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+        </>
       )}
     </CardDisplay>
   )

@@ -17,6 +17,8 @@
 'use client'
 
 import { MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // A listing's preview may be a `media:` reference (AGL-1424), which is not a
 // URL. The marketplace lib's own `ListingImage` cannot be imported here —
@@ -47,7 +49,14 @@ import {
   Grid,
   Typography,
 } from '@mui/material'
-import { collection, limit, query, where } from 'firebase/firestore'
+import {
+  collection,
+  documentId,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -149,12 +158,32 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const orgSlug = useOrgSlug()
   const hostSubdomain = useHostSubdomain()
 
-  // Marketplace site templates (AGL-137): published bundles with previews.
+  /**
+   * Marketplace site templates (AGL-137): published bundles with previews.
+   *
+   * ## Why the window is ORDERED, and why on the document name (AGL-693)
+   *
+   * A `limit` with no ordering is answered in document-id order, so an
+   * unordered cap is not "the first thirty" — it is thirty of them, and
+   * running the same query twice need not return the same thirty. The gallery
+   * then presented that sample as the marketplace's template shelf.
+   *
+   * The name is the ordering rather than a date for two reasons. An `orderBy`
+   * matches only documents that HAVE the field, so ordering on one is a
+   * decision about which rows to HIDE; a document's name cannot be absent.
+   * And an equality filter combined with an ordering on any other field needs
+   * a composite index — this pairs with the automatic single-field index on
+   * `kind`, which already ends in `__name__`.
+   *
+   * It is not a date order and does not claim to be. What it is is stable:
+   * the same thirty, in the same places, on every open of this dialog.
+   */
   const { data: templateListings } = useFirestoreCollection<any>(
     () =>
       query(
         collection(firestore, 'marketplaceListings'),
         where('kind', '==', 'template'),
+        orderBy(documentId()),
         limit(30),
       ),
     [firestore],
@@ -175,7 +204,19 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   // installs, the same collection the Templates page renders, narrowed to
   // the kind this surface picks (AGL-699).
   const { data: libraryDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'templates'), limit(50)),
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'templates'),
+        // Same reasoning as the marketplace window above: an unordered cap is
+        // an arbitrary fifty, and `templatesPerHost` is UNLIMITED from Pro
+        // upwards, so a library past that cap really does have templates this
+        // dialog cannot show. Ordering on the name makes the fifty stable and
+        // drops nothing — no field on a template document is written by every
+        // path that creates one, since a marketplace install and a
+        // save-as-template build different shapes.
+        orderBy(documentId()),
+        limit(50),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -294,6 +335,52 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   )
   const isEmpty =
     !savedPages.length && !starterCards.length && !marketplaceTemplates.length
+
+  /*
+   * The two COLLECTION-backed shelves page (AGL-693). Both used to render
+   * every card their window held, so the only limit on how much arrived at
+   * once was a cap in the query — a number the reader cannot see and cannot
+   * change, and one a library on an unlimited plan will exceed.
+   *
+   * The starters do not, and it is not an oversight: they are a fixed list in
+   * `constants/starter-templates.ts`, so "how many are there" is answered by
+   * reading the file rather than by a control. A footer under a list that
+   * cannot grow is a control that never does anything.
+   *
+   * Client-side, because the search box and the kind gate are resolved in
+   * memory: a server page would be a page of CANDIDATES, and a reader
+   * searching for one template would get pages that were mostly empty and a
+   * count that meant nothing.
+   */
+  const [savedPage, setSavedPage] = useState(0)
+  const [savedPageSize, setSavedPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const [marketPage, setMarketPage] = useState(0)
+  const [marketPageSize, setMarketPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  /*
+   * A new search starts both shelves at page one. Page three of a search with
+   * one page does not exist, and an out-of-range page renders as an empty
+   * grid with nothing saying why — which reads as the search having broken.
+   */
+  useEffect(() => {
+    setSavedPage(0)
+    setMarketPage(0)
+  }, [filter, kind, savedPageSize, marketPageSize])
+  const savedShown = useMemo(
+    () =>
+      savedPages.slice(
+        savedPage * savedPageSize,
+        (savedPage + 1) * savedPageSize,
+      ),
+    [savedPages, savedPage, savedPageSize],
+  )
+  const marketShown = useMemo(
+    () =>
+      marketplaceTemplates.slice(
+        marketPage * marketPageSize,
+        (marketPage + 1) * marketPageSize,
+      ),
+    [marketplaceTemplates, marketPage, marketPageSize],
+  )
 
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
@@ -628,8 +715,8 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {'Your templates'}
             </Typography>
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              {savedPages.map((template: any) => (
+            <Grid container spacing={2}>
+              {savedShown.map((template: any) => (
                 <Grid key={template.$id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Card variant="outlined" sx={{ height: '100%' }}>
                     <CardContent>
@@ -666,6 +753,17 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                 </Grid>
               ))}
             </Grid>
+            {/* `count` is the FILTERED total, which this shelf genuinely
+                knows — it is the array it just sliced. The window's own size
+                would count templates the search has excluded. */}
+            <ListPagination
+              page={savedPage}
+              pageSize={savedPageSize}
+              rowCount={savedShown.length}
+              count={savedPages.length}
+              onPageChange={setSavedPage}
+              onPageSizeChange={setSavedPageSize}
+            />
           </>
         ) : null}
         {/* Seeded first-party starters (AGL-687), regrouped by the starter
@@ -735,7 +833,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
               {'Marketplace templates'}
             </Typography>
             <Grid container spacing={2}>
-              {marketplaceTemplates.map((listing: any) => (
+              {marketShown.map((listing: any) => (
                 <Grid key={listing.$id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Card variant="outlined" sx={{ height: '100%' }}>
                     {resolveMediaSrc(listing.previewImageUrl) ? (
@@ -796,6 +894,14 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                 </Grid>
               ))}
             </Grid>
+            <ListPagination
+              page={marketPage}
+              pageSize={marketPageSize}
+              rowCount={marketShown.length}
+              count={marketplaceTemplates.length}
+              onPageChange={setMarketPage}
+              onPageSizeChange={setMarketPageSize}
+            />
           </>
         ) : null}
       </DialogContent>
