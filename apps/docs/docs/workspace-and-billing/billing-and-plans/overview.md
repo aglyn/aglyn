@@ -251,6 +251,69 @@ organization**:
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the
 same Stripe integration.
 
+Your billing details live on the **Billing** page in the console, one card per thing you
+might want to change. Each card saves on its own, so editing your address never touches
+your tax ID and vice versa.
+
+### Billing email {#billing-email}
+
+**Invoices are sent to the billing email**, along with receipts and — the one that
+matters most — the notices we send when a card fails and a subscription is about to
+lapse.
+
+- It is **not the same field as your organization's contact email**. The contact email is
+  the workspace's public-facing address; it appears on your marketplace profile. The
+  billing email is where the money mail goes, and most teams want that to be an
+  accounting inbox rather than a published one.
+- Until you subscribe, invoices go to the address on the account that signed up. Once
+  you are on a paid plan you can send them somewhere else.
+
+### Payment methods {#payment-methods}
+
+The cards your subscription and any usage overage are charged to.
+
+- **Add new card** opens **Stripe's own form**. Card numbers are typed into Stripe and
+  go to Stripe — they never reach Aglyn's servers or logs, which is also why the form
+  looks like Stripe's rather than ours.
+- The **default** method is the one your next renewal charges. Changing it here updates
+  the subscription as well as the customer record, so the change applies to the next
+  invoice rather than only to one-off charges.
+- **You cannot remove the last card while a subscription renews against it.** Doing so
+  would not cancel anything — it would make the renewal fail weeks later, with a dunning
+  email as the first sign. Add a replacement first, or cancel the subscription if that
+  is what you meant.
+- Wallets and Link appear here too, identified by email rather than by a card number.
+
+### Billing address {#billing-address}
+
+The address your invoices are issued to, and the address sales tax is calculated from.
+
+- It is the **same address as your organization profile's** — one address, two places to
+  edit it, never two copies that disagree.
+- **It can be replaced but not emptied.** A workspace with no billing address cannot have
+  tax calculated at all, so clearing the form is refused rather than obeyed; an
+  addressless invoice in front of a tax authority is a worse outcome than a stale one.
+- Changing it affects your **next** invoice. Invoices already issued are never re-rated.
+
+### Tax IDs {#tax-ids}
+
+A business tax ID — VAT, ABN, GST, EIN and the rest — printed on the invoices we issue
+you.
+
+- Choose the **type** and enter the value. The type is country-specific and decides how
+  the number is printed and how a tax authority reads it, so the picker is searchable:
+  type your country, the abbreviation, or the code your accountant gave you.
+- The list of types is **Stripe's own** and is refreshed with the Stripe library, so a
+  jurisdiction Stripe adds shows up without waiting on us.
+- **Stripe validates the number** against the rules for the type you picked, and if it
+  refuses you will see Stripe's own explanation of the format it expected. We do not
+  second-guess it — a check of ours would eventually refuse a number that is perfectly
+  valid.
+- Some types are verified asynchronously; a number still being checked, or one that came
+  back unverified, says so beside itself rather than looking accepted.
+- Removing a tax ID stops it appearing on **future** invoices. Invoices already issued
+  are unchanged — a finalized invoice is a record, not a document that gets edited.
+
 ### Sales tax {#sales-tax}
 
 **Plan prices are quoted before tax.** Where Aglyn has a tax collection obligation,
@@ -263,10 +326,11 @@ line on the invoice.
   your *next* invoice rather than re-rating past ones.
 - **A workspace with no billing address cannot have tax calculated at all**, which is
   why the address can be replaced but not emptied — see the address bullets below.
-- **Adding a business tax ID** (VAT, ABN, EIN and the like) at checkout or in the
-  Billing Portal puts it on the invoice. That's what makes an invoice usable for
-  reclaiming tax or handing to an accountant, and in some jurisdictions it changes
-  who accounts for the tax.
+- **Adding a business tax ID** (VAT, ABN, EIN and the like) puts it on the invoice.
+  That's what makes an invoice usable for reclaiming tax or handing to an accountant,
+  and in some jurisdictions it changes who accounts for the tax. Checkout collects one
+  at purchase; the [Tax IDs](#tax-ids) card is where you add, change or remove one
+  afterwards.
 - **Every invoice states the tax separately** from the amount charged, so the figure
   you reclaim is never one you have to back out of a total yourself. Invoice PDFs and
   receipts are on the Billing page's **Billing history** table.

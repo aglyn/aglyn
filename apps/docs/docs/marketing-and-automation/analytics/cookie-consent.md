@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Cookie consent
-description: Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Your Google Analytics and Tag Manager tags never load for a visitor whose recorded state does not grant them.
+description: Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Google Analytics and Tag Manager tags never load for a visitor whose recorded state does not grant them.
 ---
 
 # Cookie consent

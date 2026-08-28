@@ -38,8 +38,13 @@ export interface StaffPaymentMethod {
  * it. Sharing the list would show a stale method on exactly the orgs in
  * dunning — the ones looking at this card. `stripe-payment-method.spec.ts`
  * pins `unpaid` deliberately; do not converge them.
+ *
+ * EXPORTED because `/api/billing/profile` asks the identical question when it
+ * decides whether detaching the last card would break a renewal, and whether a
+ * subscription's own default payment method outranks the customer's. A third
+ * copy of the same four words is exactly the drift AGL-1715 exists to stop.
  */
-const LIVE_SUBSCRIPTION_STATUSES = [
+export const LIVE_SUBSCRIPTION_STATUSES = [
   'active',
   'trialing',
   'past_due',

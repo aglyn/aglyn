@@ -85,6 +85,11 @@ import BillingMeteredEstimateComponent from '../../../../components/billing/bill
 import BillingUsageHistoryComponent from '../../../../components/billing/billing-usage-history.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
+import BillingEmailCardComponent from '../../../../components/billing/billing-email-card.component'
+import BillingPaymentMethodsCardComponent from '../../../../components/billing/billing-payment-methods-card.component'
+import BillingAddressCardComponent from '../../../../components/billing/billing-address-card.component'
+import BillingTaxIdCardComponent from '../../../../components/billing/billing-tax-id-card.component'
+import { useBillingProfile } from '../../../../components/billing/use-billing-profile'
 import CardColumns from '../../../../components/card-columns.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
 import {
@@ -141,6 +146,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { confirm } = useConfirmationContext()
+  // ONE read of the org's Stripe billing identity, shared by the four native
+  // settings cards below. Held here rather than fetched per card so
+  // a save in any of them refreshes all four — and so the four never render
+  // four different copies of the same customer.
+  //
+  // Gated on the same permission the page itself is gated on, and on that
+  // permission having actually LOADED: `useOrgPermissions` fails open while in
+  // flight, so firing the read on an unloaded `can()` would send a billing
+  // request for every visitor before we know whether they may make one.
+  const billingProfile = useBillingProfile(
+    orgId,
+    permissionsLoaded && can('billing.view'),
+  )
   // Annual billing (AGL-269): checkout maps to the *_YEARLY price ids.
   const [interval, setInterval] = useState<'month' | 'year'>('month')
   // Non-null while an in-page checkout is open (AGL-1132). Null is both the
@@ -1195,6 +1213,102 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 <CardColumns
                   spacing={3}
                   items={[
+                    {
+                      key: 'billing-email',
+                      children: (
+                        <CardDisplay
+                          header={'Billing email'}
+                          help={docsHelp('billing', {
+                            anchor: '#billing-email',
+                            excerpt:
+                              'Where invoices, receipts and the notices about a failed card are sent — and why it is not your organization\u2019s contact email.',
+                          })}
+                          subheader={
+                            'Invoices will be sent to the following email ' +
+                            'address.'
+                          }
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <BillingEmailCardComponent
+                            profile={billingProfile}
+                            canManage={can('billing.manage')}
+                          />
+                        </CardDisplay>
+                      ),
+                    },
+                    {
+                      key: 'payment-methods',
+                      children: (
+                        <CardDisplay
+                          header={'Payment methods'}
+                          help={docsHelp('billing', {
+                            anchor: '#payment-methods',
+                            excerpt:
+                              'The cards on file, how a new one is added through Stripe\u2019s own form, and why the last card cannot be removed under a live subscription.',
+                          })}
+                          subheader={
+                            'The cards your subscription and usage are ' +
+                            'charged to.'
+                          }
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <BillingPaymentMethodsCardComponent
+                            profile={billingProfile}
+                            canManage={can('billing.manage')}
+                          />
+                        </CardDisplay>
+                      ),
+                    },
+                    {
+                      key: 'billing-address',
+                      children: (
+                        <CardDisplay
+                          header={'Billing address'}
+                          help={docsHelp('billing', {
+                            anchor: '#billing-address',
+                            excerpt:
+                              'The address invoices are issued to and sales tax is computed from, and why it can be replaced but not emptied.',
+                          })}
+                          subheader={
+                            'The address your invoices are issued to, and the ' +
+                            'one sales tax is calculated from.'
+                          }
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <BillingAddressCardComponent
+                            profile={billingProfile}
+                            canManage={can('billing.manage')}
+                          />
+                        </CardDisplay>
+                      ),
+                    },
+                    {
+                      key: 'tax-id',
+                      children: (
+                        <CardDisplay
+                          header={'Tax ID'}
+                          help={docsHelp('billing', {
+                            anchor: '#tax-ids',
+                            excerpt:
+                              'Put a VAT, ABN, GST or EIN number on your invoices, and what Stripe checks before accepting one.',
+                          })}
+                          subheader={
+                            'Specify a tax ID to have it appear on your ' +
+                            'invoices.'
+                          }
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <BillingTaxIdCardComponent
+                            profile={billingProfile}
+                            canManage={can('billing.manage')}
+                          />
+                        </CardDisplay>
+                      ),
+                    },
                     {
                       key: 'usage-history',
                       children: (
