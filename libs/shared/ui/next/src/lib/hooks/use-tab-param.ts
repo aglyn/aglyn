@@ -20,7 +20,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 
 /**
- * `?tab=` ↔ the selected vertical tab, in one place (AGL-2486).
+ * `?tab=` ↔ the selected vertical tab, in one place (AGL-2486, AGL-693).
  *
  * Every surface with vertical tabs deep-links the same way, and it is this
  * hook that makes that true. Left to themselves, three pages produce three
@@ -29,6 +29,18 @@ import { useCallback, useEffect, useState } from 'react'
  * added later; validating against two hardcoded ids is correct only until a
  * third arrives; and reading `window.location.search` once on mount ignores
  * every later navigation.
+ *
+ * ## Why this lives in the library rather than in the console
+ *
+ * The console is not the only surface with a vertical tab rail. `HubTabs` —
+ * the rail itself — is shared, and every relocated feature plugin's console
+ * page renders through it. A library cannot import from an app, so a hook
+ * that lived in `apps/console/hooks` was one the rail could not use, and the
+ * rail therefore grew the fourth answer: it read the parameter once into
+ * `useState` and never looked again, so back, forward and an in-app link into
+ * another section of an open page all left the rail on the old tab while the
+ * URL said otherwise. Moving the hook here is what makes "one reader" true of
+ * the component that most needs it.
  *
  * ## The list is the CALLER'S, and it is the real one
  *
@@ -57,21 +69,6 @@ export interface UseTabParamOptions {
   fallback?: string
   /** Ran after a change — the pages log a `screen_view` here. */
   onChange?: (id: string) => void
-  /**
-   * Tabs that MOVED to another page, by id, mapped to the route that holds
-   * them now (AGL-1485).
-   *
-   * Falling back is right for a typo and wrong for a link that was valid last
-   * week: it lands the reader somewhere unrelated with nothing to say why. A
-   * moved id is sent on with the param intact, so a bookmarked
-   * `?tab=security` still means what it meant.
-   *
-   * Here rather than in an effect on the page, because this hook is the one
-   * place that reads the tab param — `tab-param-deep-links.spec.ts` enforces
-   * that, and it is right to: a second reader is a second answer waiting to
-   * disagree with this one.
-   */
-  movedTo?: Readonly<Record<string, string | undefined>>
 }
 
 export interface UseTabParamResult {
@@ -81,12 +78,16 @@ export interface UseTabParamResult {
 }
 
 export function useTabParam(options: UseTabParamOptions): UseTabParamResult {
-  const { ids, param = 'tab', fallback, onChange, movedTo } = options
+  const { ids, param = 'tab', fallback, onChange } = options
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const requested = searchParams?.get(param) ?? null
-  const fallbackId = fallback ?? ids[0]
+  // `''` and not `undefined` on an empty list: MUI's `TabContext` takes the
+  // selected id as its context value, and `undefined` there renders a rail
+  // with no selection and warns on every render. A hub whose tabs are built
+  // from entitlements can legitimately have none for one render.
+  const fallbackId = fallback ?? ids[0] ?? ''
   /*
     `ids.includes` and not a Set: these lists are single digits, the array is
     rebuilt every render by callers that derive it, and a Set built per render
@@ -103,15 +104,6 @@ export function useTabParam(options: UseTabParamOptions): UseTabParamResult {
     setTab((current) => (current === resolved ? current : resolved))
   }, [resolved])
 
-  // A tab that moved pages takes its link with it. `replace`, not `push`, so
-  // Back goes where the reader came from rather than to the redirect.
-  const movedDestination = requested ? movedTo?.[requested] : undefined
-  useEffect(() => {
-    if (!movedDestination) return
-    router.replace(
-      `${movedDestination}?${param}=${encodeURIComponent(requested ?? '')}`,
-    )
-  }, [movedDestination, requested, param, router])
 
   const onTabChange = useCallback(
     (_event: unknown, value: string) => {

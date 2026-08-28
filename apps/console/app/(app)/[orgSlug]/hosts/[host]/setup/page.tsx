@@ -55,7 +55,7 @@ import CardDisplayFormTemplate, {
   FormCardWrapper,
 } from '../../../../../../components/card-display-form-template'
 import { useFormApi } from '@aglyn/shared-ui-jsx-forms'
-import useTabParam from '../../../../../../hooks/use-tab-param'
+import useTabParam from '@aglyn/shared-ui-next/hooks/use-tab-param'
 import { Grid } from '@mui/material'
 import {
   useHostId,
@@ -65,7 +65,6 @@ import AuthenticatedLayout from '../../../../../../components/layouts/authentica
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import MainLayout from '../../../../../../components/layouts/main.layout'
-import AuthScreensCard from '../../../../../../components/auth-screens-card.component'
 import CustomDomainCard from '../../../../../../components/custom-domain-card.component'
 import SiteBrandingBadgeCard from '../../../../../../components/site-branding-badge-card.component'
 import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
@@ -610,23 +609,6 @@ const THEME_TAB_ID = 'theme'
 /** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
 const EMAILS_TAB_ID = 'emails'
 
-/**
- * The three tabs that moved to ADMIN (AGL-1485), kept here only to redirect.
- *
- * Setup answers "what is this site, and how does it behave for a visitor".
- * Admin answers "what governs it as an object" — its address, its
- * permissions, its history, its existence. Custom domain is ownership and
- * infrastructure; Activity is an audit log; and Security is the one that was
- * not a taste call, because all six approved-host fields are admin-only in
- * the Firestore rules and an editor was being shown controls they could not
- * write.
- *
- * They keep their ids, so a bookmarked `/setup?tab=security` still means
- * exactly what it meant — it just arrives at the page that now holds it,
- * rather than falling back to Basic details with nothing to say a link was
- * ever valid.
- */
-const MOVED_TO_ADMIN_TAB_IDS = ['domain', 'security', 'activity'] as const
 
 /**
  * Every tab id this page renders, in nav order (AGL-2486).
@@ -656,15 +638,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const searchParams = useSearchParams()
   const orgSlugForTabs = useOrgSlug()
   const hostForTabs = useHostSubdomain()
-  /** Where each moved tab lives now, or nothing until the route resolves. */
-  const adminTabDestinations = useMemo(() => {
-    if (!orgSlugForTabs || !hostForTabs) return undefined
-    const admin = buildRoute(Route.HOST_ADMIN, {
-      orgSlug: orgSlugForTabs,
-      host: hostForTabs,
-    })
-    return Object.fromEntries(MOVED_TO_ADMIN_TAB_IDS.map((id) => [id, admin]))
-  }, [orgSlugForTabs, hostForTabs])
   /*
     Every tab this page has, DERIVED (AGL-2486).
 
@@ -681,8 +654,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { tab, onTabChange } = useTabParam({
     ids: SETUP_TAB_IDS,
     fallback: basicSchema.id,
-    // The three that moved to Admin keep their links (AGL-1485).
-    movedTo: adminTabDestinations,
     onChange: (value) => {
       const form = forms.find(({ schema }) => schema.id === value)
       // `analytics` is undefined whenever Firebase Analytics failed to
@@ -1234,10 +1205,15 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                             <div style={{ marginTop: 24 }}>
                               <ErrorScreensCard hostId={hostId} />
                             </div>
-                            {/* Designable auth screens (AGL-553). */}
-                            <div style={{ marginTop: 24 }}>
-                              <AuthScreensCard hostId={hostId} />
-                            </div>
+                            {/* Designable auth screens (AGL-553) moved to the
+                                User Accounts plugin's per-site page (AGL-1015)
+                                — Admin › Plugins › User Accounts. They
+                                designate the /signin, /signup and /recover
+                                screens, which exist only while that plugin is
+                                on for the site, so they are settings OF the
+                                plugin rather than of the site. Nothing here
+                                writes `authScreens` any more; the card is its
+                                only writer and it now lives on that page. */}
                             <div style={{ marginTop: 24 }}>
                               <LanguagesCard hostId={hostId} />
                             </div>

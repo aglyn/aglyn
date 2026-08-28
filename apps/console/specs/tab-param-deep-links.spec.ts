@@ -32,10 +32,53 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+
+/** Every `.ts`/`.tsx` source under a directory, specs excluded. */
+function tsxFilesUnder(dir: string): string[] {
+  const found: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      found.push(...tsxFilesUnder(path))
+      continue
+    }
+    if (/\.tsx?$/.test(entry.name) && !entry.name.includes('.spec.')) {
+      found.push(path)
+    }
+  }
+  return found
+}
 import { SETUP_TAB_IDS } from '../app/(app)/[orgSlug]/hosts/[host]/setup/page'
 
 const read = (...segments: string[]) =>
   readFileSync(join(__dirname, '..', ...segments), 'utf8')
+
+const REPO = join(__dirname, '..', '..', '..')
+const readRepo = (path: string) => readFileSync(join(REPO, path), 'utf8')
+
+/**
+ * The shared vertical tab RAIL. Every hub surface draws through it — the org
+ * marketplace, the content browser, the publish panel, and each relocated
+ * feature plugin's console page — so a second answer here is a second answer
+ * on all of them at once.
+ */
+const HUB_TABS = 'libs/shared/ui/next/src/lib/components/hub-tabs.tsx'
+/** The one reader. It takes the query key from its caller, so it reads `get(param)`. */
+const RESOLVER = 'libs/shared/ui/next/src/lib/hooks/use-tab-param.ts'
+
+/**
+ * A file that DRAWS a tab rail — the thing that must not resolve the parameter
+ * itself.
+ *
+ * The rule is about rails, not about the parameter: a routed index that reads
+ * `?tab=` only to FORWARD it selects no tab at all, has no panels to get
+ * wrong, and answers an unknown id with a destination rather than a fallback.
+ * Naming such pages in a path allowlist is the version of this guard that goes
+ * stale the moment one is retired; asking whether the file renders a rail
+ * does not.
+ */
+const drawsATabRail = (source: string) =>
+  /<TabList\b/.test(source) || /<Tab\s/.test(source)
 
 const SETUP = read(
   'app',
@@ -96,6 +139,56 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
     for (const id of SETUP_TAB_IDS) {
       expect(SETUP.includes(`'${id}'`)).toBe(true)
     }
+  })
+
+  it('the shared RAIL goes through the resolver too (AGL-693)', () => {
+    /*
+     * `HubTabs` was the fourth answer, and the widest: it read `?tab=` into
+     * `useState`, which reads once. Every hub built on it therefore ignored
+     * back, forward, and any link that moved the parameter under a page
+     * already mounted.
+     *
+     * It could not have used this hook while the hook lived in
+     * `apps/console/hooks` — a library cannot import from an app — which is
+     * why the fix was to move the hook rather than to patch the rail.
+     * `hub-tabs-follows-tab-param.spec.tsx` drives the behavior; this holds
+     * the rail to the one reader.
+     */
+    const source = readRepo(HUB_TABS)
+    expect(source).toContain('useTabParam')
+    expect(source).not.toContain(`get('tab')`)
+    // And not by way of a copy: the hook has to be the LIBRARY one, or the
+    // console keeps a second definition of the same rule.
+    expect(readRepo(RESOLVER)).toContain('export function useTabParam')
+  })
+
+  it('no surface that DRAWS tabs resolves the param itself', () => {
+    /*
+     * The general form of the three-answers failure. A page that draws a rail
+     * and reaches for `searchParams.get('tab')` is writing the fourth answer,
+     * whatever it does with it — and the ones that got it wrong all looked
+     * reasonable in isolation.
+     */
+    const offenders = [
+      ...tsxFilesUnder(join(__dirname, '..', 'app')),
+      ...tsxFilesUnder(join(__dirname, '..', 'components')),
+      ...tsxFilesUnder(join(REPO, 'libs', 'shared', 'ui', 'next', 'src')),
+    ]
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8')
+        return source.includes(`get('tab')`) && drawsATabRail(source)
+      })
+      .map((path) => path.replace(`${REPO}/`, ''))
+    expect(offenders).toEqual([])
+  })
+
+  it('THE CONTROL: the sweep reads real files and the rail test bites', () => {
+    // A walker that found nothing, or a rail test that matched nothing, would
+    // pass the test above on a console full of hand-rolled readers.
+    const swept = tsxFilesUnder(join(REPO, 'libs', 'shared', 'ui', 'next', 'src'))
+    expect(swept.some((path) => path.endsWith('hub-tabs.tsx'))).toBe(true)
+    expect(drawsATabRail(readRepo(HUB_TABS))).toBe(true)
+    expect(drawsATabRail(readRepo(RESOLVER))).toBe(false)
   })
 
   it('every page that still has PANELS goes through the shared resolver', () => {
