@@ -66,6 +66,12 @@ Thumbs.db
 
 vite.config.*.timestamp*
 .claude/worktrees
+# Personal agent instructions. These are prompts written to an assistant, not
+# project configuration: they name the owner's accounts, browser sessions and
+# working habits, and THIS REPOSITORY IS PUBLIC. `settings.json`,
+# `launch.json` and `HANDOFF.md` stay tracked because they describe the
+# project rather than a person.
+.claude/commands/
 .nx/polygraph
 .nx/self-healing
 .vercel
