@@ -39,6 +39,7 @@ import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Stack, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
+import { deleteField } from 'firebase/firestore'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   useCallback,
@@ -170,6 +171,32 @@ const basicSchema: FormSchema = {
  * and nothing happened". The console rejects it at the field instead, with the
  * same two patterns rather than a second guess at them.
  */
+/**
+ * The tracking fields a site owner must be able to turn back OFF (AGL-1608).
+ *
+ * The form renderer drops an empty text input from its submitted values
+ * entirely rather than reporting it as `''`, and the write is
+ * `setDoc(..., { merge: true })` — so clearing a field submitted a payload
+ * that simply did not mention it, merge left the stored value alone, and the
+ * page said "Saved!". Every id here could be switched on and never off.
+ *
+ * That is not a cosmetic bug on this card. These ids load third-party tags
+ * and set third-party cookies, and a control that cannot withdraw them leaves
+ * the only way out of a tracker being a database edit.
+ *
+ * ⚠️ Scoped to the form that OWNS them. `handleBasicSave` serves the details
+ * and SEO cards too, and those submit no analytics fields at all — treating
+ * their absence as "cleared" would wipe every tracking id the moment somebody
+ * saved a page title.
+ */
+const CLEARABLE_TRACKING_PATHS = [
+  'analytics.gaMeasurementId',
+  'analytics.gtmContainerId',
+  'analytics.adTags.meta',
+  'analytics.adTags.google-ads',
+  'analytics.adTags.linkedin',
+] as const
+
 const trackingSchema: FormSchema = {
   id: 'hostTracking',
   title: 'Tracking',
@@ -199,8 +226,10 @@ const trackingSchema: FormSchema = {
       name: 'analytics.gaMeasurementId',
       label: 'Google Analytics measurement ID',
       helperText:
-        'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site. Visitors ' +
-        'are asked for consent first.',
+        'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site. In the ' +
+        'UK, EU and EEA, and anywhere the region cannot be determined, it ' +
+        'waits for the visitor to accept; elsewhere it runs from the first ' +
+        'visit and the visitor can turn it off at any time.',
       help: docsHelp('analytics', {
         anchor: '#google-analytics',
         excerpt:
@@ -238,8 +267,10 @@ const trackingSchema: FormSchema = {
        */
       helperText:
         'Optional — e.g. GTM-XXXXXXX. A container is a LOADER: whatever ' +
-        'tags it carries load with it, so it waits for the same consent, and ' +
-        'advertising tags stay denied unless the visitor grants advertising. ' +
+        'tags it carries load with it, on the same terms as the fields ' +
+        'beside it — waiting for an accept in the UK, EU and EEA, running ' +
+        'from the first visit elsewhere — and advertising tags stay denied ' +
+        'until that visitor allows advertising. ' +
         'Do not put an Analytics or Google Ads tag in the container if you ' +
         'have filled in the fields above — that loads the same measurement ' +
         'twice and counts every visit and conversion twice.',
@@ -830,7 +861,11 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
 
   /** The save itself. Only reachable through the guard above. */
   const runBasicSave = useCallback(
-    async (fields: any, dequeueLoading: () => void) => {
+    async (
+      fields: any,
+      dequeueLoading: () => void,
+      clearable: readonly string[] = [],
+    ) => {
       const subdomainChanged =
         typeof fields.subdomain === 'string' &&
         fields.subdomain !== data?.subdomain
@@ -904,6 +939,36 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       // `subdomain` is server-owned above; the rules reject it from here.
       const clientFields = { ...fields }
       delete clientFields.subdomain
+      /*
+       * A CLEARED field has to be deleted, not left unmentioned. See
+       * `CLEARABLE_TRACKING_PATHS` for why an omission reads as "unchanged"
+       * and what that cost. Only the paths the submitting form owns are
+       * considered, and only when the document actually holds a value — so
+       * this writes nothing on a form that never carried the field.
+       */
+      const read = (source: any, path: string) =>
+        path.split('.').reduce((value, key) => value?.[key], source)
+      /*
+       * Written as a NESTED object, not a dotted key. `setDoc` with `merge`
+       * treats a dotted key as a literal field name — only `updateDoc` reads
+       * it as a path — so `{'analytics.gtmContainerId': deleteField()}` would
+       * store nothing and delete nothing, while still reporting success.
+       */
+      const bury = (target: any, path: string, value: unknown) => {
+        const keys = path.split('.')
+        const leaf = keys.pop() as string
+        let node = target
+        for (const key of keys) node = node[key] ??= {}
+        node[leaf] = value
+      }
+      for (const path of clearable) {
+        const submitted = read(clientFields, path)
+        const blank = submitted == null || String(submitted).trim() === ''
+        const stored = read(data, path)
+        if (blank && stored != null && String(stored) !== '') {
+          bury(clientFields, path, deleteField())
+        }
+      }
       await setDoc(clientFields, { merge: true })
         .then(() => {
           enqueueSnackbar('Saved!', { variant: 'success' })
@@ -953,7 +1018,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   )
 
   const handleBasicSave = useCallback(
-    async (fields: any) => {
+    async (fields: any, clearable: readonly string[] = []) => {
       const dequeueLoading = queueLoading()
       /**
        * Refuse the whole save when the seed is unconfirmed (AGL-1358).
@@ -977,7 +1042,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
           fromCache: hostFromCache,
         },
         async () => {
-          await runBasicSave(fields, dequeueLoading)
+          await runBasicSave(fields, dequeueLoading, clearable)
         },
       )
       if (!verdict.ok) {
@@ -994,17 +1059,23 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
     {
       schema: basicSchema,
       initialValues: data,
-      onSubmit: handleBasicSave,
+      // Wrapped, never passed by reference: the renderer calls
+      // `onSubmit(values, formApi, callback)`, and a bare handler would take
+      // the form API as its `clearable` argument.
+      onSubmit: (fields: any) => handleBasicSave(fields),
     },
     {
       schema: seoSchema,
       initialValues: data,
-      onSubmit: handleBasicSave,
+      onSubmit: (fields: any) => handleBasicSave(fields),
     },
     {
       schema: trackingSchema,
       initialValues: data,
-      onSubmit: handleBasicSave,
+      // The only form that owns the tracking ids, so the only one entitled to
+      // read their absence as "cleared".
+      onSubmit: (fields: any) =>
+        handleBasicSave(fields, CLEARABLE_TRACKING_PATHS),
     },
   ]
 
