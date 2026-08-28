@@ -47,7 +47,6 @@ import { TABLE_ROW_HEIGHT } from '../../../../constants/shared'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
-import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import {
   SuperStaffOnlyNotice,
   useSuperStaffGate,
@@ -65,6 +64,9 @@ import {
   hiddenFilterVisibility,
   listFilterColumn,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { displayWindow } from '../../../../utils/display-window'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   USER_LIST_FILTER_FIELDS,
   USER_LIST_FILTER_HEADERS,
@@ -233,12 +235,24 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     enqueueSnackbar('Could not load users', { variant: 'error' })
   }, [enqueueSnackbar])
   /*
-   * The console's shared footer (AGL-693), with the size menu deliberately
-   * off. The page size here is Firebase Auth's, applied by
-   * `/api/admin/users`: `listUsersAcrossPools` only appends tenant-pool users
-   * once the project-level walk has run out of pages, so a smaller page would
-   * push every enterprise SSO account behind several Next clicks. That is the
-   * invisible-users bug AGL-1122 fixed, and it is not worth a menu.
+   * TWO PAGE SIZES, and they are not the same question (AGL-693).
+   *
+   * `AUTH_LIST_PAGE_SIZE` is the width of the WALK — a transport detail.
+   * `listUsersAcrossPools` only appends tenant-pool users once the
+   * project-level walk has run out of pages, so a narrow walk pushes every
+   * enterprise SSO account behind several round trips. That is the
+   * invisible-users bug AGL-1122 fixed, and it is why the walk stays wide.
+   *
+   * What a reader wants from a footer is a different number: how many rows to
+   * put on screen. Conflating the two gave this list a size menu holding 200
+   * — a value the shared options do not contain, so MUI drew the control
+   * blank — and then no menu at all, because the only way to stop it lying
+   * was to switch it off.
+   *
+   * So they are separated. The menu drives the DISPLAY size and nothing else;
+   * no cursor is touched, and the hook's warning that "a cursor names a
+   * position in a walk of a given width" stays true because the width never
+   * moves.
    */
   const pagination = useStaffListPagination<AdminUser>({
     fetchPage: fetchUsersPage,
@@ -248,6 +262,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   })
   const router = useRouter()
   const { rows: users, pageIndex, loading, refresh } = pagination
+  const [displaySize, setDisplaySize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const [displayPage, setDisplayPage] = useState(0)
 
   /**
    * Change the query and re-ask for the first page, in that order.
@@ -259,6 +275,12 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const applyQuery = useCallback(
     (search: string, filter: ListQuery) => {
       queryRef.current = { search, filter }
+      // The rows of the OLD walk go with it. They are kept to merge twins
+      // across pages, and a row that matched the previous search is not a
+      // row that matched this one — carrying them over would show accounts
+      // the query excluded.
+      pageRowsRef.current.clear()
+      setDisplayPage(0)
       void pagination.loadPage(0)
     },
     [pagination],
@@ -283,15 +305,49 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     //
     // No narrowing happens here any more. The search and the filter are the
     // server's, so a row that arrived is a row that matched.
-    const elsewhere: AdminUser[] = []
-    pageRowsRef.current.forEach((rows, index) => {
-      if (index !== pageIndex) elsewhere.push(...rows)
-    })
-    const onThisPage = new Set(users.map((record) => record.uid))
-    return collapseAdminUserRows([...users, ...elsewhere]).filter((record) =>
-      onThisPage.has(record.uid),
-    )
+    const walked: AdminUser[] = []
+    for (let index = 0; index <= pageIndex; index += 1) {
+      walked.push(...(index === pageIndex ? users : pageRowsRef.current.get(index) ?? []))
+    }
+    return collapseAdminUserRows(walked)
   }, [users, pageIndex])
+
+  /*==========================================
+   * THE DISPLAY PAGE, OVER THE WALK SO FAR.
+   *
+   * Sliced from every row fetched rather than from the current round trip,
+   * which is what makes the count line monotonic: `1–10`, `11–20`, `21–30`
+   * straight across a walk-page boundary the reader never has to know about.
+   * Indexing the current round trip alone would restart the numbering at one
+   * every two hundred rows.
+   *
+   * The buffer costs nothing new — the twin merge already keeps every page's
+   * rows, because a human's two pool records can arrive in different
+   * responses and the emailless twin must still fold into the real account.
+   *
+   * ⚠️ Advancing past what has been fetched FETCHES. A size control that
+   * silently stops at whatever was already loaded is the truncation bug in a
+   * different coat, and on a directory it is the one that makes an account
+   * look deleted.
+   *=========================================*/
+  const window = useMemo(
+    () => displayWindow(visible, displayPage, displaySize),
+    [visible, displayPage, displaySize],
+  )
+  const changeDisplayPage = useCallback(
+    async (next: number) => {
+      if (next === displayPage) return
+      // Forward past what has been fetched: get the next round trip FIRST, so
+      // the page the reader lands on is drawn rather than briefly empty. One
+      // is always enough — every shared page size is far smaller than the
+      // walk's width, so a single round trip always covers the next page.
+      if (next > displayPage && window.needsFetch && pagination.hasMore) {
+        await pagination.loadPage(pageIndex + 1)
+      }
+      setDisplayPage(Math.max(next, 0))
+    },
+    [displayPage, pageIndex, pagination, window.needsFetch],
+  )
 
   // RBAC (AGL-206): role changes go through the same audited endpoint.
   const handleSetRole = useCallback(
@@ -645,7 +701,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   'their email here.'}
               </Typography>
               <ListTable
-                rows={visible}
+                rows={window.shown}
                 columns={userColumns}
                 getRowId={(row: any) => row.uid}
                 loading={loading}
@@ -680,15 +736,32 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   },
                 }}
               />
-              {/* Previous/Next instead of an ever-growing table (AGL-2486),
-                  the same control the Organizations list carries. The count
-                  is the COLLAPSED row count, not the raw page length — this
-                  is the screen staff check when they think an account is
-                  missing, so it must not claim a row it did not draw. */}
-              <StaffListPaginationControls
-                sizeMenu={false}
-                pagination={pagination}
-                shown={visible.length}
+              {/*
+                The console's shared footer, driven by the DISPLAY page
+                (AGL-693). `rowCount` is the number of rows this page actually
+                DREW — not the walk's length and not the collapsed total —
+                because this is the screen staff check when they think an
+                account is missing, and it must not claim a row it did not
+                put on screen.
+
+                `hasMore` is true while either the buffer or the walk has more
+                behind it. Both halves matter: the first keeps Next live
+                inside a fetched page, the second keeps it live at the seam.
+              */}
+              <ListPagination
+                page={displayPage}
+                pageSize={displaySize}
+                rowCount={window.shown.length}
+                hasMore={window.hasMore || pagination.hasMore}
+                disabled={loading}
+                onPageChange={(next) => void changeDisplayPage(next)}
+                onPageSizeChange={(next) => {
+                  // Back to the first page, because page four of a ten-row
+                  // view does not exist at fifty. The WALK is untouched — no
+                  // cursor is discarded and no round trip is repeated.
+                  setDisplaySize(next)
+                  setDisplayPage(0)
+                }}
               />
               {/* A partial answer never reads as a complete one. A staff
                   list that stopped early and said "no matches" is the whole

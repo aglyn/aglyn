@@ -180,6 +180,90 @@ describe('useStaffListPagination', () => {
     expect(seen[seen.length - 1]).toBeNull()
   })
 
+  /*==========================================
+   * THE SIZE HAS TO REACH THE QUERY (AGL-693).
+   *
+   * A size control that only re-slices an already-fetched window looks
+   * perfectly correct on a small collection and silently caps at whatever the
+   * original request asked for on a large one. So this drives a walk that is
+   * WIDER than one page and asserts the new width in the REQUEST — a hook
+   * that re-sliced would never issue a second call at all.
+   *=========================================*/
+  it('carries a new page size into the REQUEST, and starts the walk over', async () => {
+    const seen: Array<{ cursor: string | null; size: number }> = []
+    // A pool of nine rows, so a width of two and a width of four cut it
+    // differently and no single constant satisfies both.
+    const pool = 'abcdefghi'.split('').map((id) => ({ id }))
+    const fetchPage = jest.fn(
+      async (cursor: string | null, _index: number, size: number) => {
+        seen.push({ cursor, size })
+        const start = cursor ? pool.findIndex((row) => row.id === cursor) + 1 : 0
+        const rows = pool.slice(start, start + size)
+        const nextCursor =
+          start + size < pool.length ? rows[rows.length - 1].id : null
+        return { rows, nextCursor, hasMore: Boolean(nextCursor) }
+      },
+    )
+    // `onError` is built ONCE. A fresh function per render changes
+    // `loadPage`'s identity every time, which re-runs the effect that reloads
+    // page 0 — the hook then never settles and the test times out rather
+    // than failing on anything it was written to check.
+    const onError = jest.fn()
+    const view = renderHook(() =>
+      useStaffListPagination<Row>({ fetchPage, onError, pageSize: 2 }),
+    )
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    expect(ids(view.result.current.rows)).toBe('ab')
+
+    // Walk forward so there are cursors to invalidate — a cursor names a
+    // position in a walk of a GIVEN width and points somewhere else under
+    // another.
+    await act(async () => {
+      await view.result.current.loadPage(1)
+    })
+    expect(ids(view.result.current.rows)).toBe('cd')
+
+    await act(async () => {
+      view.result.current.setPageSize(4)
+    })
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+
+    // THE ASSERTIONS. A new request went out, it carried the new width, and
+    // the walk restarted from the top rather than resuming on a cursor cut
+    // for the old one. The first request is asserted too, so "the size
+    // reaches the route" is a claim about a value that MOVED.
+    expect(seen[0]).toEqual({ cursor: null, size: 2 })
+    expect(seen.at(-1)).toEqual({ cursor: null, size: 4 })
+    expect(view.result.current.pageIndex).toBe(0)
+    expect(ids(view.result.current.rows)).toBe('abcd')
+    expect(view.result.current.pageSize).toBe(4)
+  })
+
+  it('THE CONTROL: the fake route honors the width it is handed', async () => {
+    // Otherwise the test above could pass against a route that returned the
+    // same rows whatever it was asked for, and "the size reached the query"
+    // would be a claim about an argument nothing consumed.
+    const seen: number[] = []
+    const pool = 'abcdefghi'.split('').map((id) => ({ id }))
+    const fetchPage = jest.fn(
+      async (cursor: string | null, _index: number, size: number) => {
+        seen.push(size)
+        return {
+          rows: pool.slice(0, size),
+          nextCursor: null,
+          hasMore: false,
+        }
+      },
+    )
+    const onError = jest.fn()
+    const view = renderHook(() =>
+      useStaffListPagination<Row>({ fetchPage, onError, pageSize: 3 }),
+    )
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    expect(seen).toEqual([3])
+    expect(ids(view.result.current.rows)).toBe('abc')
+  })
+
   it('refresh re-reads the page on screen, not page 0', async () => {
     // The post-mutation target. Bouncing an operator back to page 1 after
     // every grant is how a staff screen becomes unusable at scale.
@@ -208,10 +292,38 @@ describe('both staff list screens use the one implementation', () => {
     for (const file of SCREENS) expect(read(file).length).toBeGreaterThan(5000)
   })
 
+  /**
+   * A RENDERED shared footer, in either spelling.
+   *
+   * The Organizations list pages the walk itself, so its footer is the walk's
+   * and it goes through `StaffListPaginationControls`. The Users list pages
+   * what is on SCREEN out of a wide Auth walk, which the staff control does
+   * not model, so it renders the shared `ListPagination` directly. Both are
+   * the one footer; neither is a second implementation.
+   *
+   * Matched on the JSX rather than the identifier, so a stale import cannot
+   * satisfy it.
+   */
+  const SHARED_FOOTER = /<(ListPagination|StaffListPaginationControls)[\s>]/
+
+  it('THE CONTROL: the footer check reads JSX, not an import', () => {
+    // Guard the guard. A check that matched the word anywhere would pass on
+    // a file that imported the footer and rendered a pair of buttons.
+    expect(SHARED_FOOTER.test('<ListPagination page={0} />')).toBe(true)
+    expect(SHARED_FOOTER.test('<StaffListPaginationControls pagination={p} />')).toBe(
+      true,
+    )
+    expect(
+      SHARED_FOOTER.test(
+        "import ListPagination from 'x'\n<Button>{'Next'}</Button>",
+      ),
+    ).toBe(false)
+  })
+
   it.each(SCREENS)('%s paginates through the shared hook', (file) => {
     const text = read(file)
     expect(text).toContain('useStaffListPagination')
-    expect(text).toContain('StaffListPaginationControls')
+    expect(text).toMatch(SHARED_FOOTER)
   })
 
   it.each(SCREENS)('%s keeps no private cursor table', (file) => {
