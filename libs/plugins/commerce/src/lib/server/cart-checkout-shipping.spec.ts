@@ -222,6 +222,13 @@ interface Scenario {
   couponCode?: string
   /** Overrides on the single cart product. */
   product?: Record<string, any>
+  /**
+   * `hosts/{hostId}/discounts` docs. When present the legacy AGL-96 coupon is
+   * NOT seeded, so a scenario testing a discount cannot accidentally be
+   * carried by a 50%-off coupon of the same code if the discount fails to
+   * resolve — which would hide the very failure under test.
+   */
+  discounts?: Array<Record<string, any> & { id: string }>
 }
 
 function makeRequest(scenario: Scenario): PluginApiRequest {
@@ -268,7 +275,11 @@ function seedStore(
     tax: { mode: 'none' },
     ...(storeSettings ?? {}),
   })
-  if (scenario.couponCode) {
+  for (const discount of scenario.discounts ?? []) {
+    const { id, ...fields } = discount
+    docs.set(`hosts/host-1/discounts/${id}`, fields)
+  }
+  if (scenario.couponCode && !scenario.discounts) {
     docs.set(`hosts/host-1/coupons/${scenario.couponCode}`, {
       percentOff: 50,
       enabled: true,
@@ -649,6 +660,134 @@ describe('cart checkout shipping options (AGL-1707)', () => {
       expect(shippingOptions(body).map((option) => option.amount)).toEqual([
         '1299',
       ])
+    })
+  })
+  /**
+   * A FREE-SHIPPING DISCOUNT REACHES THE TOTAL (AGL-2508).
+   *
+   * The defect was a silent wrong charge, and silent is the operative word.
+   * `valueCents` answered `0` for every kind it did not understand, so a
+   * `free_shipping` discount resolved successfully worth nothing: the apply
+   * block gates on `discountCents > 0` and skipped it, and the invalid-code
+   * 400 beside it only fires when NOTHING resolved, so that skipped it too.
+   * The shopper typed a valid code, saw no error, and paid full shipping.
+   *
+   * Asserted on the CHARGED AMOUNT — the `fixed_amount` on the session's
+   * shipping options, which is the number Stripe will bill — never on any
+   * rendered output. Stripe is mocked absolutely and the key is a fake test
+   * key, exactly as the rest of this suite.
+   */
+  describe('a free-shipping discount (AGL-2508)', () => {
+    const freeShip = {
+      id: 'ship-free',
+      code: 'FREESHIP',
+      kind: 'free_shipping',
+      enabled: true,
+    }
+
+    it('zeroes the rate the shopper will be charged', async () => {
+      const { result, body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'FREESHIP',
+          discounts: [freeShip],
+        },
+      )
+
+      expect(result.status).toBe(200)
+      expect(shippingOptions(body)).toEqual([
+        { name: 'Standard', amount: '0', currency: 'usd', type: 'fixed_amount' },
+      ])
+    })
+
+    it('CONTROL: the same cart without the code still pays $7.99', async () => {
+      // Without this the assertion above would pass just as well against a
+      // handler that had stopped charging shipping altogether.
+      const { result, body } = await runCheckout(
+        { shipping },
+        { shippingCountry: 'US' },
+      )
+
+      expect(result.status).toBe(200)
+      expect(shippingOptions(body)).toEqual([
+        {
+          name: 'Standard',
+          amount: '799',
+          currency: 'usd',
+          type: 'fixed_amount',
+        },
+      ])
+    })
+
+    it('CONTROL: a percentage discount leaves shipping alone', async () => {
+      // The other direction: free shipping must not become what every discount
+      // does. A percent code reduces the goods and the parcel still costs
+      // $7.99.
+      const { result, body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'TENOFF',
+          discounts: [
+            {
+              id: 'ten-off',
+              code: 'TENOFF',
+              kind: 'percent',
+              valuePct: 10,
+              enabled: true,
+            },
+          ],
+        },
+      )
+
+      expect(result.status).toBe(200)
+      expect(shippingOptions(body)).toEqual([
+        {
+          name: 'Standard',
+          amount: '799',
+          currency: 'usd',
+          type: 'fixed_amount',
+        },
+      ])
+      // It did apply, rather than being skipped the way free shipping was.
+      expect(body?.get('metadata[discountId]')).toBe('ten-off')
+    })
+
+    it('records the redemption it just spent', async () => {
+      // Free shipping now takes the same hold every other discount takes. It
+      // was skipped entirely before, so a capped free-shipping promotion was
+      // unlimited in practice.
+      const { body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'FREESHIP',
+          discounts: [freeShip],
+        },
+      )
+
+      expect(body?.get('metadata[discountId]')).toBe('ship-free')
+    })
+
+    it('refuses a discount kind it cannot apply, rather than charging in full', async () => {
+      // The guard that keeps the next `free_shipping` from being a silent
+      // undercharge: a code that resolves but confers nothing this build
+      // understands is a refusal the shopper can see, not a full-price sale.
+      const { result, body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'WAT',
+          discounts: [
+            { id: 'mystery', code: 'WAT', kind: 'mystery-kind', enabled: true },
+          ],
+        },
+      )
+
+      expect(result.status).toBe(400)
+      // Nothing was opened, so nothing can be charged.
+      expect(body).toBeNull()
     })
   })
 })

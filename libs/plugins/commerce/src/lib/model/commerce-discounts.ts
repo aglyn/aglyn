@@ -74,6 +74,13 @@ export interface ResolvedDiscount {
   discountId: string
   discountCents: number
   freeShipping: boolean
+  /**
+   * What this discount confers, as one value. `discountCents` and
+   * `freeShipping` are projections of it and are kept because callers read
+   * them; the benefit is what a caller should GATE on, because it is the only
+   * one of the three that can say "nothing, and here is why".
+   */
+  benefit: DiscountBenefit
   /** Why a specifically-entered code failed; unset when one applied. */
   codeProblem?: string
 }
@@ -116,18 +123,73 @@ function applies(
   return null
 }
 
-function valueCents(
+/**
+ * WHAT A DISCOUNT ACTUALLY CONFERS, named rather than implied (AGL-2508).
+ *
+ * The whole point of this type is that "nothing" is a STATED outcome with a
+ * reason, not the number zero. `valueCents` used to answer a bare `number`,
+ * and every kind it did not understand — `free_shipping` included — answered
+ * `0`. The cart's apply-block gates on `discountCents > 0`, and the
+ * invalid-code 400 beside it only fires when NO discount resolved at all, so a
+ * free-shipping code took neither branch: it resolved successfully, conferred
+ * nothing, raised no error, and the shopper paid full shipping. A silent zero
+ * cannot be told from "this discount is worth nothing", which is exactly the
+ * distinction a money path has to make.
+ *
+ * So a caller cannot read a benefit without also seeing the `none` case, and a
+ * kind this build does not recognise reports itself instead of underpaying.
+ */
+export type DiscountBenefit =
+  /** Cents off the items subtotal. Always > 0 — a zero lands on `none`. */
+  | { kind: 'amount'; centsOff: number }
+  /** The shopper pays no shipping, whichever rate they pick. */
+  | { kind: 'free-shipping' }
+  /** Resolvable, but worth nothing. The caller must refuse, never proceed. */
+  | { kind: 'none'; reason: string }
+
+/**
+ * The single derivation of what one discount is worth against one subtotal.
+ *
+ * Exhaustive over {@link DiscountKind} by construction: the `never` binding
+ * below fails the BUILD when a kind is added to the union and not handled
+ * here, so the next `free_shipping` cannot reach production as a silent zero.
+ * The runtime arm underneath it is not redundant — Firestore documents are not
+ * typechecked, and a `kind` written by a newer build than the one reading it
+ * arrives as an ordinary unrecognised string.
+ */
+export function discountBenefit(
   discount: HostDiscount,
   subtotalCents: number,
-): number {
-  if (discount.kind === 'percent') {
-    const pct = Math.min(100, Math.max(0, discount.valuePct ?? 0))
-    return Math.round((subtotalCents * pct) / 100)
+): DiscountBenefit {
+  const kind = discount.kind
+  if (kind === 'percent' || kind === 'fixed') {
+    const centsOff =
+      kind === 'percent'
+        ? Math.round(
+            (subtotalCents * Math.min(100, Math.max(0, discount.valuePct ?? 0))) /
+              100,
+          )
+        : Math.min(subtotalCents, Math.max(0, discount.valueCents ?? 0))
+    // A discount configured to take nothing off — 0%, or a zero amount — is
+    // worth nothing, and saying so is what stops it being applied as a
+    // successful reduction of zero.
+    return centsOff > 0
+      ? { kind: 'amount', centsOff }
+      : {
+          kind: 'none',
+          reason: 'this discount takes nothing off the items in the cart',
+        }
   }
-  if (discount.kind === 'fixed') {
-    return Math.min(subtotalCents, Math.max(0, discount.valueCents ?? 0))
+  if (kind === 'free_shipping') return { kind: 'free-shipping' }
+  // Unreachable while `DiscountKind` is fully handled above; the annotation is
+  // what makes adding a kind a compile error rather than a quiet no-op.
+  const unhandled: never = kind
+  return {
+    kind: 'none',
+    reason: `this store has a discount of a kind this site cannot apply (${String(
+      unhandled,
+    )})`,
   }
-  return 0
 }
 
 /**
@@ -153,26 +215,53 @@ export function resolveDiscount(
         discountId: coded.$id,
         discountCents: 0,
         freeShipping: false,
+        benefit: { kind: 'none', reason: problem },
         codeProblem: problem,
+      }
+    }
+    const benefit = discountBenefit(coded, context.subtotalCents)
+    // A code the shopper TYPED that turns out to be worth nothing is reported
+    // as a code problem, so it leaves through the caller's existing refusal
+    // rather than as a successful discount of zero. This is the free-shipping
+    // defect's actual exit: the caller's apply-block tests `discountCents > 0`
+    // and its invalid-code branch only fires when nothing resolved, so a
+    // benefit of `none` used to satisfy neither and the shopper was charged in
+    // full without a word.
+    if (benefit.kind === 'none') {
+      return {
+        discount: coded,
+        discountId: coded.$id,
+        discountCents: 0,
+        freeShipping: false,
+        benefit,
+        codeProblem: benefit.reason,
       }
     }
     return {
       discount: coded,
       discountId: coded.$id,
-      discountCents: valueCents(coded, context.subtotalCents),
-      freeShipping: coded.kind === 'free_shipping',
+      discountCents: benefit.kind === 'amount' ? benefit.centsOff : 0,
+      freeShipping: benefit.kind === 'free-shipping',
+      benefit,
     }
   }
   let best: ResolvedDiscount | null = null
   for (const discount of discounts) {
     if (discount.code) continue
     if (applies(discount, context)) continue
-    const cents = valueCents(discount, context.subtotalCents)
+    const benefit = discountBenefit(discount, context.subtotalCents)
+    // An automatic promotion worth nothing is passed over rather than reported:
+    // nobody asked for it, so there is no shopper to answer and a better one
+    // may still be in the list. An entered CODE is the opposite case and
+    // refuses above — the shopper made a request and is owed the reason.
+    if (benefit.kind === 'none') continue
+    const cents = benefit.kind === 'amount' ? benefit.centsOff : 0
     const candidate: ResolvedDiscount = {
       discount,
       discountId: discount.$id,
       discountCents: cents,
-      freeShipping: discount.kind === 'free_shipping',
+      freeShipping: benefit.kind === 'free-shipping',
+      benefit,
     }
     if (
       !best ||

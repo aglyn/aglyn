@@ -16,6 +16,7 @@
  */
 
 import {
+  discountBenefit,
   resolveDiscount,
   type HostDiscount,
 } from './commerce-discounts'
@@ -114,5 +115,95 @@ describe('resolveDiscount', () => {
       { ...context, code: 'SCOPED' },
     )
     expect(scoped?.codeProblem).toMatch(/does not apply/)
+  })
+})
+
+
+/**
+ * What a discount is WORTH, and the fact that "nothing" is an answer with a
+ * reason rather than the number zero (AGL-2508).
+ *
+ * `valueCents` used to return a bare `number`, and every kind it did not
+ * understand returned `0`. `free_shipping` was such a kind, so it resolved
+ * successfully worth nothing and the cart — which applies a discount only when
+ * `discountCents > 0`, and refuses a code only when nothing resolved at all —
+ * charged full shipping without an error. These pin the distinction that makes
+ * that impossible to repeat.
+ */
+describe('discountBenefit (AGL-2508)', () => {
+  const at = (kind: string, extra: Record<string, unknown> = {}) =>
+    discountBenefit({ kind, ...extra } as never, 10000)
+
+  it('names free shipping as its own benefit, not as zero off', () => {
+    expect(at('free_shipping')).toEqual({ kind: 'free-shipping' })
+  })
+
+  it('prices a percentage against the subtotal', () => {
+    expect(at('percent', { valuePct: 10 })).toEqual({
+      kind: 'amount',
+      centsOff: 1000,
+    })
+  })
+
+  it('caps a fixed amount at the subtotal', () => {
+    // CONTROL that the amount arm still computes, and still refuses to hand
+    // back more than the cart is worth.
+    expect(at('fixed', { valueCents: 99999 })).toEqual({
+      kind: 'amount',
+      centsOff: 10000,
+    })
+  })
+
+  it('reports a kind it cannot apply instead of answering zero', () => {
+    // The guard. A `kind` written by a newer build arrives as an ordinary
+    // string, and answering `0` for it is the original defect restated.
+    const benefit = at('store-credit')
+    expect(benefit.kind).toBe('none')
+    expect(benefit).toHaveProperty('reason', expect.stringMatching(/cannot apply/))
+  })
+
+  it('reports a discount configured to take nothing off', () => {
+    expect(at('percent', { valuePct: 0 }).kind).toBe('none')
+    expect(at('fixed', { valueCents: 0 }).kind).toBe('none')
+  })
+})
+
+describe('resolveDiscount carries the benefit (AGL-2508)', () => {
+  const context = { subtotalCents: 10000, productIds: ['p1'] }
+
+  it('refuses an entered code that confers nothing', () => {
+    // A code the shopper TYPED must produce a reason they can see. Before
+    // this it resolved as a successful discount of zero and said nothing.
+    const resolved = resolveDiscount(
+      [{ $id: 'd1', code: 'WAT', kind: 'store-credit' } as never],
+      { ...context, code: 'WAT' },
+    )
+    expect(resolved?.codeProblem).toMatch(/cannot apply/)
+    expect(resolved?.discountCents).toBe(0)
+    expect(resolved?.freeShipping).toBe(false)
+  })
+
+  it('applies an entered free-shipping code', () => {
+    const resolved = resolveDiscount(
+      [{ $id: 'd1', code: 'FREESHIP', kind: 'free_shipping' } as never],
+      { ...context, code: 'FREESHIP' },
+    )
+    expect(resolved?.codeProblem).toBeUndefined()
+    expect(resolved?.freeShipping).toBe(true)
+    expect(resolved?.benefit).toEqual({ kind: 'free-shipping' })
+  })
+
+  it('passes over an automatic promotion worth nothing', () => {
+    // Nobody asked for an automatic promotion, so there is no shopper to
+    // answer — but a real one later in the list must still win.
+    const resolved = resolveDiscount(
+      [
+        { $id: 'dead', kind: 'store-credit' } as never,
+        { $id: 'live', kind: 'percent', valuePct: 5 } as never,
+      ],
+      context,
+    )
+    expect(resolved?.discountId).toBe('live')
+    expect(resolved?.discountCents).toBe(500)
   })
 })

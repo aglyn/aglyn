@@ -488,7 +488,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // `model/commerce-promotions.ts` for why that is the right way round.
     const slotKey = promotionHoldKey(claim.stripeKey)
     let totalOffCents = 0
-    if (resolvedDiscount && resolvedDiscount.discountCents > 0) {
+    if (resolvedDiscount && resolvedDiscount.benefit.kind !== 'none') {
       const discountRef = hostRef
         .collection('discounts')
         .doc(resolvedDiscount.discountId)
@@ -523,6 +523,24 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         params.set('metadata[discountHoldKey]', slot.holdKey)
       }
     }
+    // FREE SHIPPING IS A ZEROED RATE, NOT A COUPON (AGL-2508).
+    //
+    // A session-level Stripe coupon discounts LINE ITEMS; shipping is a
+    // separate `shipping_options` concept and a coupon never touches it. There
+    // is also no amount to discount at this point — the shopper picks their
+    // rate after the session is created — so the only construction that can be
+    // exact is to offer every rate at zero.
+    //
+    // Every rate, not just the cheapest: `free_shipping` carries no field
+    // scoping it to one, so the merchant asked for shipping to be free rather
+    // than for one particular rate to be. Zeroing the dearest too also keeps
+    // the fee and transfer arithmetic below honest, since both read these same
+    // options and the shopper is paying nothing for carriage either way.
+    const shippingOptions =
+      resolvedDiscount?.freeShipping === true
+        ? shippingPlan.options.map((option) => ({ ...option, amountCents: 0 }))
+        : shippingPlan.options
+
     // Coupons (AGL-96 semantics): percent off the items total.
     if (couponCode && !resolvedDiscount) {
       const couponRef = hostRef.collection('coupons').doc(couponCode)
@@ -742,7 +760,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // rate the lines carry. A store on Stripe Tax is the one residual — its tax
     // is computed inside Stripe after the session is made.
     if (chargedItemsCents > 0) {
-      const shippingCeilingCents = shippingPlan.options.reduce(
+      const shippingCeilingCents = shippingOptions.reduce(
         (most, option) =>
           Math.max(most, Math.max(0, Number(option.amountCents ?? 0))),
         0,
@@ -784,7 +802,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       params,
       shippingPlan.countries,
     )
-    CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
+    CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
 
     // Taxes (AGL-1953). This block used to be the `stripe` line alone, and a
     // `manual`-mode store — the mode the AGL-285 zone editor leaves a merchant
@@ -918,7 +936,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     const cartTaxOwner =
       taxDecision.kind === 'stripe-automatic' ? 'platform' : 'merchant'
     const cartShippingFloorCents = CommerceModel.shippingFloorCents(
-      shippingPlan.options,
+      shippingOptions,
     )
     Object.entries(
       CommerceModel.destinationChargeParams({
