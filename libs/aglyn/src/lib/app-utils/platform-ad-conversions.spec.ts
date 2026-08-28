@@ -32,6 +32,16 @@
  * inside the deployment that causes it.
  */
 
+/*
+ * A spec that reaches its subject only through `await import()` has no static
+ * import, which makes it a SCRIPT rather than a module — and every top-level
+ * binding in a script is a global. Two env-mutating specs in this folder both
+ * called their loader `loadWith`, and tsc reported the collision against the
+ * other file while jest, which wraps each file, stayed green. This marks the
+ * file as a module so its helpers stay its own.
+ */
+export {}
+
 const loadWith = async (env: Record<string, string | undefined>) => {
   jest.resetModules()
   const previous = { ...process.env }

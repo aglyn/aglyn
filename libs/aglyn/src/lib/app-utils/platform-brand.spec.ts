@@ -47,6 +47,14 @@ afterEach(() => {
 })
 
 /** Re-import under the given env so the module-scope constants re-evaluate. */
+/*
+ * A spec whose subject is reached only through `await import()` has no static
+ * import, so it is a script and every top-level binding in it is a global.
+ * This marks it as a module, which keeps `loadWith` below from colliding with
+ * the identically-named loader in the sibling env-mutating specs.
+ */
+export {}
+
 function loadWith(env: Partial<Record<(typeof ENV_KEYS)[number], string>>) {
   for (const key of ENV_KEYS) delete process.env[key]
   for (const [key, value] of Object.entries(env)) process.env[key] = value
