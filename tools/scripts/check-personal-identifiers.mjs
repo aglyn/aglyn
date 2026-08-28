@@ -110,8 +110,9 @@ const FORBIDDEN = [
     sha256: 'a57504720403b4a1dc084dc6a5b46e880e32a03454a067d83d52a218fe713364',
     fix: 'Name the property: "an SSO account in the `aglyn-org-y5v14` tenant", '
       + '"the account owner\'s mailbox", "a single human recipient". In a '
-      + 'fixture use `staff@aglyn.com` where the aglyn.com DOMAIN is what the '
-      + 'test is about, and an `example.com` address where it is not.',
+      + 'fixture keep the aglyn.com domain but use a ROLE local-part where the '
+      + 'domain is what the test is about (SSO governance, staff detection), '
+      + 'and an example.com address where it is not.',
   },
   {
     label: "a second address on the account owner's work domain",
