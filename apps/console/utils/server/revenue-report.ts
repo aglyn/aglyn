@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import {
   isBillingSubscription,
   orgListPriceMonthlyUsd,
@@ -581,6 +582,28 @@ export function marketplaceCommissionCents(
  * fee as take in full — and they are COUNTED, because the cost they absorb is
  * uncovered and someone should be able to see how much of the book it is.
  */
+/**
+ * Whether this order row was a test-mode rehearsal (AGL-2520).
+ *
+ * The staff twin of the commerce plugin's `orderIsTestMode`, and the same two
+ * signals in the same order of trust: a recorded `livemode` wins, and the
+ * session id's prefix is the fallback for rows written before anything
+ * recorded it. It cannot import the plugin's copy — this is an app reading a
+ * plugin's documents — so the shared `stripeIdIsTestMode` is what keeps the
+ * two from drifting about what a test id looks like.
+ *
+ * An order with neither signal is LIVE. A POS cash sale carries no Stripe
+ * session at all, and answering "test" for anything unidentifiable would erase
+ * genuine revenue from the staff figures.
+ */
+function isTestModeOrderRow(row: CommerceOrderRowInput): boolean {
+  const livemode = (row as { livemode?: unknown }).livemode
+  if (typeof livemode === 'boolean') return !livemode
+  return stripeIdIsTestMode(
+    (row as { checkoutSessionId?: unknown }).checkoutSessionId ?? row.id,
+  )
+}
+
 export function commerceSettledSummary(
   rows: readonly CommerceOrderRowInput[],
   truncated = false,
@@ -597,6 +620,13 @@ export function commerceSettledSummary(
     truncated: truncated === true,
   }
   for (const row of rows ?? []) {
+    // A REHEARSAL IS NOT REVENUE (AGL-2520). A smoke-test checkout writes a
+    // real order document — Stripe never moved money for it, and its session
+    // id says so — and this summary counted it as a settled storefront sale
+    // that Aglyn had taken commission on. Skipped ENTIRELY rather than counted
+    // at zero, because `transactionCount` is read as "how many sales", and a
+    // rehearsal is not one.
+    if (isTestModeOrderRow(row)) continue
     const split = commerceOrderTake(row)
     out.transactionCount += 1
     out.grossCents += split.gross

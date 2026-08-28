@@ -710,3 +710,52 @@ describe('a signup that never paid is neither revenue nor a comp', () => {
     expect(classifyOrgRevenueState(payingOrg())).toBe('collecting')
   })
 })
+
+/**
+ * A REHEARSAL IS NOT REVENUE, ON THE STAFF PAGE TOO (AGL-2520).
+ *
+ * The only order in production is a `cs_test_…` smoke-test checkout Stripe
+ * never moved money for, and this summary counted it as a settled storefront
+ * sale Aglyn had taken commission on. Every case carries a LIVE order beside
+ * the test one: with only a test row in the fixture, a filter that dropped
+ * everything would be indistinguishable from one that worked.
+ */
+describe('test-mode orders are not settled revenue (AGL-2520)', () => {
+  const live = { id: 'cs_live_real', amountCents: 10000, feeCents: 300 }
+  const test = { id: 'cs_test_smoke', amountCents: 1800, feeCents: 36 }
+
+  it('leaves the rehearsal out and keeps the real sale', () => {
+    const out = commerceSettledSummary([live, test])
+
+    expect(out.grossCents).toBe(10000)
+    // Skipped entirely, not counted at zero: `transactionCount` is read as
+    // "how many sales", and a rehearsal is not one.
+    expect(out.transactionCount).toBe(1)
+    expect(out.applicationFeeCents).toBe(300)
+  })
+
+  it('CONTROL: the same order counts once its id is a live session', () => {
+    const out = commerceSettledSummary([live, { ...test, id: 'cs_live_two' }])
+
+    expect(out.grossCents).toBe(11800)
+    expect(out.transactionCount).toBe(2)
+  })
+
+  it('CONTROL: a recorded livemode beats a test-shaped id', () => {
+    const out = commerceSettledSummary([live, { ...test, livemode: true }])
+
+    expect(out.grossCents).toBe(11800)
+    expect(out.transactionCount).toBe(2)
+  })
+
+  it('CONTROL: an order with no Stripe id at all is real money', () => {
+    // A POS cash sale. Answering "test" for anything unidentifiable would
+    // erase genuine revenue from the staff figures.
+    const out = commerceSettledSummary([
+      { id: 'aBcD1234auto', amountCents: 5000, feeCents: 150 },
+    ])
+
+    expect(out.grossCents).toBe(5000)
+    expect(out.transactionCount).toBe(1)
+  })
+})

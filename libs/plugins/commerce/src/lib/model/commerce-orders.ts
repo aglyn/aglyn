@@ -24,6 +24,7 @@
  * I/O here.
  */
 
+import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import type { ProductType } from './commerce'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 
@@ -552,6 +553,52 @@ export function orderLineRefundCents(
   let cents = 0
   for (const index of wanted) cents += gross[index] - shares[index]
   return Math.max(0, cents)
+}
+
+/**
+ * A REHEARSAL IS NOT REVENUE (AGL-2520).
+ *
+ * A smoke-test checkout writes a real order document. Stripe never moved money
+ * for it — the session id is `cs_test_…` — but every surface that sums paid
+ * orders counted it, so a storefront with one test order and no sales reported
+ * revenue it had never earned. Found in production: a single $18.00 order from
+ * an end-to-end run, standing as the whole platform's storefront revenue.
+ *
+ * ## Two signals, in order of trust
+ *
+ * `livemode` is a RECORDED FACT and wins whenever it is present: the webhook
+ * knows which Stripe environment an event came from and now writes it onto the
+ * order. Only a literal boolean counts, the same three-valued reading every
+ * other money gate in this codebase uses.
+ *
+ * The session id prefix is the FALLBACK, for the orders written before
+ * anything recorded the fact. It is Stripe's convention rather than our data,
+ * so it lives behind `stripeIdIsTestMode` and is not spelled out here.
+ *
+ * ## An unknowable order is LIVE
+ *
+ * An order with no `livemode` and no Stripe session id — a POS cash sale, a
+ * folio charge, a draft order paid offline — is real money and is counted.
+ * Answering "test" for anything we cannot identify would zero genuine sales,
+ * which is the one direction this must never fail in: a merchant under-reporting
+ * their own revenue has no way to tell it is happening.
+ */
+export function orderIsTestMode(
+  order: Pick<Partial<HostOrder>, 'checkoutSessionId'> & {
+    livemode?: unknown
+    /** The Firestore doc id, which for a storefront order IS the session id. */
+    $id?: unknown
+  },
+): boolean {
+  if (typeof order?.livemode === 'boolean') return !order.livemode
+  // `$id` as well as the field: every storefront order is keyed BY its session
+  // id, so the doc id carries the same signal and is present on rows read
+  // straight out of Firestore even where the field was never written. A POS or
+  // draft order has an auto-generated id, which matches no Stripe prefix and
+  // correctly reads as live.
+  return (
+    stripeIdIsTestMode(order?.checkoutSessionId) || stripeIdIsTestMode(order?.$id)
+  )
 }
 
 /** Sums line items and folds in shipping/tax/discount/fee, all cents. */

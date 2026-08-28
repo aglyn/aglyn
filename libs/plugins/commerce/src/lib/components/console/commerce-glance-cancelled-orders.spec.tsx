@@ -189,4 +189,63 @@ describe('CommerceGlanceCard revenue window', () => {
     expect(getByText('$140.00')).toBeTruthy()
     expect(queryByText('$165.00')).toBeNull()
   })
+
+  /**
+   * A REHEARSAL IS NOT REVENUE, AND IS NOT HIDDEN EITHER (AGL-2520).
+   *
+   * The one order in production is a `cs_test_…` smoke-test checkout that
+   * Stripe never moved money for, and it was counted here as $18.00 of
+   * storefront revenue. Every case below carries a LIVE order alongside the
+   * test one, because with only a test order in the fixture a filter that
+   * zeroed everything would look identical to a filter that worked.
+   */
+  describe('a test-mode order (AGL-2520)', () => {
+    // Two live orders so the $140.00 revenue is distinct from the $70.00
+    // average and from every per-order caption.
+    const live = { ...order('paid', 10000), $id: 'cs_live_realsale' }
+    const live2 = { ...order('paid', 4000), $id: 'cs_live_alsoreal' }
+    const test = { ...order('paid', 25000), $id: 'cs_test_smoke' }
+
+    it('is left out of revenue while the live order still counts', () => {
+      orderRows = [live, live2, test]
+
+      const { getByText, queryByText } = render(
+        <CommerceGlanceCard hostId="host-1" />,
+      )
+
+      expect(getByText('$140.00')).toBeTruthy()
+      expect(queryByText('$390.00')).toBeNull()
+    })
+
+    it('CONTROL: the same order counts once it is a live session', () => {
+      // Only the session id differs. Without this the assertion above would
+      // pass against a card that had stopped counting orders altogether.
+      orderRows = [live, live2, { ...test, $id: 'cs_live_thirdsale' }]
+
+      const { getByText } = render(<CommerceGlanceCard hostId="host-1" />)
+
+      expect(getByText('$390.00')).toBeTruthy()
+    })
+
+    it('CONTROL: a recorded livemode beats the id', () => {
+      // A test-shaped id on an order the webhook recorded as live must still
+      // count — the recorded fact is the stronger signal.
+      orderRows = [live, live2, { ...test, livemode: true }]
+
+      const { getByText } = render(<CommerceGlanceCard hostId="host-1" />)
+
+      expect(getByText('$390.00')).toBeTruthy()
+    })
+
+    it('EXCLUDED, NOT HIDDEN: it still appears in the order list', () => {
+      // It happened, and the merchant should be able to see it. Only the
+      // revenue total may not claim it.
+      orderRows = [live, live2, test]
+
+      const { getByText } = render(<CommerceGlanceCard hostId="host-1" />)
+
+      // The latest-orders list renders the id when there is no order number.
+      expect(getByText(/cs_test_/)).toBeTruthy()
+    })
+  })
 })

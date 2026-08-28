@@ -2175,6 +2175,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 ? { interval: liftedForSnapshot.subscription.interval }
                 : {}),
               checkoutSessionId: String(object.id),
+              // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+              // so no revenue surface has to infer it from the session id's `cs_test_`
+              // prefix — Stripe's convention rather than our data, and all that the
+              // orders written before this carry. Only a literal boolean is written; an
+              // event stating none leaves the field absent and the reader falls back.
+              ...(typeof event?.livemode === 'boolean'
+                ? { livemode: event.livemode }
+                : {}),
               createdAtMs: Date.now(),
               // WHICH TAX this subscription will bill, for as long as it
               // lives (AGL-2323).
@@ -2950,6 +2958,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 status: 'confirmed',
                 paidCents,
                 checkoutSessionId: String(object.id),
+                // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+                // so no revenue surface has to infer it from the session id's `cs_test_`
+                // prefix — Stripe's convention rather than our data, and all that the
+                // orders written before this carry. Only a literal boolean is written; an
+                // event stating none leaves the field absent and the reader falls back.
+                ...(typeof event?.livemode === 'boolean'
+                  ? { livemode: event.livemode }
+                  : {}),
                 paymentIntentId: String(object?.payment_intent ?? '') || null,
                 // The regime this stay carried, on the record the merchant
                 // reads (AGL-1969).
@@ -3233,6 +3249,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(unresolvedLines.length ? { unresolvedLines } : {}),
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
+            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+            // so no revenue surface has to infer it from the session id's `cs_test_`
+            // prefix — Stripe's convention rather than our data, and all that the
+            // orders written before this carry. Only a literal boolean is written; an
+            // event stating none leaves the field absent and the reader falls back.
+            ...(typeof event?.livemode === 'boolean'
+              ? { livemode: event.livemode }
+              : {}),
             customerName: object?.customer_details?.name ?? null,
             customerEmail: object?.customer_details?.email ?? null,
             ...(shipping?.address
@@ -4191,6 +4215,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
+            // WHICH STRIPE WORLD THIS SALE HAPPENED IN (AGL-2520). A recorded fact,
+            // so no revenue surface has to infer it from the session id's `cs_test_`
+            // prefix — Stripe's convention rather than our data, and all that the
+            // orders written before this carry. Only a literal boolean is written; an
+            // event stating none leaves the field absent and the reader falls back.
+            ...(typeof event?.livemode === 'boolean'
+              ? { livemode: event.livemode }
+              : {}),
             customerName: object?.customer_details?.name ?? null,
             createdAtMs: Date.now(),
             // Legacy Commerce Starter fields (AGL-90).

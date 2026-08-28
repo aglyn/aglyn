@@ -79,7 +79,11 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
       }))
       .filter(
         (order: any) =>
-          !['pending', 'cancelled'].includes(order.status),
+          !['pending', 'cancelled'].includes(order.status) &&
+          // A rehearsal is not revenue (AGL-2520). A smoke-test checkout writes
+          // a real order document that Stripe never moved money for, and every
+          // surface summing paid orders counted it.
+          !CommerceModel.orderIsTestMode(order),
       )
     const paidCents = (order: any) =>
       (order.totals?.totalCents ?? order.amountCents ?? 0) -

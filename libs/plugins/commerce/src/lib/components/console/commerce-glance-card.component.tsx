@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { formatOrderNumber, isLowStock, liftLegacyProduct } from '../../model'
+import {
+  formatOrderNumber,
+  isLowStock,
+  liftLegacyProduct,
+  orderIsTestMode,
+} from '../../model'
 import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Button, Chip, Divider, Stack, Typography } from '@mui/material'
@@ -90,7 +95,10 @@ export function CommerceGlanceCard(props: { hostId: string }) {
       (order) =>
         (order.createdAtMs ?? 0) >= since &&
         order.status !== 'pending' &&
-        order.status !== 'cancelled',
+        order.status !== 'cancelled' &&
+        // A rehearsal is not revenue (AGL-2520) — the same exclusion the
+        // analytics card applies, from the same helper.
+        !orderIsTestMode(order),
     )
     // Net of what went back, rather than dropping the order. The legacy flat
     // `amountCents` is the fallback, matching every other money reader

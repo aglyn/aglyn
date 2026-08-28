@@ -49,3 +49,30 @@ export function deploymentLivemode(
   if (override === 'false') return false
   return String(env['STRIPE_SECRET_KEY'] ?? '').startsWith('sk_live_')
 }
+
+/**
+ * Whether a Stripe object id belongs to TEST mode (AGL-2520).
+ *
+ * Stripe stamps the environment into the id itself — `cs_test_…`, `pi_test_…`,
+ * `in_test_…` — and that is the only signal a stored document carries when
+ * nothing recorded `livemode` beside it.
+ *
+ * ONE NAMED PLACE, and that is the point of the function rather than a
+ * `.startsWith()` at each call site. This is STRIPE'S convention, not our
+ * data: it is a fact about a third party's id format that we happen to depend
+ * on, so it needs somewhere to be documented, somewhere to be changed, and
+ * somewhere a reader can find every consumer of it. A recorded `livemode`
+ * beats it and callers should prefer one; this is the fallback for documents
+ * written before anything recorded the fact.
+ *
+ * Strict prefix match on the segment, never `includes('test')`: a live id can
+ * contain the letters `test` anywhere in its random tail, and a substring
+ * check would read a real sale as a rehearsal — the direction that erases
+ * revenue.
+ */
+export function stripeIdIsTestMode(id: unknown): boolean {
+  const value = typeof id === 'string' ? id.trim() : ''
+  if (!value) return false
+  // `cs_test_…`, and also the `_test_` infix Stripe uses on some prefixed ids.
+  return /^[a-z]+_test_/.test(value)
+}
