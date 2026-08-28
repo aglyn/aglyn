@@ -25,9 +25,17 @@ import type { ReactNode } from 'react'
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ host: string; pluginSlug: string }>
+  params: Promise<{ host: string; pluginSlug: string[] }>
 }): Promise<Metadata> {
   const { host, pluginSlug } = await params
+  /*
+   * The SURFACE, not the section (AGL-693). The route is a catch-all now, so
+   * `pluginSlug` is every segment beneath the site — `['products', 'orders']`
+   * on a section URL. The tab says "Products", because a tab strip is read to
+   * tell one open site's page from another's and the section is a rail click
+   * away inside it. The breadcrumb is where the section is named.
+   */
+  const [surfaceSlug = ''] = pluginSlug ?? []
   /*
    * The DISPLAYED name, not the URL slug (AGL-2184). This returned
    * `${pluginSlug} · ${host}` — the raw lowercase segment — so every plugin
@@ -39,7 +47,7 @@ export async function generateMetadata({
    * naming the page is not a permission decision, and the page below already
    * gates itself.
    */
-  return { title: `${pluginPageTitle(pluginSlug)} · ${host}` }
+  return { title: `${pluginPageTitle(surfaceSlug)} · ${host}` }
 }
 
 export default function HostPluginTitleLayout({

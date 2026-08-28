@@ -118,12 +118,12 @@ jest.mock('firebase/remote-config', () => ({
 }))
 
 jest.mock('next/navigation', () => ({
-  useParams: () => ({ pluginSlug: 'contacts' }),
+  useParams: () => ({ pluginSlug: ['contacts'] }),
   useSearchParams: () => new URLSearchParams(),
 }))
 
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
-// This page lives at `/[orgSlug]/hosts/[host]/[pluginSlug]`, so the URL names
+// This page lives at `/[orgSlug]/hosts/[host]/[...pluginSlug]`, so the URL names
 // a workspace and the flags provider resolves against it (AGL-1935). Mocked
 // rather than driven through `usePathname` because the router mock above is
 // deliberately partial.
@@ -165,7 +165,7 @@ jest.mock('../components/host-display-name.component', () => ({
   default: () => null,
 }))
 
-import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[pluginSlug]/page'
+import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page'
 import { ReleaseFlagsProvider } from '../hooks/use-release-flags'
 
 beforeEach(() => {

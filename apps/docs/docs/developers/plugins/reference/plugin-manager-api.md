@@ -17,7 +17,7 @@ design: the surface is small and curated, and each entry needs semantics
 | API | What it does |
 | --- | --- |
 | `registerConsoleExtension(extension)` | Declares everything a plugin adds to the console shell. Idempotent by `pluginId` (re-registration replaces). |
-| `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[hostId]/[pluginSlug]`. |
+| `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[orgSlug]/hosts/[host]/[...pluginSlug]`. The resolver matches an exact `href`, or a declared section beneath one — longest href wins, prefixes match on a segment boundary, and a tie between two enabled plugins refuses. It answers `{ extension, navItem, section?, segments }`. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
@@ -26,8 +26,18 @@ design: the surface is small and curated, and each entry needs semantics
 `ConsoleExtension` fields: `pluginId`, `displayName`, `featureFlag?`
 (plan-entitlement gate the shell applies — extensions cannot bypass plans),
 `navItems?` (a nav item with a `Component` becomes a full page and receives
-`ConsolePluginPageProps { hostId, entitled, org?, permissions? }`),
-`dashboardCards?`, `settingsSections?`, `widgets?`, `providers?`.
+`ConsolePluginPageProps { hostId, entitled, org?, permissions?, releaseFlag?,
+basePath?, sections?, section?, segments? }`), `dashboardCards?`,
+`settingsSections?`, `widgets?`, `providers?`.
+
+`ConsoleNavItem.sections?` turns one surface into a hub of routes — each
+`{ id, label, navTabId? }` becomes a URL at `${href}/${id}`, and the shell
+hands the page `section`, `sections` (hrefs + release verdict), `basePath` and
+`segments`. An id nobody declared is a 404, never a fallback to the first
+section; a section's own `navTabId` ANDs with its nav item's, so a section is
+never reachable when its surface is not. Omitting `sections` keeps the nav
+item matched exactly as before — a path beneath it does not resolve. See
+[Building feature plugins → Routed sections](../building-feature-plugins.md).
 
 ## Loading — `plugin-loader`
 

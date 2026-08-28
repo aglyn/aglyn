@@ -136,6 +136,46 @@ export interface ConsolePluginPageProps {
   /** True when the org holds the extension's `featureFlag` entitlement. */
   entitled: boolean
   /**
+   * The absolute console path this surface is mounted at — the nav item's
+   * `href` under the active org and site, e.g. `/acme/hosts/shop/products`
+   * (AGL-693).
+   *
+   * A plugin page is handed a host DOC ID and nothing else, so building a
+   * link to itself meant resolving the org slug and subdomain from Firestore
+   * — two `getDoc`s that answer `null` on first paint, which for a section
+   * rail means drawing it without hrefs. The shell already knows this string
+   * synchronously; the alternative is paying for it again, later, per page.
+   */
+  basePath?: string
+  /**
+   * The nav item's declared {@link ConsoleNavItem.sections}, resolved: an
+   * absolute `href` per section, and the release-flag verdict already applied
+   * to `visible` (AGL-693).
+   *
+   * The plugin DECLARES sections; the shell RESOLVES them. Release flags live
+   * in `scope:app` and a `scope:lib` plugin may not import the hooks that read
+   * them, so a page that filtered its own rail could only do it by guessing —
+   * and a rail offering a link into the shell's own "coming soon" notice is
+   * the guess going wrong. Feed this straight to `HubSections`.
+   */
+  sections?: readonly ResolvedConsoleNavSection[]
+  /**
+   * The id of the section the URL names, or undefined on the nav item's own
+   * href (AGL-693).
+   *
+   * Always one of the declared `sections` — the shell 404s an id it does not
+   * recognize rather than passing it down, so a page may switch on this
+   * without a fallback branch for a section it does not have.
+   */
+  section?: string
+  /**
+   * Path segments beneath `basePath`, `[]` on the nav item's own href
+   * (AGL-693). `segments[0]` is `section`; anything after it is the section's
+   * own, so a section can own deeper routes (`…/orders/ord_123`) without a
+   * further registry change.
+   */
+  segments?: readonly string[]
+  /**
    * The ORG billing doc (`orgs/{orgId}`) the shell already loaded to
    * compute `entitled` (prop renamed from `tenant` in AGL-444). Passed
    * through so a plugin page can run its own `checkEntitlement`/
@@ -186,6 +226,44 @@ export interface ConsolePluginPageProps {
 
 export type ConsolePluginPage = ComponentType<ConsolePluginPageProps>
 
+/**
+ * One routed section of a plugin console page (AGL-693).
+ *
+ * A section is a real URL beneath the nav item's `href`, not a panel: it is
+ * linkable, the back button walks sections, and the page mounts the one being
+ * read. That last part is the reason this exists — a six-panel hub subscribes
+ * every panel's queries on load, and the reader is looking at one.
+ */
+export interface ConsoleNavSection {
+  /**
+   * URL segment beneath the nav item's `href`, and the id the shell hands the
+   * page as `section`. Appears in links people keep — treat it as persisted.
+   */
+  id: string
+  label: string
+  /**
+   * Release-flag nav-tab id gating THIS section, when it ships on a different
+   * schedule than the surface around it. Omit to inherit the nav item's gate,
+   * which is the common case.
+   *
+   * Declaring one NARROWS, never widens: the nav item's own gate is applied
+   * outside this one, so a section of a flagged-off surface stays unreachable
+   * whatever it declares. A section gated by its own flag is refused on a deep
+   * link exactly as it is hidden from the rail — one verdict, both places.
+   */
+  navTabId?: string
+}
+
+/** A {@link ConsoleNavSection} with the shell's answers filled in. */
+export interface ResolvedConsoleNavSection {
+  id: string
+  label: string
+  /** Absolute console path — `${basePath}/${id}`. */
+  href: string
+  /** False when this section's release flag hides it from this viewer. */
+  visible: boolean
+}
+
 export interface ConsoleNavItem {
   label: string
   /**
@@ -205,6 +283,17 @@ export interface ConsoleNavItem {
    * the plugin owns the whole surface — no core page file needed.
    */
   Component?: ConsolePluginPage
+  /**
+   * Routed sections of this page (AGL-693). Each becomes a URL at
+   * `${href}/${section.id}`, and the shell tells the page which one it is on.
+   *
+   * Optional, and omitting it is not a lesser option — it means the surface is
+   * ONE page, which is what every plugin surface was before this existed and
+   * what most should stay. A nav item without sections resolves exactly as it
+   * always has: its own href and nothing beneath it, so a path under it is a
+   * 404 rather than this page rendered again.
+   */
+  sections?: readonly ConsoleNavSection[]
   /**
    * Dashboard header for the plugin page (title + icon), and the docs topic
    * its help `?` explains.
@@ -378,23 +467,116 @@ export function listConsoleNavItems(
   )
 }
 
+/** What {@link resolveConsolePluginPage} answers for a matched href. */
+export interface ResolvedConsolePluginPage {
+  extension: ConsoleExtension
+  navItem: ConsoleNavItem
+  /**
+   * The section the href names, when the nav item declares sections and the
+   * href reaches past its own. Undefined on the nav item's own href.
+   */
+  section?: ConsoleNavSection
+  /** Path segments beneath `navItem.href`; `[]` on the nav item's own href. */
+  segments: readonly string[]
+}
+
 /**
- * Resolves a host-relative href (e.g. '/events') to the extension + nav
- * item that owns a renderable page for it. The shell's generic host route
- * uses this to render plugin pages without a per-plugin page file.
+ * One nav item against one href: exact, or a declared section beneath it.
+ *
+ * A nav item with NO sections matches its own href and nothing else. That is
+ * what keeps every plugin written before AGL-693 behaving as it did: without
+ * it, prefix matching would quietly hand `/products/anything` to the Products
+ * page, which is the "it opened the wrong page" report rather than a 404.
+ */
+function matchNavItem(
+  navItem: ConsoleNavItem,
+  href: string,
+): { section?: ConsoleNavSection; segments: readonly string[] } | undefined {
+  if (navItem.href === href) return { segments: [] }
+  if (!navItem.sections?.length) return undefined
+  // On a separator boundary, so `/products` cannot claim `/products-archive`.
+  if (!href.startsWith(`${navItem.href}/`)) return undefined
+  const segments = href.slice(navItem.href.length + 1).split('/').filter(Boolean)
+  const section = navItem.sections.find((item) => item.id === segments[0])
+  // An id the nav item never declared is NOT this page. Returning the nav item
+  // anyway would render the surface's default section under a URL naming a
+  // different one, which reads to the person who typed it as the wrong page
+  // opening rather than as a typo.
+  return section ? { section, segments } : undefined
+}
+
+/**
+ * Resolves a host-relative href (e.g. '/events', '/products/orders') to the
+ * extension + nav item that owns a renderable page for it, and the section
+ * within it. The shell's generic host route uses this to render plugin pages
+ * without a per-plugin page file.
+ *
+ * ## Which registration wins (AGL-693)
+ *
+ * LONGEST declared `href` wins, and an exact match therefore always beats a
+ * section match — an exact `href` spans the whole path, so nothing matching a
+ * prefix of it can be longer. `/products/orders` goes to a plugin that
+ * declares that path over one that declares `/products` with an `orders`
+ * section, and a prefix only matches on a SEGMENT boundary, so `/products`
+ * never claims `/products-archive`.
+ *
+ * A TIE REFUSES. Two enabled plugins matching the same path at the same length
+ * resolve to nothing, and the console 404s. Registry insertion order is an
+ * accident of which chunk loaded first, so picking from it means one
+ * workspace serves plugin A's page at a URL where another serves plugin B's —
+ * silently, and differently per session. Nobody can debug that from the
+ * symptom, so it is refused and logged instead. Two nav items of the SAME
+ * extension are not a tie: that order is authored, and the first wins as it
+ * always has.
+ *
+ * This is a rule rather than an accident because the registry is a
+ * session-wide UNION across plugins from different authors (AGL-758) — one
+ * plugin registering `/products` and another `/products/orders` is two
+ * workspaces' code meeting in one module-global, not one author's tidiness
+ * problem. Scoping is unchanged and load-bearing: every candidate still comes
+ * from `listConsoleExtensions(enabledPluginIds)`, so a plugin the current org
+ * has not enabled cannot win a path — or collide with one.
  */
 export function resolveConsolePluginPage(
   href: string,
   enabledPluginIds?: readonly PluginId[],
-): { extension: ConsoleExtension; navItem: ConsoleNavItem } | undefined {
+): ResolvedConsolePluginPage | undefined {
+  let best: ResolvedConsolePluginPage | undefined
+  /** Extensions matching at `best`'s length — more than one is the tie. */
+  let contenders: PluginId[] = []
   for (const extension of listConsoleExtensions(enabledPluginIds)) {
     for (const navItem of extension.navItems ?? []) {
-      if (navItem.Component && navItem.href === href) {
-        return { extension, navItem }
+      if (!navItem.Component) continue
+      const match = matchNavItem(navItem, href)
+      if (!match) continue
+      const bestLength = best?.navItem.href.length ?? -1
+      if (navItem.href.length > bestLength) {
+        best = { extension, navItem, ...match }
+        contenders = [extension.pluginId]
+        continue
+      }
+      // Same length, different plugin: ambiguous. Same plugin: authored order,
+      // and the first nav item keeps the path.
+      if (
+        navItem.href.length === bestLength &&
+        !contenders.includes(extension.pluginId)
+      ) {
+        contenders.push(extension.pluginId)
       }
     }
   }
-  return undefined
+  if (contenders.length > 1) {
+    // Loud, because the symptom — a 404 on a page that is plainly installed —
+    // names neither plugin. This line is the only place the collision is
+    // visible, so it carries both ids and the path they are fighting over.
+    console.error(
+      `[aglyn] console page path "${href}" is claimed by more than one ` +
+        `enabled plugin (${contenders.join(', ')}); refusing to guess which ` +
+        'one owns it. Change one plugin\'s nav item href.',
+    )
+    return undefined
+  }
+  return best
 }
 
 /** Widgets registered for a slot, across every extension (AGL-419). */

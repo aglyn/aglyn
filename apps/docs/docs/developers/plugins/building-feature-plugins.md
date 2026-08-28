@@ -93,8 +93,8 @@ bypass plans. A feature plugin adds a menu item to the host app bar **and a
 new page** without editing any core console file (AGL-394).
 
 A nav item that carries a `Component` becomes a full page: the shell's
-generic host route (`apps/console/app/(app)/[hostId]/[pluginSlug]/page.tsx`) mounts
-it under the active host, wires the breadcrumb/header, resolves the
+generic host route (`apps/console/app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page.tsx`)
+mounts it under the active host, wires the breadcrumb/header, resolves the
 `featureFlag` entitlement, and passes it in as `entitled`.
 
 ```ts
@@ -126,7 +126,8 @@ export function registerEventsCalendarConsole(): void {
 ```
 
 The page component receives `ConsolePluginPageProps` — `{ hostId, entitled,
-org }` — so it stays free of console-app hooks. `org` is the resolved
+org, permissions, releaseFlag, basePath, sections, section, segments }` — so it
+stays free of console-app hooks. `org` is the resolved
 org billing doc the shell already loaded, so the page can run its own
 `checkEntitlement`/`checkQuota` (e.g. per-plan limits) without the app's
 org/session hooks:
@@ -158,10 +159,95 @@ export default function BookingsConsolePage({
    `useSecondaryNav()` from the current route and rendered once by
    `app/(app)/layout.tsx` — a plugin never passes tabs to a page, and pages
    have no nav props to set (AGL-754/755).
-3. The generic `[hostId]/[pluginSlug]` route resolves the page with
-   `resolveConsolePluginPage('/'+slug)`, renders it inside `DashboardLayout`
+3. The generic `[orgSlug]/hosts/[host]/[...pluginSlug]` route resolves the page
+   with `resolveConsolePluginPage(href)`, renders it inside `DashboardLayout`
    under `Suspense`, and applies the release-flag `FeatureGate`. Named routes
-   (setup, media, …) still win over this dynamic segment.
+   (setup, media, …) still win over this catch-all segment.
+
+## Routed sections (AGL-693)
+
+A surface can be a hub of real URLs instead of a tab strip. Declare `sections`
+on the nav item and each becomes a route at `${href}/${section.id}`:
+
+```ts
+navItems: [
+  {
+    label: 'Products',
+    href: '/products',
+    navTabId: 'nav-tab-commerce',
+    Component: CommerceConsolePage,
+    sections: [
+      { id: 'catalog', label: 'Catalog' },
+      { id: 'orders', label: 'Orders' },
+      // Ships on its own schedule — see "Gating" below.
+      { id: 'insights', label: 'Insights', navTabId: 'nav-tab-logic' },
+    ],
+  },
+]
+```
+
+The shell resolves the URL and hands the page back:
+
+- `section` — the id the URL names, or `undefined` on the surface's own href.
+  It is always one of the declared ids: the shell **404s** an id it does not
+  recognize rather than falling back to the first section, so the page needs no
+  branch for a section it does not have.
+- `sections` — the declared list with an absolute `href` per section and the
+  release verdict already applied to `visible`. Feed it straight to
+  `HubSections`; a plugin cannot compute `visible` itself, because release flags
+  live in `scope:app`.
+- `basePath` — the surface's absolute path, e.g. `/acme/hosts/shop/products`.
+- `segments` — everything beneath `basePath`. `segments[0]` is `section`;
+  anything after it belongs to the section, so a section may own deeper routes
+  (`…/orders/ord_123`) without another registry change.
+
+The surface's own href (`/products`) names no section. Redirect it to the first
+visible one rather than rendering that section in place — rendering it would pay
+for its reads on a URL that is about to be replaced.
+
+**Why routes rather than tabs.** A tab strip mounts every panel, so every
+panel's Firestore listens open on load and the reader is looking at one of them.
+The commerce console was the worst case: one load issued 32 listens with a
+ceiling of 4,462 documents to render one tab. A URL per section makes "mount
+only what is open" structural instead of a flag somebody has to remember — and a
+section becomes linkable, the back button walks sections, and which one is open
+is a fact about the URL rather than state kept in sync with it.
+
+`sections` is optional, and omitting it is not a lesser option — it means the
+surface is one page. A nav item without sections is matched exactly as it always
+was, so a path beneath it is a 404 rather than the page rendered again.
+
+### Which registration owns a path
+
+The registry is a session-wide union across plugins from different authors
+(AGL-758), so two plugins can claim overlapping paths. Resolution is:
+
+1. **Longest declared `href` wins**, so an exact match always beats a section
+   match — an exact href spans the whole path, and nothing matching a prefix of
+   it can be longer. A plugin registering `/products/orders` takes that URL from
+   one registering `/products` with an `orders` section.
+2. **Prefixes match on a segment boundary only**: `/products` never claims
+   `/products-archive`.
+3. **A tie refuses.** Two *enabled* plugins matching the same path at the same
+   length resolve to nothing and the console 404s, with both plugin ids logged.
+   Registry insertion order is an accident of which chunk loaded first, so
+   resolving by it would serve plugin A's page in one workspace and plugin B's
+   in another. Two nav items of the *same* extension are not a tie — that order
+   is authored, and the first wins.
+
+Every candidate comes from `listConsoleExtensions(enabledPluginIds)`, so a
+plugin this workspace has not enabled can neither win a path nor collide on one.
+
+### Gating a section
+
+A section **inherits its nav item's `navTabId`** — the flag that already gates
+the surface. That is the common case and needs nothing.
+
+A section may declare its own `navTabId`, which **ANDs** with the parent's: a
+released surface can hold one unreleased section, but a section is never
+reachable when its parent is not. Deep links are refused exactly as the nav is
+hidden, and the rail is filtered from the same verdict, so a section this viewer
+would be refused is not offered as a link.
 
 ## Loading: org-gated and dynamic (AGL-417)
 

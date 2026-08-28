@@ -20,11 +20,15 @@
 /**
  * What one commerce console load actually READS (AGL-693).
  *
- * The console page is a six-tab hub, and the reader looks at one tab. The
- * question this answers is what the other five cost, and it has to be answered
- * in listens and documents rather than in rendered output: a spec that asserts
- * on what is on screen passes identically whether the hidden panels are
- * mounted or not, which is the entire cost being removed.
+ * The console page is a six-SECTION hub, and the reader looks at one section.
+ * The question this answers is what the other five cost, and it has to be
+ * answered in listens and documents rather than in rendered output: a spec that
+ * asserts on what is on screen passes identically whether the other sections
+ * are mounted or not, which is the entire cost being removed.
+ *
+ * Sections are ROUTES now, so the URL is what selects one — this drives the
+ * page the way the shell does, by resolving the path and handing the page the
+ * section it named.
  *
  * So the meter sits at the Firestore boundary. Every query the page builds is
  * recorded with the `limit()` it carries, because that limit IS the billable
@@ -34,6 +38,7 @@
 
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { COMMERCE_CONSOLE_SECTIONS } from './commerce-console-sections'
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.
@@ -166,12 +171,18 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 /** The section the URL names, moved between renders to stand for a link. */
-let mockTab = ''
+let mockSection = ''
+
+/** Where the page would be sent when the URL names no section. */
+const mockReplace = jest.fn()
+
+const BASE_PATH = '/acme/hosts/site/products'
 
 jest.mock('next/navigation', () => ({
-  usePathname: () => '/acme/hosts/site/products',
-  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
-  useSearchParams: () => new URLSearchParams(mockTab ? `tab=${mockTab}` : ''),
+  usePathname: () =>
+    mockSection ? `${BASE_PATH}/${mockSection}` : BASE_PATH,
+  useRouter: () => ({ replace: mockReplace, push: () => undefined }),
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({}),
 }))
 
@@ -209,9 +220,24 @@ function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
 }
 
-async function renderConsole(tab: string) {
-  mockTab = tab
+/**
+ * The section list the SHELL would hand the page, resolved from the registry's
+ * own declaration rather than retyped here — a second copy would let this spec
+ * go on passing after a section was renamed out from under it.
+ */
+function shellSections() {
+  return COMMERCE_CONSOLE_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.label,
+    href: `${BASE_PATH}/${section.id}`,
+    visible: true,
+  }))
+}
+
+async function renderConsole(section: string) {
+  mockSection = section
   mockListens.length = 0
+  mockReplace.mockClear()
   const { CommerceConsolePage } = await import('./commerce-console-page')
   const view = render(
     <CommerceConsolePage
@@ -219,6 +245,10 @@ async function renderConsole(tab: string) {
       entitled
       org={{ plan: 'business' } as never}
       permissions={{ managePos: true } as never}
+      basePath={BASE_PATH}
+      sections={shellSections()}
+      section={section || undefined}
+      segments={section ? [section] : []}
     /> as ReactNode as never,
   )
   return view
@@ -226,7 +256,7 @@ async function renderConsole(tab: string) {
 
 describe('commerce console read cost (AGL-693)', () => {
   afterEach(() => {
-    mockTab = ''
+    mockSection = ''
     mockListens.length = 0
   })
 
@@ -267,6 +297,21 @@ describe('commerce console read cost (AGL-693)', () => {
         expect(seen).not.toContain(collection)
       }
     }
+  })
+
+  /*
+   * `/products` itself, which names no section (AGL-693).
+   *
+   * It redirects to the landing section rather than rendering it, and the
+   * difference is billable: rendering Catalog here would pay for Catalog's
+   * listens on a URL that is about to be replaced — on every click of the
+   * Products nav tab, which is how most readers arrive.
+   */
+  it('the sectionless URL redirects and reads nothing', async () => {
+    await renderConsole('')
+    summarize('no section', mockListens)
+    expect(mockListens).toHaveLength(0)
+    expect(mockReplace).toHaveBeenCalledWith(`${BASE_PATH}/catalog`)
   })
 
   it('a section is reachable by URL, and mounts only itself', async () => {

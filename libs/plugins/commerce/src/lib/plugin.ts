@@ -37,6 +37,7 @@ import * as ProductGrid from './components/product-grid'
 import * as ProductReviews from './components/product-reviews'
 import * as RelatedProducts from './components/related-products'
 import * as Wishlist from './components/wishlist'
+import { COMMERCE_CONSOLE_SECTIONS } from './components/commerce-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
@@ -164,6 +165,10 @@ export function registerCommerceConsole(): void {
         label: 'Products',
         href: '/products',
         icon: { path: mdiStorefrontOutline.path },
+        // Sections as ROUTES (AGL-693): `/products/orders` and friends are
+        // real URLs the shell resolves and gates, so the page mounts the one
+        // being read instead of subscribing all six.
+        sections: COMMERCE_CONSOLE_SECTIONS,
         header: {
           title: 'Products',
           icon: { path: mdiStorefrontOutline.path },

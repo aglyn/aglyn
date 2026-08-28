@@ -110,7 +110,7 @@ jest.mock('firebase/remote-config', () => ({
 }))
 
 jest.mock('next/navigation', () => ({
-  useParams: () => ({ pluginSlug: 'redirects' }),
+  useParams: () => ({ pluginSlug: ['redirects'] }),
   useSearchParams: () => new URLSearchParams(),
   // The refusal notice carries a real `AppLink` to Billing, which reads the
   // pathname to decide whether it is the active route.
@@ -152,7 +152,7 @@ jest.mock('../components/host-display-name.component', () => ({
   default: () => null,
 }))
 
-import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[pluginSlug]/page'
+import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page'
 import PluginWidgetSlot from '../components/plugin-widget-slot.component'
 import { ReleaseFlagsProvider } from '../hooks/use-release-flags'
 

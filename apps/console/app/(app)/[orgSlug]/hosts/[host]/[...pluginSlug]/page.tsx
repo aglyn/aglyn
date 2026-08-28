@@ -23,7 +23,7 @@ import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
-import { useParams } from 'next/navigation'
+import { notFound, useParams } from 'next/navigation'
 import { Suspense, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../../../components/console-media-picker-provider.component'
 import FeatureGate from '../../../../../../components/feature-gate.component'
@@ -41,23 +41,43 @@ import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 import { useReleaseFlags } from '../../../../../../hooks/use-release-flags'
 
+/** `children` behind `flag`, or plain when the surface declares no flag. */
+function wrapInGate(
+  flag: ReleaseFlagKey | undefined,
+  children: JSX.Element,
+): JSX.Element {
+  return flag ? <FeatureGate flag={flag}>{children}</FeatureGate> : children
+}
+
 /**
- * Generic host route for plugin-contributed pages (AGL-394). Any feature
- * plugin that registers a ConsoleExtension nav item with a `Component`
- * renders here — the console shell owns auth, chrome, and gating, so the
- * plugin needs no page file of its own. Named routes (setup, media, …)
- * still win over this dynamic segment; only unclaimed host sub-paths reach
- * it, and an unregistered slug renders a not-found notice.
+ * Generic host route for plugin-contributed pages (AGL-394), section by
+ * section (AGL-693). Any feature plugin that registers a ConsoleExtension nav
+ * item with a `Component` renders here — the console shell owns auth, chrome,
+ * and gating, so the plugin needs no page file of its own. Named routes
+ * (setup, media, …) still win over this dynamic segment; only unclaimed host
+ * sub-paths reach it, and an unregistered slug renders a not-found notice.
+ *
+ * A CATCH-ALL segment since AGL-693, so a surface can be a hub of real URLs:
+ * `/products/orders` is the Products nav item's `orders` section, resolved by
+ * the same registry lookup and handed to the page as `section`. A nav item
+ * that declares no sections is matched exactly as it always was, so the
+ * widened route shape is invisible to every plugin written before it.
  *
  * The Events page is the reference org of this route: it comes entirely
  * from the events-calendar plugin.
  */
 const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
-  const params = useParams<{ hostId: string; pluginSlug: string }>()
+  const params = useParams<{ hostId: string; pluginSlug: string | string[] }>()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const hostId = useHostId()
-  const pluginSlug = params?.pluginSlug ?? ''
+  // `string[]` from the catch-all; `useParams` types it either way because a
+  // user can type any URL, and the single-segment form is still the common one.
+  const segments = useMemo(() => {
+    const raw = params?.pluginSlug
+    return (Array.isArray(raw) ? raw : raw ? [raw] : []).filter(Boolean)
+  }, [params?.pluginSlug])
+  const pluginHref = segments.length ? `/${segments.join('/')}` : ''
   const { org, ready: orgReady } = useCurrentOrg()
   const { permissions, loaded: permissionsLoaded } = useOrgPermissions()
 
@@ -67,16 +87,51 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const enabledPluginIds = useEnabledPluginIds()
   const resolved = useMemo(
     () =>
-      pluginSlug
-        ? resolveConsolePluginPage(`/${pluginSlug}`, enabledPluginIds)
+      pluginHref
+        ? resolveConsolePluginPage(pluginHref, enabledPluginIds)
         : undefined,
-    [pluginSlug, enabledPluginIds],
+    [pluginHref, enabledPluginIds],
   )
+
+  /*
+   * How an unresolved URL is refused, and why it depends on the segment count.
+   *
+   * ONE segment names a surface. `/products` on a workspace without commerce
+   * is a live bookmark into a plugin that is disabled or uninstalled, and the
+   * notice below says exactly that — the true and useful answer, and the
+   * behavior this route has always had.
+   *
+   * MORE than one is a path, and a path that resolves to nothing is a 404.
+   * That covers both cases the catch-all introduced: a typo'd section under a
+   * surface that IS installed (rendering its default section instead is how
+   * someone reports "it opened the wrong page"), and an unmatched path under a
+   * NAMED route — `/setup/bogus` reaches this file now, where it used to be a
+   * plain 404, and Setup is a core page that no plugin provides or could.
+   */
+  const unresolvedIsNotFound = !resolved && segments.length > 1
 
   // The release flag governing this surface, keyed by the nav item's tab id
   // (same gate the nav strip applies), so deep links leak nothing.
   const releaseFlag = useMemo<ReleaseFlagKey | undefined>(() => {
     const navTabId = resolved?.navItem.navTabId
+    if (!navTabId) return undefined
+    return RELEASE_FLAGS.find((flag) => flag.navTabId === navTabId)?.key
+  }, [resolved])
+
+  /*
+   * The flag governing the SECTION, when it declares one of its own (AGL-693).
+   *
+   * Applied INSIDE the surface's gate below rather than instead of it, so the
+   * two compose: a section of a flagged-off surface stays refused whatever it
+   * declares, and a section can only ever be narrower than the page holding
+   * it. Sections that declare nothing inherit the surface's gate by simply
+   * being inside it — which is the common case and needs no code here.
+   *
+   * The rail is filtered from the same verdict a few lines down, so a section
+   * this refuses is not offered: one answer, drawn and enforced.
+   */
+  const sectionReleaseFlag = useMemo<ReleaseFlagKey | undefined>(() => {
+    const navTabId = resolved?.section?.navTabId
     if (!navTabId) return undefined
     return RELEASE_FLAGS.find((flag) => flag.navTabId === navTabId)?.key
   }, [resolved])
@@ -94,7 +149,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   // billing claim. Paired with `ready` so a page can withhold the claim
   // entirely until the verdict settles rather than assert the default-off
   // answer for one paint.
-  const { flags, ready: releaseFlagsReady } = useReleaseFlags()
+  const { flags, ready: releaseFlagsReady, isStaff } = useReleaseFlags()
   const releaseFlagVerdict = useMemo(
     () =>
       releaseFlag
@@ -102,6 +157,56 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         : undefined,
     [releaseFlag, flags, releaseFlagsReady],
   )
+
+  /**
+   * The surface's own absolute path — the nav item's href under this org and
+   * site, which is where the section rail links from. Built from the NAV
+   * ITEM's href rather than from the URL so it is the surface root on a
+   * section route too.
+   */
+  const basePath = useMemo(() => {
+    if (!resolved) return undefined
+    return buildRoute(Route.HOST_PLUGIN, {
+      orgSlug,
+      host,
+      pluginSlug: resolved.navItem.href.replace(/^\//, ''),
+    })
+  }, [resolved, orgSlug, host])
+
+  /**
+   * The declared sections with the shell's answers filled in: an absolute
+   * href, and the release verdict this viewer gets.
+   *
+   * `visible` is `released || isStaff`, the same reading `FeatureGate` uses,
+   * so the rail offers exactly what the gate below admits. A plugin cannot
+   * compute this for itself — release flags are `scope:app` — and a rail that
+   * guessed would link into the shell's own "coming soon" notice.
+   */
+  const resolvedSections = useMemo(() => {
+    const sections = resolved?.navItem.sections
+    if (!sections?.length || !basePath) return undefined
+    return sections.map((section) => {
+      const flagKey = section.navTabId
+        ? RELEASE_FLAGS.find((flag) => flag.navTabId === section.navTabId)?.key
+        : undefined
+      return {
+        id: section.id,
+        label: section.label,
+        href: `${basePath}/${section.id}`,
+        visible: flagKey ? flags[flagKey].released || isStaff : true,
+      }
+    })
+  }, [resolved, basePath, flags, isStaff])
+
+  /*
+   * The 404, after every hook and before anything renders (AGL-693).
+   *
+   * `notFound()` throws, so calling it where the check reads most naturally —
+   * beside the resolver, at the top — would skip every hook below it and put
+   * this component's hook order at the mercy of the URL. Held here instead:
+   * the answer is the same, and the hook list is not a function of the path.
+   */
+  if (unresolvedIsNotFound) notFound()
 
   const entitled = resolved?.extension.featureFlag
     ? checkEntitlement(org, resolved.extension.featureFlag)
@@ -127,6 +232,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const header = resolved?.navItem.header
   const title = header?.title ?? resolved?.navItem.label ?? 'Not found'
   const PluginComponent = resolved?.navItem.Component
+  const activeSection = resolved?.section
 
   const body = !PluginComponent ? (
     <Alert severity="warning">
@@ -196,6 +302,10 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           org={org}
           permissions={permissions}
           releaseFlag={releaseFlagVerdict}
+          basePath={basePath}
+          sections={resolvedSections}
+          section={resolved?.section?.id}
+          segments={resolved?.segments}
         />
       </ConsoleMediaPickerProvider>
     </Suspense>
@@ -208,7 +318,13 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           children: <HostDisplayNameComponent hostId={hostId} />,
           href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
         },
-        { children: title },
+        // The surface, linked once a section is open beneath it, so the trail
+        // walks back rather than dead-ending on the level the reader is on.
+        { children: title, ...(activeSection && basePath ? { href: basePath } : {}) },
+        // The section the reader is actually on (AGL-693), following the hubs
+        // that already migrated: without it the trail names every level except
+        // theirs — the one that says where they are.
+        ...(activeSection ? [{ children: activeSection.label }] : []),
       ]}
       // The surface's own docs page, not the marketplace's (AGL-1074). One
       // route renders every plugin page, so a hardcoded topic here told
@@ -220,7 +336,17 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        {releaseFlag ? <FeatureGate flag={releaseFlag}>{body}</FeatureGate> : body}
+        {/*
+          Two gates, nested, never swapped (AGL-693). The section's own flag
+          sits INSIDE the surface's, so a section is refused whenever its page
+          is — the surface's gate cannot be escaped by a section declaring a
+          released flag of its own. A section that declares nothing is gated by
+          the surface simply by being inside it.
+        */}
+        {wrapInGate(
+          releaseFlag,
+          wrapInGate(sectionReleaseFlag, body),
+        )}
       </Container>
     </DashboardLayout>
   )
