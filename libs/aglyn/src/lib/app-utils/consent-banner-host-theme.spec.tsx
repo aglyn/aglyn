@@ -47,7 +47,9 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
-import ConsentBannerUi from './consent-banner-ui'
+import ConsentBannerUi, {
+  type ConsentBannerUiProps,
+} from './consent-banner-ui'
 
 /**
  * A theme no default could produce by accident.
@@ -68,9 +70,9 @@ const hostTheme = createTheme({
 })
 
 /** A visitor who has already answered — the state that draws the pill. */
-const props = {
+const props: ConsentBannerUiProps = {
   hostId: 'host-1',
-  stored: { analytics: 'denied' } as never,
+  stored: { v: 1, at: 0, status: 'declined', analytics: false },
   posture: null,
   advertising: true,
 }
