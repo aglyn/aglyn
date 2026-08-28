@@ -26,7 +26,7 @@
  */
 
 /**
- * The headers carrying the request's country and subdivision, named by
+ * The headers carrying the request's country, subdivision and city, named by
  * configuration with Vercel's own as the default (AGL-2436).
  *
  * These were bare `x-vercel-*` literals, under a comment calling them "the
@@ -37,7 +37,10 @@
  *
  *  - the sanctions gate FAILED OPEN on every request, logging it once per
  *    instance — an embargo control that is silently not running,
- *  - the tenant's consent-region endpoint had no region to answer with.
+ *  - the tenant's consent-region endpoint had no region to answer with,
+ *  - the new-device sign-in alert reported "Unknown location" to every user,
+ *    and stored that string, so the breach-notification report that reads a
+ *    data subject's country back off it counted nobody.
  *
  * An operator's proxy has the signal under its own name: Cloudflare sends
  * `cf-ipcountry`, and Caddy/nginx/Traefik can set whatever they are told to.
@@ -58,6 +61,9 @@ export const GEO_COUNTRY_HEADER = (
 ).toLowerCase()
 export const GEO_REGION_HEADER = (
   process.env.AGLYN_GEO_REGION_HEADER || 'x-vercel-ip-country-region'
+).toLowerCase()
+export const GEO_CITY_HEADER = (
+  process.env.AGLYN_GEO_CITY_HEADER || 'x-vercel-ip-city'
 ).toLowerCase()
 
 export interface RequestGeo {
@@ -154,10 +160,128 @@ const readCountry = (headers: HeaderReader): string | null => {
   return null
 }
 
+/**
+ * The subdivision headers tried after the configured one, in order.
+ *
+ * The sub-country half of the embargo check — Crimea, Donetsk, Luhansk,
+ * Sevastopol — matches on this and on nothing else, so an operator who named
+ * a country header but no region header had the country gate running and the
+ * REGION gate quietly inert: a Donetsk request reads `UA`, which is not
+ * embargoed, and passes. Cloudflare sends no subdivision at all, so a
+ * deployment behind it has no sub-country signal by any name; the rest do.
+ */
+const FALLBACK_REGION_HEADERS = [
+  'x-appengine-region',
+  'x-client-geo-region',
+  'cloudfront-viewer-country-region',
+  'x-geo-region',
+  'x-region-code',
+] as const
+
+/** Every header consulted for the subdivision, in order, configured one first. */
+export const GEO_REGION_HEADERS: readonly string[] = [
+  GEO_REGION_HEADER,
+  ...FALLBACK_REGION_HEADERS,
+].filter((name, index, all) => all.indexOf(name) === index)
+
+const rawRegion = (headers: HeaderReader): string => {
+  for (const name of GEO_REGION_HEADERS) {
+    const value = (headers.get(name) ?? '').trim()
+    if (value) return value
+  }
+  return ''
+}
+
 export function readRequestGeo(headers: HeaderReader): RequestGeo {
-  const region = (headers.get(GEO_REGION_HEADER) ?? '').trim()
+  const region = rawRegion(headers)
   return {
     country: readCountry(headers),
     region: region ? normalizeRegion(region) : null,
   }
+}
+
+/**
+ * The subdivision as a person should read it, rather than as an embargo set
+ * matches it.
+ *
+ * `readRequestGeo().region` is upper-cased and zero-padded because
+ * `EMBARGOED_UA_REGIONS` is an exact-membership test that every spelling of a
+ * code has to land on. That normalization is wrong for anything a person
+ * reads: a proxy configured to send a subdivision NAME rather than a code
+ * reaches a user's security email shouting `CAPITAL`.
+ *
+ * Same headers, same precedence — only the normalization differs, so the two
+ * readers can never disagree about WHICH subdivision a request came from.
+ */
+export function readRequestRegionLabel(headers: HeaderReader): string | null {
+  const raw = rawRegion(headers)
+  if (!raw) return null
+  const bare = raw.includes('-') ? raw.slice(raw.indexOf('-') + 1) : raw
+  // Commas are the delimiter callers join these parts on; see `readRequestCity`.
+  const label = bare.replace(/,/g, ' ').replace(/\s+/g, ' ').trim()
+  return label || null
+}
+
+/**
+ * The city names the common edges send, tried after the configured one.
+ *
+ * Same ordering rule as the country list: the configured header wins, and
+ * these only fill in for an operator who never named one. Cloudflare's
+ * `cf-ipcity` arrives only on plans where the visitor-location transform is
+ * available, so its absence is normal rather than a misconfiguration.
+ */
+const FALLBACK_CITY_HEADERS = [
+  'cf-ipcity',
+  'x-appengine-city',
+  'x-client-geo-city',
+  'cloudfront-viewer-city',
+  'x-geo-city',
+  'x-city',
+] as const
+
+/** Every header consulted for the city, in order, configured one first. */
+export const GEO_CITY_HEADERS: readonly string[] = [
+  GEO_CITY_HEADER,
+  ...FALLBACK_CITY_HEADERS,
+].filter((name, index, all) => all.indexOf(name) === index)
+
+/**
+ * The longest city name treated as a city.
+ *
+ * A proxy that passes something else through one of these names — a header
+ * list, a user agent, a path — would otherwise be rendered to a person as
+ * their sign-in location. 64 characters clears the longest real place names
+ * with room to spare.
+ */
+const MAX_CITY_LENGTH = 64
+
+/**
+ * The request's city, decoded, or `null` when no edge sent one.
+ *
+ * Percent-decoded because every edge that sends this header sends non-ASCII
+ * names encoded (`S%C3%A3o%20Paulo`), and an undecoded value reaches a person
+ * as mojibake in a security email. A value that is not valid percent-encoding
+ * is kept verbatim rather than dropped — a literal `%` in a name is not a
+ * reason to lose the city.
+ *
+ * Commas become spaces. Callers join city, region and country with `", "`
+ * into one stored string, and `deviceLocationCountry` reads the country back
+ * off the LAST comma-separated token; a comma arriving inside the city half
+ * would add a token to a string that a breach-notification report parses.
+ */
+export function readRequestCity(headers: HeaderReader): string | null {
+  for (const name of GEO_CITY_HEADERS) {
+    const raw = (headers.get(name) ?? '').trim()
+    if (!raw) continue
+    let decoded: string
+    try {
+      decoded = decodeURIComponent(raw)
+    } catch {
+      decoded = raw
+    }
+    const city = decoded.replace(/,/g, ' ').replace(/\s+/g, ' ').trim()
+    if (!city || city.length > MAX_CITY_LENGTH) continue
+    return city
+  }
+  return null
 }

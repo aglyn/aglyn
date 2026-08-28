@@ -121,6 +121,7 @@ describe('request geo header names (AGL-2436)', () => {
     for (const name of [
       'AGLYN_GEO_COUNTRY_HEADER',
       'AGLYN_GEO_REGION_HEADER',
+      'AGLYN_GEO_CITY_HEADER',
     ]) {
       if (!new RegExp(`^\\s*${name}: process\\.env\\.${name},`, 'm').test(source)) {
         throw new Error(
@@ -133,9 +134,79 @@ describe('request geo header names (AGL-2436)', () => {
     }
   })
 
-  it('the self-host template offers both names', () => {
+  it('the self-host template offers every name', () => {
     const template = readFileSync(join(REPO_ROOT, '.env.selfhost.example'), 'utf8')
     expect(template).toMatch(/^AGLYN_GEO_COUNTRY_HEADER=/m)
     expect(template).toMatch(/^AGLYN_GEO_REGION_HEADER=/m)
+    expect(template).toMatch(/^AGLYN_GEO_CITY_HEADER=/m)
+  })
+
+  /**
+   * The city half exists so the new-device sign-in alert names a place off
+   * Vercel. It is read through the same configured-then-fallback chain as the
+   * country, so an operator behind Cloudflare gets a city without naming one.
+   */
+  it('reads a city from a fallback header, decoded', async () => {
+    let mod!: typeof import('./request-geo')
+    await jest.isolateModulesAsync(async () => {
+      mod = await import('./request-geo')
+    })
+    expect(mod.readRequestCity(new Headers({ 'cf-ipcity': 'S%C3%A3o%20Paulo' }))).toBe(
+      'São Paulo',
+    )
+    expect(mod.readRequestCity(new Headers())).toBeNull()
+  })
+
+  /**
+   * A comma in the city would add a token to `"City, Region, Country"`, which
+   * `deviceLocationCountry` parses by taking the LAST one — the input to a
+   * breach-notification filing.
+   */
+  it('never lets a city carry the delimiter that string is parsed on', async () => {
+    let mod!: typeof import('./request-geo')
+    await jest.isolateModulesAsync(async () => {
+      mod = await import('./request-geo')
+    })
+    expect(mod.readRequestCity(new Headers({ 'x-geo-city': 'Dallas, TX' }))).toBe(
+      'Dallas TX',
+    )
+  })
+
+  /**
+   * The sub-country embargo set (Crimea, Sevastopol, Donetsk, Luhansk) matches
+   * on the subdivision and nothing else. An operator who named a country
+   * header but no region header had the country gate live and the region gate
+   * inert — a Donetsk request reads `UA`, which is not embargoed, and passes.
+   */
+  it('finds a subdivision under a fallback header, normalized for matching', async () => {
+    let mod!: typeof import('./request-geo')
+    await jest.isolateModulesAsync(async () => {
+      mod = await import('./request-geo')
+    })
+    expect(
+      mod.readRequestGeo(
+        new Headers({ 'cloudfront-viewer-country': 'ua', 'x-geo-region': 'UA-14' }),
+      ),
+    ).toEqual({ country: 'UA', region: '14' })
+    // Single digits are zero-padded onto the set's spelling: `9` is Luhansk.
+    expect(
+      mod.readRequestGeo(new Headers({ 'x-client-geo-region': '9' })).region,
+    ).toBe('09')
+  })
+
+  /**
+   * The label reader exists because the matching form is upper-cased, and a
+   * proxy sending a subdivision NAME would reach a user's security email
+   * shouting. Both readers must still name the SAME subdivision.
+   */
+  it('labels a subdivision for a person without changing which one it is', async () => {
+    let mod!: typeof import('./request-geo')
+    await jest.isolateModulesAsync(async () => {
+      mod = await import('./request-geo')
+    })
+    const headers = new Headers({ 'x-geo-region': 'IS-Capital' })
+    expect(mod.readRequestRegionLabel(headers)).toBe('Capital')
+    expect(mod.readRequestGeo(headers).region).toBe('CAPITAL')
+    expect(mod.readRequestRegionLabel(new Headers())).toBeNull()
   })
 })

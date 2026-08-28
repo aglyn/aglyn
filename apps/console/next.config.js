@@ -111,6 +111,7 @@ module.exports = withAglyn({
     // request time. Fixed at image-build time, like AGLYN_TENANT_HOST_CNAME.
     AGLYN_GEO_COUNTRY_HEADER: process.env.AGLYN_GEO_COUNTRY_HEADER,
     AGLYN_GEO_REGION_HEADER: process.env.AGLYN_GEO_REGION_HEADER,
+    AGLYN_GEO_CITY_HEADER: process.env.AGLYN_GEO_CITY_HEADER,
     NEXT_PUBLIC_DEPLOY_ENV: process.env.VERCEL_ENV,
   },
   /**

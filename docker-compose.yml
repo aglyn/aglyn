@@ -26,8 +26,24 @@ services:
       secrets:
         - selfhost_env
     env_file: .env.selfhost
+    # Published on LOOPBACK, so the only way in is the reverse proxy the
+    # runbook puts in front (docs/SELF_HOSTING.md §5 proxies to
+    # `localhost:4200` / `localhost:4500`, i.e. this same host).
+    #
+    # A bare `4200:4200` binds every interface, so the container also answers
+    # requests that never passed through the proxy — and those carry whatever
+    # `x-forwarded-for` the caller typed. Every rate limiter in the product
+    # keys on the first hop of that header, so a directly reachable container
+    # hands an attacker a fresh bucket per request on passkey sign-in,
+    # password reset, org creation and form submission. Nothing errors; the
+    # limits simply stop counting.
+    #
+    # If your proxy runs on another host or in another Docker network, do NOT
+    # widen this — put the proxy on this host's network, or add a
+    # `docker-compose.override.yml` and make sure the port you expose is
+    # firewalled to the proxy alone.
     ports:
-      - '4200:4200'
+      - '127.0.0.1:4200:4200'
     restart: unless-stopped
 
   tenant:
@@ -39,8 +55,24 @@ services:
       secrets:
         - selfhost_env
     env_file: .env.selfhost
+    # Published on LOOPBACK, so the only way in is the reverse proxy the
+    # runbook puts in front (docs/SELF_HOSTING.md §5 proxies to
+    # `localhost:4200` / `localhost:4500`, i.e. this same host).
+    #
+    # A bare `4200:4200` binds every interface, so the container also answers
+    # requests that never passed through the proxy — and those carry whatever
+    # `x-forwarded-for` the caller typed. Every rate limiter in the product
+    # keys on the first hop of that header, so a directly reachable container
+    # hands an attacker a fresh bucket per request on passkey sign-in,
+    # password reset, org creation and form submission. Nothing errors; the
+    # limits simply stop counting.
+    #
+    # If your proxy runs on another host or in another Docker network, do NOT
+    # widen this — put the proxy on this host's network, or add a
+    # `docker-compose.override.yml` and make sure the port you expose is
+    # firewalled to the proxy alone.
     ports:
-      - '4500:4500'
+      - '127.0.0.1:4500:4500'
     restart: unless-stopped
 
 secrets:

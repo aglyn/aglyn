@@ -43,7 +43,10 @@ import { getApp } from 'firebase-admin/app'
 import '@aglyn/shared-util-fbserver'
 // The readable half of the server-error signal (AGL-1921) — see the block
 // comment in `reportServerError`.
-import { deploymentEnvironmentLabel } from '@aglyn/aglyn/server'
+import {
+  deploymentCommitRef,
+  deploymentEnvironmentLabel,
+} from '@aglyn/aglyn/server'
 
 import { recordServerError } from './rate-limit-store'
 
@@ -203,7 +206,21 @@ export async function reportClientErrors(
     )
     return 0
   }
-  const version = process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7)
+  /*
+   * Which BUILD this report came from, resolved the way `/api/health` resolves
+   * it — `BUILD_ID`, then `COMMIT_REF`, then Vercel's own.
+   *
+   * This read `VERCEL_GIT_COMMIT_SHA` directly, which is set on Aglyn's cloud
+   * and nowhere else, so every error a self-hosted deployment reported arrived
+   * with no version at all while the health endpoint beside it named the
+   * commit correctly. An error report you cannot tie to a build is an error
+   * report you cannot act on.
+   *
+   * `undefined`, not `null`: this becomes Error Reporting's
+   * `serviceContext.version`, where an absent key is omitted and an empty one
+   * is a version.
+   */
+  const version = deploymentCommitRef() ?? undefined
   try {
     const response = await fetch('https://logging.googleapis.com/v2/entries:write', {
       method: 'POST',
@@ -381,7 +398,7 @@ export async function reportServerError(
 
   const stack = clampString(event.stack, MAX_STACK)
   const hasStack = stack.includes('\n')
-  const version = process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7)
+  const version = deploymentCommitRef() ?? undefined
   try {
     const response = await fetch('https://logging.googleapis.com/v2/entries:write', {
       method: 'POST',
@@ -530,7 +547,7 @@ export async function writeBeaconHeartbeat(options: {
               // No `@type`: this must not be ingested by Error Reporting.
               tag: 'AGL-1923:beacon-heartbeat',
               service: options.service,
-              version: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+              version: deploymentCommitRef(),
               environment: deploymentEnvironmentLabel(),
             },
           },

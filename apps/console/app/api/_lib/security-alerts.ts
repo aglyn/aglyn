@@ -16,6 +16,11 @@
  */
 
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import {
+  readRequestCity,
+  readRequestGeo,
+  readRequestRegionLabel,
+} from '@aglyn/aglyn/app-utils/request-geo'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
@@ -151,35 +156,43 @@ export function summarizeUserAgent(userAgent: string | null | undefined): string
 export interface SignInClient {
   deviceName: string
   userAgent: string
-  /** "City, Region, Country" from Vercel's geo headers, or a fallback. */
+  /** "City, Region, Country" from the edge geo headers, or a fallback. */
   location: string
   ip: string
 }
 
-function decodeHeaderPart(value: string | null): string {
-  if (!value) return ''
-  try {
-    // Vercel URI-encodes non-ASCII city names.
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
-
 /**
- * Reads device/location facts off the request headers. Location comes from
- * Vercel's `x-vercel-ip-*` geo headers, so it is approximate and absent in
- * local dev — the email copy treats every field as best-effort.
+ * Reads device/location facts off the request headers.
+ *
+ * Location comes from `readRequestGeo`/`readRequestCity`, the one geo reader
+ * the sanctions gate and the consent-region endpoint also use, so all three
+ * agree about where a request came from and all three follow the same
+ * `AGLYN_GEO_*_HEADER` configuration.
+ *
+ * These were bare `x-vercel-ip-*` reads, which no self-host container has: on
+ * a Docker install every sign-in alert said "Unknown location", and — because
+ * the same string is stored on `users/{uid}/devices` — the breach-notification
+ * report's widest bucket, the one built by reading a subject's country back
+ * off that string, silently counted nobody. Neither surface errors when the
+ * signal is missing, so an operator has nothing to notice.
+ *
+ * Still best-effort: an edge that sends no geo at all yields "Unknown
+ * location", and the email copy treats every field as approximate.
  */
 export function describeSignInClient(headers: {
   get(name: string): string | null
 }): SignInClient {
   const userAgent = headers.get('user-agent') ?? ''
+  // The LABEL reader for the subdivision, not `readRequestGeo().region`: that
+  // one is upper-cased for embargo-set matching, which renders a proxy's
+  // subdivision name as `CAPITAL` in a person's email.
   const location =
     [
-      decodeHeaderPart(headers.get('x-vercel-ip-city')),
-      headers.get('x-vercel-ip-country-region') ?? '',
-      headers.get('x-vercel-ip-country') ?? '',
+      readRequestCity(headers),
+      readRequestRegionLabel(headers),
+      // Widest last: `deviceLocationCountry` reads the filing country back off
+      // the final comma-separated token of this stored string.
+      readRequestGeo(headers).country,
     ]
       .filter(Boolean)
       .join(', ') || 'Unknown location'

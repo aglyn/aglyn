@@ -280,6 +280,32 @@ describe('describeSignInClient', () => {
     expect(client.location).toBe('Unknown location')
     expect(client.ip).toBe('Unknown')
   })
+
+  /**
+   * SELF-HOST: no container has an `x-vercel-*` header. Reading only those
+   * names put "Unknown location" in every alert email on every Docker install
+   * — and stored it, which is what the breach-notification report parses a
+   * data subject's country out of. Neither surface errors, so the whole
+   * failure was invisible to an operator.
+   */
+  it('reads geo from a non-Vercel edge', () => {
+    const client = describeSignInClient(
+      headers({
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Chrome/126.0 Safari/537.36',
+        'cf-ipcity': 'Dublin',
+        'cf-ipcountry': 'IE',
+      }),
+    )
+    expect(client.location).toBe('Dublin, IE')
+    // The country is the last comma-separated token, which is the contract
+    // `deviceLocationCountry` reads the filing country back on.
+    expect(client.location.split(', ').pop()).toBe('IE')
+  })
+
+  it('reports the country alone when the edge sends no city', () => {
+    const client = describeSignInClient(headers({ 'cloudfront-viewer-country': 'de' }))
+    expect(client.location).toBe('DE')
+  })
 })
 
 describe('summarizeUserAgent', () => {

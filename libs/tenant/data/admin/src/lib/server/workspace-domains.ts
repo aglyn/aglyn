@@ -406,7 +406,43 @@ export async function attachWorkspaceDomain(
   slug: string,
 ): Promise<WorkspaceDomainResult> {
   if (!slug) return { outcome: 'skipped', domain: domainFor(slug) }
+  noteUnmanagedWorkspaceDomains()
   return attachProjectDomain(domainFor(slug))
+}
+
+/**
+ * Has this instance already said that it does not manage workspace subdomains?
+ *
+ * Once per instance, not once per org: on a deployment that will never have
+ * this integration the condition is permanent, and a line per workspace
+ * creation is noise an operator learns to scroll past.
+ */
+let loggedUnmanagedDomains = false
+
+/**
+ * Say ONCE that `{slug}.<workspace domain>` is nobody's job on this deployment.
+ *
+ * `createOrg` awaits the attach and discards the result, which is fine when
+ * the outcome is `attached` or `already-exists`. Off Vercel the outcome is
+ * `skipped` — `config()` finds no token — and the org is still created, with
+ * the console going on to advertise `{slug}.<workspace domain>` as the
+ * workspace URL. That address resolves only if the operator independently
+ * runs wildcard DNS and a proxy rule for it, and nothing in the product tells
+ * them so: the workspace simply has a URL that does not load.
+ *
+ * A log line rather than a refusal, because the operator's proxy is a
+ * legitimate way to serve those names and failing org creation over a missing
+ * hosting-vendor credential would be far worse than the gap it closes.
+ */
+function noteUnmanagedWorkspaceDomains(): void {
+  if (loggedUnmanagedDomains || workspaceDomainsConfigured()) return
+  loggedUnmanagedDomains = true
+  console.info(
+    '[workspace-domains] not configured — workspace subdomains are not ' +
+      'attached by this deployment. Point a wildcard DNS record for ' +
+      `*.${WORKSPACE_DOMAIN} at your console and route it there, or the ` +
+      'workspace URL the console shows will not resolve.',
+  )
 }
 
 /**
