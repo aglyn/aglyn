@@ -169,7 +169,15 @@ export function StaffUserEmailHistoryCard({
         // the column, and the browser's own affordance costs nothing and
         // survives a row the grid virtualized away.
         renderCell: (params) => (
-          <Typography variant="body2" noWrap title={params.row.subject}>
+          // `width: '100%'` so `noWrap` has a box to truncate against: inside
+          // a flex cell the paragraph shrink-wraps its text and the ellipsis
+          // never appears.
+          <Typography
+            variant="body2"
+            noWrap
+            title={params.row.subject}
+            sx={{ width: '100%' }}
+          >
             {params.row.subject}
           </Typography>
         ),
@@ -178,29 +186,31 @@ export function StaffUserEmailHistoryCard({
         field: 'context',
         headerName: 'Sender',
         width: 170,
+        // An imported row carries no sender: the provider's history has no
+        // tags, so we know what was sent and not which of our senders produced
+        // it. Rendered by the grid as a plain value, which also keeps it
+        // sortable and filterable.
+        valueFormatter: (value: string | null) => value || '—',
         renderCell: (params) =>
           params.row.context ? (
             <Chip size="small" variant="outlined" label={params.row.context} />
           ) : (
-            // An imported row carries none: the provider's history has no
-            // tags, so we know what was sent and not which sender produced it.
-            <Typography variant="caption" color="text.secondary">
-              {'—'}
-            </Typography>
+            '—'
           ),
       },
       {
         field: 'sentAtMs',
         headerName: 'Sent',
         width: 190,
-        // A NUMBER in the row and a string only at render, so the column sorts
-        // chronologically rather than alphabetically — a formatted string
-        // would put "Aug" before "Dec" before "Jan".
-        renderCell: (params) => (
-          <Typography variant="body2" noWrap>
-            {formatWhen(params.row.sentAtMs)}
-          </Typography>
-        ),
+        // A NUMBER in the row and a string only at display, so the column
+        // sorts chronologically rather than alphabetically — a formatted
+        // string would put "Aug" before "Dec" before "Jan".
+        //
+        // `valueFormatter`, NOT `renderCell`: a formatter leaves the grid to
+        // draw the text, which is what makes it sit on the same line as every
+        // other plain cell. A custom node opts out of that and has to
+        // reproduce the centering itself.
+        valueFormatter: (value: number) => formatWhen(value),
       },
       {
         field: 'status',
@@ -294,6 +304,25 @@ export function StaffUserEmailHistoryCard({
              */
             rowHeight={44}
             columnHeaderHeight={44}
+            /*
+             * CENTRE EVERY CELL'S CONTENT.
+             *
+             * The grid centres a plain value it renders itself, and does not
+             * centre a node returned from `renderCell` — it drops it in and
+             * leaves the alignment to the node. So a row mixing the two put
+             * its text on one line and its chips on another, by a few pixels,
+             * which is exactly the kind of misalignment that reads as broken
+             * without being nameable.
+             *
+             * Applied at the grid rather than per column so a column added
+             * later cannot reintroduce it.
+             */
+            sx={{
+              '& .MuiDataGrid-cell': {
+                display: 'flex',
+                alignItems: 'center',
+              },
+            }}
             onOpen={(_id, row) => setOpen(row.record as StaffEmailDeliveryRow)}
           />
           {/*

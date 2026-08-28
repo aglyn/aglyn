@@ -30,7 +30,7 @@ import {
   Tabs,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import type { StaffEmailDeliveryRow } from './staff-user-email-history-card.component'
 
@@ -158,15 +158,33 @@ export function StaffEmailMessageDialog({
 
   const messageId = row?.messageId ?? null
 
+  /*
+   * THE USER IS READ THROUGH A REF, NOT DEPENDED ON.
+   *
+   * `useUser()` is not contractually stable, and a hook that returns a fresh
+   * object each render makes `[messageId, user]` a dependency that changes
+   * every time — so the effect re-runs, its cleanup sets `active = false`, the
+   * in-flight response is discarded as stale, and `setLoading(false)` is
+   * skipped along with it. The dialog then spins on "Loading the message"
+   * forever while re-fetching in a loop.
+   *
+   * A ref for the value and a BOOLEAN for the condition: the effect re-runs
+   * when a message is opened or when the user first becomes available, and at
+   * no other time.
+   */
+  const userRef = useRef(user)
+  userRef.current = user
+  const signedIn = Boolean(user)
+
   useEffect(() => {
-    if (!messageId || !user) return
+    if (!messageId || !signedIn) return
     let active = true
     setLoading(true)
     setError(null)
     setMessage(null)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
+        const idToken = await (userRef.current as any)?.getIdToken?.()
         const response = await fetch(
           `/api/admin/emails/message?id=${encodeURIComponent(messageId)}`,
           { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
@@ -181,9 +199,18 @@ export function StaffEmailMessageDialog({
           return
         }
         setMessage(payload as StaffEmailMessage)
-        // Default to whichever part actually exists, so a text-only message
-        // does not open on an empty HTML tab.
-        setTab(payload?.html ? 'html' : 'text')
+        /*
+         * An EMPTY html part still opens on the HTML tab, because the notice
+         * shown there — "this went out as plain text only, so no click could
+         * be recorded" — is the most useful sentence in this dialog and the
+         * finding this whole feature came from. Falling through to the text
+         * tab hid it behind a tab nobody would click.
+         *
+         * `null` is different: the body could not be read at all, and there
+         * is nothing to explain, so the text part (if any) is the better
+         * landing.
+         */
+        setTab((payload as StaffEmailMessage)?.html === null ? 'text' : 'html')
       } catch {
         if (active) setError('Could not load the message')
       } finally {
@@ -193,7 +220,7 @@ export function StaffEmailMessageDialog({
     return () => {
       active = false
     }
-  }, [messageId, user])
+  }, [messageId, signedIn])
 
   const close = useCallback(() => {
     setMessage(null)
