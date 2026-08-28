@@ -158,17 +158,39 @@ const NOT_LOGGED = {
   'apps/console/app/api/domains/detach/route.ts':
     'PENDING (AGL-118). The attach half now logs; detach has several exit ' +
     'branches and picking the terminal one needs the same care attach got.',
+  // The three billing routes share one decision, recorded here so whoever
+  // picks this up inherits the answer instead of re-deriving it.
+  //
+  // DECIDED: subscription lifecycle is logged FROM THE WEBHOOK, not from the
+  // console route.
+  //
+  //  1. The webhook reports what HAPPENED; the route reports what was
+  //     ATTEMPTED. A plan change Stripe declines, or that fails SCA, is a
+  //     console action with no billing consequence — and a log that records
+  //     the attempt as the event is wrong in precisely the cases somebody is
+  //     reading it to understand.
+  //  2. It covers events with NO console action at all: dunning
+  //     cancellations, Stripe-side retries, disputes. With the console as
+  //     writer those are invisible, which is the same hole this whole issue
+  //     closed.
+  //  3. One writer, so there is no de-duplication problem to solve.
+  //
+  // The cost is that the webhook does not know who clicked. Carry the acting
+  // uid in Stripe METADATA on the call the console makes and read it back off
+  // the event: a customer-initiated change then names the person, and a
+  // Stripe-initiated one honestly has no actor.
+  //
+  // ⛔ Do NOT fall back to attributing a dunning cancellation to the last
+  // person who touched billing. That is the org-owner inference wearing a
+  // different hat, and it puts a name on an act nobody performed.
   'apps/console/app/api/billing/subscription/route.ts':
-    'PENDING (AGL-118), and BLOCKED: billing is held by another change in ' +
-    'this checkout. Subscription lifecycle also needs one authoritative ' +
-    'source decided between the console action and the Stripe webhook, or a ' +
-    'plan change produces two rows saying different things.',
+    'PENDING (AGL-118). Correctly silent — the webhook is the authority; see ' +
+    'the note above. Also BLOCKED: billing is held by another change.',
   'apps/console/app/api/billing/checkout/route.ts':
-    'PENDING (AGL-118), and BLOCKED for the reason above.',
+    'PENDING (AGL-118). Correctly silent for the reason above; also BLOCKED.',
   'apps/console/app/api/billing/webhook/route.ts':
-    'PENDING (AGL-118), and BLOCKED for the reason above. The webhook is the ' +
-    'honest source for what actually happened to a subscription, so it is ' +
-    'the likely authority — but that is a decision, not a default.',
+    'PENDING (AGL-118). THIS is the route that should log, per the decision ' +
+    'above. BLOCKED until the billing files are clean.',
 }
 
 /** How many exclusions are allowed. It may fall; it may not rise. */
