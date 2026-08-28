@@ -104,6 +104,38 @@ export interface PublicCatalogQuery {
   offset?: number
   /** Include category + price facets in the result. */
   facets?: boolean
+  /**
+   * Optional per-render dedupe (see {@link CatalogReadScope}). Absent for a
+   * one-off call such as the API route, where there is nothing to share with.
+   */
+  reads?: CatalogReadScope
+}
+
+/**
+ * Reads shared by every catalog query in ONE render, for ONE host.
+ *
+ * The products read does not vary with the query — the whole catalog is
+ * fetched and then filtered in memory by collection, category, tag, price and
+ * search text. A page carrying four product grids therefore issued four
+ * identical 500-document reads and threw three of them away.
+ *
+ * This shares the READ, never the RESULT. Each grid still filters and sorts
+ * the shared snapshot independently, because a collection-scoped grid and an
+ * all-products grid on the same page must not receive each other's items.
+ *
+ * Scoped to one host and one render deliberately: it holds a promise, not
+ * data, so nothing is cached across requests and no staleness window opens.
+ * Reusing a scope for a second host would serve that host the first one's
+ * catalog, which is why it is created per render rather than per module.
+ */
+export interface CatalogReadScope {
+  products?: Promise<FirebaseFirestore.QuerySnapshot>
+  categories?: Promise<FirebaseFirestore.QuerySnapshot>
+}
+
+/** A fresh read scope. One per render, never reused across hosts. */
+export function createCatalogReadScope(): CatalogReadScope {
+  return {}
 }
 
 /** What both the API route and the SSR seed hand to a product grid. */
@@ -154,6 +186,19 @@ export async function queryPublicCatalog(
 
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
+  const reads = params.reads
+  // Assigned into the scope BEFORE it is awaited, so grids running together
+  // under one `Promise.all` share the single in-flight read rather than each
+  // starting their own and racing to store it.
+  const sharedProducts = () =>
+    (reads
+      ? (reads.products ??= hostRef.collection('products').limit(500).get())
+      : hostRef.collection('products').limit(500).get())
+  const sharedCategories = () =>
+    (reads
+      ? (reads.categories ??=
+          hostRef.collection('productCategories').limit(200).get())
+      : hostRef.collection('productCategories').limit(200).get())
   const [
     productsSnapshot,
     collectionsSnapshot,
@@ -162,7 +207,7 @@ export async function queryPublicCatalog(
     facetsSnapshot,
   ] =
     await Promise.all([
-      hostRef.collection('products').limit(500).get(),
+      sharedProducts(),
       // limit(5) not 1: content collections share this path and a slug is
       // unique only within a kind (AGL-954) — the catalog match is picked
       // out below rather than trusting whichever doc came back first.
@@ -183,9 +228,7 @@ export async function queryPublicCatalog(
       collectionIdParam
         ? hostRef.collection('collections').doc(collectionIdParam).get()
         : null,
-      wantFacets
-        ? hostRef.collection('productCategories').limit(200).get()
-        : null,
+      wantFacets ? sharedCategories() : null,
     ])
   const collectionById =
     collectionByIdSnapshot?.exists &&

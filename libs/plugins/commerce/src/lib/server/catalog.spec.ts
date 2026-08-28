@@ -19,7 +19,12 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { catalogHandler, matchesCatalogQuery } from './catalog'
+import {
+  catalogHandler,
+  createCatalogReadScope,
+  matchesCatalogQuery,
+  queryPublicCatalog,
+} from './catalog'
 
 interface MockRow {
   id: string
@@ -35,6 +40,15 @@ const mockDb: Record<string, MockRow[]> = {
   collections: [],
 }
 
+/**
+ * How many times each subcollection was actually READ, by name.
+ *
+ * The seed's cost is not visible in its output — four grids sharing one read
+ * and four grids each doing their own return identical items. Only the call
+ * count separates them, so it is counted here and asserted directly.
+ */
+const mockReads: Record<string, number> = {}
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
@@ -43,12 +57,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           doc: () => ({
             collection: (name: string) => {
               const rows = () => mockDb[name] ?? []
-              const toDocs = (list: MockRow[]) => ({
-                docs: list.map((row) => ({
-                  id: row.id,
-                  data: () => row.data,
-                })),
-              })
+              const toDocs = (list: MockRow[]) => {
+                mockReads[name] = (mockReads[name] ?? 0) + 1
+                return {
+                  docs: list.map((row) => ({
+                    id: row.id,
+                    data: () => row.data,
+                  })),
+                }
+              }
               return {
                 limit: () => ({ get: async () => toDocs(rows()) }),
                 get: async () => toDocs(rows()),
@@ -312,5 +329,91 @@ describe('matchesCatalogQuery', () => {
     expect(matchesCatalogQuery(item, '  ')).toBe(true)
     expect(matchesCatalogQuery(item, 'shoes')).toBe(false)
     expect(matchesCatalogQuery({ name: 'Bare' }, 'bare')).toBe(true)
+  })
+})
+
+/**
+ * A storefront page can carry several product grids, and each one seeds
+ * itself through `queryPublicCatalog`. The products read does not vary with
+ * the query — the whole catalog comes back and is filtered in memory — so
+ * four grids meant four identical 500-document reads per server render, three
+ * of them discarded.
+ *
+ * These assert the number of READS, never the items. A grid that re-read the
+ * catalog returns exactly the same products as one that shared a read, so an
+ * item assertion cannot tell the two apart and would pass on the shape it was
+ * written to reject.
+ */
+describe('catalog read scope', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(mockReads)) delete mockReads[key]
+    mockDb.products = [product('a'), product('b')]
+    mockDb.productCategories = []
+    mockDb.collections = []
+  })
+
+  /**
+   * Forced red by dropping `reads` from the four calls below: `products`
+   * then reports 4 instead of 1.
+   */
+  it('reads the catalog once for four grids sharing a scope', async () => {
+    const reads = createCatalogReadScope()
+    const results = await Promise.all([
+      queryPublicCatalog({ hostId: 'host-1', reads }),
+      queryPublicCatalog({ hostId: 'host-1', reads }),
+      queryPublicCatalog({ hostId: 'host-1', reads }),
+      queryPublicCatalog({ hostId: 'host-1', reads }),
+    ])
+
+    expect(mockReads['products']).toBe(1)
+    // Every grid is still served — sharing the READ must not cost a grid its
+    // result. A page that seeded three of four grids would render a skeleton.
+    expect(results).toHaveLength(4)
+    for (const result of results) {
+      expect(result.items.map((item) => item.id).sort()).toEqual(['a', 'b'])
+    }
+  })
+
+  /**
+   * The scope is opt-in. A caller with nothing to share — the API route —
+   * must keep reading for itself rather than inheriting another request's
+   * snapshot.
+   *
+   * Forced red by making `sharedProducts` memoize on a module-level scope
+   * instead of the passed one: `products` then reports 1 and two separate
+   * requests silently share a catalog.
+   */
+  it('reads once per call when no scope is passed', async () => {
+    await queryPublicCatalog({ hostId: 'host-1' })
+    await queryPublicCatalog({ hostId: 'host-1' })
+
+    expect(mockReads['products']).toBe(2)
+  })
+
+  /**
+   * Facets are the other query-invariant read. Only grids that show a
+   * category or price control ask for them, so the count must follow the
+   * ASK rather than the grid count.
+   *
+   * Forced red by having `sharedCategories()` run unconditionally instead of
+   * behind `wantFacets`: `productCategories` then reports 1 for the
+   * facet-less pair below.
+   */
+  it('does not read facets for grids that show no filter controls', async () => {
+    const reads = createCatalogReadScope()
+    await Promise.all([
+      queryPublicCatalog({ hostId: 'host-1', reads }),
+      queryPublicCatalog({ hostId: 'host-1', reads }),
+    ])
+
+    expect(mockReads['productCategories']).toBeUndefined()
+
+    const faceted = createCatalogReadScope()
+    await Promise.all([
+      queryPublicCatalog({ hostId: 'host-1', reads: faceted, facets: true }),
+      queryPublicCatalog({ hostId: 'host-1', reads: faceted, facets: true }),
+    ])
+
+    expect(mockReads['productCategories']).toBe(1)
   })
 })
