@@ -39,7 +39,10 @@
  * placeholder fails here instead of passing.
  */
 
+import { ThemeProvider } from '@mui/material/styles'
+import { consoleThemeLight } from '@aglyn/shared-ui-theme'
 import { render, screen } from '@testing-library/react'
+import type React from 'react'
 import NewsletterSignup from './newsletter-signup'
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -94,3 +97,40 @@ describe('the newsletter block names its email field (AGL-2392)', () => {
  *    popup's raw `<input>`. Asserted in that library's own spec, beside the
  *    popup harness that already exists there.
  */
+
+/**
+ * AND IT IS NOT A HEADING EITHER (AGL-2486).
+ *
+ * The same "Get product updates" line was reaching the page as an `<h6>` —
+ * not because anything asked for a heading, but because MUI's own
+ * `defaultVariantMapping` sends `subtitle1` there. On `aglyn.com/blog` the
+ * nearest heading above it is an `h3`, so the outline read `h3 -> h6`: a
+ * skipped level, and the `heading-order` audit failure. Six blog listing pages
+ * carried it, and eleven blog posts carried the `subtitle2` twin.
+ *
+ * The fix is a `variantMapping` in the shared theme rather than a `component`
+ * prop here, because this block is one of 37 subtitle call sites on the render
+ * path and they all had it. This asserts the RENDERED ELEMENT of a real
+ * affected component, so the theme default is proven to reach the markup — a
+ * theme assertion alone would still pass if a provider stopped applying it.
+ */
+describe('the newsletter heading is styled text, not an outline entry (AGL-2486)', () => {
+  const renderThemed = (node: React.ReactElement) =>
+    render(<ThemeProvider theme={consoleThemeLight}>{node}</ThemeProvider>)
+
+  it('renders the subtitle as a paragraph, not an h6', () => {
+    renderThemed(<NewsletterSignup heading="Get product updates" />)
+    const line = screen.getByText('Get product updates')
+    expect(line.tagName).toBe('P')
+  })
+
+  it('CONTROL — it contributes no heading to the document outline at all', () => {
+    // The assertion that actually matches the audit: `heading-order` reads the
+    // sequence of heading ELEMENTS, so what matters is that this block adds
+    // none, not merely that one particular node changed tag.
+    const { container } = renderThemed(
+      <NewsletterSignup heading="Get product updates" />,
+    )
+    expect(container.querySelectorAll('h1,h2,h3,h4,h5,h6')).toHaveLength(0)
+  })
+})
