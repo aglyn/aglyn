@@ -26,7 +26,8 @@ import {
 import PluginDisableCascadeDialog, {
   type CascadeEntry,
 } from './plugin-disable-cascade-dialog.component'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiChevronRight } from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -40,7 +41,10 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useOrgSlug } from '../hooks/use-org-scope'
+import { useHostSubdomain } from './host-id-provider'
 
 /**
  * Per-site plugin switchboard (AGL-1014), the host-level counterpart of
@@ -64,6 +68,8 @@ export default function SitePluginsCard(props: { hostId: string }) {
   // on `ready` would only add a flash to a card that cannot lie.
   // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org } = useCurrentOrg()
+  const orgSlug = useOrgSlug()
+  const hostSlug = useHostSubdomain()
   const { enqueueSnackbar } = useSnackbar()
   const {
     doc: {
@@ -265,7 +271,18 @@ export default function SitePluginsCard(props: { hostId: string }) {
       contentGutterX
       contentGutterY
     >
-      <Stack spacing={1} sx={{ maxWidth: 560 }}>
+      {/*
+        NO WIDTH CAP ON THE LIST. This card is a list of rows with a
+        right-aligned control, not a column of form fields, and the ~560px
+        form measure the console uses for the latter was capping the former:
+        every row's text, chevron and switch bunched into the left half of an
+        1100px card, with the hover highlight stopping mid-card as though the
+        row had failed to render. `Container maxWidth={CONTENT_MAX_WIDTH}` on
+        the page already bounds the measure; a second cap inside the card
+        bounds the ROW, which is not the same thing. The workspace plugin list
+        this mirrors has never had one.
+      */}
+      <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">
           {'Choose which of the workspace-enabled plugins run on this ' +
             'site. Disabling one removes it from this site only — ' +
@@ -290,14 +307,48 @@ export default function SitePluginsCard(props: { hostId: string }) {
                 />
               }
             >
-              <ListItemText
-                primary={row.label}
-                secondary={
-                  row.alwaysOn
-                    ? `${row.description ?? ''} Always on.`.trim()
-                    : row.description
-                }
-              />
+              {/*
+                The row opens the plugin's page for THIS site (AGL-428,
+                AGL-1014), the way a workspace plugin row opens its own. The link wraps only
+                the text: the switch is the list item's `secondaryAction` and
+                sits outside it, so flipping one never navigates.
+              */}
+              <AppLink
+                href={buildRoute(Route.HOST_ADMIN_PLUGIN, {
+                  orgSlug,
+                  host: hostSlug,
+                  pluginRef: row.id,
+                })}
+                color="inherit"
+                underline="none"
+                sx={{ flex: 1, minWidth: 0, display: 'block' }}
+              >
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{
+                    alignItems: 'center',
+                    px: 1,
+                    mx: -1,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <ListItemText
+                    primary={row.label}
+                    secondary={
+                      row.alwaysOn
+                        ? `${row.description ?? ''} Always on.`.trim()
+                        : row.description
+                    }
+                  />
+                  <MdiIcon
+                    path={mdiChevronRight.path}
+                    color="disabled"
+                    sx={{ fontSize: 20 }}
+                  />
+                </Stack>
+              </AppLink>
             </ListItem>
           ))}
         </List>

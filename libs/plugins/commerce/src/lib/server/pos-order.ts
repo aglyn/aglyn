@@ -167,8 +167,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // The ceiling defaults to 100 (see `plugin-config.ts` for why that number
     // is the merchant's to lower and not this fix's to invent). What changed
     // is that exceeding it is now an answer instead of a silent rounding.
+    // Resolved for THIS SITE (AGL-428, AGL-1014): a chain that trusts one
+    // branch's register with a deeper discount than the rest sets it on that
+    // site, and
+    // reading only the workspace's answer would refuse the sale the console
+    // says is allowed.
     const maxDiscountPct = posMaxDiscountPct(
-      await getPluginConfig(ownerOrg?.orgId, 'commerce'),
+      await getPluginConfig(ownerOrg?.orgId, 'commerce', { hostId }),
     )
     if (discountPct > maxDiscountPct) {
       return res.status(403).json({

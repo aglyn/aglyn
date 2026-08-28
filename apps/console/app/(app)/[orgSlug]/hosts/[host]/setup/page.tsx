@@ -1205,15 +1205,16 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                             <div style={{ marginTop: 24 }}>
                               <ErrorScreensCard hostId={hostId} />
                             </div>
-                            {/* Designable auth screens (AGL-553) moved to the
-                                User Accounts plugin's per-site page (AGL-1015)
-                                — Admin › Plugins › User Accounts. They
-                                designate the /signin, /signup and /recover
-                                screens, which exist only while that plugin is
-                                on for the site, so they are settings OF the
-                                plugin rather than of the site. Nothing here
-                                writes `authScreens` any more; the card is its
-                                only writer and it now lives on that page. */}
+                            {/* Designable auth screens (AGL-553) moved to
+                                the User Accounts plugin's per-site page
+                                (AGL-428, AGL-1014) — Admin › Plugins › User
+                                Accounts. They designate the /signin, /signup
+                                and /recover screens, which exist only while
+                                that plugin is on for the site, so they are
+                                settings OF the plugin rather than of the
+                                site. Nothing here writes `authScreens` any
+                                more; the card is its only writer and it now
+                                lives on that page. */}
                             <div style={{ marginTop: 24 }}>
                               <LanguagesCard hostId={hostId} />
                             </div>

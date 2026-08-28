@@ -169,11 +169,18 @@ const slotsHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown service' })
     }
     const fromMs = Date.now()
-    // Booking horizon (AGL-428): org-configurable via the plugin settings
+    // Booking horizon (AGL-428): configurable via the plugin settings
     // framework; defaults to BOOKING_MAX_DAYS_AHEAD through the schema.
+    //
+    // Resolved for THIS SITE (AGL-428, AGL-1014), not just the workspace.
+    // The horizon is the setting per-site overrides were built for — one
+    // chain, one answer, and the flagship branch taking bookings further out
+    // — so reading only the org's would leave the console showing a number
+    // this endpoint never honors.
     const config = await getPluginConfig(
       await resolveOrgIdForHost(hostId),
       'bookings',
+      { hostId },
     )
     const maxDaysAhead = Number(config.maxDaysAhead ?? BOOKING_MAX_DAYS_AHEAD)
     const toMs = fromMs + maxDaysAhead * 24 * 60 * 60_000

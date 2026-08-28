@@ -256,6 +256,17 @@ export enum Route {
    * `?tab=` ids these sections were deep-linked by.
    */
   HOST_ADMIN_PLUGINS = '/[orgSlug]/hosts/[host]/admin/plugins',
+  /*
+   * One plugin, as installed on ONE site (AGL-428, AGL-1014) — the
+   * site-scoped twin of `ORG_PLUGIN_INSTALLATION`, reached by clicking a row
+   * on the site's plugin
+   * list exactly as the workspace list opens its own detail page. The segment
+   * is `[pluginRef]` and accepts either identifier for the same reason the
+   * workspace route does (AGL-1010): a marketplace install is keyed by listing
+   * id, a first-party plugin by its registry id, and an admin does not think
+   * of the two as different things.
+   */
+  HOST_ADMIN_PLUGIN = '/[orgSlug]/hosts/[host]/admin/plugins/[pluginRef]',
   HOST_ADMIN_DOMAIN = '/[orgSlug]/hosts/[host]/admin/domain',
   HOST_ADMIN_SECURITY = '/[orgSlug]/hosts/[host]/admin/security',
   HOST_ADMIN_ACTIVITY = '/[orgSlug]/hosts/[host]/admin/activity',
@@ -438,6 +449,7 @@ export interface RoutePayload {
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGINS]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_PLUGIN]: { orgSlug: string; host: string; pluginRef: string }
   [Route.HOST_ADMIN_DOMAIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_SECURITY]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_ACTIVITY]: { orgSlug: string; host: string }

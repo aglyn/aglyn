@@ -17,16 +17,23 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { segmentTitle } from '../../../../../page-title'
 
 // Title-only shell (AGL-1059 pattern): the page is a client component, so
 // its title lives in the nearest server layout.
+//
+// `segmentTitle` rather than a plain string, because this segment now has a
+// titled route nested below it (the per-site plugin detail page). A layout
+// that sets a bare string carries no template of its own and consumes the
+// root's, so everything deeper renders unbranded — "accounts · Plugin"
+// instead of "accounts · Plugin · Aglyn".
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Admin · ${host}` }
+  return { title: segmentTitle(`Admin · ${host}`) }
 }
 
 export default function HostAdminTitleLayout({

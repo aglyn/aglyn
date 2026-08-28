@@ -1764,6 +1764,42 @@ service cloud.firestore {
            request.resource.data.diff(resource.data)
              .affectedKeys().hasOnly(['timeline', 'restockCheck']));
       }
+      // Per-site plugin settings (AGL-428, AGL-1014): the keys ONE site
+      // answers for itself, inheriting every other key from the org's
+      // `pluginSettings/{pluginId}`. Same access class as that org document,
+      // at host scope — any member of the site reads it, and only a site
+      // ADMIN writes it.
+      //
+      // READ is what the org twin grants: a member of the scope. It is
+      // deliberately no wider than the host doc's own read, so a settings
+      // document can never be readable by someone who cannot already read the
+      // site it configures. Readers coerce types defensively (the doc is
+      // admin-writable), so junk here can misconfigure only that plugin.
+      //
+      // WRITE is admin-only, matching `disabledPlugins`/`enabledPlugins` on
+      // the host document above rather than the catch-all's
+      // `canWriteHostContent`. Those keys decide WHETHER a plugin runs on this
+      // site and are already frozen against an editor; this decides what it
+      // runs WITH, which is the same administrative act one level in. An
+      // editor who could write here could not turn a plugin on, but could
+      // change what it does on a live site — a booking horizon, a discount
+      // ceiling — with no publish step in front of it.
+      //
+      // `hostWritesFrozen` carries the suspension arm that `orgNotSuspended()`
+      // carries on the org twin, and takes the host and platform arms with it:
+      // a suspended site must not keep reconfiguring what it serves.
+      //
+      // THE EXCLUSION LIST IS THE MECHANISM, not this block. Sibling matches
+      // are OR'd and the LOOSER allow wins, so `pluginSettings` is named in
+      // the catch-all's create, update and delete exclusions below and this is
+      // the re-grant — exactly the `webhooks`/`orders` shape. Without the
+      // exclusions this block would narrow nothing and every editor and author
+      // on the site would keep the catch-all's write.
+      match /pluginSettings/{pluginId} {
+        allow read: if isStaff() || isHostAdmin(hostId);
+        allow write: if isStaff() ||
+          (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
+      }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc
       // itself too — which would let editors delete the host through
@@ -2055,7 +2091,7 @@ service cloud.firestore {
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'formSubmissions', 'actions',
-              'authors', 'carts', 'memberPosts',
+              'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds']));
         // `stockHolds` joins all THREE lists (AGL-2356). It is the release
@@ -2162,7 +2198,7 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
-              'webhooks', 'memberPosts', 'redirects',
+              'webhooks', 'memberPosts', 'redirects', 'pluginSettings',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
@@ -2208,7 +2244,7 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
-              'counters', 'memberPosts', 'redirects',
+              'counters', 'memberPosts', 'redirects', 'pluginSettings',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',

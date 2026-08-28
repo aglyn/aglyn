@@ -19,6 +19,7 @@ import {
   getPluginConfigSchema,
   isPluginRevoked,
   mergePluginConfig,
+  resolvePluginConfig,
   type PluginRevocation,
   type RealmPluginInstall,
 } from '@aglyn/aglyn/server'
@@ -27,33 +28,72 @@ import { resolveOrgIdForHost } from './organizations'
 import { tenantDataTag, withRenderCache } from '../render-cache'
 
 /**
- * Server-side plugin config read (AGL-428): the org's stored overrides
- * merged over the plugin's declared defaults (type-coerced — the doc is
- * manager-writable). Without a registered schema the raw doc (or {})
- * comes back, so handlers degrade to their own fallbacks.
+ * One `pluginSettings` document, or `undefined` if it cannot be read.
+ *
+ * A failed read degrades to "no answer at this level" rather than throwing,
+ * so a transient Firestore error costs a handler its overrides and not its
+ * request. The caller layers what comes back, so a missing site document and
+ * a missing site override are the same thing to it.
  */
-export async function getPluginConfig(
-  orgId: string | null | undefined,
+async function readPluginSettings(
+  scope: 'orgs' | 'hosts',
+  scopeId: string,
   pluginId: string,
-): Promise<Record<string, unknown>> {
-  const schema = getPluginConfigSchema(pluginId)
-  if (!orgId) return schema ? mergePluginConfig(schema, null) : {}
-  let stored: Record<string, unknown> | undefined
+): Promise<Record<string, unknown> | undefined> {
   try {
-    stored = (
+    return (
       await firebaseAdmin
         .app()
         .firestore()
-        .collection('orgs')
-        .doc(orgId)
+        .collection(scope)
+        .doc(scopeId)
         .collection('pluginSettings')
         .doc(pluginId)
         .get()
     ).data()
   } catch {
-    stored = undefined
+    return undefined
   }
-  return schema ? mergePluginConfig(schema, stored) : (stored ?? {})
+}
+
+/**
+ * Server-side plugin config read (AGL-428): the stored overrides merged over
+ * the plugin's declared defaults (type-coerced — the docs are
+ * manager-writable). Without a registered schema the raw doc (or {}) comes
+ * back, so handlers degrade to their own fallbacks.
+ *
+ * `hostId` resolves the SITE's answer on top of the workspace's (AGL-428,
+ * AGL-1014), and a handler that has one must pass it. A per-site setting the console can
+ * store and the server never reads is not a setting: the operator lowers the
+ * flagship branch's booking horizon, the console shows the number they typed,
+ * and `/api/bookings/slots` keeps offering the workspace's — a disagreement
+ * with no error and no surface that shows both sides.
+ *
+ * The site read is CONDITIONAL on being handed a host, so a request with no
+ * site in scope pays nothing for a document that could not apply to it. It
+ * runs alongside the org read rather than after it: the two documents are
+ * independent, and sequencing them would put a second serial round trip on
+ * every request that resolves config.
+ */
+export async function getPluginConfig(
+  orgId: string | null | undefined,
+  pluginId: string,
+  options: { hostId?: string | null } = {},
+): Promise<Record<string, unknown>> {
+  const schema = getPluginConfigSchema(pluginId)
+  const hostId = options.hostId
+  if (!orgId && !hostId) return schema ? mergePluginConfig(schema, null) : {}
+  const [org, host] = await Promise.all([
+    orgId ? readPluginSettings('orgs', orgId, pluginId) : undefined,
+    hostId ? readPluginSettings('hosts', hostId, pluginId) : undefined,
+  ])
+  // Coercion happens once, at the end, inside `resolvePluginConfig` — a
+  // malformed site value falls back to the WORKSPACE value it was trying to
+  // replace rather than skipping past it to the schema default.
+  if (schema) return resolvePluginConfig(schema, { org, host })
+  // No schema: there is no field list to layer by, so the site document
+  // simply narrows the workspace's, key for key.
+  return { ...(org ?? {}), ...(host ?? {}) }
 }
 
 /**
