@@ -35,9 +35,18 @@
 import {
   apportionCents,
   orderLineRefundCents,
+  type OrderLineItem,
 } from './commerce-orders'
 
-const line = (unitAmountCents: number, quantity = 1) => ({
+/**
+ * A whole line, annotated so the compiler holds this double to the shape the
+ * order documents actually carry. The identity fields are immaterial to the
+ * arithmetic under test — it reads only `unitAmountCents` and `quantity` — but
+ * a double that cannot typecheck as a line is asserting against a shape no
+ * order ever has.
+ */
+const line = (unitAmountCents: number, quantity = 1): OrderLineItem => ({
+  productId: 'prod-item',
   name: 'item',
   quantity,
   unitAmountCents,

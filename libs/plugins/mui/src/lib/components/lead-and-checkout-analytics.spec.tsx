@@ -76,7 +76,7 @@ function renderForm(props: Record<string, unknown> = {}) {
   const utils = render(
     <Aglyn.SiteContext.Provider value={{ hostId: 'host-1' }}>
       <Form formName="Contact" {...props}>
-        <FormField name="message" label="Message" />
+        <FormField fieldName="message" label="Message" />
       </Form>
     </Aglyn.SiteContext.Provider>,
   )
