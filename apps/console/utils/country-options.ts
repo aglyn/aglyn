@@ -60,15 +60,21 @@ export interface CountryOption {
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-function buildCountryOptions(): CountryOption[] {
-  let regionNames: Intl.DisplayNames | null = null
+/** The region namer, or `null` on a runtime without full ICU. */
+function regionNamer(): Intl.DisplayNames | null {
   try {
-    regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
+    return new Intl.DisplayNames(['en'], { type: 'region' })
   } catch {
-    // A runtime without full ICU. An empty list is honest: the card falls
-    // back to a plain two-letter field rather than showing a broken picker.
-    return []
+    return null
   }
+}
+
+function buildCountryOptions(): CountryOption[] {
+  const regionNames = regionNamer()
+  // An empty list is honest on a runtime that cannot name regions: the card
+  // falls back to a plain two-letter field rather than showing a broken
+  // picker with nothing in it.
+  if (!regionNames) return []
   const options: CountryOption[] = []
   for (const first of ALPHABET) {
     for (const second of ALPHABET) {
