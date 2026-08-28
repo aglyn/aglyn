@@ -16,34 +16,25 @@
  */
 
 /**
- * The security-alert email's link still lands on Security (AGL-693).
+ * The security-alert email's button lands on Security (AGL-693).
  *
- * Manage Account's six panels became routes, and the general rule for that
- * conversion is that `?tab=` needs no compatibility map: the parameter existed
- * so a panel could be linked to, a route IS the link, and no customer holds an
- * old console URL yet.
+ * Manage Account's six panels are routes, and a route IS the link — the
+ * `?tab=` parameter that let a panel be linked to is gone, along with the
+ * compatibility map that forwarded it.
  *
- * This page is the exception, and the exception is a sent email.
- * `security-alerts.ts` mails a "Review account security" button on every
- * new-device sign-in, and it has been pointing at
- * `/manage/user?tab=security`. Those messages are in inboxes and cannot be
- * edited. The person opening one has just been told a stranger signed into
- * their account, and Recent sign-ins — with the button that revokes the
- * device — is the surface the whole message is about. Landing them on the
- * default section, or on a 404, is the failure this file exists to make
- * impossible to reintroduce quietly.
- *
- * The other five ids ride along because a map that forwards the emailed link
- * and silently drops its neighbours is a trap for whoever links to a section
- * next.
+ * What survives that removal is the risk the map was protecting against, and
+ * it never depended on the parameter: `security-alerts.ts` mails a "Review
+ * account security" button on every new-device sign-in, and the person opening
+ * one has just been told a stranger signed into their account. Recent sign-ins
+ * — with the button that revokes the device — is the surface the whole message
+ * is about. A hand-written path in that email is what goes dead without
+ * anything failing to compile, so this asserts the route it names is a real
+ * section and that the section list and the route table still agree.
  */
 
 import { act, render } from '@testing-library/react'
 import React from 'react'
-import {
-  ACCOUNT_SECTIONS,
-  accountSectionHrefForTab,
-} from '../constants/account-sections'
+import { ACCOUNT_SECTIONS } from '../constants/account-sections'
 import { buildRoute, Route } from '../constants/route-links'
 
 const mockReplace = jest.fn()
@@ -128,58 +119,54 @@ const arriveAt = async (Page: () => React.ReactElement | null, query: string) =>
   })
 }
 
-describe('the account sections keep the links people already hold (AGL-693)', () => {
+describe('the account sections and the links that name them (AGL-693)', () => {
   beforeEach(() => {
     mockReplace.mockClear()
     railSections = []
     mockUser = PASSWORD_ACCOUNT
   })
 
-  it('THE REGRESSION: the emailed ?tab=security link lands on Security', async () => {
-    // The exact URL `security-alerts.ts` has been mailing.
-    await arriveAt(ManageUserIndex, '?tab=security')
-    expect(mockReplace).toHaveBeenCalledWith('/manage/user/security')
-  })
-
-  it('sends the alert email to that same URL going forward', async () => {
-    // The two halves of the promise: the old link is forwarded, and the new
-    // link is what a message composed today carries. `security-alerts.spec.ts`
-    // asserts the send site itself emits this path.
+  it('THE REGRESSION: the alert email names a route that exists', async () => {
+    /*
+     * `security-alerts.ts` builds its button from `Route.MANAGE_USER_SECURITY`
+     * rather than a literal, and `security-alerts.spec.ts` asserts the send
+     * site emits this path. What this adds is the other half: that the path is
+     * a section the rail actually offers, so a renamed segment fails here
+     * instead of in somebody's inbox.
+     */
     expect(buildRoute(Route.MANAGE_USER_SECURITY)).toBe('/manage/user/security')
-    expect(accountSectionHrefForTab('security')).toBe('/manage/user/security')
+    expect(ACCOUNT_SECTIONS.map((section) => section.href)).toContain(
+      '/manage/user/security',
+    )
   })
 
-  it('forwards every id the panels carried, not just the emailed one', async () => {
-    const expected = {
+  it('lists every section under the segment its route builds', async () => {
+    // The rail and the route table are two spellings of the same six paths.
+    // One drifting from the other is a section listed under a name that opens
+    // something else.
+    expect(
+      Object.fromEntries(
+        ACCOUNT_SECTIONS.map((section) => [section.id, section.href]),
+      ),
+    ).toEqual({
       account: '/manage/user/account',
       emails: '/manage/user/emails',
       profile: '/manage/user/profile',
       basic: '/manage/user/basic',
       security: '/manage/user/security',
       close: '/manage/user/close',
-    }
-    // Both directions. The literal map is the deep link a reader may hold;
-    // the section list is what the rail draws — an id in one and not the other
-    // is a section listed under a name nothing forwards to.
-    expect(
-      Object.fromEntries(
-        ACCOUNT_SECTIONS.map((section) => [section.id, section.href]),
-      ),
-    ).toEqual(expected)
-    for (const [id, href] of Object.entries(expected)) {
-      mockReplace.mockClear()
-      await arriveAt(ManageUserIndex, `?tab=${id}`)
-      expect(mockReplace).toHaveBeenCalledWith(href)
-    }
+    })
   })
 
-  it('lands a retired or mistyped id on the account, not on nothing', async () => {
-    await arriveAt(ManageUserIndex, '?tab=notasection')
+  it('opens the account from the bare index', async () => {
+    await arriveAt(ManageUserIndex, '')
     expect(mockReplace).toHaveBeenCalledWith('/manage/user/account')
   })
 
-  it('opens the account when no section is named', async () => {
-    await arriveAt(ManageUserIndex, '')
+  it('still opens the account when a stale query rides along', async () => {
+    // THE CONTROL for the removal: a leftover `?tab=` is now just a query
+    // string the index ignores. It must not 404 and must not be read.
+    await arriveAt(ManageUserIndex, '?tab=security')
     expect(mockReplace).toHaveBeenCalledWith('/manage/user/account')
   })
 })

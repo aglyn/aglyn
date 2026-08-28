@@ -233,23 +233,21 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
   })
 
   /**
-   * Manage Account is the ONE routed index that keeps a map, and it is not an
-   * exception to the reasoning above — it is the case the reasoning turns on.
+   * The routed indexes read no parameter at all.
    *
-   * "Nothing shipped holds an old link" is true of settings and site admin and
-   * false here: `security-alerts.ts` has been mailing
-   * `/manage/user?tab=security` on every new-device sign-in, those messages sit
-   * in inboxes, and they cannot be edited. The reader opening one has just been
-   * told a stranger reached their account.
+   * Manage Account was the last one that did. It kept a `?tab=` map for a
+   * single reason — `security-alerts.ts` had been mailing
+   * `/manage/user?tab=security` and a delivered message cannot be edited — and
+   * pre-release there are no such messages, so the map went with the rest.
    *
-   * What the map may NOT become is a second reader of the parameter with its
-   * own opinion — the failure this whole suite exists for. It resolves through
-   * `constants/account-sections.ts`, which is also what draws the rail, so the
-   * ids it forwards and the sections that exist are one list.
+   * Asserted as an ABSENCE rather than left untested: a routed index that
+   * grows a second reader of the parameter is the exact failure this suite
+   * exists for, and it would look like a helpful convenience while it did it.
    */
-  it('the account index forwards ?tab= through the sections list', () => {
+  it('the account index redirects without reading a parameter', () => {
     const source = read('app', '(app)', 'manage', 'user', 'page.tsx')
-    expect(source).toContain('accountSectionHrefForTab')
     expect(source).toContain('router.replace')
+    expect(source).not.toContain('useSearchParams')
+    expect(source).not.toContain("'tab'")
   })
 })

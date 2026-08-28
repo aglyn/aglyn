@@ -21,6 +21,7 @@ import {
   readRequestGeo,
   readRequestRegionLabel,
 } from '@aglyn/aglyn/app-utils/request-geo'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
@@ -110,10 +111,8 @@ export const DEVICE_SCAN_LIMIT = 50
  * revoke) lives under Security, so the link names it.
  *
  * From the route table rather than assembled here (AGL-685/693): Security is a
- * route now, and a hand-written path is what goes dead without anything
- * failing to compile. Every alert already delivered carries the previous
- * spelling, `/manage/user?tab=security`, and `/manage/user` still forwards
- * that id to this URL — see `constants/account-sections.ts`.
+ * route, and a hand-written path is what goes dead without anything failing to
+ * compile.
  */
 function accountSecurityUrl(): string {
   const origin = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
@@ -196,10 +195,12 @@ export function describeSignInClient(headers: {
     ]
       .filter(Boolean)
       .join(', ') || 'Unknown location'
-  const ip =
-    (headers.get('x-forwarded-for') ?? '').split(',')[0].trim() ||
-    headers.get('x-real-ip') ||
-    'Unknown'
+  // The one client-address reader, so the address in a person's alert email is
+  // the address the sanctions gate and every limiter saw. `'Unknown'` only
+  // when nothing readable arrived: this string is stored on the device record
+  // and read back by the breach-notification report, so a guess here becomes a
+  // durable claim about where somebody signed in from.
+  const ip = readClientIp(headers) ?? 'Unknown'
   return { deviceName: summarizeUserAgent(userAgent), userAgent, location, ip }
 }
 

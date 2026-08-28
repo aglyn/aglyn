@@ -18,11 +18,7 @@
 import { buildRoute, Route } from './route-links'
 
 export interface AccountSection {
-  /**
-   * The id this section carried as a `?tab=` panel, and its URL segment.
-   *
-   * The two are the same string on purpose — see `accountSectionHrefForTab`.
-   */
+  /** The section's URL segment, and the key the rail and specs match on. */
   id: 'account' | 'emails' | 'profile' | 'basic' | 'security' | 'close'
   label: string
   href: string
@@ -31,11 +27,10 @@ export interface AccountSection {
 /**
  * Manage Account's sections, in rail order (AGL-693).
  *
- * One list, read by three callers that must agree: the sections layout draws
- * the rail from it, the `/manage/user` index forwards an old `?tab=` link
- * through it, and the spec that guards the security-alert email checks it.
- * Three hand-written copies of six labels is how a section comes to be listed
- * under one name and linked under another.
+ * One list, read by the callers that must agree: the sections layout draws
+ * the rail from it, and the spec that guards the security-alert link checks
+ * it. Three hand-written copies of six labels is how a section comes to be
+ * listed under one name and linked under another.
  *
  * Close account is last and separate, as it was as a tab: an irreversible
  * control should not sit one mis-click below a password field somebody is
@@ -82,27 +77,3 @@ export const ACCOUNT_SECTIONS: readonly AccountSection[] = [
 
 /** Where `/manage/user` lands when nothing names a section. */
 export const DEFAULT_ACCOUNT_SECTION_HREF = ACCOUNT_SECTIONS[0].href
-
-/**
- * An old `?tab=` id → the section route that holds it now, or null.
- *
- * ## Why this map exists when the settings and admin conversions dropped theirs
- *
- * A transactional email already in people's inboxes links
- * `/manage/user?tab=security`. `security-alerts.ts` sends it when a new device
- * signs in, it cannot be edited once delivered, and the person opening it has
- * just been told a stranger reached their account — landing them on the
- * default section, or on nothing, is the one case where "there are no shipped
- * customers holding old links" is false and the cost of being wrong is
- * highest. `account-section-links.spec.tsx` is what stops this being deleted
- * as dead weight.
- *
- * Unknown ids resolve to null and the index falls back to the default
- * section, so a typo or a retired id lands somewhere real.
- */
-export function accountSectionHrefForTab(
-  tab: string | null | undefined,
-): string | null {
-  if (!tab) return null
-  return ACCOUNT_SECTIONS.find((section) => section.id === tab)?.href ?? null
-}
