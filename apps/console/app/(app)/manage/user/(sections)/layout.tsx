@@ -19,7 +19,10 @@
 
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
-import { HubSections } from '@aglyn/shared-ui-next/components/hub-tabs'
+import {
+  HubSections,
+  useActiveSection,
+} from '@aglyn/shared-ui-next/components/hub-tabs'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import { ACCOUNT_SECTIONS } from '../../../../../constants/account-sections'
@@ -44,6 +47,31 @@ export default function AccountSectionsLayout({
   children: ReactNode
 }) {
   const { securityApplies } = useAccountSignInMethods()
+  /*
+   * One list, read twice — by the rail and by the breadcrumb. Hoisted so
+   * `useActiveSection` resolves against the same array the rail highlights: a
+   * section added here is named in the trail by construction, rather than by
+   * somebody remembering a second copy.
+   */
+  const sections = ACCOUNT_SECTIONS.map((section) => ({
+    href: section.href,
+    label: section.label,
+    /*
+     * Security is conditional (AGL-662), and only Security is.
+     *
+     * It needs a password to change or passkeys to manage, and an
+     * SSO-governed account with no password has neither — passkeys are
+     * project-pool only and the customer's IdP owns the credentials.
+     * Offering a section that will immediately redirect is the same
+     * dead end the old tab had, moved into the URL bar.
+     *
+     * The route guards itself on the same answer rather than trusting
+     * this, so typing the URL is refused as well as unlisted.
+     */
+    visible: section.id === 'security' ? securityApplies : undefined,
+  }))
+  const active = useActiveSection(sections)
+
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -51,6 +79,9 @@ export default function AccountSectionsLayout({
           children: 'Manage Account',
           href: buildRoute(Route.MANAGE_USER_SETTINGS),
         },
+        // The section the reader is actually on. Without it the trail names
+        // every level except theirs — the one that says where they are.
+        ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
       help="account"
       header={{
@@ -59,27 +90,7 @@ export default function AccountSectionsLayout({
       }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <HubSections
-          sections={ACCOUNT_SECTIONS.map((section) => ({
-            href: section.href,
-            label: section.label,
-            /*
-             * Security is conditional (AGL-662), and only Security is.
-             *
-             * It needs a password to change or passkeys to manage, and an
-             * SSO-governed account with no password has neither — passkeys are
-             * project-pool only and the customer's IdP owns the credentials.
-             * Offering a section that will immediately redirect is the same
-             * dead end the old tab had, moved into the URL bar.
-             *
-             * The route guards itself on the same answer rather than trusting
-             * this, so typing the URL is refused as well as unlisted.
-             */
-            visible: section.id === 'security' ? securityApplies : undefined,
-          }))}
-        >
-          {children}
-        </HubSections>
+        <HubSections sections={sections}>{children}</HubSections>
       </Container>
     </DashboardLayout>
   )

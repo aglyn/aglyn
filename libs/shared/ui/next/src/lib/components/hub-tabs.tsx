@@ -230,23 +230,43 @@ export interface HubSectionsProps {
  * match first so a nested section beats its parent. The separator boundary is
  * what stops `/settings` claiming `/settings-export`.
  */
+/**
+ * The section the current URL is inside, or `null` when none matches.
+ *
+ * Exported because the RAIL is not the only thing that has to know. A hub's
+ * breadcrumb ends at the hub — "Site / Admin" — while the reader is looking at
+ * Plugins, so the trail names every level except the one they are on. Feeding
+ * both from one resolver is what stops the two disagreeing: a section added to
+ * the rail is in the breadcrumb by construction, rather than by somebody
+ * remembering a second list.
+ *
+ * Matching is by PREFIX so a section stays selected on its own deeper routes,
+ * longest match first so a nested section beats its parent, and on a separator
+ * boundary so `/settings` cannot claim `/settings-export`.
+ */
+export function useActiveSection(
+  sections: readonly HubSection[],
+): HubSection | null {
+  const pathname = usePathname()
+  return useMemo(() => {
+    const onPath = (href: string) =>
+      pathname === href || pathname.startsWith(`${href}/`)
+    return (
+      [...sections]
+        .filter((section) => section.visible !== false && onPath(section.href))
+        .sort((a, b) => b.href.length - a.href.length)[0] ?? null
+    )
+  }, [pathname, sections])
+}
+
 export function HubSections(props: HubSectionsProps) {
   const { sections, children, navHeader = 'Navigation' } = props
   const { tabsProps } = useRailLayout()
-  const pathname = usePathname()
   const shown = useMemo(
     () => sections.filter((section) => section.visible !== false),
     [sections],
   )
-  const activeHref = useMemo(() => {
-    const onPath = (href: string) =>
-      pathname === href || pathname.startsWith(`${href}/`)
-    return (
-      [...shown]
-        .filter((section) => onPath(section.href))
-        .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null
-    )
-  }, [pathname, shown])
+  const activeHref = useActiveSection(sections)?.href ?? null
 
   return (
     <GridItems

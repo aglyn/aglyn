@@ -19,7 +19,10 @@
 
 import { mdiAccountMultipleOutline } from '@aglyn/shared-data-mdi'
 import { Container } from '@aglyn/shared-ui-jsx'
-import { HubSections } from '@aglyn/shared-ui-next/components/hub-tabs'
+import {
+  HubSections,
+  useActiveSection,
+} from '@aglyn/shared-ui-next/components/hub-tabs'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
@@ -39,13 +42,52 @@ import type { ReactNode } from 'react'
  * that the section they are on is in the URL — linkable, back-buttonable, and
  * the source of its own active state.
  */
-export default function TeamSectionsLayout({ children }: { children: ReactNode }) {
+export default function TeamSectionsLayout({
+  children,
+}: {
+  children: ReactNode
+}) {
   const orgSlug = useOrgSlug()
   const { can, loaded: permissionsLoaded } = useOrgPermissions()
+  /*
+   * One list, read twice — by the rail and by the breadcrumb. Hoisted so
+   * `useActiveSection` resolves against the same array the rail highlights: a
+   * section added here is named in the trail by construction, rather than by
+   * somebody remembering a second copy.
+   */
+  const sections = [
+    {
+      href: buildRoute(Route.MANAGE_TEAM_MEMBERS, { orgSlug }),
+      label: 'Members',
+    },
+    {
+      href: buildRoute(Route.MANAGE_TEAM_ROLES, { orgSlug }),
+      label: 'Custom roles',
+    },
+    {
+      href: buildRoute(Route.MANAGE_TEAM_ACTIVITY, { orgSlug }),
+      /*
+       * Permission-gated (AGL-243, `org.auditLog`).
+       *
+       * `permissionsLoaded &&`, never `!permissionsLoaded ||`. The
+       * second spelling offers the section BECAUSE the permission read
+       * has not landed — an opt-in to failing open on the one section
+       * carrying other people's data. Hiding the item is not the gate
+       * either; the route gates itself.
+       */
+      visible: permissionsLoaded && can('org.auditLog'),
+      label: 'Recent activity',
+    },
+  ]
+  const active = useActiveSection(sections)
+
   return (
     <DashboardLayout
       breadcrumbItems={[
         { children: 'Team', href: buildRoute(Route.MANAGE_TEAM, { orgSlug }) },
+        // The section the reader is actually on. Without it the trail names
+        // every level except theirs — the one that says where they are.
+        ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
       help="team"
       header={{
@@ -54,34 +96,7 @@ export default function TeamSectionsLayout({ children }: { children: ReactNode }
       }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <HubSections
-          sections={[
-            {
-              href: buildRoute(Route.MANAGE_TEAM_MEMBERS, { orgSlug }),
-              label: 'Members',
-            },
-            {
-              href: buildRoute(Route.MANAGE_TEAM_ROLES, { orgSlug }),
-              label: 'Custom roles',
-            },
-            {
-              href: buildRoute(Route.MANAGE_TEAM_ACTIVITY, { orgSlug }),
-              /*
-               * Permission-gated (AGL-243, `org.auditLog`).
-               *
-               * `permissionsLoaded &&`, never `!permissionsLoaded ||`. The
-               * second spelling offers the section BECAUSE the permission read
-               * has not landed — an opt-in to failing open on the one section
-               * carrying other people's data. Hiding the item is not the gate
-               * either; the route gates itself.
-               */
-              visible: permissionsLoaded && can('org.auditLog'),
-              label: 'Recent activity',
-            },
-          ]}
-        >
-          {children}
-        </HubSections>
+        <HubSections sections={sections}>{children}</HubSections>
       </Container>
     </DashboardLayout>
   )

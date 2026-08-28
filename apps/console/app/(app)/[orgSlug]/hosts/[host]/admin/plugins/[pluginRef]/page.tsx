@@ -165,6 +165,15 @@ const SitePluginInstallation: NextPageWithLayout<Record<string, never>> = () => 
           children: <HostDisplayNameComponent hostId={hostId} />,
           href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
         },
+        // Admin, then Plugins. This page sits outside the admin `(sections)`
+        // group so it can own its header, and it inherited none of that
+        // group's trail with it — so the crumb jumped from the site straight
+        // to Plugins, skipping the level a reader would click to get back to
+        // the other admin sections.
+        {
+          children: 'Admin',
+          href: buildRoute(Route.HOST_ADMIN, { orgSlug, host }),
+        },
         {
           children: 'Plugins',
           href: buildRoute(Route.HOST_ADMIN_PLUGINS, { orgSlug, host }),

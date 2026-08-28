@@ -20,7 +20,10 @@
 import { canManageOrg } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
-import { HubSections } from '@aglyn/shared-ui-next/components/hub-tabs'
+import {
+  HubSections,
+  useActiveSection,
+} from '@aglyn/shared-ui-next/components/hub-tabs'
 import { Box, CircularProgress } from '@mui/material'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
@@ -56,6 +59,28 @@ export default function SettingsSectionsLayout({
     visible,
   })
 
+  /*
+   * One list, read twice — by the rail and by the breadcrumb. Hoisted so
+   * `useActiveSection` resolves against the same array the rail highlights: a
+   * section added here is named in the trail by construction, rather than by
+   * somebody remembering a second copy.
+   */
+  const sections = [
+    section(Route.ORG_SETTINGS_GENERAL, 'General'),
+    section(Route.ORG_SETTINGS_PROFILE, 'Profile', canManage),
+    section(Route.ORG_SETTINGS_PLUGINS, 'Plugins', canManage),
+    section(Route.ORG_SETTINGS_API_KEYS, 'API keys', canManage),
+    section(Route.ORG_SETTINGS_BRANDING, 'Branding', canManage),
+    // Shown to every admin, not only entitled orgs (AGL-1210): the
+    // unentitled state explains that SSO comes with Enterprise and
+    // that setup is self-serve once there. Hiding it would leave
+    // "can I do SSO?" unanswerable from inside the product.
+    section(Route.ORG_SETTINGS_SSO, 'Single sign-on', canManage),
+    section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
+    section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
+  ]
+  const active = useActiveSection(sections)
+
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -63,6 +88,9 @@ export default function SettingsSectionsLayout({
           children: 'Settings',
           href: buildRoute(Route.ORG_SETTINGS, { orgSlug }),
         },
+        // The section the reader is actually on. Without it the trail names
+        // every level except theirs — the one that says where they are.
+        ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
       help={{
         topic: 'consoleTour',
@@ -88,24 +116,7 @@ export default function SettingsSectionsLayout({
             <CircularProgress size={24} />
           </Box>
         ) : (
-          <HubSections
-            sections={[
-              section(Route.ORG_SETTINGS_GENERAL, 'General'),
-              section(Route.ORG_SETTINGS_PROFILE, 'Profile', canManage),
-              section(Route.ORG_SETTINGS_PLUGINS, 'Plugins', canManage),
-              section(Route.ORG_SETTINGS_API_KEYS, 'API keys', canManage),
-              section(Route.ORG_SETTINGS_BRANDING, 'Branding', canManage),
-              // Shown to every admin, not only entitled orgs (AGL-1210): the
-              // unentitled state explains that SSO comes with Enterprise and
-              // that setup is self-serve once there. Hiding it would leave
-              // "can I do SSO?" unanswerable from inside the product.
-              section(Route.ORG_SETTINGS_SSO, 'Single sign-on', canManage),
-              section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
-              section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
-            ]}
-          >
-            {children}
-          </HubSections>
+          <HubSections sections={sections}>{children}</HubSections>
         )}
         <PluginWidgetSlot slot="org.settings" />
       </Container>

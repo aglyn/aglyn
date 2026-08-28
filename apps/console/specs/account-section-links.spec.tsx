@@ -81,6 +81,14 @@ jest.mock('../components/layouts/dashboard.layout', () => ({
 
 /** What the rail was handed, captured instead of drawn. */
 let railSections: Array<{ href: string; label: string; visible?: boolean }> = []
+/*
+ * Both exports the layout takes from this module, not just the one this suite
+ * asserts on. A partial mock returns `undefined` for the rest, and the layout
+ * calling it renders as "is not a function" — which points at the layout
+ * rather than at the mock, and only appears the day the layout imports one
+ * more thing. `useActiveSection` feeds the breadcrumb, which this file does
+ * not test, so a null answer is the honest stub.
+ */
 jest.mock('@aglyn/shared-ui-next/components/hub-tabs', () => ({
   HubSections: (props: {
     sections: Array<{ href: string; label: string; visible?: boolean }>
@@ -89,6 +97,7 @@ jest.mock('@aglyn/shared-ui-next/components/hub-tabs', () => ({
     railSections = props.sections
     return <div>{props.children}</div>
   },
+  useActiveSection: () => null,
 }))
 
 const ManageUserIndex = require('../app/(app)/manage/user/page').default
