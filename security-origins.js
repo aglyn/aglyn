@@ -537,6 +537,29 @@ const SCRIPT_ORIGINS = [
   // `img-src` report and is a question about ad-network beacons in a logged-in
   // console rather than an allowlist entry (see `imgSrcDirective`).
   'https://www.googletagmanager.com',
+  /*
+   * The console's own advertising tags
+   * (`apps/console/components/advertising-tags.component.tsx`).
+   *
+   * Scripts we deliberately ship, so they belong in the candidate policy for
+   * the same reason the gtag loader above does — and the distinction that
+   * comment draws still holds: a gtag *pixel* arrives as an `img-src` report
+   * and is a question about ad-network beacons in a logged-in console, not an
+   * allowlist entry here.
+   *
+   * Two of these are already covered by `www.googletagmanager.com`: the Google
+   * Ads tag rides the same `gtag/js` library, and a Tag Manager container is
+   * `gtm.js` on that host. Only the non-Google vendors need naming.
+   *
+   * Listed AHEAD of a violation report rather than after one, which is the
+   * exception to this file's rule that the browser names what belongs here.
+   * The rule exists so the list documents facts instead of guesses; a loader
+   * this repository mounts is a fact. Leaving them out would fill the
+   * report-only stream with violations for scripts we chose to ship, and would
+   * silently kill both tags on the day `script-src` is flipped to enforcing.
+   */
+  'https://connect.facebook.net',
+  'https://snap.licdn.com',
   // Google Sign-In. `signInWithPopup` loads gapi from here for the federated
   // flows, which is why the reports cluster on `/signin` — 37 of them in the
   // first fortnight of measurement, every one a script we deliberately ship.
