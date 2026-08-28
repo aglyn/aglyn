@@ -307,6 +307,53 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // figures is exactly the readout an operator would use to decide whether
   // to refund again.
   const [billingNonce, setBillingNonce] = useState(0)
+  const [portalBusy, setPortalBusy] = useState(false)
+  /**
+   * Open this organization's Stripe Billing Portal, for support.
+   *
+   * The portal is not a customer surface: the console owns payment methods,
+   * invoices and the plan switch in its own design, and sending a customer
+   * out to a second product to do what this app already does is the wart it
+   * exists here to avoid. What the portal still holds is Stripe's own view of
+   * a customer — the raw payment-method state, the dunning attempts, the tax
+   * ids as Stripe recorded them — which is exactly what someone diagnosing a
+   * billing complaint needs and cannot reconstruct from our mirrors.
+   *
+   * So it lives HERE, on the staff org page, behind `StaffOnly`. The route's
+   * `portal` action already admits staff on any org without an org membership
+   * (`isStaff` short-circuits the `billing.manage` check), so this needs no
+   * new authority — only somewhere to press.
+   *
+   * A new tab, not `location.assign`: this page is the operator's place in an
+   * investigation, and navigating it away to Stripe loses the org they were
+   * reading.
+   */
+  const handleOpenStripePortal = useCallback(async () => {
+    if (portalBusy) return
+    setPortalBusy(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/billing/subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ orgId, action: 'portal' }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.url) {
+        enqueueSnackbar(
+          payload?.error ?? 'Could not open the Stripe billing portal.',
+          { variant: 'warning', persist: false },
+        )
+        return
+      }
+      window.open(String(payload.url), '_blank', 'noopener,noreferrer')
+    } finally {
+      setPortalBusy(false)
+    }
+  }, [orgId, user, portalBusy, enqueueSnackbar])
   useEffect(() => {
     if (!isStaff || !orgId || !user) return
     let active = true
@@ -1578,6 +1625,23 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           )}
                         </Stack>
                       )}
+                      {/*
+                        Outside the load conditional on purpose. The states
+                        that hide the table — Stripe unreachable, the customer
+                        invisible to this deployment's key — are the states an
+                        operator most needs Stripe's own view to explain, so a
+                        button that disappears exactly then is a button that is
+                        missing when it counts.
+                      */}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={portalBusy}
+                        sx={{ mt: 1.5 }}
+                        onClick={() => void handleOpenStripePortal()}
+                      >
+                        {'Open Stripe billing portal'}
+                      </Button>
                     </CardDisplay>
                   ),
                 },
