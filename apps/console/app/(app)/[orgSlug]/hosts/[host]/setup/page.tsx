@@ -41,13 +41,7 @@ import { InputAdornment, Stack, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import { deleteField } from 'firebase/firestore'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
 import HostActivityTable from '../../../../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -1021,32 +1015,75 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
         // The form keeps its values, so the author can retry after reloading
         // rather than discovering later that nothing was stored.
         enqueueSnackbar(verdict.message, { variant: 'warning' })
+        return false
       }
+      return true
     },
     [queueLoading, runBasicSave, status, hostFromCache, enqueueSnackbar],
   )
 
+  /**
+   * Half-typed values, per tab, so changing tab does not discard them.
+   *
+   * `TabPanel` renders `(keepMounted || value === context.value) && children`,
+   * and this page passes no `keepMounted` — so the inactive panel is UNMOUNTED
+   * and takes its form state with it. Typing into Display name, switching to
+   * SEO and switching back lost the edit, with the card reading "UP TO DATE"
+   * afterwards so that nothing on screen said anything had gone.
+   *
+   * `keepMounted` is the one-line answer and it is the wrong one: it would
+   * mount every tab's cards at once — the logo card, the contact cards, the
+   * theme cards — and every read behind them, on a page where four of the five
+   * tabs are not being looked at. So the draft is hoisted above the panel
+   * instead and the unmount is kept. This costs no reads: a ref holds values
+   * that are already in memory, mounts nothing and subscribes nothing.
+   *
+   * A REF rather than state, and that is load-bearing twice over. It is
+   * written on every keystroke, so state would re-render the whole page each
+   * time; and a re-render that changed `SeoFormTemplate`'s identity would
+   * remount the form and blow away the very input being typed into — the trap
+   * its own `useMemo` was added for.
+   */
+  const draftsRef = useRef<Record<string, Record<string, unknown>>>({})
+
+  /** Seed a tab from its draft when it has one, else from the host doc. */
+  const seedFor = (schemaId: string) => draftsRef.current[schemaId] ?? data
+
+  /**
+   * Retire a draft once its values are SAVED. Without this a reader who saved
+   * and came back would keep being shown the draft — a stale copy of what they
+   * had already committed, indistinguishable from an edit still pending.
+   */
+  const saveAndClearDraft = async (
+    schemaId: string,
+    fields: any,
+    clearable?: readonly string[],
+  ) => {
+    const saved = await handleBasicSave(fields, clearable)
+    if (saved) delete draftsRef.current[schemaId]
+  }
+
   const forms = [
     {
       schema: basicSchema,
-      initialValues: data,
+      initialValues: seedFor(basicSchema.id),
       // Wrapped, never passed by reference: the renderer calls
       // `onSubmit(values, formApi, callback)`, and a bare handler would take
       // the form API as its `clearable` argument.
-      onSubmit: (fields: any) => handleBasicSave(fields),
+      onSubmit: (fields: any) => saveAndClearDraft(basicSchema.id, fields),
     },
     {
       schema: seoSchema,
-      initialValues: data,
-      onSubmit: (fields: any) => handleBasicSave(fields),
+      initialValues: seedFor(seoSchema.id),
+      onSubmit: (fields: any) => saveAndClearDraft(seoSchema.id, fields),
     },
     {
       schema: trackingSchema,
-      initialValues: data,
+      initialValues: seedFor(trackingSchema.id),
       // The only form that owns the tracking ids, so the only one entitled to
       // read their absence as "cleared".
       onSubmit: (fields: any) =>
-        handleBasicSave(fields, CLEARABLE_TRACKING_PATHS),
+        saveAndClearDraft(trackingSchema.id, fields, CLEARABLE_TRACKING_PATHS),
     },
   ]
 
@@ -1186,6 +1223,26 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                           onSubmit={onSubmit}
                           schema={schema}
                           initialValues={initialValues}
+                          /*
+                            `react-final-form`'s hook for watching state
+                            without subscribing a component to it — the
+                            renderer forwards unrecognised props to the form.
+                            Writing to a ref here is why a keystroke does not
+                            re-render the page.
+
+                            `dirty` gates it so an untouched form never shadows
+                            the host doc: without that, merely opening a tab
+                            would pin its pristine values and a later snapshot
+                            could not seed it.
+                          */
+                          debug={(state: {
+                            values: Record<string, unknown>
+                            dirty: boolean
+                          }) => {
+                            if (state.dirty) {
+                              draftsRef.current[schema.id] = state.values
+                            }
+                          }}
                         />
 
                         {schema.id === 'hostDetails' ? (
