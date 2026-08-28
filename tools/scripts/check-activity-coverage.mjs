@@ -134,10 +134,6 @@ const NOT_LOGGED = {
   'apps/console/app/api/orgs/create/route.ts':
     'Delegates to `createOrganization`, which writes the entry. Logging here ' +
     'too would put two rows on one act, and the route is not the only caller.',
-  'apps/console/app/api/hosts/versions/route.ts':
-    'A resource and its FIRST version are one act — /api/hosts/resources ' +
-    'already recorded it. A later version is a save, logged by the surface ' +
-    'that performs it. A row here would be an invented second event.',
   'apps/console/app/api/hosts/import/route.ts':
     'Writes its own `Restored site from export (N documents)` entry directly ' +
     'with the Admin SDK rather than through the helper.',
@@ -177,7 +173,7 @@ const NOT_LOGGED = {
 }
 
 /** How many exclusions are allowed. It may fall; it may not rise. */
-const RATCHET = 6
+const RATCHET = 5
 
 const read = (relative) => {
   const path = `${repoRoot}${relative}`

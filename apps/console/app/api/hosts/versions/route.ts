@@ -23,6 +23,7 @@ import {
   getOrgForHost,
   isImpersonationSession,
   lockdownJsonResponse,
+  logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 
@@ -249,12 +250,48 @@ async function handler(request: Request): Promise<Response> {
       // attributed later without guessing.
       createdBy: decoded.uid,
     })
-    // Deliberately NOT logged to the site activity feed. A page built from a
-    // template writes its screen, its first version and its route as ONE act,
-    // and /api/hosts/resources already recorded it — a second row here would
-    // be an invented event that makes the timeline look busier than the work
-    // was. A LATER version is a save, and saves are logged by the surface
-    // that performs them.
+    /*==========================================
+     * THE COUNT THAT GATES THE ENTITLEMENT ALSO NAMES THE EVENT (AGL-118).
+     *
+     * This route creates version documents for two different acts and only
+     * one of them is an event:
+     *
+     *  - `existing.empty` — the resource's FIRST version, minted as part of
+     *    creating the resource. A page built from a template writes its
+     *    screen, its first version and its route as ONE act, and
+     *    /api/hosts/resources has already recorded it. A row here would be an
+     *    invented second event, and on a template that seeds a dozen screens
+     *    it would double a feed that is read to see what somebody did.
+     *
+     *  - otherwise — a RETAINED version. This is the Pro restore point:
+     *    somebody opened the versions panel, named a snapshot, and now has
+     *    history they did not have before. Nothing logged it, on either side
+     *    of the wire — the besigner's panel never called the client logger,
+     *    so the one act on this route a person deliberately performs was the
+     *    one act with no record at all.
+     *
+     * `existing` is already read above as the entitlement gate, so the
+     * discriminator costs nothing and cannot drift away from the thing it
+     * describes: whatever counts as "more than one version" for billing is
+     * exactly what counts as a retained version here.
+     *
+     * After the `create()`, which throws ALREADY_EXISTS into the 409 below —
+     * a row written first would claim a version that does not exist.
+     *=========================================*/
+    if (!existing.empty) {
+      const label = payload['displayName']
+      await logHostActivity(
+        hostId,
+        { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+        `Created a version of the ${kind}`,
+        {
+          type: kind as 'screen' | 'layout' | 'component',
+          id: parentId,
+          versionId: id,
+          ...(typeof label === 'string' && label ? { name: label } : {}),
+        },
+      )
+    }
 
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {
