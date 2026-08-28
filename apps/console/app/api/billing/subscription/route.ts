@@ -219,8 +219,10 @@ async function activeSubscription(
  * Subscription management (AGL-269), billing.manage-gated:
  * - `cancel`   → cancel_at_period_end (plan runs out at renewal)
  * - `resume`   → clears a pending cancelation
- * - `preview`  → prorated amount for switching to another plan today,
- *   via Stripe's upcoming-invoice preview
+ * - `preview`  → what switching plan costs, via Stripe's upcoming-invoice
+ *   preview. `prorationCents` is the cost of the change and rides the NEXT
+ *   invoice (`create_prorations` bills nothing today); `amountDueCents` is
+ *   that whole invoice, next period's recurring charge included.
  * - `switch`   → UP the ladder: updates the subscription item to the
  *   target plan's price with prorations, today (an existing subscription
  *   never goes through Checkout again); per-plan add-on items re-price to
@@ -824,6 +826,10 @@ async function handler(request: Request): Promise<Response> {
       // not to offer.
       return Response.json({
         amountDueCents: 0,
+        // Nothing prorates on a scheduled downgrade: phase 0 restates what
+        // the customer already bought and phase 1 opens a clean period, so
+        // the cost of the change is zero on both readings of the word.
+        prorationCents: 0,
         currency: subscription.currency ?? 'usd',
         periodEnd: periodEndIso,
         droppedAddons: dropped,
@@ -852,8 +858,26 @@ async function handler(request: Request): Promise<Response> {
         // another.
         `&automatic_tax[enabled]=true`,
     )
+    // What the switch COSTS, kept apart from what the next invoice TOTALS.
+    //
+    // `create_prorations` charges nothing today. Stripe writes the proration
+    // adjustments onto the upcoming invoice, so `amount_due` is that whole
+    // invoice — the next period's recurring charge included. Presented as the
+    // price of the change it overstates an upgrade by a full billing period
+    // and dates it wrong, and it is the number a customer reads immediately
+    // before committing money.
+    //
+    // The cost of the change is the proration lines alone: positive when the
+    // move bills the difference, negative when it issues a credit. Derived
+    // exactly as `/api/billing/addons` derives it, because both routes are
+    // previewing the same Stripe mechanic on the same subscription and the
+    // two answering differently is indistinguishable from a pricing bug.
+    const prorationCents = (preview?.lines?.data ?? [])
+      .filter((line: any) => line?.proration)
+      .reduce((sum: number, line: any) => sum + Number(line?.amount ?? 0), 0)
     return Response.json({
       amountDueCents: preview?.amount_due ?? 0,
+      prorationCents,
       currency: preview?.currency ?? 'usd',
       periodEnd: preview?.period_end
         ? new Date(preview.period_end * 1000).toISOString()
