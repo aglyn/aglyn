@@ -55,8 +55,10 @@
 import type {
   MarketplaceTaxSummary,
   StorefrontTaxSummary,
+  TaxReturnRowFinding,
   TaxReturnSummary,
 } from './server/tx-return'
+import type { TaxablePurchasesEntry } from './taxable-purchases'
 import {
   TAX_REGISTRATION_UNSET,
   taxFilingIdUnsetNote,
@@ -231,8 +233,29 @@ export interface TaxReturnRow {
   taxableSalesCents: number
   state: string | null
   country: string | null
-  automaticTax: boolean
+  /**
+   * `null` where the field was never written — which is NOT the explicit
+   * `false` the untaxed finding is about. It projected as a plain boolean
+   * until the findings arrived, so an unwritten field read as "billed without
+   * automatic tax" to anything that filtered on it.
+   */
+  automaticTax: boolean | null
   refundedCents: number
+  /**
+   * Aglyn's own purchase rather than a customer's (AGL-1582), and therefore
+   * not a sale on this return. Absent on a payload predating the exclusion.
+   */
+  internalTraffic?: boolean
+  /**
+   * Which of the summary's per-row counts this row is in, stamped by the same
+   * predicate that did the counting.
+   *
+   * Optional because a response cached from before this existed carries none —
+   * and the surfaces must read that as "this response cannot name its rows"
+   * rather than as "there are no rows", which would be a false clean on a
+   * finding about money owed to a state.
+   */
+  findings?: TaxReturnRowFinding[]
 }
 
 /** One row of the storefront listing (AGL-1904). */
@@ -293,6 +316,21 @@ export interface TaxReturnPayload {
   truncated: boolean
   undatedRows: number
   rows: TaxReturnRow[]
+  /**
+   * The rows behind `undatedRows` — in no period query, so in no other list
+   * on this payload. Optional: a response predating them carries the count
+   * alone, which is the state this whole section exists to leave behind.
+   */
+  undated?: { rows: TaxReturnRow[] } | null
+  /**
+   * Item 3, as somebody entered it for THIS period, or absent.
+   *
+   * Absent means `not computed` and must keep meaning that. The figure is use
+   * tax on Aglyn's own purchases, which is not in `platformRevenue` and never
+   * will be; storing an operator's entry records what was filed and why, and
+   * changes nothing about what an unentered period reports.
+   */
+  taxablePurchases?: TaxablePurchasesEntry | null
   /** AGL-1904. Absent on a payload predating it. */
   storefront?: StorefrontTaxSection | null
   /** AGL-2137. Absent on a payload predating it. */
@@ -644,6 +682,246 @@ export function taxReturnAttention(
   }
 }
 
+/**
+ * ONE ROW A FINDING IS ABOUT, with enough on it to begin.
+ *
+ * A finding that states a count and cannot state which rows is a finding
+ * nobody can act on. "1 row needs attention — billed without automatic tax"
+ * meant somebody owed a decision about whether tax was under-collected on a
+ * sale, with the platform paying any shortfall out of the receipt, and no way
+ * to learn which sale.
+ *
+ * So each row carries exactly what it takes to resolve it and nothing more:
+ * the invoice id, the jurisdiction it was BUCKETED under (the resolved one,
+ * not the raw address — that is the fact that put it on or off the return),
+ * the money, the paid date, and a link into Stripe where an invoice id can
+ * build one. Every field is already on the payload; none of it is a widening.
+ */
+export interface TaxReturnFindingRow {
+  invoiceId: string
+  orgId: string | null
+  /** `US-TX`, or `unknown` — the bucket key, as the summary resolved it. */
+  jurisdiction: string
+  grossDollars: string
+  taxDollars: string
+  /** ISO, or null — which is itself one of the findings. */
+  paidAt: string | null
+  /** Null where the invoice id is not one Stripe would recognize. */
+  stripeUrl: string | null
+  findings: TaxReturnRowFinding[]
+}
+
+/**
+ * Stripe's dashboard, for an invoice id.
+ *
+ * Only for ids that look like Stripe's own (`in_…`). A row whose id came from
+ * somewhere else gets no link rather than a link to a 404: a dead link on a
+ * filing surface is read as "the invoice is gone", which is a much more
+ * alarming claim than "this is not a Stripe id".
+ */
+function stripeInvoiceUrl(invoiceId: string): string | null {
+  return /^in_[A-Za-z0-9]+$/.test(invoiceId)
+    ? `https://dashboard.stripe.com/invoices/${invoiceId}`
+    : null
+}
+
+/** The bucket key a row was summed under — see {@link TaxReturnFindingRow}. */
+function rowJurisdiction(row: TaxReturnRow): string {
+  const country = typeof row.country === 'string' ? row.country.trim() : ''
+  if (!country) return 'unknown'
+  const state = typeof row.state === 'string' ? row.state.trim() : ''
+  return state ? `${country}-${state}` : country
+}
+
+function toFindingRow(row: TaxReturnRow): TaxReturnFindingRow {
+  return {
+    invoiceId: row.invoiceId,
+    orgId: row.orgId ?? null,
+    jurisdiction: rowJurisdiction(row),
+    grossDollars: centsToDollars(row.grossCents),
+    taxDollars: centsToDollars(row.taxCents),
+    paidAt: row.paidAt ?? null,
+    stripeUrl: stripeInvoiceUrl(row.invoiceId),
+    findings: row.findings ?? [],
+  }
+}
+
+/**
+ * The rows behind one finding, from every list on the payload that can hold
+ * them.
+ *
+ * `undatedRows` is the reason this reads two lists rather than one: those rows
+ * are outside every period query by definition, so they are in `undated` and
+ * can never be in `rows`. A version of this that filtered `rows` alone would
+ * answer "none" for the one finding that BLOCKS filing.
+ */
+export function taxReturnFindingRows(
+  payload: TaxReturnPayload | null,
+  finding: TaxReturnRowFinding | 'undatedRows',
+): TaxReturnFindingRow[] {
+  if (!payload) return []
+  if (finding === 'undatedRows') {
+    return (payload.undated?.rows ?? []).map(toFindingRow)
+  }
+  return (payload.rows ?? [])
+    .filter((row) => (row.findings ?? []).includes(finding))
+    .map(toFindingRow)
+}
+
+/**
+ * A finding, its count, and the rows it is about — or an honest admission
+ * that this response cannot name them.
+ *
+ * `namesRows: false` is the state a response cached from before the per-row
+ * findings existed lands in. It has to be distinguishable from "no rows",
+ * because the two look identical in a table and mean opposite things: one is
+ * a clean period and the other is a period whose evidence did not arrive.
+ */
+export interface TaxReturnFindingGroup {
+  id: TaxReturnRowFinding | 'undatedRows'
+  label: string
+  severity: TaxReturnAttentionSeverity | 'informational'
+  detail: string
+  count: number
+  rows: TaxReturnFindingRow[]
+  namesRows: boolean
+}
+
+/**
+ * Every finding that is ABOUT ROWS, with its rows attached.
+ *
+ * Ordered blocking, then review, then informational, matching the verdict
+ * banner above it — a reader moving from one to the other is following the
+ * same list.
+ *
+ * The informational entry is `untaxedRowsBeforeObligation`, and it is here
+ * rather than in the verdict on purpose. Those rows need no attention: they
+ * were billed before the filer's obligation began, so nothing was
+ * under-collected and raising them every quarter forever would train a reader
+ * to skim the one list that must not be skimmed. But they must not simply
+ * vanish either — an operator who has been looking at a count of one is owed
+ * the rows and the reason, not a number that quietly became zero.
+ *
+ * Findings the verdict raises that are NOT about rows — a truncated sweep, an
+ * unrecognized jurisdiction key, a cents total — are absent. There is nothing
+ * to name, and a group with an empty table beside it would read as a finding
+ * whose rows failed to load.
+ */
+export function taxReturnFindingGroups(
+  payload: TaxReturnPayload | null,
+): TaxReturnFindingGroup[] {
+  if (!payload) return []
+  const attention = payload.summary?.attention
+  const filing = taxReturnFilingJurisdiction(payload)
+  const items = taxReturnAttentionItems(payload)
+  const stated = new Map(items.map((item) => [item.id, item]))
+
+  const rowFindings: Array<{
+    id: TaxReturnRowFinding | 'undatedRows'
+    count: number
+    label: string
+    severity: TaxReturnAttentionSeverity | 'informational'
+    detail: string
+  }> = [
+    {
+      id: 'undatedRows',
+      count: Number(payload.undatedRows ?? 0),
+      label: 'Rows outside every period',
+      severity: 'blocking',
+      detail: stated.get('undatedRows')?.detail ?? '',
+    },
+    {
+      id: 'untaxedRows',
+      count: Number(attention?.untaxedRows ?? 0),
+      label: 'Rows billed without automatic tax',
+      severity: 'review',
+      detail: stated.get('untaxedRows')?.detail ?? '',
+    },
+    {
+      id: 'rowsMissingTaxableBase',
+      count: Number(attention?.rowsMissingTaxableBase ?? 0),
+      label: 'Rows with tax but no stated base',
+      severity: 'review',
+      detail: stated.get('rowsMissingTaxableBase')?.detail ?? '',
+    },
+    {
+      id: 'rowsMissingAddress',
+      count: Number(attention?.rowsMissingAddress ?? 0),
+      label: 'Rows with no readable address',
+      severity: 'review',
+      detail: stated.get('rowsMissingAddress')?.detail ?? '',
+    },
+    {
+      id: 'rowsWithNetMismatch',
+      count: Number(attention?.rowsWithNetMismatch ?? 0),
+      label: 'Rows whose stored net contradicts gross minus tax',
+      severity: 'review',
+      detail: stated.get('rowsWithNetMismatch')?.detail ?? '',
+    },
+    {
+      id: 'nonUsdRows',
+      count: Number(attention?.nonUsdRows ?? 0),
+      label: 'Rows not in US dollars',
+      severity: 'review',
+      detail: stated.get('nonUsdRows')?.detail ?? '',
+    },
+    {
+      id: 'rowsMissingPaidAt',
+      count: Number(attention?.rowsMissingPaidAt ?? 0),
+      label: 'Rows with no paid date',
+      severity: 'review',
+      detail: stated.get('rowsMissingPaidAt')?.detail ?? '',
+    },
+    {
+      id: 'untaxedRowsBeforeObligation',
+      count: Number(attention?.untaxedRowsBeforeObligation ?? 0),
+      label: 'Untaxed rows from before the obligation began',
+      severity: 'informational',
+      detail:
+        'Billed without automatic tax, and paid before the first filable ' +
+        `period configured for ${filing.label}. There was nothing to ` +
+        'collect on these, so they raise no finding — they are listed so a ' +
+        'count that used to include them is accounted for rather than ' +
+        'silently smaller.',
+    },
+    {
+      id: 'internalRows',
+      count: Number(attention?.internalRows ?? 0),
+      label: 'Aglyn’s own purchases — excluded from every figure',
+      severity: 'informational',
+      detail:
+        'Marked internal at checkout (AGL-1582) and therefore not sales to ' +
+        `${filing.label}. Their receipts, base and tax are OUT of the ` +
+        'figures above and stated on the jurisdiction table as excluded, so ' +
+        'nothing was dropped silently. The mark is written when the purchase ' +
+        'is made and cannot be added afterwards — a test purchase made ' +
+        'without it is filed as a real sale, and the only remedy is at the ' +
+        'row.',
+    },
+  ]
+
+  const order: Record<string, number> = {
+    blocking: 0,
+    review: 1,
+    informational: 2,
+  }
+  return rowFindings
+    .filter((entry) => entry.count > 0)
+    .map((entry) => {
+      const rows = taxReturnFindingRows(payload, entry.id)
+      return {
+        ...entry,
+        rows,
+        // A count with no rows beside it is a response that could not name
+        // them, not a finding without rows: the count came from the same
+        // predicate that stamps them, so on any payload carrying findings the
+        // two agree by construction.
+        namesRows: rows.length > 0,
+      }
+    })
+    .sort((a, b) => order[a.severity] - order[b.severity])
+}
+
 export interface TaxReturnWebfileLine {
   /** Form 01-114 item number, where the figure maps to one. */
   item: string
@@ -651,6 +929,60 @@ export interface TaxReturnWebfileLine {
   /** Dollars, or null when this report does not compute the figure. */
   dollars: string | null
   note: string
+  /**
+   * True when the figure was TYPED by an operator rather than derived from
+   * records here.
+   *
+   * The provenance has to travel with the number. Every other line on this
+   * return is summed from `platformRevenue`; Item 3 cannot be, and a figure
+   * that appears in the same column, in the same font, with the same
+   * authority as a computed one is a figure somebody will later defend as
+   * computed. The surfaces mark it, and the CSV carries who entered it and
+   * when.
+   */
+  entered?: boolean
+}
+
+/**
+ * ITEM 3, from the entry — and `not computed` when there is no entry.
+ *
+ * The whole of the rule this module holds most tightly lives in this one
+ * function, so it is written once rather than spelled out at each caller:
+ *
+ *   - **No entry ⇒ `dollars: null`.** Never `'0.00'`. A zero printed where no
+ *     figure was derived is a claim this data cannot support, and one arriving
+ *     from a storage layer is worse than one arriving from nowhere, because it
+ *     looks derived.
+ *   - **An entry of zero ⇒ `dollars: '0.00'`, marked entered.** That is not
+ *     the same fact and must not render as one: somebody looked, and the
+ *     answer was nothing.
+ */
+function taxablePurchasesLine(
+  payload: TaxReturnPayload | null,
+): TaxReturnWebfileLine {
+  const entry = payload?.taxablePurchases ?? null
+  if (!entry) {
+    return {
+      item: 'Item 3',
+      label: 'Taxable purchases',
+      dollars: null,
+      note:
+        "NOT COMPUTED — use tax on Aglyn's own purchases is not in " +
+        'platformRevenue. Enter it from the expense records on the Taxable ' +
+        'purchases card, where it is stored for this period and audited.',
+    }
+  }
+  const who = entry.enteredBy ? ` by ${entry.enteredBy}` : ''
+  const when = entry.enteredAt ? ` on ${entry.enteredAt.slice(0, 10)}` : ''
+  return {
+    item: 'Item 3',
+    label: 'Taxable purchases',
+    dollars: entry.amountDollars,
+    entered: true,
+    note:
+      `ENTERED, not computed${who}${when} — use tax on Aglyn's own ` +
+      `purchases, from the expense records. Reason given: ${entry.note}`,
+  }
 }
 
 /**
@@ -663,6 +995,9 @@ export interface TaxReturnWebfileLine {
  * Taxable purchases (use tax on Aglyn's OWN purchases) is stated as NOT
  * COMPUTED rather than as zero: `platformRevenue` records sales, and a zero
  * printed where no figure was derived is a claim this data cannot support.
+ * Where an operator has ENTERED one for this period it prints their figure,
+ * marked as entered and carrying who entered it — see
+ * {@link taxablePurchasesLine}. An unentered period still reads not computed.
  */
 export function taxReturnWebfileLines(
   payload: TaxReturnPayload | null,
@@ -683,12 +1018,7 @@ export function taxReturnWebfileLines(
       dollars: dollars(tx?.taxableSalesCents),
       note: "Stripe's taxable_amount summed — the 80% base under the data-processing position.",
     },
-    {
-      item: 'Item 3',
-      label: 'Taxable purchases',
-      dollars: null,
-      note: 'NOT COMPUTED — use tax on Aglyn\'s own purchases is not in platformRevenue. Enter it from the expense records.',
-    },
+    taxablePurchasesLine(payload),
     {
       item: '—',
       label: 'Tax collected (reconciliation)',
@@ -863,6 +1193,30 @@ export interface TaxReturnJurisdictionRow {
   taxabilityReasons: TaxReturnWorkingPaperRow[]
   /** WHICH rate produced it — the row an examiner checks a rate table against. */
   rates: TaxReturnWorkingPaperRow[]
+  /**
+   * WHAT WAS TAKEN OUT of this jurisdiction, and it is stated because it was
+   * taken out (AGL-1582).
+   *
+   * Aglyn's own purchases are not sales to a state, so they are excluded from
+   * every figure above — but a return that quietly drops rows cannot be
+   * checked by the person signing it. These are the same figures for the rows
+   * that were removed, so the two can be added back by anyone who disagrees
+   * with the exclusion.
+   */
+  internalTransactionCount: number
+  internalTotalSalesDollars: string
+  internalTaxCollectedDollars: string
+  /**
+   * True when NOTHING was filed for this jurisdiction and the rows here are
+   * all excluded ones.
+   *
+   * The state the current deployment is in, and the one a union of the two
+   * maps exists to make visible: a jurisdiction whose only rows are internal
+   * is absent from `byJurisdiction` altogether, so a table built from that map
+   * alone would report the period as having no invoices at all while an
+   * excluded row sat behind it.
+   */
+  internalOnly: boolean
 }
 
 /**
@@ -893,48 +1247,71 @@ export function taxReturnJurisdictionRows(
   payload: TaxReturnPayload | null,
 ): TaxReturnJurisdictionRow[] {
   const byJurisdiction = payload?.summary?.byJurisdiction ?? {}
+  const internalByJurisdiction =
+    payload?.summary?.internal?.byJurisdiction ?? {}
   const filing = taxReturnFilingJurisdiction(payload)
-  return Object.entries(byJurisdiction)
-    .map(([jurisdiction, bucket]) => ({
-      jurisdiction,
-      isFilingJurisdiction: jurisdiction === filing.code,
-      transactionCount: Number(bucket?.transactionCount ?? 0),
-      totalSalesDollars: centsToDollars(bucket?.totalSalesCents),
-      taxableSalesDollars: centsToDollars(bucket?.taxableSalesCents),
-      taxCollectedDollars: centsToDollars(bucket?.taxCollectedCents),
-      taxabilityReasons: Object.entries(bucket?.taxabilityReasons ?? {})
-        .map(([reason, entry]) => ({
-          key: reason,
-          // Stripe's enum, in words. An unrecognised reason keeps its raw
-          // code rather than being dropped or relabelled — a filing record
-          // must not silently rename a fact it does not know.
-          label: TAXABILITY_REASON_LABEL[reason] ?? reason,
-          lines: Number(entry?.lines ?? 0),
-          taxCollectedDollars: centsToDollars(entry?.taxCollectedCents),
-          taxableSalesDollars: centsToDollars(entry?.taxableAmountCents),
-        }))
-        .sort(
-          (a, b) =>
-            Number(b.taxCollectedDollars) - Number(a.taxCollectedDollars) ||
-            a.key.localeCompare(b.key),
+  // The UNION of the filed and the excluded maps. A jurisdiction whose only
+  // rows were Aglyn's own purchases appears in neither `byJurisdiction` nor
+  // any figure above, so a table built from the filed map alone would show an
+  // empty period over rows that exist and were removed.
+  const jurisdictions = [
+    ...new Set([
+      ...Object.keys(byJurisdiction),
+      ...Object.keys(internalByJurisdiction),
+    ]),
+  ]
+  return jurisdictions
+    .map((jurisdiction) => {
+      const bucket = byJurisdiction[jurisdiction]
+      const internal = internalByJurisdiction[jurisdiction]
+      return {
+        jurisdiction,
+        isFilingJurisdiction: jurisdiction === filing.code,
+        transactionCount: Number(bucket?.transactionCount ?? 0),
+        totalSalesDollars: centsToDollars(bucket?.totalSalesCents),
+        taxableSalesDollars: centsToDollars(bucket?.taxableSalesCents),
+        taxCollectedDollars: centsToDollars(bucket?.taxCollectedCents),
+        taxabilityReasons: Object.entries(bucket?.taxabilityReasons ?? {})
+          .map(([reason, entry]) => ({
+            key: reason,
+            // Stripe's enum, in words. An unrecognised reason keeps its raw
+            // code rather than being dropped or relabelled — a filing record
+            // must not silently rename a fact it does not know.
+            label: TAXABILITY_REASON_LABEL[reason] ?? reason,
+            lines: Number(entry?.lines ?? 0),
+            taxCollectedDollars: centsToDollars(entry?.taxCollectedCents),
+            taxableSalesDollars: centsToDollars(entry?.taxableAmountCents),
+          }))
+          .sort(
+            (a, b) =>
+              Number(b.taxCollectedDollars) - Number(a.taxCollectedDollars) ||
+              a.key.localeCompare(b.key),
+          ),
+        rates: (bucket?.rates ?? []).map((rate) => ({
+          key: `${rate?.taxRateId}-${rate?.percentage ?? 'na'}`,
+          label:
+            [
+              rate?.jurisdiction ?? rate?.rateState ?? null,
+              rate?.percentage == null ? null : `${rate.percentage}%`,
+              rate?.taxRateId && rate.taxRateId !== 'unknown'
+                ? rate.taxRateId
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'rate not stated',
+          lines: Number(rate?.lines ?? 0),
+          taxCollectedDollars: centsToDollars(rate?.taxCollectedCents),
+          taxableSalesDollars: centsToDollars(rate?.taxableAmountCents),
+        })),
+        internalTransactionCount: Number(internal?.transactionCount ?? 0),
+        internalTotalSalesDollars: centsToDollars(internal?.totalSalesCents),
+        internalTaxCollectedDollars: centsToDollars(
+          internal?.taxCollectedCents,
         ),
-      rates: (bucket?.rates ?? []).map((rate) => ({
-        key: `${rate?.taxRateId}-${rate?.percentage ?? 'na'}`,
-        label: [
-          rate?.jurisdiction ?? rate?.rateState ?? null,
-          rate?.percentage == null ? null : `${rate.percentage}%`,
-          rate?.taxRateId && rate.taxRateId !== 'unknown'
-            ? rate.taxRateId
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' · ') || 'rate not stated',
-        lines: Number(rate?.lines ?? 0),
-        taxCollectedDollars: centsToDollars(rate?.taxCollectedCents),
-        taxableSalesDollars: centsToDollars(rate?.taxableAmountCents),
-      })),
-      sortKey: Number(bucket?.totalSalesCents ?? 0),
-    }))
+        internalOnly: !bucket && Number(internal?.transactionCount ?? 0) > 0,
+        sortKey: Number(bucket?.totalSalesCents ?? 0),
+      }
+    })
     .sort((a, b) => {
       if (a.isFilingJurisdiction !== b.isFilingJurisdiction)
         return a.isFilingJurisdiction ? -1 : 1
@@ -1262,6 +1639,36 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
     ],
     ['Rows with a chargeback', String(payload.summary?.refunds?.rowsChargedBack ?? 0)],
     [],
+    /*
+     * WHAT WAS EXCLUDED, and it is in the working papers because it was
+     * excluded (AGL-1582). Aglyn's own purchases are not sales to a state, so
+     * they are out of every figure above — and a return whose rows do not sum
+     * to its totals cannot be checked by the person signing it. Adding these
+     * back reproduces the unfiltered figures exactly.
+     */
+    ['Excluded as Aglyn’s own purchases (NOT in any figure above)'],
+    [
+      'Rows excluded',
+      String(payload.summary?.internal?.transactionCount ?? 0),
+    ],
+    [
+      'Excluded receipts, tax excluded (USD)',
+      centsToDollars(payload.summary?.internal?.totalSalesCents),
+    ],
+    [
+      'Excluded taxable base (USD)',
+      centsToDollars(payload.summary?.internal?.taxableSalesCents),
+    ],
+    [
+      'Excluded tax collected (USD)',
+      centsToDollars(payload.summary?.internal?.taxCollectedCents),
+    ],
+    [
+      'How a row is marked',
+      'At checkout, from a browser the deployment declared its own ' +
+        '(AGL-1582). The mark cannot be added to a purchase afterwards.',
+    ],
+    [],
     ['Rows needing attention', String(verdict.total)],
     ['Severity', 'Count', 'Finding', 'What it means'],
     ...(verdict.items.length
@@ -1422,8 +1829,20 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       'taxable base (USD)',
       'refunded (USD)',
       'automaticTax',
+      // AGL-1582: whether this row is in the figures above at all. A working
+      // paper whose rows sum to something other than the total it supports is
+      // not a working paper, so the exclusion has to be legible per row.
+      'on the return',
+      // The findings this row raises, so a count on the screen can be walked
+      // back to its rows in a spreadsheet as well.
+      'findings',
     ],
-    ...(payload.rows ?? []).map((row) => [
+    ...[
+      ...(payload.rows ?? []),
+      // The rows in NO period query — the blocking finding's own population,
+      // which is in no other list on the payload and was in no export.
+      ...(payload.undated?.rows ?? []),
+    ].map((row) => [
       row.invoiceId,
       row.orgId ?? '',
       row.paidAt ?? '',
@@ -1433,7 +1852,15 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       centsToDollars(row.taxCents),
       centsToDollars(row.taxableSalesCents),
       centsToDollars(row.refundedCents),
-      row.automaticTax ? 'yes' : 'no',
+      // Three states, not two: a field that was never written is not the
+      // explicit `false` the untaxed finding is about.
+      row.automaticTax === null || row.automaticTax === undefined
+        ? 'not stated'
+        : row.automaticTax
+          ? 'yes'
+          : 'no',
+      row.internalTraffic ? 'no — Aglyn’s own purchase' : 'yes',
+      (row.findings ?? []).join(' '),
     ]),
   ]
   return lines.map((row) => (row ?? []).map(csvCell).join(',')).join('\n')

@@ -99,6 +99,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import StaffTaxFindingsCard from '../../../../components/staff-tax-findings-card.component'
+import StaffTaxablePurchasesCard from '../../../../components/staff-taxable-purchases-card.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
@@ -187,6 +189,13 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
   const [payload, setPayload] = useState<TaxReturnPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  /*
+   * Bumped when Item 3 is entered, so the figures card shows the entry
+   * immediately rather than on the next period change. The return is the
+   * document; the entry card only edits one line of it, and a line that
+   * updates in one place and not the other is two answers for one figure.
+   */
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     if (!isStaff || !user || !period) return
@@ -221,7 +230,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     return () => {
       active = false
     }
-  }, [isStaff, user, period])
+  }, [isStaff, user, period, reloadToken])
 
   const verdict = useMemo(() => taxReturnAttention(payload), [payload])
   const registration = useMemo(() => taxReturnRegistration(payload), [payload])
@@ -255,6 +264,40 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     () => taxReturnMarketplaceLines(payload),
     [payload],
   )
+
+  /**
+   * The rows that were REMOVED to reach the figures, in one sentence.
+   *
+   * Two rules take rows off this return and both are new: Aglyn's own tagged
+   * purchases are not sales to a state, and an untaxed row paid before the
+   * configured obligation began could not have under-collected. Either can
+   * turn a finding into no finding, and a count that quietly becomes zero
+   * looks exactly like a rule that broke. Null when neither removed anything,
+   * so a genuinely clean period says nothing extra.
+   */
+  const excludedNote = useMemo(() => {
+    const internal = Number(payload?.summary?.internal?.transactionCount ?? 0)
+    const beforeObligation = Number(
+      payload?.summary?.attention?.untaxedRowsBeforeObligation ?? 0,
+    )
+    const parts: string[] = []
+    if (internal) {
+      parts.push(
+        `${internal} ${internal === 1 ? 'row is' : 'rows are'} Aglyn’s own ` +
+          'purchases and are excluded from every figure below',
+      )
+    }
+    if (beforeObligation) {
+      parts.push(
+        `${beforeObligation} untaxed ${
+          beforeObligation === 1 ? 'row was' : 'rows were'
+        } paid before the obligation began, so nothing was under-collected on ` +
+          'them',
+      )
+    }
+    if (!parts.length) return null
+    return `${parts.join('; ')}. Both are listed on the findings card below.`
+  }, [payload])
 
   const handleExport = useCallback(() => {
     const csv = taxReturnCsv(payload)
@@ -390,6 +433,19 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   {`All ${payload.summary?.transactionCount ?? 0} invoices in ` +
                     'this period were fully readable — no row was dropped, ' +
                     'and no figure below is a lower bound.'}
+                  {/*
+                    …AND WHAT WAS TAKEN OUT TO GET HERE. A clean verdict
+                    reached by removing rows is not the same as a clean
+                    verdict over all of them, and an operator who watched a
+                    count fall to zero is owed the reason rather than left to
+                    wonder whether the rule broke. The rows themselves are on
+                    the findings card below.
+                  */}
+                  {excludedNote ? (
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      {excludedNote}
+                    </Typography>
+                  ) : null}
                 </Alert>
               ) : (
                 <Alert severity={verdict.blocking ? 'error' : 'warning'}>
@@ -429,9 +485,23 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                       </Stack>
                     ))}
                   </Stack>
+                  {excludedNote ? (
+                    <Typography variant="body2" sx={{ mt: 1.5 }}>
+                      {excludedNote}
+                    </Typography>
+                  ) : null}
                 </Alert>
               )
             ) : null}
+
+            {/*
+              WHICH ROWS. The banner above states the counts; this states the
+              invoices behind them. A finding that names a count and cannot
+              name a row is a finding nobody can begin on — and the one this
+              page raised most often says that if the row is a sale here, tax
+              was under-collected and the platform pays it from the receipt.
+            */}
+            <StaffTaxFindingsCard payload={payload} loading={loading} />
 
             <CardDisplay
               header={payload ? filing.figuresHeader : 'Return figures'}
@@ -490,7 +560,28 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                           {line.item}
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2">{line.label}</Typography>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                          >
+                            <Typography variant="body2">{line.label}</Typography>
+                            {/*
+                              PROVENANCE TRAVELS WITH THE FIGURE. Every other
+                              line here is summed from platformRevenue; this
+                              one was typed. Same column, same font, same
+                              authority — so without the mark it is a figure
+                              somebody will later defend as computed.
+                            */}
+                            {line.entered ? (
+                              <Chip
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                label="Entered, not computed"
+                              />
+                            ) : null}
+                          </Stack>
                           <Typography variant="caption" color="text.secondary">
                             {line.note}
                           </Typography>
@@ -526,6 +617,21 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : null}
             </CardDisplay>
+
+            {/*
+              ITEM 3, which no query here can answer. Only where the form is
+              known: `taxReturnBreakdownLines` deliberately omits taxable
+              purchases for every other jurisdiction, because it is a Form
+              01-114 line rather than a universal concept, and offering a box
+              to fill a line that is not on the document would invent the form
+              this report declines to guess at.
+            */}
+            {payload && filing.form === 'tx-webfile' ? (
+              <StaffTaxablePurchasesCard
+                period={payload.period ?? period}
+                onSaved={() => setReloadToken((token) => token + 1)}
+              />
+            ) : null}
 
             <GridItems
               spacing={3}
@@ -1002,12 +1108,20 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     <TableCell align="right">{'Total sales'}</TableCell>
                     <TableCell align="right">{'Taxable sales'}</TableCell>
                     <TableCell align="right">{'Tax collected'}</TableCell>
+                    {/*
+                      WHAT WAS REMOVED (AGL-1582). Aglyn's own purchases are
+                      not sales to a state, so they are out of every column to
+                      the left — and a return that drops rows without saying
+                      which cannot be checked by the person signing it. Stated
+                      here so the two can be added back.
+                    */}
+                    <TableCell align="right">{'Excluded (internal)'}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {jurisdictions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={6}>
                         <Typography variant="body2" color="text.secondary">
                           {payload
                             ? 'No invoices in this period.'
@@ -1047,6 +1161,19 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                                 size="small"
                                 color="warning"
                                 label="No address"
+                              />
+                            ) : null}
+                            {/*
+                              A jurisdiction whose ONLY rows were Aglyn's own
+                              purchases is in no filed figure at all. Without
+                              this the period reads as having no invoices while
+                              rows sit behind it, excluded.
+                            */}
+                            {row.internalOnly ? (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label="Nothing filed — all internal"
                               />
                             ) : null}
                           </Stack>
@@ -1120,11 +1247,58 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                         >
                           {`$${row.taxCollectedDollars}`}
                         </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {row.internalTransactionCount ? (
+                            <Stack spacing={0.25}>
+                              <Typography
+                                variant="body2"
+                                sx={{ fontFamily: 'monospace' }}
+                                color="text.secondary"
+                              >
+                                {`$${row.internalTotalSalesDollars}`}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {`${row.internalTransactionCount} ${
+                                  row.internalTransactionCount === 1
+                                    ? 'invoice'
+                                    : 'invoices'
+                                }, $${row.internalTaxCollectedDollars} tax`}
+                              </Typography>
+                            </Stack>
+                          ) : (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ fontFamily: 'monospace' }}
+                            >
+                              {'—'}
+                            </Typography>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mt: 1.5 }}
+              >
+                {'“Excluded (internal)” is Aglyn’s own purchases (AGL-1582) — ' +
+                  'marked at checkout, kept out of every other column here and ' +
+                  'out of the filing figures above, because a purchase the ' +
+                  'platform made from itself is not a sale to a state. It is ' +
+                  'stated rather than subtracted quietly so the figures can be ' +
+                  'checked. The mark is written when the purchase is made and ' +
+                  'cannot be added afterwards.'}
+              </Typography>
             </CardDisplay>
           </Stack>
         </StaffOnly>

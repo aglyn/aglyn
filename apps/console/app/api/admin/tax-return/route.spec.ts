@@ -189,6 +189,12 @@ describe('GET /api/admin/tax-return (AGL-1811)', () => {
         country: 'US',
         automaticTax: true,
         refundedCents: 0,
+        // Read with the revenue report's own `=== true`, so the seeded row's
+        // absent flag is a real sale rather than an exclusion.
+        internalTraffic: false,
+        // Empty because this row is clean — the array is what lets a count on
+        // the screen resolve to the invoices behind it.
+        findings: [],
       },
     ])
   })

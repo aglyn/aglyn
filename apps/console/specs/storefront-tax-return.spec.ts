@@ -410,8 +410,17 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
         chargedBackCents: 0,
         rowsChargedBack: 0,
       },
+      internal: {
+        transactionCount: 0,
+        totalSalesCents: 0,
+        taxableSalesCents: 0,
+        taxCollectedCents: 0,
+        byJurisdiction: {},
+      },
       attention: {
         untaxedRows: 0,
+        internalRows: 0,
+        untaxedRowsBeforeObligation: 0,
         rowsMissingTaxableBase: 0,
         rowsMissingAddress: 0,
         nonUsdRows: 0,

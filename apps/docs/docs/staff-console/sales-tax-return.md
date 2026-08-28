@@ -70,6 +70,34 @@ so the page states the count out loud and, when it is serious, says **do not fil
 A clean period says so explicitly — "every row read cleanly" — so that silence is never
 mistaken for a passing check.
 
+### Which rows
+
+Every count above resolves to its invoices on the **Findings** card directly beneath the
+banner. Pick a finding and the card lists the rows it is about: the invoice id (linked
+into Stripe), the jurisdiction the row was bucketed under, the gross and tax, the paid
+date, and the row's *other* findings — a row commonly raises two, and fixing one half of
+a problem is worse than seeing all of it.
+
+A count is only ever as good as the rows behind it, so the count and the list are
+computed by the same predicate. If a response arrives without per-row findings, the card
+says it **cannot name these rows** rather than showing an empty table — a finding with no
+rows and a finding whose rows failed to load look identical and mean opposite things.
+
+### Rows that are excluded rather than flagged
+
+Two rules take rows off the return. Both are stated on screen, and neither ever removes
+a row silently.
+
+| Rule | What happens |
+|---|---|
+| **Aglyn's own purchases** | A purchase the platform made from itself is not a sale to a state. Rows marked internal at checkout are excluded from Items 1 and 2, the tax-collected reconciliation and the jurisdiction figures — and stated in an **Excluded (internal)** column beside them, so the figures can be checked and added back. The mark is written when the purchase is made and **cannot be added afterwards**: a test purchase made without it is filed as a real sale. |
+| **Before the obligation began** | An untaxed row paid before the configured earliest filable period could not have under-collected — there was nothing to collect — so it raises no finding. The rows are still listed, as *Untaxed rows from before the obligation began*, so a count that used to include them is accounted for rather than quietly smaller. |
+
+Both fail toward **including**. A row with no readable flag is filed as a sale, and with
+no earliest filable period configured nothing is scoped out at all. Under-reporting to a
+tax authority because a field was missing is far worse than an over-reported figure,
+which is at least visible on the form.
+
 ## Where this deployment files
 
 **Staff → Platform settings → Sales tax filing.** Reading it needs any staff role;
@@ -156,10 +184,10 @@ writes `NOT CONFIGURED …` rather than a blank cell someone files from.
 - **Item 2 — Taxable sales.** The base the rate was applied to: Stripe's
   `taxable_amount` summed, which is 80% of the charge under the data-processing
   position Aglyn files on.
-- **Item 3 — Taxable purchases.** Shown as **not computed**. This is use tax on Aglyn's
-  *own* purchases, which is not in the revenue records at all — take it from the expense
-  records. It is stated as "not computed" rather than as `0.00` on purpose: a zero
-  printed where nothing was derived is a claim this data cannot support.
+- **Item 3 — Taxable purchases.** Use tax on Aglyn's *own* purchases, which is not in
+  the revenue records at all. Unentered, it reads **not computed**; entered, it reads
+  the figure with an *Entered, not computed* mark. See
+  [Taxable purchases](#taxable-purchases).
 - **Tax collected** is not a form line. It is what was actually charged to Texas
   customers, there to reconcile against the tax Webfile computes from Item 2. A gap
   between them is a real discrepancy worth understanding before submitting.
@@ -170,6 +198,40 @@ to type in.
 
 **Period bounds** echoes the exact UTC window swept, so a return filed today can be
 reproduced from the same bounds a year from now.
+
+## Taxable purchases
+
+Item 3 is the one line on the return that nothing here can compute. It is use tax on
+Aglyn's **own** purchases, and `platformRevenue` records sales — the figure is not in
+the data and never will be.
+
+So it is entered, per period, from the expense records, on the **Item 3 — Taxable
+purchases** card. Entering it does not compute it. It records what was filed and why,
+so the next quarter has the previous one to check against and an auditor asking where
+a figure came from has an answer.
+
+:::caution An unentered period reads "not computed", never `0.00`
+Absence of a record and a record of zero are different facts and never render alike.
+A blank field is refused rather than stored as zero: a zero arriving from storage looks
+*derived*, which is exactly the claim this line refuses to make.
+
+If the answer genuinely is zero, type `0.00`. That is a claim somebody made, and it is
+stored, marked as entered, and audited like any other figure.
+:::
+
+Reading the entry is open to any staff role. **Entering one needs the `super` staff
+role** — the same bar as [where the platform files](#where-this-deployment-files), and
+for the same reason: the number goes onto a return signed under penalty of perjury.
+Every change writes an `adminAudit` row with the figure before, the figure after, and
+the reason typed for it. Unlike a registration number, the *figure* is recorded — it is
+destined for a public filing, not a credential.
+
+The entry is keyed by period. A figure entered for one quarter cannot appear under
+another; clearing it returns the line to **not computed**.
+
+The card appears for Texas only. Taxable purchases is a Form 01-114 line rather than a
+universal concept, and the return breakdown for other jurisdictions deliberately does
+not invent one.
 
 ## Refunds
 
