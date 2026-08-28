@@ -304,12 +304,23 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         .status(400)
         .json({ error: `Line ${invalidLine} is not on this order` })
     }
-    const namedLinesCents = requestedLineIds.reduce(
-      (sum, index) =>
-        sum +
-        Math.max(0, Math.round(Number(orderLines[index]?.unitAmountCents ?? 0))) *
-          Math.max(1, Math.round(Number(orderLines[index]?.quantity ?? 1))),
-      0,
+    // NET OF THE ORDER'S DISCOUNT, not the list price (AGL-2509).
+    //
+    // This was the bare `unitAmountCents x quantity`, which is what the line
+    // was LISTED at rather than what the buyer paid for it. On a discounted
+    // order the two differ, and both directions of the error land on the
+    // merchant: a $10 coupon over two $50 lines means each line cost $45, so
+    // refunding one at $50 gave back $5 that was never taken, and the order
+    // then held less than its remaining line was worth — so the second line
+    // refund hit the cap below and was refused outright, leaving the merchant
+    // unable to finish a refund they had already half-issued.
+    //
+    // `orderLineRefundCents` apportions the discount across every line by list
+    // value and returns the named lines' share, so refunding all of them sums
+    // to exactly what was charged and no cent is stranded or invented.
+    const namedLinesCents = CommerceModel.orderLineRefundCents(
+      order,
+      requestedLineIds,
     )
     if (
       requestedLineIds.length > 0 &&

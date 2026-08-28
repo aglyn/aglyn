@@ -386,11 +386,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!order || !orderId) return
     const lines = order.lineItems ?? []
     const scoped = (lineItemIds ?? []).length > 0
-    const scopedCents = (lineItemIds ?? []).reduce(
-      (sum, index) =>
-        sum +
-        (lines[index]?.unitAmountCents ?? 0) * (lines[index]?.quantity ?? 1),
-      0,
+    // The SERVER's figure, not a second derivation of it (AGL-2509). This was
+    // the list value `unitAmountCents x quantity`, which on a discounted order
+    // is more than the buyer paid — so the dialog quoted one number and the
+    // route refunded another. One function answers both.
+    const scopedCents = CommerceModel.orderLineRefundCents(
+      order,
+      lineItemIds ?? [],
     )
     const confirmed = await confirm({
       title: scoped ? 'Refund this line?' : 'Refund this order?',

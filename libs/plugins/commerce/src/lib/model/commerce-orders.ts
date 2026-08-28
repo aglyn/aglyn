@@ -456,6 +456,104 @@ const wholeCents = (value: unknown): number => {
   return Number.isFinite(cents) && cents > 0 ? cents : 0
 }
 
+/**
+ * Split `totalCents` across `weights` so the parts sum to it EXACTLY (AGL-2509).
+ *
+ * Largest-remainder (Hamilton) apportionment. Each weight takes its exact
+ * share, the shares are floored, and the cents left over by flooring are handed
+ * one each to the largest fractional parts, ties going to the lower index so
+ * the answer is deterministic for a given input.
+ *
+ * The exactness is the whole point and it is a money property, not a
+ * neatness one: `Math.round` per line loses or invents cents against the total
+ * — three lines splitting a 10¢ discount round to 3+3+3=9 and the missing cent
+ * has to come from somewhere. A refund built on a split that does not close is
+ * a reconciliation defect that surfaces months later against Stripe's numbers.
+ *
+ * Pure and total. A non-positive total, an empty weight list, or weights that
+ * sum to nothing all answer zeros — never a division by zero, never a NaN
+ * propagated into an amount someone is charged.
+ */
+export function apportionCents(
+  weights: readonly number[],
+  totalCents: number,
+): number[] {
+  const safe = (weights ?? []).map((weight) =>
+    Math.max(0, Math.round(Number(weight ?? 0))),
+  )
+  const basis = safe.reduce((sum, weight) => sum + weight, 0)
+  const total = Math.max(0, Math.round(Number(totalCents ?? 0)))
+  if (safe.length === 0 || basis <= 0 || total <= 0) return safe.map(() => 0)
+  // Never hand back more than there is to split. A discount larger than the
+  // items it came off is a data fault, and apportioning it in full would
+  // credit lines with money the order never carried.
+  const pot = Math.min(total, basis)
+  const exact = safe.map((weight) => (weight * pot) / basis)
+  const shares = exact.map((value) => Math.floor(value))
+  let remainder = pot - shares.reduce((sum, share) => sum + share, 0)
+  const order = exact
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
+  for (const entry of order) {
+    if (remainder <= 0) break
+    shares[entry.index] += 1
+    remainder -= 1
+  }
+  return shares
+}
+
+/**
+ * What refunding the named lines is actually worth (AGL-2509).
+ *
+ * A line's LIST value is `unitAmountCents x quantity`, and that is what the
+ * refund route used to hand back. It is the wrong number on any order that
+ * carried an order-level discount, because the buyer never paid it: a $10
+ * coupon on two $50 lines means each line cost $45, and refunding one at $50
+ * pays back $5 the buyer never spent. The order then has less left than its
+ * remaining line is worth, so the SECOND line refund is refused outright and
+ * the merchant cannot finish the job they started.
+ *
+ * So each line carries its share of the discount, apportioned by list value
+ * through {@link apportionCents} — which guarantees the shares sum to the whole
+ * discount, so refunding every line returns exactly `itemsCents - discountCents`
+ * and no cent is stranded or invented.
+ *
+ * SHIPPING AND TAX ARE DELIBERATELY NOT IN THIS FIGURE. Refunding a line
+ * returns what the goods cost. Shipping is charged for the consignment rather
+ * than the line, so no split of it is defensible without knowing whether the
+ * parcel still ships; tax follows the goods but is Stripe's to recompute, and
+ * an order whose tax was collected under Aglyn's own registration
+ * (`taxMode: 'stripe-automatic'`) is not one this function may quietly decide
+ * to hand back. Both remain whole-order concerns, refundable by amount.
+ *
+ * Pure: unknown indexes contribute nothing rather than throwing.
+ */
+export function orderLineRefundCents(
+  order: Pick<Partial<HostOrder>, 'lineItems' | 'totals'>,
+  lineIndexes: readonly number[],
+): number {
+  const lines = order?.lineItems ?? []
+  const gross = lines.map((line) =>
+    Math.max(
+      0,
+      Math.round(Number(line?.unitAmountCents ?? 0)) *
+        Math.max(1, Math.round(Number(line?.quantity ?? 1))),
+    ),
+  )
+  const shares = apportionCents(
+    gross,
+    Math.max(0, Math.round(Number(order?.totals?.discountCents ?? 0))),
+  )
+  const wanted = new Set(
+    (lineIndexes ?? []).filter(
+      (index) => Number.isInteger(index) && index >= 0 && index < lines.length,
+    ),
+  )
+  let cents = 0
+  for (const index of wanted) cents += gross[index] - shares[index]
+  return Math.max(0, cents)
+}
+
 /** Sums line items and folds in shipping/tax/discount/fee, all cents. */
 export function computeOrderTotals(
   lineItems: OrderLineItem[],
