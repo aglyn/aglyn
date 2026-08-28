@@ -15,7 +15,51 @@
  * limitations under the License.
  */
 
-import { RESEND_SEND_ENDPOINT, getEmailConfig } from './send-email'
+import { getEmailConfig } from './send-email'
+
+/**
+ * Where the credential probe asks its question.
+ *
+ * Deliberately NOT the send endpoint. A probe aimed at `/emails` is a send
+ * attempt however empty its body is: it consumes an API call, and Resend
+ * records it in the account's logs as a `422` on `POST /emails` with no
+ * recipient, no subject and nothing identifying the caller — a line an
+ * operator reading that dashboard has to treat as failed mail. A domain read
+ * cannot create a message and cannot be mistaken for one.
+ */
+export const RESEND_DOMAINS_ENDPOINT = 'https://api.resend.com/domains'
+
+/**
+ * Resend error names that mean the key itself was not accepted, as opposed to
+ * a key that authenticated and merely lacks read scope. Matched by NAME, not
+ * status: `401` and `403` each cover both meanings.
+ */
+const REFUSED_KEY_ERRORS = new Set([
+  'missing_api_key',
+  'validation_error',
+  'suspended_api_key',
+])
+
+/**
+ * Resend error names that mean the key authenticated and was then denied this
+ * particular read. A sending-scoped key — the shape Aglyn provisions — always
+ * lands here, and reaching this answer at all required Resend to recognize
+ * the credential, which is exactly what the probe is asking.
+ */
+const AUTHENTICATED_BUT_UNSCOPED_ERRORS = new Set([
+  'restricted_api_key',
+  'invalid_permission',
+])
+
+/** The `name` Resend puts on an error body, or `''` for anything else. */
+function resendErrorName(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { name?: unknown }
+    return typeof parsed?.name === 'string' ? parsed.name : ''
+  } catch {
+    return ''
+  }
+}
 
 export interface EmailConfigReport {
   /** Both env vars present — mail will at least be attempted. */
@@ -66,17 +110,27 @@ export interface EmailCredentialReport {
 
 /**
  * Checks whether `RESEND_API_KEY` is actually accepted by Resend — without
- * sending anything to anybody.
+ * sending anything to anybody, and without leaving anything behind that reads
+ * as failed mail.
  *
- * How: it POSTs an **empty body** to the send endpoint. No recipient and no
- * sender means no message can be created, so this is safe to run against
- * production. What differs is the rejection:
+ * How: a `GET` of the domains collection. The question is only ever "does
+ * Resend recognize this credential", so the probe reads the ERROR NAME rather
+ * than the status, because `401` and `403` each carry both meanings:
  *
- * - `401`/`403` — the key itself was refused → `invalid-key`
- * - `422`/`400` — the key was accepted, the empty payload was not → `ok`
+ * - `2xx` — the key is accepted and has read scope → `ok`
+ * - `restricted_api_key` / `invalid_permission` — Resend authenticated the
+ *   key and then denied it this read. A sending-scoped key, which is what
+ *   Aglyn provisions, always answers this way, and getting the answer proves
+ *   the credential works → `ok`
+ * - `missing_api_key` / `validation_error` / `suspended_api_key` — the key
+ *   itself was refused → `invalid-key`
+ * - anything else → `unknown`
  *
- * A sending-scoped Resend key has no read permissions, so there is no
- * `GET /domains` available to us; this is the only no-send liveness signal.
+ * An unrecognized rejection is `unknown`, never `invalid-key`: this feeds a
+ * staff diagnostics screen whose whole value is that a red line means
+ * something, and a shape we have not seen before is not evidence that a
+ * working key is broken.
+ *
  * It cannot confirm that *domain verification* has completed — only a real
  * send does that.
  */
@@ -85,21 +139,23 @@ export async function checkEmailCredentials(): Promise<EmailCredentialReport> {
   if (!apiKey) return { status: 'unconfigured' }
 
   try {
-    const response = await fetch(RESEND_SEND_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: '{}',
+    const response = await fetch(RESEND_DOMAINS_ENDPOINT, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${apiKey}` },
     })
     const detail = (await response.text().catch(() => '')).slice(0, 300)
 
-    if (response.status === 401 || response.status === 403) {
-      return { status: 'invalid-key', probeStatus: response.status, detail }
-    }
-    if (response.status === 422 || response.status === 400) {
+    if (response.status >= 200 && response.status < 300) {
       return { status: 'ok', probeStatus: response.status }
+    }
+    if (response.status === 401 || response.status === 403) {
+      const name = resendErrorName(detail)
+      if (AUTHENTICATED_BUT_UNSCOPED_ERRORS.has(name)) {
+        return { status: 'ok', probeStatus: response.status }
+      }
+      if (REFUSED_KEY_ERRORS.has(name)) {
+        return { status: 'invalid-key', probeStatus: response.status, detail }
+      }
     }
     return { status: 'unknown', probeStatus: response.status, detail }
   } catch (error) {

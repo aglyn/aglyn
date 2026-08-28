@@ -58,6 +58,18 @@ Optional fields: `html`, `headers` (e.g. `List-Unsubscribe`), `tags` (webhook
 attribution), `replyTo`, and `from` (overrides the configured sender — rarely
 correct, since the point of `USAGE_EMAIL_FROM` is one verified identity).
 
+### The transport boundary
+
+`postResendEmail()` is the only function that POSTs to Resend's send endpoint,
+and it **throws** on a payload with no `to` rather than putting it on the wire.
+Such a payload cannot become a message; Resend answers `422
+missing_required_field`, which costs an API call and then sits in the vendor
+dashboard looking exactly like mail that failed to deliver, carrying nothing
+that names the code responsible. `sendEmail()` filters recipients long before
+this point, so ordinary senders never meet the guard — it is there because
+`RESEND_SEND_ENDPOINT` is exported and a module that fetches it directly
+bypasses every check `sendEmail()` owns.
+
 ## Checking configuration
 
 ```typescript
@@ -70,11 +82,16 @@ import { isEmailConfigured, describeEmailConfig, checkEmailCredentials }
 - `describeEmailConfig()` — env presence plus the sender and its domain, with
   the API key never included.
 - `checkEmailCredentials()` — asks Resend whether the key is accepted
-  **without sending anything**, by POSTing an empty body and reading the
-  rejection: `401`/`403` means the key was refused, `422`/`400` means it was
-  accepted and only the empty payload was rejected. A sending-scoped key has
-  no read permissions, so this is the only no-send liveness signal available.
-  It cannot confirm domain verification — only a real send does that.
+  **without sending anything**, by `GET`ting the domains collection and
+  reading the error NAME rather than the status. A `2xx`, or a
+  `restricted_api_key`/`invalid_permission` rejection (what a sending-scoped
+  key gets, and it can only be reached once Resend has authenticated the key),
+  means the credential works. `missing_api_key`, `validation_error` and
+  `suspended_api_key` mean it was refused. Anything else is `unknown`, never
+  `invalid-key`. It never touches the send endpoint: a probe aimed there is
+  logged by Resend as a `422` on `POST /emails` and reads, in the dashboard,
+  as failed mail. It cannot confirm domain verification — only a real send
+  does that.
 
 These back the staff-only `/api/admin/email-health` route in the console.
 

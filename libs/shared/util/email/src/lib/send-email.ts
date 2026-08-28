@@ -232,6 +232,60 @@ function normalizeRecipients(to: string | string[]): string[] {
     .filter((address) => address.includes('@'))
 }
 
+/** A Resend send payload in the provider's own wire shape. */
+export interface ResendSendPayload {
+  to?: unknown
+  from?: unknown
+  subject?: unknown
+  [field: string]: unknown
+}
+
+/**
+ * The one place that POSTs to Resend's send endpoint, and the last thing
+ * standing between a payload and the network.
+ *
+ * A payload carrying no recipient cannot become a message. Resend answers it
+ * `422 missing_required_field`, which costs an API call and then shows up in
+ * the vendor dashboard as a red line indistinguishable from mail that
+ * genuinely failed to deliver — carrying no subject, no recipient and nothing
+ * naming the code that produced it. Diagnosing that means reading a log
+ * outside the deployment and guessing. So the refusal happens here, before
+ * the fetch, and names the caller's `context`.
+ *
+ * It throws rather than returning a `SendEmailResult`: this is a programming
+ * error, not a delivery outcome. `sendEmail` filters recipients well before
+ * it reaches this call, so nothing on the ordinary path can trip it. The
+ * guard exists because `RESEND_SEND_ENDPOINT` is exported and any module can
+ * therefore reach the send endpoint on its own, bypassing every check
+ * `sendEmail` owns.
+ */
+export async function postResendEmail(
+  apiKey: string,
+  payload: ResendSendPayload,
+  context?: string,
+): Promise<Response> {
+  const raw = payload?.to
+  const recipients = (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
+    .map((address) => String(address ?? '').trim())
+    .filter(Boolean)
+  if (!recipients.length) {
+    throw new Error(
+      `${context ? `${context} ` : ''}send refused before the network — a ` +
+        'Resend payload with no `to` field cannot become a message, and the ' +
+        'attempt would surface only as a 422 in the Resend dashboard',
+    )
+  }
+
+  return fetch(RESEND_SEND_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
 /**
  * Sends one email through Resend.
  *
@@ -322,13 +376,9 @@ export async function sendEmail(
   }
 
   try {
-    const response = await fetch(RESEND_SEND_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const response = await postResendEmail(
+      apiKey,
+      {
         from,
         to,
         subject: options.subject,
@@ -348,8 +398,9 @@ export async function sendEmail(
           return tags.length ? { tags } : {}
         })(),
         ...(options.replyTo ? { reply_to: options.replyTo } : {}),
-      }),
-    })
+      },
+      options.context,
+    )
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '')

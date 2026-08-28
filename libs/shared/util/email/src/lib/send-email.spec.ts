@@ -20,6 +20,7 @@ import {
   applyFromName,
   contextTag,
   isEmailConfigured,
+  postResendEmail,
   sendEmail,
 } from './send-email'
 
@@ -439,6 +440,72 @@ describe('sendEmail', () => {
       await sendEmail({ to: 'a@example.com', subject: 'Hi', context: 'invite' })
 
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('invite email'))
+    })
+  })
+
+  /*
+   * THE TRANSPORT BOUNDARY.
+   *
+   * `sendEmail` filters recipients before it gets here, so these cases are
+   * unreachable through it. They matter for the other way to the send
+   * endpoint: `RESEND_SEND_ENDPOINT` is exported, so a module can POST to it
+   * directly and skip every check above — which is how a recipientless
+   * request reached Resend and came back 422, visible only in the vendor
+   * dashboard.
+   */
+  describe('postResendEmail', () => {
+    it('refuses a payload with no recipient before the network', async () => {
+      const fetchMock = mockFetch({})
+
+      await expect(
+        postResendEmail('re_test', { from: FROM, subject: 'Hi' }),
+      ).rejects.toThrow(/no `to` field/)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('refuses an empty recipient list and a blank address', async () => {
+      const fetchMock = mockFetch({})
+
+      await expect(
+        postResendEmail('re_test', { from: FROM, to: [] }),
+      ).rejects.toThrow()
+      await expect(
+        postResendEmail('re_test', { from: FROM, to: '  ' }),
+      ).rejects.toThrow()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('names the caller so the refusal identifies the sender', async () => {
+      mockFetch({})
+
+      await expect(
+        postResendEmail('re_test', { from: FROM }, 'usage-summary'),
+      ).rejects.toThrow(/usage-summary/)
+    })
+
+    /*
+     * The control for this block: the guard refuses one specific shape, not
+     * every request. Without it the three refusals above would all pass on a
+     * transport that had stopped working entirely.
+     */
+    it('puts a well-formed payload on the wire', async () => {
+      const fetchMock = mockFetch({})
+
+      await postResendEmail(
+        're_test',
+        { from: FROM, to: ['a@example.com'], subject: 'Hi' },
+        'invite',
+      )
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(url).toBe(RESEND_SEND_ENDPOINT)
+      expect(init.method).toBe('POST')
+      expect(init.headers.Authorization).toBe('Bearer re_test')
+      expect(JSON.parse(init.body)).toMatchObject({
+        to: ['a@example.com'],
+        subject: 'Hi',
+      })
     })
   })
 })
