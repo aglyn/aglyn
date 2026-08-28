@@ -76,6 +76,7 @@ import {
   ICON_VARIANT_SEARCH,
 } from '@aglyn/shared-data-enums'
 import { STARTER_TEMPLATES } from '../../constants/starter-templates'
+import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import createPageFromTemplate, {
   withBundleRootScreen,
 } from './create-page-from-template'
@@ -154,6 +155,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
+  const logActivity = useHostActivityLogger(hostId)
   const router = useRouter()
   const orgSlug = useOrgSlug()
   const hostSubdomain = useHostSubdomain()
@@ -570,6 +572,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
               seo: screen.seo,
               slug: screen.slug,
               usedSlugs: used,
+              logActivity,
             },
           )
         }
@@ -599,6 +602,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       hostId,
       createHostResource,
       createHostVersion,
+      logActivity,
       queueLoading,
       enqueueSnackbar,
       onClose,

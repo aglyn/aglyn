@@ -1058,6 +1058,18 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                    * page is open for a reason, "what did they do" is the
                    * question being asked, and nothing here could answer it.
                    * Every org, every site, newest first.
+                   *
+                   * The copy says "console actions", not "everything". The
+                   * feed is `collectionGroup('activity')`, which spans
+                   * `orgs/{orgId}/activity` and `hosts/{hostId}/activity` —
+                   * so the SCOPE half of the claim holds. Completeness does
+                   * not: an entry exists only where a mutation point calls
+                   * the logger, and a flow that forgets to is indistinguishable
+                   * here from a person who did nothing. Promising
+                   * "everything" turns that gap into a false negative on a
+                   * page read as an audit trail, which is the reading that
+                   * matters — an empty feed must be understood as "nothing
+                   * was logged", never as "nothing was done".
                    */
                   <ActorActivityTable
                     endpoint={`/api/admin/user-activity?uid=${encodeURIComponent(uid)}`}
@@ -1065,12 +1077,13 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
                       excerpt:
-                        'Everything this account has done, across every organization and site — as distinct from the staff actions taken against it.',
+                        'Console actions logged for this account, across every organization and site — as distinct from the staff actions taken against it.',
                     })}
                     description={
-                      'Everything this account has done, across every ' +
-                      'organization and site. Not the same as the staff ' +
-                      'actions above, which were done TO it.'
+                      'Console actions logged for this account, across every ' +
+                      'organization and site. An empty feed means nothing was ' +
+                      'logged, not that nothing was done. Not the same as the ' +
+                      'staff actions above, which were done TO it.'
                     }
                   />
                 ),

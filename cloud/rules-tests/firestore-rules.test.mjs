@@ -32,6 +32,7 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
 import {
+  addDoc,
   collection,
   deleteDoc,
   deleteField,
@@ -7623,6 +7624,167 @@ describe('media object fields are server-owned (AGL-1881)', () => {
         'but the DAM edits an asset client-direct. Denying it breaks the ' +
         'library for every customer to close a hole the field freeze ' +
         'already closes.',
+    )
+  })
+})
+
+/**
+ * WHO MAY APPEND TO A SITE'S ACTIVITY LOG (AGL-118)
+ *
+ * `hosts/{hostId}/activity` has no dedicated match block. It falls to the
+ * host catch-all, and its name is deliberately absent from every exclusion
+ * list there, so a member holding a content role appends straight from the
+ * browser. That absence is load-bearing and was never asserted, which is how
+ * an empty activity log came to be read as a permission denial: the log is
+ * silent whether the write was refused or never attempted, and with nothing
+ * pinning the rule, "the rules must be denying it" is the cheapest available
+ * explanation and it is wrong.
+ *
+ * These cases exist to make that explanation impossible to reach again. The
+ * ALLOW half is the important half — a suite where every case is a deny
+ * passes just as well when the collection has been closed by accident.
+ *
+ * The role axis is exactly `canWriteHostContent`: admin, editor and author
+ * append; a viewer does not. That is deliberate rather than incidental — an
+ * audit entry is written BY the act it records, so anyone who can perform a
+ * logged mutation must be able to log it, and nobody else needs to write here
+ * at all.
+ */
+describe('a site activity entry is appended by the member who caused it (AGL-118)', () => {
+  const ACTIVITY = ['hosts', HOST, 'activity']
+  /**
+   * A host in a healthy org whose `memberRoles` projection is EMPTY.
+   *
+   * `syncOrgAuthProjections` stamps owner/admin onto every host in the org,
+   * so this state should not occur — which is the reason to pin it. It is the
+   * shape a missed projection would take, and it must read as a denial rather
+   * than as a quietly writable log.
+   */
+  const UNPROJECTED_HOST = 'host-unprojected'
+
+  /** The document the console's activity logger actually writes. */
+  const entry = (actorId) => ({
+    actorId,
+    actorEmail: 'member@acme.test',
+    action: 'Saved the screen',
+    target: { type: 'screen', id: 'screen-1', name: 'Home' },
+    createdAt: new Date(),
+  })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', UNPROJECTED_HOST), {
+        displayName: 'Unprojected', orgId: ORG, memberRoles: {},
+      })
+    })
+  })
+
+  it('THE CONTROL — the roles that mutate content can record having done so', async () => {
+    // Asserted FIRST and deliberately: every refusal below would still pass
+    // if this collection were closed outright, and a log nobody can write is
+    // the defect, not the fix.
+    await mustAllow(
+      'an org owner (projected admin on every host) logging a screen save',
+      addDoc(collection(authed(OWNER), ...ACTIVITY), entry(OWNER)),
+    )
+    await mustAllow(
+      'a site editor logging a screen save',
+      addDoc(collection(authed(EDITOR), ...ACTIVITY), entry(EDITOR)),
+    )
+    // The author edits content without publishing it, so the author generates
+    // audit entries too. Excluding this role would lose exactly the actions a
+    // reviewer most wants attributed.
+    await mustAllow(
+      'a site author logging a screen save',
+      addDoc(collection(authed(AUTHOR), ...ACTIVITY), entry(AUTHOR)),
+    )
+    await mustAllow(
+      'staff logging a screen save',
+      addDoc(
+        collection(authed(STAFF, { staff: true }), ...ACTIVITY),
+        entry(STAFF),
+      ),
+    )
+  })
+
+  it('a viewer, an outsider and a signed-out browser cannot forge one', async () => {
+    // A viewer performs no logged mutation, so an entry from one is either a
+    // forgery or a bug. `isHostAdmin` admits a viewer for READS; the write
+    // gate is `canWriteHostContent`, which does not.
+    await mustDeny(
+      'a viewer appending to the activity log',
+      addDoc(collection(authed(VIEWER), ...ACTIVITY), entry(VIEWER)),
+    )
+    await mustDeny(
+      'a member of another org appending to this log',
+      addDoc(collection(authed(OUTSIDER), ...ACTIVITY), entry(OUTSIDER)),
+    )
+    await mustDeny(
+      'a signed-out browser appending to the activity log',
+      addDoc(collection(anon(), ...ACTIVITY), entry('nobody')),
+    )
+    // The retired uid map must not authorize an append any more than it
+    // authorizes anything else.
+    await mustDeny(
+      'a legacy `admins` entry appending to the activity log',
+      addDoc(collection(authed(LEGACY), ...ACTIVITY), entry(LEGACY)),
+    )
+  })
+
+  it('an org owner with no projected role on the host is refused', async () => {
+    // Org standing alone authorizes nothing here: the rules read the host
+    // doc's `memberRoles`, never the org roster. So a host the projection
+    // never reached is unwritable by its own org's owner — which is the
+    // failure this case names, and the reason a missed `registerOrgHost`
+    // would present as a site that quietly records nothing.
+    await mustDeny(
+      'an org owner appending to a host with an empty memberRoles projection',
+      addDoc(
+        collection(authed(OWNER), 'hosts', UNPROJECTED_HOST, 'activity'),
+        entry(OWNER),
+      ),
+    )
+  })
+
+  it('a suspended site stops accepting activity like every other write', async () => {
+    // `hostWritesFrozen` is the second conjunct, so the log is not an exception
+    // to a takedown. Staff keep the append — the un-panic invariant — because
+    // the people working inside the lock are the ones whose actions most need
+    // recording.
+    await mustDeny(
+      'an editor appending to a suspended site\'s activity log',
+      addDoc(
+        collection(authed(EDITOR), 'hosts', LOCKED_HOST, 'activity'),
+        entry(EDITOR),
+      ),
+    )
+    await mustAllow(
+      'staff appending to a suspended site\'s activity log',
+      addDoc(
+        collection(authed(STAFF, { staff: true }), 'hosts', LOCKED_HOST, 'activity'),
+        entry(STAFF),
+      ),
+    )
+  })
+
+  it('the catch-all exclusion lists still leave `activity` client-writable', async () => {
+    // The mechanism, asserted directly. Adding `activity` to the create list
+    // would deny every append above, and the console has no server route to
+    // fall back on — the log would simply stop, silently, exactly as it
+    // appeared to have done.
+    const lists = hostSubcollectionExclusions()
+    assert.ok(
+      !lists.create.includes('activity'),
+      '`activity` has been added to the host catch-all CREATE exclusion ' +
+        'list. The console appends activity entries client-direct and no ' +
+        'Admin-SDK route writes them, so this silently ends host activity ' +
+        'logging rather than moving it.',
+    )
+    assert.ok(
+      !hostServerOnlySubcollections().includes('activity'),
+      '`activity` is now denied to the client outright under hosts/{hostId}, ' +
+        'which stops the console writing the audit trail it reads back.',
     )
   })
 })

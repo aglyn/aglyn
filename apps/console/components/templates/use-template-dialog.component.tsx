@@ -40,6 +40,7 @@ import {
 } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import createPageFromTemplate from './create-page-from-template'
 
 /**
@@ -67,6 +68,7 @@ export function UseTemplateDialog({
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
+  const logActivity = useHostActivityLogger(hostId)
   const { enqueueSnackbar } = useSnackbar()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -116,11 +118,15 @@ export function UseTemplateDialog({
             nodes,
           },
         })
+        logActivity('Created component from template', {
+          type: 'component',
+          id,
+          name: name.trim(),
+        })
         enqueueSnackbar(`Created the component “${name.trim()}”`, {
           variant: 'success',
           persist: false,
         })
-        void id
         return void onClose()
       }
 
@@ -153,6 +159,11 @@ export function UseTemplateDialog({
             nodes,
           },
         })
+        logActivity('Created layout from template', {
+          type: 'layout',
+          id: layoutId,
+          name: name.trim(),
+        })
         enqueueSnackbar(`Created the layout “${name.trim()}”`, {
           variant: 'success',
           persist: false,
@@ -180,6 +191,7 @@ export function UseTemplateDialog({
           seo: template.seo,
           slug,
           usedSlugs: used,
+          logActivity,
         },
       )
       enqueueSnackbar(
@@ -211,6 +223,7 @@ export function UseTemplateDialog({
     firestore,
     createHostResource,
     createHostVersion,
+    logActivity,
     enqueueSnackbar,
     onClose,
   ])
