@@ -213,6 +213,32 @@ describe('the wildcard driver', () => {
     })
   })
 
+  it('covers NOTHING when nobody has named an apex', async () => {
+    /*
+     * ⛔ No hardcoded fallback, and this is the case that says why. Elsewhere
+     * an unset `NEXT_PUBLIC_TENANT_DOMAIN` may default to Aglyn's own name,
+     * because the consequence is a visibly wrong URL the operator corrects on
+     * their first click. Here the consequence is different in kind: this
+     * driver ASSERTS the names it covers are served, so a default would have
+     * an operator's install report `serving` for `*.aglyn.com` — a domain they
+     * do not own and never named.
+     */
+    env({
+      AGLYN_DOMAIN_PROVIDER: 'wildcard',
+      NEXT_PUBLIC_WORKSPACE_DOMAIN: undefined,
+      NEXT_PUBLIC_TENANT_DOMAIN: undefined,
+    })
+    const provider = (await load()).domainProvider()
+    for (const name of ['acme.aglyn.com', 'acme.aglyn.app', 'a.example.com']) {
+      expect(await provider.status('console', name)).toMatchObject({
+        state: 'unknown',
+      })
+      expect(await provider.attach('console', name)).toMatchObject({
+        outcome: 'skipped',
+      })
+    }
+  })
+
   it('satisfies a redirect without an edge rule', async () => {
     /*
      * The renamed workspace's old slug still resolves under the wildcard, and
@@ -258,7 +284,7 @@ describe('the webhook driver', () => {
     ;(globalThis as { fetch: unknown }).fetch = fetchMock
   })
 
-  it('THE CONTROL: relays the endpoint'''s outcome and its own detail', async () => {
+  it('THE CONTROL: relays what the endpoint answered, and its own detail', async () => {
     fetchMock.mockResolvedValue(
       respond(200, { outcome: 'attached', detail: 'added to caddy' }),
     )

@@ -306,7 +306,7 @@ export function domainProvider(): DomainProvider {
     process.env.AGLYN_DOMAIN_WEBHOOK_URL ?? '',
     process.env.AGLYN_DOMAIN_WILDCARD_SUFFIXES ?? '',
     process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? '',
-    process.env.NEXT_PUBLIC_TENANT_APEX ?? '',
+    process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? '',
   ].join(' ')
   if (cached?.key === key) return cached.provider
 

@@ -55,11 +55,20 @@ import {
 /**
  * The apexes the operator's DNS and certificate already cover.
  *
- * Defaults to the two the product itself hands out — the console's workspace
+ * Falls back to the two the product itself hands out — the console's workspace
  * domain and the tenant apex — because those are the names Aglyn generates and
  * therefore the ones an operator choosing this driver is choosing it FOR. A
  * deployment serving more than those, or serving them under different names
  * per scope, lists them explicitly.
+ *
+ * ⛔ NO hardcoded apex behind those two. Elsewhere in the product an unset
+ * `NEXT_PUBLIC_TENANT_DOMAIN` may default to Aglyn's own name, because the
+ * consequence is a visibly wrong URL the operator corrects on their first
+ * click. Here the consequence is different in kind: this driver ASSERTS that
+ * the names it covers are being served, so a default would have an operator's
+ * install report `serving` for `*.aglyn.com` — a domain they do not own,
+ * cannot serve, and never named. An empty list covers nothing, which is the
+ * only honest answer when nobody has said what the proxy answers for.
  */
 function wildcardSuffixes(): string[] {
   const configured = String(process.env.AGLYN_DOMAIN_WILDCARD_SUFFIXES ?? '')
@@ -68,8 +77,8 @@ function wildcardSuffixes(): string[] {
     .filter(Boolean)
   if (configured.length) return configured
   return [
-    normalizeHost(process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'),
-    normalizeHost(process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? 'aglyn.app'),
+    normalizeHost(process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? ''),
+    normalizeHost(process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? ''),
   ].filter(Boolean)
 }
 
