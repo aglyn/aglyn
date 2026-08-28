@@ -39,10 +39,7 @@
  * placeholder fails here instead of passing.
  */
 
-import { ThemeProvider } from '@mui/material/styles'
-import { consoleThemeLight } from '@aglyn/shared-ui-theme'
 import { render, screen } from '@testing-library/react'
-import type React from 'react'
 import NewsletterSignup from './newsletter-signup'
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -108,18 +105,20 @@ describe('the newsletter block names its email field (AGL-2392)', () => {
  * skipped level, and the `heading-order` audit failure. Six blog listing pages
  * carried it, and eleven blog posts carried the `subtitle2` twin.
  *
- * The fix is a `variantMapping` in the shared theme rather than a `component`
- * prop here, because this block is one of 37 subtitle call sites on the render
- * path and they all had it. This asserts the RENDERED ELEMENT of a real
- * affected component, so the theme default is proven to reach the markup — a
- * theme assertion alone would still pass if a provider stopped applying it.
+ * The element is named at the call site, with `component="p"` on the
+ * Typography itself. A theme-wide `variantMapping` would fix this block and
+ * every other `subtitle1` at once, which is exactly why it is the wrong tool:
+ * it changes the element under call sites nobody audited, including ones where
+ * an `h6` is correct. A default is a guess applied everywhere; the prop is a
+ * statement about this block.
+ *
+ * Asserted on the RENDERED ELEMENT rather than on the source, so the prop is
+ * proven to survive Typography's own `component || variantMapping[variant] ||
+ * defaultVariantMapping[variant]` resolution.
  */
 describe('the newsletter heading is styled text, not an outline entry (AGL-2486)', () => {
-  const renderThemed = (node: React.ReactElement) =>
-    render(<ThemeProvider theme={consoleThemeLight}>{node}</ThemeProvider>)
-
   it('renders the subtitle as a paragraph, not an h6', () => {
-    renderThemed(<NewsletterSignup heading="Get product updates" />)
+    render(<NewsletterSignup heading="Get product updates" />)
     const line = screen.getByText('Get product updates')
     expect(line.tagName).toBe('P')
   })
@@ -128,7 +127,7 @@ describe('the newsletter heading is styled text, not an outline entry (AGL-2486)
     // The assertion that actually matches the audit: `heading-order` reads the
     // sequence of heading ELEMENTS, so what matters is that this block adds
     // none, not merely that one particular node changed tag.
-    const { container } = renderThemed(
+    const { container } = render(
       <NewsletterSignup heading="Get product updates" />,
     )
     expect(container.querySelectorAll('h1,h2,h3,h4,h5,h6')).toHaveLength(0)

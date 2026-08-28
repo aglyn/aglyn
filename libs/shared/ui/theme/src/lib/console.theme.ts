@@ -356,38 +356,6 @@ const baseOptions: ThemeOptions = {
         arrow: true,
       },
     },
-    /**
-     * `subtitle1`/`subtitle2` ARE NOT HEADINGS (AGL-2486).
-     *
-     * MUI's own `defaultVariantMapping` sends both to `<h6>`, so every
-     * `<Typography variant="subtitle1">` in the codebase puts a heading in the
-     * document outline while its author was only picking a type style. That is
-     * a skipped heading level wherever the surrounding content is not already
-     * at `h5`, which is the `heading-order` accessibility failure.
-     *
-     * Measured across the 94 pages of aglyn.com's sitemap: 21 pages had a
-     * skipped level, and 17 of them were this — `h2 -> h6 "Share this article"`
-     * on every blog post, and `h3 -> h6 "Get product updates"` on every blog
-     * listing, both from repo components that never asked for a heading.
-     *
-     * `p` for both, matching `body1`/`body2`, which MUI already maps that way.
-     * It is an ELEMENT change only: Typography's styles come from `variant`,
-     * so nothing moves visually.
-     *
-     * ⛔ THE THEME IS THE FIX, not 37 call sites (AGL-1487 fixed the same
-     * defect for AUTHOR content in `plugins/mui`'s `typography.tsx`, which
-     * passes its own `variantMapping` and is unaffected by this). Anything
-     * that genuinely IS a heading says so with `component="h3"`, which still
-     * overrides this — a default is not a ceiling.
-     */
-    MuiTypography: {
-      defaultProps: {
-        variantMapping: {
-          subtitle1: 'p',
-          subtitle2: 'p',
-        },
-      },
-    },
   },
   // mixins: {},
   shadowsInset: [

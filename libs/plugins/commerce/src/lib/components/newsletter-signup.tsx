@@ -102,7 +102,16 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
     return (
       <Box ref={ref} {...rest}>
         {heading ? (
-          <Typography variant="subtitle1" gutterBottom>
+          // `component="p"` because this introduces the field below it and is
+          // not a section heading (AGL-2486). MUI's `defaultVariantMapping`
+          // sends `subtitle1` to `<h6>`, so without this the signup block puts
+          // a level-6 heading into the outline of every page it appears on. On
+          // a blog listing the nearest preceding heading is an `h3`, which
+          // makes it a skipped level and a `heading-order` failure.
+          //
+          // It is also not the field's label — see the `aria-label` below,
+          // which is the input's only accessible name.
+          <Typography component="p" variant="subtitle1" gutterBottom>
             {heading}
           </Typography>
         ) : null}
