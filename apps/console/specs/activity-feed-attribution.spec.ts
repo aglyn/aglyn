@@ -22,20 +22,20 @@
  */
 
 /**
- * AGL-118 — the staff user page shows unattributed workspace activity WITHOUT
- * claiming the person performed it.
+ * AGL-118 — the staff user page shows exactly the rows an actor is recorded
+ * on, and nothing else.
  *
  * No artifact under a host recorded its creator until this issue, and three
- * template surfaces logged nothing at all, so the attributed feed
- * (`actorId == uid`) is empty for someone who built a site from a template and
- * the page reads as an account that never used the product. The second section
- * answers that, and the entire risk it carries is that it answers it by
- * IMPLYING attribution.
+ * template surfaces logged nothing at all, so `actorId == uid` returned zero
+ * for someone who had built a whole site and the page read as an account that
+ * had never used the product. The reconstruction fills the actor in where a
+ * host's access set is exhaustive and holds one person; where it does not,
+ * the row keeps no actor and belongs to the SITE's feed, not to anybody's
+ * page.
  *
- * So the two readers are pinned against each other. The attributed one must
- * never surface a row nothing attributes; the unattributed one must never
- * reach outside the workspaces the person administers; and neither may
- * swallow the other.
+ * Which makes one property load-bearing: a row with no actor must never be
+ * reachable by the query that answers "what did this account do", however
+ * strongly its surroundings suggest who it was.
  */
 
 interface FakeDoc {
@@ -136,11 +136,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-import {
-  administeredScopePaths,
-  readActorActivity,
-  readUnattributedScopeActivity,
-} from '../utils/server/actor-activity'
+import { readActorActivity } from '../utils/server/actor-activity'
 
 const THEM = 'uid-the-account-this-page-is-about'
 
@@ -198,72 +194,5 @@ describe('the two feeds cannot bleed into each other (AGL-118)', () => {
     ]
     const page = await readActorActivity({ actorId: THEM, pageSize: 25 })
     expect(page.entries).toEqual([])
-  })
-
-  it('the unattributed feed carries only rows with no actor', async () => {
-    mockUserOrgs = [{ id: 'o1', role: 'owner' }]
-    mockHostsByOrg = { o1: ['h1'] }
-    mockCorpus = [
-      attributed('a1', 'hosts/h1', 900),
-      unattributed('r1', 'hosts/h1', 800),
-    ]
-    const page = await readUnattributedScopeActivity({ uid: THEM, pageSize: 25 })
-    expect(page.entries.map((entry) => entry.$id)).toEqual(['r1'])
-    // Rendered as "not recorded" by the table; never as an empty cell, which
-    // reads as a bug and invites the reader to fill the blank in themselves.
-    expect(page.entries[0].actorEmail).toBeNull()
-  })
-})
-
-describe('the unattributed feed is scoped to what the account administers', () => {
-  it('does not leak another organization\'s activity', async () => {
-    mockUserOrgs = [{ id: 'o1', role: 'owner' }]
-    mockHostsByOrg = { o1: ['h1'] }
-    mockCorpus = [
-      unattributed('mine', 'hosts/h1', 900),
-      // Same shape, same absence of an actor, another org's site. Nothing
-      // about this row is distinguishable except WHERE it happened.
-      unattributed('theirs', 'hosts/h-other', 800),
-    ]
-    const page = await readUnattributedScopeActivity({ uid: THEM, pageSize: 25 })
-    expect(page.entries.map((entry) => entry.$id)).toEqual(['mine'])
-  })
-
-  it('counts owner and admin, and not a lesser membership', async () => {
-    // "Administers" is narrower than "belongs to" on purpose: an editor on
-    // somebody else's site has no administrative relationship to its activity,
-    // and listing it on a staff page about them misrepresents their remit.
-    mockUserOrgs = [{ id: 'o1', role: 'editor' }]
-    mockHostsByOrg = { o1: ['h1'] }
-    mockCorpus = [unattributed('r1', 'hosts/h1', 900)]
-    const page = await readUnattributedScopeActivity({ uid: THEM, pageSize: 25 })
-    expect(page.entries).toEqual([])
-
-    mockUserOrgs = [{ id: 'o1', role: 'admin' }]
-    const asAdmin = await readUnattributedScopeActivity({
-      uid: THEM,
-      pageSize: 25,
-    })
-    expect(asAdmin.entries.map((entry) => entry.$id)).toEqual(['r1'])
-  })
-
-  it('an account that administers nothing gets an empty feed, not the platform\'s', async () => {
-    // The scope set is REQUIRED for this reader. An empty one must mean "no
-    // rows", never "no filter" — the difference between an empty section and
-    // every unattributed row on the platform under one person's name.
-    mockUserOrgs = []
-    mockCorpus = [unattributed('r1', 'hosts/h1', 900)]
-    const page = await readUnattributedScopeActivity({ uid: THEM, pageSize: 25 })
-    expect(page.entries).toEqual([])
-    expect(page.nextCursor).toBeNull()
-  })
-
-  it('the org feed itself is in scope, not only its sites', async () => {
-    mockUserOrgs = [{ id: 'o1', role: 'owner' }]
-    mockHostsByOrg = { o1: ['h1'] }
-    expect([...(await administeredScopePaths(THEM))].sort()).toEqual([
-      'hosts/h1',
-      'orgs/o1',
-    ])
   })
 })

@@ -1088,51 +1088,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   />
                 ),
               },
-              {
-                size: { xs: 12 },
-                children: (
-                  /*
-                   * The other half, and deliberately NOT merged into the card
-                   * above (AGL-118).
-                   *
-                   * Until this issue, no artifact under a host recorded who
-                   * created it, and three template surfaces logged nothing at
-                   * all. For someone who built a site from a template the
-                   * attributed feed is therefore empty, and an empty feed on a
-                   * page headed "what did this account do" reads as an account
-                   * that never used the product. That reading is wrong and it
-                   * is the complaint this answers.
-                   *
-                   * What it must NOT do is answer it by implying this person
-                   * performed these acts. Nothing records who did. So the rows
-                   * live under their own heading, carry an Actor column that
-                   * says `not recorded`, and are joined to this page by one
-                   * relationship only — the account administers the workspace
-                   * they happened on. A reader must come away knowing both
-                   * that the site was built and that the platform did not
-                   * record who built it.
-                   */
-                  <ActorActivityTable
-                    endpoint={`/api/admin/user-scope-activity?uid=${encodeURIComponent(uid)}`}
-                    header="Unattributed activity on workspaces this account administers"
-                    actorNotRecorded
-                    help={docsHelp('staffConsole', {
-                      anchor: '#whats-there',
-                      excerpt:
-                        'Activity on the workspaces and sites this account administers whose actor the platform never recorded — evidence about the SITE, not about the person.',
-                    })}
-                    description={
-                      'Separate from the list above because nobody is ' +
-                      'recorded as having done these things. They happened on ' +
-                      'workspaces this account administers, which is the only ' +
-                      'thing connecting them to this page — it is not evidence ' +
-                      'that this account performed them. Rows marked ' +
-                      '“reconstructed” were derived after the fact from the ' +
-                      'artifact they describe.'
-                    }
-                  />
-                ),
-              },
+
               {
                 size: { xs: 12 },
                 children: (

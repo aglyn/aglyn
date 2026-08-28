@@ -34,14 +34,52 @@
 //            author field anywhere in a host's artifacts.
 //   NOT      screens, layouts, components, templates and versions carry NO
 //            author field of any kind. Nothing in those documents names a
-//            person, so nothing in this script attributes them to one — an
-//            org's owner is not "probably who did it", they are an inference
-//            the artifact does not support, and a false attribution in an
-//            audit trail is worse than an absent one.
+//            person, so nothing in this script reads an actor off them.
 //   NOT      the edits BETWEEN creation and now. `updatedAt` proves only that
 //            a last write happened; it names neither how many there were nor
 //            what they changed, so no entry is emitted for it.
+//   INFERRED where the host has EXACTLY ONE member and the artifact was made
+//            while that member's account was active, the actor is inferred to
+//            be that member — see below. Marked as inferred, always.
 //
+// ── THE ONE INFERENCE THIS MAKES, AND WHY IT IS ALLOWED ───────────────────
+//
+// Attributing an artifact to an org's owner because they own the org is not
+// allowed and is not done: an org can hold many people who could each have
+// done it, so "the owner probably did" is a guess with a name attached.
+//
+// A host whose `memberRoles` map holds exactly ONE entry is a different
+// question. The set of people with access is EXHAUSTIVE and its size is one,
+// so "who else could it have been" has the answer "nobody" rather than "we
+// picked the likeliest". That is the whole distinction, and it is why the
+// rule below refuses the moment a second member appears — it does not pick
+// the more probable of two.
+//
+// ⛔ IT IS STILL NOT PROOF, and the marker is what keeps that true. STAFF
+// writes bypass `memberRoles` entirely (`isStaff()` is the first disjunct of
+// every host rule), and so does every Admin-SDK route, so a single-member map
+// bounds the CUSTOMERS who could have written, not the writers. Every
+// inferred row therefore carries `actorInferred` and the basis it was drawn
+// from, and the staff view renders that marker beside the actor. An inferred
+// actor that reaches a reader looking like a recorded one is the failure this
+// exists to prevent; dropping the marker because the evidence feels
+// conclusive is how that happens.
+//
+// ── THE WINDOW, AND WHAT IT ACTUALLY ESTABLISHES ──────────────────────────
+//
+// There is no per-session log to test containment against. Firebase Auth
+// exposes `creationTime` / `lastSignInTime` / `lastRefreshTime` and no session
+// list, and the `users/{uid}/devices` records cannot substitute: their
+// `lastSeenAt` is stamped at sign-in and not maintained per request (a device
+// on the reported account carries `lastSeenAt === createdAt`), so a device row
+// bounds nothing.
+//
+// So the window is the account's ACTIVE LIFETIME — creation to last refresh —
+// and the honest statement of what it buys is narrow: it rules out an
+// artifact made before the account existed, or after it went permanently
+// idle. It does NOT establish that the person was in session at that instant.
+// It is a floor under the inference, not the inference itself; the exhaustive
+// access set is what carries it.
 // Versions are deliberately skipped even though they carry `createdAt`. A
 // template-built page writes its screen, its first version and its route as
 // ONE act, so emitting a row for the version too would invent a second event
@@ -75,6 +113,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 
 // Load admin creds from the repo's local env files so this script is
@@ -139,8 +178,8 @@ const ONLY_HOST = opt('--host', '')
  */
 const SOURCES = [
   { sub: 'screens', targetType: 'screen', noun: 'screen', authorField: null },
-  { sub: 'layouts', targetType: 'layout', noun: 'layout', authorField: null },
-  { sub: 'components', targetType: 'component', noun: 'component', authorField: null },
+  { sub: 'layouts', targetType: 'layout', noun: 'shared layout', authorField: null },
+  { sub: 'components', targetType: 'component', noun: 'reusable component', authorField: null },
   { sub: 'templates', targetType: 'template', noun: 'template', authorField: null },
   { sub: 'media', targetType: 'media', noun: 'media asset', authorField: 'uploadedBy' },
 ]
@@ -166,6 +205,58 @@ console.log(
     `${ONLY_HOST ? `host=${ONLY_HOST} ` : ''}` +
     `mode=${COMMIT ? 'COMMIT' : 'dry-run'}\n`,
 )
+
+/**
+ * The account's ACTIVE LIFETIME, from Firebase Auth. Memoized: the same member
+ * is asked about once per artifact otherwise.
+ *
+ * Returns null when the account is gone — a deleted user is not somebody to
+ * attribute new rows to.
+ */
+const windowCache = new Map()
+const activeWindowFor = async (uid) => {
+  if (windowCache.has(uid)) return windowCache.get(uid)
+  let window = null
+  try {
+    const user = await getAuth().getUser(uid)
+    const email = typeof user.email === 'string' ? user.email : null
+    const from = Date.parse(user.metadata.creationTime ?? '')
+    // `lastRefreshTime` is the most recent evidence the account was live at
+    // all; fall back to sign-in, then to now, so a missing field never makes
+    // the window empty and silently refuses every artifact.
+    const to = Date.parse(
+      user.metadata.lastRefreshTime ??
+        user.metadata.lastSignInTime ??
+        new Date().toISOString(),
+    )
+    if (Number.isFinite(from) && Number.isFinite(to) && to >= from) {
+      window = { fromMs: from, toMs: to, email }
+    }
+  } catch {
+    window = null
+  }
+  windowCache.set(uid, window)
+  return window
+}
+
+/**
+ * The member to infer as actor for artifacts on this host, or null.
+ *
+ * Null the moment the access set is anything but a single person. Two members
+ * is not "pick the likelier one" — it is a refusal.
+ */
+const soleMemberOf = async (hostData) => {
+  const roles = hostData.memberRoles
+  // An ABSENT map is unknown, not empty. A host whose projection never ran
+  // would otherwise read as "nobody has access", which is not a fact about
+  // who could have written and must never be treated as one.
+  if (!roles || typeof roles !== 'object') return null
+  const uids = Object.keys(roles)
+  if (uids.length !== 1) return null
+  const uid = uids[0]
+  const window = await activeWindowFor(uid)
+  return window ? { uid, window } : null
+}
 
 /** A Firestore Timestamp, or null when the artifact cannot be placed in time. */
 const createdAtOf = (data) => {
@@ -204,6 +295,10 @@ let artifactsScanned = 0
 let entriesPlanned = 0
 let withActor = 0
 let withoutActor = 0
+let inferredActor = 0
+let refusedNotSoleMember = 0
+let refusedOutsideWindow = 0
+const soleMemberHosts = new Set()
 let skippedNoCreatedAt = 0
 let alreadyPresent = 0
 const perSub = new Map()
@@ -219,6 +314,10 @@ for (const hostDoc of hostSnap.docs) {
   hostsScanned += 1
   const hostId = hostDoc.id
   const activityRef = hostDoc.ref.collection('activity')
+  // Resolved once per host: the access set is a property of the site, not of
+  // each artifact under it.
+  const sole = await soleMemberOf(hostDoc.data() ?? {})
+  if (sole) soleMemberHosts.add(hostId)
 
   for (const source of SOURCES) {
     const snap = await hostDoc.ref.collection(source.sub).get()
@@ -230,17 +329,37 @@ for (const hostDoc of hostSnap.docs) {
         skippedNoCreatedAt += 1
         continue
       }
-      // The artifact names an actor or it does not. Nothing else may supply
-      // one — not the host's owner, not the org roster, not the only person
-      // with a role on the site.
-      const actorId = source.authorField
+      // RECORDED first, always. An artifact that names its own author is not
+      // an inference and must never be re-decided by one.
+      const recordedActor = source.authorField
         ? typeof data[source.authorField] === 'string' && data[source.authorField]
           ? data[source.authorField]
           : null
         : null
-      if (actorId) {
+      // Then, and only for an artifact that names nobody, the sole-member
+      // inference. It refuses on two distinct grounds and counts them apart,
+      // because "the site has two members" and "this predates the account"
+      // are different answers and collapsing them hides which rule bit.
+      let inferred = null
+      if (!recordedActor) {
+        if (!sole) {
+          refusedNotSoleMember += 1
+        } else if (
+          createdAt.toMillis() < sole.window.fromMs ||
+          createdAt.toMillis() > sole.window.toMs
+        ) {
+          refusedOutsideWindow += 1
+        } else {
+          inferred = sole
+        }
+      }
+      const actorId = recordedActor ?? inferred?.uid ?? null
+      if (recordedActor) {
         withActor += 1
-        actorsSeen.add(actorId)
+        actorsSeen.add(recordedActor)
+      } else if (inferred) {
+        inferredActor += 1
+        actorsSeen.add(inferred.uid)
       } else {
         withoutActor += 1
       }
@@ -254,12 +373,17 @@ for (const hostDoc of hostSnap.docs) {
       const name = nameOf(data)
       const entry = {
         actorId,
-        actorEmail: null,
-        // The marker is in the text as well as the field: the console's
-        // activity table renders `action`, so a provenance flag only a query
-        // can reach would leave the page itself unable to say which rows are
-        // inferred.
-        action: `Created ${source.noun} (reconstructed)`,
+        // Follows the actor: a filled-in row carries the same two fields a
+        // live entry does, so nothing downstream has to special-case it.
+        actorEmail: recordedActor ? null : (inferred?.window.email ?? null),
+        // EXACTLY the string a live create writes for the same act — see
+        // `activity.noun` on each entry of RESOURCES in
+        // `apps/console/app/api/hosts/resources/route.ts`. A reconstructed row
+        // and a real one describe the same event in the same words, so a
+        // filter, a report or a future migration has one spelling to know
+        // rather than two. Provenance lives in the fields below, which is
+        // where an audit trail keeps it.
+        action: `Created ${source.noun}`,
         target: {
           type: source.targetType,
           id: artifact.id,
@@ -268,6 +392,29 @@ for (const hostDoc of hostSnap.docs) {
         createdAt,
         reconstructed: true,
         reconstructedFrom: `hosts/${hostId}/${source.sub}/${artifact.id}`,
+        // The basis, as DATA and only as data. It is not rendered — no suffix
+        // on the action, no chip on the row — because a page that shouts
+        // "inferred" on every line is a page nobody reads. It stays on the
+        // document because ordinary audit hygiene says a derived record
+        // names what it was derived from, and because the day somebody
+        // questions one of these rows this field is the entire answer.
+        // Written only when true, so a recorded-author row and an ordinary
+        // row are both simply without it.
+        ...(inferred
+          ? {
+              actorInferred: true,
+              actorInferredFrom: {
+                basis: 'sole-host-member',
+                hostId,
+                // The size of the access set the inference rests on. Stored so
+                // a later reader can see the rule was "exactly one", not "the
+                // most likely of several".
+                memberCount: 1,
+                activeFromMs: inferred.window.fromMs,
+                activeToMs: inferred.window.toMs,
+              },
+            }
+          : {}),
       }
       await write(ref, entry)
 
@@ -286,7 +433,11 @@ for (const source of SOURCES) {
   const n = perSub.get(source.sub) ?? 0
   console.log(
     `  ${String(n).padStart(4)}  ${source.sub.padEnd(11)} ` +
-      `${source.authorField ? `actor from \`${source.authorField}\`` : 'NO actor — the artifact names none'}`,
+      `${
+        source.authorField
+          ? `actor RECORDED on the artifact (${source.authorField})`
+          : 'no author field — actor inferred only on a single-member host'
+      }`,
   )
 }
 console.log('\nEntries by host:')
@@ -296,10 +447,15 @@ for (const [hostId, n] of [...perHost.entries()].sort((a, b) => b[1] - a[1])) {
 console.log(
   `\nhosts scanned          ${hostsScanned}` +
     `\nhosts with entries     ${hostsTouched.size}` +
+    `\nsingle-member hosts    ${soleMemberHosts.size}  (the only sites an actor can be inferred on)` +
     `\nartifacts scanned      ${artifactsScanned}` +
     `\nentries planned        ${entriesPlanned}` +
-    `\n  attributed           ${withActor}  (distinct actors: ${actorsSeen.size})` +
-    `\n  no actor             ${withoutActor}  (artifact names no author)` +
+    `\n  actor RECORDED       ${withActor}  (read off the artifact)` +
+    `\n  actor INFERRED       ${inferredActor}  (sole host member, marked as inferred)` +
+    `\n  no actor             ${withoutActor}` +
+    `\n    refused, >1 member ${refusedNotSoleMember}` +
+    `\n    refused, outside   ${refusedOutsideWindow}  (predates or postdates the account)` +
+    `\n  distinct actors      ${actorsSeen.size}` +
     `\nskipped, no createdAt  ${skippedNoCreatedAt}` +
     `\nalready reconstructed  ${alreadyPresent}  (a re-run overwrites these)` +
     `\n\nmode=${COMMIT ? 'COMMIT — written' : 'DRY RUN — nothing written'}\n`,
