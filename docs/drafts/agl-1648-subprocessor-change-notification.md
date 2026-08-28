@@ -147,14 +147,15 @@ load-bearing for the beta.
 Neither adds a legal entity, so neither is a missing subprocessor. Both are the published
 *description* being narrower than the code.
 
+⛔ **The GA settings quoted below are the cell as it read when this draft was written and
+are no longer true of the property.** Google Signals, ads personalization and user-provided
+data collection are all on, and the property is linked to Google Ads — see the verified
+table at the top of `docs/ANALYTICS.md`. The gap this sub-section describes is unaffected
+by that; do not cite the quoted settings as current.
+
 **(i) The GA row does not disclose the server-side Measurement Protocol path.** The
 published cell says GA is *"configured for measurement only — Google Signals off, ads
-personalization disabled in every region, … no user-provided data collection."*
-⛔ **That quotation is the cell as it read when this draft was written and is no longer
-true of the property.** Signals, ads personalization and user-provided data collection are
-all on, and the property is linked to Google Ads — see the verified table at the top of
-`docs/ANALYTICS.md`. The gap this section describes is unaffected; do not cite the quoted
-settings as current. True of the
+personalization disabled in every region, … no user-provided data collection."* True of the
 browser tags. But `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts` POSTs
 `purchase`, `refund`, `subscription_cancelled` and `site_published` to
 `https://www.google-analytics.com/mp/collect` from the **server**, on `GA4_MEASUREMENT_ID` +
