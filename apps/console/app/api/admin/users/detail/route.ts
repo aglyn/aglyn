@@ -26,6 +26,7 @@ import {
   type ContactChannel,
   type LegalAcceptanceStatus,
 } from '@aglyn/tenant-data-admin'
+import { adminAuditKind } from '../../../_lib/admin-audit'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
 import { type DeviceRow, readDeviceRows } from '../../../_lib/device-registry'
@@ -320,7 +321,8 @@ async function handler(request: Request): Promise<Response> {
     )
 
     /*
-     * Recent audit trail: actions BY this account and ON this account.
+     * Recent audit trail: actions BY this account, ON this account, and
+     * ABOUT this account.
      *
      * Both halves are ORDERED (AGL-693). They were `limit(10)` with no
      * `orderBy`, which Firestore answers in document-id order over generated
@@ -335,13 +337,32 @@ async function handler(request: Request): Promise<Response> {
      * `add()` that creates the entry, and there is no client write path — the
      * collection is server-only — so an entry without it cannot be produced.
      *
-     * ⚠️ Each half now needs a composite index (`actorUid ASC, at DESC` and
-     * `target ASC, at DESC`), declared in `cloud/firebase-firestore.indexes.json`
-     * and OWED a deploy. Until it lands each read fails its own `catch` and
-     * that half renders empty — which is why the card must keep saying the
-     * full record lives on the Audit log page.
+     * ⚠️ Each half needs a composite index (`actorUid ASC, at DESC`,
+     * `target ASC, at DESC` and `subjectUid ASC, at DESC`), declared in
+     * `cloud/firebase-firestore.indexes.json`. All three are live. A half
+     * whose index is missing fails its own `catch` and renders EMPTY rather
+     * than erroring — so an empty card is not by itself evidence of an index
+     * problem, and the card keeps saying the full record lives on the Audit
+     * log page.
+     *
+     * ## Why a THIRD half, on `subjectUid`
+     *
+     * `target` names the thing acted on, which for most staff actions is the
+     * account itself — but not for all of them. Reading somebody's mail
+     * targets `emailDeliveries/{messageId}`, which can never equal
+     * `users/{uid}`, so the access was invisible on the page of the person
+     * whose mail it was. The log could answer "what did this staff member
+     * do" and could not answer "who accessed my data", which is the question
+     * the collection exists for.
+     *
+     * `subjectUid` is that second fact, kept separate from `target` on
+     * purpose: overloading the target to mean the subject would lose which
+     * record was actually touched. Entries written before the field existed
+     * do not have one and cannot be given one by inference, so this history
+     * stays incomplete — the `target` half remains the only way to reach
+     * them, and dropping it would lose them entirely.
      */
-    const [byActor, onTarget] = await Promise.all([
+    const [byActor, onTarget, onSubject] = await Promise.all([
       firestore
         .collection('adminAudit')
         .where('actorUid', '==', uid)
@@ -356,22 +377,70 @@ async function handler(request: Request): Promise<Response> {
         .limit(10)
         .get()
         .catch(() => null),
+      firestore
+        .collection('adminAudit')
+        .where('subjectUid', '==', uid)
+        .orderBy('at', 'desc')
+        .limit(10)
+        .get()
+        .catch(() => null),
     ])
-    const audit = [...(byActor?.docs ?? []), ...(onTarget?.docs ?? [])]
+    const seenAuditIds = new Set<string>()
+    const auditEntries = [
+      ...(byActor?.docs ?? []),
+      ...(onTarget?.docs ?? []),
+      ...(onSubject?.docs ?? []),
+    ]
+      // The halves OVERLAP: an action targeting `users/{uid}` that also
+      // names the same person as its subject is one act answered by two
+      // queries, and rendering it twice would read as two.
+      .filter((doc) => {
+        if (seenAuditIds.has(doc.id)) return false
+        seenAuditIds.add(doc.id)
+        return true
+      })
       .map((doc) => ({
         id: doc.id,
         actorUid: doc.get('actorUid') ?? null,
         action: doc.get('action') ?? null,
         target: doc.get('target') ?? null,
+        subjectUid: doc.get('subjectUid') ?? null,
         // WHY (AGL-1652). An `org.override` performed BY this account is in
         // the `byActor` half above, so dropping the reason here would hide
         // it on one of the three surfaces the act is read from.
         reason: doc.get('reason') ?? null,
         note: doc.get('note') ?? null,
         at: doc.get('at')?.toDate?.()?.toISOString() ?? null,
+        /*
+         * How many times one act was recorded, and when it last happened.
+         * A repeat COLLAPSES onto its row rather than adding one, so without
+         * these two fields the card would under-report the access it just
+         * merged. Absent on rows written before the writer carried them,
+         * which read as a single occurrence — which is what they are.
+         */
+        repeatCount: Number(doc.get('repeatCount')) || 1,
+        lastAt: doc.get('lastAt')?.toDate?.()?.toISOString() ?? null,
+        kind: adminAuditKind(doc.get('action')),
       }))
       .sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
-      .slice(0, 15)
+    /*
+     * A BURST OF READS MUST NOT PUSH OUT AN IMPERSONATION.
+     *
+     * One flat window sorted by time let four `email.message-viewed` rows
+     * crowd `user.impersonate` and `org.override` off a ten-row card — the
+     * entries somebody opens that card to find. The window is taken PER KIND
+     * instead, so the two categories cannot compete for the same slots and a
+     * change is displaced only by another change.
+     *
+     * Both kinds are returned in full; the console renders them as two
+     * tables. Reads are never dropped — an unrecorded look is the failure
+     * this collection exists to prevent, and hiding one from the page is a
+     * quieter version of the same thing.
+     */
+    const audit = [
+      ...auditEntries.filter((entry) => entry.kind === 'change').slice(0, 15),
+      ...auditEntries.filter((entry) => entry.kind === 'access').slice(0, 15),
+    ].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
 
     return Response.json({
       user: {

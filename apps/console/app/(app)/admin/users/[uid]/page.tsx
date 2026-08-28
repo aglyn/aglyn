@@ -113,10 +113,21 @@ interface UserDetail {
     actorUid: string | null
     action: string | null
     target: string | null
+    /** The person the entry is ABOUT, when the writer could resolve one. */
+    subjectUid: string | null
     /** WHY, when the row carries one (AGL-1652) — see `org.override`. */
     reason: string | null
     note: string | null
     at: string | null
+    /**
+     * One act recorded more than once, collapsed onto one row. `1` and a null
+     * `lastAt` are the ordinary case; anything higher must be rendered, or
+     * the card under-reports an access the writer merged.
+     */
+    repeatCount: number
+    lastAt: string | null
+    /** `access` looked; `change` altered something or acted on someone. */
+    kind: 'access' | 'change'
   }>
   /**
    * Clickwrap acceptance history and the ToS §18.5 verdicts (AGL-2316).
@@ -203,10 +214,36 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
    */
   const [auditPage, setAuditPage] = useState(0)
   const [auditPageSize, setAuditPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const [accessPage, setAccessPage] = useState(0)
+  const [accessPageSize, setAccessPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [error, setError] = useState<string | null>(null)
   // Memoized rather than `detail?.audit ?? []` inline: a fresh empty array on
   // every render re-runs the slice below forever.
-  const auditEntries = useMemo(() => detail?.audit ?? [], [detail])
+  const allAuditEntries = useMemo(() => detail?.audit ?? [], [detail])
+  /*
+   * TWO TABLES, BECAUSE A READ MUST NOT BE ABLE TO BURY AN IMPERSONATION.
+   *
+   * One list held both, newest first, and a handful of `email.message-viewed`
+   * rows pushed `user.impersonate` and `org.override` off the visible page —
+   * the entries somebody opens this card to find. Separating them is what
+   * makes that structurally impossible rather than a matter of how the
+   * ranking happens to fall today: the two categories no longer compete for
+   * the same rows, and each pages on its own.
+   *
+   * Filtering one table would have been less page, but it puts the answer
+   * behind a control whose default hides half the record. These are also two
+   * different questions — "what was done to this account" and "who looked at
+   * this account's data" — and the page already reads as a stack of separately
+   * titled logs.
+   */
+  const auditEntries = useMemo(
+    () => allAuditEntries.filter((entry) => entry.kind !== 'access'),
+    [allAuditEntries],
+  )
+  const accessEntries = useMemo(
+    () => allAuditEntries.filter((entry) => entry.kind === 'access'),
+    [allAuditEntries],
+  )
   /**
    * The audit trail's columns, in the console's row grammar (AGL-693).
    *
@@ -294,8 +331,24 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
         type: 'date',
         valueGetter: (_value: unknown, row: any) =>
           row.at ? new Date(row.at) : null,
-        renderCell: ({ row }: any) =>
-          row.at ? new Date(row.at).toLocaleString() : '—',
+        /*
+         * A COLLAPSED ROW SAYS SO.
+         *
+         * The writer merges an immediate repeat of one act onto the row
+         * already there rather than adding a second. Printing only the first
+         * instant would hide that, and a row that quietly stands for several
+         * accesses is the same lie as a missing row — so the count and the
+         * last occurrence are rendered whenever there was more than one.
+         */
+        renderCell: ({ row }: any) => {
+          if (!row.at) return '—'
+          const first = new Date(row.at).toLocaleString()
+          if (!(row.repeatCount > 1)) return first
+          const last = row.lastAt
+            ? new Date(row.lastAt).toLocaleTimeString()
+            : null
+          return `${first} · ${row.repeatCount}x${last ? `, last ${last}` : ''}`
+        },
       },
     ],
     [detail?.user.uid],
@@ -308,6 +361,14 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
       ),
     [auditEntries, auditPage, auditPageSize],
   )
+  const pagedAccess = useMemo(
+    () =>
+      accessEntries.slice(
+        accessPage * accessPageSize,
+        accessPage * accessPageSize + accessPageSize,
+      ),
+    [accessEntries, accessPage, accessPageSize],
+  )
   // A reload that returns a shorter trail can strand a reader past the last
   // page, which renders as an empty table with no way back.
   useEffect(() => {
@@ -317,6 +378,13 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     )
     if (auditPage > lastPage) setAuditPage(lastPage)
   }, [auditEntries.length, auditPage, auditPageSize])
+  useEffect(() => {
+    const lastPage = Math.max(
+      0,
+      Math.ceil(accessEntries.length / accessPageSize) - 1,
+    )
+    if (accessPage > lastPage) setAccessPage(lastPage)
+  }, [accessEntries.length, accessPage, accessPageSize])
 
   useEffect(() => {
     if (!uid || !user) return
@@ -1102,8 +1170,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     description={
                       'Audited staff actions performed BY or ON this ' +
                       'account. Not the same as the activity above, which ' +
-                      'is what the account itself did. The full record ' +
-                      'lives on the Audit log page.'
+                      'is what the account itself did. Data staff merely ' +
+                      'LOOKED at is the card below. The full record lives ' +
+                      'on the Audit log page.'
                     }
                     columns={auditColumns}
                     rows={pagedAudit}
@@ -1111,9 +1180,52 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                     emptyLabel="No audited actions involve this account."
                     page={auditPage}
                     pageSize={auditPageSize}
-                    count={detail.audit.length}
+                    count={auditEntries.length}
                     onPageChange={setAuditPage}
                     onPageSizeChange={setAuditPageSize}
+                  />
+                ),
+              },
+
+              {
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * WHO LOOKED — its own card, so it cannot crowd the one
+                   * above.
+                   *
+                   * Reads are cheap to perform and so arrive far more often
+                   * than the acts anybody opens this page to review; sharing
+                   * one window with them is how four message views buried an
+                   * impersonation. They are separated rather than dropped
+                   * because this is the half that answers the question the
+                   * audit trail exists for — a customer asking who at Aglyn
+                   * read their mail — and that answer must be on the page of
+                   * the person whose mail it was.
+                   */
+                  <ActivityTable
+                    header="Data access by staff"
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt:
+                        'Audited staff READS of this account’s private data — kept apart from the actions above so a burst of views cannot bury an impersonation.',
+                    })}
+                    description={
+                      'Times a staff member opened this account’s ' +
+                      'private data without changing it — reading a sent ' +
+                      'message, for example. Repeats of a single opening ' +
+                      'collapse onto one row and say how many; two separate ' +
+                      'openings are two rows.'
+                    }
+                    columns={auditColumns}
+                    rows={pagedAccess}
+                    getRowId={(row: any) => row.id}
+                    emptyLabel="No audited staff reads of this account's data."
+                    page={accessPage}
+                    pageSize={accessPageSize}
+                    count={accessEntries.length}
+                    onPageChange={setAccessPage}
+                    onPageSizeChange={setAccessPageSize}
                   />
                 ),
               },

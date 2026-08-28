@@ -806,6 +806,13 @@ async function handler(request: Request): Promise<Response> {
         target: reviewUid
           ? `marketplaceListings/${listingId}/reviews/${reviewUid}`
           : `marketplaceListings/${listingId}`,
+        /*
+         * A review document is keyed by its AUTHOR's uid, so hiding one is a
+         * staff act against a named person. The target names the review, as
+         * it must — but on its own that put the takedown nowhere near the
+         * page of the person whose words were removed.
+         */
+        ...(reviewUid ? { subjectUid: reviewUid } : {}),
         after: {
           hidden: action === 'hide',
           ...(hideReason ? { reason: hideReason } : {}),
