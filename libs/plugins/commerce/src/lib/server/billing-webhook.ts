@@ -26,6 +26,8 @@ import {
   notifyStaff,
   upsertHostContact,
   renderHostEmailWithTokens,
+  clearConnectPayoutFailure,
+  recordConnectPayoutFailure,
   syncConnectAccountStatus,
   updateExisting,
 } from '@aglyn/tenant-data-admin'
@@ -1887,6 +1889,43 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   // instead of staying refused forever.
   if (type === 'account.updated') {
     await syncConnectAccountStatus('profiles', object, event?.livemode)
+    return
+  }
+
+  // A PAYOUT OR TRANSFER THAT NEVER LANDED (AGL-2513).
+  //
+  // Placed beside `account.updated` because it is the same kind of event —
+  // account-level, nothing to do with the `metadata.type` order sections
+  // below — and returns for the same reason.
+  //
+  // `payout.failed` is the CONNECTED account's balance failing to reach its
+  // bank, so the account id is `event.account`: the Payout object's own
+  // `destination` names the bank, not the Connect account. `transfer.failed`
+  // is the platform's balance failing to reach the connected account, a
+  // platform event whose `destination` IS the account.
+  //
+  // Recorded and surfaced, never retried: Stripe runs its own retry schedule
+  // and a second transfer against an account that just refused one is how a
+  // duplicate lands.
+  if (type === 'payout.failed' || type === 'transfer.failed') {
+    const failedAccountId =
+      type === 'payout.failed'
+        ? String(event?.account ?? '')
+        : String(object?.destination?.id ?? object?.destination ?? '')
+    await recordConnectPayoutFailure('profiles', {
+      kind: type === 'payout.failed' ? 'payout' : 'transfer',
+      object,
+      accountId: failedAccountId,
+      livemode: event?.livemode,
+    })
+    return
+  }
+  // A later success retires the warning the card shows. The history in
+  // `connectPayoutFailures` is kept — "has this account failed before" is what
+  // that record exists to answer — but a stale warning on a resolved problem
+  // trains people to ignore the surface.
+  if (type === 'payout.paid') {
+    await clearConnectPayoutFailure('profiles', String(event?.account ?? ''))
     return
   }
 
