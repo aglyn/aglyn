@@ -27,6 +27,7 @@ const {
   tenantFontSrcDirective,
   tenantFormActionDirective,
   tenantFrameSrcDirective,
+  tenantImgSrcDirective,
   tenantMediaSrcDirective,
   // Root-level CommonJS, outside the nx graph, because `next.config.js` must
   // `require` it (AGL-523) — the console specs read it the same way.
@@ -212,5 +213,148 @@ describe('owner-widened tenant CSP directives (AGL-1152)', () => {
     const dev = tenantConnectSrcDirective(false, [], false, SITE)
     expect(dev).toContain('http://localhost:*')
     expect(dev).toContain('ws://localhost:*')
+  })
+})
+
+/**
+ * THE POLICY IS MATCHED AGAINST REAL ENDPOINT URLS, NOT SEARCHED FOR STRINGS
+ * (AGL-2486).
+ *
+ * Every assertion above this one asks whether a directive CONTAINS a host we
+ * chose to name. That question cannot fail when the host we named is the wrong
+ * one, and for GA4 it was: `connect-src` listed
+ * `https://www.google-analytics.com` and `https://*.google-analytics.com`, a
+ * `toContain('https://www.google-analytics.com')` passed, and gtag's v2
+ * transport was posting to `https://analytics.google.com/g/collect` — a
+ * DIFFERENT domain, since `analytics.google.com` is a subdomain of
+ * `google.com` and no wildcard over `google-analytics.com` reaches it. Every
+ * GA4 pageview and every web-vitals event from aglyn.com was refused while the
+ * policy read as complete and the suite stayed green.
+ *
+ * So these ask the browser's question instead: does SOME source expression in
+ * the emitted directive admit this exact URL? A wildcard that looks like it
+ * covers a similarly-named domain cannot satisfy that, because
+ * `sourceAdmits()` implements the CSP host-part rule rather than a substring
+ * search — `*.a.example` matches a subdomain of `a.example` and nothing else.
+ *
+ * ⛔ Removing this block would let the same defect back in: a measurement host
+ * renamed, moved to a sibling domain, or given a new regional prefix would go
+ * on passing the `toContain` assertions above while the beacon it names is
+ * refused in production. The signal that shape produces is silence — the tag
+ * loads, the site renders, the reports go empty, and nothing anywhere says
+ * why.
+ */
+describe('the measurement directives admit the URLs gtag actually requests (AGL-2486)', () => {
+  /**
+   * Does one CSP source expression admit `url`? The host-part rule only, which
+   * is the part the wildcard confusion lives in: an exact host matches itself,
+   * and `*.` matches any SUBDOMAIN of what follows — never the bare domain,
+   * and never a different domain that merely shares a suffix of its text.
+   */
+  const sourceAdmits = (source: string, url: string): boolean => {
+    if (!source.startsWith('https://')) return false
+    const host = new URL(url).hostname
+    const pattern = source.slice('https://'.length)
+    if (!pattern.startsWith('*.')) return pattern === host
+    const parent = pattern.slice('*.'.length)
+    // `.endsWith('.' + parent)` and NOT `.endsWith(parent)`: the second is the
+    // bug this file exists to catch, since `analytics.google.com` does end
+    // with `google.com` only once the separating dot is thrown away.
+    return host.endsWith(`.${parent}`)
+  }
+
+  const admits = (directive: string, url: string): boolean =>
+    directive
+      .split(' ')
+      .slice(1)
+      .some((source) => sourceAdmits(source, url))
+
+  /**
+   * The v2 transport's collection endpoints, both domain families.
+   *
+   * The first hit goes to `www.google-analytics.com/g/collect`; the Google
+   * Signals follow-up goes to `analytics.google.com/g/collect`, so the
+   * ad-personalization cookie can be set on a `google.com` host. Regional data
+   * residency moves either onto a `region#.` prefix of its own domain.
+   *
+   * Measured on a live `https://aglyn.com/press` document under the enforcing
+   * policy: the two `analytics.google.com` rows were refused with
+   * `effectiveDirective: 'connect-src'`, the two `google-analytics.com` rows
+   * were allowed.
+   */
+  const GA4_COLLECT_URLS = [
+    'https://www.google-analytics.com/g/collect?v=2&tid=G-YW5PG16YTM&en=page_view',
+    'https://region1.google-analytics.com/g/collect?v=2&tid=G-YW5PG16YTM&en=page_view',
+    'https://analytics.google.com/g/collect?v=2&tid=G-YW5PG16YTM&en=page_view',
+    'https://region1.analytics.google.com/g/collect?v=2&tid=G-YW5PG16YTM&en=page_view',
+  ]
+
+  it('CONTROL — the matcher really does refuse a similarly-named domain', () => {
+    // Without this the four assertions below could pass on a matcher that says
+    // yes to everything, which is the failure this whole block is built to
+    // avoid repeating.
+    // It DOES reach a subdomain of the domain it wildcards — `www.` and
+    // `region1.` alike, which is why the regional endpoints needed no entry of
+    // their own and why the list looked complete.
+    expect(sourceAdmits('https://*.google-analytics.com', GA4_COLLECT_URLS[0])).toBe(true)
+    expect(sourceAdmits('https://*.google-analytics.com', GA4_COLLECT_URLS[1])).toBe(true)
+    // And it does NOT reach the other domain family, which is the whole defect.
+    expect(sourceAdmits('https://*.google-analytics.com', GA4_COLLECT_URLS[2])).toBe(false)
+    expect(sourceAdmits('https://*.google-analytics.com', GA4_COLLECT_URLS[3])).toBe(false)
+    expect(sourceAdmits('https://www.google-analytics.com', GA4_COLLECT_URLS[0])).toBe(true)
+    // A wildcard never admits the bare domain it wildcards, so a `*.` entry
+    // alone would still leave `analytics.google.com` refused.
+    expect(sourceAdmits('https://*.analytics.google.com', 'https://analytics.google.com/g/collect')).toBe(false)
+    // An exact source is exact: no suffix match, no prefix match.
+    expect(sourceAdmits('https://analytics.google.com', 'https://evilanalytics.google.com/x')).toBe(false)
+  })
+
+  it('connect-src admits every GA4 collection endpoint', () => {
+    const directive = tenantConnectSrcDirective(true, [], true, SITE)
+    for (const url of GA4_COLLECT_URLS) {
+      expect({ url, admitted: admits(directive, url) }).toEqual({
+        url,
+        admitted: true,
+      })
+    }
+  })
+
+  it('img-src admits them too, for the beacon fallback transport', () => {
+    // gtag falls back to an image beacon when `sendBeacon`/`fetch` is
+    // unavailable, and the same violation was observed on `img-src` from the
+    // same production document. Two directives, one gap — fixing only the one
+    // in the console log leaves the fallback refused.
+    const directive = tenantImgSrcDirective(true, [], true, SITE)
+    for (const url of GA4_COLLECT_URLS) {
+      expect({ url, admitted: admits(directive, url) }).toEqual({
+        url,
+        admitted: true,
+      })
+    }
+  })
+
+  it('still GATES them on the site running measurement', () => {
+    // The fix must not become a widening: a site with no analytics configured
+    // has no reason to reach any of these.
+    const connect = tenantConnectSrcDirective(true, [], false, SITE)
+    const img = tenantImgSrcDirective(true, [], false, SITE)
+    for (const url of GA4_COLLECT_URLS) {
+      expect(admits(connect, url)).toBe(false)
+      expect(admits(img, url)).toBe(false)
+    }
+  })
+
+  it('buys the endpoint without opening the whole of google.com', () => {
+    // The lazy fix for a refused `analytics.google.com` is `https://*.google.com`,
+    // which admits every Google property there is to buy one collection host.
+    // These lists exist to name what a page actually talks to.
+    for (const directive of [
+      tenantConnectSrcDirective(true, [], true, SITE),
+      tenantImgSrcDirective(true, [], true, SITE),
+    ]) {
+      expect(directive).not.toContain('https://*.google.com')
+      expect(admits(directive, 'https://mail.google.com/x')).toBe(false)
+      expect(admits(directive, 'https://accounts.google.com/x')).toBe(false)
+    }
   })
 })

@@ -937,9 +937,46 @@ const GOOGLE_CCTLD_ORIGINS = GOOGLE_CCTLDS.map((tld) => `https://www.google.${tl
 const MEASUREMENT_IMAGE_ORIGINS = [
   // Google Tag Manager / gtag delivery.
   'https://www.googletagmanager.com',
-  // GA4 collection, including the regional endpoints (`region1.` … `region#.`).
+  /*
+   * GA4 collection, which lands on TWO SEPARATE DOMAINS (AGL-2486).
+   *
+   * `google-analytics.com` and `analytics.google.com` read as the same vendor
+   * and are not the same host, so no wildcard over one reaches the other:
+   * `https://*.google-analytics.com` matches `region1.google-analytics.com`
+   * and cannot match `analytics.google.com`, which is a subdomain of
+   * `google.com`. Listing only the first family is the shape that refused
+   * every GA4 hit on aglyn.com while the policy looked complete.
+   *
+   * Measured on production rather than inferred — four `fetch` probes from a
+   * live `https://aglyn.com/press` document under the enforcing policy:
+   *
+   * | host                            | verdict                        |
+   * | ------------------------------- | ------------------------------ |
+   * | `www.google-analytics.com`      | allowed                        |
+   * | `region1.google-analytics.com`  | allowed (the wildcard reaches) |
+   * | `analytics.google.com`          | **REFUSED**, connect-src       |
+   * | `region1.analytics.google.com`  | **REFUSED**, connect-src       |
+   *
+   * gtag's v2 transport uses both: the first hit goes to
+   * `www.google-analytics.com/g/collect`, and the Google Signals follow-up
+   * goes to `analytics.google.com/g/collect` so the ad-personalization cookie
+   * can be set on a `google.com` host. Regional data residency moves each
+   * onto a `region#.` prefix of its own domain, which is why both families
+   * carry a wildcard rather than only the bare host.
+   *
+   * ⛔ The fix is NOT `https://*.google.com`. That would admit every Google
+   * property on the internet to buy one endpoint, and this list exists to name
+   * what a page actually talks to.
+   *
+   * The cost of getting this wrong is the worst shape a measurement failure
+   * has: the tag loads, the site looks fine, and the reports go quiet with
+   * nothing saying why — pageviews AND Core Web Vitals, since web-vitals
+   * events ride the same transport.
+   */
   'https://www.google-analytics.com',
   'https://*.google-analytics.com',
+  'https://analytics.google.com',
+  'https://*.analytics.google.com',
   // Google Signals.
   'https://stats.g.doubleclick.net',
   // Google Ads conversion tracking.
