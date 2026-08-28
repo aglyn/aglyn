@@ -39,8 +39,12 @@
  * id boundary.
  */
 
-import { render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import {
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_ROWS_PER_PAGE_LABEL,
+} from '@aglyn/shared-ui-jsx/const/table-pagination'
 import HostActivityCard from './host-activity-card.component'
 
 const HOST_ID = 'DXnRbPH4CQ'
@@ -48,6 +52,10 @@ const HOST_ID = 'DXnRbPH4CQ'
 const BUSY_SCREEN = 'coOm073Tai'
 /** A screen that genuinely has never been touched. */
 const UNTOUCHED_SCREEN = 'never-touched'
+/** A screen with MORE history than the window, so the probe finds a row. */
+const CROWDED_SCREEN = 'crowded-screen'
+/** The card's own ceiling. */
+const WINDOW = 200
 
 interface FakeDoc {
   id: string
@@ -89,7 +97,22 @@ const busy: FakeDoc[] = [
   },
 }))
 
-const DOCS: FakeDoc[] = [...filler, ...busy]
+/**
+ * One target with more entries than the window, so the TARGETED read can be
+ * seen to truncate. Older than everything else, so the un-targeted feed's
+ * newest-first order is unchanged by their presence.
+ */
+const crowded: FakeDoc[] = Array.from({ length: WINDOW + 5 }, (_, i) => ({
+  id: `B${String(i).padStart(4, '0')}`,
+  data: {
+    action: 'Saved the screen',
+    actorEmail: 'someone@example.com',
+    target: { type: 'screen', id: CROWDED_SCREEN, name: 'Crowded' },
+    createdAt: { seconds: 1 + i },
+  },
+}))
+
+const DOCS: FakeDoc[] = [...filler, ...busy, ...crowded]
 
 /** Reads a dotted field path the way Firestore does. */
 const readPath = (data: Record<string, any>, path: string) =>
@@ -150,10 +173,17 @@ jest.mock('firebase/firestore', () => ({
   query: (base: unknown, ...clauses: Clause[]) => ({ base, clauses }),
 }))
 
+/** Every cap the card asked for, so a read that stopped probing is visible. */
+const caps: number[] = []
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreCollection: (build: () => any) => {
     const descriptor = build()
+    const cap = (descriptor?.clauses ?? []).find(
+      (clause: Clause) => clause.kind === 'limit',
+    )?.count
+    if (typeof cap === 'number') caps.push(cap)
     return {
       data: descriptor && listener.status === 'success' ? runQuery(descriptor) : [],
       status: descriptor ? listener.status : 'loading',
@@ -162,6 +192,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       serverDenied: false,
     }
   },
+  // Real: the card's probe row is dropped by it, so a stub would decide how
+  // many rows this spec's assertions see.
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
 }))
 
 jest.mock('next/navigation', () => ({
@@ -177,8 +211,15 @@ jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
 const EMPTY = /No activity yet/
 const UNREADABLE = /Could not read the activity log/
 
+/** Row elements, whichever entries are on the page. */
+const renderedActions = () =>
+  Array.from(document.querySelectorAll('li')).map(
+    (node) => (node.textContent ?? '').trim(),
+  )
+
 beforeEach(() => {
   listener.status = 'success'
+  caps.length = 0
 })
 
 describe('Page Activity — the window it asks for', () => {
@@ -211,7 +252,7 @@ describe('Page Activity — the window it asks for', () => {
   })
 
   it('orders the un-targeted feed newest-first, not by document id', () => {
-    render(<HostActivityCard hostId={HOST_ID} max={3} />)
+    render(<HostActivityCard hostId={HOST_ID} />)
     // `YrLePecu…` is the newest row and one of the LAST by id: an id-ordered
     // window of 200 over 255 rows never reaches it.
     expect(
@@ -235,5 +276,65 @@ describe('Page Activity — "could not look" is not "found nothing"', () => {
     render(<HostActivityCard hostId={undefined as never} targetId={BUSY_SCREEN} />)
     expect(screen.getByText(UNREADABLE)).not.toBeNull()
     expect(screen.queryByText(EMPTY)).toBeNull()
+  })
+})
+
+/**
+ * The "Show N more" expander became the shared footer (AGL-693, AGL-2486).
+ *
+ * It was the console's FOURTH pagination grammar for one act, and it stood
+ * beside the guard written to stop exactly that — escaping it on spelling,
+ * because the guard demanded the literal `'Load more'`. On its own terms it
+ * was the weakest of the four: it only ever grew, offered no size control, and
+ * said nothing when the 200-row window bit.
+ *
+ * These assert the three things the expander could not do, rather than that a
+ * footer component is present somewhere on the card.
+ */
+describe('Page Activity — the expander is the shared footer now', () => {
+  it('asks for the window PLUS a probe, on both queries', () => {
+    render(<HostActivityCard hostId={HOST_ID} />)
+    cleanup()
+    render(<HostActivityCard hostId={HOST_ID} targetId={BUSY_SCREEN} />)
+    // The SET, not "some read asked for 201". Both queries are the card's own
+    // and both must probe; an assertion satisfied by either alone would keep
+    // passing if the other stopped bounding itself honestly.
+    expect(caps).toEqual([WINDOW + 1, WINDOW + 1])
+  })
+
+  it('pages BACKWARD, which is what the expander could never do', () => {
+    render(<HostActivityCard hostId={HOST_ID} />)
+    const firstPage = renderedActions()
+    expect(firstPage).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
+    fireEvent.click(screen.getByLabelText('Go to next page'))
+    expect(renderedActions()).not.toEqual(firstPage)
+    fireEvent.click(screen.getByLabelText('Go to previous page'))
+    expect(renderedActions()).toEqual(firstPage)
+  })
+
+  it('offers the shared size menu, which the expander never had', () => {
+    render(<HostActivityCard hostId={HOST_ID} />)
+    expect(screen.getByText(TABLE_ROWS_PER_PAGE_LABEL)).not.toBeNull()
+    // And no growing button survives anywhere on the card.
+    expect(screen.queryByText(/Show \d+ more/)).toBeNull()
+  })
+
+  it('says when the window bit, and stays quiet when it did not', () => {
+    // 255 documents against a 200-row ceiling: the probe finds a 201st.
+    render(<HostActivityCard hostId={HOST_ID} />)
+    expect(screen.getByText(/There is more history than that/)).not.toBeNull()
+    // The busy screen has five entries of its own, so nothing was cut.
+    cleanup()
+    render(<HostActivityCard hostId={HOST_ID} targetId={BUSY_SCREEN} />)
+    expect(screen.queryByText(/It has more/)).toBeNull()
+  })
+
+  it('does not call the TARGETED window "most recent" — it has no order', () => {
+    // The targeted query carries no `orderBy` on purpose, so its window is a
+    // document-id sample. Saying "most recent" over it would be the AGL-2292
+    // lie in a caption instead of in a list.
+    render(<HostActivityCard hostId={HOST_ID} targetId={CROWDED_SCREEN} />)
+    expect(screen.getByText(/these are not necessarily the newest/)).not.toBeNull()
+    expect(screen.queryByText(/most recent/)).toBeNull()
   })
 })

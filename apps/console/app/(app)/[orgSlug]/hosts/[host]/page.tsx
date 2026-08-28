@@ -130,7 +130,6 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
                 <PluginWidgetSlot
                   slot="hostActivity"
                   hostId={hostId}
-                  max={10}
                   viewAllHref={`${buildRoute(Route.HOST_SETUP, { orgSlug,  host })}?tab=activity`}
                 />
               ),

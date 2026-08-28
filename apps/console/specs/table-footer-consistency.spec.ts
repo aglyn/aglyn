@@ -160,6 +160,43 @@ const LOAD_MORE_ALLOWED = [
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
 ]
 
+/**
+ * Surfaces that still GROW instead of paging, and what stands in the way.
+ *
+ * A second list rather than more entries in the one above, for the same reason
+ * `OWES_A_FOOTER` is not `NOT_A_LIST`: an exemption and a debt read identically
+ * in an allow-list, and the debt is the one that has to shrink. This one is
+ * ratcheted below; the exemption above is not.
+ *
+ * They were invisible until the check learned the other spellings — see the
+ * pattern, which used to demand the exact string `'Load more'`.
+ */
+const GROWS_INSTEAD_OF_PAGING: Array<[string, string]> = [
+  [
+    'apps/console/components/org-switcher-nav.component.tsx',
+    'The workspace switcher: a cursor feed inside a NAV menu, where the row ' +
+      'count is the accounts one person belongs to and the control is a ' +
+      'dropdown rather than a list surface. It shares its button with the two ' +
+      'workspace PAGES below and should be decided with them.',
+  ],
+  [
+    'apps/console/app/(app)/(home)/page.tsx',
+    'The workspace list, which grows with every workspace a person joins. A ' +
+      'page shell another agent is converting to routed sections.',
+  ],
+  [
+    'apps/console/app/(app)/billing/page.tsx',
+    'The same workspace list on the billing entry page — the same button, ' +
+      'the same block.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
+    'Invoices, one per month forever, behind a "Load older invoices" that ' +
+      'only goes one way. Billing is out of this pass’s scope, and the same ' +
+      'table is already named in `OWES_A_FOOTER` for the footer it lacks.',
+  ],
+]
+
 /** A literal page-size array anywhere in a footer prop. */
 const LITERAL_OPTIONS = /(?:rowsPerPage|pageSize)Options=\{\[/
 /**
@@ -338,30 +375,69 @@ describe('no list hand-rolls a pager (AGL-693)', () => {
 
 describe('no list keeps a bespoke "Load more" (AGL-693)', () => {
   const CONSOLE_ROOT = join(REPO, 'apps', 'console', 'components')
-  // The literal, not one JSX spelling of it: the storefront grid writes
-  // `{loadingMore ? 'Loading…' : 'Load more'}`, which a check for
-  // `{'Load more'}` walks straight past.
-  const LOADS_MORE = /'Load more'/
+  /**
+   * A button that GROWS the list, in any of the spellings this repo uses.
+   *
+   * `/'Load more'/` was the whole check, and three things walked past it. The
+   * workspace lists say `'Load more workspaces'`, so the closing quote never
+   * arrived where the pattern wanted it. The staff audit log said
+   * `'Load older'`. And the site activity card said `Show ${more} more`, which
+   * is how a FOURTH pagination grammar stood beside this guard for as long as
+   * the guard existed — the one failure it was written to prevent.
+   *
+   * So the shape, not the string: a quoted or templated label that opens with
+   * Load or Show and carries `more` or `older`. It stays narrow enough not to
+   * fire on the counts this console writes everywhere — `+${n} more`,
+   * `Confirm ${n} more` — because those do not begin with the verb.
+   */
+  const LOADS_MORE =
+    /(['"`])(?:Load|Show)\s[^'"`]*\b(?:more|older)\b[^'"`]*\1/
   const repoRelative = (path: string) => path.replace(`${REPO}/`, '')
 
-  it('THE CONTROL: the check catches both spellings', () => {
+  it('THE CONTROL: the check catches every spelling, and no counts', () => {
     expect(LOADS_MORE.test(`<Button>{'Load more'}</Button>`)).toBe(true)
     expect(
       LOADS_MORE.test(`{loadingMore ? 'Loading…' : 'Load more'}`),
     ).toBe(true)
+    // The three that escaped it, each of which was a real surface.
+    expect(LOADS_MORE.test(`{'Load more workspaces'}`)).toBe(true)
+    expect(LOADS_MORE.test(`{'Load older invoices'}`)).toBe(true)
+    expect(LOADS_MORE.test('{`Show ${more} more`}')).toBe(true)
+    // And what it must NOT claim: a count is not a pager.
+    expect(LOADS_MORE.test('{`+${n} more`}')).toBe(false)
+    expect(LOADS_MORE.test('{`Confirm ${n} more`}')).toBe(false)
     expect(LOADS_MORE.test(`<ListPagination page={0} />`)).toBe(false)
   })
 
-  it('only the two documented grids still grow instead of paging', () => {
-    const offenders = [
+  it('THE CONTROL: it reads code, not the prose that discusses it', () => {
+    // This check used to read raw source, so a docblock explaining the rule
+    // broke the rule — which is not a hypothetical: the activity card's
+    // conversion is documented in the card, quoting the button it removed.
+    expect(
+      LOADS_MORE.test(
+        withoutComments(`/* the old 'Load more' button */\nconst x = 1`),
+      ),
+    ).toBe(false)
+  })
+
+  it('only the documented grids and the owed list still grow', () => {
+    const growing = [
       ...tsxFilesUnder(CONSOLE_ROOT),
       ...tsxFilesUnder(join(REPO, 'apps', 'console', 'app')),
       ...pluginComponentFiles(),
     ]
-      .filter((path) => LOADS_MORE.test(readFileSync(path, 'utf8')))
+      .filter((path) => LOADS_MORE.test(withoutComments(readFileSync(path, 'utf8'))))
       .map(repoRelative)
-      .filter((path) => !LOAD_MORE_ALLOWED.includes(path))
-    expect(offenders).toEqual([])
+    const owed = GROWS_INSTEAD_OF_PAGING.map(([path]) => path)
+    expect(
+      growing.filter(
+        (path) => !LOAD_MORE_ALLOWED.includes(path) && !owed.includes(path),
+      ),
+    ).toEqual([])
+    // The debt only ever shrinks, and every entry still describes a surface
+    // that really does grow — a stale line here widens the exemption silently.
+    expect(GROWS_INSTEAD_OF_PAGING).toHaveLength(4)
+    for (const path of owed) expect(growing).toContain(path)
   })
 
   it('THE CONTROL: the plugin walk reaches more than one plugin', () => {
@@ -957,6 +1033,16 @@ const NOT_A_LIST: Array<[string, string]> = [
       'into tenth. Ceilinged and ordered instead, with a probe, exactly like ' +
       'the console’s screen tree and starter bundles.',
   ],
+  [
+    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
+    'MISCLASSIFIED as the contact roster, which is not what the detector ' +
+      'found here: the roster renders `ListTable` and has had a footer and a ' +
+      'server-side filter since AGL-2292. The rows this matches are one ' +
+      'contact’s interaction timeline in the drawer, and ' +
+      '`CONTACT_INTERACTIONS_CAP` is 50 — `mergeContactInteraction` slices to ' +
+      'it on every write, so the array cannot hold a fifty-first row and the ' +
+      'second page is empty for every contact that will ever exist.',
+  ],
 ]
 
 /**
@@ -1060,11 +1146,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'without editing across that work.',
   ],
   [
-    'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
-    'The contact roster. The same page-shell collision as the bookings ' +
-      'page, and the same reason it is named rather than converted.',
-  ],
-  [
     'libs/plugins/commerce/src/lib/components/console/pos-page.component.tsx',
     'The POS catalog grid, a page shell reading `limit(500)`. It is also the ' +
       'one surface here where a pager is the wrong control — a till is ' +
@@ -1120,20 +1201,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'libs/plugins/marketplace/src/lib/components/listing-reviews.component.tsx',
     'Reviews of one listing, an unordered `limit(100)`. A popular listing ' +
       'accumulates them for as long as it is published.',
-  ],
-  [
-    'libs/plugins/workflows/src/lib/components/host-actions-card.component.tsx',
-    'Event-triggered actions, an unordered `limit(100)`. The same ' +
-      'duplicate-name check as the workflows card beside it, so it wants the ' +
-      'same ceiling-and-probe rather than a server page — a 1,700-line card ' +
-      'this pass ran out of room for.',
-  ],
-  [
-    'libs/plugins/workflows/src/lib/components/host-activity-card.component.tsx',
-    'The site activity feed. It keeps a "Show more" expander over a ' +
-      'ceilinged read with a View all link, which is a deliberate dashboard ' +
-      'shape rather than an oversight — but the expander is a fourth ' +
-      'pagination grammar and should become the shared footer.',
   ],
 ]
 
@@ -1226,8 +1293,8 @@ describe('a table with rows under it has a footer under those (AGL-693)', () => 
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(28)
-    expect(NOT_A_LIST).toHaveLength(26)
+    expect(OWES_A_FOOTER).toHaveLength(25)
+    expect(NOT_A_LIST).toHaveLength(27)
   })
 })
 

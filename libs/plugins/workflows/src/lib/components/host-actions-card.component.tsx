@@ -38,9 +38,12 @@ import {
   validateHostAction,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -64,6 +67,8 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useState, useMemo } from 'react'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
@@ -73,6 +78,18 @@ import {
 import HostRunHistoryCard from './host-run-history-card.component'
 
 const CUSTOM_EVENT_VALUE = '__custom__'
+
+/**
+ * How many action documents the card reads.
+ *
+ * A CEILING, not a page size — see the query, which explains why this one
+ * collection cannot be sliced by the server without making the count beneath
+ * the list a per-page number.
+ *
+ * `ACTIONS_MAX_PER_HOST` is 500, so the ceiling really can bite and the probe
+ * beside it is what says when it has.
+ */
+const ACTION_CEILING = 100
 
 /** One editable condition row (AGL-565); a lone row with an empty op
  * means "always run" and clears the stored conditions. */
@@ -190,10 +207,40 @@ export function HostActionsCard(props: {
      */
     fromCache: actionsFromCache,
   } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
+    /*
+     * ORDERED AND CEILINGED, deliberately not paged by the query (AGL-693) —
+     * the same decision as the workflows card beside it.
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order, so the window was a
+     * pseudo-random hundred that the `localeCompare` below arranged
+     * alphabetically, and nothing said the list was bounded.
+     *
+     * `collectionCeiling` does not change WHICH hundred — document-id order is
+     * what the bare cap already returned. What it changes is that the order is
+     * NAMED, so the obvious next edit is caught: ordering on `name` would HIDE
+     * every action written without one rather than mis-sorting the list, and
+     * `/api/hosts/resources` validates no field for presence while
+     * `IMPORTABLE_FIELDS.actions` copies one only if the export carried it.
+     *
+     * The QUERY is not paged because this collection holds TWO audiences. A
+     * row whose trigger names a leaf selector is an element interaction, which
+     * belongs to its document and is reported below as a count rather than
+     * listed; the rest are the site's actions. Both partitions are derived
+     * from the rows in hand, so a server page would make "3 interactions are
+     * set up on their own elements" mean "3 on this page" — a count that is a
+     * window length, which is the defect this sweep keeps finding rather than
+     * a shape it should add.
+     */
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'actions'),
+        ACTION_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { rows: readActions, truncated: actionsTruncated } =
+    ceilingedWindow<any>(actionDocs, ACTION_CEILING)
   const { data: workflowDocs } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
@@ -253,9 +300,7 @@ export function HostActionsCard(props: {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const liveActions = [...(actionDocs ?? [])].filter(
-    (action: any) => !action.deletedAt,
-  )
+  const liveActions = readActions.filter((action: any) => !action.deletedAt)
   /**
    * Element interactions are not listed here (AGL-1478).
    *
@@ -275,11 +320,21 @@ export function HostActionsCard(props: {
   const elementScoped = liveActions.filter((action: any) =>
     LEAF_SELECTOR.test(String(action?.trigger?.selector ?? '')),
   )
+  // Sorting is safe here in a way it is not on a paged list: these rows are
+  // the whole collection below the ceiling, not a slice of one.
   const actions = liveActions
     .filter((action: any) => !elementScoped.includes(action))
     .sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
+  // The page is a SLICE: the rows are already in hand, and both the element
+  // interaction count and the alphabetical order need all of them.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleActions = useMemo(
+    () => actions.slice(page * pageSize, page * pageSize + pageSize),
+    [actions, page, pageSize],
+  )
   // Options carry ids (AGL-261): selects store the doc id, keep the name
   // as the display hint, and legacy name-only steps map back to their id.
   const workflowOptions = (workflowDocs ?? [])
@@ -603,7 +658,7 @@ export function HostActionsCard(props: {
             'workflow, show the visitor an alert, chain a custom event, or ' +
             'write to a dataset. Pro plans and up.'}
         </Typography>
-        {actions.map((action: any) => (
+        {visibleActions.map((action: any) => (
           <Stack
             key={action.$id}
             direction="row"
@@ -700,6 +755,27 @@ export function HostActionsCard(props: {
             </Button>
           </Stack>
         ))}
+        {actions.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleActions.length}
+            // The actions the card HOLDS, which is what the reader is paging
+            // through — not the collection, whose other half is the element
+            // interactions counted below.
+            count={actions.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {actionsTruncated ? (
+          <Alert severity="info">
+            {`Showing the first ${ACTION_CEILING} rows of this site’s ` +
+              'automations, ordered by id. There are more — both the list ' +
+              'above and the interaction count below describe only what was ' +
+              'read.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           color="primary"
