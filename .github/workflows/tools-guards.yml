@@ -828,6 +828,14 @@ jobs:
       # `expect-absent` assertion vacuously, silently, on the happy path.
       - run: npm run test:external-facts
 
+      # AGL-1489. The four deploy scripts all SHIP SOMETHING when they run, and
+      # three of them read a single flag with `process.argv.includes(...)` and
+      # discarded everything else — so `deploy-firestore-rules.mjs --help`
+      # deployed the live Firestore rules. This guards the shared parser AND the
+      # wiring: a call site that goes back to scanning argv fails here, because
+      # the parser being correct is worth nothing if the script does not use it.
+      - run: npm run test:deploy-args
+
       # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
       # Aglyn's own Stripe products — the single input that decides how much
       # sales tax is collected and remitted from Sep 1. It was set by hand in

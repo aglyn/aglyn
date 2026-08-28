@@ -798,6 +798,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       // replaces that silence is only worth anything if its INCONCLUSIVE
       // verdict still works, and this suite is the only thing that runs it.
       'test:ci-test-digest',
+      // AGL-1489 — the deploy scripts refuse an argument they cannot parse.
+      'test:deploy-args',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -843,6 +845,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:lint-tools', // AGL-2480
       'test:week-one-preflight', // AGL-1617
       'test:ci-test-digest', // AGL-1617
+      'test:deploy-args', // AGL-1489
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

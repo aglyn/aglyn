@@ -33,6 +33,10 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
 import {
+  ALLOW_DIRTY_FLAG,
+  parseDeployArgs,
+} from './lib/deploy-args.mjs'
+import {
   authHeaders,
   getServiceAccountToken,
   loadLocalEnv,
@@ -45,6 +49,15 @@ import {
 // scripts AND the drift checker (check-rules-drift.mjs) via
 // lib/firebase-rules-api.mjs — the reader must never diverge from the
 // writer it verifies (AGL-1509).
+// Parsed FIRST, before any credential is minted or any file is read: an
+// argument this script does not understand must stop it here rather than
+// be discarded on the way to a live deploy.
+const args = parseDeployArgs({
+  command: 'deploy-storage-rules',
+  summary: 'Deploy cloud/firebase-storage.rules to the live Storage bucket.',
+  flags: [ALLOW_DIRTY_FLAG],
+})
+
 loadLocalEnv()
 
 // Dirty-tree refusal (AGL-1489): the deploy ships the worktree copy
@@ -55,7 +68,7 @@ const rulesPath = fileURLToPath(
 )
 try {
   const verdict = assertCleanDeploySource(rulesPath, {
-    allowDirty: process.argv.includes('--allow-dirty'),
+    allowDirty: args.allowDirty,
     fileLabel: 'cloud/firebase-storage.rules',
   })
   if (verdict.warning) console.warn(verdict.warning)
