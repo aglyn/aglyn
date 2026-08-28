@@ -47,6 +47,16 @@ export interface EmbeddedCheckoutDialogProps {
   /** Stripe session client secret; the dialog is closed while this is null. */
   clientSecret: string | null
   onClose: () => void
+  /**
+   * Stripe's own "the session completed" callback — the only moment in the
+   * browser that knows a subscription was actually paid for.
+   *
+   * ⚠️ Not a substitute for the webhook. Entitlements come from Stripe's
+   * server event and always will; this fires for the things that can only
+   * happen in the page, and a visitor who closes the tab first simply does not
+   * get them. Never gate access on it.
+   */
+  onComplete?: () => void
 }
 
 /**
@@ -65,6 +75,7 @@ function getStripe() {
 export function EmbeddedCheckoutDialogComponent({
   clientSecret,
   onClose,
+  onComplete,
 }: EmbeddedCheckoutDialogProps) {
   const stripe = useMemo(() => getStripe(), [])
   // Belt and braces with the route's own check: if the key is missing the
@@ -82,7 +93,14 @@ export function EmbeddedCheckoutDialogComponent({
       <DialogContent sx={{ p: 0 }}>
         <EmbeddedCheckoutProvider
           stripe={stripe}
-          options={{ clientSecret }}
+          /*
+           * `onComplete` is read once, when the provider mounts — Stripe does
+           * not re-read the options object. Spreading it conditionally rather
+           * than always passing a wrapper keeps the redirect-mode session,
+           * which has no completion in this page, from being handed a callback
+           * that can never fire.
+           */
+          options={{ clientSecret, ...(onComplete ? { onComplete } : {}) }}
         >
           <EmbeddedCheckout />
         </EmbeddedCheckoutProvider>

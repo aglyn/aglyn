@@ -87,6 +87,8 @@ import { RetentionFunnelDialog } from '../../../../components/billing/retention-
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
 import CardColumns from '../../../../components/card-columns.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
+import { reportPlatformAdConversion } from '@aglyn/aglyn/app-utils/platform-ad-conversions'
+import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import LockdownNotice from '../../../../components/lockdown-notice.component'
 import { useReleaseFlag } from '../../../../hooks/use-release-flags'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -1550,6 +1552,25 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         <EmbeddedCheckoutDialogComponent
           clientSecret={checkoutClientSecret}
           onClose={() => setCheckoutClientSecret(null)}
+          /*
+           * The Google Ads Subscribe conversion (AGL-1152).
+           *
+           * Reported HERE and not from the Stripe webhook, which is where the
+           * `purchase` event goes: an Ads website conversion is matched to the
+           * ad click through the GCLID the tag holds in the browser, and a
+           * server has neither. A webhook-reported one arrives unattributed to
+           * the click that paid for it, which is the whole thing being bought.
+           *
+           * ⚠️ Attribution only. Entitlements come from the webhook and always
+           * will — this fires late, can be missed entirely if the tab closes,
+           * and nothing may be gated on it.
+           */
+          onComplete={() =>
+            reportPlatformAdConversion(
+              'subscribe',
+              platformAdvertisingAllowed(),
+            )
+          }
         />
         {/* The leave path (AGL-1863): survey, downsell, winback, and only
             then the cancel. */}
