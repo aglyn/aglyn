@@ -886,14 +886,54 @@ function orgOwnsHost(ctx: ApiV1Context, hostId: string): boolean {
   return Boolean(hosts[hostId])
 }
 
+/**
+ * The only fields a `site` resource is made of, and the projection every
+ * host-document read behind it carries. Built from the same list the view
+ * reads so a field cannot be added to one and forgotten in the other — a
+ * projection missing a field renders it `null` rather than failing, which
+ * is the kind of omission a test has to be looking for to catch.
+ *
+ * The host document is the largest in the product and most of it is theme
+ * and routing data no API consumer asked for, so the list read below sends
+ * bytes proportional to the page size only through these three names.
+ */
+const SITE_VIEW_FIELDS = ['displayName', 'subdomain', 'cname'] as const
+
 function siteView(hostId: string, data: FirebaseFirestore.DocumentData | undefined) {
   return {
     id: hostId,
     object: 'site',
-    displayName: data?.displayName ?? null,
-    subdomain: data?.subdomain ?? null,
-    domain: data?.cname ?? null,
+    displayName: data?.[SITE_VIEW_FIELDS[0]] ?? null,
+    subdomain: data?.[SITE_VIEW_FIELDS[1]] ?? null,
+    domain: data?.[SITE_VIEW_FIELDS[2]] ?? null,
   }
+}
+
+/**
+ * The host documents behind one page of `/v1/sites`, in the order asked for.
+ *
+ * `Promise.all(ids.map((id) => …doc(id).get()))` is one BatchGetDocuments
+ * per site — `DocumentReference.get()` is `getAll([ref])` — so a
+ * `?limit=100` list was 100 round trips and 100 whole host documents for
+ * three fields each. `getAll` is one round trip for the whole page.
+ *
+ * Snapshots are paired back by document id and the page is rebuilt in the
+ * order it was ASKED for, rather than trusting the order they arrive in: a
+ * batch that came back permuted would otherwise hand every site its
+ * neighbour's name, and the cursor is the last id of this array.
+ */
+async function siteViews(
+  firestore: FirebaseFirestore.Firestore,
+  hostIds: string[],
+) {
+  // `getAll` requires at least one reference; an empty page is not an error.
+  if (!hostIds.length) return []
+  const snapshots = await firestore.getAll(
+    ...hostIds.map((id) => firestore.collection('hosts').doc(id)),
+    { fieldMask: [...SITE_VIEW_FIELDS] },
+  )
+  const byId = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]))
+  return hostIds.map((id) => siteView(id, byId.get(id)?.data()))
 }
 
 /**
@@ -1075,10 +1115,11 @@ async function handleSites(
     const start = cursor ? hostIds.findIndex((id) => id > cursor) : 0
     const page = hostIds.slice(start < 0 ? hostIds.length : start, (start < 0 ? hostIds.length : start) + limit)
     const nextCursor = start >= 0 && start + limit < hostIds.length ? encodeCursor(page[page.length - 1]) : null
-    const sites = await Promise.all(
-      page.map(async (id) => siteView(id, (await ctx.firestore.collection('hosts').doc(id).get()).data())),
+    return listResponse(
+      await siteViews(ctx.firestore, page),
+      nextCursor,
+      ctx.headers,
     )
-    return listResponse(sites, nextCursor, ctx.headers)
   }
 
 
@@ -1090,8 +1131,8 @@ async function handleSites(
     const denied = requireScope(ctx, 'sites:read')
     if (denied) return denied
     if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    const snap = await ctx.firestore.collection('hosts').doc(hostId).get()
-    return apiJson(siteView(hostId, snap.data()), { headers: ctx.headers })
+    const [site] = await siteViews(ctx.firestore, [hostId])
+    return apiJson(site, { headers: ctx.headers })
   }
 
   if (sub === 'form-submissions') {
