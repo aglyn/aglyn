@@ -565,18 +565,22 @@ describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
 })
 
 /**
- * A paid upgrade needs the pieces it will charge.
+ * A paid upgrade ANNOUNCES what it will ask for. It does not refuse.
  *
  * Subscribing is a server-side call against a stored payment method and a
- * stored billing address — there is no checkout step left to collect either.
- * So the grid must refuse the button rather than offer one whose only outcome
- * is a 409, and it must SAY which piece is missing: a disabled control with no
- * explanation is the dead button this exists to avoid.
+ * stored billing address, and `/api/billing/checkout` refuses without either.
+ * That refusal is the enforcement and it is untouched — what changed is what
+ * the grid does with the same facts. It used to disable Upgrade and name two
+ * cards on another screen; now the button stays live and opens a flow that
+ * collects the missing pieces, so this caption is a heads-up about the next
+ * screen rather than homework.
  *
- * This was load-bearing before it was tested — it is what made the two suites
- * above render nothing until their fixtures grew a card.
+ * These assertions are on RENDERED TEXT because the caption is the whole
+ * feature here. The behaviour that matters — that the click subscribes, that
+ * the collected card is stored, that the server still refuses — is asserted
+ * against calls and state in `billing-upgrade-collects-in-flow.spec.tsx`.
  */
-describe('the plan grid gates on what subscribing will charge', () => {
+describe('the plan grid announces what an upgrade will collect', () => {
   /** Re-mount with a billing profile that is missing something. */
   function renderWithProfile(profile: Record<string, unknown>) {
     const real = global.fetch as any
@@ -619,7 +623,7 @@ describe('the plan grid gates on what subscribing will charge', () => {
     // beside each button it disables, not once at the top where a reader
     // scrolling the grid never meets it.
     expect(
-      (await screen.findAllByText(/Add a payment method and a billing address/i))
+      (await screen.findAllByText(/a payment method and a billing address/i))
         .length,
     ).toBeGreaterThan(0)
   })
@@ -631,7 +635,7 @@ describe('the plan grid gates on what subscribing will charge', () => {
       taxIds: [],
       paymentMethods: [],
     })
-    const said = (await screen.findAllByText(/Add a payment method above first/i))[0]
+    const said = (await screen.findAllByText(/ask for a payment method as you go/i))[0]
     expect(said).toBeTruthy()
     expect(said.textContent).not.toMatch(/billing address/i)
   })
@@ -645,25 +649,28 @@ describe('the plan grid gates on what subscribing will charge', () => {
       taxIds: [],
       paymentMethods: [CARD],
     })
-    const said = (await screen.findAllByText(/Add a billing address above first/i))[0]
+    const said = (await screen.findAllByText(/ask for a billing address as you go/i))[0]
     expect(said.textContent).toMatch(/sales tax is calculated from it/i)
   })
 
-  it('disables the paid button rather than letting it 409', async () => {
+  it('leaves the paid button LIVE with nothing on file', async () => {
+    // The reversal, stated as a test. The old assertion here was that the
+    // button was disabled; a customer who wants to buy is now taken through
+    // the missing pieces instead of being turned away at the button.
     renderWithProfile({
       configured: true,
       customer: { email: 'a@b.c', name: 'Acme', address: null },
       taxIds: [],
       paymentMethods: [],
     })
-    await screen.findAllByText(/Add a payment method and a billing address/i)
+    await screen.findAllByText(/a payment method and a billing address/i)
     const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
-    expect(upgrades[0].hasAttribute('disabled')).toBe(true)
+    expect(upgrades[0].hasAttribute('disabled')).toBe(false)
   })
 
-  it('CONTROL — a workspace with both is not gated at all', async () => {
-    // Without this, a grid that disabled Upgrade unconditionally would satisfy
-    // every assertion above.
+  it('CONTROL — a workspace with both is told nothing at all', async () => {
+    // Without this, a grid that printed the caption unconditionally would
+    // satisfy every assertion above.
     renderWithProfile({
       configured: true,
       customer: { email: 'a@b.c', name: 'Acme', address: ADDRESS },
@@ -672,6 +679,6 @@ describe('the plan grid gates on what subscribing will charge', () => {
     })
     const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
     expect(upgrades[0].hasAttribute('disabled')).toBe(false)
-    expect(screen.queryByText(/above first/i)).toBeNull()
+    expect(screen.queryByText(/as you go/i)).toBeNull()
   })
 })

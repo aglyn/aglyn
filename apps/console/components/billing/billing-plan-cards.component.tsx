@@ -313,20 +313,21 @@ export interface BillingPlanCardsProps {
   /** The tenant's current plan; undefined when no plan is assigned yet. */
   plan: OrgPlan | undefined
   /**
-   * Why this workspace cannot subscribe yet, or null when it can.
+   * What the upgrade will ask for on the way through, or null when the
+   * workspace already has everything.
    *
-   * Subscribing charges a stored payment method against a stored billing
-   * address, so both have to exist before a paid tier can be bought. This
-   * gates the PAID buttons only: browsing the grid, comparing tiers and the
-   * Free card are unaffected — the requirement is on subscribing, not on
-   * looking.
+   * ⚠️ This DISABLES NOTHING. Subscribing does require a stored payment method
+   * and a stored billing address — `/api/billing/checkout` refuses without
+   * either, and that refusal is the enforcement — but a customer who arrived
+   * wanting to buy is not turned away for missing them. Upgrade opens a flow
+   * that collects them, so the sentence here is a heads-up about the next
+   * screen rather than a reason the button will not work.
    *
-   * A sentence rather than a boolean because the button is not the place to
-   * discover this. A disabled control with no explanation is the dead button
-   * this exists to avoid; the caption below it names what is missing, and the
-   * card that fixes it is on this same page.
+   * A sentence rather than a boolean because "one more step" and "two more
+   * steps" are different promises, and the difference is the whole value of
+   * saying anything at all.
    */
-  subscribeBlockedReason?: string | null
+  subscribeCollectsNotice?: string | null
   /**
    * Billing interval from the page's monthly/annual toggle (AGL-532):
    * 'year' shows the discounted annual headline price on every card.
@@ -459,7 +460,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     enterprise = false,
     org,
     subscriptionActive = false,
-    subscribeBlockedReason = null,
+    subscribeCollectsNotice = null,
     highlight,
     onSelect,
   } = props
@@ -613,15 +614,13 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     // a SUBSCRIBER it has a real route, and it is the cancel
                     // flow (AGL-2156) — which the page owns, and which states
                     // what happens and when.
-                    disabled={
-                      tier === 'free'
-                        ? !canCancelToFree
-                        : // A paid tier with nothing to charge. Disabled ONLY
-                          // on the paid path, and only for an UPGRADE — a
-                          // downgrade bills nothing new and must stay
-                          // reachable. The caption below says what is missing.
-                          Boolean(subscribeBlockedReason) && index > currentIndex
-                    }
+                    //
+                    // Every PAID tier is clickable unconditionally. A missing
+                    // card or address is collected by the flow Upgrade opens,
+                    // so there is nothing left for this control to refuse; the
+                    // server still refuses the subscribe itself, which is
+                    // where that check belongs.
+                    disabled={tier === 'free' ? !canCancelToFree : false}
                     onClick={() => onSelect(tier)}
                     sx={{ mb: 1.5, ...(isLower ? { color: 'text.secondary' } : {}) }}
                   >
@@ -636,20 +635,19 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         ? 'Upgrade'
                         : 'Downgrade'}
                   </Button>
-                  {/* The button name alone would still be a surprise — a
-                      customer clicking it deserves to know their paid plan
-                      runs out rather than stopping today, and that nothing is
-                      deleted. The funnel repeats it at the decision; this is
-                      the version visible while they are still choosing. */}
+                  {/* What the next screen will ask for. Not a refusal and not
+                      a reason the button is inert — it is not — but pressing
+                      Upgrade and meeting an address form unannounced is a
+                      small betrayal of a button labelled Upgrade. */}
                   {tier !== 'free' &&
-                  subscribeBlockedReason &&
+                  subscribeCollectsNotice &&
                   index > currentIndex ? (
                     <Typography
                       variant="caption"
                       color="text.secondary"
                       sx={{ display: 'block', mt: -1, mb: 1.5 }}
                     >
-                      {subscribeBlockedReason}
+                      {subscribeCollectsNotice}
                     </Typography>
                   ) : null}
                   {tier === 'free' && canCancelToFree ? (

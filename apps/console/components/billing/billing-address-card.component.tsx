@@ -28,6 +28,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
+import { COMPACT_FIELD_WIDTH } from '../../constants/shared'
 import { COUNTRY_OPTIONS, countryOption, type CountryOption } from '../../utils/country-options'
 import type { BillingProfile } from './use-billing-profile'
 
@@ -184,11 +185,27 @@ export default function BillingAddressCardComponent({
             onChange={set('line2')}
             slotProps={{ htmlInput: { 'aria-label': 'Address line 2' } }}
           />
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          {/*
+            Three across, and allowed to WRAP.
+
+            `fullWidth` lets these shrink without overflowing, but shrinking is
+            its own failure: MUI sizes a TextField from its input, so at a
+            third of a narrow column "State or province" renders as a truncated
+            label on a control too small to type a value into. `useFlexGap` +
+            `flexWrap` with a floor per field means the row breaks onto a
+            second line instead — the column width is what varies between
+            breakpoints, so the row has to be the thing that gives.
+          */}
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            useFlexGap
+            sx={{ flexWrap: 'wrap' }}
+          >
             <TextField
               label="City"
               size="small"
-              fullWidth
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
               value={fields.city}
               disabled={!canManage || busy}
               onChange={set('city')}
@@ -197,7 +214,7 @@ export default function BillingAddressCardComponent({
             <TextField
               label="State or province"
               size="small"
-              fullWidth
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
               value={fields.state}
               disabled={!canManage || busy}
               onChange={set('state')}
@@ -206,7 +223,7 @@ export default function BillingAddressCardComponent({
             <TextField
               label="Postal code"
               size="small"
-              fullWidth
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
               value={fields.postalCode}
               disabled={!canManage || busy}
               onChange={set('postalCode')}

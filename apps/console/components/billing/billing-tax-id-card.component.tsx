@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import BillingProfileGateComponent from './billing-profile-gate.component'
+import { COMPACT_FIELD_WIDTH } from '../../constants/shared'
 import {
   TAX_ID_TYPE_OPTIONS,
   taxIdTypeLabel,
@@ -232,13 +233,29 @@ export default function BillingTaxIdCardComponent({
             </Alert>
           ) : null}
 
+          {/*
+            WRAPS rather than fits.
+
+            The three controls have a combined minimum wider than this card
+            gets in a multi-column layout, and a `direction="row"` Stack does
+            not wrap: the Save button was laid out past the card's right edge
+            and clipped. Sizing the controls down would only move the failure
+            to the next breakpoint, because the column width is what changes —
+            so the row is allowed to break instead, and each control keeps a
+            width its own label fits in.
+
+            `useFlexGap` is what makes that safe: Stack's default spacing is a
+            margin on the following sibling, which a wrapped item carries onto
+            the start of its new line. `gap` spaces both axes.
+          */}
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
             spacing={1}
-            sx={{ alignItems: 'flex-start' }}
+            useFlexGap
+            sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}
           >
             <Autocomplete
-              sx={{ minWidth: 260, flexGrow: 1 }}
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
               size="small"
               disabled={!canManage || busy}
               options={TAX_ID_TYPE_OPTIONS}
@@ -265,7 +282,7 @@ export default function BillingTaxIdCardComponent({
             <TextField
               label="Tax ID"
               size="small"
-              sx={{ minWidth: 200, flexGrow: 1 }}
+              sx={{ minWidth: COMPACT_FIELD_WIDTH, flexGrow: 1 }}
               value={value}
               disabled={!canManage || busy}
               onChange={(event) => setValue(event.target.value)}

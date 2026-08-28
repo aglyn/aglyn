@@ -92,6 +92,7 @@ import BillingAddressCardComponent from '../../../../../components/billing/billi
 import BillingTaxIdCardComponent from '../../../../../components/billing/billing-tax-id-card.component'
 import BillingOpenInvoicesCardComponent from '../../../../../components/billing/billing-open-invoices-card.component'
 import BillingPlanQuoteComponent from '../../../../../components/billing/billing-plan-quote.component'
+import BillingUpgradeDialogComponent from '../../../../../components/billing/billing-upgrade.dialog'
 import { useBillingProfile } from '../../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../../utils/browser-stripe'
 import { prorationQuote } from '../../../../../utils/proration-quote'
@@ -166,32 +167,45 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   /**
-   * Why this workspace cannot subscribe yet, or null when it can.
+   * What this workspace still has to hand over, or null when it has
+   * everything.
    *
-   * The order the customer walks is payment method → billing address → plan,
-   * so the plan grid has to say which of the first two is missing rather than
-   * offering a button whose only outcome is a 409. Both are cards on this same
-   * page, directly above the grid.
+   * ⚠️ NOT a reason Upgrade is disabled — it isn't. Subscribing does need a
+   * stored payment method and a stored billing address, and
+   * `/api/billing/checkout` refuses without either; what changed is who
+   * collects them. Upgrade opens a flow that asks for exactly the missing
+   * pieces, in the order tax requires, so this sentence tells a customer what
+   * the next screen holds instead of sending them off to two cards on another
+   * one.
    *
    * Deliberately null while the profile is still loading or could not be read:
-   * an unknown is not a refusal, and blocking Upgrade on a fetch that has not
-   * landed would accuse a fully set-up workspace of being incomplete.
+   * an unknown is not a promise. Announcing steps off a fetch that has not
+   * landed would tell a fully set-up workspace it is about to be asked for
+   * details it already gave us.
    */
-  const subscribeBlockedReason = useMemo(() => {
+  const missingBillingPieces = useMemo(() => {
     if (billingProfile.loadState !== 'loaded') return null
     const profile = billingProfile.state
     if (!profile) return null
-    const hasCard = (profile.paymentMethods ?? []).length > 0
-    const hasAddress = Boolean(profile.customer?.address?.country)
-    if (!hasCard && !hasAddress) {
-      return 'Add a payment method and a billing address above first.'
+    return {
+      card: (profile.paymentMethods ?? []).length === 0,
+      address: !profile.customer?.address?.country,
     }
-    if (!hasCard) return 'Add a payment method above first.'
-    if (!hasAddress) {
-      return 'Add a billing address above first — sales tax is calculated from it.'
+  }, [billingProfile.loadState, billingProfile.state])
+
+  const subscribeCollectsNotice = useMemo(() => {
+    if (!missingBillingPieces) return null
+    const { card, address } = missingBillingPieces
+    if (card && address) {
+      return 'We’ll ask for a payment method and a billing address as you go.'
+    }
+    if (card) return 'We’ll ask for a payment method as you go.'
+    if (address) {
+      return 'We’ll ask for a billing address as you go — sales tax is ' +
+        'calculated from it.'
     }
     return null
-  }, [billingProfile.loadState, billingProfile.state])
+  }, [missingBillingPieces])
   // Annual billing (AGL-269): checkout maps to the *_YEARLY price ids.
   const [interval, setInterval] = useState<'month' | 'year'>('month')
   // Non-null while an in-page checkout is open (AGL-1132). Null is both the
@@ -206,6 +220,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // when they look back at the button they just pressed.
   const [checkoutLockdown, setCheckoutLockdown] =
     useState<LockdownRefusalNotice | null>(null)
+  /**
+   * The plan an upgrade is collecting billing details for, or null.
+   *
+   * Only ever set for a workspace that is actually missing something — one
+   * that has a card and an address never sees this dialog and buys in the
+   * clicks it always took.
+   */
+  const [collectingForPlan, setCollectingForPlan] = useState<OrgPlan | null>(
+    null,
+  )
   // The plan the visitor picked on the marketing site, if they arrived by a
   // pricing CTA (AGL-1117). Read once off the URL: it preselects the toggle
   // and emphasizes the matching card, and nothing here submits on its own.
@@ -586,138 +610,24 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    */
   const checkoutAttempts = useRef(new Map<string, string>())
 
-  const handleUpgrade = useCallback(
-    (targetPlan: OrgPlan) => async () => {
+  /**
+   * The purchase itself, separated from the button that asks for it.
+   *
+   * It is its own function because there are now two ways to arrive at it:
+   * a workspace that already has a card and an address goes straight here
+   * from the plan grid — the behaviour that shipped, with no extra clicks —
+   * and one that does not arrives from the collection dialog once it has
+   * both. ONE subscribe call either way, so SCA, the declined-card branch
+   * and the lockdown notice cannot be handled on one path and forgotten on
+   * the other.
+   */
+  const startSubscribe = useCallback(
+    async (targetPlan: OrgPlan) => {
       const dequeue = queueLoading()
       // A fresh attempt clears the last refusal: a stale "checkout is paused"
       // sitting above the cards after the lock lifted would be its own lie.
       setCheckoutLockdown(null)
       try {
-        // Moving to Free is a CANCEL, not a switch (AGL-2156). There is no
-        // Free price to check out or switch to — the server says so in as many
-        // words now — and for a subscriber it is the cheapest save the
-        // retention funnel has, so the grid's Free card lands in the funnel
-        // rather than on a disabled button that said "No credit card
-        // required" to somebody already paying.
-        if (targetPlan === 'free' && subscriptionActive) {
-          dequeue()
-          if (cancelAtPeriodEnd) {
-            // Already on the way out: opening the funnel again would ask them
-            // to cancel something that is already canceled.
-            enqueueSnackbar(
-              'Your subscription already ends at the period end — this ' +
-                'organization moves to Free then.',
-              { variant: 'info', persist: false },
-            )
-            return
-          }
-          await openCancelFunnel()
-          return
-        }
-        // Plan switches on a live subscription go through the proration
-        // preview + subscription update, never a second Checkout (AGL-269).
-        if (subscriptionActive && org?.plan && targetPlan !== 'free') {
-          dequeue()
-          const preview = await subscriptionRequest({
-            action: 'preview',
-            plan: targetPlan,
-            interval,
-          })
-          if (!preview) return
-          const over = await overLimitSummary(targetPlan)
-          // A downgrade and an upgrade are not the same sentence (AGL-1862).
-          // The server already treats them differently — nothing is charged
-          // today and the move lands at the period end — so the confirm has
-          // to SAY that, or the customer clicks expecting an immediate
-          // change and a refund, and gets neither.
-          const effective = preview.periodEnd
-            ? new Date(preview.periodEnd).toLocaleDateString()
-            : 'the end of your billing period'
-          const accepted = await confirm({
-            title: preview.downgrade
-              ? `Move down to ${targetPlan}?`
-              : `Switch to ${targetPlan}?`,
-            description:
-              (preview.downgrade
-                ? `Nothing is charged today, and nothing changes yet. You ` +
-                  `keep ${org?.plan} — and everything you've already paid ` +
-                  `for — until ${effective}, when this organization moves ` +
-                  `to ${targetPlan}. You can keep your current plan any ` +
-                  `time before then.`
-                : prorationQuote(preview, effective)) +
-              // A pending cancel and a pending plan change cannot both stand
-              // (AGL-2151). The server clears the cancellation as part of this
-              // operation — a customer picking a smaller plan is trying to
-              // STAY — so the confirm has to say so before they click, or the
-              // cancellation they scheduled disappears without anyone telling
-              // them.
-              (cancelAtPeriodEnd
-                ? ` This also cancels your scheduled cancellation: the ` +
-                  `subscription continues on ${targetPlan} instead of ` +
-                  `ending. You can cancel again at any time.`
-                : '') +
-              (over.length
-                ? ` Heads up — you'll be over the ${targetPlan} plan on: ` +
-                  `${over.join('; ')}. Nothing is deleted and these keep ` +
-                  "working, but you can't add more until you're back under " +
-                  'the limit.'
-                : ''),
-            confirmationText: preview.downgrade
-              ? 'Schedule the move down'
-              : 'Switch plan',
-          })
-            .then(() => true)
-            .catch(() => false)
-          if (!accepted) return
-          const switched = await subscriptionRequest({
-            action: 'switch',
-            plan: targetPlan,
-            interval,
-          })
-          if (switched) {
-            // The plan change, REPORTED (AGL-2235, under AGL-1859 §4).
-            //
-            // The four retention events all fire from the funnel dialog and
-            // from nowhere else, so the identical move made here — Downgrade
-            // on the plan card — was invisible, and `downsell_accepted` read
-            // as a total while being a fraction. Emitted from the SERVER's
-            // answer, never the client's intent: a switch the route refused
-            // returns null above and is not counted, and the effective date
-            // is the one Stripe actually scheduled.
-            //
-            // `preview.downgrade` is the classification the same server made
-            // a moment ago, rather than a second ladder comparison here that
-            // could disagree with it.
-            if (preview.downgrade) {
-              trackEvent('plan_downgrade_scheduled', {
-                from_plan: String(org?.plan ?? ''),
-                to_plan: targetPlan,
-                interval,
-                ...(switched.effectiveAt
-                  ? { effective_at: String(switched.effectiveAt) }
-                  : {}),
-              })
-            } else {
-              trackEvent('plan_upgraded', {
-                from_plan: String(org?.plan ?? ''),
-                to_plan: targetPlan,
-                interval,
-              })
-            }
-            // A scheduled downgrade has not switched anything yet; saying so
-            // is the difference between a customer who understands their
-            // bill and one who opens a ticket about it.
-            enqueueSnackbar(
-              switched.scheduled && switched.effectiveAt
-                ? `Moving to ${targetPlan} on ${new Date(
-                    switched.effectiveAt,
-                  ).toLocaleDateString()} — you keep your current plan until then.`
-                : `Plan switched to ${targetPlan}`,
-              { variant: 'success', persist: false },
-            )
-          }
-          return
-        }
         const idToken = await (user as any)?.getIdToken?.()
         const attemptScope = `${orgId}:${targetPlan}:${interval}`
         const attemptKey =
@@ -889,9 +799,177 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         dequeue()
       }
     },
+    [user, orgId, interval, queueLoading, enqueueSnackbar],
+  )
+
+  const handleUpgrade = useCallback(
+    (targetPlan: OrgPlan) => async () => {
+      const dequeue = queueLoading()
+      // A fresh attempt clears the last refusal: a stale "checkout is paused"
+      // sitting above the cards after the lock lifted would be its own lie.
+      setCheckoutLockdown(null)
+      try {
+        // Moving to Free is a CANCEL, not a switch (AGL-2156). There is no
+        // Free price to check out or switch to — the server says so in as many
+        // words now — and for a subscriber it is the cheapest save the
+        // retention funnel has, so the grid's Free card lands in the funnel
+        // rather than on a disabled button that said "No credit card
+        // required" to somebody already paying.
+        if (targetPlan === 'free' && subscriptionActive) {
+          dequeue()
+          if (cancelAtPeriodEnd) {
+            // Already on the way out: opening the funnel again would ask them
+            // to cancel something that is already canceled.
+            enqueueSnackbar(
+              'Your subscription already ends at the period end — this ' +
+                'organization moves to Free then.',
+              { variant: 'info', persist: false },
+            )
+            return
+          }
+          await openCancelFunnel()
+          return
+        }
+        // Plan switches on a live subscription go through the proration
+        // preview + subscription update, never a second Checkout (AGL-269).
+        if (subscriptionActive && org?.plan && targetPlan !== 'free') {
+          dequeue()
+          const preview = await subscriptionRequest({
+            action: 'preview',
+            plan: targetPlan,
+            interval,
+          })
+          if (!preview) return
+          const over = await overLimitSummary(targetPlan)
+          // A downgrade and an upgrade are not the same sentence (AGL-1862).
+          // The server already treats them differently — nothing is charged
+          // today and the move lands at the period end — so the confirm has
+          // to SAY that, or the customer clicks expecting an immediate
+          // change and a refund, and gets neither.
+          const effective = preview.periodEnd
+            ? new Date(preview.periodEnd).toLocaleDateString()
+            : 'the end of your billing period'
+          const accepted = await confirm({
+            title: preview.downgrade
+              ? `Move down to ${targetPlan}?`
+              : `Switch to ${targetPlan}?`,
+            description:
+              (preview.downgrade
+                ? `Nothing is charged today, and nothing changes yet. You ` +
+                  `keep ${org?.plan} — and everything you've already paid ` +
+                  `for — until ${effective}, when this organization moves ` +
+                  `to ${targetPlan}. You can keep your current plan any ` +
+                  `time before then.`
+                : prorationQuote(preview, effective)) +
+              // A pending cancel and a pending plan change cannot both stand
+              // (AGL-2151). The server clears the cancellation as part of this
+              // operation — a customer picking a smaller plan is trying to
+              // STAY — so the confirm has to say so before they click, or the
+              // cancellation they scheduled disappears without anyone telling
+              // them.
+              (cancelAtPeriodEnd
+                ? ` This also cancels your scheduled cancellation: the ` +
+                  `subscription continues on ${targetPlan} instead of ` +
+                  `ending. You can cancel again at any time.`
+                : '') +
+              (over.length
+                ? ` Heads up — you'll be over the ${targetPlan} plan on: ` +
+                  `${over.join('; ')}. Nothing is deleted and these keep ` +
+                  "working, but you can't add more until you're back under " +
+                  'the limit.'
+                : ''),
+            confirmationText: preview.downgrade
+              ? 'Schedule the move down'
+              : 'Switch plan',
+          })
+            .then(() => true)
+            .catch(() => false)
+          if (!accepted) return
+          const switched = await subscriptionRequest({
+            action: 'switch',
+            plan: targetPlan,
+            interval,
+          })
+          if (switched) {
+            // The plan change, REPORTED (AGL-2235, under AGL-1859 §4).
+            //
+            // The four retention events all fire from the funnel dialog and
+            // from nowhere else, so the identical move made here — Downgrade
+            // on the plan card — was invisible, and `downsell_accepted` read
+            // as a total while being a fraction. Emitted from the SERVER's
+            // answer, never the client's intent: a switch the route refused
+            // returns null above and is not counted, and the effective date
+            // is the one Stripe actually scheduled.
+            //
+            // `preview.downgrade` is the classification the same server made
+            // a moment ago, rather than a second ladder comparison here that
+            // could disagree with it.
+            if (preview.downgrade) {
+              trackEvent('plan_downgrade_scheduled', {
+                from_plan: String(org?.plan ?? ''),
+                to_plan: targetPlan,
+                interval,
+                ...(switched.effectiveAt
+                  ? { effective_at: String(switched.effectiveAt) }
+                  : {}),
+              })
+            } else {
+              trackEvent('plan_upgraded', {
+                from_plan: String(org?.plan ?? ''),
+                to_plan: targetPlan,
+                interval,
+              })
+            }
+            // A scheduled downgrade has not switched anything yet; saying so
+            // is the difference between a customer who understands their
+            // bill and one who opens a ticket about it.
+            enqueueSnackbar(
+              switched.scheduled && switched.effectiveAt
+                ? `Moving to ${targetPlan} on ${new Date(
+                    switched.effectiveAt,
+                  ).toLocaleDateString()} — you keep your current plan until then.`
+                : `Plan switched to ${targetPlan}`,
+              { variant: 'success', persist: false },
+            )
+          }
+          return
+        }
+        // ── What the purchase still needs, asked for on the way to it ──
+        //
+        // The plan grid used to disable this button and name two cards on
+        // another screen. It no longer does: a customer who wants to buy is
+        // taken through the missing pieces here rather than turned away and
+        // asked to come back once they have done some filing.
+        //
+        // ⚠️ The SERVER still refuses. `/api/billing/checkout` answers 409
+        // `payment_method_required` and 409 `billing_address_required`, and
+        // that is the enforcement — this branch only decides whether the
+        // customer is asked first or sent straight through. Dropping both
+        // would have removed the protection rather than moved it.
+        //
+        // Unknown is NOT missing. `missingBillingPieces` is null while the
+        // profile is loading or failed to load, and that falls through to
+        // the subscribe, where the server decides on what Stripe actually
+        // holds instead of on a fetch that has not landed.
+        if (missingBillingPieces?.card || missingBillingPieces?.address) {
+          dequeue()
+          setCollectingForPlan(targetPlan)
+          return
+        }
+        dequeue()
+        await startSubscribe(targetPlan)
+        return
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('Could not start checkout', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        dequeue()
+      }
+    },
     [
-      user,
-      orgId,
       interval,
       subscriptionActive,
       cancelAtPeriodEnd,
@@ -899,6 +977,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       org?.plan,
       overLimitSummary,
       subscriptionRequest,
+      missingBillingPieces,
+      startSubscribe,
       confirm,
       queueLoading,
       enqueueSnackbar,
@@ -1374,7 +1454,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               size: { xs: 12 },
               children: (
                 <BillingPlanCardsComponent
-                  subscribeBlockedReason={subscribeBlockedReason}
+                  subscribeCollectsNotice={subscribeCollectsNotice}
                   // The page's own defaulted value (AGL-1422), not the raw
                   // field (AGL-2156): a pre-billing workspace with no `plan`
                   // handed the grid `undefined`, which is `currentIndex = -1` —
@@ -1422,6 +1502,31 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           onClose={() => setFunnelOpen(false)}
           onDownsell={handleFunnelDownsell}
           onLeave={handleFunnelLeave}
+        />
+
+        {/*
+          The buy path's counterpart to the funnel: everything a subscribe
+          needs, asked for on the way to the subscribe instead of on a
+          different screen the customer has to find first.
+
+          Opened only for a workspace that is missing something — the same
+          `missingBillingPieces` the plan grid's caption reads — so the
+          already-set-up case never meets it. It collects; `startSubscribe` is
+          still the one thing that buys.
+        */}
+        <BillingUpgradeDialogComponent
+          plan={collectingForPlan}
+          interval={interval}
+          orgId={orgId}
+          profile={billingProfile}
+          canManage={can('billing.manage')}
+          onClose={() => setCollectingForPlan(null)}
+          onConfirm={async () => {
+            const targetPlan = collectingForPlan
+            if (!targetPlan) return
+            setCollectingForPlan(null)
+            await startSubscribe(targetPlan)
+          }}
         />
     </>
   )
