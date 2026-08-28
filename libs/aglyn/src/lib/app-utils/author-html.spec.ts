@@ -23,6 +23,7 @@
 
 import { INERT_CSS_URL } from './author-css'
 import {
+  ALLOWED_AUTHOR_HTML_ELEMENTS,
   type AuthorHtmlRemoval,
   decodeCharacterReferences,
   sanitizeAuthorHtml,
@@ -348,5 +349,43 @@ describe('removal reporting (AGL-2486)', () => {
     ]) {
       expect(sanitizeAuthorHtml(html, [])).toBe(sanitizeAuthorHtml(html))
     }
+  })
+})
+
+/**
+ * `main` IS A DELIBERATE SUBTRACTION FROM THE PROFILE (AGL-2486).
+ *
+ * The tenant root layout renders the document's single `main` landmark, so
+ * author markup carrying another can only make the landmark ambiguous — a
+ * worse accessibility outcome than the missing one it replaced, because
+ * assistive tech gets a choice to make where it previously had a gap to
+ * report.
+ *
+ * It is the SUBSET argument working as intended rather than an exception to
+ * it: keeping less than DOMPurify can only cost an author some markup, and
+ * here it costs them a tag whose children survive verbatim.
+ *
+ * ⛔ Restoring it to `ALLOWED_AUTHOR_HTML_ELEMENTS` puts a second landmark
+ * back within reach of any Custom HTML block or rich-text body.
+ */
+describe('author markup cannot mint a second `main` landmark (AGL-2486)', () => {
+  it('is not in the allowlist', () => {
+    expect(ALLOWED_AUTHOR_HTML_ELEMENTS.has('main')).toBe(false)
+    // CONTROL — the sibling landmarks are untouched, so this is a targeted
+    // subtraction and not a general narrowing of the profile.
+    for (const element of ['section', 'article', 'aside', 'nav', 'header', 'footer']) {
+      expect(ALLOWED_AUTHOR_HTML_ELEMENTS.has(element)).toBe(true)
+    }
+  })
+
+  it('UNWRAPS it, keeping the content the author wrote', () => {
+    // Dropping the subtree would be content loss for a landmark decision, so
+    // the distinction is asserted rather than assumed: the tag goes, the words
+    // stay, and the sibling landmark beside it is untouched.
+    const out = sanitizeAuthorHtml('<main><p>kept</p></main><nav><p>also</p></nav>')
+    expect(out).not.toContain('<main')
+    expect(out).toContain('<p>kept</p>')
+    expect(out).toContain('<nav>')
+    expect(out).toContain('<p>also</p>')
   })
 })

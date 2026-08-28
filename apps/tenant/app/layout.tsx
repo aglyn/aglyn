@@ -53,7 +53,28 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
-          {children}
+          {/* THE DOCUMENT'S ONE `main` LANDMARK (AGL-2486).
+              Published pages are composed from author nodes, so no screen can
+              be relied on to declare the landmark itself — a page built
+              entirely of Box and Section nodes has none, and every published
+              site was shipping a document whose only landmark was `body`.
+              Assistive tech has nothing to skip the chrome with, and it is the
+              precondition for a skip link.
+
+              It lives HERE rather than in `[host]/layout` so the guarantee is
+              "every document, exactly one" rather than "every host route":
+              the root `not-found` and `error` screens render through this
+              layout and no other. `main` is `display: block`, the same as the
+              `div` the canvas root already renders, so wrapping changes no
+              layout — measured against production, where `body` is
+              `display: block` with block-level children.
+
+              ⚠️ EXACTLY ONE. A second `main` is its own a11y failure, worse
+              than none because it makes the landmark ambiguous. `main` is
+              therefore NOT an element an author can choose — see
+              `SECTION_ELEMENTS` and `ALLOWED_AUTHOR_HTML_ELEMENTS`, both of
+              which drop it and say why. */}
+          <main>{children}</main>
           {/* First-party error beacon (AGL-1538): uncaught browser errors
               → /api/errors → Cloud Error Reporting. Sits OUTSIDE the page's
               suspense boundaries so it reports even when a page component
