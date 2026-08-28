@@ -121,14 +121,24 @@ export async function overLimitSummary(options: {
       `${seatCounts.managerSeats} team members (${targetPlan} includes ${target.managersPerOrg})`,
     )
   }
+  // `datasetsPerOrg`, not `maxDatasetsPerOrg`, and the two are far apart:
+  // Starter includes 3 and sells up to 10, Pro includes 15 and sells up to 50.
+  // The band is the purchase CEILING — what the org could reach by buying
+  // extra datasets at `extraDatasetMonthlyUsd` — so measuring against it both
+  // printed a number the word "includes" makes false and cleared an org that
+  // will be over the moment the plan changes: 8 datasets moving to Starter
+  // read as a clean bill of health and lands 5 over the included count.
+  //
+  // The sites and seats rows above already measure what the plan INCLUDES
+  // (`hostLimit`, `managersPerOrg`); this is the row that disagreed with them.
   if (datasetCount == null) {
     over.push(
       `datasets — could not be checked (${targetPlan} includes ` +
-        `${target.maxDatasetsPerOrg})`,
+        `${target.datasetsPerOrg})`,
     )
-  } else if (datasetCount > target.maxDatasetsPerOrg) {
+  } else if (datasetCount > target.datasetsPerOrg) {
     over.push(
-      `${datasetCount} datasets (${targetPlan} includes ${target.maxDatasetsPerOrg})`,
+      `${datasetCount} datasets (${targetPlan} includes ${target.datasetsPerOrg})`,
     )
   }
   return over
