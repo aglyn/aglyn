@@ -275,7 +275,42 @@ export interface ListTableProps extends DataTableProps {
  * reader actually compares.
  */
 export function ListTable(props: ListTableProps) {
-  const { onOpen, sx, initialState, ...rest } = props
+  const { onOpen, sx, initialState, hideFooter, rows, ...rest } = props
+  /*==========================================
+   * A HIDDEN FOOTER STILL PAGED THE ROWS.
+   *
+   * `hideFooter` is how a caller says "something else owns the page" — a
+   * server-paged staff list, a cursor feed, a card whose `ListPagination`
+   * sits under the grid. It hides the CONTROL and nothing else: the free
+   * DataGrid always paginates, so the grid went on slicing at the shared
+   * default and rows eleven onward were drawn by nothing and reachable by
+   * nothing. The outer footer then described the rows it was HANDED, so it
+   * reported a page two rows longer than the one on screen and offered no
+   * way to see the difference.
+   *
+   * Eight lists pass `hideFooter`, and every one of them was losing rows past
+   * the tenth. It went unnoticed because a list has to hold more than ten
+   * rows to show a symptom, and most of these do not yet.
+   *
+   * So when the footer is hidden the grid takes ONE page as tall as the rows
+   * it was given. CONTROLLED rather than `initialState`, because a
+   * server-paged list hands over a different number of rows on every page and
+   * initial state is read once. A floor of one because MUI rejects a page
+   * size of zero, and an empty grid has nothing to slice anyway.
+   *=========================================*/
+  const rowCount = rows?.length ?? 0
+  const unpaged = hideFooter
+    ? {
+        paginationModel: { page: 0, pageSize: Math.max(rowCount, 1) },
+        // A controlled model with no handler logs a MUI warning, and the
+        // grid must not move off page zero in any case: the page is not
+        // this component's to change while somebody else owns the footer.
+        onPaginationModelChange: () => undefined,
+        // Keeps the size out of the "not preset in pageSizeOptions" warning.
+        // Nothing renders it — the footer carrying the menu is hidden.
+        pageSizeOptions: [Math.max(rowCount, 1)],
+      }
+    : {}
   return (
     <DataTableComponent
       getRowId={(row: any) => row.$id}
@@ -346,7 +381,16 @@ export function ListTable(props: ListTableProps) {
       slotProps={{
         pagination: { labelRowsPerPage: TABLE_ROWS_PER_PAGE_LABEL },
       }}
+      rows={rows}
+      hideFooter={hideFooter}
       {...rest}
+      /*
+       * AFTER `rest`, deliberately. "The footer is hidden, so every row I was
+       * handed is on screen" is an invariant of this component, not a default
+       * a call site may talk it out of — a caller that could re-slice here
+       * would reintroduce exactly the rows nobody can reach.
+       */
+      {...unpaged}
     />
   )
 }

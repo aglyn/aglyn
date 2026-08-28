@@ -30,7 +30,10 @@ export interface ListPaginationProps {
   /** Rows rendered on the CURRENT page — not the collection's total. */
   rowCount: number
   onPageChange: (page: number) => void
-  /** Omit to render the size menu read-only-ish; most lists should pass it. */
+  /**
+   * Omit on a list whose page size is not the reader's to choose — the size
+   * menu is then not rendered at all. Most lists should pass it.
+   */
   onPageSizeChange?: (pageSize: number) => void
   /**
    * The collection's total, when the caller genuinely knows it — a
@@ -82,12 +85,31 @@ export function ListPagination(props: ListPaginationProps) {
     count,
     hasMore,
     labelDisplayedRows,
-    pageSizeOptions = TABLE_PAGE_SIZE_OPTIONS,
+    pageSizeOptions,
     disabled,
   } = props
 
   const resolvedCount =
     count ?? (hasMore ? -1 : page * pageSize + rowCount)
+
+  /*==========================================
+   * A MENU OVER STATE THIS FOOTER DOES NOT OWN.
+   *
+   * Without `onPageSizeChange` the size menu is inert — MUI renders the
+   * select and nothing happens when it is used. Worse on a list whose page
+   * size is dictated elsewhere: the staff Users list pages at the width
+   * Firebase Auth is asked for, which is not one of the shared options, so
+   * MUI had a value with no matching item and drew the control EMPTY. A
+   * blank select beside a row count reads as a broken page, and the one
+   * thing it could not do was be used.
+   *
+   * An empty options array is how MUI is told there is no choice to offer,
+   * so the control is absent rather than present and dead. A caller that
+   * genuinely wants a fixed menu still passes `pageSizeOptions` itself.
+   *=========================================*/
+  const resolvedOptions =
+    pageSizeOptions ??
+    (onPageSizeChange ? TABLE_PAGE_SIZE_OPTIONS : [])
 
   return (
     <TablePagination
@@ -109,7 +131,7 @@ export function ListPagination(props: ListPaginationProps) {
             }
           : undefined
       }
-      rowsPerPageOptions={pageSizeOptions}
+      rowsPerPageOptions={resolvedOptions}
       labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
       {...(labelDisplayedRows ? { labelDisplayedRows } : {})}
       disabled={disabled}
