@@ -40,6 +40,9 @@ export const WORKFLOWS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'webhooks', label: 'Webhooks' },
 ]
 
-/** Where `/workflows` lands when the URL names no section. */
-export const DEFAULT_WORKFLOWS_CONSOLE_SECTION: WorkflowsConsoleSectionId =
-  'workflows'
+/*
+ * Rail ORDER decides where `/workflows` lands: the shell redirects a bare hub
+ * URL to the first section in this list the reader may open (AGL-693). There
+ * is deliberately no separate default constant — a second place to say which
+ * section is first is a second place for it to disagree with the rail.
+ */

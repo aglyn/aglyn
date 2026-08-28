@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-'use client'
-
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { redirect } from 'next/navigation'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { useOrgSlug } from '../../../../hooks/use-org-scope'
+import {
+  sectionIndexTarget,
+  type SearchParams,
+} from '../../../../utils/section-index-redirect'
 
 /**
  * `/team` is the section index and renders nothing of its own (AGL-693).
@@ -30,18 +29,33 @@ import { useOrgSlug } from '../../../../hooks/use-org-scope'
  * sections existed still resolves — both land on Members, which is what the
  * page opened with when it was one scrolling column.
  *
- * `replace`, not `push`: a redirect the reader did not ask for must not
- * become a history entry that their back button bounces off.
+ * A SERVER component, deliberately (AGL-693). This was a client page that
+ * returned `null`, waited for hydration, resolved the org slug from a hook and
+ * then client-navigated — load the index chunk, hydrate, resolve, navigate,
+ * load the target chunk, render. Every step of that was a blank main area in
+ * front of the reader. The slug is in `params`, so the redirect can be issued
+ * before any JavaScript ships.
+ *
+ * The incoming query is carried across: a redirect that drops it silently
+ * deletes whatever somebody else put in the URL.
+ *
+ * `redirect()` is a 307 — a temporary, non-cached hop. Deliberately not
+ * `permanentRedirect`: which section is the default is a product decision that
+ * may change, and a 308 is cached by the browser past the point where changing
+ * it would help.
  */
-const ManageTeam: NextPageWithLayout<Record<string, never>> = () => {
-  const router = useRouter()
-  const orgSlug = useOrgSlug()
-  useEffect(() => {
-    if (!orgSlug) return
-    router.replace(buildRoute(Route.MANAGE_TEAM_MEMBERS, { orgSlug }))
-  }, [router, orgSlug])
-  return null
+export default async function ManageTeamIndex({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string }>
+  searchParams: Promise<SearchParams>
+}): Promise<never> {
+  const { orgSlug } = await params
+  redirect(
+    sectionIndexTarget(
+      buildRoute(Route.MANAGE_TEAM_MEMBERS, { orgSlug }),
+      await searchParams,
+    ),
+  )
 }
-ManageTeam.displayName = 'Page:ManageTeam'
-
-export default ManageTeam

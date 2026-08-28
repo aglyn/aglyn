@@ -38,6 +38,8 @@ import { ACCOUNT_SECTIONS } from '../constants/account-sections'
 import { buildRoute, Route } from '../constants/route-links'
 
 const mockReplace = jest.fn()
+/** Where the server index redirected. */
+const mockRedirect = jest.fn()
 /** Swapped per test — the query the reader arrived with. */
 let mockSearch = new URLSearchParams()
 
@@ -54,6 +56,14 @@ jest.mock('next/navigation', () => {
   }
   return {
     ...jest.requireActual('next/navigation'),
+    // The index is a SERVER component now (AGL-693) and answers with an HTTP
+    // redirect instead of a client navigation. `redirect()` throws, and the
+    // throw is part of the behavior — a stub that only recorded would let the
+    // page carry on past a redirect it was supposed to stop at.
+    redirect: (url: string) => {
+      mockRedirect(url)
+      throw new Error('NEXT_REDIRECT')
+    },
     useRouter: () => router,
     useParams: () => ({}),
     usePathname: () => '/manage/user',
@@ -131,6 +141,7 @@ const arriveAt = async (Page: () => React.ReactElement | null, query: string) =>
 describe('the account sections and the links that name them (AGL-693)', () => {
   beforeEach(() => {
     mockReplace.mockClear()
+    mockRedirect.mockClear()
     railSections = []
     mockUser = PASSWORD_ACCOUNT
   })
@@ -167,16 +178,36 @@ describe('the account sections and the links that name them (AGL-693)', () => {
     })
   })
 
+  /**
+   * The index is a SERVER component, so it is CALLED rather than rendered
+   * (AGL-693).
+   *
+   * That is the assertion, not an inconvenience: rendering it is what the old
+   * client version required — ship a bundle, hydrate, resolve, navigate — and
+   * every step of that was a blank main area. An async server component cannot
+   * be rendered into jsdom at all, which is why this reads as a call.
+   */
+  const arriveAtIndex = async (query: Record<string, string> = {}) => {
+    await expect(
+      (ManageUserIndex as unknown as (props: {
+        searchParams: Promise<Record<string, string>>
+      }) => Promise<never>)({ searchParams: Promise.resolve(query) }),
+    ).rejects.toThrow('NEXT_REDIRECT')
+  }
+
   it('opens the account from the bare index', async () => {
-    await arriveAt(ManageUserIndex, '')
-    expect(mockReplace).toHaveBeenCalledWith('/manage/user/account')
+    await arriveAtIndex()
+    expect(mockRedirect).toHaveBeenCalledWith('/manage/user/account')
   })
 
   it('still opens the account when a stale query rides along', async () => {
     // THE CONTROL for the removal: a leftover `?tab=` is now just a query
-    // string the index ignores. It must not 404 and must not be read.
-    await arriveAt(ManageUserIndex, '?tab=security')
-    expect(mockReplace).toHaveBeenCalledWith('/manage/user/account')
+    // string the index ignores — it must not be read, and it must not be
+    // dropped either, because a third party's marker rides the same slot.
+    await arriveAtIndex({ tab: 'security' })
+    expect(mockRedirect).toHaveBeenCalledWith(
+      '/manage/user/account?tab=security',
+    )
   })
 })
 

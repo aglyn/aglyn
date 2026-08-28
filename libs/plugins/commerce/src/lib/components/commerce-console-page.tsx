@@ -19,12 +19,8 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import { HubSections } from '@aglyn/shared-ui-next'
-import { useRouter } from 'next/navigation'
-import { useEffect, type ReactNode } from 'react'
-import {
-  DEFAULT_COMMERCE_CONSOLE_SECTION,
-  type CommerceConsoleSectionId,
-} from './commerce-console-sections'
+import type { ReactNode } from 'react'
+import type { CommerceConsoleSectionId } from './commerce-console-sections'
 import CatalogOrganizationCard from './console/catalog-organization-card.component'
 import CommerceAnalyticsCard from './console/commerce-analytics-card.component'
 import DiscountsCard from './console/discounts-card.component'
@@ -195,29 +191,6 @@ function sectionBody(
  */
 export function CommerceConsolePage(props: ConsolePluginPageProps) {
   const { hostId, section, sections, basePath } = props
-  const router = useRouter()
-
-  /*
-   * `/products` names no section, so it lands on the first one the reader may
-   * open — the same shape as the marketplace hub's index.
-   *
-   * The FIRST VISIBLE one, not `DEFAULT_COMMERCE_CONSOLE_SECTION` outright: a
-   * section can be held behind its own release flag, and redirecting to a
-   * section this viewer is refused would answer the nav strip's Products tab
-   * with a "coming soon" notice.
-   *
-   * `replace`, not `push`: a redirect the reader did not ask for must not
-   * become a history entry their back button bounces off.
-   */
-  const landing =
-    sections?.find(
-      (item) => item.visible && item.id === DEFAULT_COMMERCE_CONSOLE_SECTION,
-    ) ?? sections?.find((item) => item.visible)
-
-  useEffect(() => {
-    if (section || !landing) return
-    router.replace(landing.href)
-  }, [section, landing, router])
 
   /*
    * Nothing, deliberately, while the redirect is in flight.

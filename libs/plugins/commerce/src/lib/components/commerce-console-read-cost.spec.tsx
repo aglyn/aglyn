@@ -173,15 +173,12 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 /** The section the URL names, moved between renders to stand for a link. */
 let mockSection = ''
 
-/** Where the page would be sent when the URL names no section. */
-const mockReplace = jest.fn()
-
 const BASE_PATH = '/acme/hosts/site/products'
 
 jest.mock('next/navigation', () => ({
   usePathname: () =>
     mockSection ? `${BASE_PATH}/${mockSection}` : BASE_PATH,
-  useRouter: () => ({ replace: mockReplace, push: () => undefined }),
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
   useSearchParams: () => new URLSearchParams(),
   useParams: () => ({}),
 }))
@@ -237,7 +234,6 @@ function shellSections() {
 async function renderConsole(section: string) {
   mockSection = section
   mockListens.length = 0
-  mockReplace.mockClear()
   const { CommerceConsolePage } = await import('./commerce-console-page')
   const view = render(
     <CommerceConsolePage
@@ -302,16 +298,18 @@ describe('commerce console read cost (AGL-693)', () => {
   /*
    * `/products` itself, which names no section (AGL-693).
    *
-   * It redirects to the landing section rather than rendering it, and the
-   * difference is billable: rendering Catalog here would pay for Catalog's
-   * listens on a URL that is about to be replaced — on every click of the
-   * Products nav tab, which is how most readers arrive.
+   * The page renders nothing and reads nothing. The REDIRECT itself is the
+   * shell's — it lives above the `lazy()` boundary so a bare hub URL never
+   * downloads this chunk at all — and is asserted in
+   * `apps/console/specs/plugin-section-routes.spec.tsx`. What belongs here is
+   * the half this file can prove: that the page issues no query while the URL
+   * names no section. Rendering Catalog instead would pay for its listens on a
+   * URL that is already being replaced — on every click of the nav tab.
    */
-  it('the sectionless URL redirects and reads nothing', async () => {
+  it('the sectionless URL reads nothing', async () => {
     await renderConsole('')
     summarize('no section', mockListens)
     expect(mockListens).toHaveLength(0)
-    expect(mockReplace).toHaveBeenCalledWith(`${BASE_PATH}/catalog`)
   })
 
   it('a section is reachable by URL, and mounts only itself', async () => {

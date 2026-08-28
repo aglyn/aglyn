@@ -40,6 +40,9 @@ export const MARKETING_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'experiments', label: 'A/B testing' },
 ]
 
-/** Where `/marketing` lands when the URL names no section. */
-export const DEFAULT_MARKETING_CONSOLE_SECTION: MarketingConsoleSectionId =
-  'overview'
+/*
+ * Rail ORDER decides where `/marketing` lands: the shell redirects a bare hub
+ * URL to the first section in this list the reader may open (AGL-693). There
+ * is deliberately no separate default constant — a second place to say which
+ * section is first is a second place for it to disagree with the rail.
+ */

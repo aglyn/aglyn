@@ -19,16 +19,12 @@
 import type { AglynOrgBilling, ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
-import { useRouter } from 'next/navigation'
-import { useEffect, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import HostActionsCard from './host-actions-card.component'
 import HostWebhooksCard from './host-webhooks-card.component'
 import HostWorkflowsCard from './host-workflows-card.component'
 import RunQuotaLine from './run-quota-line.component'
-import {
-  DEFAULT_WORKFLOWS_CONSOLE_SECTION,
-  type WorkflowsConsoleSectionId,
-} from './workflows-console-sections'
+import type { WorkflowsConsoleSectionId } from './workflows-console-sections'
 
 /**
  * The body of one workflows section, built only when that section is the one
@@ -90,25 +86,13 @@ function sectionBody(
  */
 export function WorkflowsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org, section, sections, basePath } = props
-  const router = useRouter()
 
   /*
-   * `/workflows` names no section, so it lands on the first one the reader may
-   * open. `replace`, not `push`: a redirect the reader did not ask for must not
-   * become a history entry their back button bounces off.
+   * Nothing until the URL names a section. The shell redirects a bare hub URL
+   * to the landing section and holds a spinner while it does, so this state is
+   * transient — and rendering a default section here instead would pay for its
+   * listens on a URL that is already being replaced.
    */
-  const landing =
-    sections?.find(
-      (item) => item.visible && item.id === DEFAULT_WORKFLOWS_CONSOLE_SECTION,
-    ) ?? sections?.find((item) => item.visible)
-
-  useEffect(() => {
-    if (section || !landing) return
-    router.replace(landing.href)
-  }, [section, landing, router])
-
-  // Nothing while the redirect is in flight: rendering the default section
-  // would pay for its listens on a URL about to be replaced.
   if (!section || !sections?.length || !basePath) return null
 
   return (

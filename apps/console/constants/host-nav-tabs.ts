@@ -144,7 +144,29 @@ export function hostNavTabItems(
     href: buildRoute(Route.HOST_PLUGIN, {
       orgSlug,
       host,
-      pluginSlug: item.href.replace(/^\//, ''),
+      /*
+       * Straight to the hub's landing section when it has sections (AGL-693).
+       *
+       * The bare href redirects, and the redirect can only be a CLIENT one —
+       * the plugin registry is a client-side module-global, so no server
+       * component can resolve which sections exist. Linking the tab at the
+       * section the reader is going to land on anyway means the common path
+       * never pays for that hop, and the redirect is left for typed and
+       * bookmarked bare URLs.
+       *
+       * `sections[0]`, not the first VISIBLE one: release verdicts are not
+       * available here, and a link into a gated section is refused by the same
+       * gate that hides it, which is the correct answer rather than a leak.
+       * The shell's own redirect does apply the verdict, so a reader who lands
+       * on a gated first section is moved along by it.
+       *
+       * `resolveActiveTab` compares the first segment under the site, so the
+       * tab still reads as active on every section of its own hub.
+       */
+      pluginSlug: [
+        item.href.replace(/^\//, ''),
+        ...(item.sections?.length ? [item.sections[0].id] : []),
+      ].join('/'),
     }),
   }))
   if (!pluginTabs.length) return staticTabs

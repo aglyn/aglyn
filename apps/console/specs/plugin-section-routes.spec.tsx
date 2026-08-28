@@ -85,11 +85,14 @@ const mockNotFound = jest.fn(() => {
   throw new Error('NEXT_NOT_FOUND')
 })
 
+/** Where the shell sent a bare hub URL. */
+const mockReplace = jest.fn()
+
 jest.mock('next/navigation', () => ({
   useParams: () => ({ pluginSlug: mockSegments }),
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => `/acme/hosts/acme-site/${mockSegments.join('/')}`,
-  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
+  useRouter: () => ({ replace: mockReplace, push: () => undefined }),
   notFound: () => mockNotFound(),
 }))
 
@@ -175,6 +178,7 @@ beforeEach(() => {
   mockSegments = ['contacts']
   mockFlags = {}
   mockNotFound.mockClear()
+  mockReplace.mockClear()
   registerConsoleExtension({
     pluginId: 'contacts',
     displayName: 'Contacts',
@@ -238,14 +242,89 @@ describe('a plugin section is a route (AGL-693)', () => {
     expect(mockNotFound).not.toHaveBeenCalled()
   })
 
-  it('the surface itself still renders, with no section', async () => {
+  /**
+   * A bare hub URL is redirected by the SHELL, not by the plugin page
+   * (AGL-693).
+   *
+   * Where it lives is the whole point. Plugin pages are `lazy()`, so a
+   * redirect inside one cannot fire until its chunk has downloaded and
+   * mounted — the reader watches an empty main area for a bundle that is
+   * about to be thrown away. Asserting the page did NOT mount is what proves
+   * the redirect happens above that boundary; asserting only the destination
+   * would pass either way.
+   */
+  it('redirects a sectionless hub URL to the first section, without mounting the page', async () => {
     mockFlags = { [PARENT_FLAG]: { enabled: true } }
     mockSegments = ['contacts']
     mount()
 
-    await waitFor(() => expect(rendered()).toBe(true))
-    expect(received[received.length - 1].section).toBeUndefined()
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith(
+        '/acme/hosts/acme-site/contacts/people',
+      ),
+    )
+    expect(rendered()).toBe(false)
     expect(mockNotFound).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Past a gated first section, not into it. `visible` is the same verdict the
+   * gate applies, so redirecting to a refused section would answer the nav tab
+   * with the shell's own "coming soon" notice.
+   */
+  it('skips a flagged-off first section when choosing where to land', async () => {
+    unregisterConsoleExtension('contacts')
+    registerConsoleExtension({
+      pluginId: 'contacts',
+      displayName: 'Contacts',
+      navItems: [
+        {
+          label: 'Contacts',
+          href: '/contacts',
+          navTabId: 'nav-tab-contacts',
+          header: { title: 'Contacts' },
+          Component: mockRecordingPluginPage,
+          sections: [
+            // First in the rail, and gated off for this viewer.
+            { id: 'reports', label: 'Reports', navTabId: 'nav-tab-bookings' },
+            { id: 'people', label: 'People' },
+          ],
+        },
+      ],
+    })
+    mockFlags = {
+      [PARENT_FLAG]: { enabled: true },
+      [SECTION_FLAG]: { enabled: false },
+    }
+    mockSegments = ['contacts']
+    mount()
+
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith(
+        '/acme/hosts/acme-site/contacts/people',
+      ),
+    )
+  })
+
+  it('a sectionless plugin is not redirected', async () => {
+    unregisterConsoleExtension('contacts')
+    registerConsoleExtension({
+      pluginId: 'contacts',
+      displayName: 'Contacts',
+      navItems: [
+        {
+          label: 'Contacts',
+          href: '/contacts',
+          header: { title: 'Contacts' },
+          Component: mockRecordingPluginPage,
+        },
+      ],
+    })
+    mockSegments = ['contacts']
+    mount()
+
+    await waitFor(() => expect(rendered()).toBe(true))
+    expect(mockReplace).not.toHaveBeenCalled()
   })
 
   /*

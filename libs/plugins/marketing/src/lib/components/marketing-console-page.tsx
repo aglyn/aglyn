@@ -19,17 +19,13 @@
 import type { AglynOrgBilling, ConsolePluginPageProps } from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import { HubSections } from '@aglyn/shared-ui-next'
-import { useRouter } from 'next/navigation'
-import { useEffect, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import AnnouncementBarCard from './announcement-bar-card.component'
 import HostExperimentsCard from './host-experiments-card.component'
 import HostMarketingSummaryCard from './host-marketing-summary-card.component'
 import HostOverlaysCard from './host-overlays-card.component'
 import PopupCard from './popup-card.component'
-import {
-  DEFAULT_MARKETING_CONSOLE_SECTION,
-  type MarketingConsoleSectionId,
-} from './marketing-console-sections'
+import type { MarketingConsoleSectionId } from './marketing-console-sections'
 
 /**
  * The body of one marketing section, built only when that section is the one
@@ -92,25 +88,13 @@ function sectionBody(
  */
 export function MarketingConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org, section, sections, basePath } = props
-  const router = useRouter()
 
   /*
-   * `/marketing` names no section, so it lands on the first one the reader may
-   * open. `replace`, not `push`: a redirect the reader did not ask for must not
-   * become a history entry their back button bounces off.
+   * Nothing until the URL names a section. The shell redirects a bare hub URL
+   * to the landing section and holds a spinner while it does, so this state is
+   * transient — and rendering a default section here instead would pay for its
+   * listens on a URL that is already being replaced.
    */
-  const landing =
-    sections?.find(
-      (item) => item.visible && item.id === DEFAULT_MARKETING_CONSOLE_SECTION,
-    ) ?? sections?.find((item) => item.visible)
-
-  useEffect(() => {
-    if (section || !landing) return
-    router.replace(landing.href)
-  }, [section, landing, router])
-
-  // Nothing while the redirect is in flight: rendering the default section
-  // would pay for its listens on a URL about to be replaced.
   if (!section || !sections?.length || !basePath) return null
 
   return (

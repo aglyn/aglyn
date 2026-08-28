@@ -219,6 +219,11 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
    *
    * What this still holds is that those pages do not go back to reading the
    * parameter by hand — the thing the resolver above exists to prevent.
+   *
+   * The redirect itself moved to the SERVER (AGL-693), so the shape asserted
+   * here is `redirect(` rather than `router.replace`: a client index shipped a
+   * bundle, hydrated, resolved the slug from a hook and only then navigated,
+   * and the reader watched every step of that as an empty main area.
    */
   it('a routed section index reads no tab param', () => {
     const routed = [
@@ -228,7 +233,8 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
     for (const segments of routed) {
       const source = read(...segments)
       expect(source).not.toContain(`get('tab')`)
-      expect(source).toContain('router.replace')
+      expect(source).toContain('redirect(')
+      expect(source).not.toContain('router.replace')
     }
   })
 
@@ -246,7 +252,8 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
    */
   it('the account index redirects without reading a parameter', () => {
     const source = read('app', '(app)', 'manage', 'user', 'page.tsx')
-    expect(source).toContain('router.replace')
+    expect(source).toContain('redirect(')
+    expect(source).not.toContain('router.replace')
     expect(source).not.toContain('useSearchParams')
     expect(source).not.toContain("'tab'")
   })

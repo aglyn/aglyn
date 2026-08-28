@@ -45,6 +45,9 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'suppressions', label: 'Suppressions' },
 ]
 
-/** Where `/emails` lands when the URL names no section. */
-export const DEFAULT_EMAILS_CONSOLE_SECTION: EmailsConsoleSectionId =
-  'campaigns'
+/*
+ * Rail ORDER decides where `/emails` lands: the shell redirects a bare hub
+ * URL to the first section in this list the reader may open (AGL-693). There
+ * is deliberately no separate default constant — a second place to say which
+ * section is first is a second place for it to disagree with the rail.
+ */

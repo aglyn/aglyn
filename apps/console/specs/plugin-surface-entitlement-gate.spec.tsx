@@ -112,6 +112,10 @@ jest.mock('firebase/remote-config', () => ({
 jest.mock('next/navigation', () => ({
   useParams: () => ({ pluginSlug: ['redirects'] }),
   useSearchParams: () => new URLSearchParams(),
+  // The shell redirects a bare hub URL to its landing section (AGL-693).
+  // Neither surface here declares sections, so it never fires — but the
+  // hook is called unconditionally, as hooks must be.
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
   // The refusal notice carries a real `AppLink` to Billing, which reads the
   // pathname to decide whether it is the active route.
   usePathname: () => '/acme/hosts/acme-site/redirects',

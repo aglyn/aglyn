@@ -15,62 +15,56 @@
  * limitations under the License.
  */
 
-'use client'
-
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect } from 'react'
+import { redirect } from 'next/navigation'
 import {
   DEFAULT_MARKETPLACE_SECTION_ID,
   MARKETPLACE_RETURN_SECTIONS,
   marketplaceSections,
 } from '../../../../constants/marketplace-sections'
-import { useOrgSlug } from '../../../../hooks/use-org-scope'
+import {
+  sectionIndexTarget,
+  type SearchParams,
+} from '../../../../utils/section-index-redirect'
 
 /**
  * `/marketplace` is the section index and renders nothing of its own
  * (AGL-693).
  *
+ * A SERVER component. This was a client page that returned `null`, waited for
+ * hydration, resolved the org slug from a hook and then client-navigated, and
+ * every step of that was a blank main area in front of the reader. The slug is
+ * in `params`, so the redirect is issued before any JavaScript ships.
+ *
  * No `?tab=` compatibility map, for the reason the settings sections have
- * none: the sections were panels behind a query parameter and are routes now,
- * nothing shipped holds a `?tab=` link into this hub, and a map kept "just in
- * case" is a second set of names for the same eight pages to maintain against
- * them.
+ * none: nothing shipped holds a `?tab=` link into this hub, and a map kept
+ * "just in case" is a second set of names for the same eight pages.
  *
  * `?connect=` and `?purchase=` are the opposite case and ARE honored. Stripe
  * bakes them into onboarding links and checkout sessions, so they are held
  * externally by a third party rather than by us — see
- * `MARKETPLACE_RETURN_SECTIONS`. The whole query is carried across either way,
- * so a marker nothing routes on still survives the hop.
- *
- * `replace`, not `push`: a redirect the reader did not ask for must not become
- * a history entry their back button bounces off.
+ * `MARKETPLACE_RETURN_SECTIONS`. Each is sent to the section it is about
+ * rather than to the default: a seller returning from Connect onboarding wants
+ * Payouts, and a buyer returning from checkout wants what they now own. The
+ * whole query is carried across either way, so a marker nothing routes on
+ * still survives the hop.
  */
-const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
-  const router = useRouter()
-  const orgSlug = useOrgSlug()
-  const searchParams = useSearchParams()
-  const search = searchParams?.toString() ?? ''
-
-  useEffect(() => {
-    if (!orgSlug) return
-    const sections = marketplaceSections(orgSlug)
-    const returning = Object.keys(MARKETPLACE_RETURN_SECTIONS).find((key) =>
-      searchParams?.has(key),
-    )
-    const targetId = returning
-      ? MARKETPLACE_RETURN_SECTIONS[returning]
-      : DEFAULT_MARKETPLACE_SECTION_ID
-    const target =
-      sections.find((section) => section.id === targetId) ?? sections[0]
-    router.replace(search ? `${target.href}?${search}` : target.href)
-    // `search` rather than the `searchParams` object: Next hands back a new
-    // instance on every render, which would re-fire this redirect forever.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router, orgSlug, search])
-
-  return null
+export default async function OrgMarketplaceIndex({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string }>
+  searchParams: Promise<SearchParams>
+}): Promise<never> {
+  const { orgSlug } = await params
+  const query = await searchParams
+  const sections = marketplaceSections(orgSlug)
+  const returning = Object.keys(MARKETPLACE_RETURN_SECTIONS).find(
+    (key) => query[key] !== undefined,
+  )
+  const targetId = returning
+    ? MARKETPLACE_RETURN_SECTIONS[returning]
+    : DEFAULT_MARKETPLACE_SECTION_ID
+  const target =
+    sections.find((section) => section.id === targetId) ?? sections[0]
+  redirect(sectionIndexTarget(target.href, query))
 }
-OrgMarketplace.displayName = 'Page:OrgMarketplace'
-
-export default OrgMarketplace

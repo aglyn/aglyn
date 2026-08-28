@@ -16,15 +16,19 @@
  */
 'use client'
 
-import { checkEntitlement, RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
+import {
+  checkEntitlement,
+  RELEASE_FLAGS,
+  type ReleaseFlagKey,
+} from '@aglyn/aglyn'
 import { resolveConsolePluginPage } from '@aglyn/aglyn'
 import { useEnabledPluginIds } from '../../../../../../components/console-plugins-gate.component'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
-import { notFound, useParams } from 'next/navigation'
-import { Suspense, useMemo } from 'react'
+import { notFound, useParams, useRouter } from 'next/navigation'
+import { Suspense, useEffect, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../../../components/console-media-picker-provider.component'
 import FeatureGate from '../../../../../../components/feature-gate.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
@@ -33,7 +37,10 @@ import DashboardLayout from '../../../../../../components/layouts/dashboard.layo
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { resolveDocsHelpTopic } from '../../../../../../constants/docs-links'
-import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
+import {
+  useHostId,
+  useHostSubdomain,
+} from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import { resolveExtensionEntitlement } from '../../../../../../utils/extension-entitlement'
@@ -70,6 +77,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ hostId: string; pluginSlug: string | string[] }>()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
+  const router = useRouter()
   const hostId = useHostId()
   // `string[]` from the catch-all; `useParams` types it either way because a
   // user can type any URL, and the single-segment form is still the common one.
@@ -198,6 +206,35 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     })
   }, [resolved, basePath, flags, isStaff])
 
+  /**
+   * Where a bare hub URL goes, when the nav item has sections and the URL
+   * names none (AGL-693).
+   *
+   * The FIRST VISIBLE section, which is the rule: a hub's landing section is
+   * the first one in its rail that this reader may open. Skipping past a
+   * flagged-off first section matters — redirecting to one the gate below
+   * would refuse answers the nav tab with a "coming soon" notice.
+   *
+   * Held HERE rather than in each plugin page, and that is the whole point.
+   * Plugin pages are `lazy()`, so a redirect inside one cannot fire until its
+   * chunk has downloaded and mounted — the reader watches an empty main area
+   * for a bundle that is about to be thrown away. The shell already knows the
+   * answer from the registry, before any of that.
+   *
+   * Still a client redirect, unavoidably: the registry is a client-side
+   * module-global, so no server component can resolve which sections exist.
+   * The nav strip therefore links straight to the landing section (see
+   * `hostNavTabItems`), leaving this for typed and bookmarked bare URLs.
+   */
+  const sectionRedirect =
+    resolved && !resolved.section && resolvedSections?.length
+      ? resolvedSections.find((section) => section.visible)?.href
+      : undefined
+
+  useEffect(() => {
+    if (sectionRedirect) router.replace(sectionRedirect)
+  }, [sectionRedirect, router])
+
   /*
    * The 404, after every hook and before anything renders (AGL-693).
    *
@@ -234,7 +271,14 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const PluginComponent = resolved?.navItem.Component
   const activeSection = resolved?.section
 
-  const body = !PluginComponent ? (
+  const body = sectionRedirect ? (
+    // Deliberately NOT the plugin page. Mounting it here would download its
+    // chunk and open its first section's listens for a URL that is already
+    // being replaced — the exact read this hub's meter exists to refuse.
+    <Box sx={{ p: 2 }}>
+      <CircularProgress size={24} />
+    </Box>
+  ) : !PluginComponent ? (
     <Alert severity="warning">
       {"This page isn't available. It may have moved or the feature that " +
         'provided it is not installed.'}
@@ -316,11 +360,14 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       breadcrumbItems={[
         {
           children: <HostDisplayNameComponent hostId={hostId} />,
-          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
+          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
         },
         // The surface, linked once a section is open beneath it, so the trail
         // walks back rather than dead-ending on the level the reader is on.
-        { children: title, ...(activeSection && basePath ? { href: basePath } : {}) },
+        {
+          children: title,
+          ...(activeSection && basePath ? { href: basePath } : {}),
+        },
         // The section the reader is actually on (AGL-693), following the hubs
         // that already migrated: without it the trail names every level except
         // theirs — the one that says where they are.
@@ -343,10 +390,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           released flag of its own. A section that declares nothing is gated by
           the surface simply by being inside it.
         */}
-        {wrapInGate(
-          releaseFlag,
-          wrapInGate(sectionReleaseFlag, body),
-        )}
+        {wrapInGate(releaseFlag, wrapInGate(sectionReleaseFlag, body))}
       </Container>
     </DashboardLayout>
   )

@@ -16,6 +16,10 @@
  */
 
 import adminNavTabItems from '../constants/admin-nav-tabs'
+import {
+  registerConsoleExtension,
+  unregisterConsoleExtension,
+} from '@aglyn/aglyn'
 import hostNavTabItems from '../constants/host-nav-tabs'
 import manageNavTabItems from '../constants/manage-nav-tabs'
 import orgNavTabItems from '../constants/org-nav-tabs'
@@ -283,4 +287,81 @@ describe('isAddressableSection', () => {
       ).toBe(true)
     },
   )
+})
+
+/**
+ * A plugin hub's nav tab links straight to its landing section (AGL-693).
+ *
+ * The bare hub href redirects, and that redirect can only be a CLIENT one —
+ * the plugin registry is a client-side module-global, so no server component
+ * can resolve which sections a plugin declares. Linking the tab at the section
+ * the reader lands on anyway means the common path never pays for the hop, and
+ * leaves the redirect for typed and bookmarked bare URLs.
+ *
+ * The pair of assertions is the point. The href must reach the section, AND
+ * `resolveActiveTab` must still mark the tab active from it — a link that
+ * skipped ahead but left the tab strip looking unselected would trade one
+ * visible defect for another.
+ */
+describe('plugin nav tabs point at the landing section (AGL-693)', () => {
+  const ORG_SLUG = 'acme'
+  const HOST_SUB = 'shop'
+  const BASE = `/${ORG_SLUG}/hosts/${HOST_SUB}`
+  const Page = (): null => null
+
+  afterEach(() => {
+    unregisterConsoleExtension('sectioned')
+    unregisterConsoleExtension('flat')
+  })
+
+  function tabFor(pluginId: string) {
+    return hostNavTabItems(ORG_SLUG, HOST_SUB).find(
+      (tab) => tab.label === pluginId,
+    )
+  }
+
+  it('links a sectioned hub at its first section, and still reads as active', () => {
+    registerConsoleExtension({
+      pluginId: 'sectioned',
+      displayName: 'Sectioned',
+      navItems: [
+        {
+          label: 'sectioned',
+          href: '/workflows',
+          Component: Page,
+          sections: [
+            { id: 'workflows', label: 'Workflows' },
+            { id: 'actions', label: 'Actions' },
+          ],
+        },
+      ],
+    })
+    const tab = tabFor('sectioned')
+    expect(tab?.href).toBe(`${BASE}/workflows/workflows`)
+
+    // …and the strip still selects it, from the section route it links to and
+    // from a deeper section the reader clicks through to.
+    const tabs = hostNavTabItems(ORG_SLUG, HOST_SUB)
+    expect(resolveActiveTab(`${BASE}/workflows/workflows`, BASE, tabs)).toBe(
+      tab?.href,
+    )
+    expect(resolveActiveTab(`${BASE}/workflows/actions`, BASE, tabs)).toBe(
+      tab?.href,
+    )
+  })
+
+  /*
+   * The CONTROL, and the "existing plugins are untouched" half: a nav item
+   * that declares no sections is linked exactly where it always was. Without
+   * this, a change that appended a segment unconditionally would pass the
+   * assertion above.
+   */
+  it('CONTROL: a sectionless hub keeps its bare href', () => {
+    registerConsoleExtension({
+      pluginId: 'flat',
+      displayName: 'Flat',
+      navItems: [{ label: 'flat', href: '/redirects', Component: Page }],
+    })
+    expect(tabFor('flat')?.href).toBe(`${BASE}/redirects`)
+  })
 })

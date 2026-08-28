@@ -18,16 +18,12 @@
 
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
-import { useRouter } from 'next/navigation'
-import { useEffect, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import CampaignsCard from './campaigns-card'
 import EmailScreensCard from './email-screens-card'
 import ListsCard from './lists-card'
 import SuppressionsCard from './suppressions-card'
-import {
-  DEFAULT_EMAILS_CONSOLE_SECTION,
-  type EmailsConsoleSectionId,
-} from './emails-console-sections'
+import type { EmailsConsoleSectionId } from './emails-console-sections'
 
 /**
  * The body of one emails section, built only when that section is the one
@@ -73,26 +69,6 @@ function sectionBody(
  */
 export function EmailsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, section, sections, basePath } = props
-  const router = useRouter()
-
-  /*
-   * `/emails` names no section, so it lands on the first one the reader may
-   * open. The FIRST VISIBLE one, not the default outright: a section can be
-   * held behind its own release flag, and redirecting to one this viewer is
-   * refused would answer the nav tab with a "coming soon" notice.
-   *
-   * `replace`, not `push`: a redirect the reader did not ask for must not
-   * become a history entry their back button bounces off.
-   */
-  const landing =
-    sections?.find(
-      (item) => item.visible && item.id === DEFAULT_EMAILS_CONSOLE_SECTION,
-    ) ?? sections?.find((item) => item.visible)
-
-  useEffect(() => {
-    if (section || !landing) return
-    router.replace(landing.href)
-  }, [section, landing, router])
 
   /*
    * Nothing, deliberately, while the redirect is in flight. Rendering the
