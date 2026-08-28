@@ -154,7 +154,20 @@ export enum Route {
   ORG_SETTINGS_SSO = '/[orgSlug]/settings/sso',
   ORG_SETTINGS_OWNERSHIP = '/[orgSlug]/settings/ownership',
   ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
+  /**
+   * Billing, section by section (AGL-693).
+   *
+   * `MANAGE_BILLING` is unchanged and is the PLAN section — it resolves to a
+   * page inside a route group, which adds no path segment. That is what makes
+   * this split free: every link in the console, every hash anchor
+   * (`#addons`, `#collaborator-seats`) and Stripe's own dunning mail all point
+   * here already and none of them moves. No redirect, and no `?tab=` shim to
+   * carry forever.
+   */
   MANAGE_BILLING = '/[orgSlug]/billing',
+  MANAGE_BILLING_USAGE = '/[orgSlug]/billing/usage',
+  MANAGE_BILLING_INVOICES = '/[orgSlug]/billing/invoices',
+  MANAGE_BILLING_SETTINGS = '/[orgSlug]/billing/settings',
   // The ONE billing URL that carries no org (AGL-2430).
   //
   // Everything else on this table is org-scoped, which is correct for a
@@ -476,6 +489,9 @@ export interface RoutePayload {
   [Route.MANAGE_SUPPORT_TICKETS]: { orgSlug: string }
   [Route.MANAGE_SUPPORT_FORUM]: { orgSlug: string }
   [Route.MANAGE_BILLING]: { orgSlug: string }
+  [Route.MANAGE_BILLING_USAGE]: { orgSlug: string }
+  [Route.MANAGE_BILLING_INVOICES]: { orgSlug: string }
+  [Route.MANAGE_BILLING_SETTINGS]: { orgSlug: string }
   [Route.BILLING_ENTRY]: undefined
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }

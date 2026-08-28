@@ -124,7 +124,7 @@ const CALL_SITES: CallSite[] = SEARCH_ROOTS.flatMap((root) =>
  * over an empty set passes.
  */
 const NAMED_SURFACES = {
-  'billing / upgrade': 'apps/console/app/(app)/[orgSlug]/billing/page.tsx',
+  'billing / upgrade': 'apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx',
   'marketplace install + purchase':
     'libs/plugins/marketplace/src/lib/hooks/use-marketplace-actions.ts',
   'AI-assist drawer':

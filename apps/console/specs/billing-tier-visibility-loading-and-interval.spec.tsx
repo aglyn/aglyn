@@ -212,7 +212,7 @@ jest.mock('../components/billing/retention-funnel.dialog', () => ({
   RetentionFunnelDialog: () => null,
 }))
 
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
 
 /** A paying Pro org on ANNUAL billing — the shape both halves need. */
 const ANNUAL_PRO = {

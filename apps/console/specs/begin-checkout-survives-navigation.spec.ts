@@ -64,7 +64,7 @@ const REPO_ROOT = join(__dirname, '..', '..', '..')
 /** The two surfaces that start a checkout and then navigate away. */
 const EMITTERS = [
   {
-    file: 'apps/console/app/(app)/[orgSlug]/billing/page.tsx',
+    file: 'apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx',
     what: 'the console plan subscribe (no navigation at all)',
     emits: 1,
     // The un-awaitable spelling is now the CORRECT one here. Subscribing is a

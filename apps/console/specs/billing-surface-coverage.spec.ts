@@ -324,7 +324,7 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
       { cwd: REPO_ROOT, encoding: 'utf8' },
     )
     // Imported and rendered: two occurrences on the billing page.
-    expect(page).toMatch(/billing\/page\.tsx:[2-9]/)
+    expect(page).toMatch(/billing\/\(sections\)\/page\.tsx:[2-9]/)
   })
 
   it('collaborator-allocations specifically is wired to the billing page (AGL-2439)', () => {
@@ -353,7 +353,7 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
       { cwd: REPO_ROOT, encoding: 'utf8' },
     )
     // Imported and rendered: two occurrences on the billing page.
-    expect(page).toMatch(/billing\/page\.tsx:[2-9]/)
+    expect(page).toMatch(/billing\/\(sections\)\/page\.tsx:[2-9]/)
   })
 
   it('storage-overage specifically is wired to the billing page (AGL-1957)', () => {
@@ -380,7 +380,10 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
       ],
       { cwd: REPO_ROOT, encoding: 'utf8' },
     )
-    expect(page).toMatch(/billing\/page\.tsx:[2-9]/)
+    // The storage cap moved to the Usage section (AGL-693) — it is a control
+    // over consumption and belongs beside the meter that shows why you would
+    // want one. Same card, same wiring requirement, different file.
+    expect(page).toMatch(/billing\/\(sections\)\/usage\/page\.tsx:[2-9]/)
   })
 
   it('the exemption list records decisions, never open defects (AGL-1957)', () => {

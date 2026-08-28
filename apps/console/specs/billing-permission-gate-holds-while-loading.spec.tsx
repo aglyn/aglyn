@@ -129,6 +129,20 @@ jest.mock('../hooks/use-branding', () => ({
 
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(''),
+  // The section rail resolves the active tab from the path (AGL-693).
+  usePathname: () => '/test-org/billing',
+}))
+
+/**
+ * The section rail renders its own chrome — a card, a `Tabs`, a responsive
+ * layout hook — none of which this suite is about. Stubbed to a passthrough so
+ * these cases stay about the GATE: what the layout decides to render, not how
+ * the navigation beside it is laid out. `hub-tabs` has its own tests.
+ */
+jest.mock('@aglyn/shared-ui-next/components/hub-tabs', () => ({
+  __esModule: true,
+  HubSections: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  useActiveSection: () => null,
 }))
 
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'test-org' }))
@@ -212,7 +226,36 @@ jest.mock('../components/billing/retention-funnel.dialog', () => ({
   RetentionFunnelDialog: () => null,
 }))
 
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
+import BillingSectionsLayout from '../app/(app)/[orgSlug]/billing/(sections)/layout'
+import BillingInvoicesPage from '../app/(app)/[orgSlug]/billing/(sections)/invoices/page'
+
+/**
+ * The gate moved to the LAYOUT when billing became four routed sections
+ * (AGL-693), so the invariant is only observable through it.
+ *
+ * Rendering the page bare would exercise a component that, in production, is
+ * never reached until the layout has decided — and would quietly stop testing
+ * the thing this suite is named after. Wrapping is what keeps these cases
+ * about the gate rather than about one section's internals.
+ */
+const Billing = () => (
+  <BillingSectionsLayout>
+    <BillingPage />
+  </BillingSectionsLayout>
+)
+
+/**
+ * The invoice history moved to its own section (AGL-693), so the cases about
+ * the invoice READ have to render THAT one. Left on the Plan section they
+ * would pass for the wrong reason — Plan no longer asks for invoices at all,
+ * so "it did not ask" would be true whatever the gate did.
+ */
+const BillingInvoices = () => (
+  <BillingSectionsLayout>
+    <BillingInvoicesPage />
+  </BillingSectionsLayout>
+)
 
 /**
  * A REAL paying workspace — the fixture is the point.
@@ -291,7 +334,7 @@ describe('THE FLICKER: no ledger paints before the permission read lands', () =>
   })
 
   it('renders no plan tier, no status chip and no renewal date', () => {
-    render(<BillingPage />)
+    render(<Billing />)
     // `queryAllByText`, not `queryByText`: the tier name appears both on the
     // Current plan card and on its grid card, and the singular query THROWS on
     // a multiple match instead of failing the assertion it was written for.
@@ -301,14 +344,14 @@ describe('THE FLICKER: no ledger paints before the permission read lands', () =>
   })
 
   it('renders no plan grid and no upgrade path', () => {
-    render(<BillingPage />)
+    render(<Billing />)
     expect(grid()).toBeNull()
     expect(screen.queryByText('Current plan')).toBeNull()
     expect(screen.queryAllByRole('button', { name: 'Upgrade' })).toHaveLength(0)
   })
 
   it('offers none of the money CONTROLS either', () => {
-    render(<BillingPage />)
+    render(<Billing />)
     expect(
       screen.queryByRole('button', { name: 'Manage payment methods' }),
     ).toBeNull()
@@ -322,7 +365,7 @@ describe('THE FLICKER: no ledger paints before the permission read lands', () =>
     // the same mistake one layer down: the effect's guard is also written
     // `permissionsLoaded && !can(...)`, so the request goes out while the
     // answer is unknown. Do not ask a question you are not yet entitled to.
-    render(<BillingPage />)
+    render(<BillingInvoices />)
     await waitFor(() => expect(fetchMock).not.toHaveBeenCalled())
     expect(invoiceCalls()).toHaveLength(0)
   })
@@ -331,7 +374,7 @@ describe('THE FLICKER: no ledger paints before the permission read lands', () =>
     // The other direction, and it is a real defect too (AGL-2474): showing
     // the refusal on a pending read tells every legitimate admin they have no
     // access, on every navigation.
-    render(<BillingPage />)
+    render(<Billing />)
     expect(screen.queryByText(REFUSAL)).toBeNull()
     expect(screen.getByRole('progressbar')).toBeTruthy()
   })
@@ -341,7 +384,7 @@ describe('NEGATIVE CONTROLS: the page still works once the read lands', () => {
   it('a permitted reader sees the tier, the status and the renewal date', async () => {
     mockPermissionsLoaded = true
     mockCanBillingView = true
-    render(<BillingPage />)
+    render(<Billing />)
     // Without this, every assertion in the block above is satisfied by a page
     // that renders nothing at all.
     expect(screen.getAllByText(PLAN_LABELS.pro).length).toBeGreaterThan(0)
@@ -351,13 +394,21 @@ describe('NEGATIVE CONTROLS: the page still works once the read lands', () => {
     expect(
       screen.getByRole('button', { name: 'Manage payment methods' }),
     ).toBeTruthy()
+  })
+
+  it('a permitted reader’s invoice section does ask for the history', async () => {
+    // The other half of the control, on the section that owns the read. Plan
+    // no longer asks for invoices, so asserting it there would be vacuous.
+    mockPermissionsLoaded = true
+    mockCanBillingView = true
+    render(<BillingInvoices />)
     await waitFor(() => expect(invoiceCalls().length).toBeGreaterThan(0))
   })
 
   it('a refused reader sees the refusal, and none of the ledger', () => {
     mockPermissionsLoaded = true
     mockCanBillingView = false
-    render(<BillingPage />)
+    render(<Billing />)
     expect(screen.getByText(REFUSAL)).toBeTruthy()
     expect(screen.queryAllByText(PLAN_LABELS.pro)).toHaveLength(0)
     expect(screen.queryAllByText(RENEWAL_TEXT)).toHaveLength(0)
@@ -371,7 +422,7 @@ describe('NEGATIVE CONTROLS: the page still works once the read lands', () => {
     mockCanBillingView = true
     mockReady = false
     mockOrg = undefined
-    render(<BillingPage />)
+    render(<Billing />)
     expect(grid()).toBeNull()
     expect(screen.getByRole('progressbar')).toBeTruthy()
   })

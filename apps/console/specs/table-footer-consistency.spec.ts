@@ -775,7 +775,10 @@ const NOT_A_LIST: Array<[string, string]> = [
  */
 const OWES_A_FOOTER: Array<[string, string]> = [
   [
-    'apps/console/app/(app)/[orgSlug]/billing/page.tsx',
+    // The invoice table moved to its own section when billing was split
+    // (AGL-693). Same table, same reason, same scope decision — only the file
+    // it lives in changed.
+    'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
     'Invoices, one per month forever. Billing is out of this pass’s scope.',
   ],
   [

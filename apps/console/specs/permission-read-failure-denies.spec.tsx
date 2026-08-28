@@ -315,6 +315,8 @@ jest.mock('../hooks/use-branding', () => ({
 }))
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(''),
+  // The section rail resolves the active tab from the path (AGL-693).
+  usePathname: () => '/test-org/billing',
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
@@ -374,7 +376,31 @@ jest.mock('../components/billing/retention-funnel.dialog', () => ({
 }))
 
 import { subscriptionPeriodNotice } from '../utils/subscription-period-notice'
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
+import BillingSectionsLayout from '../app/(app)/[orgSlug]/billing/(sections)/layout'
+import BillingInvoicesPage from '../app/(app)/[orgSlug]/billing/(sections)/invoices/page'
+
+/**
+ * The gate moved to the LAYOUT when billing became four routed sections
+ * (AGL-693), so the invariant is only observable through it.
+ *
+ * Rendering the page bare would exercise a component that, in production, is
+ * never reached until the layout has decided — and would quietly stop testing
+ * the thing this suite is named after. Wrapping is what keeps these cases
+ * about the gate rather than about one section's internals.
+ */
+const Billing = () => (
+  <BillingSectionsLayout>
+    <BillingPage />
+  </BillingSectionsLayout>
+)
+
+/** The section that owns the invoice read since AGL-693. */
+const BillingInvoices = () => (
+  <BillingSectionsLayout>
+    <BillingInvoicesPage />
+  </BillingSectionsLayout>
+)
 
 /** A real paying workspace — every field below paints as a visible figure. */
 const PAYING_PRO_ORG = {
@@ -425,7 +451,7 @@ describe('THE PAGE: a failed permission read paints no ledger', () => {
   })
 
   it('renders no plan tier, no status chip and no renewal date', async () => {
-    render(<BillingPage />)
+    render(<Billing />)
     // Settle the rejected read FIRST — asserting before it lands would pass
     // on the loading hold and prove nothing about the failure path.
     await waitFor(() =>
@@ -438,7 +464,7 @@ describe('THE PAGE: a failed permission read paints no ledger', () => {
   })
 
   it('offers none of the money controls', async () => {
-    render(<BillingPage />)
+    render(<Billing />)
     await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull())
     expect(
       screen.queryByRole('button', { name: 'Manage payment methods' }),
@@ -450,13 +476,13 @@ describe('THE PAGE: a failed permission read paints no ledger', () => {
   })
 
   it('does not ask for the invoice history', async () => {
-    render(<BillingPage />)
+    render(<Billing />)
     await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull())
     expect(invoiceCalls()).toHaveLength(0)
   })
 
   it('says the check FAILED — it does not accuse the reader', async () => {
-    render(<BillingPage />)
+    render(<Billing />)
     const notice = await screen.findByText(/couldn't confirm your access/i)
     expect(notice).toBeTruthy()
     // Holding over refusing: "you do not have permission" is a claim we did
@@ -480,7 +506,7 @@ describe('NEGATIVE CONTROL: the page still works when the read lands', () => {
   })
 
   it('an admin sees the tier, the status, the renewal date and the controls', async () => {
-    render(<BillingPage />)
+    render(<Billing />)
     await waitFor(() =>
       expect(screen.getAllByText(PLAN_LABELS.pro).length).toBeGreaterThan(0),
     )
@@ -491,6 +517,12 @@ describe('NEGATIVE CONTROL: the page still works when the read lands', () => {
       screen.getByRole('button', { name: 'Manage payment methods' }),
     ).toBeTruthy()
     expect(screen.queryByText(/couldn't confirm your access/i)).toBeNull()
+  })
+
+  it('and their invoice section asks for the history', async () => {
+    // Plan no longer reads invoices (AGL-693), so the control for that read
+    // belongs on the section that does — asserting it here would be vacuous.
+    render(<BillingInvoices />)
     await waitFor(() => expect(invoiceCalls().length).toBeGreaterThan(0))
   })
 })

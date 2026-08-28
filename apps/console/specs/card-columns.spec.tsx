@@ -178,11 +178,24 @@ describe('the org detail page uses it', () => {
   })
 })
 
-describe('the billing page pairs its narrow cards (AGL-2486)', () => {
-  const source = readFileSync(
-    join(__dirname, '..', 'app/(app)/[orgSlug]/billing/page.tsx'),
+describe('the billing sections pair their narrow cards (AGL-2486)', () => {
+  /*
+   * Billing became four routed sections (AGL-693), so the band this describes
+   * is split: the wide/narrow masonry pair and the usage cards moved to the
+   * Usage section, and the plan-side cards stayed with Plan. Both are read,
+   * because the layout rule is about the CARDS and it has to hold wherever
+   * they ended up — checking only one would let the other regress to a stack
+   * of full-width bands.
+   */
+  const plan = readFileSync(
+    join(__dirname, '..', 'app/(app)/[orgSlug]/billing/(sections)/page.tsx'),
     'utf8',
   )
+  const usage = readFileSync(
+    join(__dirname, '..', 'app/(app)/[orgSlug]/billing/(sections)/usage/page.tsx'),
+    'utf8',
+  )
+  const source = plan + usage
 
   it('reads a real file', () => {
     expect(source.length).toBeGreaterThan(10000)
@@ -210,13 +223,36 @@ describe('the billing page pairs its narrow cards (AGL-2486)', () => {
       'usage-history',
       'storage-cap',
       'usage-budget',
-      'billing-history',
       'plan-addons',
       'register-seats',
       'collaborator-seats',
+      // The dunning card, on Plan: a customer landing from a failed-payment
+      // email must not have to hunt for it, and a full-width band for a card
+      // that is usually one sentence is the waste this rule exists to stop.
+      'open-invoices',
     ]) {
       expect(source).toContain(`key: '${key}'`)
     }
+  })
+
+  it('the invoices section stacks its two cards rather than banding them', () => {
+    // `billing-history` left CardColumns when billing was split (AGL-693).
+    // Invoices holds exactly two cards — an outstanding-balance card and a
+    // wide history TABLE — and a table earns its width, so a balanced
+    // two-column flow would be the wrong shape here. Asserted rather than
+    // assumed, because "it moved" is also what a card silently disappearing
+    // looks like.
+    const invoices = readFileSync(
+      join(
+        __dirname,
+        '..',
+        'app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
+      ),
+      'utf8',
+    )
+    expect(invoices).toContain('Billing history')
+    expect(invoices).toContain('Outstanding')
+    expect(invoices).not.toContain('<CardColumns')
   })
 
   it('leaves the plan comparison grid at full width', () => {

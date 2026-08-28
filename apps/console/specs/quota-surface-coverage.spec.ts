@@ -100,7 +100,7 @@ const USAGE_SURFACES = [
 const LIMIT_ONLY_SURFACES = [
   'apps/console/components/billing/billing-plan-cards.component.tsx',
   'apps/console/components/org-publish-panel.component.tsx',
-  'apps/console/app/(app)/[orgSlug]/billing/page.tsx',
+  'apps/console/app/(app)/[orgSlug]/billing/(sections)/page.tsx',
   'libs/plugins/commerce/src/lib/components/console/payments-settings-card.component.tsx',
 ]
 

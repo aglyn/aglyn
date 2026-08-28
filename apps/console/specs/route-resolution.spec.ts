@@ -46,9 +46,22 @@ function pageExists(template: string): boolean {
   const walk = (dir: string, rest: string[]): boolean => {
     if (!existsSync(dir)) return false
     if (rest.length === 0) {
-      return (
-        existsSync(join(dir, 'page.tsx')) || existsSync(join(dir, 'page.ts'))
-      )
+      if (existsSync(join(dir, 'page.tsx')) || existsSync(join(dir, 'page.ts'))) {
+        return true
+      }
+      // …and through a route group's INDEX page. A group adds no path
+      // segment, so `billing/(sections)/page.tsx` IS `/[orgSlug]/billing` —
+      // which is what lets a hub land its default section on the parent path
+      // with no redirect. The group descent below only ran while segments
+      // remained, so an index inside a group read as "no page file" and this
+      // helper called a live route missing.
+      for (const entry of readdirSync(dir)) {
+        if (!entry.startsWith('(') || !entry.endsWith(')')) continue
+        const nested = join(dir, entry)
+        if (!statSync(nested).isDirectory()) continue
+        if (walk(nested, rest)) return true
+      }
+      return false
     }
     const [segment, ...tail] = rest
     if (walk(join(dir, segment as string), tail)) return true

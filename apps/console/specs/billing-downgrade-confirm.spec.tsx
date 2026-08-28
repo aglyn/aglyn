@@ -235,7 +235,7 @@ jest.mock('../components/billing/retention-funnel.dialog', () => ({
   RetentionFunnelDialog: () => null,
 }))
 
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
 
 /** Every `/api/billing/subscription` body, in order. */
 let subscriptionCalls: Array<Record<string, any>>
@@ -253,6 +253,29 @@ beforeEach(() => {
   postsAtConfirmTime = -1
   global.fetch = jest.fn(async (input: any, init?: any) => {
     const url = String(input)
+    // The billing profile the plan grid gates on (AGL-693 follow-up): a paid
+    // upgrade needs a stored card AND a billing address, because subscribing
+    // charges the one against the other. Without this the grid correctly
+    // DISABLES every Upgrade button and no confirm can ever open — which is
+    // the gate working, not the page failing.
+    if (url.startsWith('/api/billing/profile')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          configured: true,
+          customer: {
+            email: 'owner@example.com',
+            name: 'Acme',
+            address: { line1: '1 Example St', line2: '', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+          },
+          taxIds: [],
+          paymentMethods: [
+            { id: 'pm_1', type: 'card', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030, email: null, isDefault: true },
+          ],
+        }),
+      }
+    }
     if (url.startsWith('/api/billing/subscription')) {
       const body = JSON.parse(String(init?.body ?? '{}'))
       subscriptionCalls.push(body)
@@ -538,5 +561,117 @@ describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
     await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
     expect(eventNamed('plan_downgrade_scheduled')).toBeUndefined()
     expect(eventNamed('plan_upgraded')).toBeUndefined()
+  })
+})
+
+/**
+ * A paid upgrade needs the pieces it will charge.
+ *
+ * Subscribing is a server-side call against a stored payment method and a
+ * stored billing address — there is no checkout step left to collect either.
+ * So the grid must refuse the button rather than offer one whose only outcome
+ * is a 409, and it must SAY which piece is missing: a disabled control with no
+ * explanation is the dead button this exists to avoid.
+ *
+ * This was load-bearing before it was tested — it is what made the two suites
+ * above render nothing until their fixtures grew a card.
+ */
+describe('the plan grid gates on what subscribing will charge', () => {
+  /** Re-mount with a billing profile that is missing something. */
+  function renderWithProfile(profile: Record<string, unknown>) {
+    const real = global.fetch as any
+    global.fetch = jest.fn(async (input: any, init?: any) => {
+      if (String(input).startsWith('/api/billing/profile')) {
+        return { ok: true, status: 200, json: async () => profile }
+      }
+      return real(input, init)
+    }) as any
+    render(<BillingPage />)
+  }
+
+  const CARD = {
+    id: 'pm_1',
+    type: 'card',
+    brand: 'visa',
+    last4: '4242',
+    expMonth: 12,
+    expYear: 2030,
+    email: null,
+    isDefault: true,
+  }
+  const ADDRESS = {
+    line1: '1 Example St',
+    line2: '',
+    city: 'Austin',
+    state: 'TX',
+    postalCode: '78701',
+    country: 'US',
+  }
+
+  it('names BOTH when neither is on file', async () => {
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: null },
+      taxIds: [],
+      paymentMethods: [],
+    })
+    // On every upgradeable tier, which is the point: the sentence belongs
+    // beside each button it disables, not once at the top where a reader
+    // scrolling the grid never meets it.
+    expect(
+      (await screen.findAllByText(/Add a payment method and a billing address/i))
+        .length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('names the CARD when only the address is on file', async () => {
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: ADDRESS },
+      taxIds: [],
+      paymentMethods: [],
+    })
+    const said = (await screen.findAllByText(/Add a payment method above first/i))[0]
+    expect(said).toBeTruthy()
+    expect(said.textContent).not.toMatch(/billing address/i)
+  })
+
+  it('names the ADDRESS when only the card is on file, and says why', async () => {
+    // The address is a TAX input, and saying so is what stops it reading as
+    // bureaucracy.
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: null },
+      taxIds: [],
+      paymentMethods: [CARD],
+    })
+    const said = (await screen.findAllByText(/Add a billing address above first/i))[0]
+    expect(said.textContent).toMatch(/sales tax is calculated from it/i)
+  })
+
+  it('disables the paid button rather than letting it 409', async () => {
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: null },
+      taxIds: [],
+      paymentMethods: [],
+    })
+    await screen.findAllByText(/Add a payment method and a billing address/i)
+    const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+    expect(upgrades[0].hasAttribute('disabled')).toBe(true)
+  })
+
+  it('CONTROL — a workspace with both is not gated at all', async () => {
+    // Without this, a grid that disabled Upgrade unconditionally would satisfy
+    // every assertion above.
+    renderWithProfile({
+      configured: true,
+      customer: { email: 'a@b.c', name: 'Acme', address: ADDRESS },
+      taxIds: [],
+      paymentMethods: [CARD],
+    })
+    const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+    expect(upgrades[0].hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByText(/above first/i)).toBeNull()
   })
 })

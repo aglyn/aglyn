@@ -215,7 +215,7 @@ jest.mock(
   () => nullCard,
 )
 
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
 
 /**
  * The 423 body a chokepoint actually emits, mirroring `lockdownJsonResponse`
@@ -274,6 +274,29 @@ beforeEach(() => {
   checkoutCalls = []
   global.fetch = jest.fn(async (input: any, init?: any) => {
     const url = String(input)
+    // The billing profile the plan grid gates on (AGL-693 follow-up): a paid
+    // upgrade needs a stored card AND a billing address, because subscribing
+    // charges the one against the other. Without this the grid correctly
+    // DISABLES every Upgrade button and no confirm can ever open — which is
+    // the gate working, not the page failing.
+    if (url.startsWith('/api/billing/profile')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          configured: true,
+          customer: {
+            email: 'owner@example.com',
+            name: 'Acme',
+            address: { line1: '1 Example St', line2: '', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+          },
+          taxIds: [],
+          paymentMethods: [
+            { id: 'pm_1', type: 'card', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030, email: null, isDefault: true },
+          ],
+        }),
+      }
+    }
     if (url.startsWith('/api/billing/checkout')) {
       checkoutCalls.push(JSON.parse(String(init?.body ?? '{}')))
       const answer = checkoutAnswers.shift()

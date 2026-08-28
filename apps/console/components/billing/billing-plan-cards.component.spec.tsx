@@ -354,6 +354,8 @@ describe('the billing page hands the grid a defaulted plan (AGL-2156)', () => {
         '(app)',
         '[orgSlug]',
         'billing',
+        // The plan grid lives on the Plan section since AGL-693.
+        '(sections)',
         'page.tsx',
       ),
       'utf8',
