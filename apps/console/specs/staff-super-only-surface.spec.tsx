@@ -261,6 +261,24 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['components/staff-free-workspace-cap-card.component.tsx'],
     via: /isSuper/,
   },
+  // Where this deployment files its own sales tax (AGL-2021). Reading it is
+  // open to every staff role — support answers "where do we file" without a
+  // write — and CHANGING it is `super`, because it decides which authority a
+  // return is prepared for and under whose registration number it is signed.
+  // Like the send-rate and free-workspace cards, this one reads the role off
+  // its OWN endpoint's response rather than the claim hook.
+  'tax-filing/route.ts': {
+    ui: ['components/staff-tax-filing-card.component.tsx'],
+    via: /isSuper/,
+  },
+  // The taxable-purchases figure that goes onto that return. Reading is
+  // staff-wide for the same reason; ENTERING the number is `super`, because it
+  // lands on a return signed under penalty of perjury. Same role source — the
+  // support reader gets no form at all, and the route would refuse one anyway.
+  'tax-purchases/route.ts': {
+    ui: ['components/staff-taxable-purchases-card.component.tsx'],
+    via: /isSuper/,
+  },
   'media-quarantine/route.ts': {
     ui: ['app/(app)/admin/media-quarantine/page.tsx'],
     via: /useStaffRole/,
