@@ -108,7 +108,9 @@ import BesignerVersionsComponent, {
   type BesignerVersionsActions,
 } from '../../../../../../../../../../components/besigner-versions.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
-import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
+import revalidateLivePages, {
+  describeRevalidateShortfall,
+} from '../../../../../../../../../../utils/revalidate-live-pages'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
@@ -446,7 +448,18 @@ function BesignerPage(props) {
         // Best effort and deliberately not awaited: the save has already
         // succeeded, and a cache hint that fails must never make a successful
         // save look failed. The revalidate window remains the backstop.
-        void revalidateLivePages({ user, hostId, screenId })
+        // Reported, not discarded (AGL-1483). `revalidated: 0` reads the same
+        // for "nothing was routed here, so there was nothing to drop" as it
+        // does for "the tenant refused the call", and only the second leaves
+        // the live page stale for the rest of its window. Discarding the
+        // result is how a publish came to report itself complete over a page
+        // that kept serving the old HTML.
+        void revalidateLivePages({ user, hostId, screenId }).then((result) => {
+          const shortfall = describeRevalidateShortfall(result)
+          if (shortfall) {
+            enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+          }
+        })
       }
       return logActivity('Saved the screen', {
         type: 'screen',
@@ -871,7 +884,18 @@ function BesignerPage(props) {
     }
     // Not awaited: the writes above have already succeeded, and a cache hint
     // that fails must never make a completed publish look failed.
-    void revalidateLivePages({ user, hostId, screenId })
+    // Reported, not discarded (AGL-1483). `revalidated: 0` reads the same
+    // for "nothing was routed here, so there was nothing to drop" as it
+    // does for "the tenant refused the call", and only the second leaves
+    // the live page stale for the rest of its window. Discarding the
+    // result is how a publish came to report itself complete over a page
+    // that kept serving the old HTML.
+    void revalidateLivePages({ user, hostId, screenId }).then((result) => {
+      const shortfall = describeRevalidateShortfall(result)
+      if (shortfall) {
+        enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+      }
+    })
     // The draft has been published, so it must stop being offered — otherwise
     // the next open invites the author to restore the state they just moved
     // past. Best effort, like the cache drop above.

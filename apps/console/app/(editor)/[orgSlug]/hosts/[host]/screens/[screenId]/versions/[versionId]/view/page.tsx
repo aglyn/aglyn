@@ -96,7 +96,9 @@ import SecondaryNavBarComponent from '../../../../../../../../../../components/s
 import ScreenSocialImageField, {
   type ScreenSocialImageDraft,
 } from '../../../../../../../../../../components/screen-social-image-field.component'
-import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
+import revalidateLivePages, {
+  describeRevalidateShortfall,
+} from '../../../../../../../../../../utils/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { hasEntitlement } from '../../../../../../../../../../constants/entitlements'
 import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
@@ -635,13 +637,22 @@ function ScreenDetails() {
   // publish site that dropped a cache; keeping the call in one helper is what
   // stops the next publish surface from quietly forgetting it.
   //
-  // No shortfall snackbar here, unlike that panel (AGL-1239): publishing a
-  // SCREEN fans out to exactly one path, so neither the tenant's path cap nor
-  // the console's dependent scan can bite. A warning that cannot fire is worse
-  // than none — it reads as coverage.
+  // Neither the tenant's path cap nor the console's dependent scan can bite on
+  // a SCREEN publish, which fans out to exactly one path — but a REFUSED drop
+  // can, and that is the case where the live page stays stale for the rest of
+  // its window rather than for a moment (AGL-1483). `describeRevalidateShortfall`
+  // covers both, so the caller reports whichever applies instead of deciding
+  // in advance that nothing can.
   const revalidateLivePage = useCallback(
-    () => revalidateLivePages({ user, hostId, screenId }),
-    [user, hostId, screenId],
+    async () => {
+      const result = await revalidateLivePages({ user, hostId, screenId })
+      const shortfall = describeRevalidateShortfall(result)
+      if (shortfall) {
+        enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+      }
+      return result
+    },
+    [user, hostId, screenId, enqueueSnackbar],
   )
 
   // --- Version publish-now ----------------------------------------------
