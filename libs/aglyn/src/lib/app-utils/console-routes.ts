@@ -148,6 +148,25 @@ export enum Route {
   // `/[orgSlug]`.
   BILLING_ENTRY = '/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
+  /*
+   * Account SECTIONS are routes (AGL-693). `HubTabs` mounted every panel —
+   * `keepMounted`, with `lazy` off by default and passed by nobody — so
+   * opening Account also mounted the email-addresses, passkeys, recent
+   * sign-ins, data-export and close-account cards and ran every read in them.
+   * Routes mount one page and code-split per route.
+   *
+   * The segments are the ids the panels carried, because a transactional
+   * email already in people's inboxes links `/manage/user?tab=security`:
+   * `MANAGE_USER_SETTINGS` forwards each of those ids to the section that
+   * holds it, and the segment matching the id is what keeps that map a
+   * one-liner rather than a second naming scheme.
+   */
+  MANAGE_USER_ACCOUNT = '/manage/user/account',
+  MANAGE_USER_EMAILS = '/manage/user/emails',
+  MANAGE_USER_PROFILE = '/manage/user/profile',
+  MANAGE_USER_BASIC = '/manage/user/basic',
+  MANAGE_USER_SECURITY = '/manage/user/security',
+  MANAGE_USER_CLOSE = '/manage/user/close',
   MANAGE_NOTIFICATIONS = '/manage/notifications',
   AUTH_SIGN_IN = '/signin',
   AUTH_SIGN_OUT = '/signout',
@@ -364,6 +383,12 @@ export interface RoutePayload {
   [Route.ORG_MARKETPLACE_PUBLISHER]: { orgSlug: string; handle: string }
   [Route.ORG_MARKETPLACE_PUBLISH_PLUGIN]: { orgSlug: string }
   [Route.MANAGE_USER_SETTINGS]: undefined
+  [Route.MANAGE_USER_ACCOUNT]: undefined
+  [Route.MANAGE_USER_EMAILS]: undefined
+  [Route.MANAGE_USER_PROFILE]: undefined
+  [Route.MANAGE_USER_BASIC]: undefined
+  [Route.MANAGE_USER_SECURITY]: undefined
+  [Route.MANAGE_USER_CLOSE]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
   [Route.ORG_SETTINGS_GENERAL]: { orgSlug: string }

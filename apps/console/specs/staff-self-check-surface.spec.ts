@@ -38,7 +38,12 @@ const CARD = join(
   REPO_ROOT,
   'apps/console/components/account-identities-card.component.tsx',
 )
-const PAGE = join(REPO_ROOT, 'apps/console/app/(app)/manage/user/page.tsx')
+// Manage Account → Account, a component since the sections became routes
+// (AGL-693).
+const PAGE = join(
+  REPO_ROOT,
+  'apps/console/components/account/account-sign-in-card.component.tsx',
+)
 
 /**
  * The file with its comments removed.
@@ -106,7 +111,7 @@ describe('AGL-2119 · staff self-check has a console surface', () => {
     // one layer in (the AGL-1947 lesson).
     const page = readFileSync(PAGE, 'utf8')
     expect(page).toContain(
-      "from '../../../../components/account-identities-card.component'",
+      "from '../account-identities-card.component'",
     )
     expect(page).toMatch(/<AccountIdentitiesCard\s*\/>/)
   })

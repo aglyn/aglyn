@@ -45,18 +45,39 @@ import { join } from 'node:path'
 
 import { code } from './source-text'
 
+// The Profile image section, a component of its own since Manage Account's
+// panels became routes (AGL-693).
+const CARD_PATH = join(
+  __dirname,
+  '..',
+  'components',
+  'account',
+  'profile-image-card.component.tsx',
+)
 const PAGE = code(
+  readFileSync(CARD_PATH, 'utf8'),
+  'components/account/profile-image-card.component.tsx',
+)
+
+/**
+ * Where `ssoGoverned` is decided, for the last case below.
+ *
+ * It is one answer shared by the rail, the Security route and this card
+ * (AGL-693), so the predicate moved out of the card that used to compute it.
+ */
+const SIGN_IN_METHODS = code(
   readFileSync(
-    join(__dirname, '..', 'app', '(app)', 'manage', 'user', 'page.tsx'),
+    join(__dirname, '..', 'hooks', 'use-account-sign-in-methods.ts'),
     'utf8',
   ),
-  'manage/user/page.tsx',
+  'hooks/use-account-sign-in-methods.ts',
 )
 
 function handlePhotoSaveBody(): string {
   const start = PAGE.indexOf('const handlePhotoSave = useCallback(')
   expect(start).toBeGreaterThan(-1)
-  const end = PAGE.indexOf('const handleSecuritySave', start)
+  // Up to the JSX, which is everything after the handler.
+  const end = PAGE.indexOf('\n  return (', start)
   expect(end).toBeGreaterThan(start)
   return PAGE.slice(start, end)
 }
@@ -72,7 +93,7 @@ describe('an SSO user can set — and unset — their own avatar', () => {
       'accountPhotoProfilePatch(cleaned, { deleteField, serverTimestamp })',
     )
     expect(PAGE).toContain(
-      "import { accountPhotoProfilePatch } from '../../../../components/account-photo-payload'",
+      "import { accountPhotoProfilePatch } from '../account-photo-payload'",
     )
   })
 
@@ -110,9 +131,9 @@ describe('an SSO user can set — and unset — their own avatar', () => {
     // come from a mapped `picture` attribute, and Google Workspace's SAML app
     // has none to map — so without this the page is silent about why, and an
     // empty field beside a grey initial reads as a broken import.
-    const start = PAGE.indexOf('const profileCard')
+    const start = PAGE.indexOf('<CardDisplay')
     expect(start).toBeGreaterThan(-1)
-    const card = PAGE.slice(start, PAGE.indexOf('const formPanel', start))
+    const card = PAGE.slice(start)
     expect(card).toContain('ssoGoverned')
     expect(card).toMatch(/identity provider/i)
   })
@@ -132,6 +153,11 @@ describe('an SSO user can set — and unset — their own avatar', () => {
     // `ssoGoverned` is `!canLinkSocialProvider(user)` — tenanted accounts
     // only. Asserting the negation is present is what stops the notice being
     // "helpfully" widened to everyone, where it would be simply false.
-    expect(PAGE).toContain('const ssoGoverned = !canLinkSocialProvider(')
+    expect(SIGN_IN_METHODS).toContain(
+      'const ssoGoverned = !canLinkSocialProvider(',
+    )
+    // And that the card reads that answer rather than deriving a second one,
+    // which is how two surfaces come to disagree about one account.
+    expect(PAGE).toContain('useAccountSignInMethods()')
   })
 })

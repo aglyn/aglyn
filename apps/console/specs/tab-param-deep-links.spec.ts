@@ -101,9 +101,13 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
   it('every page that still has PANELS goes through the shared resolver', () => {
     // Three pages had three different answers and one of them was wrong.
     // Reading `?tab=` by hand is how the fourth one gets it wrong too.
+    //
+    // Manage Account has left this list: its six panels are routes (AGL-693),
+    // so it selects nothing and has nothing to resolve. What it does with the
+    // parameter now is forward it, which `account-section-links.spec.tsx`
+    // owns.
     const pages = [
       ['app', '(app)', '[orgSlug]', 'hosts', '[host]', 'setup', 'page.tsx'],
-      ['app', '(app)', 'manage', 'user', 'page.tsx'],
     ]
     for (const segments of pages) {
       const source = read(...segments)
@@ -133,5 +137,26 @@ describe('a ?tab= link opens that tab (AGL-2486)', () => {
       expect(source).not.toContain(`get('tab')`)
       expect(source).toContain('router.replace')
     }
+  })
+
+  /**
+   * Manage Account is the ONE routed index that keeps a map, and it is not an
+   * exception to the reasoning above — it is the case the reasoning turns on.
+   *
+   * "Nothing shipped holds an old link" is true of settings and site admin and
+   * false here: `security-alerts.ts` has been mailing
+   * `/manage/user?tab=security` on every new-device sign-in, those messages sit
+   * in inboxes, and they cannot be edited. The reader opening one has just been
+   * told a stranger reached their account.
+   *
+   * What the map may NOT become is a second reader of the parameter with its
+   * own opinion — the failure this whole suite exists for. It resolves through
+   * `constants/account-sections.ts`, which is also what draws the rail, so the
+   * ids it forwards and the sections that exist are one list.
+   */
+  it('the account index forwards ?tab= through the sections list', () => {
+    const source = read('app', '(app)', 'manage', 'user', 'page.tsx')
+    expect(source).toContain('accountSectionHrefForTab')
+    expect(source).toContain('router.replace')
   })
 })

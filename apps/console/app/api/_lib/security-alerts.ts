@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
@@ -98,16 +99,20 @@ export const DEVICE_SCAN_LIMIT = 50
 /**
  * Where the alert's button lands (AGL-1959).
  *
- * This was a bare `/manage/user`, which opens on the ACCOUNT tab — so the
- * person who had just been told a stranger signed in landed on their email
- * address and had to go looking. The surface the mail is about now exists
- * (Recent sign-ins, AGL-2318, plus revoke) and lives on the Security tab, so
- * the link names it. The page ignores an unknown or hidden `tab`, so the link
- * degrades to today's behaviour rather than to a blank panel.
+ * A bare `/manage/user` opens the ACCOUNT section — so the person who had just
+ * been told a stranger signed in landed on their email address and had to go
+ * looking. The surface the mail is about (Recent sign-ins, AGL-2318, plus
+ * revoke) lives under Security, so the link names it.
+ *
+ * From the route table rather than assembled here (AGL-685/693): Security is a
+ * route now, and a hand-written path is what goes dead without anything
+ * failing to compile. Every alert already delivered carries the previous
+ * spelling, `/manage/user?tab=security`, and `/manage/user` still forwards
+ * that id to this URL — see `constants/account-sections.ts`.
  */
 function accountSecurityUrl(): string {
   const origin = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
-  return `${origin}/manage/user?tab=security`
+  return `${origin}${buildRoute(Route.MANAGE_USER_SECURITY)}`
 }
 
 /**

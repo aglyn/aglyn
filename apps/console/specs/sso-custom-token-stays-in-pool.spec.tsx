@@ -345,18 +345,19 @@ describe('a project-pool credential is aimed at the project pool', () => {
       .map((file) => file.slice(ROOT.length + 1))
       .sort()
     expect(sites).toEqual([
-      // Re-authenticates the CURRENT user to change their password, so the
-      // right pool is the one that user is already in — inherited, never
-      // guessed.
-      'app/(app)/manage/user/page.tsx',
       // Aims at the project pool (this block).
       'app/(auth)/signin/page.tsx',
       'app/(auth)/signup/page.tsx',
       // Sets the tenant itself, from the domain lookup — the one site that
       // legitimately aims AWAY from the project pool.
       'app/(auth)/sso/page.tsx',
-      // Same inheritance as manage/user: it re-signs the identity that was
-      // just signed in, on an instance already in that identity's pool.
+      // Re-authenticates the CURRENT user to change their password, so the
+      // right pool is the one that user is already in — inherited, never
+      // guessed. (Manage Account → Security, a component of its own since
+      // that page's panels became routes.)
+      'components/account/account-security-card.component.tsx',
+      // Same inheritance: it re-signs the identity that was just signed in,
+      // on an instance already in that identity's pool.
       'components/session-reauth-dialog.component.tsx',
     ])
   })

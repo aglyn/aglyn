@@ -1550,13 +1550,18 @@ Worth knowing for anything that ever adds a second Firebase app: the SDK's
 `FirebaseApp` sharing the primary's `appId` — `use-presence.ts` builds exactly
 one — would throw `already-exists` if analytics were ever initialized on it.
 
-**Still open:** two raw `logEvent(analytics, 'screen_view', …)` calls live
-outside the taxonomy, in `hosts/[host]/setup/page.tsx` and `manage/user/page.tsx`.
-They are legal — Firebase treats `screen_view` and the `firebase_` prefix
-specially — but they are the one class of console event neither the compiler nor
-the sanitizer sees. Their own `firebase_screen` / `firebase_screen_class` values
-are authored strings and were never the problem; what rode alongside them was
-the ambient `page_title`, closed by AGL-2087 in §11.
+**Still open:** one raw `logEvent(analytics, 'screen_view', …)` call lives
+outside the taxonomy, in `hosts/[host]/setup/page.tsx`. It is legal — Firebase
+treats `screen_view` and the `firebase_` prefix specially — but it is the one
+class of console event neither the compiler nor the sanitizer sees. Its own
+`firebase_screen` / `firebase_screen_class` values are authored strings and were
+never the problem; what rode alongside them was the ambient `page_title`, closed
+by AGL-2087 in §11.
+
+`manage/user/page.tsx` had the second one. Its sections are routes now
+(AGL-693), so each one reports through the shared `page_view` effect in
+`firebase-app.layout.tsx` — which fires on every pathname change — rather than
+through a hand-written event a tab click had to remember to send.
 
 ### 11. `page_title` is sent explicitly, and is not the tab title (AGL-2060)
 

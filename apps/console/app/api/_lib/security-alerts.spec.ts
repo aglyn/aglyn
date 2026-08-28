@@ -152,7 +152,10 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
     expect(String(options.text)).toContain('Denver, CO, US')
     expect(String(options.text)).toContain('203.0.113.7')
     expect(String(options.text)).toContain('2026-08-08 14:03 UTC')
-    expect(String(options.text)).toContain('/manage/user')
+    // The SECTION, not the page (AGL-693). Landing someone who has just been
+    // told a stranger signed in on their email address, to go looking for
+    // Recent sign-ins themselves, is the thing this link exists to prevent.
+    expect(String(options.text)).toContain('/manage/user/security')
   })
 
   it('is silent for a known device, and only touches lastSeenAt', async () => {
@@ -240,7 +243,7 @@ describe('sendPasskeyAddedAlert (AGL-665, trigger awaits AGL-662)', () => {
     expect(options.context).toBe('security-passkey-added')
     expect(String(options.text)).toContain('MacBook Touch ID')
     expect(String(options.text)).toContain('2026-08-08 14:03 UTC')
-    expect(String(options.text)).toContain('/manage/user')
+    expect(String(options.text)).toContain('/manage/user/security')
   })
 })
 
