@@ -118,16 +118,18 @@ export const PLATFORM_CONSENT_REGION_CACHE_KEY = 'aglyn:consent:region'
  *
  * DERIVED from {@link PLATFORM_CONSENT_DEFAULT_COMMANDS} rather than declared
  * as its own flag. Those commands are what the console tells gtag about ad
- * storage, and today every one of them denies it in every region: Google
- * Signals is off, there is no Google Ads link, enhanced conversions is off,
- * and no advertising vendor's script is loaded on `app.aglyn.com` at all.
+ * storage, so the question and the declaration cannot drift: a surface that
+ * denies advertising in every region asks nothing, and one that grants it
+ * anywhere asks.
  *
- * With nothing behind it the question must not be asked — a consent control
- * whose answer changes nothing is decoration, and decoration is what teaches
- * people to click past the controls that do matter. Deriving it also means the
- * day this surface takes an advertising tag, the declaration and the question
- * move together: the defaults would have to grant `ad_storage` somewhere for
- * the tag to work, and that same edit turns the question on.
+ * A control whose answer changes nothing is decoration, and decoration is what
+ * teaches people to click past the controls that do matter — which is the
+ * whole reason this is derived rather than hardcoded either way.
+ *
+ * The console currently grants advertising outside the prior-consent regions,
+ * because Aglyn advertises, remarkets and retargets on its own surfaces and
+ * the Privacy Policy names this one among them. So the question IS asked, and
+ * a visitor who declines gets the signals denied and the tags torn down.
  *
  * `every`, so a single region-scoped grant is enough to make the question
  * real. The console's whole visitor population is not asked about a category

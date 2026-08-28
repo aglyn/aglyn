@@ -213,17 +213,35 @@ describe('the advertising question on this surface', () => {
     expect(platformAsksAboutAdvertising()).toBe(declarationGrantsAds)
   })
 
-  it('grants nothing today, on any path', async () => {
-    // The console loads no advertising vendor's script and declares ad
-    // storage denied in every region, so no route through this module may
-    // produce an advertising grant — not the implied default, and not an
-    // explicit yes typed into the call.
+  it('follows implied consent outside the prior-consent regions', async () => {
+    // Aglyn advertises and retargets on its own surfaces, so a US visitor is
+    // measured for advertising from the first visit, exactly as they are for
+    // analytics — and the persistent control is how they stop it.
     serveRegion('US')
     await decidePlatformConsent()
-    expect(readPlatformConsent()?.advertising).toBe(false)
+    expect(readPlatformConsent()?.advertising).toBe(true)
+    expect(platformAdvertisingAllowed()).toBe(true)
+  })
+
+  it('a refusal withdraws it, and outranks the implied grant', () => {
+    // The half that matters more than the grant: a declined record must beat
+    // the regional default, or the opt-out control is decoration.
+    storePlatformConsent({ status: 'declined', country: 'US' })
+    expect(platformAdvertisingAllowed()).toBe(false)
+  })
+
+  it('grants nothing in a prior-consent region until the visitor accepts', async () => {
+    /*
+     * THE CASE THAT MUST NOT MOVE. A European visitor gets no advertising
+     * signal on the strength of a regional default, and only an explicit
+     * acceptance carrying `advertising` turns it on.
+     */
+    serveRegion('DE')
+    await decidePlatformConsent()
+    expect(readPlatformConsent()?.advertising ?? false).toBe(false)
     expect(platformAdvertisingAllowed()).toBe(false)
 
-    storePlatformConsent({ status: 'accepted', country: 'US', advertising: true })
-    expect(platformAdvertisingAllowed()).toBe(false)
+    storePlatformConsent({ status: 'accepted', country: 'DE', advertising: true })
+    expect(platformAdvertisingAllowed()).toBe(true)
   })
 })

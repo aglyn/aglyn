@@ -270,7 +270,14 @@ describe('the console consent banner', () => {
       render(<VisitorConsent />)
     })
     expect(banner()).not.toBeNull()
-    expect(screen.getByRole('button', { name: 'Allow' })).toBeTruthy()
+    /*
+     * `Allow all`, not `Allow` — the label follows
+     * `platformAsksAboutAdvertising`, which is derived from the shipped
+     * consent-mode declaration. Asserting the bare word would pass whether or
+     * not the advertising question is being asked, which is the thing this
+     * banner most has to get right.
+     */
+    expect(screen.getByRole('button', { name: 'Allow all' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
   })
 
@@ -290,7 +297,7 @@ describe('the console consent banner', () => {
     await act(async () => {
       render(<VisitorConsent />)
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow all' }))
     await waitFor(() => expect(banner()).toBeNull())
     expect(JSON.parse(storedRecord() ?? '{}')).toMatchObject({
       status: 'accepted',

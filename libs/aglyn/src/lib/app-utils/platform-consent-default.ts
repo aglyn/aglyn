@@ -152,12 +152,20 @@ export const PLATFORM_PRIOR_CONSENT_REGIONS: readonly string[] = [
   ]),
 ].sort()
 
-/** The four signals a consent-mode declaration carries. */
+/**
+ * The four signals a consent-mode declaration carries.
+ *
+ * All four are the full signal type. Pinning the three advertising ones to the
+ * literal `'denied'` made the type a second, silent policy — a declaration that
+ * granted advertising anywhere would not compile, so the surface could never
+ * take an ad tag without someone first noticing the type was the thing
+ * refusing. The policy belongs in the values below, where it can be read.
+ */
 export interface PlatformConsentSignals {
   analytics_storage: PlatformConsentSignal
-  ad_storage: 'denied'
-  ad_user_data: 'denied'
-  ad_personalization: 'denied'
+  ad_storage: PlatformConsentSignal
+  ad_user_data: PlatformConsentSignal
+  ad_personalization: PlatformConsentSignal
 }
 
 /**
@@ -182,9 +190,19 @@ export const PLATFORM_CONSENT_DEFAULT_COMMANDS: readonly PlatformConsentDefaultC
   [
     {
       analytics_storage: 'granted',
-      ad_storage: 'denied',
-      ad_user_data: 'denied',
-      ad_personalization: 'denied',
+      /*
+       * Advertising is granted here for the same reason analytics is: outside
+       * the prior-consent regions the posture is implied consent, and Aglyn
+       * advertises, remarkets and retargets across all of its own surfaces —
+       * the marketing site, this console and the docs. The Privacy Policy names
+       * the console among them.
+       *
+       * The region-scoped declaration below still denies all four for the
+       * UK/EU/EEA/CH set, and a visitor there gets nothing until they accept.
+       */
+      ad_storage: 'granted',
+      ad_user_data: 'granted',
+      ad_personalization: 'granted',
     },
     {
       analytics_storage: 'denied',
@@ -228,11 +246,18 @@ export function resolvePlatformConsentDefault(
     if (code !== '' && command.region.indexOf(code) >= 0) matched = command
   }
   const winner = matched === null ? fallback : matched
+  /*
+   * Every signal is READ off the winning command. Restating the advertising
+   * three as literals here made this resolver a second declaration that could
+   * disagree with the one that ships — and it did: the emitted global default
+   * granted them while this said denied, so a test asserting the resolver
+   * proved nothing about the snippet in the page.
+   */
   return {
     analytics_storage: winner.analytics_storage,
-    ad_storage: 'denied',
-    ad_user_data: 'denied',
-    ad_personalization: 'denied',
+    ad_storage: winner.ad_storage,
+    ad_user_data: winner.ad_user_data,
+    ad_personalization: winner.ad_personalization,
   }
 }
 

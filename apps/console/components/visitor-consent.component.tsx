@@ -350,21 +350,22 @@ export function VisitorConsent(): ReactElement | null {
               />
             ) : (
               /*
-               * Stated rather than offered, because there is nothing here to
-               * consent to: this surface declares ad storage, ad user data and
-               * ad personalization DENIED in every region, loads no
-               * advertising vendor's script, and has no Google Ads link. A
-               * switch whose answer changes nothing is decoration, and
-               * decoration is what teaches people to click past the controls
-               * that do matter. `platformAsksAboutAdvertising` derives this
-               * from the declaration itself, so the day an ad tag arrives the
-               * switch appears with it.
+               * The branch for a deployment whose consent-mode declaration
+               * denies advertising everywhere — a self-hosted console, or any
+               * build that ships different defaults. A switch whose answer
+               * changes nothing is decoration, and decoration teaches people
+               * to click past the controls that do matter.
+               *
+               * ⛔ It says only what `platformAsksAboutAdvertising` actually
+               * proved: that THIS build's declaration denies it. It must not
+               * describe which vendors are loaded or which links exist — those
+               * are facts about one deployment, they are not checked here, and
+               * a privacy panel is the last place to state something that can
+               * quietly stop being true.
                */
               <Typography variant="body2" color="text.secondary">
-                {'Advertising is off for everyone here. This console loads ' +
-                  'no advertising or retargeting tags, and tells Google to ' +
-                  'deny ad storage, ad personalization and ad user data in ' +
-                  'every region — so there is nothing to switch on.'}
+                {'This build declares advertising storage denied in every ' +
+                  'region, so there is nothing to switch on here.'}
               </Typography>
             )}
             {policyLinks}

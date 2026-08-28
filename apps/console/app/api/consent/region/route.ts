@@ -69,9 +69,43 @@ export function resetConsentGeoTelemetry(): void {
   noSignalCount = 0
 }
 
+/**
+ * The country a DEVELOPMENT request is treated as coming from.
+ *
+ * `x-vercel-ip-country` is set by Vercel's edge and does not exist on
+ * `localhost`, so every local request resolves to "region unknown" — which is
+ * correctly the strictest posture, and is therefore the ONE posture a
+ * developer can never see the alternative of. Locally the console always
+ * showed the prior-consent banner with analytics switched off, which is not
+ * what a visitor in an implied-consent region gets, so the behaviour that
+ * covers most of the world went untested by everyone who works on it.
+ *
+ * ⛔ DEVELOPMENT ONLY. In production an absent header still means unknown and
+ * still resolves to opt-in — inventing a country there would hand a European
+ * visitor an implied-consent posture on the strength of a missing header.
+ * `CONSENT_DEV_COUNTRY` overrides it for testing the other side.
+ */
+const developmentCountry = (): string | null =>
+  process.env.NODE_ENV === 'production'
+    ? null
+    : (process.env.CONSENT_DEV_COUNTRY ?? 'US')
+
 export async function GET(req: NextRequest): Promise<Response> {
   const geo = readRequestGeo(req.headers)
-  if (!geo.country) {
+  const resolved = geo.country ?? developmentCountry()
+  if (!geo.country && resolved) {
+    // Said once per instance, not per request: a developer needs to know the
+    // country is invented, and needs to stop being told after that.
+    if (!hasLoggedNoSignal) {
+      console.warn(
+        `${CONSENT_GEO_LOG_PREFIX} no ${GEO_COUNTRY_HEADER} — answering ` +
+          `"${resolved}" because this is not a production build. Set ` +
+          'CONSENT_DEV_COUNTRY to test another region.',
+      )
+      hasLoggedNoSignal = true
+    }
+  }
+  if (!resolved) {
     noSignalCount += 1
     const now = Date.now()
     if (
@@ -91,7 +125,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // whoever the cache serves next, which on a shared edge means a US answer
   // handed to a European visitor and no banner shown.
   return Response.json(
-    { country: geo.country },
+    { country: resolved },
     {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate',

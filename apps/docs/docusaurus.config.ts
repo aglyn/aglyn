@@ -139,7 +139,7 @@ const GTAG_HEAD_BOOTSTRAP: string =
   // `apps/console/specs/docs-platform-consent-snippet.spec.ts` fails if the two
   // ever drift. A template literal because the snippet contains both quote
   // styles.
-  `gtag('consent','default',{"analytics_storage":"granted","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied"});gtag('consent','default',{"analytics_storage":"denied","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","region":["AT","AX","BE","BG","CH","CY","CZ","DE","DK","EE","ES","FI","FR","GB","GF","GI","GP","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MQ","MT","NL","NO","PL","PT","RE","RO","SE","SI","SK","YT"]});` +
+  `gtag('consent','default',{"analytics_storage":"granted","ad_storage":"granted","ad_user_data":"granted","ad_personalization":"granted"});gtag('consent','default',{"analytics_storage":"denied","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","region":["AT","AX","BE","BG","CH","CY","CZ","DE","DK","EE","ES","FI","FR","GB","GF","GI","GP","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MQ","MT","NL","NO","PL","PT","RE","RO","SE","SI","SK","YT"]});` +
   // `content_group: 'docs'` (AGL-1857): the GA4 axis that separates docs
   // traffic from `marketing` and `console` in standard reports. The gtag preset
   // accepts no config params, so the group is queued as a `gtag('set')` into
