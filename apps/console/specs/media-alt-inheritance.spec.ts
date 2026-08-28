@@ -77,6 +77,20 @@ function prose(...parts: string[]): string {
 }
 
 /**
+ * The same read, with every run of whitespace collapsed to one space.
+ *
+ * A source-text assertion that pins a call's exact line breaks tests the
+ * formatter, not the code. This one broke when the picker call gained two
+ * arguments and Prettier wrapped it across four lines — the alt was still
+ * being passed, the contract this file exists to protect was intact, and the
+ * suite went red anyway. Whitespace-insensitive matching keeps the assertion
+ * about the argument and lets the layout move.
+ */
+function flat(...parts: string[]): string {
+  return source(...parts).replace(/\s+/g, ' ')
+}
+
+/**
  * The one rule, and the reason there is only one.
  *
  * "Default from the asset, override per placement" has four edge cases —
@@ -95,13 +109,15 @@ describe('the media picker carries the asset alt', () => {
    * every surface downstream had wanted to.
    */
   it('the besigner provider hands the asset alt to the requesting surface', () => {
-    const text = source(
+    const text = flat(
       'apps',
       'console',
       'components',
       'besigner-media-picker-provider.component.tsx',
     )
-    expect(text).toContain('pendingPick.current?.(src, { alt: media.alt })')
+    // The argument, not its layout: the call carries `width`/`height` too
+    // (AGL-2486), and a future addition must not read as the alt going away.
+    expect(text).toContain('pendingPick.current?.(src, { alt: media.alt,')
   })
 
   /**
