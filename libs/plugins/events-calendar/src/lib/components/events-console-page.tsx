@@ -28,6 +28,7 @@ import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-j
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  ceilingedWindow,
   useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
@@ -55,7 +56,19 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+
+/**
+ * How many event documents this page reads.
+ *
+ * A CEILING, not a page size: the rows are filtered for soft deletes and
+ * re-sorted after reading, so a server page would arrive holding anywhere
+ * from zero to ten events and the count under it would be about candidates
+ * rather than about events.
+ */
+const EVENT_CEILING = 200
 
 interface EventDraft {
   id: string | null
@@ -104,6 +117,7 @@ interface EventRecord {
  */
 function useHostEvents(hostId: string): {
   events: EventRecord[]
+  truncated: boolean
   fromCache: boolean
   unreadable: boolean
 } {
@@ -130,14 +144,22 @@ function useHostEvents(hostId: string): {
              * writes a row here.
              */
             orderBy('startsAtMs', 'desc'),
-            limit(200),
+            /*
+             * One document more than the ceiling, so "there is more than
+             * this" is a fact rather than a comparison against the cap —
+             * which is wrong in exactly the case it matters, a site holding
+             * precisely 200 events. The probe row is dropped below and is
+             * never rendered or counted.
+             */
+            limit(EVENT_CEILING + 1),
           )
         : null,
     [firestore, hostId],
     { idField: '$id' },
   )
 
-  return { events: data, fromCache, unreadable: status === 'error' }
+  const { rows, truncated } = ceilingedWindow<EventRecord>(data, EVENT_CEILING)
+  return { events: rows, truncated, fromCache, unreadable: status === 'error' }
 }
 
 /** datetime-local ↔ epoch-ms without timezone surprises. */
@@ -182,11 +204,25 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
      * rewritten on every save whether or not anyone touched the schedule.
      */
     fromCache: eventsFromCache,
+    truncated: eventsTruncated,
     unreadable: eventsUnreadable,
   } = useHostEvents(hostId)
   const events = eventDocs
     .filter((event) => !event.deletedAt)
     .sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0))
+
+  /*
+   * The page is a SLICE of the ceiling this page already holds. Sorting is
+   * allowed here for the reason it is not allowed on a server-paged list: the
+   * whole window is in hand, so newest-first is the order of the window and
+   * not of one arbitrary page inside it.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleEvents = useMemo(
+    () => events.slice(page * pageSize, page * pageSize + pageSize),
+    [events, page, pageSize],
+  )
 
   const [draft, setDraft] = useState<EventDraft | null>(null)
 
@@ -346,7 +382,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
                 'screen — published events render with SEO Event markup.'}
             </Typography>
           ) : (
-            events.map((event) => (
+            visibleEvents.map((event) => (
               <Stack
                 key={event.$id}
                 direction="row"
@@ -392,6 +428,26 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
               </Stack>
             ))
           )}
+          {events.length === 0 ? null : (
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={visibleEvents.length}
+              // The events this page HOLDS, after the soft-deleted ones are
+              // dropped — a slice of rows already read, so the total is exact
+              // for the window. The alert below says when the window is short
+              // of the site.
+              count={events.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
+          {eventsTruncated ? (
+            <Alert severity="info">
+              {`Showing the newest ${EVENT_CEILING} events. This site has ` +
+                'more, and the older ones are not reachable from here.'}
+            </Alert>
+          ) : null}
           <Button
             size="small"
             color="primary"

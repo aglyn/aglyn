@@ -1151,14 +1151,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'over `screens`. The email plugin’s page shell is mid-conversion.',
   ],
   [
-    'libs/plugins/events-calendar/src/lib/components/events-console-page.tsx',
-    'Events, a `limit(200)` window. ORDERED now — `orderBy(startsAtMs)` was ' +
-      'safe on all three counts: the only writer refuses a save without the ' +
-      'field, the server feed already orders by it, and `events` is not in ' +
-      '`IMPORTABLE_FIELDS`. So the window is the newest 200 rather than a ' +
-      'document-id sample, and what is still owed is the footer.',
-  ],
-  [
     'libs/plugins/redirects/src/lib/components/redirects-console-page.tsx',
     'Redirect rules, an unordered `limit(200)`. The QUOTA half is fixed: the ' +
       'gate and the readout now read an aggregation count over the whole ' +
@@ -1285,7 +1277,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(18)
+    expect(OWES_A_FOOTER).toHaveLength(17)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
