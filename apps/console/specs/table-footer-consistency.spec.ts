@@ -1097,10 +1097,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'An organization’s invoices, one per month forever.',
   ],
   [
-    'apps/console/components/org-licences-panel.component.tsx',
-    'Marketplace licences held and sold, which grow with every purchase.',
-  ],
-  [
     'apps/console/components/org-sso-card.component.tsx',
     'The accounts a domain claim would move. A large customer’s domain is ' +
       'not a bounded preview.',
@@ -1266,7 +1262,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(20)
+    expect(OWES_A_FOOTER).toHaveLength(19)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
