@@ -1064,7 +1064,26 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/hosts/$(hostId))
         .data.get('memberRoles', {}).get(request.auth.uid, null);
     }
-    function isHostAdmin(hostId) {
+    /**
+     * Is this user a member of the host AT ALL — any role, including the
+     * narrowest?
+     *
+     * The loosest membership test in this file: `admin`, `editor`, `author`
+     * and `viewer` all pass. It answers "may this person LOOK at the site
+     * they were added to", and every role we sell was added to do exactly
+     * that. `memberRoles` carries no entry for a non-member, so a null role
+     * is the whole test.
+     *
+     * It is NOT an admin gate and must never be used as one. Rules that mean
+     * admin-only spell the comparison out inline —
+     * `hostMemberRole(hostId) == 'admin'`, as the `pluginSettings` write
+     * does — so that a rule restricting something to owners cannot be
+     * satisfied by a viewer. It says nothing about writing either: mutating
+     * content asks `canWriteHostContent`, making it live asks
+     * `canPublishHostContent`, and the documents carrying webhook secrets and
+     * shopper PII ask `canReadHostSensitive`.
+     */
+    function isHostMember(hostId) {
       return isSignedIn() && hostMemberRole(hostId) != null;
     }
     /**
@@ -1527,7 +1546,7 @@ service cloud.firestore {
       // only proves the refusals would pass just as well for a role that can
       // do nothing at all.
       match /screens/{screenId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1563,13 +1582,13 @@ service cloud.firestore {
         // Frozen writes still freeze it. A draft is authoring, and a freeze
         // stops authoring.
         match /versions/{versionId}/draft/{draftId} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
 
         match /{sub}/{document=**} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create: if isStaff();
           // Saving the canvas is an UPDATE on a version document, and it is
           // the whole of what an author does — open to every content role.
@@ -1592,7 +1611,7 @@ service cloud.firestore {
       // but a layout wraps pages that ARE live, so moving that pointer
       // changes the live site exactly as a screen publish does (AGL-2334).
       match /layouts/{layoutId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1622,13 +1641,13 @@ service cloud.firestore {
         // Frozen writes still freeze it. A draft is authoring, and a freeze
         // stops authoring.
         match /versions/{versionId}/draft/{draftId} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
 
         match /{sub}/{document=**} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create: if isStaff();
           allow update: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
@@ -1657,7 +1676,7 @@ service cloud.firestore {
       // the freeze here alone would have been theatre. The dedicated block
       // re-grants what the exclusion takes, exactly as it does for `screens`.
       match /components/{componentId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1687,13 +1706,13 @@ service cloud.firestore {
         // Frozen writes still freeze it. A draft is authoring, and a freeze
         // stops authoring.
         match /versions/{versionId}/draft/{draftId} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
 
         match /{sub}/{document=**} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create: if isStaff();
           allow update: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
@@ -1712,7 +1731,7 @@ service cloud.firestore {
       // first-party starter, and the library shows that to the user. A client
       // able to rewrite it could stamp marketplace provenance on its own work.
       match /templates/{templateId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1844,7 +1863,7 @@ service cloud.firestore {
       // exclusions this block would narrow nothing and every editor and author
       // on the site would keep the catch-all's write.
       match /pluginSettings/{pluginId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow write: if isStaff() ||
           (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
       }
@@ -1865,7 +1884,7 @@ service cloud.firestore {
         // does not need one. No client read means no such surface can appear
         // by accident.
         allow read: if isStaff() ||
-          (isHostAdmin(hostId) &&
+          (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones']));
         // Quota-governed collections are created via /api/hosts/resources
         // ONLY (AGL-473) — the route enforces the per-plan quota (and the
