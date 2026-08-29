@@ -1413,6 +1413,14 @@ describe('hosts', () => {
       // hold's TTL lapsed, and one who could forge one would have the webhook
       // release reservations it does not own.
       'stockHolds',
+      // AGL-1302. The previous theme, kept verbatim so "Go back to the
+      // previous theme" can restore it. Written only by `install-theme.ts` on
+      // the Admin SDK, and read by nothing on the tenant render path — which
+      // is why it moves out of the host document at all. A client that could
+      // forge one would be choosing the CSS a publisher's revert restores:
+      // arbitrary styling pushed onto a live site from the narrowest role we
+      // sell, arriving disguised as the site's own history.
+      'themeHistory',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),

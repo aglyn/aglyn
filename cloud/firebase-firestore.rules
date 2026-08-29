@@ -2141,7 +2141,15 @@ service cloud.firestore {
               'media', 'mediaTombstones', 'formSubmissions', 'actions',
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory']));
+        // `themeHistory` joins all THREE lists (AGL-1302), and has no client
+        // writer of any kind. It holds the PREVIOUS theme verbatim so that
+        // "Go back to the previous theme" can restore it, written only by
+        // `install-theme.ts` on the Admin SDK. A client that could forge one
+        // would be choosing the CSS a publisher's revert restores — arbitrary
+        // styling pushed onto a live site from the narrowest role we sell,
+        // and it would arrive looking like the site's own history.
+        //
         // `stockHolds` joins all THREE lists (AGL-2356). It is the release
         // index for the units a live checkout has reserved: written inside the
         // same transaction as the holds it names, read by id when the session
@@ -2251,7 +2259,7 @@ service cloud.firestore {
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -2296,7 +2304,7 @@ service cloud.firestore {
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
