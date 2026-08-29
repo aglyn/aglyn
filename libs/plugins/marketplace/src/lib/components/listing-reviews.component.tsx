@@ -19,11 +19,14 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useFirestore,
   useFirestoreCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
+  Alert,
   Avatar,
   Button,
   Chip,
@@ -33,10 +36,23 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import ReportTarget from './report-target.component'
+
+/**
+ * How many review documents this card reads.
+ *
+ * A CEILING, not a page size. Three things below are computed over the whole
+ * set — the hidden-review filter, the newest-first sort, and finding the
+ * reader's OWN review to seed the form — so a server page would be a page of
+ * candidates and a reader whose review sat past the first ten would be shown
+ * an empty form over a review they had already written.
+ */
+const REVIEW_CEILING = 200
 
 /**
  * Ratings and comments on a listing (AGL-655).
@@ -69,26 +85,72 @@ export function ListingReviews({
   const emailVerified = Boolean((user as any)?.emailVerified)
 
   const { data: reviewDocs } = useFirestoreCollection<any>(
+    /*
+     * ORDERED AND CEILINGED, with a probe (AGL-2501).
+     *
+     * `limit(100)` alone is answered in DOCUMENT-ID order, and a review's
+     * document id is its author's uid — so the hundred were a pseudo-random
+     * hundred of the reviewers, and on a popular listing the reviews past
+     * them were not merely unrendered but unreachable, because nothing drew
+     * them and no control asked for more.
+     *
+     * Ordering on the document NAME changes which rows come back only in the
+     * sense that the walk is now total: every reviewer is reachable by
+     * paging. It is not chronological and nothing here claims it is — the
+     * sort below puts the newest first, which it may do because it holds the
+     * whole ceiling rather than a slice of it.
+     *
+     * `orderBy('updatedAtMs')` would have been the tempting fix and is the
+     * dangerous one: it matches only documents that HAVE the field, so a
+     * review written before that field existed would vanish from a listing's
+     * page rather than sort oddly on it.
+     */
     () =>
-      query(
+      collectionCeiling(
         collection(firestore, 'marketplaceListings', listingId, 'reviews'),
-        limit(100),
+        REVIEW_CEILING,
       ),
     [firestore, listingId],
     { idField: '$id' },
   )
+  const { rows: readReviews, truncated: reviewsTruncated } = ceilingedWindow<any>(
+    reviewDocs,
+    REVIEW_CEILING,
+  )
 
   const reviews = useMemo(
     () =>
-      [...(reviewDocs ?? [])]
+      [...readReviews]
         .filter((entry: any) => !entry.hidden)
         .sort((a: any, b: any) => (b.updatedAtMs ?? 0) - (a.updatedAtMs ?? 0)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [reviewDocs],
   )
   const mine = useMemo(
     () => reviews.find((entry: any) => entry.$id === uid),
     [reviews, uid],
   )
+
+  /*
+   * The page is a SLICE of what the card already holds, for the three reasons
+   * the ceiling exists: `hidden` is filtered after reading, the order on
+   * screen is not the order the query walks, and `mine` seeds the form above
+   * from anywhere in the set.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleReviews = useMemo(
+    () => reviews.slice(page * pageSize, page * pageSize + pageSize),
+    [reviews, page, pageSize],
+  )
+  /*
+   * A new listing starts at page one. Page four of a listing with two pages
+   * does not exist, and an out-of-range page renders as an empty list with
+   * nothing saying why — which reads as the reviews having gone.
+   */
+  useEffect(() => {
+    setPage(0)
+  }, [listingId])
 
   const [rating, setRating] = useState<number | null>(null)
   const [comment, setComment] = useState('')
@@ -252,7 +314,7 @@ export function ListingReviews({
           <>
             <Divider />
             <Stack spacing={2}>
-              {reviews.map((review: any) => {
+              {visibleReviews.map((review: any) => {
                 const name = String(review.displayName ?? 'Someone')
                 return (
                   <Stack
@@ -317,6 +379,25 @@ export function ListingReviews({
                 )
               })}
             </Stack>
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={visibleReviews.length}
+              // The reviews this card HOLDS, after the hidden ones are
+              // dropped — a slice of rows already read, so the total is
+              // known exactly for the window. The alert below is what says
+              // when the window itself is short of the listing.
+              count={reviews.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+            {reviewsTruncated ? (
+              <Alert severity="info">
+                {`Showing ${REVIEW_CEILING} reviews, ordered by author. This ` +
+                  'listing has more, and the rating summary above counts all ' +
+                  'of them.'}
+              </Alert>
+            ) : null}
           </>
         ) : null}
       </Stack>

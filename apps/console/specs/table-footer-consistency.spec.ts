@@ -818,8 +818,16 @@ const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
  * fixed vocabulary and always was; a row built from a CAPPED COLLECTION READ
  * is a window over something that grows, which is the entire subject of this
  * file.
+ *
+ * `collectionPage` and `collectionCeiling` count as the same thing, because
+ * they ARE it: the cap moved inside the shared query builders and the word
+ * `limit` moved with it, so a card converted to them left this detector's
+ * sight whether or not it grew a footer. That is the shape of a guard that
+ * retires itself — the more of this list is fixed the right way, the less of
+ * the console the check can still see.
  */
-const READS_A_CAPPED_COLLECTION = /\blimit\(/
+const READS_A_CAPPED_COLLECTION =
+  /\blimit\(|\bcollection(?:Page|Ceiling)\(/
 /**
  * The repeated ROW elements, as this codebase actually writes them.
  *
@@ -1166,11 +1174,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'Bounded by the marketplace rather than by the account, but the ' +
       'marketplace is the thing that grows.',
   ],
-  [
-    'libs/plugins/marketplace/src/lib/components/listing-reviews.component.tsx',
-    'Reviews of one listing, an unordered `limit(100)`. A popular listing ' +
-      'accumulates them for as long as it is published.',
-  ],
 ]
 
 describe('a table with rows under it has a footer under those (AGL-2501)', () => {
@@ -1186,6 +1189,26 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     ).toBe(true)
     // A grid whose own footer was switched off and given nothing in its place.
     expect(unpaginatedTable(`<ListTable rows={rows} hideFooter />`)).toBe(true)
+    /*
+     * And a card that caps its read through the SHARED builders, which is
+     * the spelling every conversion in this arc leaves behind. The word
+     * `limit` lives inside `collectionPage`/`collectionCeiling` now, so a
+     * detector that only knew the literal went blind to a surface at exactly
+     * the moment it was half-fixed — capped correctly, still footerless, and
+     * no longer visible to the check that would have said so.
+     */
+    expect(
+      unpaginatedTable(`
+        const rows = collectionCeiling(collection(db, 'reviews'), 200)
+        return rows.map((row) => (<Stack key={row.$id} />))
+      `),
+    ).toBe(true)
+    expect(
+      unpaginatedTable(`
+        const rows = collectionPage(collection(db, 'suppliers'), pageLimit)
+        return rows.map((row) => (<Stack key={row.$id} />))
+      `),
+    ).toBe(true)
   })
 
   it('THE CONTROL: it does not fire when a footer IS present', () => {
@@ -1262,7 +1285,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(19)
+    expect(OWES_A_FOOTER).toHaveLength(18)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
