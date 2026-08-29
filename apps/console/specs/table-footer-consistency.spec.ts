@@ -1151,16 +1151,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'over `screens`. The email plugin’s page shell is mid-conversion.',
   ],
   [
-    'libs/plugins/redirects/src/lib/components/redirects-console-page.tsx',
-    'Redirect rules, an unordered `limit(200)`. The QUOTA half is fixed: the ' +
-      'gate and the readout now read an aggregation count over the whole ' +
-      'collection, which is what `app/api/hosts/resources` enforces on, ' +
-      'instead of the window length minus soft-deleted rows. What remains is ' +
-      'the window itself — a document-id sample sorted by source in the ' +
-      'browser — and the footer. Ordering needs a field every writer sets, ' +
-      'and `source` is not yet checked that way.',
-  ],
-  [
     'libs/plugins/marketplace/src/lib/components/host-plugins-card.component.tsx',
     'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
       'Bounded by the marketplace rather than by the account, but the ' +
@@ -1277,7 +1267,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(17)
+    expect(OWES_A_FOOTER).toHaveLength(16)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
