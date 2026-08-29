@@ -34,6 +34,7 @@ import {
   Alert,
   Button,
   Chip,
+  Link,
   Stack,
   TextField,
   Table,
@@ -70,6 +71,7 @@ import {
 import ActivityTable from '../../../../../components/activity-table.component'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
+import { legalAcceptanceDocumentHref } from '../../../../../utils/legal-document-link'
 import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 
 interface UserDetail {
@@ -1141,14 +1143,32 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   <TableCell>
                                     {record.documents.length === 0
                                       ? '—'
-                                      : record.documents
-                                          .map(
-                                            (doc) =>
-                                              `${doc.key}:${(
-                                                doc.sha256 ?? ''
-                                              ).slice(0, 12)}`,
+                                      : record.documents.map((doc, index) => {
+                                          const label = `${doc.key}:${(
+                                            doc.sha256 ?? ''
+                                          ).slice(0, 12)}`
+                                          const href =
+                                            legalAcceptanceDocumentHref(
+                                              doc.url,
+                                            )
+                                          return (
+                                            <span key={doc.key}>
+                                              {index > 0 ? ' · ' : null}
+                                              {href ? (
+                                                <Link
+                                                  href={href}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  underline="always"
+                                                >
+                                                  {label}
+                                                </Link>
+                                              ) : (
+                                                label
+                                              )}
+                                            </span>
                                           )
-                                          .join(' · ')}
+                                        })}
                                   </TableCell>
                                   <TableCell>
                                     {record.ipAddress ?? '—'}
