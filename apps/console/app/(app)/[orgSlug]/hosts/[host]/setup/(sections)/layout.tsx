@@ -588,33 +588,6 @@ function SeoFormBody(props: {
 }
 SeoFormBody.displayName = 'SeoFormBody'
 
-/** Theme tab id (AGL-114); `/setup?tab=theme` deep links land here. */
-const THEME_TAB_ID = 'theme'
-/** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
-const EMAILS_TAB_ID = 'emails'
-
-
-/**
- * Every tab id this page renders, in nav order (AGL-2486).
- *
- * Built from the SAME values the tabs are rendered with — the schema ids and
- * the four constants above — so there is no second spelling to fall out of
- * date. The deep-link resolver reads this list and nothing else.
- *
- * A tab missing from this list is not reachable by deep link: `/setup?tab=<id>`
- * finds no match and falls back to Basic details, with nothing to signal that
- * the link was valid. `setup-tab-deep-links.spec.ts` derives the rendered tabs
- * from this file and fails if the two disagree, so the next tab is either on
- * this list or red — never silently unreachable.
- */
-export const SETUP_TAB_IDS = [
-  basicSchema.id,
-  seoSchema.id,
-  trackingSchema.id,
-  THEME_TAB_ID,
-  EMAILS_TAB_ID,
-] as const
-
 /**
  * Everything a Setup section needs but must not own (AGL-2501).
  *
