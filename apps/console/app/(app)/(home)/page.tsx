@@ -31,6 +31,7 @@ import {
   GridItems,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   Alert,
   Box,
@@ -50,6 +51,7 @@ import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
+import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '../../../utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
 import {
@@ -76,6 +78,18 @@ function OrgJump() {
     error: orgsError,
     retry: retryOrgs,
   } = useOrgScope()
+  // The picker pages on the console's own footer (AGL-2501); the membership
+  // window still grows underneath when the reader walks to its end.
+  const {
+    visible: visibleOrgs,
+    page: orgPage,
+    setPage: setOrgPage,
+    pageSize: orgPageSize,
+    hasMore: hasMoreOrgPages,
+  } = useWorkspacePage(orgs, {
+    hasMoreRows: hasMoreOrgs,
+    loadMoreRows: loadMoreOrgs,
+  })
   /**
    * `useOrgScope` has said all along that an errored membership listen "says
    * nothing about what orgs exist" (AGL-1260), and this page read `orgs`
@@ -306,7 +320,7 @@ function OrgJump() {
               </Box>
               <GridItems
                 spacing={3}
-                items={orgs.map((org) => ({
+                items={visibleOrgs.map((org) => ({
                   size: { xs: 12, sm: 6, md: 4 },
                   children: (
                     <CardDisplay
@@ -366,23 +380,22 @@ function OrgJump() {
                   ),
                 }))}
               />
-              {/* AGL-2336: this grid is a WINDOW over the membership list and
-                  used to end in silence, so an agency past its 50th client
-                  saw a complete-looking picker that was not complete. */}
-              {hasMoreOrgs ? (
-                <Box>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    gutterBottom
-                  >
-                    {`Showing ${orgs.length} of your workspaces.`}
-                  </Typography>
-                  <Button variant="outlined" onClick={loadMoreOrgs}>
-                    {'Load more workspaces'}
-                  </Button>
-                </Box>
-              ) : null}
+              {/* This grid is a WINDOW over the membership list and used to
+                  end in silence, so an agency past its 50th client saw a
+                  complete-looking picker that was not complete (AGL-2336).
+                  The footer states the position instead: "1–5 of more than 5"
+                  while another page is known to exist, the real total once it
+                  is not. */}
+              <ListPagination
+                page={orgPage}
+                pageSize={orgPageSize}
+                rowCount={visibleOrgs.length}
+                hasMore={hasMoreOrgPages}
+                onPageChange={setOrgPage}
+                labelDisplayedRows={({ from, to, count }) =>
+                  `${from}–${to} of ${count === -1 ? 'more than ' + to : count} workspaces`
+                }
+              />
             </Stack>
           )}
           <CreateOrgDialog

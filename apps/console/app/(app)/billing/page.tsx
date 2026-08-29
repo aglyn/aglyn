@@ -24,13 +24,15 @@ import {
   GridItems,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
-import { Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { Box, CircularProgress, Stack, Typography } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo } from 'react'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import EmptyState from '../../../components/empty-state.component'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
+import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { billingHrefFor, resolveBillingEntry } from '../../../utils/billing-entry'
 import { readOutcome } from '../../../utils/read-outcome'
 
@@ -112,6 +114,18 @@ function BillingEntry() {
 
   /** Only ever read in the `choose` render; empty everywhere else. */
   const choices = destination.kind === 'choose' ? destination.orgs : []
+  // Paged on the console's own footer (AGL-2501), like the workspace picker
+  // at the console root — the same list, and now the same control.
+  const {
+    visible: visibleChoices,
+    page: choicePage,
+    setPage: setChoicePage,
+    pageSize: choicePageSize,
+    hasMore: hasMoreChoicePages,
+  } = useWorkspacePage(choices, {
+    hasMoreRows: hasMoreOrgs,
+    loadMoreRows: loadMoreOrgs,
+  })
   /**
    * Four renders, decided in this order — and the order is the correctness.
    *
@@ -187,7 +201,7 @@ function BillingEntry() {
               </Box>
               <GridItems
                 spacing={3}
-                items={choices.map((org) => ({
+                items={visibleChoices.map((org) => ({
                   size: { xs: 12, sm: 6, md: 4 },
                   children: (
                     <CardDisplay
@@ -225,17 +239,17 @@ function BillingEntry() {
               {/* The membership list is a WINDOW, not the whole truth
                   (AGL-2336): an agency past the page size would otherwise see
                   a complete-looking picker missing the workspace they came to
-                  pay for. */}
-              {hasMoreOrgs ? (
-                <Box>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {`Showing ${choices.length} of your workspaces.`}
-                  </Typography>
-                  <Button variant="outlined" onClick={loadMoreOrgs}>
-                    {'Load more workspaces'}
-                  </Button>
-                </Box>
-              ) : null}
+                  pay for. The footer says which part of it is on screen. */}
+              <ListPagination
+                page={choicePage}
+                pageSize={choicePageSize}
+                rowCount={visibleChoices.length}
+                hasMore={hasMoreChoicePages}
+                onPageChange={setChoicePage}
+                labelDisplayedRows={({ from, to, count }) =>
+                  `${from}–${to} of ${count === -1 ? 'more than ' + to : count} workspaces`
+                }
+              />
             </Stack>
           )}
         </Container>

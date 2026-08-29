@@ -140,6 +140,22 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'datasets records',
     'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
   ],
+  /*
+   * The two workspace pickers, which shared a "Load more workspaces" button —
+   * the last bespoke grower in the console outside the two documented grids.
+   * They page a SLICE of the membership window rather than re-keying it: that
+   * window is app-wide (it resolves which workspace the console is in), so
+   * `useWorkspacePage` grows it when a reader walks to its end instead of
+   * asking the picker to own it.
+   */
+  [
+    'workspace picker',
+    'apps/console/app/(app)/(home)/page.tsx',
+  ],
+  [
+    'billing workspace picker',
+    'apps/console/app/(app)/billing/page.tsx',
+  ],
 ]
 
 /**
@@ -176,18 +192,11 @@ const GROWS_INSTEAD_OF_PAGING: Array<[string, string]> = [
     'apps/console/components/org-switcher-nav.component.tsx',
     'The workspace switcher: a cursor feed inside a NAV menu, where the row ' +
       'count is the accounts one person belongs to and the control is a ' +
-      'dropdown rather than a list surface. It shares its button with the two ' +
-      'workspace PAGES below and should be decided with them.',
-  ],
-  [
-    'apps/console/app/(app)/(home)/page.tsx',
-    'The workspace list, which grows with every workspace a person joins. A ' +
-      'page shell another agent is converting to routed sections.',
-  ],
-  [
-    'apps/console/app/(app)/billing/page.tsx',
-    'The same workspace list on the billing entry page — the same button, ' +
-      'the same block.',
+      'dropdown rather than a list surface. The two workspace PAGES it shared ' +
+      'the button with now page on the shared footer; this one keeps growing ' +
+      'because a menu that reveals as you scroll is not the same act as a ' +
+      'list you page — a pager inside a dropdown puts a Next button under a ' +
+      'search field and makes finding a workspace take two controls.',
   ],
   [
     'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
@@ -436,7 +445,7 @@ describe('no list keeps a bespoke "Load more" (AGL-2501)', () => {
     ).toEqual([])
     // The debt only ever shrinks, and every entry still describes a surface
     // that really does grow — a stale line here widens the exemption silently.
-    expect(GROWS_INSTEAD_OF_PAGING).toHaveLength(4)
+    expect(GROWS_INSTEAD_OF_PAGING).toHaveLength(2)
     for (const path of owed) expect(growing).toContain(path)
   })
 
