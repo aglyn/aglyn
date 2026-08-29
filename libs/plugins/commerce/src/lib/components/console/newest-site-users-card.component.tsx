@@ -16,31 +16,46 @@
  */
 'use client'
 
+import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
-import {
-  collection,
-  limit,
-  orderBy,
-  query,
-} from 'firebase/firestore'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { docsHelp } from '../../constants/docs-links'
-import { buildRoute, Route } from '../../constants/route-links'
-import { useHostSubdomain } from '../../components/host-id-provider'
-import { useOrgSlug } from '../../hooks/use-org-scope'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import { collection, limit, orderBy, query } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
+import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 /**
- * Dashboard glance at the newest site users (AGL-350): loads exactly
- * five so the dashboard stays light; the Users section owns the full,
- * searchable list.
+ * Dashboard glance at the newest site users (AGL-350).
+ *
+ * ## Why this card lives in the commerce package and registers as `accounts`
+ *
+ * It is a card about visitor ACCOUNTS, and the accounts capability is a
+ * switch a site turns on rather than a bundle that loads: the member blocks
+ * and every `membership/*` handler ship inside commerce, which is why
+ * `ACCOUNTS_PLUGIN_ID` has no manifest entry of its own. Registering the
+ * widget under that id is what puts the card behind the same switch as the
+ * `/signin` page it describes — the console dashboard used to import it
+ * directly, so a site that has never turned member accounts on still had
+ * `Newest site users` on its dashboard, permanently empty, advertising a
+ * feature it does not serve.
+ *
+ * ## Five, and no footer
+ *
+ * A deliberate preview, not a window that got cut short: the Users section
+ * owns the full, searchable, paged list and the header links to it. The
+ * pagination sweep records the same reading in `table-footer-consistency`.
+ *
+ * `orderBy('createdAt', 'desc')` is safe to name, checked against the writers
+ * rather than assumed — an `orderBy` DROPS documents missing the field, so a
+ * newest-first list can quietly become a some-of-them list. Every path that
+ * creates a member stamps it (`membership-register.ts` writes a
+ * `serverTimestamp()` on the only sign-up route, the seed and e2e fixtures
+ * stamp their own), and `siteMembers` is absent from `IMPORTABLE_FIELDS`, so
+ * no site-bundle restore can mint one without it.
  */
 export function NewestSiteUsersCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
-  const orgSlug = useOrgSlug()
-  const host = useHostSubdomain()
+  const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const { data: memberDocs } = useFirestoreCollection<any>(
     () =>
       query(
@@ -55,8 +70,8 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Newest site users'}
-      help={docsHelp('members', {
-        anchor: '#5-manage-members-from-the-console',
+      help={pluginDocsHelp('membersOnly', {
+        anchor: '#manage-your-members',
         excerpt:
           'The five newest visitor accounts on this site — the Users page ' +
           'has the full, searchable list.',
@@ -68,7 +83,7 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
           <Button
             component={AppLink as any}
             {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={buildRoute(Route.HOST_USERS, { orgSlug,  host })}
+            href={buildRoute(Route.HOST_USERS, { orgSlug, host })}
             size="small"
             color="primary"
           >
@@ -87,7 +102,14 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
               sx={{ justifyContent: 'space-between', alignItems: 'center' }}
             >
               <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
-                {member.name || member.email || member.$id}
+                {/*
+                  `displayName` first: that is the field sign-up writes, and a
+                  member document has never carried `name` — the tenant's
+                  campaign sender says so where it merges recipients. Reading
+                  `name` first meant every account rendered as an email
+                  address while the site knew the person's name.
+                 */}
+                {member.displayName || member.name || member.email || member.$id}
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
                 {member.createdAt?.toDate?.()

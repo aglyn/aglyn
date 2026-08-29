@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { AppLink, Container, GridItems } from '@aglyn/shared-ui-jsx'
@@ -25,8 +26,6 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import HostAnalyticsCard from '../../../../../components/analytics/host-analytics-card.component'
-import CampaignGlanceCard from '../../../../../components/dashboard/campaign-glance-card.component'
-import NewestSiteUsersCard from '../../../../../components/dashboard/newest-site-users-card.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -102,13 +101,6 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
                 xs: 12,
                 md: 6,
               },
-              children: <NewestSiteUsersCard hostId={hostId} />,
-            },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
               children: <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />,
             },
             {
@@ -116,7 +108,23 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
                 xs: 12,
                 md: 6,
               },
-              children: <CampaignGlanceCard hostId={hostId} />,
+              /*
+               * The capability cards, registered rather than imported
+               * (AGL-433). `Newest site users` and `Last campaign` used to be
+               * imported right here, which made the dashboard the one console
+               * surface where enablement was nobody's decision: the site-users
+               * card rendered on sites that have never turned member accounts
+               * on, permanently empty, advertising a `/signin` those sites
+               * answer with a 404. The slot renders only what the workspace
+               * has enabled and is entitled to, and a plugin that has nothing
+               * to say renders nothing.
+               */
+              children: (
+                <PluginWidgetSlot
+                  slot={CONSOLE_WIDGET_SLOTS.hostDashboard}
+                  hostId={hostId}
+                />
+              ),
             },
             // Announcement bar + popup moved to /marketing (AGL-251);
             // components, products, variables and functions to their own

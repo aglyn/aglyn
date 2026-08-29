@@ -334,6 +334,18 @@ export interface ConsoleSettingsSection {
 export const CONSOLE_WIDGET_SLOTS = {
   /** Host dashboard + screen view activity column. Props: hostId. */
   hostActivity: 'hostActivity',
+  /**
+   * The host dashboard's glance row — one card per capability the site
+   * actually has. Props: hostId.
+   *
+   * The dashboard's own cards used to be imported by the page, which made
+   * enablement a decision nobody was making: `New site users` rendered on a
+   * site that has never turned member accounts on, and `Last campaign` on a
+   * workspace with the email plugin switched off. A card that answers a
+   * question about a capability belongs to the capability, so it registers
+   * here and the shell's entitlement + enablement gate decides.
+   */
+  hostDashboard: 'hostDashboard',
   /** Host dashboard commerce summary. Props: hostId, org. */
   commerceGlance: 'commerceGlance',
   /** Org Data page body. Props: orgId, org. */

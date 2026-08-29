@@ -14,6 +14,7 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | Zone | Where it renders | Props your widget receives |
 | --- | --- | --- |
 | `hostActivity` | Host dashboard + screen-view activity column | `hostId`, `targetId?`, `header?`, `viewAllHref?` |
+| `hostDashboard` | Host dashboard glance row, one card per capability | `hostId` |
 | `commerceGlance` | Host dashboard commerce summary | `hostId` |
 | `orgData` | Organization → Data page body | `orgId`, `org` |
 | `besignerFunctions` | Besigner ƒx panel | `hostId` |

@@ -22,6 +22,9 @@ const PosConsolePage = lazy(() => import('./components/console/pos-page.componen
 const CommerceGlanceCard = lazy(
   () => import('./components/console/commerce-glance-card.component'),
 )
+const NewestSiteUsersCard = lazy(
+  () => import('./components/console/newest-site-users-card.component'),
+)
 import * as Account from './components/account'
 import * as Cart from './components/cart'
 import * as Gate from './components/gate'
@@ -186,6 +189,32 @@ export function registerCommerceConsole(): void {
         icon: { path: mdiStorefrontOutline.path },
         header: { title: 'Point of Sale', docsTopic: 'pos' },
         Component: PosConsolePage,
+      },
+    ],
+  })
+  /*
+   * The USER ACCOUNTS half, registered under its own id.
+   *
+   * `accounts` is a switch rather than a bundle: the member blocks and every
+   * `membership/*` handler ship inside this package, which is why the id
+   * carries no loader manifest entry of its own. A second extension is how a
+   * card about visitor accounts is gated on the switch that decides whether
+   * the site serves them — `listConsoleWidgets` filters by the workspace's
+   * effective plugin ids, and `accounts` is default-OFF per site.
+   *
+   * A separate call rather than more widgets on the commerce extension: the
+   * registry is keyed by `pluginId` and that key IS the gate, so folding this
+   * card in above would have kept the dashboard defect it fixes — `Newest
+   * site users` on a site whose /signin returns 404.
+   */
+  Aglyn.registerConsoleExtension({
+    pluginId: Aglyn.ACCOUNTS_PLUGIN_ID,
+    displayName: 'User Accounts',
+    widgets: [
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
+        widgetId: 'accounts-newest-site-users',
+        Component: NewestSiteUsersCard,
       },
     ],
   })

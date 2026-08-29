@@ -25,6 +25,11 @@ import { BUNDLE_ID } from './constants/bundle-common'
 /** Code-split: the Emails console page only loads when opened. */
 const EmailsConsolePage = lazy(() => import('./components/emails-console-page'))
 
+/** Dashboard glance card, loaded only where the shell renders the slot. */
+const CampaignGlanceCard = lazy(
+  () => import('./components/campaign-glance-card.component'),
+)
+
 /**
  * Email designer feature plugin (AGL-346): email-safe blocks designed in
  * besigner like any screen — no separate editor. The render pipeline
@@ -60,6 +65,17 @@ export function registerEmailConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Email',
+    // The host dashboard's `Last campaign` card (AGL-433). The console page
+    // imported it directly, so it rendered on workspaces with the email
+    // plugin switched off — a card about sends, on a console with nowhere to
+    // send from.
+    widgets: [
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
+        widgetId: 'email-campaign-glance',
+        Component: CampaignGlanceCard,
+      },
+    ],
     navItems: [
       {
         label: 'Emails',

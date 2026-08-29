@@ -16,29 +16,45 @@
  */
 'use client'
 
+import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { docsHelp } from '../../constants/docs-links'
-import { buildRoute, Route } from '../../constants/route-links'
-import { useHostSubdomain } from '../../components/host-id-provider'
-import { useOrgSlug } from '../../hooks/use-org-scope'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 /**
- * Last campaign at a glance (AGL-353): sent/opens/clicks for the most
- * recent send. Hidden until the host has sent a campaign.
+ * How many campaigns the card reads to find the last SENT one.
+ *
+ * A ceiling on a search, not a page: the newest send is what the card is
+ * about, and a site whose thirty most recent campaigns are all drafts simply
+ * has nothing to show — the card renders nothing at all in that case, which
+ * is the same answer it gives a site that has never sent.
+ */
+const SEARCH_CEILING = 30
+
+/**
+ * Last campaign at a glance (AGL-353): sent, opens and clicks for the most
+ * recent send.
+ *
+ * Registered by the email plugin rather than imported by the dashboard.
+ * Campaigns are composed and sent from the Emails page, so a workspace with
+ * the email plugin switched off has no campaigns and no page to send one
+ * from — and the console still drew this card there, where it could only
+ * ever be blank. The header links to the surface that owns the history for
+ * the same reason: it is the one this widget's own plugin guarantees exists.
  */
 export function CampaignGlanceCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
-  const orgSlug = useOrgSlug()
-  const host = useHostSubdomain()
+  const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const { data: campaignDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(30)),
+      query(
+        collection(firestore, 'hosts', hostId, 'campaigns'),
+        limit(SEARCH_CEILING),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -58,11 +74,11 @@ export function CampaignGlanceCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Last campaign'}
-      help={docsHelp('emailCampaigns', {
+      help={pluginDocsHelp('emailCampaigns', {
         anchor: '#opens--clicks',
         excerpt:
           'Sent, opens, and clicks for your most recent campaign — open ' +
-          'Marketing for the full history.',
+          'Emails for the full history.',
       })}
       contentGutterX
       contentGutterY
@@ -71,11 +87,15 @@ export function CampaignGlanceCard(props: { hostId: string }) {
           <Button
             component={AppLink as any}
             {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={buildRoute(Route.HOST_MARKETING, { orgSlug,  host })}
+            href={buildRoute(Route.HOST_PLUGIN, {
+              orgSlug,
+              host,
+              pluginSlug: 'emails',
+            })}
             size="small"
             color="primary"
           >
-            {'Marketing'}
+            {'Emails'}
           </Button>
         ),
       }}
@@ -86,25 +106,19 @@ export function CampaignGlanceCard(props: { hostId: string }) {
         </Typography>
         <Stack direction="row" spacing={3}>
           <Stack>
-            <Typography variant="h6">
-              {lastSent.stats?.sent ?? 0}
-            </Typography>
+            <Typography variant="h6">{lastSent.stats?.sent ?? 0}</Typography>
             <Typography variant="caption" color="text.secondary">
               {'Sent'}
             </Typography>
           </Stack>
           <Stack>
-            <Typography variant="h6">
-              {lastSent.stats?.opens ?? 0}
-            </Typography>
+            <Typography variant="h6">{lastSent.stats?.opens ?? 0}</Typography>
             <Typography variant="caption" color="text.secondary">
               {'Opens'}
             </Typography>
           </Stack>
           <Stack>
-            <Typography variant="h6">
-              {lastSent.stats?.clicks ?? 0}
-            </Typography>
+            <Typography variant="h6">{lastSent.stats?.clicks ?? 0}</Typography>
             <Typography variant="caption" color="text.secondary">
               {'Clicks'}
             </Typography>

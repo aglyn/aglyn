@@ -980,9 +980,11 @@ const NOT_A_LIST: Array<[string, string]> = [
       'surface a reader scans — the same line the ordering guard draws.',
   ],
   [
-    'apps/console/components/dashboard/newest-site-users-card.component.tsx',
+    'libs/plugins/commerce/src/lib/components/console/newest-site-users-card.component.tsx',
     'A dashboard preview at `limit(5)` with a View all link to the paged ' +
-      'list. Five rows chosen to be five, not a window that got cut short.',
+      'list. Five rows chosen to be five, not a window that got cut short. ' +
+      'It moved into the commerce package when the dashboard cards became ' +
+      'registered widgets (AGL-433); the reading is unchanged.',
   ],
   [
     'apps/console/components/media/media-library.component.tsx',
