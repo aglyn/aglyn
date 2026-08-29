@@ -193,6 +193,7 @@ export default function IdempotencyClaimsCard() {
     [],
   )
 
+  const countPrefix = report?.truncated ? 'at least ' : ''
 
   return (
     <CardDisplay
@@ -227,9 +228,18 @@ export default function IdempotencyClaimsCard() {
         {report ? (
           <>
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+              {/*
+                "at least", or nothing at all. Both figures are counted over
+                the scan window, so once the probe finds a claim past it they
+                are lower bounds — and a lower bound printed as a total is
+                what makes a fleet-wide outage read as a quiet minute. Keyed
+                on the probe rather than on the window's length, because a
+                scan that returned exactly the ceiling is complete and its
+                numbers are exact.
+              */}
               <Chip
                 size="small"
-                label={`${report.pending} in flight or stuck`}
+                label={`${countPrefix}${report.pending} in flight or stuck`}
               />
               {/*
                 Two numbers, not one. A pending claim is ordinary traffic and
@@ -239,7 +249,7 @@ export default function IdempotencyClaimsCard() {
               <Chip
                 size="small"
                 color={report.stranded > 0 ? 'warning' : 'success'}
-                label={`${report.stranded} stranded over ${formatAge(
+                label={`${countPrefix}${report.stranded} stranded over ${formatAge(
                   report.strandedAfterMs,
                 )}`}
               />
@@ -247,8 +257,9 @@ export default function IdempotencyClaimsCard() {
 
             {report.truncated ? (
               <Alert severity="warning">
-                {'More pending claims than this read returns — the counts ' +
-                  'below describe a sample, not the fleet.'}
+                {'More pending claims than this read returns — the figures ' +
+                  'above are floors, and the rows are a sample of the ' +
+                  'fleet rather than all of it.'}
               </Alert>
             ) : null}
 
@@ -261,8 +272,17 @@ export default function IdempotencyClaimsCard() {
                 rows={report.claims}
                 columns={claimColumns}
                 getRowId={(row: any) => row.id}
-                // A staff read-out: nothing here has a page of its own.
-                hideFooter
+                /*
+                 * The grid's own footer, which is the console's one footer
+                 * (AGL-2501). The route reads a ceiling with a probe and
+                 * hands the whole window over, so the page is a client slice
+                 * — and this list is at its longest during the incident it
+                 * exists to describe, which is precisely when the claims
+                 * past the tenth were reachable by nothing.
+                 *
+                 * A claim has no page of its own, which is a fact about the
+                 * ROW and was never a reason to withhold the pager.
+                 */
                 rowHeight={TABLE_ROW_HEIGHT}
               />
             )}

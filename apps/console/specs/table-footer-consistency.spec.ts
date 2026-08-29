@@ -1106,13 +1106,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'not a bounded preview.',
   ],
   [
-    'apps/console/components/idempotency-claims-card.component.tsx',
-    'Pending claims. They accumulate exactly when a process is stuck, which ' +
-      'is the state this card exists to show — so the long list is the one ' +
-      'that matters. `hideFooter` here was about rows having no detail page ' +
-      'of their own, which is a different question from paging.',
-  ],
-  [
     'apps/console/components/staff-org-refund-card.component.tsx',
     'An organization’s charges, which grow with its trading.',
   ],
@@ -1273,7 +1266,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(21)
+    expect(OWES_A_FOOTER).toHaveLength(20)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
