@@ -129,12 +129,24 @@ async function handler(request: Request): Promise<Response> {
       // and a missing index fails this query at runtime, in production only,
       // which is the one place this surface has to work.
       // Oldest first, which is also the order the runner takes them in.
+      /*
+       * ONE document more than the ceiling, which is what makes "there is
+       * more than this" a fact rather than a comparison.
+       *
+       * `size >= MAX_PENDING_LISTED` is wrong in exactly the case the flag
+       * exists for: a queue holding precisely the ceiling is COMPLETE, and
+       * reporting it as truncated puts "at least" on a number that is exact.
+       * The probe row is never handed on — a response listing `ceiling + 1`
+       * rows would be describing a window it did not draw.
+       */
       const pending = await firestore
         .collection('orgs')
         .orderBy('erasureRequestedAt', 'asc')
-        .limit(MAX_PENDING_LISTED)
+        .limit(MAX_PENDING_LISTED + 1)
         .get()
+      const truncated = pending.size > MAX_PENDING_LISTED
       const rows = pending.docs
+        .slice(0, MAX_PENDING_LISTED)
         .map((org) => {
           const requestedAt = org.get('erasureRequestedAt')
           const requestedMs =
@@ -159,7 +171,7 @@ async function handler(request: Request): Promise<Response> {
           maxPerRun: MAX_PER_RUN,
           // A lower bound, and said so: the query is capped, so a longer
           // queue reads identically to a complete one from the length alone.
-          truncated: pending.size >= MAX_PENDING_LISTED,
+          truncated,
         },
         { status: 200 },
       )

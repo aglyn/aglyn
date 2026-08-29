@@ -1113,10 +1113,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'of their own, which is a different question from paging.',
   ],
   [
-    'apps/console/components/pending-erasures-card.component.tsx',
-    'Pending erasures, which accumulate for the same reason.',
-  ],
-  [
     'apps/console/components/staff-org-refund-card.component.tsx',
     'An organization’s charges, which grow with its trading.',
   ],
@@ -1277,7 +1273,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(22)
+    expect(OWES_A_FOOTER).toHaveLength(21)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
