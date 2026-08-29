@@ -1122,12 +1122,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'untouched.',
   ],
   [
-    'apps/console/components/site-member-drawer.component.tsx',
-    'One member’s orders and subscriptions. Bounded by that person rather ' +
-      'than by the site, which makes it small — but it grows for as long as ' +
-      'they keep buying, so it is a list and not a fixed set.',
-  ],
-  [
     'libs/plugins/bookings/src/lib/components/bookings-console-page.tsx',
     'Bookings, which grow with every reservation. A plugin PAGE SHELL, ' +
       'being converted to routed sections by another agent — the list lives ' +
@@ -1263,7 +1257,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(15)
+    expect(OWES_A_FOOTER).toHaveLength(14)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
