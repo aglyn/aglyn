@@ -43,7 +43,10 @@ import {
 } from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
-import { resolveExtensionEntitlement } from '../../../../../../utils/extension-entitlement'
+import {
+  blockedExtensionNotice,
+  resolveExtensionEntitlement,
+} from '../../../../../../utils/extension-entitlement'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 import { useReleaseFlags } from '../../../../../../hooks/use-release-flags'
@@ -328,8 +331,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         ) : undefined
       }
     >
-      {`${title} is not included in your current plan. Manage your plan and ` +
-        'add-ons from Billing.'}
+      {blockedExtensionNotice(title, resolved?.extension.featureFlag)}
     </Alert>
   ) : (
     <Suspense

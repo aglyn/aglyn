@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, type OrgFeatureFlags } from '@aglyn/aglyn'
+import {
+  checkEntitlement,
+  planGrantingFeature,
+  type OrgFeatureFlags,
+} from '@aglyn/aglyn'
 
 /**
  * The shell's feature-flag gate for plugin surfaces (AGL-2484).
@@ -55,4 +59,30 @@ export function resolveExtensionEntitlement(
   return checkEntitlement(org as never, featureFlag) === true
     ? 'entitled'
     : 'blocked'
+}
+
+/**
+ * The refusal sentence for a `blocked` plugin surface (owner feedback: the
+ * Events page told an org an upgrade would include it, which is never true).
+ *
+ * "`${title}` is not included in your current plan" implies a HIGHER plan
+ * would include it — true for most gated features, but `eventCalendar` is
+ * `false` on every one of the eight plans (`PLAN_ENTITLEMENTS`) and is sold
+ * instead as a per-org add-on, so that sentence is a standing lie for it no
+ * matter which plan the org is on. `planGrantingFeature` is the same ladder
+ * walk `planLabelGrantingFeature` already trusts elsewhere to answer "which
+ * plan carries this" — its `undefined` answer means no plan does, which is
+ * exactly the condition that makes the "upgrade" framing wrong.
+ */
+export function blockedExtensionNotice(
+  title: string,
+  featureFlag: keyof OrgFeatureFlags | undefined,
+): string {
+  const grantedByAPlan =
+    featureFlag != null && planGrantingFeature(featureFlag) !== undefined
+  return grantedByAPlan
+    ? `${title} is not included in your current plan. Manage your plan and ` +
+        'add-ons from Billing.'
+    : `${title} isn't included in any plan — it's a paid add-on. Manage ` +
+        'your plan and add-ons from Billing.'
 }
