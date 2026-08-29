@@ -831,7 +831,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
     if (action === 'test') {
