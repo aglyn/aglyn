@@ -33,8 +33,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import { useStaffRole } from '../hooks/use-is-staff'
 import {
   checkRefundAuthority,
@@ -155,6 +157,7 @@ export default function StaffOrgRefundCard({
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const [charges, setCharges] = useState<RefundableCharge[] | null>(null)
+  const [moreCharges, setMoreCharges] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [hasCustomer, setHasCustomer] = useState(true)
   const [authorityInfo, setAuthorityInfo] = useState<RefundAuthorityInfo | null>(
@@ -187,9 +190,14 @@ export default function StaffOrgRefundCard({
       // could not read — that sentence would send staff away satisfied.
       setLoadError(payload.stripeError ?? null)
       setCharges(payload.charges ?? [])
+      // Stripe's own `has_more`, not a comparison against the page size —
+      // which is wrong in exactly the case that matters, an organization
+      // with precisely as many charges as the route asks for.
+      setMoreCharges(payload.hasMore === true)
     } catch (error: any) {
       console.error(error)
       setCharges(null)
+      setMoreCharges(false)
       setLoadError(error?.message ?? 'Could not load charges')
     }
   }, [user, orgId])
@@ -197,6 +205,27 @@ export default function StaffOrgRefundCard({
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  /*==========================================
+   * THE TABLE PAGES; THE PICKER DOES NOT.
+   *
+   * The rows below are a client slice of the window the route already read,
+   * because nothing on this card is derived from the page — the charge
+   * PICKER, the selected charge and the remaining-refundable arithmetic all
+   * read the full array. Slicing the picker would hide a refundable charge
+   * behind a control the operator cannot page.
+   *=========================================*/
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleCharges = useMemo(
+    () => (charges ?? []).slice(page * pageSize, page * pageSize + pageSize),
+    [charges, page, pageSize],
+  )
+  // A fresh organization starts at page one: an out-of-range page renders as
+  // an empty table, which on this card reads as "nothing to refund".
+  useEffect(() => {
+    setPage(0)
+  }, [orgId])
 
   const selected = (charges ?? []).find((charge) => charge.id === chargeId)
   const remaining = selected ? remainingRefundableCents(selected) : 0
@@ -416,7 +445,7 @@ export default function StaffOrgRefundCard({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {charges.map((charge) => {
+                {visibleCharges.map((charge) => {
                   const left = remainingRefundableCents(charge)
                   return (
                     <TableRow
@@ -456,6 +485,25 @@ export default function StaffOrgRefundCard({
                 })}
               </TableBody>
             </Table>
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={visibleCharges.length}
+              // The charges this card HOLDS. Deliberately not a claim about
+              // the organization's trading: `hasMore` is what says the window
+              // is short, and the notice under the footer is where it is said
+              // in words, because "nothing left to refund" is the wrong thing
+              // for an operator to conclude from a truncated list.
+              count={charges.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+            {moreCharges ? (
+              <Alert severity="info">
+                {'This organization has older charges than the ones listed ' +
+                  'here. Refund them from the Stripe dashboard.'}
+              </Alert>
+            ) : null}
             <TextField
               select
               size="small"

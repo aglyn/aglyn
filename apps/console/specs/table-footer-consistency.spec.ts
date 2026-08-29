@@ -1109,10 +1109,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'The accounts a domain claim would move. A large customer’s domain is ' +
       'not a bounded preview.',
   ],
-  [
-    'apps/console/components/staff-org-refund-card.component.tsx',
-    'An organization’s charges, which grow with its trading.',
-  ],
   /*========================================================================
    * The widened shape's own tranche: real lists, still footerless, each with
    * what stands in the way TODAY. Listed even where this pass could not fix
@@ -1267,7 +1263,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(16)
+    expect(OWES_A_FOOTER).toHaveLength(15)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })
