@@ -238,6 +238,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
                 : ' Your staff role is read-only here — editing requires the super role.'}
               <HelpTip
                 {...docsHelp('featureFlags', { anchor: '#how-gating-behaves' })}
+                sx={{ fontSize: '0.8em', my: -0.5 }}
               />
             </Alert>
             <CardDisplay
