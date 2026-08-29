@@ -171,7 +171,7 @@ deliberate:
   no paging in the dialog.
 - **Nothing prunes run records on a schedule**, so an automation's history keeps
   accumulating in the site's activity log even though this dialog only ever shows a
-  window of it. **Setup → Activity** is the full log, ordered newest-first and paginated
+  window of it. **Admin → Activity** is the full log, ordered newest-first and paginated
   — go there when the Runs dialog doesn't show the run you're looking for.
 
 ## Interactions from the Besigner

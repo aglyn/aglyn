@@ -8,7 +8,7 @@ description: Connect your own domain — subdomain or bare apex — with one-cli
 
 Every site starts on an Aglyn subdomain. When you're ready, connect your **own domain** —
 a subdomain like `www.example.com` or the bare apex `example.com` — self-serve, from the
-site's Setup page.
+site's Admin page.
 
 :::info Plan availability
 **Starter and above.**
@@ -18,7 +18,7 @@ site's Setup page.
 
 ## Connect a domain
 
-1. In **Setup**, open the **Custom Domain** tab.
+1. In **Admin**, open the **Custom Domain** tab.
 2. Add **one DNS record** at your registrar — a **CNAME** to `sites.aglyn.app` for a
    subdomain, or an **ALIAS/ANAME** to the same hostname for a bare apex (an **A record**
    where your registrar offers no ALIAS).

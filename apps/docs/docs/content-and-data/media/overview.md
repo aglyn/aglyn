@@ -418,8 +418,8 @@ were on, whether or not you have any relationship with them. It is a real disclo
 it is one you are making on your visitors' behalf.
 
 So your site keeps a list of the external hosts it is allowed to load images from, under
-**Setup → Approved image hosts**. Add a host and images from it load normally. Leave it
-off the list and browsers refuse it.
+**Admin → Security → Approved image hosts**. Add a host and images from it load
+normally. Leave it off the list and browsers refuse it.
 
 You do not have to think about this for anything you upload — your own media is always
 allowed, and so is your site's own address.
