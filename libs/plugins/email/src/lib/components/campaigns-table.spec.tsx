@@ -199,6 +199,18 @@ const cells = () =>
     (node.textContent ?? '').trim(),
   )
 
+/** The grid row holding a campaign, found by its name. */
+const rowFor = (name: string) =>
+  Array.from(document.querySelectorAll('[role="row"]')).find((row) =>
+    row.textContent?.includes(name),
+  ) as HTMLElement
+
+/** The trailing overflow menu on that row, opened. */
+const openMenuFor = (name: string) =>
+  fireEvent.click(
+    screen.getByRole('button', { name: `More actions for ${name}` }),
+  )
+
 describe('the campaigns table', () => {
   it('reads each collection to its ceiling PLUS a probe', async () => {
     await mount()
@@ -230,11 +242,87 @@ describe('the campaigns table', () => {
       expect(screen.getByText('Last week’s news')).toBeTruthy(),
     )
 
-    fireEvent.click(screen.getByText('Last week’s news'))
+    fireEvent.click(rowFor('Last week’s news'))
 
     // The id in the path is the SEND's id. Every `/emails/campaigns/{sendId}`
     // a merchant has pasted anywhere goes on resolving.
     expect(pushed).toContain('/acme/hosts/store/emails/campaigns/legacy-send')
+  })
+
+  it('the campaign name is a real link, and does not double-push', async () => {
+    /*
+     * A click handler that calls `router.push` looks identical to a left
+     * click and offers nothing to a middle click, a ⌘-click, "Open link in
+     * new tab" or "Copy link address". The row click and the anchor are two
+     * affordances rather than one — and the anchor stops the row's handler,
+     * which would otherwise push the same route twice and cost one history
+     * entry per back press.
+     */
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    const link = rowFor('Spring sale').querySelector('a') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe(
+      '/acme/hosts/store/emails/campaigns/camp-1',
+    )
+    fireEvent.click(link)
+    expect(pushed).toEqual([])
+  })
+
+  it('the row’s actions are in the shared overflow menu', async () => {
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    // Exactly one, because opening it is the only thing a campaign row can do
+    // today: there is no campaign edit page and no delete path, so anything
+    // else here would be an action the product does not have.
+    const items = screen.getAllByRole('menuitem')
+    expect(items.map((item) => item.textContent)).toEqual(['Open campaign'])
+    // A real anchor, so it is middle-clickable like any other link.
+    expect(items[0].tagName).toBe('A')
+    expect(items[0].getAttribute('href')).toBe(
+      '/acme/hosts/store/emails/campaigns/camp-1',
+    )
+  })
+
+  it('opening the menu does not open the campaign', async () => {
+    // The menu button sits inside a clickable row. Without the propagation
+    // guard the grid would navigate out from under the menu it just opened.
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    expect(pushed).toEqual([])
+  })
+
+  it('the count columns are right-aligned in the header AND the cells', async () => {
+    /*
+     * The defect this table was reported for. A figure is read by its last
+     * digit, so a column of them lines up on the right or not at all — and a
+     * grid column defaults its HEADER to the column type's alignment rather
+     * than to the cell's, so `align` without `headerAlign` leaves a left
+     * header sitting over right-aligned figures.
+     */
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    for (const field of ['emails', 'sent', 'opens', 'clicks']) {
+      const header = document.querySelector(
+        `[role="columnheader"][data-field="${field}"]`,
+      )
+      const cell = document.querySelector(
+        `[role="gridcell"][data-field="${field}"]`,
+      )
+      expect(header?.className).toMatch(/columnHeader--alignRight/)
+      expect(cell?.className).toMatch(/cell--textRight/)
+    }
+    // THE CONTROL: the name column is not right-aligned, so the assertion
+    // above is about alignment and not about every column in the grid.
+    expect(
+      document.querySelector('[role="columnheader"][data-field="name"]')
+        ?.className,
+    ).not.toMatch(/alignRight/)
   })
 
   it('does not list a send twice when it belongs to a campaign', async () => {
