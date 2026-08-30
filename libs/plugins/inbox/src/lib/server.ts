@@ -33,8 +33,9 @@
  * enrolls nobody and writes no consent, and enrolling sends nothing and
  * meters nothing. Folding either into the other would make a merchant's
  * ordinary act of answering a customer into an act with consequences they
- * did not choose. The enrollment rule itself is
- * `model/list-assignment-policy.ts`.
+ * did not choose. The enrollment rule itself is the framework's
+ * `list-assignment-policy`, shared with the Emails console's audience card so
+ * that both surfaces refuse the same people for the same stated reasons.
  *
  * ## The boundary this feature sits on, stated because the UI must say it too
  *
@@ -82,10 +83,14 @@
  */
 
 import {
+  ASSIGNMENT_REFUSAL_MESSAGES,
+  assignmentBasis,
+  assignmentReadout,
   isOrgWideMember,
   readMarketingBasis,
   registerPluginApiRoute,
   resolveBrandingProfile,
+  type AssignmentRefusal,
   type MarketingConsentRecord,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
@@ -108,12 +113,6 @@ import {
   replyRecipient,
   type ReplyRefusal,
 } from './model/reply-policy'
-import {
-  ASSIGNMENT_REFUSAL_MESSAGES,
-  assignmentBasis,
-  assignmentReadout,
-  type AssignmentRefusal,
-} from './model/list-assignment-policy'
 
 /** Where a reply is stored, under the submission it answers. */
 export const REPLIES_SUBCOLLECTION = 'replies'
@@ -501,7 +500,17 @@ async function storedConsentForAddress(
      * somebody whose stored refusal this route simply failed to see, and no
      * later surface would ever revisit it. A refusal costs a retry.
      */
-    return { basis: 'declined', basisAtMs: null, capturedAtMs: null }
+    return {
+      basis: 'declined',
+      // Attributed to nobody, because nobody asserted this: it is what a
+      // failed read falls back to, not a refusal anyone recorded. Claiming
+      // `'person'` here would put a refusal in the audit trail that the
+      // person never made.
+      assertedBy: null,
+      source: null,
+      basisAtMs: null,
+      capturedAtMs: null,
+    }
   }
 }
 

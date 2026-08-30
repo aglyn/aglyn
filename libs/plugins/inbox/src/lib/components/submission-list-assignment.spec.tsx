@@ -24,7 +24,7 @@
  * screen that claimed a check it had not performed is the specific failure
  * this feature was held back to avoid, so the surface gets its own file.
  *
- * The rule itself is asserted in `../model/list-assignment-policy.spec.ts` and
+ * The rule itself is asserted in `@aglyn/aglyn`'s `list-assignment-policy.spec.ts` and
  * the route in `../server-assign-list.spec.ts`; nothing here re-derives it,
  * because the component deliberately computes none of it.
  *

@@ -108,15 +108,32 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
 }))
 
+/**
+ * Every QUERY the card and its panels build, by path.
+ *
+ * Queries, not collection references — the two are different purchases and the
+ * distinction is the whole point. The card already takes one server AGGREGATE
+ * per visible list for the `Subscribers` column, which builds a members
+ * collection ref and bills a read per thousand index entries. A members QUERY
+ * is a listener that returns documents, one per subscriber, and one of those
+ * per row is what this file holds the line against.
+ */
+const mockBuiltQueries: string[] = []
+/** Collection references built for anything — aggregates included. */
+const mockBuiltRefs: string[] = []
+
 jest.mock('firebase/firestore', () => ({
-  collection: (_db: unknown, ...segments: string[]) => ({
-    path: segments.join('/'),
-    constraints: [],
-  }),
-  query: (base: any, ...constraints: unknown[]) => ({
-    path: base?.path ?? base,
-    constraints: [...(base?.constraints ?? []), ...constraints],
-  }),
+  collection: (_db: unknown, ...segments: string[]) => {
+    mockBuiltRefs.push(segments.join('/'))
+    return { path: segments.join('/'), constraints: [] }
+  },
+  query: (base: any, ...constraints: unknown[]) => {
+    mockBuiltQueries.push(base?.path ?? String(base))
+    return {
+      path: base?.path ?? base,
+      constraints: [...(base?.constraints ?? []), ...constraints],
+    }
+  },
   limit: (value: number) => ({ limit: value }),
   orderBy: (field: string, direction?: string) => ({
     orderBy: field,
@@ -125,8 +142,11 @@ jest.mock('firebase/firestore', () => ({
   getCountFromServer: async () => ({
     data: () => ({ count: MEMBERS_PER_LIST }),
   }),
+  documentId: () => '__name__',
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   setDoc: jest.fn().mockResolvedValue(undefined),
+  updateDoc: jest.fn().mockResolvedValue(undefined),
+  deleteDoc: jest.fn().mockResolvedValue(undefined),
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -145,11 +165,16 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 const mountCard = async () => {
+  mockBuiltQueries.length = 0
+  mockBuiltRefs.length = 0
   render(<OrgListsCard hostId="host-1" />)
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
 }
+
+const memberQueries = () =>
+  mockBuiltQueries.filter((path) => path.endsWith('/members'))
 
 const renderedNames = () =>
   Array.from(document.querySelectorAll('tbody tr')).map(
@@ -209,6 +234,45 @@ describe('the email-list table walks the collection (AGL-2501)', () => {
       String(MEMBERS_PER_LIST),
     )
     expect(MEMBERS_PER_LIST).toBeGreaterThan(TABLE_PAGE_SIZE_DEFAULT)
+  })
+
+  /*
+   * A LISTENER PER ROW is the shape this page is one careless render away
+   * from. Each list's `members` is a collection of PII with one document per
+   * subscriber; opening one per row would charge an agency for the membership
+   * of every list they own to render a page whose subject is the list of
+   * lists. Counted in queries BUILT rather than rows displayed, because the
+   * two are indistinguishable on a fixture with one list.
+   */
+  it('reads no list’s MEMBERS until a list is opened', async () => {
+    await mountCard()
+    expect(renderedNames()).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
+    expect(memberQueries()).toEqual([])
+    // THE CONTROL for the assertion above, and the distinction it turns on:
+    // the aggregate refs ARE built, one per visible row, so "no member query"
+    // is not "the card never touched the collection".
+    expect(
+      mockBuiltRefs.filter((path) => path.endsWith('/members')),
+    ).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
+  })
+
+  it('reads exactly the ONE list opened, and stops when it is closed', async () => {
+    await mountCard()
+    fireEvent.click(screen.getAllByText('Members')[0])
+    await waitFor(() => expect(memberQueries().length).toBeGreaterThan(0))
+    // The first row of the alphabetical walk is `List 00`, whose id is the
+    // LAST — so this also proves the panel is given the row's own id rather
+    // than the index it happens to sit at.
+    expect(new Set(memberQueries())).toEqual(
+      new Set([
+        `orgs/org-1/lists/uid-${String(TOTAL - 1).padStart(2, '0')}/members`,
+      ]),
+    )
+
+    mockBuiltQueries.length = 0
+    fireEvent.click(screen.getByText('Close'))
+    await waitFor(() => expect(screen.queryByText('Close')).toBeNull())
+    expect(memberQueries()).toEqual([])
   })
 
   it('THE TRAP: ordering on a field a writer can omit would hide lists', () => {

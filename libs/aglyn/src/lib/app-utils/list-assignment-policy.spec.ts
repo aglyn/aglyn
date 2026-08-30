@@ -29,7 +29,7 @@ import {
   assignmentBasis,
   assignmentReadout,
 } from './list-assignment-policy'
-import type { MarketingConsentRecord } from '@aglyn/aglyn/server'
+import type { MarketingConsentRecord } from './marketing-consent'
 
 const NOW = Date.UTC(2026, 7, 29)
 const OPTED_IN_AT = Date.UTC(2025, 2, 14)
@@ -37,7 +37,16 @@ const OPTED_IN_AT = Date.UTC(2025, 2, 14)
 const record = (
   basis: MarketingConsentRecord['basis'],
   basisAtMs: number | null = null,
-): MarketingConsentRecord => ({ basis, basisAtMs, capturedAtMs: null })
+): MarketingConsentRecord => ({
+  basis,
+  // A person's own act with no operator provenance behind it, which is what
+  // every capture surface writes and therefore the right default here. The
+  // one case where it matters has its own record below.
+  assertedBy: basis === 'unrecorded' ? null : 'person',
+  source: null,
+  basisAtMs,
+  capturedAtMs: null,
+})
 
 const decide = (
   stored: MarketingConsentRecord,

@@ -57,6 +57,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // their own paths keeps the client-side barrel — and its React surface —
   // out of a suite that is testing a request handler.
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
+  // The enrollment rule itself, which moved to the framework when the Emails
+  // console became its second caller. Real, because it IS what is under test.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/list-assignment-policy'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/person-key'),
@@ -178,7 +181,7 @@ import {
 } from './server'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 
-function drive(
+async function drive(
   handler: typeof inboxAssignListHandler,
   body: Record<string, unknown>,
   headers: Record<string, string> = { authorization: 'Bearer token' },
@@ -194,7 +197,13 @@ function drive(
       return res
     },
   }
-  return handler({ method: 'POST', body, headers } as any, res).then(() => out)
+  /*
+   * Awaited rather than `.then`-ed: `PluginApiHandler` is declared
+   * `void | Promise<void>`, so a chained `then` is a type error on the `void`
+   * arm even though every handler here is async.
+   */
+  await handler({ method: 'POST', body, headers } as any, res)
+  return out
 }
 
 const assign = (body: Record<string, unknown> = {}) =>

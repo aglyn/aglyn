@@ -16,28 +16,50 @@
  */
 
 /**
- * What basis lets a sender from the Inbox be put on a marketing list.
+ * What basis lets somebody be put on a marketing list.
  *
  * Pure policy, no Firestore and no network, so the rule that decides whether
  * somebody joins a marketing audience can be asserted without an enrollment
- * path. The handler in `../server.ts` is the only caller.
+ * path.
+ *
+ * ## Why it is here and not beside one of its callers
+ *
+ * There are two enrollment surfaces and neither can own this: the Inbox
+ * assignment route (`@aglyn/plugins-inbox`) enrolls the sender of a form
+ * submission, and the Emails console's audience card enrolls an address a
+ * merchant types or pastes. `plugins-inbox` already depends on
+ * `plugins-email`, so the second could not have imported the first, and a
+ * copy in each is the shape that ends with one surface honoring a stored
+ * refusal and the other not. The basis a membership carries has to be one
+ * rule with one set of words, so it lives in the framework both import.
  *
  * ## A reply is transactional; a list is marketing
  *
  * These are two acts and this module exists because they are constantly
  * mistaken for one. Answering a form submission is the transaction the person
- * started, so `reply-policy.ts` requires no consent record. Putting them on a
- * list is a standing invitation to mail them about things they never asked
- * about, and it requires a basis. Nothing in the reply path reaches this
- * module and nothing here sends anything.
+ * started, so the Inbox's `reply-policy.ts` requires no consent record.
+ * Putting them on a list is a standing invitation to mail them about things
+ * they never asked about, and it requires a basis. Nothing in the reply path
+ * reaches this module and nothing here sends anything.
+ *
+ * ## An enrollment is not a licence to send
+ *
+ * Passing this rule writes a membership and nothing else. It meters nothing,
+ * sends nothing, and is not a promise the person is still mailable when a
+ * campaign eventually runs — suppression is consulted again at send time, in
+ * `filterSendableForHost`, because an address can be suppressed the day after
+ * it is enrolled. `apps/console/specs/an-enrollment-is-not-a-license-to-send.spec.ts`
+ * holds the two halves together end to end.
  *
  * ## A basis is DECLARED, never inferred
  *
- * The submission itself is not a basis. Somebody who filled in a contact form
- * asked to be answered; that is the whole of what they asked for. Neither is
- * writing to the merchant, buying, booking or holding an account — the shared
- * `marketing-consent` module makes the same point for the send-time join, and
- * this is the enrollment-time half of it. So there are exactly two ways in:
+ * The act that produced the address is not a basis. Somebody who filled in a
+ * contact form asked to be answered; that is the whole of what they asked for,
+ * and an address a merchant has in a spreadsheet says less than that. Neither
+ * is writing to the merchant, buying, booking or holding an account — the
+ * shared `marketing-consent` module makes the same point for the send-time
+ * join, and this is the enrollment-time half of it. So there are exactly two
+ * ways in:
  *
  * 1. the person's own record already carries a stored opt-in, which is
  *    carried across unchanged, timestamp and all; or
@@ -58,18 +80,33 @@
  * refusal and discarding it.
  */
 
-import type { MarketingConsentRecord } from '@aglyn/aglyn/server'
-import type { ReplyRefusal } from './reply-policy'
+import type { MarketingConsentRecord } from './marketing-consent'
+
+/**
+ * What is wrong with the ADDRESS, before anybody asks what is wrong with the
+ * consent.
+ *
+ * Four failures that are properties of the address rather than of the act, so
+ * every surface that touches an address shares them: a form with no email
+ * field has nobody to enroll for the same reason it has nobody to answer, and
+ * a bounced address is unmailable whichever route reached it. The Inbox's
+ * `ReplyRefusal` is this type — one union, aliased there — because a reply
+ * and an enrollment refuse an address for the same four reasons and a second
+ * copy would eventually list three.
+ */
+export type AddressRefusal =
+  /** No field the resolver recognizes as an email — nothing to enroll. */
+  | 'no-address'
+  /** The value is not a routable address. */
+  | 'unroutable-address'
+  /** The address is on the platform-wide bounce/complaint list. */
+  | 'suppressed-platform'
+  /** The address unsubscribed from, or bounced on, this site. */
+  | 'suppressed-host'
 
 /** Why an address cannot be put on a list. Each maps to one refusal message. */
 export type AssignmentRefusal =
-  /**
-   * The two address failures and the two suppression failures are shared with
-   * the reply path, because they are properties of the ADDRESS rather than of
-   * the act: a form with no email field has nobody to enroll for the same
-   * reason it has nobody to answer.
-   */
-  | ReplyRefusal
+  | AddressRefusal
   /** A stored refusal. Never enrollable, and there is no override. */
   | 'declined'
   /** No record either way, and the merchant asserted nothing. */
@@ -159,7 +196,7 @@ export interface AssignmentReadout {
  */
 export function assignmentReadout(input: {
   stored: MarketingConsentRecord
-  suppression: ReplyRefusal | null
+  suppression: AddressRefusal | null
 }): AssignmentReadout {
   if (input.suppression) {
     return {

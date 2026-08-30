@@ -740,9 +740,29 @@ service cloud.firestore {
         allow read: if isStaff() || isOrgWideMember();
         allow create, update: if isStaff() || canWriteOrgWideData();
         allow delete: if isStaff();
+        // ENROLLING is API-only; REMOVING is not, and the asymmetry is the
+        // point. A member document carries the consent basis that says why
+        // this person may be mailed — `marketingConsent`, its timestamp, the
+        // basis and the account answerable for it. A client that can write
+        // one can write `marketingConsent: true` beside an address nothing
+        // has checked, which is a consent record minted by pressing a button:
+        // no stored opt-in consulted, no suppression list consulted, and no
+        // way afterwards to tell it from one somebody actually gave. So the
+        // create and the update belong to the route
+        // (`plugins-email/server-console.ts` and the Inbox's assign-list),
+        // which runs the shared `list-assignment-policy` and writes through
+        // `enrollListMember`.
+        //
+        // `write` covered all three until AGL-254's console surface gained an
+        // add button; nothing had ever used the client create, so closing it
+        // takes nothing away. Removal stays a client delete because taking
+        // somebody OFF a list needs no basis and destroys no evidence anybody
+        // relies on — the refusal it must never be confused with lives on the
+        // suppression list, which this block does not touch.
         match /members/{memberId} {
           allow read: if isStaff() || isOrgWideMember();
-          allow write: if isStaff() || canWriteOrgWideData();
+          allow create, update: if isStaff();
+          allow delete: if isStaff() || canWriteOrgWideData();
         }
       }
 
