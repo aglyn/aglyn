@@ -301,6 +301,29 @@ describe('the page opens on the decision, not the catalogue', () => {
     expect(screen.queryByText('Not in your plan')).toBeNull()
   })
 
+  /**
+   * The cards are read across, so a card that omits a section its neighbour
+   * fills breaks the comparison. Enterprise states the same limits as every
+   * other tier; the answer is just "Unlimited" all the way down.
+   */
+  it('the Enterprise card states its limits like every other card', () => {
+    renderCards({ plan: 'agency' })
+    // Agency's own figures, and Enterprise's answer beside them.
+    expect(screen.queryAllByText('100 hosts')).toHaveLength(1)
+    expect(screen.queryAllByText('Unlimited hosts')).toHaveLength(1)
+    // Never the raw sentinel (AGL-2482).
+    expect(screen.queryAllByText(/∞|Infinity/)).toHaveLength(0)
+  })
+
+  it('and does not print its highlights twice', () => {
+    renderCards({ plan: 'agency' })
+    // The highlights are the tick list. Substituting them into the limits
+    // slot as well printed the same five lines twice in one card.
+    expect(
+      screen.queryAllByText('SAML / OIDC single sign-on for your whole team'),
+    ).toHaveLength(1)
+  })
+
   it('an enterprise org sees its own plan and nothing else', () => {
     renderCards({ plan: 'pro', enterprise: true })
     expect(cardShown('Enterprise')).toBe(true)
