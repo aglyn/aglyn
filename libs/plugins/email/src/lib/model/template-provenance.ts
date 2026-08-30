@@ -136,7 +136,20 @@ const STAMPED_STANDING: Record<string, TemplateStanding> = {
 export function templateProvenance(
   screen:
     | (Record<string, unknown> & {
-        installedFrom?: { standing?: unknown } | null
+        /*
+         * The install stamp, as a bag of fields with ONE of them named.
+         *
+         * `Record<string, unknown>` on the inner shape as well as the outer,
+         * and it is load-bearing rather than decorative: a type whose every
+         * property is optional is a WEAK type, and TypeScript refuses an
+         * argument that shares none of its properties. `installedFrom` as
+         * written by the install path carries `listingId`, `version`,
+         * `sha256`, `artifactType` and `publisherOrgId` and — since nothing
+         * writes it yet — never `standing`, so a real stamp had no property
+         * in common with `{ standing?: unknown }` and was rejected at the
+         * call site while being exactly what this function reads.
+         */
+        installedFrom?: (Record<string, unknown> & { standing?: unknown }) | null
       })
     | null
     | undefined,

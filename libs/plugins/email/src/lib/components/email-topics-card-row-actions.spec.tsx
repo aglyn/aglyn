@@ -47,6 +47,7 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import type { ConfirmFunctionOptions } from '@aglyn/shared-ui-jsx'
 import { EmailTopicsCard } from './email-topics-card'
 
 const BASE_PATH = '/acme/hosts/site/emails'
@@ -54,7 +55,16 @@ const BASE_PATH = '/acme/hosts/site/emails'
 const mockPush = jest.fn()
 /** Resolves, or REJECTS — `confirm` rejects on cancel (AGL-950). */
 let confirmAccepts = true
-const mockConfirm = jest.fn(() =>
+/*
+ * The options parameter is DECLARED even though the double ignores it.
+ *
+ * `jest.fn(() => …)` takes its call signature from the implementation, so an
+ * implementation with no parameters records every call as an empty tuple and
+ * `mock.calls[0][0]` — the whole point of spying on this — has no type. The
+ * assertions below read the description the card passes, so the double has to
+ * admit that a description is passed.
+ */
+const mockConfirm = jest.fn((_options?: ConfirmFunctionOptions) =>
   confirmAccepts ? Promise.resolve(undefined) : Promise.reject(new Error('no')),
 )
 
@@ -238,14 +248,11 @@ describe('retiring a topic from the row', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
     expect(mockConfirm).toHaveBeenCalled()
-    const options = mockConfirm.mock.calls[0][0] as unknown as Record<
-      string,
-      string
-    >
-    expect(options['description']).toMatch(/preference page/i)
+    const options = mockConfirm.mock.calls[0][0]
+    expect(String(options?.description)).toMatch(/preference page/i)
     // Campaigns already sent under it keep resolving — the reason there is no
     // delete here at all.
-    expect(options['description']).toMatch(/keep working/i)
+    expect(String(options?.description)).toMatch(/keep working/i)
   })
 
   it('writes NOTHING when the operator cancels', async () => {

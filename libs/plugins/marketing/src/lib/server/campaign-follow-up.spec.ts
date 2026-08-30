@@ -673,14 +673,17 @@ describe('the recorded populations add rather than replace', () => {
     )
 
     const report = campaignReport(storedSend().stats)
+    // Every rate hangs off `rates` — the report's own top level holds the
+    // COUNTS, and a rate read from there is `undefined`, which this loop
+    // would have skipped as "not recorded" while asserting nothing.
     const rates = [
-      report.delivery,
-      report.open,
-      report.click,
-      report.clickToOpen,
-      report.bounce,
-      report.complaint,
-      report.unsubscribe,
+      report.rates.delivery,
+      report.rates.open,
+      report.rates.click,
+      report.rates.clickToOpen,
+      report.rates.bounce,
+      report.rates.complaint,
+      report.rates.unsubscribe,
     ]
     expect(rates.some((rate) => rate !== null)).toBe(true)
     for (const rate of rates) {
