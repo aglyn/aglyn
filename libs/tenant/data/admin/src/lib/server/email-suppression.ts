@@ -91,7 +91,10 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 // `document-id.ts` gives at length: a barrel import resolves to whatever a
 // spec's `jest.mock` happens to contain, and this module's neighbours are
 // mocked in nearly every spec that touches them.
-import { TOPIC_OPT_OUTS_SUBCOLLECTION } from '@aglyn/aglyn/app-utils/email-topics'
+import {
+  readTopicSubscriptionState,
+  TOPIC_OPT_OUTS_SUBCOLLECTION,
+} from '@aglyn/aglyn/app-utils/email-topics'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import firebaseAdmin from './firebase-admin'
 
@@ -388,7 +391,7 @@ export async function filterSendableForHost(
 }
 
 /**
- * The subset of `emails` that has NOT left `topicId` on this site.
+ * The subset of `emails` that may be mailed about `topicId` on this site.
  *
  * The third filter a campaign passes, after the platform list and the site's
  * own: the two suppression lists answer "may we mail this person at all", and
@@ -396,6 +399,15 @@ export async function filterSendableForHost(
  * "Promotions and offers" on the preference page is not suppressed — they
  * still get the newsletter — so the fact cannot live on either suppression
  * list without meaning something it does not mean.
+ *
+ * ## Two ways to be excluded, and both are held here
+ *
+ * Somebody who LEFT the stream, and somebody who has been asked to confirm
+ * joining it and has not. The second is what makes a double opt-in worth
+ * recording: an unconfirmed subscriber has to be a real quarantine, not a
+ * field the send path never looks at. Both come back from
+ * `readTopicSubscriptionState`, which is the only place the three states are
+ * decided.
  *
  * Keyed by {@link emailSuppressionKey} and read with one `getAll`, which is
  * both halves of the point: the same derivation as the two lists it runs
@@ -450,11 +462,19 @@ export async function filterTopicSendable(
     lookups.forEach((entry, index) => {
       const snapshot = snapshots[index]
       if (!snapshot?.exists) return
+      /*
+       * The shared state reader, never a field test written out here.
+       *
+       * An entry means one of three things and only that function knows all
+       * three. The shorthand this replaced — "an entry with no
+       * `resubscribedAt` is a live opt-out" — reads a CONFIRMED double
+       * opt-in, which carries `pendingAt` and `confirmedAt` and no
+       * `resubscribedAt`, as somebody who left.
+       */
       const record = (snapshot.get('topics') ?? {})[topic]
-      // A `resubscribedAt` marks a lifted opt-out. The entry is kept as the
-      // evidence that the request was honored while it stood, so presence
-      // alone is not the test.
-      if (record && !record.resubscribedAt) gone.add(entry.email)
+      if (readTopicSubscriptionState(record) !== 'subscribed') {
+        gone.add(entry.email)
+      }
     })
     return emails.filter((email) => !gone.has(email))
   } catch (error) {
@@ -465,6 +485,18 @@ export async function filterTopicSendable(
     return [...emails]
   }
 }
+
+/*
+ * THE FOURTH FILTER IS NOT IN THIS FILE, and where it is is forced.
+ *
+ * `filterCadenceSendable` — the subset that has not asked this site for mail
+ * less often than right now — lives in `email-marketing-gate.ts`, because it
+ * reads the per-recipient counter document that module owns and names. That
+ * module already imports this one for the two suppression lists, so putting
+ * the cadence filter here would close a cycle. A campaign's subtraction chain
+ * therefore reads: this file's two lists, this file's topic opt-outs, then
+ * that file's cadence.
+ */
 
 /**
  * The staff queue, newest first, ordered by `suppressedAt` so a re-recorded or

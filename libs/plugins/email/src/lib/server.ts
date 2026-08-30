@@ -27,12 +27,31 @@ import {
   activeEmailTopics,
   mergeEmailTopics,
   normalizeEmailTopic,
+  readTopicSubscriptionState,
   resolveCampaignTopic,
   EMAIL_TOPICS_COLLECTION,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type EmailTopic,
+  type TopicSubscriptionEntry,
 } from '@aglyn/aglyn/app-utils/email-topics'
-import { firebaseAdmin, resolveOrgIdForHost } from '@aglyn/tenant-data-admin'
+import {
+  confirmTopicSubscription,
+  EMAIL_FREQUENCY_SUBCOLLECTION,
+  firebaseAdmin,
+  resolveOrgIdForHost,
+  setMarketingCadence,
+  type ConfirmTopicResult,
+} from '@aglyn/tenant-data-admin'
+/*
+ * The pure cadence rule from the shared email library, where the SEND path
+ * reads it too. The preference page and the gate must agree about what
+ * `'weekly'` means down to the coercion of a malformed value, and two copies
+ * of that is how a page comes to record a choice the gate does not recognize.
+ */
+import {
+  normalizeMarketingCadence,
+  type MarketingCadence,
+} from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   escapeAttribute,
@@ -566,6 +585,23 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
     })
 
     /*
+     * HOW OFTEN, recorded from the same submit as WHAT.
+     *
+     * They are one decision — "less of this, and less often" — so they are
+     * one form and one round trip. It is stored on the send counter rather
+     * than beside the topic opt-outs because that is the document the send
+     * path already reads for every marketing message, which is what makes
+     * honoring the request free at the point it has to be honored.
+     *
+     * A value that is not a cadence lands on `'all'` rather than erroring:
+     * this page is reached with no session by anybody holding the link, so
+     * `body` is untrusted, and the failure a recipient must not meet on the
+     * screen they came to in order to leave is a 500.
+     */
+    const cadence = normalizeMarketingCadence(body['cadence'])
+    const cadenceStored = await setMarketingCadence(hostId, email, cadence)
+
+    /*
      * A person asking for SOME mail is asking not to be suppressed from ALL of
      * it, so a whole-site unsubscribe standing against this address is lifted
      * — through the same guard the resubscribe route uses, which refuses to
@@ -585,8 +621,27 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
           heading(drop.length ? 'Sorry to see you go' : 'Preferences saved') +
           paragraph(
             changeSummary({ email, keep: [...keep], drop, topics }),
-            20,
+            cadence === 'all' && cadenceStored ? 20 : 8,
           ) +
+          /*
+           * The pace is reported only when it is a CHOICE. "As they come" is
+           * the default and the absence, so announcing it would tell somebody
+           * who touched nothing that they had just asked for something.
+           */
+          (cadence !== 'all' && cadenceStored
+            ? paragraph(
+                `They will arrive no more than ${cadenceSentence(cadence)}.`,
+                20,
+              )
+            : '') +
+          (!cadenceStored
+            ? paragraph(
+                'One thing we could not change: how often these arrive. Your ' +
+                  'other choices are saved — come back to this page to try ' +
+                  'that one again.',
+                20,
+              )
+            : '') +
           (stillBlocked
             ? paragraph(
                 'One thing we could not change: this address is on hold ' +
@@ -656,14 +711,35 @@ interface SubscriptionState {
   protectedRecord: boolean
   /** Topic ids this address has left and not rejoined. */
   optedOut: Set<string>
+  /**
+   * Topic ids this address was asked to confirm and has not.
+   *
+   * Held apart from {@link optedOut} even though neither is mailable, because
+   * the page says something different about each: one is a choice the person
+   * made and the other is a question they have not answered.
+   */
+  pending: Set<string>
+  /** The pace this address last asked for, or `'all'` for never asked. */
+  cadence: MarketingCadence
+}
+
+/** How a chosen cadence reads inside a sentence about what will happen. */
+function cadenceSentence(cadence: MarketingCadence): string {
+  return cadence === 'daily'
+    ? 'one a day'
+    : cadence === 'weekly'
+      ? 'one a week'
+      : 'one a month'
 }
 
 /**
- * Both per-site records for one address, in two keyed `get()`s.
+ * All three per-site records for one address, in three keyed `get()`s.
  *
  * By document id rather than a query, matching `filterSendableForHost`: no
  * composite index to go missing, and nothing that can fail open on a read
- * window.
+ * window. The third is the send counter, which is where the recipient's
+ * chosen pace lives — see `EmailFrequencyRecord.cadence` for why it is stored
+ * on the document the send path already reads rather than on this page's own.
  */
 async function readSubscriptionState(
   firestore: any,
@@ -671,24 +747,44 @@ async function readSubscriptionState(
   key: string,
 ): Promise<SubscriptionState> {
   const hostRef = firestore.collection('hosts').doc(hostId)
-  const [suppression, optOuts] = await Promise.all([
+  const [suppression, optOuts, frequency] = await Promise.all([
     hostRef.collection('suppressions').doc(key).get(),
     hostRef.collection(TOPIC_OPT_OUTS_SUBCOLLECTION).doc(key).get(),
+    hostRef
+      .collection(EMAIL_FREQUENCY_SUBCOLLECTION)
+      .doc(key)
+      .get()
+      // The pace is the one field on this page whose absence is a legitimate
+      // answer, so a read that fails renders the default rather than an
+      // error — the recipient still gets their topic checkboxes.
+      .catch(() => null),
   ])
   const stored = (optOuts?.exists ? optOuts.get('topics') : null) ?? {}
   const optedOut = new Set<string>()
+  const pending = new Set<string>()
   for (const [id, record] of Object.entries(
-    stored as Record<string, { resubscribedAt?: unknown } | null>,
+    stored as Record<string, TopicSubscriptionEntry | null>,
   )) {
-    // An entry with a `resubscribedAt` is EVIDENCE of an opt-out that has been
-    // lifted, not a live one. See `writeTopicOptOuts` for why the entry stays.
-    if (record && !record.resubscribedAt) optedOut.add(id)
+    /*
+     * The shared reader, not a field test. An entry with a `resubscribedAt`
+     * is EVIDENCE of an opt-out that has been lifted rather than a live one —
+     * see `writeTopicOptOuts` for why the entry stays — and an entry with a
+     * `confirmedAt` carries the same shape of evidence for a confirmation.
+     * Only one function knows all three states.
+     */
+    const state = readTopicSubscriptionState(record)
+    if (state === 'opted-out') optedOut.add(id)
+    if (state === 'pending') pending.add(id)
   }
   return {
     suppressed: !!suppression?.exists,
     protectedRecord:
       !!suppression?.exists && suppression.get('reason') !== 'unsubscribe',
     optedOut,
+    pending,
+    cadence: normalizeMarketingCadence(
+      frequency?.exists ? frequency.get('cadence') : null,
+    ),
   }
 }
 
@@ -709,6 +805,25 @@ async function readSubscriptionState(
  * (address, topic): the send path reads this by key alongside the suppression
  * lists, and one `get()` per address is what keeps a topic-filtered send the
  * same cost as an unfiltered one.
+ *
+ * ## Ticking a box here IS the confirmation a double opt-in asks for
+ *
+ * The entry also carries a pending-confirmation pair, and a recipient who
+ * ticks a topic on this page has done more than the confirmation link asks:
+ * they clicked a signed link delivered to that mailbox and then made a
+ * choice in it. Leaving them pending would mean the page recorded a
+ * subscription the send path refuses — a form whose submit does not take
+ * effect, which this page refuses to be anywhere else. So a resumed topic
+ * that is still pending is confirmed here, stamped with the moment they did
+ * it.
+ *
+ * ## Every write CARRIES the entry forward
+ *
+ * Each branch spreads the previous entry rather than replacing it. Two pairs
+ * of timestamps now live on one entry, and a branch that wrote only its own
+ * pair would silently discard the other — an opt-out would erase the record
+ * that somebody confirmed, and the erasure would look exactly like a person
+ * who never confirmed.
  */
 async function writeTopicOptOuts(
   firestore: any,
@@ -728,18 +843,35 @@ async function writeTopicOptOuts(
     const topics: Record<string, unknown> = {}
     for (const id of fields.optOut) {
       const previous = stored[id]
-      // Already opted out and never rejoined: leave the original timestamp
-      // alone. Re-submitting the same form must not restamp the date the
-      // person actually left, for the reason `createdAt` is not restamped on
-      // the suppression.
+      /*
+       * Already opted out and never rejoined: leave the original timestamp
+       * alone. Re-submitting the same form must not restamp the date the
+       * person actually left, for the reason `createdAt` is not restamped on
+       * the suppression.
+       *
+       * The state reader, not "an entry with no `resubscribedAt`". That
+       * shorthand reads a CONFIRMED double opt-in — which carries `pendingAt`
+       * and `confirmedAt` and no `resubscribedAt` — as somebody who had
+       * already left, so unticking their box would record no opt-out at all
+       * and the send path would go on mailing them.
+       */
       topics[id] =
-        previous && !previous['resubscribedAt']
+        readTopicSubscriptionState(previous) === 'opted-out'
           ? previous
-          : { optedOutAt: FieldValue.serverTimestamp(), resubscribedAt: null }
+          : {
+              ...(previous ?? {}),
+              optedOutAt: FieldValue.serverTimestamp(),
+              resubscribedAt: null,
+            }
     }
     for (const id of fields.resume) {
       const previous = stored[id]
       if (!previous) continue
+      const state = readTopicSubscriptionState(previous)
+      if (state === 'pending') {
+        topics[id] = { ...previous, confirmedAt: Date.now() }
+        continue
+      }
       topics[id] = previous['resubscribedAt']
         ? previous
         : { ...previous, resubscribedAt: FieldValue.serverTimestamp() }
@@ -767,6 +899,17 @@ function topicRow(
   topic: EmailTopic,
   checked: boolean,
   highlighted: boolean,
+  /**
+   * Asked to confirm and has not.
+   *
+   * The box is EMPTY for a pending topic, because empty is the truth: the
+   * send path refuses this stream until it is confirmed, and a ticked box
+   * over a stream nothing will send would be the page telling a lie the
+   * recipient can only discover by waiting for mail that never comes. The
+   * note beside it is what turns "not ticked" from a puzzle into an answer,
+   * and ticking it here confirms — see `writeTopicOptOuts`.
+   */
+  pending = false,
 ): string {
   return (
     `<label style="display:flex;gap:12px;align-items:flex-start;padding:14px 0;` +
@@ -783,11 +926,57 @@ function topicRow(
         'This email</span>'
       : '') +
     '</span>' +
+    (pending
+      ? `<span style="display:block;margin-top:2px;font-size:13px;line-height:1.45;` +
+        `color:${PAL.muted}">Waiting for you to confirm — tick this and save ` +
+        'to start receiving it.</span>'
+      : '') +
     (topic.description
       ? `<span style="display:block;margin-top:2px;font-size:13px;line-height:1.45;` +
         `color:${PAL.muted}">${escapeAttribute(topic.description)}</span>`
       : '') +
     '</span></label>'
+  )
+}
+
+/**
+ * HOW OFTEN — the half of the preference center that shipped without.
+ *
+ * `docs/specs/email-competitive-gaps.md` G10: the frequency CAP shipped and
+ * this did not, so a recipient who wanted the same mail less often had two
+ * options and one of them was the spam button.
+ *
+ * Radio buttons rather than a select, and every option written out. The whole
+ * value of the control is that somebody skimming a footer link can see, in
+ * one glance, that "less" is available at all — a collapsed select says only
+ * that there is a setting.
+ *
+ * The default option is named ("As they come") rather than left as the empty
+ * choice, because a radio group whose default is unlabeled reads as a
+ * question the recipient has not answered, and answering it is not something
+ * this page should require of somebody who came here to uncheck one box.
+ */
+function cadenceFieldset(current: MarketingCadence): string {
+  const option = (value: MarketingCadence, label: string): string =>
+    `<label style="display:flex;gap:12px;align-items:center;padding:10px 0;cursor:pointer">` +
+    `<input type="radio" name="cadence" value="${escapeAttribute(value)}"` +
+    (value === current ? ' checked' : '') +
+    ' style="margin:0;width:18px;height:18px;flex:none">' +
+    `<span style="font-size:14px;color:${PAL.ink}">${label}</span></label>`
+  return (
+    `<div style="border-top:1px solid ${PAL.divider};padding-top:18px;margin-top:6px">` +
+    `<div style="font-size:14px;font-weight:600;color:${PAL.ink};margin-bottom:2px">` +
+    'How often' +
+    '</div>' +
+    `<div style="font-size:13px;line-height:1.45;color:${PAL.muted};margin-bottom:6px">` +
+    'This applies to everything above. Nothing is cancelled — messages just ' +
+    'wait until the next one is due.' +
+    '</div>' +
+    option('all', 'As they come') +
+    option('daily', 'At most one a day') +
+    option('weekly', 'At most one a week') +
+    option('monthly', 'At most one a month') +
+    '</div>'
   )
 }
 
@@ -830,12 +1019,28 @@ function preferencesFormBody(args: {
           topic,
           // A whole-site suppression outranks the per-topic record, so an
           // unsubscribed recipient sees every box empty — which is the state
-          // they are actually in, and the state the form must round-trip.
-          !state.suppressed && !state.optedOut.has(topic.id),
+          // they are actually in, and the state the form must round-trip. An
+          // unconfirmed topic is empty for the same reason: the send path
+          // refuses it, so a ticked box would not be what is true.
+          !state.suppressed &&
+            !state.optedOut.has(topic.id) &&
+            !state.pending.has(topic.id),
           topic.id === current.id,
+          !state.suppressed && state.pending.has(topic.id),
         ),
       )
       .join('') +
+    /*
+     * HOW OFTEN, inside the same form as WHAT.
+     *
+     * The alternative to letting somebody choose "monthly" is letting them
+     * choose "report spam", and on a shared sending domain under `p=reject`
+     * that choice is charged to every other tenant. It sits under the topics
+     * because it is the smaller decision of the two and a recipient who has
+     * already found the thing they wanted to stop should not have to read
+     * past a frequency question to stop it.
+     */
+    cadenceFieldset(state.cadence) +
     `<div style="border-top:1px solid ${PAL.divider};padding-top:20px;margin-top:6px">` +
     submitButton('Save my preferences') +
     '</div></form>' +
@@ -878,11 +1083,146 @@ function changeSummary(args: {
   return `${address} will stop receiving ${names}, and keeps the rest.`
 }
 
+/**
+ * `email/confirm` — the click that turns a pending subscription into a real
+ * one (`docs/specs/email-competitive-gaps.md` P8).
+ *
+ * Same signed-link shape as its three siblings and the same safe-GET /
+ * mutating-POST split, which matters here for exactly the reason it mattered
+ * to the unsubscribe: a security gateway fetching every URL in the message
+ * would otherwise confirm the subscription on the recipient's behalf, and a
+ * confirmation nobody made is the one thing a double opt-in exists to
+ * prevent. A prescanner following this link renders a page and changes
+ * nothing.
+ *
+ * The subject it verifies is the confirmation form — see
+ * `signedConfirmSubject` for why a topic without a campaign needs one — and
+ * it is checked through the same comparison every other link goes through.
+ */
+const confirmHandler: PluginApiHandler = async (req, res) => {
+  const method = String(req.method ?? 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST')
+    return void res.status(405).send('Method not allowed')
+  }
+
+  const params = readParams(req)
+  const secret = linkSecret()
+  if (!params.hostId || !params.email || !params.signature || !secret) {
+    return void res.status(400).send('Invalid confirmation link')
+  }
+  if (!signatureMatches({ ...params, secret, purpose: 'confirm' })) {
+    return void res.status(403).send('Invalid confirmation link')
+  }
+  if (!suppressionKeyFor(params.email)) {
+    return void res.status(400).send('Invalid confirmation link')
+  }
+  const { hostId, email, topicId } = params
+  const query = signedQuery(params)
+
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const topics = await loadTopicCatalog(firestore, hostId)
+    const topic = resolveCampaignTopic(topicId, topics)
+
+    if (method !== 'POST') {
+      // SAFE. A prescanner lands here and confirms nothing.
+      return void sendPage(
+        res,
+        page(
+          heading('Confirm your subscription') +
+            paragraph(
+              `Confirm that <strong style="color:${PAL.ink}">${escapeAttribute(
+                email,
+              )}</strong> should receive ` +
+                `<strong style="color:${PAL.ink}">${escapeAttribute(
+                  topic.name,
+                )}</strong> from this site.`,
+            ) +
+            `<form method="post" action="/api/email/confirm?${escapeAttribute(
+              query,
+            )}">` +
+            submitButton('Yes, subscribe me') +
+            '</form>',
+        ),
+      )
+    }
+
+    const outcome = await confirmTopicSubscription(hostId, email, topicId)
+    return void sendPage(res, page(confirmationBody(outcome, topic.name)))
+  } catch (error) {
+    console.error(error)
+    return void res.status(500).send('Confirmation failed — please try again')
+  }
+}
+
+/**
+ * What each outcome tells the person in front of it.
+ *
+ * Every arm names what is TRUE rather than what went wrong. Somebody who
+ * clicked an expired link has not made a mistake, and somebody who clicked
+ * twice has not either — telling either of them "invalid" would read as the
+ * subscription having failed when the first case needs a fresh signup and the
+ * second is already done.
+ */
+function confirmationBody(
+  outcome: ConfirmTopicResult,
+  topicName: string,
+): string {
+  const stream = `<strong style="color:${PAL.ink}">${escapeAttribute(
+    topicName,
+  )}</strong>`
+  switch (outcome) {
+    case 'confirmed':
+      return (
+        successBadge() +
+        heading("You're subscribed") +
+        paragraph(`You'll start receiving ${stream} from this site.`, 0)
+      )
+    case 'already-confirmed':
+      return (
+        successBadge() +
+        heading('Already confirmed') +
+        paragraph(`${stream} is already on its way to you.`, 0)
+      )
+    case 'expired':
+      return (
+        heading('This link has expired') +
+        paragraph(
+          `Confirmation links are good for three days. Sign up again and ` +
+            `we'll send a fresh one — you are not subscribed to ${stream} in ` +
+            'the meantime.',
+          0,
+        )
+      )
+    case 'opted-out':
+      return (
+        heading("Can't subscribe this address") +
+        paragraph(
+          `This address asked to stop receiving ${stream} from this site, so ` +
+            'a confirmation link cannot put it back. Sign up again if that ' +
+            'was not what you meant.',
+          0,
+        )
+      )
+    default:
+      return (
+        heading('Nothing to confirm') +
+        paragraph(
+          `There is no pending request for ${stream} at this address. If you ` +
+            'meant to subscribe, sign up on the site.',
+          0,
+        )
+      )
+  }
+}
+
 /** Registers the email plugin's public API routes (AGL-396). */
 export function registerEmailApi(): void {
   registerPluginApiRoute('email/unsubscribe', unsubscribeHandler)
   registerPluginApiRoute('email/resubscribe', resubscribeHandler)
   registerPluginApiRoute('email/preferences', preferencesHandler)
+  registerPluginApiRoute('email/confirm', confirmHandler)
 }
 
 /*

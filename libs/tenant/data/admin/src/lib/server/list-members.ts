@@ -101,6 +101,17 @@ export interface ListMemberConsent {
   atMs: number
   /** The console account that attested. Meaningless for a pass-through. */
   byUid?: string | null
+  /**
+   * Why, in the operator's own terms, for whoever audits this later.
+   *
+   * Written for an attestation and ignored for a pass-through, which needs no
+   * explanation beyond the person's own record. An import fills it from what
+   * the FILE declared — the opt-in source and date the merchant supplied per
+   * row — because "a declared basis per address, not one checkbox over the
+   * file" is only worth asking for if the declaration survives onto the row
+   * it was made about.
+   */
+  reason?: string
 }
 
 export interface EnrollListMemberInput {
@@ -288,6 +299,11 @@ export async function enrollListMember(
        * a row reading "this account vouched for them" when the person ticked
        * a box themselves is a false attribution in the one direction a
        * compliance answer cannot afford.
+       *
+       * `marketingConsentReason` follows the same rule for the same reason:
+       * always written, `''` for a pass-through, so a later real opt-in
+       * cannot inherit the sentence an earlier import wrote about where the
+       * merchant said the address came from.
        */
       ...(consent
         ? {
@@ -295,6 +311,7 @@ export async function enrollListMember(
             marketingConsentAtMs: consent.atMs,
             marketingConsentBasis: consent.basis,
             marketingConsentByUid: consent.byUid ?? null,
+            marketingConsentReason: consent.reason ?? '',
           }
         : {}),
       ...(existing ? {} : { addedAt: FieldValue.serverTimestamp() }),

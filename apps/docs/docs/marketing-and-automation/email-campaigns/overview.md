@@ -311,6 +311,40 @@ an opt-in, how many need your say-so, how many cannot be added at all — before
 confirm, and one statement covers the batch. Addresses that are not valid are listed
 back to you rather than quietly dropped. Up to 100 at a time.
 
+### Import a list you already have {#import-a-list}
+
+**Import**, on an audience's own page, takes a CSV or a pasted column of addresses.
+Every one of them goes through the checks above — the same ones, not similar ones — so
+nothing an import brings in could not have been added by hand.
+
+Three steps, and the middle one is the point:
+
+1. **Choose the file.** A CSV with an email column, or one address per line. Columns
+   named `Name`, `Opt-in source` and `Opt-in date` are read when they are there.
+2. **Read what is in it.** How many addresses, how many repeats were collapsed, how many
+   lines are not addresses, and what the consent check says about a sample of them. Two
+   warnings appear here when they apply: addresses at **shared mailboxes** (`sales@`,
+   `info@`) and **column names that suggest a bought or appended list**. Neither refuses
+   anything — they are shown before you state you have permission, because that
+   statement is the part with weight.
+3. **Import.** Large files are added in batches, with a progress bar. You can close the
+   drawer: the import picks up where it stopped when you come back.
+
+What is recorded: an address with a stored opt-in keeps that opt-in and its original
+date; an address with none is added on your statement, which is stored against your
+account together with whatever the file declared about where the address came from. It
+is never recorded as though the person opted in themselves. Addresses that unsubscribed,
+bounced or declined are refused, and no file can override that.
+
+Up to 50,000 addresses per file. A larger list is split and imported in pieces —
+nothing already on the audience is affected either way.
+
+:::note
+Importing does not send a confirmation email, even on a site that
+[requires one](#double-opt-in) for signups. An import is your statement that you already
+have these people's permission.
+:::
+
 ### Removing someone is not an unsubscribe {#remove-from-a-list}
 
 **Remove** takes a person off that one list. It is not a suppression: it does not stop
@@ -490,6 +524,55 @@ Somebody who unsubscribed can also **resubscribe** from the same link — except
 when the address was suppressed by a bounce or a spam complaint. Those protect
 your sending reputation rather than expressing a preference, so no link can
 clear them.
+
+### Letting someone ask for less, instead of none {#frequency-opt-down}
+
+The same page carries a **How often** choice: as they come, at most one a day,
+at most one a week, or at most one a month. It applies to everything the
+recipient is still subscribed to.
+
+This is the option that is missing almost everywhere, and it is worth having
+for a plain reason: the alternative to letting somebody choose "monthly" is
+letting them choose "report spam", and a complaint on your shared sending
+domain costs you and every other Aglyn site far more than a slower cadence
+does.
+
+Nothing is cancelled. A message that arrives too soon **waits** — the person
+stays on every audience they were on, and the next one due reaches them. A
+reminder or an alert that was held is retried once enough time has passed.
+
+Unlike the [daily limit](#frequency-cap), this one **does** apply to campaigns.
+It is a request the recipient made rather than a ceiling you did not choose, so
+a campaign honors it — and the recipient count you see before you send has
+already had these people subtracted, so the number on screen is still the
+number that will be reached.
+
+### Ask new subscribers to confirm {#double-opt-in}
+
+Off unless you turn it on. On a topic's own page, **Confirmation** has three
+settings: use the site setting, require a confirmation click, or never confirm
+this stream.
+
+With it on, somebody who signs up gets an email asking them to confirm, and
+**nothing else reaches them on that topic until they do**. They stay on your
+audiences and keep every record you hold about them — what is held is the
+sending, not the person. The link is good for three days; after that they need
+to sign up again.
+
+They can also confirm by ticking the topic on the [preference
+page](#preference-page) — that link arrives at the same mailbox, so acting on
+it says the same thing.
+
+Somebody who unsubscribed from a topic is never sent a confirmation for it. A
+signup form must not become a way to email somebody who told you to stop by
+asking them again.
+
+:::note
+No law requires a confirmation click. What the law requires is consent you can
+prove, and a confirmation is the proof that has so far been accepted —
+particularly in Germany. If you mail people in the EU or the UK, turning this
+on is worth considering for that reason and not because a rule forces it.
+:::
 
 ### Which mail this applies to {#marketing-mail}
 

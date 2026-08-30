@@ -44,13 +44,14 @@
  */
 
 import { normalizeDynamicListRule, pluginDocsHelp } from '@aglyn/aglyn'
-import { mdiPencilOutline } from '@aglyn/shared-data-mdi'
+import { mdiPencilOutline, mdiTrayArrowUp } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { collection, doc, getCountFromServer } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useFirestoreDoc, useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { describeDynamicListRule } from './dynamic-list-rule-fields'
+import ListImportDrawer from './list-import-drawer'
 import ListMembersPanel from './list-members-panel'
 
 export interface ListDetailCardProps {
@@ -103,6 +104,15 @@ export function ListDetailCard(props: ListDetailCardProps) {
     [],
   )
 
+  /*
+   * Importing is a DRAWER opened from the header, not a control inside the
+   * membership panel. It is a multi-step act — choose a file, read what is in
+   * it, state that you have permission — and the middle step is the one that
+   * must not be cramped, because it carries the screening warnings and the
+   * consent readout the attestation is given against.
+   */
+  const [importing, setImporting] = useState(false)
+
   const audiencesHref = `${basePath}/audiences`
   const headerActions = (
     <Stack direction="row" spacing={1}>
@@ -125,6 +135,15 @@ export function ListDetailCard(props: ListDetailCardProps) {
         startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
       >
         {'Edit list'}
+      </Button>
+      <Button
+        size="small"
+        color="primary"
+        variant="contained"
+        startIcon={<MdiIcon path={mdiTrayArrowUp.path} size={0.8} />}
+        onClick={() => setImporting(true)}
+      >
+        {'Import'}
       </Button>
     </Stack>
   )
@@ -246,6 +265,21 @@ export function ListDetailCard(props: ListDetailCardProps) {
           />
         ) : null}
       </Stack>
+      {/*
+        Mounted only while it is open, so a page nobody is importing on runs
+        none of its effects — the drawer looks for an unfinished import when
+        it opens, and that read must not be a cost of visiting an audience.
+       */}
+      {importing ? (
+        <ListImportDrawer
+          open
+          onClose={() => setImporting(false)}
+          hostId={hostId}
+          listId={listId}
+          listName={String(list['name'] ?? '')}
+          onMembershipChanged={onMembershipChanged}
+        />
+      ) : null}
     </CardDisplay>
   )
 }

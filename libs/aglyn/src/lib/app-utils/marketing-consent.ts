@@ -80,6 +80,43 @@ export const MARKETING_CONSENT_SOURCE_FIELD = 'marketingConsentSource'
  */
 export const OPERATOR_BACKFILL_CONSENT_KIND = 'operator-backfill'
 
+/**
+ * The document field a LIST MEMBERSHIP carries beside `marketingConsent`,
+ * naming which of the two ways in produced it.
+ *
+ * `list-members.ts` writes it, with `'contact-opt-in'` for a basis carried
+ * across from the person's own record and
+ * {@link OPERATOR_ATTESTED_CONSENT_BASIS} for one a console account asserted.
+ * It is read here because a membership is a person record like any other to
+ * every reader in the send path, and a reader that knew only about
+ * {@link MARKETING_CONSENT_SOURCE_FIELD} would report an attestation as the
+ * person's own act.
+ */
+export const MARKETING_CONSENT_BASIS_FIELD = 'marketingConsentBasis'
+
+/**
+ * The value of {@link MARKETING_CONSENT_BASIS_FIELD} that means an operator
+ * stated they have this person's permission.
+ *
+ * A string literal shared by the writer and the reader rather than a type,
+ * for the reason above: the enrollment path stores this on a document and
+ * this module reads it back off one, and a document has no types.
+ */
+export const OPERATOR_ATTESTED_CONSENT_BASIS = 'operator-attested'
+
+/**
+ * The `kind` synthesized for an attested membership that carries no
+ * {@link MARKETING_CONSENT_SOURCE_FIELD} of its own.
+ *
+ * The console's one-address add path stores the attesting account in
+ * `marketingConsentByUid` and no provenance object, so the provenance a
+ * reader can honestly report for those rows is exactly "an account attested
+ * this" plus the account. Naming the kind rather than leaving the source
+ * `null` is what lets a console readout say WHO, which is the whole reason
+ * the attribution is stored.
+ */
+export const OPERATOR_ATTESTED_CONSENT_KIND = 'operator-attested'
+
 /** The provenance stored alongside a basis somebody other than the person set. */
 export interface MarketingConsentSource {
   /** What kind of assertion this is — {@link OPERATOR_BACKFILL_CONSENT_KIND}. */
@@ -272,6 +309,20 @@ function timestampMs(value: unknown): number | null {
  * is a caller that can read the wrong one and silently get `undefined`, which
  * is exactly how `siteMembers` came to be addressed by a blank merge tag.
  *
+ * ## TWO fields can say "an operator asserted this", and both are read
+ *
+ * A backfilled CRM record announces itself with {@link
+ * MARKETING_CONSENT_SOURCE_FIELD}; a LIST MEMBERSHIP announces itself with
+ * {@link MARKETING_CONSENT_BASIS_FIELD} set to {@link
+ * OPERATOR_ATTESTED_CONSENT_BASIS}, because the enrollment path stores what
+ * KIND of basis a membership carries and stores the attesting account beside
+ * it. Reading only the first would report every attested enrollment — every
+ * address a merchant added by hand, and every address an import brings in —
+ * as a checkbox the person ticked, which is precisely the conflation the
+ * attribution exists to prevent. The send-time consent join reads a
+ * membership through this function, so the wrong answer here is the wrong
+ * answer in a compliance response.
+ *
  * @param record any silo's person document data, or `null` for an address
  *               with no record behind it (a hand-typed manual audience).
  */
@@ -290,7 +341,10 @@ export function readMarketingBasis(
   const consent = record['marketingConsent']
   const basis: MarketingBasis =
     consent === true ? 'granted' : consent === false ? 'declined' : 'unrecorded'
-  const source = readConsentSource(record[MARKETING_CONSENT_SOURCE_FIELD])
+  const basisAtMs = timestampMs(record['marketingConsentAtMs'])
+  const source =
+    readConsentSource(record[MARKETING_CONSENT_SOURCE_FIELD]) ??
+    readAttestedBasis(record, basisAtMs)
   return {
     basis,
     // A basis with no provenance is the person's own: the capture surfaces
@@ -300,9 +354,42 @@ export function readMarketingBasis(
     assertedBy:
       basis === 'unrecorded' ? null : source !== null ? 'operator' : 'person',
     source,
-    basisAtMs: timestampMs(record['marketingConsentAtMs']),
+    basisAtMs,
     capturedAtMs:
       timestampMs(record['createdAt']) ?? timestampMs(record['addedAt']),
+  }
+}
+
+/**
+ * The provenance a list membership's own basis field carries, or `null`.
+ *
+ * `'contact-opt-in'` returns `null` deliberately and is not merely unhandled:
+ * that value means the membership carries the PERSON's opt-in, passed through
+ * with their own timestamp, so it is the strongest available statement that
+ * nobody asserted anything on their behalf.
+ *
+ * `by` falls back to the empty string rather than refusing when the account
+ * is missing. `readConsentSource` refuses an unattributed operator because
+ * its field's only writer always fills one; here the fact being read is the
+ * BASIS, which is unambiguous on its own, and losing the whole attestation
+ * because the uid did not survive would report the row as a person's own
+ * opt-in — the one direction this must never fail in.
+ */
+function readAttestedBasis(
+  record: Record<string, unknown>,
+  basisAtMs: number | null,
+): MarketingConsentSource | null {
+  if (record[MARKETING_CONSENT_BASIS_FIELD] !== OPERATOR_ATTESTED_CONSENT_BASIS)
+    return null
+  const by = record['marketingConsentByUid']
+  return {
+    kind: OPERATOR_ATTESTED_CONSENT_KIND,
+    by: typeof by === 'string' ? by : '',
+    atMs: basisAtMs,
+    reason:
+      typeof record['marketingConsentReason'] === 'string'
+        ? (record['marketingConsentReason'] as string)
+        : '',
   }
 }
 
