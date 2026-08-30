@@ -28,6 +28,7 @@ import {
   addHostLead,
   firebaseAdmin,
   recordVisitorRecordCeilingTrip,
+  resolveCampaignTouch,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
@@ -186,6 +187,25 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
     // writer that enforces `LEADS_MAX_PER_HOST` (AGL-1529). A refused lead
     // never fails the sign-up: the visitor asked for an account, not for a
     // lead record, and the trip is recorded for the owner either way.
+    /*
+     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SIGN-UP.
+     *
+     * A sign-up is the identify moment for a visitor who has been anonymous
+     * until now, and it writes two records that a campaign can be credited
+     * with — the lead and the contact. One resolve, one keyed read, and the
+     * two cannot end up naming different campaigns.
+     *
+     * The MEMBER record itself is not attributed. A member is an account the
+     * visitor holds and the lead is the site's record of the same act, so
+     * crediting both would count one sign-up twice under two names.
+     */
+    const signedUpAtMs = Date.now()
+    const campaignTouch = await resolveCampaignTouch({
+      hostId,
+      wire: req.body?.campaignTouch,
+      email,
+      atMs: signedUpAtMs,
+    })
     await addHostLead({
       hostRef,
       hostId,
@@ -199,6 +219,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
         source: 'signup',
         ...(marketingConsent ? { marketingConsent: true } : {}),
       },
+      ...(campaignTouch ? { touch: campaignTouch } : {}),
     })
     // Contacts ingestion (AGL-197).
     void upsertHostContact({
@@ -208,6 +229,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       source: 'member',
       interaction: { refId: memberRef.id, summary: 'Joined as a member' },
       ...(marketingConsent ? { marketingConsent: true } : {}),
+      ...(campaignTouch ? { campaignTouch } : {}),
     })
     // Event triggers (AGL-128/148): sign-ups double as leads here too.
     await emitHostEvent(hostId, 'memberSignUp', { email })

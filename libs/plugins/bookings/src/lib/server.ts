@@ -94,6 +94,8 @@ import {
   getOrgForHost,
   meterHostEmail,
   notifyHostManagers,
+  attributeCampaignConversion,
+  resolveCampaignTouch,
   upsertHostContact,
   getPluginConfig,
   resolveOrgIdForHost,
@@ -505,6 +507,35 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       return bookingRef.id
     })
 
+    /*
+     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE BOOKING.
+     *
+     * A booking is an identify moment: the visitor was anonymous while they
+     * browsed and picked a slot, and this request is the first thing that
+     * names them. Both channels are asked here — the labels their device
+     * carried, and the campaign mail they clicked, joined on the address they
+     * just typed — and the later of the two is credited, exactly as the
+     * revenue join credits the later click.
+     *
+     * Resolved once and handed to the booking record, the contact and the
+     * lead below, so the email-channel lookup is one keyed read for the whole
+     * request and the three records cannot name different campaigns.
+     */
+    const bookedAtMs = Date.now()
+    const campaignTouch = await resolveCampaignTouch({
+      hostId,
+      wire: req.body?.campaignTouch,
+      email,
+      atMs: bookedAtMs,
+    })
+    void attributeCampaignConversion({
+      hostId,
+      kind: 'booking',
+      refId: bookingId,
+      touch: campaignTouch,
+      convertedAtMs: bookedAtMs,
+    })
+
     // Contacts ingestion (AGL-197) — booking requests identify a person.
     void upsertHostContact({
       hostId,
@@ -516,6 +547,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         summary: `Booked "${String(service.name ?? 'a service').slice(0, 60)}"`,
       },
       ...(marketingConsent ? { marketingConsent: true } : {}),
+      ...(campaignTouch ? { campaignTouch } : {}),
     })
 
     if (paid) {
@@ -657,6 +689,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           source: 'booking',
           ...(marketingConsent ? { marketingConsent: true } : {}),
         },
+        ...(campaignTouch ? { touch: campaignTouch } : {}),
       })
       return res
         .status(200)
@@ -675,6 +708,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         source: 'booking',
         ...(marketingConsent ? { marketingConsent: true } : {}),
       },
+      ...(campaignTouch ? { touch: campaignTouch } : {}),
     })
 
     // Event trigger (AGL-128/148/159).

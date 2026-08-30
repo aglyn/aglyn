@@ -33,6 +33,13 @@ jest.mock('./email-revenue-attribution', () => ({
     (attributeOrderToEmail as any)(...args),
 }))
 
+const attributeCampaignConversion = jest.fn(async () => null)
+jest.mock('./campaign-conversion-attribution', () => ({
+  __esModule: true,
+  attributeCampaignConversion: (...args: unknown[]) =>
+    (attributeCampaignConversion as any)(...args),
+}))
+
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     increment: (operand: number) => ({ __inc: operand }),
@@ -116,6 +123,7 @@ describe('upsertHostContact reaches the revenue join', () => {
     droppedCounter.length = 0
     quotaAllowed = true
     attributeOrderToEmail.mockClear()
+    attributeCampaignConversion.mockClear()
   })
 
   it('offers a purchase to the join, with the order it names', async () => {
@@ -202,5 +210,101 @@ describe('upsertHostContact reaches the revenue join', () => {
       interaction: { refId: 'order_7' },
     })
     expect(attributeOrderToEmail).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The OTHER door on this function — the identify moments an order does not
+ * cover.
+ *
+ * The two joins share a function and must never share a conversion: an order
+ * is credited by `attributeOrderToEmail`, keyed on the order id, and a second
+ * record for the same sale would be one sale counted twice under two rules.
+ */
+describe('upsertHostContact reaches the conversion join', () => {
+  const TOUCH = {
+    channel: 'web' as const,
+    campaign: 'sept-launch',
+    touchedAtMs: 1_700_000_000_000,
+  }
+
+  beforeEach(() => {
+    for (const key of Object.keys(contacts)) delete contacts[key]
+    added = []
+    droppedCounter.length = 0
+    quotaAllowed = true
+    attributeOrderToEmail.mockClear()
+    attributeCampaignConversion.mockClear()
+  })
+
+  it('credits a NEW contact to the campaign the door resolved', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'visitor@example.com',
+      source: 'form',
+      interaction: { refId: 'form_1', atMs: 1_700_000_100_000 },
+      campaignTouch: TOUCH,
+    })
+
+    expect(attributeCampaignConversion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: 'h1',
+        kind: 'contact',
+        refId: 'auto-1',
+        touch: TOUCH,
+        convertedAtMs: 1_700_000_100_000,
+      }),
+    )
+  })
+
+  it('credits NOTHING when the door resolved no campaign', async () => {
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'visitor@example.com',
+      source: 'form',
+      interaction: { refId: 'form_1' },
+    })
+
+    expect(added).toHaveLength(1)
+    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+  })
+
+  it('credits nothing for a person the site ALREADY held', async () => {
+    contacts['c1'] = { email: 'visitor@example.com', interactions: [] }
+
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'visitor@example.com',
+      source: 'form',
+      interaction: { refId: 'form_2' },
+      campaignTouch: TOUCH,
+    })
+
+    // A returning visitor's capture is another visit, not a new person.
+    // Crediting it would let whichever campaign ran most recently re-earn the
+    // entire contact list.
+    expect(added).toEqual([])
+    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+  })
+
+  it('credits nothing when the audience band gate DROPS the contact', async () => {
+    // The deliberate opposite of the revenue join above, which is offered the
+    // order from OUTSIDE this gate. Money is real whether or not a CRM record
+    // was kept; a contact that was dropped does not exist, and reporting a
+    // campaign as having produced people the customer cannot find anywhere in
+    // the console would be a figure with nothing behind it.
+    quotaAllowed = false
+
+    await upsertHostContact({
+      hostId: 'h1',
+      email: 'visitor@example.com',
+      source: 'form',
+      interaction: { refId: 'form_1' },
+      campaignTouch: TOUCH,
+    })
+
+    expect(added).toEqual([])
+    expect(droppedCounter.length).toBe(1)
+    expect(attributeCampaignConversion).not.toHaveBeenCalled()
   })
 })

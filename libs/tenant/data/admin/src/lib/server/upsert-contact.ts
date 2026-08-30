@@ -26,6 +26,10 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { attributeOrderToEmail } from './email-revenue-attribution'
+import {
+  attributeCampaignConversion,
+  type ResolvedCampaignTouch,
+} from './campaign-conversion-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   getOrgForHost,
@@ -97,6 +101,20 @@ export async function upsertHostContact(options: {
    * to the dollars.
    */
   purchaseCurrency?: string
+  /**
+   * The campaign this person came from, already resolved by the door.
+   *
+   * ⛔ The ORDER path passes none, and must not start. An order already has
+   * its own join one branch below — `attributeOrderToEmail`, keyed on the
+   * order id — and a second record for the same sale would be the same money
+   * counted twice under two rules. This is the door for the moments an order
+   * does NOT cover: a form submission, a membership sign-up, a booking, a
+   * newsletter capture.
+   *
+   * Resolved rather than raw, for the reason `addHostLead` states: one
+   * visitor action reaches several writers and the touch lookup is paid once.
+   */
+  campaignTouch?: ResolvedCampaignTouch | null
 }): Promise<void> {
   try {
     const email = normalizeContactEmail(options.email)
@@ -225,7 +243,7 @@ export async function upsertHostContact(options: {
       return
     }
 
-    await contactsRef.add({
+    const created = await contactsRef.add({
       hostId: options.hostId,
       // Org-wide by default — today's behavior. Keeping the field
       // populated on every new contact is what lets the scoped reads
@@ -251,6 +269,32 @@ export async function upsertHostContact(options: {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })
+    /*
+     * ATTRIBUTED ON CREATION ONLY, and therefore below the band gate rather
+     * than above it — the opposite placement to the order join at the top of
+     * this function, deliberately.
+     *
+     * The order join sits above because it credits MONEY, which is real
+     * whether or not a CRM record was kept for the buyer, and a Free org past
+     * its included band would otherwise silently drop the revenue with the
+     * contact. This credits a contact, which does not exist when the band
+     * dropped it: attributing one above the gate would report a campaign as
+     * having produced people the customer cannot see anywhere in the console.
+     *
+     * The existing-contact branch above returns without reaching here, which
+     * is the same rule `addHostLead` applies — an interaction appended to
+     * somebody the site already held is another visit, not a new person, and
+     * crediting it would let the most recent campaign re-earn the whole list.
+     */
+    if (options.campaignTouch) {
+      await attributeCampaignConversion({
+        hostId: options.hostId,
+        kind: 'contact',
+        refId: created.id,
+        touch: options.campaignTouch,
+        convertedAtMs: interaction.atMs,
+      })
+    }
   } catch (error) {
     console.error('upsertHostContact failed', error)
   }

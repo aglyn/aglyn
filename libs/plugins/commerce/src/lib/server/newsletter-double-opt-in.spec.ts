@@ -60,6 +60,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   meterHostEmail: async (hostId: string) => {
     metered.push(hostId)
   },
+  // The attribution seam the handler resolves once per signup. Recorded as
+  // nothing — `campaign-conversion-attribution.spec.ts` owns the write — and
+  // defined here at all because a mocked module answers `undefined` for a
+  // name it does not list, which would make the handler throw rather than
+  // fail an assertion.
+  resolveCampaignTouch: async () => null,
   upsertHostContact: async (options: Record<string, unknown>) => {
     upserted.push(options)
   },

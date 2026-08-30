@@ -81,6 +81,7 @@ import {
   type EmailDeliverySnapshot,
   worstDeliveryStatus,
 } from '@aglyn/shared-util-email'
+import { eraseCampaignAttributionsForPersonKey } from './campaign-attribution-store'
 import { emailSuppressionKey } from './email-suppression'
 import firebaseAdmin from './firebase-admin'
 
@@ -1363,6 +1364,24 @@ export async function eraseEmailDeliveriesForAddresses(
     } catch (error) {
       console.error('[email-delivery-log] tombstone write failed', error)
     }
+
+    /*
+     * And the CONCLUSIONS drawn from those touches, on every site.
+     *
+     * A conversion attribution says "this person came from that campaign and
+     * then submitted this form / became this lead / made this booking". It is
+     * derived from the click stamp deleted a few lines above and is a
+     * strictly stronger statement than the stamp was, so deleting the stamp
+     * and keeping the attribution would be an erasure that removed the
+     * evidence and kept the conclusion.
+     *
+     * Keyed on `personKey`, which is `emailSuppressionKey` — the same
+     * derivation, one function — so the sweep covers exactly the person this
+     * loop is erasing. Per address rather than per host, because an erasure
+     * request names an address and knows nothing about which sites it ever
+     * visited.
+     */
+    await eraseCampaignAttributionsForPersonKey(key, db)
   }
 
   return { removed, addresses: erased, contestedAddresses }

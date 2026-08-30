@@ -194,8 +194,44 @@ function fakeDeliveryFirestore() {
     return api
   }
 
+  /**
+   * Collection-group reads, which the erasure needs and no other case here
+   * does. The conversion attributions an erasure has to reach live under
+   * `hosts/{hostId}/campaignAttributions`, per SITE, while an erasure request
+   * names only an ADDRESS — so a double that could only walk one host's
+   * collection would let the sweep pass while reaching nothing. It swallows
+   * its own errors, so a missing `collectionGroup` here reads as an erasure
+   * that removed zero records rather than as a broken double.
+   */
+  const groupQuery = (
+    name: string,
+    field?: string,
+    value?: unknown,
+    cap = Infinity,
+  ): any => ({
+    where: (nextField: string, _op: string, nextValue: unknown) =>
+      groupQuery(name, nextField, nextValue, cap),
+    limit: (n: number) => groupQuery(name, field, value, n),
+    get: async () => {
+      const matched = [...store.entries()]
+        .filter(([path]) => path.split('/').slice(-2)[0] === name)
+        .filter(([, data]) => !field || data[field] === value)
+        .slice(0, cap)
+      return {
+        empty: matched.length === 0,
+        size: matched.length,
+        docs: matched.map(([path, data]) => ({
+          id: path.split('/').pop(),
+          ref: docRef(path),
+          data: () => data,
+        })),
+      }
+    },
+  })
+
   return {
     collection: (name: string) => collectionRef(name),
+    collectionGroup: (name: string) => groupQuery(name),
     runTransaction: async (body: (transaction: any) => Promise<void>) =>
       body({
         get: async (ref: any) => ref.get(),
@@ -222,6 +258,15 @@ function fakeDeliveryFirestore() {
         data: () => store.get(ref.path),
         get: (field: string) => store.get(ref.path)?.[field],
       })),
+    /** Spec helper: seed and read one conversion attribution record. */
+    seedAttribution: (hostId: string, id: string, personKey: string) =>
+      store.set(`hosts/${hostId}/campaignAttributions/${id}`, {
+        kind: 'form',
+        refId: id,
+        personKey,
+      }),
+    attribution: (hostId: string, id: string) =>
+      store.get(`hosts/${hostId}/campaignAttributions/${id}`),
     /** Spec helper: the raw document, by address and message id. */
     read: (email: string, messageId: string) =>
       store.get(
@@ -1154,6 +1199,45 @@ describe('erasure removes the summary, not only the messages it came from', () =
     expect(
       await readEmailCampaignTouch('person@example.com', 'host1', firestore),
     ).toBeNull()
+  })
+
+  it('clears the CONVERSIONS those touches were credited with, on every site', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const key = emailSuppressionKey('person@example.com') as string
+    firestore.seedAttribution('host1', 'form:s1', key)
+    firestore.seedAttribution('host2', 'lead:l1', key)
+    firestore.seedAttribution('host2', 'form:s2', 'somebody-else')
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com' }],
+      firestore,
+    )
+
+    // "This person came from that campaign and then filled in this form" is a
+    // strictly stronger statement than the click it was derived from, so
+    // deleting the click above and keeping this would be an erasure that
+    // removed the evidence and kept the conclusion.
+    expect(firestore.attribution('host1', 'form:s1')).toBeUndefined()
+    // Per ADDRESS, not per host: the request names an address and knows
+    // nothing about which sites it ever visited.
+    expect(firestore.attribution('host2', 'lead:l1')).toBeUndefined()
+    // And nobody else's.
+    expect(firestore.attribution('host2', 'form:s2')).toBeDefined()
+  })
+
+  it('leaves a contested address’s conversions exactly where they are', async () => {
+    const firestore = fakeDeliveryFirestore()
+    const key = emailSuppressionKey('person@example.com') as string
+    firestore.seedAttribution('host1', 'form:s1', key)
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com', shared: true }],
+      firestore,
+    )
+
+    // A contested address is not erased at all, and the sweep must not run
+    // past the `continue` that decided so — there is no undo below that line.
+    expect(firestore.attribution('host1', 'form:s1')).toBeDefined()
   })
 
   it('leaves a contested address’s engagement exactly where it was', async () => {

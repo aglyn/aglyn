@@ -16,6 +16,7 @@
  */
 
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline, mdiFormTextbox } from '@aglyn/shared-data-mdi'
 import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
@@ -252,6 +253,11 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             path: window.location.pathname,
             fields,
             website,
+            // The campaign this visitor came from, when they came from one.
+            // Absent entirely for direct traffic — never a placeholder, so
+            // the server can tell "arrived from nowhere" from "this door does
+            // not report".
+            ...campaignTouchField(),
           }),
         })
         if (response.ok) {

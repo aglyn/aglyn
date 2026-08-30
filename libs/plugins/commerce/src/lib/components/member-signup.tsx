@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { mdiAccountPlusOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -78,6 +79,10 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
             password,
             ...(displayName ? { displayName } : {}),
             ...(marketingConsent ? { marketingConsent: true } : {}),
+            // The campaign this visitor came from, when they came from one.
+            // A sign-up is the identify moment that also writes a lead, so
+            // the touch has to arrive with the request that creates it.
+            ...campaignTouchField(),
           }),
         })
         if (!response.ok) {

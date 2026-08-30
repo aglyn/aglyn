@@ -34,6 +34,10 @@ import {
   type VisitorRecordKind,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  attributeCampaignConversion,
+  type ResolvedCampaignTouch,
+} from './campaign-conversion-attribution'
 import { notifyHostManagers } from './notifications'
 
 /**
@@ -189,6 +193,16 @@ export async function addHostLead(options: {
    * it cannot be absorbed by a fallback branch.
    */
   ceiling?: number
+  /**
+   * The campaign this person came from, already resolved by the door.
+   *
+   * Resolved rather than raw, and passed rather than looked up, because one
+   * visitor action reaches several writers: a form submission that creates a
+   * submission, a contact AND a lead must pay for the touch lookup once. A
+   * door that hands none — every order path, every import — attributes
+   * nothing, which is how a lead that no campaign caused stays uncredited.
+   */
+  touch?: ResolvedCampaignTouch | null
 }): Promise<boolean> {
   const { hostRef, hostId, lead } = options
   const maxPerHost = options.ceiling ?? LEADS_MAX_PER_HOST
@@ -213,7 +227,12 @@ export async function addHostLead(options: {
       submissionCount: FieldValue.increment(1),
       ...(lead.name ? { name: lead.name } : {}),
     }
+    let created = false
     const refused = await firestore.runTransaction(async (tx) => {
+      // Reset per attempt: a contended transaction re-runs its body, and a
+      // flag left standing from an aborted attempt would credit a campaign
+      // with a person who turned out to exist already.
+      created = false
       // ALL READS BEFORE THE WRITE, which Firestore requires.
       const existing = await tx.get(leadRef)
       /*
@@ -244,6 +263,7 @@ export async function addHostLead(options: {
        * capture would rewrite when this person opted in.
        */
       const alreadyConsented = existing.get('marketingConsent') === true
+      created = !existing.exists
       tx.set(
         leadRef,
         {
@@ -274,6 +294,29 @@ export async function addHostLead(options: {
         ceiling: maxPerHost,
       })
       return false
+    }
+    /*
+     * ATTRIBUTED ON CREATION ONLY.
+     *
+     * A returning visitor's capture is an update — the campaign did not
+     * produce a lead, it produced another visit by a person the site already
+     * held — and crediting it would let whichever campaign ran most recently
+     * re-earn every lead on the list. `created` is set inside the transaction
+     * that decides it, so the attribution and the write agree about whether
+     * this person is new.
+     *
+     * Awaited rather than fired off: `addHostLead` already returns only after
+     * its own write, and a caller that `void`s it (every one of them) is
+     * unaffected. Never throws, so a failure here cannot cost the lead.
+     */
+    if (created && options.touch) {
+      await attributeCampaignConversion({
+        hostId,
+        kind: 'lead',
+        refId: leadRef.id,
+        touch: options.touch,
+        convertedAtMs: now,
+      })
     }
     return true
   } catch (error) {

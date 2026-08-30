@@ -1440,6 +1440,15 @@ describe('hosts', () => {
       // refund with nothing to reverse — a revenue figure that can only ever
       // go up. Named here for the `registers` reason above.
       'emailAttributions',
+      // One document per CONVERSION — a form submission, a lead, a contact or
+      // a booking — naming the campaign the visitor came from and carrying
+      // `personKey`, the address hash an erasure joins on. Written only by
+      // `campaign-conversion-attribution.ts` on the Admin SDK. A client that
+      // could create one would credit a campaign for a conversion that never
+      // happened and forge a claim about where somebody else came from; one
+      // that could delete one would remove the record an erasure is meant to
+      // be the only remover of. Named here for the `registers` reason above.
+      'campaignAttributions',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
