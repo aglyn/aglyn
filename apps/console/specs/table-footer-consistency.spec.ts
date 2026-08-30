@@ -898,6 +898,16 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/email/src/lib/components/campaign-report-card.tsx',
+    'Two tables, neither of which grows with the audience. The populations ' +
+      'table is one row per named part of the send — consented, ' +
+      'grandfathered, withheld, suppressed — a fixed taxonomy. The links ' +
+      'table is bounded by `CAMPAIGN_LINK_ROLLUP_MAX` (50), enforced at ' +
+      'ROLLUP time rather than at read time, with anything past the cap ' +
+      'counted and reported instead of dropped. A 50,000-recipient send and ' +
+      'a 50-recipient one render the same number of rows.',
+  ],
+  [
     'apps/console/app/(app)/admin/revenue/page.tsx',
     'Attribution and earnings BREAKDOWNS — one row per traffic source, plan ' +
       'or refund cause. The cardinality is the taxonomy’s, not the traffic’s.',
@@ -1284,10 +1294,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
     expect(OWES_A_FOOTER).toHaveLength(15)
-    // 28 since the inbox glance joined the dashboard: a new preview card is
-    // a new classification, and it is raised here deliberately rather than
-    // by a walk that quietly stopped reaching the file.
-    expect(NOT_A_LIST).toHaveLength(28)
+    // 29 since the per-campaign report joined the Emails section. Both of its
+    // tables are capped by construction — a fixed population taxonomy, and a
+    // link rollup bounded at WRITE time — so neither can grow with an
+    // audience, which is the property this list exists to record. Raised here
+    // deliberately rather than by a walk that quietly stopped reaching a file.
+    expect(NOT_A_LIST).toHaveLength(29)
   })
 })
 
