@@ -46,6 +46,7 @@ export function registerInboxConsole(): void {
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         widgetId: 'inbox-glance',
+        title: 'Inbox',
         Component: InboxGlanceCard,
       },
     ],
