@@ -324,7 +324,7 @@ describe('the list page never carries the composer', () => {
     // shape this test exists to keep off the page.
     expect(screen.queryByText('Send campaign')).toBeNull()
     expect(screen.queryByText('Save draft')).toBeNull()
-    expect(screen.queryByText('Send test to me')).toBeNull()
+    expect(screen.queryByText('Send test')).toBeNull()
   })
 
   it('stays put and says so when the create fails', async () => {

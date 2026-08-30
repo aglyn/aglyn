@@ -433,7 +433,7 @@ describe('a marketing campaign sends only where a basis permits it', () => {
       await send({
         audience: 'manual',
         emails: ['admin@example.com'],
-        selfProofFor: 'admin@example.com',
+        proofFor: 'admin@example.com',
       })
       expect(delivered()).toEqual(['admin@example.com'])
     })
@@ -449,7 +449,7 @@ describe('a marketing campaign sends only where a basis permits it', () => {
         send({
           audience: 'manual',
           emails: ['someone@example.com'],
-          selfProofFor: 'attacker@example.com',
+          proofFor: 'attacker@example.com',
         }),
       ).rejects.toThrow(/consent record/i)
       expect(mockState.sent).toHaveLength(0)
@@ -464,7 +464,7 @@ describe('a marketing campaign sends only where a basis permits it', () => {
       await send({
         audience: 'manual',
         emails: ['admin@example.com', 'stranger@example.com'],
-        selfProofFor: 'admin@example.com',
+        proofFor: 'admin@example.com',
       })
       expect(delivered()).toEqual(['admin@example.com'])
     })
@@ -481,7 +481,7 @@ describe('a marketing campaign sends only where a basis permits it', () => {
       await expect(
         send({
           audience: 'leads',
-          selfProofFor: 'declined@example.com',
+          proofFor: 'declined@example.com',
         }),
       ).rejects.toThrow(/recorded marketing opt-out/i)
       expect(mockState.sent).toHaveLength(0)

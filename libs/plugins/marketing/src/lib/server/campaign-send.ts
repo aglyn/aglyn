@@ -403,17 +403,78 @@ export interface CampaignSendOptions {
    */
   continuation?: boolean
   /**
-   * The requester's OWN verified address, for the composer's test send
-   * (AGL-349). Exempts exactly this address from the marketing-consent rule.
+   * ONE address the caller has been proved to be entitled to proof to, for
+   * the composer's test send. Exempts exactly this address from the
+   * marketing-consent rule.
    *
-   * See the carve-out at the consent join for why a proof of your own draft
-   * is not a marketing send, and for the two properties that keep the
-   * exemption one address wide.
+   * The route decides entitlement and this file decides what the exemption
+   * can do. See {@link eligibleProofAddress} for the first half and the
+   * carve-out at the consent join for the second — including the two
+   * properties that keep the exemption one address wide however the caller
+   * arrived at it.
    */
-  selfProofFor?: string
+  proofFor?: string
+  /**
+   * Test send only: render every message as if it were addressed to this
+   * person, while DELIVERING to the recipient resolved in the ordinary way.
+   *
+   * What a merge tag resolves to is the whole question a proof answers. A
+   * test rendered against the tester shows `{{firstName|there}}` falling back
+   * for an audience whose contacts all have names, which reports the merge
+   * tags as broken when they work — and, more expensively, hides the reverse.
+   *
+   * It changes the RENDER and nothing else. The unsubscribe link, the
+   * `List-Unsubscribe` header and the suppression key are all minted from the
+   * delivery address, deliberately: a proof carrying the persona's opt-out
+   * link would let the person testing the email unsubscribe a real contact by
+   * clicking a link in their own inbox.
+   */
+  proofPersona?: { email: string; name?: string }
+  /**
+   * WHICH OF THE SITE'S IDENTITIES THIS SEND LEAVES ON.
+   *
+   * Two values and no more: empty for the site's standing selection, and
+   * {@link PLATFORM_SENDING_IDENTITY} for the shared Aglyn domain. It is a
+   * CHOICE BETWEEN the identities this site already has, and never a name a
+   * request supplies.
+   *
+   * ## Why it is not a domain name
+   *
+   * Because a domain name in a request is the spoofing path, and it stays
+   * closed. `campaignSendHandler` builds its options from the body, so any
+   * field read off `options` is a field an authenticated site editor chooses.
+   * A domain here would let an editor of one site in an agency org send as a
+   * DIFFERENT client's verified domain — the org proved that name, so a
+   * resolver checking only "is this verified for the org" would say yes.
+   *
+   * Which identity a site may use is the per-host half of the model, stored
+   * at `hosts/{hostId}.sendingDomain` and written by an org admin. This
+   * option picks between that and the shared domain; it cannot reach past it.
+   *
+   * ## Why `platform` is a choice rather than a fallback
+   *
+   * An unverified selection still REFUSES — there is no arm anywhere that
+   * reaches a platform address from a domain whose DNS is unfinished. This is
+   * the opposite direction: a merchant with a working custom identity saying
+   * "send this one from the shared domain", which is a decision they are
+   * entitled to make and which is recorded on the send.
+   */
+  sendingIdentity?: string
   /** Recorded as `sentBy`; the scheduler passes the scheduling user. */
   senderUid: string
 }
+
+/**
+ * The value of {@link CampaignSendOptions.sendingIdentity} that names the
+ * shared Aglyn domain.
+ *
+ * A reserved word rather than an empty string, because empty already means
+ * something different and load-bearing: "the composer expressed no opinion,
+ * use the site's standing selection". A merchant choosing the shared domain
+ * for one send has expressed an opinion, and a site whose default is its own
+ * verified domain must not have that choice read as silence.
+ */
+export const PLATFORM_SENDING_IDENTITY = 'platform'
 
 /**
  * Loads a designed email template's nodes + referenced products for the
@@ -1166,18 +1227,19 @@ export async function performCampaignSend(
     ],
   )
   /*
-   * THE SELF-PROOF CARVE-OUT.
+   * THE PROOF CARVE-OUT.
    *
-   * A proof delivered to the requester's own verified address is not a
-   * marketing send. The recipient is the person who pressed the button, and
-   * the consent rule exists to protect somebody from mail they did not ask
-   * for — which is not something you can do to yourself.
+   * A proof delivered to an account holder on this workspace is not a
+   * marketing send. The recipient is the person who pressed the button, or a
+   * colleague of theirs who already receives this workspace's console mail,
+   * and the consent rule exists to protect somebody from mail they did not
+   * ask for — which is not what proofing a draft to your own team is.
    *
    * Without this the composer's test send is dead under `strict`: it delivers
-   * to the caller's account address through the `manual` audience, a
-   * hand-typed address is backed by no document, and `unrecorded` is withheld
-   * before reaching the clause that grandfathers a record carrying no capture
-   * date. Proofing your own email would be refused on consent grounds.
+   * through the `manual` audience, a hand-typed address is backed by no
+   * document, and `unrecorded` is withheld before reaching the clause that
+   * grandfathers a record carrying no capture date. Proofing your own email
+   * would be refused on consent grounds.
    *
    * ⚠️ TWO PROPERTIES KEEP THE EXEMPTION ONE ADDRESS WIDE, and both are here
    * rather than at the call site, because a caller that could widen it is
@@ -1187,19 +1249,42 @@ export async function performCampaignSend(
    *      therefore only exempt a recipient, never introduce one — passing an
    *      address that is not being sent to does nothing at all.
    *   2. A stored `declined` is still refused, below. A refusal is the one
-   *      thing no policy may mail, and a self-proof is not the first
-   *      exception to it: an admin who declined marketing to their own site
-   *      un-declines rather than being quietly overridden.
+   *      thing no policy may mail, and a proof is not the first exception to
+   *      it: somebody who declined marketing on this site un-declines rather
+   *      than being quietly overridden.
+   *
+   * Neither of them is what stops a merchant proofing to a stranger. That is
+   * {@link eligibleProofAddress}, at the route, because it is a question
+   * about WHO an address belongs to and this function has no way to ask it.
+   * The two here are what hold when that check is wrong.
    */
-  const proofFor = String(options.selfProofFor ?? '')
+  const proofFor = String(options.proofFor ?? '')
     .trim()
     .toLowerCase()
   const proofAddress = proofFor && resolved.includes(proofFor) ? proofFor : ''
+  /*
+   * THE ONE READ THAT MAKES THE `declined` GUARANTEE TRUE.
+   *
+   * A proof is delivered through the `manual` audience, and a manual audience
+   * is a list of ADDRESSES — no documents are swept, so `consent` is empty
+   * and every proof address arrives as `unrecorded`. The refusal below was
+   * therefore unreachable on the only path that can reach it: the carve-out
+   * promised that a stored opt-out still refuses, and nothing ever looked one
+   * up.
+   *
+   * Keyed on the single address and only when a proof is in flight, so the
+   * cost is one small lookup on an explicit click rather than anything on the
+   * campaign path.
+   */
+  if (proofAddress && !consent.has(proofAddress)) {
+    const stored = await readStoredConsent(hostId, proofAddress)
+    if (stored) consent.set(proofAddress, readMarketingBasis(stored))
+  }
   if (proofAddress && consent.get(proofAddress)?.basis === 'declined') {
     throw new CampaignSendError(
-      'Your account address has a recorded marketing opt-out on this site, ' +
-        'so the test send was not delivered. Opt back in to proof designed ' +
-        'emails to yourself.',
+      `${proofAddress} has a recorded marketing opt-out on this site, so the ` +
+        'test send was not delivered. Proof to an address that has not opted ' +
+        'out, or opt that one back in.',
       400,
     )
   }
@@ -1473,9 +1558,21 @@ export async function performCampaignSend(
    * ever said so, since every sender treats mail as best-effort. A tenant
    * whose DNS is unfinished has to be told, by name, at the composer.
    */
+  /*
+   * The site's standing selection, or nothing at all when this send chose the
+   * shared domain.
+   *
+   * The ONLY thing an option can do here is drop the selection. It cannot
+   * introduce one, which is what keeps a request from naming a domain to send
+   * as — the address is assembled from the host document in both arms, and
+   * resolved through the same function on the same terms either way.
+   */
   const sendingIdentity = await resolveHostSendingIdentity({
     orgId,
-    selectedDomain: hostSnapshot.get('sendingDomain'),
+    selectedDomain:
+      String(options.sendingIdentity ?? '').trim() === PLATFORM_SENDING_IDENTITY
+        ? ''
+        : hostSnapshot.get('sendingDomain'),
     selectedLocalPart: hostSnapshot.get('sendingLocalPart'),
   })
   const identityRefusal = sendingIdentityRefusal(sendingIdentity)
@@ -1828,7 +1925,17 @@ export async function performCampaignSend(
         body: variant?.body?.trim() || body,
         preheader: options.preheader,
         template,
-        recipient: { email, name: names.get(email) },
+        /*
+         * The persona where a proof named one, and the actual recipient
+         * everywhere else.
+         *
+         * Only the RENDER moves. `email` above still decides who the message
+         * is delivered to, which unsubscribe link is signed, and which
+         * address a suppression would be recorded against — so a proof shows
+         * a real contact's merge values without putting that contact's
+         * opt-out link in somebody else's inbox.
+         */
+        recipient: options.proofPersona ?? { email, name: names.get(email) },
         siteBase,
         hostId,
         unsubscribeUrl,
@@ -2142,6 +2249,12 @@ export async function performCampaignSend(
       // is read months later, by which time the org's branding default may be
       // a different name than the one this campaign went out under.
       ...(options.fromName ? { fromName: options.fromName } : {}),
+      // Which identity it left on, for the same reason the display name is
+      // recorded: the site's standing selection can move, and a report read
+      // months later has to say what THIS send went out as.
+      ...(options.sendingIdentity
+        ? { sendingIdentity: options.sendingIdentity }
+        : {}),
       ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       ...(options.preheader ? { preheader: options.preheader } : {}),
       ...(options.displayName ? { displayName: options.displayName } : {}),
@@ -2337,6 +2450,328 @@ export async function performCampaignSend(
  * Refuses a send carrying neither a template nor a body, which has no message
  * whichever caller asked.
  */
+/*==========================================
+  Who a proof may reach, and whose data fills it
+==========================================*/
+
+/** One address a test send is allowed to be delivered to. */
+export interface ProofRecipient {
+  email: string
+  /** A person's name where the membership record carries one. */
+  label: string
+  /** True for the caller's own account address. */
+  self: boolean
+}
+
+/**
+ * THE ADDRESSES A TEST SEND MAY BE DELIVERED TO.
+ *
+ * The caller's own account address, plus every account holder on the org that
+ * owns this site. Exported because the composer has to OFFER this set — a
+ * free-text box beside a rule enforced on the server is a box whose every
+ * wrong answer is a refusal the person could not have predicted.
+ *
+ * ## Why membership, and not "any address the merchant types"
+ *
+ * A test send is exempt from the marketing-consent rule (see the proof
+ * carve-out in `performCampaignSend`). An exemption that could be pointed at
+ * any address would not be a test-send feature, it would be a way to mail
+ * anybody without consent and call it a test. Membership is the narrowest
+ * boundary that still answers what the button is for: proofing a draft to the
+ * people who work on it.
+ *
+ * ## What is NOT here
+ *
+ * `siteMembers`, `leads` and contacts. They are the tenant's audience, and
+ * the audience is precisely the population the consent rule protects. A
+ * contact can be chosen as the PERSONA a proof renders as — see
+ * {@link resolveProofPersona} — which reaches nobody.
+ *
+ * ## What this does not relax
+ *
+ * Everything else. The send still runs both suppression lists, so an address
+ * that bounced or complained is refused however senior its owner; and a
+ * stored `declined` on the address still refuses, because a refusal is the
+ * one thing no policy may mail.
+ */
+export async function proofRecipientsForHost(options: {
+  hostId: string
+  callerEmail: string
+}): Promise<ProofRecipient[]> {
+  const callerEmail = String(options?.callerEmail ?? '')
+    .trim()
+    .toLowerCase()
+  const found = new Map<string, ProofRecipient>()
+  if (callerEmail) {
+    found.set(callerEmail, { email: callerEmail, label: 'You', self: true })
+  }
+
+  const orgForHost = await getOrgForHost(options?.hostId).catch(() => null)
+  const orgId = String(orgForHost?.orgId ?? '')
+  if (!orgId) return [...found.values()]
+
+  const members = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('members')
+    /*
+     * A ceiling rather than the whole roster, because this feeds a picker and
+     * a picker of two thousand names is not a picker. It is ordered by
+     * document id so the page is stable across calls — a `limit` with no
+     * order is a random sample, and a person who saw a colleague in the list
+     * yesterday must not find them missing today.
+     */
+    .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
+    .limit(200)
+    .get()
+    .catch(() => null)
+
+  for (const doc of members?.docs ?? []) {
+    const email = String(doc.get('email') ?? '')
+      .trim()
+      .toLowerCase()
+    if (!email || found.has(email)) continue
+    found.set(email, {
+      email,
+      label: String(doc.get('displayName') ?? '').trim() || email,
+      self: false,
+    })
+  }
+  return [...found.values()]
+}
+
+/**
+ * Whether one address may receive a proof of this site's mail.
+ *
+ * Asked as a membership question rather than by scanning
+ * {@link proofRecipientsForHost}'s ceilinged page: the picker is allowed to
+ * show the first two hundred colleagues, and the gate is not allowed to
+ * refuse the two hundred and first.
+ */
+async function eligibleProofAddress(options: {
+  hostId: string
+  callerEmail: string
+  address: string
+}): Promise<boolean> {
+  const address = String(options?.address ?? '')
+    .trim()
+    .toLowerCase()
+  if (!address) return false
+  if (address === String(options?.callerEmail ?? '').trim().toLowerCase()) {
+    return true
+  }
+
+  const orgForHost = await getOrgForHost(options?.hostId).catch(() => null)
+  const orgId = String(orgForHost?.orgId ?? '')
+  if (!orgId) return false
+
+  const match = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('members')
+    .where('email', '==', address)
+    .limit(1)
+    .get()
+    .catch(() => null)
+  return Boolean(match && !match.empty)
+}
+
+/** One person a proof can be rendered as. Reaches nobody. */
+export interface ProofPersona {
+  email: string
+  name: string
+  /** Which audience the record came from, so the drawer can say. */
+  source: 'lead' | 'member' | 'contact'
+}
+
+/** How many of each source the persona picker offers. */
+const PROOF_PERSONA_SAMPLE = 20
+
+/**
+ * A SAMPLE of the people this site's mail is addressed to, for the picker.
+ *
+ * A sample and not a search: the question the drawer asks is "show me this
+ * email as somebody real", and twenty names from each source answers it for
+ * the cost of three small reads. A contact picker with a query behind it is a
+ * different feature, and it would put a text input in front of the org's
+ * whole contact list on a surface whose job is to prove one email.
+ *
+ * Ordered by document id in every source, because a `limit` with no `orderBy`
+ * is a random sample in doc-id order that a client `sort` then makes LOOK
+ * newest-first. Naming the order keeps the picker stable between openings —
+ * and on the org path it is also the order the automatic index for the scope
+ * filter can actually serve.
+ */
+export async function proofPersonasForHost(
+  hostId: string,
+): Promise<ProofPersona[]> {
+  const byId = firebaseAdmin.firestore.FieldPath.documentId()
+  const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
+  const found = new Map<string, ProofPersona>()
+
+  const collect = (
+    docs: FirebaseFirestore.QueryDocumentSnapshot[] | undefined,
+    source: ProofPersona['source'],
+    nameFields: readonly string[],
+  ) => {
+    for (const doc of docs ?? []) {
+      const email = String(doc.get('email') ?? '')
+        .trim()
+        .toLowerCase()
+      if (!email || found.has(email)) continue
+      const name = nameFields
+        .map((field) => String(doc.get(field) ?? '').trim())
+        .find(Boolean)
+      found.set(email, { email, name: name ?? '', source })
+    }
+  }
+
+  const [leads, members, contacts] = await Promise.all([
+    hostRef
+      .collection('leads')
+      .orderBy(byId)
+      .limit(PROOF_PERSONA_SAMPLE)
+      .get()
+      .catch(() => null),
+    hostRef
+      .collection('siteMembers')
+      .orderBy(byId)
+      .limit(PROOF_PERSONA_SAMPLE)
+      .get()
+      .catch(() => null),
+    orgDataQueryForHost(hostId, 'contacts')
+      .then(({ query }) => query.orderBy(byId).limit(PROOF_PERSONA_SAMPLE).get())
+      .catch(() => null),
+  ])
+
+  collect(leads?.docs, 'lead', ['name'])
+  // `displayName` first, and `name` only as a fallback: `siteMembers` has
+  // never had a `name` field, so reading it alone renders every member
+  // persona nameless — which is the exact defect that made merge tags resolve
+  // to empty strings for whole audiences.
+  collect(members?.docs, 'member', ['displayName', 'name'])
+  collect(contacts?.docs, 'contact', ['name', 'firstName'])
+  return [...found.values()]
+}
+
+/**
+ * THE DOCUMENT ONE ADDRESS HAS ON THIS SITE, wherever it lives, or null.
+ *
+ * ONE lookup for both of the questions a proof asks about a person — what is
+ * their name, and did they opt out — because the two must not disagree about
+ * WHO the address is. A persona resolved from the contact record beside a
+ * consent basis resolved from a lead record would be two different people
+ * wearing one address.
+ *
+ * The three sources are the three an audience is built from, tried in the
+ * order a small site grows them. Nothing here is taken from the request.
+ *
+ * The org `contacts` lookup runs against the UNSCOPED collection and checks
+ * `visibleTo` after the read. A scoped query carries `array-contains-any` on
+ * `visibleTo`, and pairing that with an equality on `email` would need a
+ * composite index for a lookup that happens on one click. This is the same
+ * shape the segment branch above uses, for the same reason, and the scope
+ * check is not skipped — it is moved.
+ */
+async function findAudienceDocument(
+  hostId: string,
+  email: string,
+): Promise<{ data: Record<string, unknown>; nameFields: readonly string[] } | null> {
+  const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
+  for (const [collection, nameFields] of [
+    ['leads', ['name']],
+    // `displayName` first: `siteMembers` has never had a `name` field, and
+    // reading only that is how merge tags came to render empty for a whole
+    // audience.
+    ['siteMembers', ['displayName', 'name']],
+  ] as const) {
+    const snapshot = await hostRef
+      .collection(collection)
+      .where('email', '==', email)
+      .limit(1)
+      .get()
+      .catch(() => null)
+    const doc = snapshot?.docs?.[0]
+    if (doc) {
+      return { data: (doc.data() ?? {}) as Record<string, unknown>, nameFields }
+    }
+  }
+
+  const contacts = await orgDataCollectionForHost(hostId, 'contacts').catch(
+    () => null,
+  )
+  const matches = contacts
+    ? await contacts
+        .where('email', '==', email)
+        // More than one, because a name can exist in several scopes within one
+        // org and only the ones this site may see are answers.
+        .limit(5)
+        .get()
+        .catch(() => null)
+    : null
+  for (const doc of matches?.docs ?? []) {
+    if (!visibleToHost(doc.get('visibleTo'), hostId)) continue
+    return {
+      data: (doc.data() ?? {}) as Record<string, unknown>,
+      nameFields: ['name', 'firstName'],
+    }
+  }
+  return null
+}
+
+/**
+ * The stored marketing-consent fields for one address, or null when this site
+ * holds no document for it at all.
+ *
+ * Null and an opted-out record are different answers and the caller treats
+ * them differently: an address we have never seen keeps whatever basis the
+ * policy assigns an unrecorded person, and one that said no is refused.
+ */
+async function readStoredConsent(
+  hostId: string,
+  email: string,
+): Promise<Record<string, unknown> | null> {
+  if (!email || !EMAIL_PATTERN.test(email)) return null
+  const found = await findAudienceDocument(hostId, email).catch(() => null)
+  return found?.data ?? null
+}
+
+/**
+ * The person whose stored data a proof renders as, or null.
+ *
+ * Read from the audience documents rather than taken from the request, so a
+ * proof demonstrates what the MERGE will do to real data.
+ */
+async function resolveProofPersona(
+  hostId: string,
+  rawEmail: string,
+): Promise<{ email: string; name?: string } | null> {
+  const email = String(rawEmail ?? '')
+    .trim()
+    .toLowerCase()
+  if (!email || !EMAIL_PATTERN.test(email)) return null
+
+  const found = await findAudienceDocument(hostId, email).catch(() => null)
+  const name = (found?.nameFields ?? [])
+    .map((field) => String(found?.data?.[field] ?? '').trim())
+    .find(Boolean)
+
+  /*
+   * An address that matches nobody still renders, as itself with no name.
+   *
+   * Refusing would be worse: the merchant asked to see what the email looks
+   * like addressed to this person, and "we could not find them" is an answer
+   * about our storage rather than about their email. The drawer says which
+   * record a persona came from, so a proof that fell through to this reads as
+   * the address it is.
+   */
+  return name ? { email, name } : { email }
+}
+
 function storedSendOptionsFrom(
   snapshot: FirebaseFirestore.DocumentSnapshot,
   hostId: string,
@@ -2390,6 +2825,12 @@ function storedSendOptionsFrom(
     ...optional('listId'),
     ...optional('topicId'),
     ...optional('fromName'),
+    // A scheduled or resumed send leaves on the identity it was composed
+    // under. Without this it would silently revert to the site's standing
+    // selection between the compose and the send, which is the same class of
+    // defect as reverting the from name — except that it changes the domain
+    // in front of the recipient rather than the words.
+    ...optional('sendingIdentity'),
     ...optional('replyTo'),
     ...optional('preheader'),
     ...optional('displayName'),
@@ -2482,6 +2923,19 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * characters is worth normalizing wherever it is going.
    */
   const displayName = headerSafe(req.body?.displayName, 60)
+  /*
+   * WHICH OF THE SITE'S IDENTITIES THIS SEND LEAVES ON.
+   *
+   * Reduced to the one reserved word or to nothing AT THE EDGE, so nothing
+   * downstream ever holds a domain name that came out of a request. A body
+   * naming `acme.com` here is not an error and is not honored — it is not a
+   * value this field has, and it resolves to the site's standing selection
+   * exactly as an absent field does.
+   */
+  const sendingIdentity =
+    String(req.body?.sendingIdentity ?? '').trim() === PLATFORM_SENDING_IDENTITY
+      ? PLATFORM_SENDING_IDENTITY
+      : ''
   // The campaign this send joins. Validated as a document id here because it
   // is stored and later queried as one.
   const emailCampaignId = String(req.body?.emailCampaignId ?? '')
@@ -2522,9 +2976,16 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * `update` is exempt because it edits neither — it carries a name and
    * nothing else.
    */
+  /*
+   * `proofOptions` joins them for the plainest of the reasons: it answers who
+   * a test may be sent to and whose data could fill it, which is a question
+   * about the workspace and not about the message. The composer asks it when
+   * the test drawer opens, which is routinely before a subject exists.
+   */
   const mails =
     action !== 'cancel' &&
     action !== 'preview' &&
+    action !== 'proofOptions' &&
     action !== 'renderPreview' &&
     action !== 'followUp' &&
     action !== 'sendNow' &&
@@ -2571,15 +3032,92 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
+    if (action === 'proofOptions') {
+      /*
+       * THE TWO LISTS THE TEST DRAWER IS BUILT FROM, and they are different
+       * kinds of thing.
+       *
+       * `recipients` is a RULE made visible: these are the only addresses a
+       * test may be delivered to, so the drawer offers them instead of a text
+       * box whose every other answer is a refusal nobody could have predicted.
+       *
+       * `personas` is a CONVENIENCE: whose stored data a proof renders as.
+       * Choosing one mails that person nothing, which the drawer says in as
+       * many words — the two controls sit next to each other and the whole
+       * risk of the feature is somebody reading the second as the first.
+       */
+      const [recipients, personas] = await Promise.all([
+        proofRecipientsForHost({ hostId, callerEmail: String(decoded.email ?? '') }),
+        proofPersonasForHost(hostId),
+      ])
+      return res.status(200).json({ recipients, personas })
+    }
+
     if (action === 'test') {
-      // Test send (AGL-349): delivers to the requesting user only, with
-      // no campaign record — proofing designed emails before a real send.
-      const testEmail = String(decoded.email ?? '')
+      /*
+       * PROOF ONE EMAIL: as somebody, to somebody, from an identity — and
+       * still no campaign record and no counter.
+       *
+       * The three choices are independent and only one of them decides who
+       * receives mail. `personaEmail` changes what the merge tags RESOLVE to
+       * and reaches nobody; `to` is the only address anything is delivered
+       * to; `sendingIdentity` is which of the site's identities it leaves on.
+       */
+      const ownEmail = String(decoded.email ?? '')
+        .trim()
+        .toLowerCase()
+      const requestedTo = String(req.body?.to ?? '')
+        .trim()
+        .toLowerCase()
+      const testEmail = requestedTo || ownEmail
       if (!testEmail) {
         return res
           .status(400)
           .json({ error: 'Your account has no email address for tests' })
       }
+      if (!EMAIL_PATTERN.test(testEmail)) {
+        return res
+          .status(400)
+          .json({ error: 'Enter a valid address to send the test to' })
+      }
+      /*
+       * WHO A TEST SEND MAY REACH, decided here because it is the only layer
+       * that can ask whose address this is.
+       *
+       * A proof may go to the caller's own account address or to another
+       * ACCOUNT HOLDER on the owning workspace, and to nobody else. The two
+       * populations a merchant could otherwise reach through this button are
+       * exactly the two that must not be reachable: a contact or lead, who is
+       * subject to the consent rule this send is exempt from, and a stranger,
+       * who has no relationship with the workspace at all.
+       *
+       * `siteMembers` are deliberately NOT eligible. They are the tenant's
+       * customers — the audience — and an audience member reached by a
+       * "test" is an audience member who has been mailed.
+       */
+      const eligible = await eligibleProofAddress({
+        hostId,
+        callerEmail: ownEmail,
+        address: testEmail,
+      })
+      if (!eligible) {
+        return res.status(403).json({
+          error:
+            `A test can only be sent to you or to someone with an account on ` +
+            `this workspace, and ${testEmail} is neither. Add them to the ` +
+            `workspace first, or send the test to yourself and forward it.`,
+        })
+      }
+      /*
+       * The person whose data fills the merge tags. Looked up rather than
+       * taken from the request, so what a proof shows is what the audience
+       * document actually holds — a persona assembled from a request would
+       * demonstrate the composer's own typing rather than the merge.
+       */
+      const persona = await resolveProofPersona(
+        hostId,
+        String(req.body?.personaEmail ?? ''),
+      )
       const result = await performCampaignSend({
         hostId,
         subject,
@@ -2587,12 +3125,22 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         audience: 'manual',
         emails: [testEmail],
         templateScreenId: templateScreenId || undefined,
+        fromName,
+        replyTo,
+        preheader,
+        ...(sendingIdentity ? { sendingIdentity } : {}),
+        ...(persona ? { proofPersona: persona } : {}),
         recordCampaign: false,
         senderUid: decoded.uid,
-        // Not marketing: the recipient is the account making the request.
-        selfProofFor: testEmail,
+        // Not marketing: the recipient holds an account on this workspace.
+        proofFor: testEmail,
       })
-      return res.status(200).json({ ...result, test: true })
+      return res.status(200).json({
+        ...result,
+        test: true,
+        to: testEmail,
+        ...(persona ? { personaEmail: persona.email } : {}),
+      })
     }
 
     if (action === 'renderPreview') {
@@ -2667,6 +3215,14 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           ? req.body.emails.map(String)
           : undefined,
         templateScreenId: templateScreenId || undefined,
+        /*
+         * The composer's identity choice rides the preview, which is what
+         * makes the refusal arrive BEFORE the Send button rather than from
+         * it. The dry run resolves the identity on the same terms a send
+         * does and throws the same 409, so picking a domain whose DNS is
+         * unfinished says so the moment it is picked.
+         */
+        ...(sendingIdentity ? { sendingIdentity } : {}),
         senderUid: decoded.uid,
         dryRun: true,
       })
@@ -2828,6 +3384,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           // scheduled processor mails the message that was composed rather
           // than one that reverts to the org's branding defaults.
           ...(fromName ? { fromName } : {}),
+          ...(sendingIdentity ? { sendingIdentity } : {}),
           ...(replyTo ? { replyTo } : {}),
           ...(preheader ? { preheader } : {}),
           ...(displayName ? { displayName } : {}),
@@ -3057,6 +3614,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
       fromName,
+      ...(sendingIdentity ? { sendingIdentity } : {}),
       replyTo,
       preheader,
       displayName,
