@@ -29,6 +29,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { campaignProcessScheduledHandler } from './server/campaign-process-scheduled'
 import { listsMaterializeHandler } from './server/lists-materialize'
 import { campaignSendHandler } from './server/campaign-send'
+import { campaignRecipientsHandler } from './server/campaign-recipients'
 
 /**
  * Experiment beacon (AGL-252): counts an exposure or conversion on
@@ -127,6 +128,11 @@ export function registerMarketingApi(): void {
 /** Registers the marketing plugin's console-side API routes (AGL-396). */
 export function registerMarketingConsoleApi(): void {
   registerPluginApiRoute('campaigns/send', campaignSendHandler)
+  // The other direction through the per-recipient delivery log: not "what did
+  // we send this person" but "who did this design reach, and which of them
+  // opened it". Server-side because the log is a platform-level collection no
+  // security rule can scope to one site's campaigns.
+  registerPluginApiRoute('campaigns/recipients', campaignRecipientsHandler)
   // Relocated console route (AGL-418): the Resend/Svix webhook keeps its
   // /api/email/events URL via the dispatcher; ownership is recorded at
   // registration so the org gate attributes it to marketing, not email.

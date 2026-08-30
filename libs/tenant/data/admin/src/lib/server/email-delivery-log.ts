@@ -453,28 +453,37 @@ export async function readEmailDeliveries(
     .limit(Math.max(1, options?.limit ?? EMAIL_DELIVERY_READ_LIMIT))
     .get()
 
-  return snapshot.docs.map((doc: any) => {
-    const data = doc.data() ?? {}
-    return {
-      messageId: String(data.messageId ?? doc.id),
-      provider: String(data.provider ?? 'unknown'),
-      to: String(data.to ?? ''),
-      subject: data.subject ?? null,
-      context: data.context ?? null,
-      status: (data.status ?? 'sent') as EmailDeliveryEventType,
-      timestamps: (data.timestamps ?? {}) as EmailDeliveryRecord['timestamps'],
-      firstSeenAtMs: Number(data.firstSeenAtMs ?? 0),
-      openCount: Number(data.openCount ?? 0),
-      clickCount: Number(data.clickCount ?? 0),
-      clickedLinks: Array.isArray(data.clickedLinks)
-        ? data.clickedLinks.map(String)
-        : [],
-      bounceType: data.bounceType ?? null,
-      detail: data.detail ?? null,
-      hostId: data.hostId ?? null,
-      campaignId: data.campaignId ?? null,
-    }
-  })
+  return snapshot.docs.map(deliveryRecordFrom)
+}
+
+/**
+ * One stored message document as {@link EmailDeliveryRecord}.
+ *
+ * Shared by every reader in this file so the defaults are decided once. A
+ * second copy would be a second answer to "what does an absent `openCount`
+ * mean", and the two would drift the first time a field is added.
+ */
+function deliveryRecordFrom(doc: any): EmailDeliveryRecord {
+  const data = doc.data() ?? {}
+  return {
+    messageId: String(data.messageId ?? doc.id),
+    provider: String(data.provider ?? 'unknown'),
+    to: String(data.to ?? ''),
+    subject: data.subject ?? null,
+    context: data.context ?? null,
+    status: (data.status ?? 'sent') as EmailDeliveryEventType,
+    timestamps: (data.timestamps ?? {}) as EmailDeliveryRecord['timestamps'],
+    firstSeenAtMs: Number(data.firstSeenAtMs ?? 0),
+    openCount: Number(data.openCount ?? 0),
+    clickCount: Number(data.clickCount ?? 0),
+    clickedLinks: Array.isArray(data.clickedLinks)
+      ? data.clickedLinks.map(String)
+      : [],
+    bounceType: data.bounceType ?? null,
+    detail: data.detail ?? null,
+    hostId: data.hostId ?? null,
+    campaignId: data.campaignId ?? null,
+  }
 }
 
 /**
@@ -495,6 +504,167 @@ export async function readEmailDeliveryHistory(
   } catch (error) {
     console.error('[email-delivery-log] read failed', error)
     return { lookupFailed: true, rows: [] }
+  }
+}
+
+/*==========================================
+ * ACROSS THE CAMPAIGNS OF ONE SITE.
+ *
+ * The readers above answer "what did we send this person". This one answers
+ * the other direction — "who did this campaign reach, and which of them
+ * opened it" — and it is the SAME store, queried across the recipient
+ * documents instead of down one of them.
+ *
+ * That direction is a collection-group query, and it is the one shape this
+ * file's header says the per-address layout avoids. It is worth the index
+ * here for the reason the index exists at all: the alternative is a second
+ * per-recipient store keyed by campaign, written by the same webhook, which
+ * would be two records of the same fact and one of them eventually wrong.
+ *
+ * ⚠️ EVERY caller must be authorised on `hostId` before calling. The rows
+ * carry recipient addresses, and the `hostId` filter below is a query
+ * predicate, not a permission — it narrows the read to one site's mail and
+ * says nothing about who is asking.
+ *=========================================*/
+
+/** The most recipient rows one campaign-engagement read returns. */
+export const EMAIL_CAMPAIGN_ENGAGEMENT_PAGE_SIZE = 25
+
+/**
+ * How many campaigns one engagement read can span.
+ *
+ * Firestore's `in` operator takes at most 30 values, and the query below runs
+ * as a merge of one sub-query per value — so this is a hard limit of the
+ * store rather than a number worth tuning. A design used by more campaigns
+ * than this reads its most recent 30, and the caller is told so.
+ */
+export const EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS = 30
+
+/** Which recipients a campaign-engagement read returns. */
+export type EmailEngagementFilter = 'all' | 'opened' | 'clicked'
+
+/** One page of recipient rows. */
+export interface EmailCampaignEngagementPage {
+  rows: EmailDeliveryRecord[]
+  /**
+   * Cursor for the next page, or null at the end.
+   *
+   * The full document PATH of the last row, which is
+   * `emailDeliveries/{sha256(address)}/messages/{messageId}`. It is re-read
+   * as a snapshot to resume the query, rather than resuming from the ordered
+   * VALUE: a value cursor positions after every document sharing it, so two
+   * messages recorded in the same millisecond would lose one of them between
+   * pages — silently, and only under load.
+   */
+  cursor: string | null
+  /** The read failed, as distinct from finding nothing. */
+  lookupFailed: boolean
+  /** Campaigns past {@link EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS}. */
+  campaignsOmitted: number
+}
+
+/**
+ * The recipients of one site's campaigns, newest message first.
+ *
+ * ## What each filter orders on, and why it is not one query with a flag
+ *
+ * `all` orders on `firstSeenAtMs`, which {@link recordEmailDeliveryEvent}
+ * guarantees on creation. `opened` and `clicked` carry an inequality —
+ * `openCount > 0` — and Firestore requires the first ordering to be on the
+ * inequality's own field, so those two order on the count and then on the
+ * time. That is not a workaround: a message never opened has no `openCount`
+ * field at all, so the inequality is also what excludes it, and the ordering
+ * puts the most engaged recipient first, which is the order a merchant reads
+ * such a table in.
+ *
+ * ## Never throws
+ *
+ * Same contract as the rest of this file: `lookupFailed` distinguishes a read
+ * that could not run — a missing index is the likely one — from a campaign
+ * nobody opened. Rendering those two the same way is how a merchant concludes
+ * their campaign reached nobody.
+ */
+export async function readCampaignEngagement(options: {
+  /** The site whose mail this is. The caller must already have proven it. */
+  hostId: string
+  /** Campaign ids to read, most recent first. */
+  campaignIds: readonly string[]
+  filter?: EmailEngagementFilter
+  limit?: number
+  /** A `cursor` from a previous page. */
+  cursor?: string | null
+  firestore?: any
+}): Promise<EmailCampaignEngagementPage> {
+  const {
+    hostId,
+    campaignIds,
+    filter = 'all',
+    cursor = null,
+    firestore,
+  } = options
+  const pageSize = Math.max(
+    1,
+    Math.min(
+      EMAIL_CAMPAIGN_ENGAGEMENT_PAGE_SIZE,
+      options.limit ?? EMAIL_CAMPAIGN_ENGAGEMENT_PAGE_SIZE,
+    ),
+  )
+  const ids = campaignIds
+    .filter(Boolean)
+    .slice(0, EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS)
+  const campaignsOmitted = Math.max(
+    0,
+    campaignIds.filter(Boolean).length - ids.length,
+  )
+  const empty: EmailCampaignEngagementPage = {
+    rows: [],
+    cursor: null,
+    lookupFailed: false,
+    campaignsOmitted,
+  }
+  if (!hostId || !ids.length) return empty
+
+  try {
+    const db = firestore ?? defaultFirestore()
+    let query = db
+      .collectionGroup(EMAIL_DELIVERY_MESSAGES_COLLECTION)
+      // `hostId` first so the read is provably one site's mail even if a
+      // caller ever passes a campaign id belonging to another.
+      .where('hostId', '==', hostId)
+      .where('campaignId', 'in', ids)
+    if (filter === 'opened') {
+      query = query.where('openCount', '>', 0).orderBy('openCount', 'desc')
+    } else if (filter === 'clicked') {
+      query = query.where('clickCount', '>', 0).orderBy('clickCount', 'desc')
+    }
+    query = query.orderBy('firstSeenAtMs', 'desc')
+
+    if (cursor) {
+      const anchor = await db.doc(cursor).get()
+      // A cursor whose document has been erased resumes nothing rather than
+      // silently restarting at page one, which would loop the reader through
+      // the same rows forever.
+      if (!anchor.exists) return empty
+      query = query.startAfter(anchor)
+    }
+
+    const snapshot = await query.limit(pageSize).get()
+    const rows = snapshot.docs.map(deliveryRecordFrom)
+    return {
+      rows,
+      // Null on a short page: a full page is the only state from which more
+      // rows can exist, and offering a cursor that returns nothing makes a
+      // finished table look unfinished.
+      cursor:
+        rows.length === pageSize
+          ? String(snapshot.docs[snapshot.docs.length - 1].ref.path)
+          : null,
+      lookupFailed: false,
+      campaignsOmitted,
+    }
+  } catch (error) {
+    console.error('[email-delivery-log] campaign engagement read failed', error)
+    return { ...empty, lookupFailed: true }
   }
 }
 
