@@ -21,7 +21,7 @@ place; steps that need a higher plan are labeled in the editor.
 
 ## Create an action
 
-1. Open the **actions builder** from **Workflows**.
+1. Open the **actions builder** from **Automation → Actions**.
 2. Choose the **event** (the trigger).
 3. Choose the **steps** to run in response.
 4. Save.
@@ -181,8 +181,8 @@ attributes panel to attach a **when clicked**, **when hovered**, or **when scrol
 view** trigger to that exact element — no CSS selectors to write. Pairing a **when
 hovered** trigger with an **open menu** or **open drawer** step is how you build
 hover-to-reveal navigation, and — like all basic in-page effects — it works on every
-plan. The interaction is created disabled with a placeholder step; finish and enable it
-on the Workflows page. The same panel lists the
+plan. The interaction is saved and enabled on the element itself — it belongs to the
+document it is on, not to this section. The same panel lists the
 element's existing interactions with an **enable switch and a remove button** — so you
 can pause or retire one without leaving the canvas — and offers **"A/B test this
 section"**, which creates a draft section experiment for the element.

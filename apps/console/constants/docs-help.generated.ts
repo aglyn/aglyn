@@ -685,7 +685,7 @@ export const DOCS_HELP_TOPICS = {
   },
   workflows: {
     path: '/marketing-and-automation/workflows-and-actions/overview',
-    title: 'Workflows, Actions & Webhooks',
+    title: 'Automation',
     excerpt: 'Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.',
   },
   yourFirstApiCall: {

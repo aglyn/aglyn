@@ -17,7 +17,7 @@ site. This guide builds one end to end.
 
 ## 1. Open the workflows page
 
-In the console, go to **Data → Workflows** and choose **New workflow**. Give it a name that
+In the console, go to **Automation → Workflows** and choose **New workflow**. Give it a name that
 describes the outcome (e.g. "Welcome new member").
 
 ## 2. Choose a trigger

@@ -193,7 +193,7 @@ Combine an outcome with a [conditional automation](../../marketing-and-automatio
 
 1. Add a **Checkboxes** field named `subscribe` with one option, `Yes, keep me posted`.
 2. Set **After submit** to *Redirect the visitor* and pick your `/thanks` screen.
-3. On the Workflows page, add an action on **formSubmission** with the condition
+3. On **Automation → Actions**, add an action on **formSubmission** with the condition
    *"A field is not empty" → `subscribe`* and the step **Enroll in a list**,
    picking your email audience.
 
