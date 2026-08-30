@@ -58,6 +58,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   // Nobody in this file is suppressed; the audience is what is under test.
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   // Free's `emailSendsPerMonth` is 0 by design and would refuse the send
   // before any of this is reached.

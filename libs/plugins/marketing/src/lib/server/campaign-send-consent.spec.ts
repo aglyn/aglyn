@@ -88,6 +88,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Both suppression lists, through the shared filter this send now uses.
   // Wide open here: `campaign-send.spec.ts` and the suppression suites own
   // what it removes, and this file is about the consent join in front of it.
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   readEmailSendRateConfig: async () => ({
     perHour: 100_000,

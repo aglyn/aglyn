@@ -61,6 +61,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * rather than left permissive because a double that never suppresses
    * anybody cannot tell a sender consulting one list from one consulting two.
    */
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
   filterSendableForHost: async (hostId: string, emails: string[]) =>
     emails.filter((email) => {
       // `require` inside the factory rather than the file's own import: a
