@@ -206,31 +206,31 @@ describe('the Traffic card reads across the full width', () => {
 
 describe('the dashboard gives Traffic the row', () => {
   /**
-   * The `size` object of the grid item that holds the card — the CODE, not
-   * the prose around it. The comment above that item discusses the `md: 6`
-   * it replaced, so a slice that swept the whole item in would fail on the
-   * explanation of the fix.
+   * A card the page gives a WIDTH to, in either grammar the console uses: a
+   * `GridItems` item that declares `md: 6`, or a grid track that halves the
+   * row. Traffic is neither — it is a direct child of the page's stack, so
+   * the container's width is its width.
    */
-  const trafficItemSize = () => {
-    const source = read(DASHBOARD)
-    const card = source.indexOf('<HostAnalyticsCard')
-    const size = source.lastIndexOf('size: {', card)
-    return source.slice(size, source.indexOf('}', size) + 1)
-  }
+  const HALF_WIDTH = /md:\s*6|md:\s*'repeat\(2/
 
   it('places the card at full width', () => {
-    expect(trafficItemSize()).toContain('xs: 12')
-    expect(trafficItemSize()).not.toContain('md: 6')
+    const source = read(DASHBOARD)
+    expect(source).toContain('<HostAnalyticsCard')
+    // Not inside the capability grid, and not in a half-width grid item:
+    // both of those are how a card ends up with half the row.
+    const beforeCard = source.slice(0, source.indexOf('<HostAnalyticsCard'))
+    expect(beforeCard).not.toMatch(HALF_WIDTH)
+    expect(source).not.toContain('GridItems')
   })
 
-  it('THE CONTROL: the slice really is that item’s size', () => {
-    // A slice that missed would assert `md: 6` is absent from an empty
-    // string, which is true of every page in the console.
-    expect(trafficItemSize()).toMatch(/^size: \{[^}]*\}$/)
-    expect(trafficItemSize()).toContain('xs')
-    // And it bites: the half-width form it replaces would fail the test
-    // above, which is what makes that test about this page.
-    expect('size: {\n  xs: 12,\n  md: 6,\n}').toContain('md: 6')
+  it('THE CONTROL: the width pattern catches what it is meant to catch', () => {
+    // A pattern that matched nothing would pass on the page that put the
+    // card back beside another one.
+    expect('size: { xs: 12, md: 6 }').toMatch(HALF_WIDTH)
+    expect(
+      "gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }",
+    ).toMatch(HALF_WIDTH)
+    expect('size: { xs: 12 }').not.toMatch(HALF_WIDTH)
   })
 
   it('hand-writes no type weight — the theme owns those', () => {

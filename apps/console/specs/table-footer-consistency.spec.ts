@@ -980,6 +980,13 @@ const NOT_A_LIST: Array<[string, string]> = [
       'surface a reader scans — the same line the ordering guard draws.',
   ],
   [
+    'libs/plugins/inbox/src/lib/components/inbox-glance-card.component.tsx',
+    'The dashboard inbox preview: three rows over a four-document read, ' +
+      'where the fourth is the probe that lets the card say the rest are in ' +
+      'the Inbox. The Inbox page owns the paged list and the header links ' +
+      'to it — the same reading as the site-users preview below.',
+  ],
+  [
     'libs/plugins/commerce/src/lib/components/console/newest-site-users-card.component.tsx',
     'A dashboard preview at `limit(5)` with a View all link to the paged ' +
       'list. Five rows chosen to be five, not a window that got cut short. ' +
@@ -1269,7 +1276,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
     expect(OWES_A_FOOTER).toHaveLength(14)
-    expect(NOT_A_LIST).toHaveLength(27)
+    // 28 since the inbox glance joined the dashboard: a new preview card is
+    // a new classification, and it is raised here deliberately rather than
+    // by a walk that quietly stopped reaching the file.
+    expect(NOT_A_LIST).toHaveLength(28)
   })
 })
 

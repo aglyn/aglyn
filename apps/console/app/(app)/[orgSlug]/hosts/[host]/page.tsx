@@ -19,7 +19,8 @@
 import { CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
-import { AppLink, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { AppLink, Container } from '@aglyn/shared-ui-jsx'
+import { Box, Stack } from '@mui/material'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useParams } from 'next/navigation'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -78,83 +79,68 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
       ]}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <GridItems
-          spacing={3}
-          items={[
-            // Glanceable widgets (AGL-352/353): summaries only — the
-            // Users and Analytics sections own the deep views. Feature
-            // widgets (commerce, campaigns) hide until the host uses them.
-            /*
-             * Traffic spans the container. It is the widest card the console
-             * has — six figures, a bar per day of the selected range, and
-             * four ranked breakdowns — and at `md: 6` all of it competed for
-             * half a page: the figures wrapped into a ragged block, ninety
-             * bars shared the width of one column, and the breakdowns
-             * stacked into a scroll. It is also the card everything else on
-             * this dashboard is read against, which is the other half of the
-             * argument for giving it the row.
-             */
-            {
-              size: {
-                xs: 12,
+        <Stack spacing={3}>
+          {/*
+            Glanceable widgets (AGL-352/353): summaries only — the Users and
+            Analytics sections own the deep views.
+
+            Traffic spans the container. It is the widest card the console
+            has — six figures, a bar per day of the selected range, and four
+            ranked breakdowns — and at half a page the figures wrapped into a
+            ragged block, ninety bars shared one column's width, and the
+            breakdowns stacked into a scroll. It is also the card everything
+            below is read against.
+           */}
+          <HostAnalyticsCard
+            hostId={hostId}
+            viewAllHref={buildRoute(Route.HOST_ANALYTICS, { orgSlug,  host })}
+          />
+          {/*
+            The capability row: one card per thing this site actually does,
+            each registered by the plugin that owns it rather than imported
+            here (AGL-433).
+
+            A GRID rather than grid ITEMS, because the shell does not know
+            how many cards there are — a slot renders every widget the
+            workspace has enabled, and a plugin with nothing to say renders
+            nothing at all. Items would have had to declare a width per slot,
+            which puts every card a slot holds into one column: four
+            capability cards stacked beside one commerce card. Grid children
+            need no such declaration, and a widget that renders null occupies
+            no track.
+
+            `start` keeps a three-line card from being stretched to the
+            height of a five-row one beside it.
+           */}
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 3,
+              alignItems: 'start',
+              gridTemplateColumns: {
+                xs: '1fr',
+                md: 'repeat(2, minmax(0, 1fr))',
               },
-              children: (
-                <HostAnalyticsCard
-                  hostId={hostId}
-                  viewAllHref={buildRoute(Route.HOST_ANALYTICS, { orgSlug,  host })}
-                />
-              ),
-            },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
-              children: <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />,
-            },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
-              /*
-               * The capability cards, registered rather than imported
-               * (AGL-433). `Newest site users` and `Last campaign` used to be
-               * imported right here, which made the dashboard the one console
-               * surface where enablement was nobody's decision: the site-users
-               * card rendered on sites that have never turned member accounts
-               * on, permanently empty, advertising a `/signin` those sites
-               * answer with a 404. The slot renders only what the workspace
-               * has enabled and is entitled to, and a plugin that has nothing
-               * to say renders nothing.
-               */
-              children: (
-                <PluginWidgetSlot
-                  slot={CONSOLE_WIDGET_SLOTS.hostDashboard}
-                  hostId={hostId}
-                />
-              ),
-            },
-            // Announcement bar + popup moved to /marketing (AGL-251);
-            // components, products, variables and functions to their own
-            // pages (AGL-250); workflows to /workflows (AGL-128); datasets
-            // to /data (AGL-132); site users to /users (AGL-350).
-            {
-              size: {
-                xs: 12,
-              },
-              children: (
-                <PluginWidgetSlot
-                  slot="hostActivity"
-                  hostId={hostId}
-                  viewAllHref={`${buildRoute(Route.HOST_SETUP, { orgSlug,  host })}?tab=activity`}
-                />
-              ),
-            },
-          ]}
-        />
-        {/* Plugin zone (AGL-433): widgets registered for dashboardFooter. */}
-        <PluginWidgetSlot slot="dashboardFooter" hostId={hostId} />
+            }}
+          >
+            <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />
+            <PluginWidgetSlot
+              slot={CONSOLE_WIDGET_SLOTS.hostDashboard}
+              hostId={hostId}
+            />
+          </Box>
+          {/* Announcement bar + popup moved to /marketing (AGL-251);
+              components, products, variables and functions to their own
+              pages (AGL-250); workflows to /workflows (AGL-128); datasets
+              to /data (AGL-132); site users to /users (AGL-350). */}
+          <PluginWidgetSlot
+            slot="hostActivity"
+            hostId={hostId}
+            viewAllHref={`${buildRoute(Route.HOST_SETUP, { orgSlug,  host })}?tab=activity`}
+          />
+          {/* Plugin zone (AGL-433): widgets registered for dashboardFooter. */}
+          <PluginWidgetSlot slot="dashboardFooter" hostId={hostId} />
+        </Stack>
       </Container>
     </DashboardLayout>
   )

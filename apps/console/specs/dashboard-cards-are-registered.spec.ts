@@ -97,3 +97,45 @@ describe('the dashboard cards are registered, not imported (AGL-433)', () => {
     expect(CONSOLE_WIDGET_SLOTS.hostDashboard).toBe('hostDashboard')
   })
 })
+
+/**
+ * The capability cards share one grid, so each is its own cell.
+ *
+ * A slot renders a variable number of widgets — four for a site that sells,
+ * takes bookings, mails and has forms; none for a brochure site. Grid ITEMS
+ * cannot express that: an item declares one width for the whole slot, so
+ * every card the slot holds lands in a single column, stacked beside the one
+ * card a different slot holds. That is the layout the dashboard would have
+ * grown into as widgets were added, which is why it is asserted rather than
+ * left to the next reader's judgement.
+ */
+describe('the dashboard lays its capability cards out as one row', () => {
+  /** From the grid container to the first thing after it. */
+  const capabilityGrid = () => {
+    const source = read(DASHBOARD)
+    const grid = source.indexOf("display: 'grid'")
+    return source.slice(grid, source.indexOf('slot="hostActivity"'))
+  }
+
+  it('puts both capability slots in the same grid', () => {
+    expect(capabilityGrid()).toContain('slot="commerceGlance"')
+    expect(capabilityGrid()).toContain('CONSOLE_WIDGET_SLOTS.hostDashboard')
+  })
+
+  it('does not stretch a short card to its neighbour’s height', () => {
+    // The grid default is `stretch`, which makes a three-line card as tall as
+    // the five-row one beside it and draws the empty space as part of it.
+    expect(capabilityGrid()).toContain("alignItems: 'start'")
+  })
+
+  it('THE CONTROL: the slice really is the grid, and it ends', () => {
+    const source = read(DASHBOARD)
+    expect(source.indexOf("display: 'grid'")).toBeGreaterThan(0)
+    expect(source.indexOf('slot="hostActivity"')).toBeGreaterThan(
+      source.indexOf("display: 'grid'"),
+    )
+    // The activity feed is NOT in the capability row: it is full width, and a
+    // slice that ran past it would be asserting over the whole page.
+    expect(capabilityGrid()).not.toContain('hostActivity')
+  })
+})
