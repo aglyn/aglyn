@@ -87,6 +87,12 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
           audience: String(data['audience'] ?? 'leads'),
           segmentId: String(data['segmentId'] ?? ''),
           listId: String(data['listId'] ?? ''),
+          // A scheduled campaign carries the topic it was composed under, not
+          // whatever the default is on the day the cron picks it up: the
+          // unsubscribe links it mints have to name the stream the author
+          // chose. Absent on every campaign scheduled before topics existed,
+          // which `performCampaignSend` resolves to the default.
+          topicId: String(data['topicId'] ?? '') || undefined,
           emails: Array.isArray(data['emails'])
             ? data['emails'].map(String)
             : undefined,

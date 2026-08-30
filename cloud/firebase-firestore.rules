@@ -727,6 +727,29 @@ service cloud.firestore {
         allow write: if isStaff() || canWriteOrgWideData();
       }
 
+      // Email topics: the streams a recipient may leave one at a time.
+      // Scoped like `lists` and for the same reason — a topic is authored
+      // editorial content an agency writes once and points several sites at,
+      // so the definitions are org-shared while a recipient's OPT-OUT is
+      // per site, at `hosts/{hostId}/topicOptOuts`.
+      //
+      // Read is org-wide like the CRM it sits beside, and NOT public: the
+      // catalog names an org's internal mail streams. The unauthenticated
+      // preference page reads it on the Admin SDK behind a verified HMAC,
+      // which is a different question from whether a browser may.
+      //
+      // Delete is refused outright, matching the card, and that is the rule
+      // rather than a convenience. A topic id is signed into every
+      // unsubscribe link sent under it, and those links live in inboxes
+      // indefinitely — a deleted topic is a preference page that cannot name
+      // the message the recipient is holding. Retiring writes
+      // `archived: true`, which is an update.
+      match /emailTopics/{topicId} {
+        allow read: if isStaff() || isOrgWideMember();
+        allow create, update: if isStaff() || canWriteOrgWideData();
+        allow delete: if isStaff();
+      }
+
       // Email lists (AGL-254): static audiences shared across the org's
       // hosts; the enrollList automation step writes members server-side.
       // Deleting the LIST doc is API-only (AGL-946): its `members` are
@@ -2187,6 +2210,16 @@ service cloud.firestore {
         // exact question for `components` — taking live content down is the
         // publish act in the other direction. So the name is excluded here
         // and the block below re-grants delete on `canPublishHostContent`.
+        //
+        // `topicOptOuts` joins all THREE lists. It records which email streams
+        // a RECIPIENT has left — third-party PII captured by an
+        // unauthenticated endpoint behind a signed link, on the same footing
+        // as `restockAlerts`, and read by the send path to decide who a
+        // campaign skips. An editor who could write one would be forging a
+        // preference somebody else expressed; one who could delete one would
+        // be putting an address back into a stream it asked to leave, and
+        // destroying the record that the request was ever honored. The
+        // preference page is the only writer and it runs on the Admin SDK.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -2197,7 +2230,8 @@ service cloud.firestore {
               'media', 'mediaTombstones', 'formSubmissions', 'actions',
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds', 'themeHistory']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'topicOptOuts']));
         // `themeHistory` joins all THREE lists (AGL-1302), and has no client
         // writer of any kind. It holds the PREVIOUS theme verbatim so that
         // "Go back to the previous theme" can restore it, written only by
@@ -2315,7 +2349,8 @@ service cloud.firestore {
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds', 'themeHistory']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'topicOptOuts']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -2360,7 +2395,8 @@ service cloud.firestore {
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds', 'themeHistory']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'topicOptOuts']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

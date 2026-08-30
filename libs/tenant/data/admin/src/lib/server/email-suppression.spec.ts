@@ -20,6 +20,7 @@ import {
   emailSuppressionKey,
   filterSendableForHost,
   filterSuppressedEmails,
+  filterTopicSendable,
   isEmailSuppressed,
   releaseEmail,
   suppressEmail,
@@ -137,7 +138,7 @@ describe('isEmailSuppressed', () => {
     await expect(releaseEmail({ email: ADDRESS, firestore })).resolves.toBe(true)
     await expect(isEmailSuppressed(ADDRESS, firestore)).resolves.toBe(false)
     // The record is KEPT, not deleted: it is the evidence the suppression was
-    // honoured while it stood.
+    // honored while it stood.
     expect(firestore.docs('emailSuppressions')[KEY]).toBeDefined()
   })
 
@@ -299,5 +300,133 @@ describe('filterSendableForHost', () => {
     await expect(
       filterSendableForHost(HOST, [ADDRESS], firestore),
     ).resolves.toEqual([])
+  })
+})
+
+/**
+ * The THIRD filter a campaign passes, and the narrowest.
+ *
+ * The two suppression lists answer "may we mail this person at all"; this one
+ * answers "may we mail them about THIS". Somebody who unticked one stream on
+ * the preference page is not suppressed — they still get the others — so the
+ * fact cannot live on either list without meaning something it does not mean.
+ */
+describe('filterTopicSendable', () => {
+  const HOST = 'host-1'
+  const optOuts = `hosts/${HOST}/topicOptOuts`
+  const OTHER = 'ok@example.com'
+
+  it('drops an address that left this stream', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([OTHER])
+  })
+
+  it('keeps them for a stream they did NOT leave', async () => {
+    // The whole point of topics. Leaving one is not leaving all of them.
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'marketing', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([ADDRESS, OTHER])
+  })
+
+  it('mails an opt-out that was later lifted, and keeps the evidence', async () => {
+    // A `resubscribedAt` marks a lifted opt-out. The entry stays as the proof
+    // the request was honored while it stood, so PRESENCE alone is not the
+    // test — reading it that way would leave a rejoined recipient unmailable
+    // forever with no record on screen explaining why.
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: 2 } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('does not apply another site’s opt-outs to this one', async () => {
+    const firestore = fakeFirestore({
+      'hosts/host-2/topicOptOuts': {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('filters nobody, and READS nothing, for a campaign with no topic', async () => {
+    // Every campaign sent before topics existed. There is no stream to have
+    // left, so there is nothing to drop — and nothing to ask Firestore, which
+    // is the half worth asserting: a lookup keyed on an absent topic costs one
+    // `getAll` per send to answer a question with no question in it.
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { optedOutAt: 1, resubscribedAt: null } },
+        },
+      },
+    })
+    const getAll = jest.spyOn(firestore, 'getAll')
+    await expect(
+      filterTopicSendable(HOST, '', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+    expect(getAll).not.toHaveBeenCalled()
+  })
+
+  it('fails OPEN, unlike every other filter in this module', async () => {
+    /*
+     * The opposite posture from its neighbours, on purpose. They answer
+     * "suppressed" on a read that throws, because the cost of guessing wrong
+     * is mailing somebody who told us to stop. Here the campaign has ALREADY
+     * passed both suppression lists, so nobody who asked us to stop entirely
+     * can reach this line — and the cost of failing closed would be refusing
+     * a newsletter somebody asked for, over a read that failed for an
+     * unrelated reason.
+     */
+    const firestore = fakeFirestore()
+    firestore.getAll = async () => {
+      throw new Error('firestore down')
+    }
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([ADDRESS, OTHER])
+    consoleError.mockRestore()
+  })
+
+  it('keeps an address it cannot key rather than refusing it twice', async () => {
+    // An unkeyable value cannot carry an opt-out record. The suppression
+    // filters above have already refused it on their own stricter rule, so
+    // this one has no business refusing it a second time.
+    const firestore = fakeFirestore()
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', ['not-an-address'], firestore),
+    ).resolves.toEqual(['not-an-address'])
   })
 })

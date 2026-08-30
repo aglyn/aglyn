@@ -22,6 +22,8 @@ import type { ReactNode } from 'react'
 import CampaignReportCard from './campaign-report-card'
 import CampaignsCard from './campaigns-card'
 import EmailScreensCard from './email-screens-card'
+import EmailTopicDetail from './email-topic-detail'
+import EmailTopicsCard from './email-topics-card'
 import ListsCard from './lists-card'
 import SuppressionsCard from './suppressions-card'
 import type { EmailsConsoleSectionId } from './emails-console-sections'
@@ -73,6 +75,18 @@ function sectionBody(
       return <EmailScreensCard hostId={hostId} />
     case 'audiences':
       return <ListsCard hostId={hostId} />
+    case 'topics':
+      // Create is a drawer on the list; EDIT is the topic's own route, which
+      // is the section owning its own subtree exactly as `campaigns` does.
+      return detail[0] ? (
+        <EmailTopicDetail
+          hostId={hostId}
+          topicId={detail[0]}
+          basePath={basePath}
+        />
+      ) : (
+        <EmailTopicsCard hostId={hostId} />
+      )
     case 'suppressions':
       return <SuppressionsCard hostId={hostId} />
     default:

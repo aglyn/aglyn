@@ -18,6 +18,8 @@
 import {
   checkQuota,
   contactMatchesSegment,
+  isEmailTopicId,
+  DEFAULT_CAMPAIGN_TOPIC_ID,
   readMarketingBasis,
   resolveMarketingConsentPolicy,
   splitByMarketingConsent,
@@ -36,6 +38,7 @@ import {
   orgDataCollectionForHost,
   orgDataQueryForHost,
   filterSendableForHost,
+  filterTopicSendable,
   firebaseAdmin,
   getOrgForHost,
   meterHostEmail,
@@ -182,10 +185,32 @@ export function unsubscribeSignature(
    * the campaign is already known at the moment the link is minted.
    */
   campaignId?: string,
+  /**
+   * The TOPIC the message belonged to, appended on the same rule and for a
+   * sharper version of the same reason.
+   *
+   * The topic decides which stream the preference page offers to stop and
+   * which one a one-click unsubscribe is attributed to. An unsigned `tid`
+   * would be editable in the URL by anybody holding a link — including the
+   * recipient — so a person could arrive at the preference page having
+   * silently renamed the message they are unsubscribing from, and the
+   * suppression record would carry the topic they chose rather than the one
+   * that was sent. The topic is known at the moment the link is minted, so
+   * there is nothing to trade for leaving it unsigned.
+   *
+   * The verifier's rules for reading these three forms unambiguously — and
+   * why a colon in either id is refused — are in the email plugin's
+   * `unsubscribe-link.ts`.
+   */
+  topicId?: string,
 ): string {
-  const subject = campaignId
-    ? `${hostId}:${email.toLowerCase()}:${campaignId}`
-    : `${hostId}:${email.toLowerCase()}`
+  const address = email.toLowerCase()
+  const subject =
+    topicId && campaignId
+      ? `${hostId}:${address}:${campaignId}:${topicId}`
+      : campaignId
+        ? `${hostId}:${address}:${campaignId}`
+        : `${hostId}:${address}`
   return createHmac('sha256', secret).update(subject).digest('hex')
 }
 
@@ -229,6 +254,15 @@ export interface CampaignSendOptions {
   audience: string
   segmentId?: string
   listId?: string
+  /**
+   * The stream this campaign belongs to, chosen in the composer.
+   *
+   * Resolved to {@link DEFAULT_CAMPAIGN_TOPIC_ID} when absent, so every send
+   * belongs to some topic: a campaign with none would mint an unsubscribe link
+   * the preference page can render but not place, offering the recipient a
+   * catalog without saying which entry the message in front of them was.
+   */
+  topicId?: string
   /**
    * Resolve the audience and return the count WITHOUT sending anything
    * (AGL-2178). Returns before the first write, so it mints no campaign
@@ -454,6 +488,20 @@ export async function performCampaignSend(
       throw new CampaignSendError(`Invalid ${name}`, 400)
     }
   }
+  /*
+   * `topicId` is checked against its OWN predicate, not `isDocumentId`.
+   *
+   * It is a path component like the others, but it is also a colon-joined
+   * component of the unsubscribe link's signed subject, and `isDocumentId`
+   * permits a colon. Signing one would let a single subject string be read as
+   * two different parameter tuples — see `signedSubject` in the email plugin's
+   * `unsubscribe-link.ts`. Refused at the point the topic ENTERS the send, so
+   * the link that leaves it is unambiguous by construction.
+   */
+  if (options.topicId && !isEmailTopicId(options.topicId)) {
+    throw new CampaignSendError('Invalid topicId', 400)
+  }
+  const topicId = options.topicId || DEFAULT_CAMPAIGN_TOPIC_ID
 
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
@@ -765,7 +813,26 @@ export async function performCampaignSend(
    * mailed, and asking about people this send will not reach would buy a
    * larger read for a number nobody acts on.
    */
-  const sendable = await filterSendableForHost(hostId, recipients, firestore)
+  const notSuppressed = await filterSendableForHost(
+    hostId,
+    recipients,
+    firestore,
+  )
+  /*
+   * The THIRD list, and the narrowest: who has left THIS stream.
+   *
+   * After the two suppression lists rather than before them, because it is the
+   * weaker fact and the weaker fact should never be the one that decides. A
+   * person who unticked "Promotions and offers" is still a subscriber; a
+   * person on either suppression list is not, and asking about their topic
+   * preferences would be a read taken on a question already answered.
+   */
+  const sendable = await filterTopicSendable(
+    hostId,
+    topicId,
+    notSuppressed,
+    firestore,
+  )
   if (!sendable.length) {
     throw new CampaignSendError(
       'Every recipient has unsubscribed or been suppressed',
@@ -1069,11 +1136,33 @@ export async function performCampaignSend(
         email,
         unsubscribeSecret,
         campaignId,
+        topicId,
       )
-      const unsubscribeUrl =
-        `${siteBase}/api/email/unsubscribe?hostId=${encodeURIComponent(hostId)}` +
+      const signedQuery =
+        `hostId=${encodeURIComponent(hostId)}` +
         `&email=${encodeURIComponent(email)}&sig=${signature}` +
-        `&cid=${encodeURIComponent(campaignId)}`
+        `&cid=${encodeURIComponent(campaignId)}` +
+        `&tid=${encodeURIComponent(topicId)}`
+      /*
+       * TWO URLS OVER ONE SIGNATURE, and which one goes where is the whole
+       * RFC 8058 story.
+       *
+       * `oneClickUrl` is what the `List-Unsubscribe` header names. A mailbox
+       * provider POSTs it with no human present and expects the act to have
+       * happened when it reads the 200 — so it points at the route whose POST
+       * writes immediately, and it must never point at a page of checkboxes
+       * that has to be submitted by somebody.
+       *
+       * `unsubscribeUrl` is the link a PERSON clicks in the footer, and it
+       * points at the preference center, where the topic this message
+       * belonged to is one of the things they can stop instead of all of it.
+       * The merge token keeps its name because designed templates in the wild
+       * reference `{{unsubscribeUrl}}`, and because the page it opens is still
+       * where you go to unsubscribe — with "Unsubscribe from everything" on
+       * it, one button away.
+       */
+      const oneClickUrl = `${siteBase}/api/email/unsubscribe?${signedQuery}`
+      const unsubscribeUrl = `${siteBase}/api/email/preferences?${signedQuery}`
       // Variant assignment keys on the recipient address (AGL-255) so a
       // re-send reaches the same variant.
       const variant = experiment
@@ -1137,17 +1226,29 @@ export async function performCampaignSend(
         to: email,
         subject: recipientSubject,
         ...(rendered ? { html: rendered.html } : {}),
+        // The plain-text footer names what the link actually opens. "Choose
+        // which emails you get" in front of "or unsubscribe" is the only place
+        // a text-only reader learns that leaving one stream is an option at
+        // all, and the word "unsubscribe" stays in the line because that is
+        // what a recipient scans the footer for.
         text: rendered
-          ? `${rendered.text}\n\n—\nUnsubscribe: ${unsubscribeUrl}`
-          : `${recipientBody}\n\n—\nUnsubscribe: ${unsubscribeUrl}`,
+          ? `${rendered.text}\n\n—\nChoose which emails you get, or ` +
+            `unsubscribe: ${unsubscribeUrl}`
+          : `${recipientBody}\n\n—\nChoose which emails you get, or ` +
+            `unsubscribe: ${unsubscribeUrl}`,
         // RFC 8058 one-click (AGL-2408). `List-Unsubscribe` alone does NOT
         // satisfy Gmail's and Yahoo's bulk-sender rules — the pair does, and
         // Gmail is where most of a merchant's list lives. A client honouring
         // the pair POSTs `List-Unsubscribe=One-Click` to the URL, which is
         // why the handler had to accept POST first: advertising one-click
         // against a GET-only handler would promise a verb nothing served.
+        //
+        // `oneClickUrl`, NOT the preference center. Topics narrow what a
+        // person can choose on a page; they change nothing about what a
+        // machine POSTing this header is promised, which is that the
+        // recipient stops hearing from this site.
         headers: {
-          'List-Unsubscribe': `<${unsubscribeUrl}>`,
+          'List-Unsubscribe': `<${oneClickUrl}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
         fromName: branding.fromName,
@@ -1253,6 +1354,11 @@ export async function performCampaignSend(
       subject,
       body,
       audience,
+      // The RESOLVED topic, not `options.topicId`. Recording the default
+      // explicitly is what lets the campaign report and the preference page
+      // agree about which stream this send belonged to, without either of them
+      // re-deriving a default that could drift from the other's.
+      topicId,
       ...(options.templateScreenId
         ? { templateScreenId: options.templateScreenId }
         : {}),
@@ -1365,6 +1471,21 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
   if (!['leads', 'members', 'manual', 'segment', 'list'].includes(audience)) {
     return res.status(400).json({ error: 'Unknown audience' })
   }
+  /*
+   * The composer's topic, refused here as well as inside `performCampaignSend`.
+   *
+   * Both, because the SCHEDULE branch below writes the campaign document
+   * without going through the send — the same asymmetry AGL-1771 found for
+   * `campaignId` — so a topic that only the send validated would be stored
+   * unchecked and then signed into a link a fortnight later.
+   *
+   * An empty value is not an error: it means "the composer did not say", which
+   * `performCampaignSend` resolves to the default topic.
+   */
+  const topicId = String(req.body?.topicId ?? '')
+  if (topicId && !isEmailTopicId(topicId)) {
+    return res.status(400).json({ error: 'Unknown topic' })
+  }
 
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -1419,6 +1540,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         audience,
         segmentId: String(req.body?.segmentId ?? ''),
         listId: String(req.body?.listId ?? ''),
+        topicId: topicId || undefined,
         emails: Array.isArray(req.body?.emails)
           ? req.body.emails.map(String)
           : undefined,
@@ -1456,6 +1578,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
             ? { segmentId: String(req.body.segmentId) }
             : {}),
           ...(req.body?.listId ? { listId: String(req.body.listId) } : {}),
+          ...(topicId ? { topicId } : {}),
           ...(Array.isArray(req.body?.emails)
             ? { emails: req.body.emails.map(String).slice(0, 500) }
             : {}),
@@ -1508,6 +1631,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       audience,
       segmentId: String(req.body?.segmentId ?? ''),
       listId: String(req.body?.listId ?? ''),
+      topicId: topicId || undefined,
       emails: Array.isArray(req.body?.emails) ? req.body.emails : undefined,
       campaignId: String(req.body?.campaignId ?? ''),
       experimentId: String(req.body?.experimentId ?? ''),

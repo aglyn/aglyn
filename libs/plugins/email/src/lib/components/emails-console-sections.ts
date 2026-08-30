@@ -18,7 +18,7 @@
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
 export type EmailsConsoleSectionId =
-  'campaigns' | 'designs' | 'audiences' | 'suppressions'
+  'campaigns' | 'designs' | 'audiences' | 'topics' | 'suppressions'
 
 /**
  * The emails console's sections, in rail order (AGL-2501).
@@ -39,6 +39,11 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'campaigns', label: 'Campaigns' },
   { id: 'designs', label: 'Designs' },
   { id: 'audiences', label: 'Audiences' },
+  // Between the audiences and the suppressions, which is where a topic sits
+  // conceptually: an audience is who you may reach, a suppression is who you
+  // may not, and a topic is the stream a recipient can leave without becoming
+  // either.
+  { id: 'topics', label: 'Topics' },
   // Beside the audiences rather than inside them (AGL-2410): a suppression is
   // not a list you build, it is the reason a list you built did not all get
   // mailed.

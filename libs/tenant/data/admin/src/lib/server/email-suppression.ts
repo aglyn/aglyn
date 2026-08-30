@@ -88,6 +88,11 @@
 
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
+// The leaf entry, not the `@aglyn/aglyn` barrel, for the reason
+// `document-id.ts` gives at length: a barrel import resolves to whatever a
+// spec's `jest.mock` happens to contain, and this module's neighbours are
+// mocked in nearly every spec that touches them.
+import { TOPIC_OPT_OUTS_SUBCOLLECTION } from '@aglyn/aglyn/app-utils/email-topics'
 import firebaseAdmin from './firebase-admin'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
@@ -215,7 +220,7 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
  * Put an address back in circulation (a staff correction, or the person asking
  * to be re-added). The record is kept and marked released, never deleted —
  * same reasoning as `releasePhoneContact`: a deleted record cannot show that
- * the suppression was honoured while it stood.
+ * the suppression was honored while it stood.
  *
  * @returns false when there was no live record to release.
  */
@@ -377,6 +382,85 @@ export async function filterSendableForHost(
       error,
     )
     return []
+  }
+}
+
+/**
+ * The subset of `emails` that has NOT left `topicId` on this site.
+ *
+ * The third filter a campaign passes, after the platform list and the site's
+ * own: the two suppression lists answer "may we mail this person at all", and
+ * this answers "may we mail them about THIS". A recipient who unticked
+ * "Promotions and offers" on the preference page is not suppressed — they
+ * still get the newsletter — so the fact cannot live on either suppression
+ * list without meaning something it does not mean.
+ *
+ * Keyed by {@link emailSuppressionKey} and read with one `getAll`, which is
+ * both halves of the point: the same derivation as the two lists it runs
+ * beside, so one person is one document id everywhere; and one round trip
+ * bounded by the size of the send, so adding topics does not make a campaign
+ * cost more to resolve.
+ *
+ * ## This one fails OPEN, and that is the opposite of its neighbors
+ *
+ * Every other filter in this module answers "suppressed" when a read throws,
+ * because the cost of guessing wrong is mailing somebody who told us to stop.
+ * Here the cost of guessing wrong in that direction is refusing to send a
+ * newsletter somebody asked for, on a read that failed for an unrelated
+ * reason — and the campaign has already passed both suppression lists, so
+ * nobody who asked us to stop entirely can reach this line. A topic
+ * preference is a narrower fact than a suppression and it gets the treatment
+ * that matches. A caller that wants the strict posture already has it one
+ * layer up.
+ *
+ * An empty `topicId` is a campaign from before topics existed, or one whose
+ * topic was never resolved. It filters nobody: there is no stream to have
+ * left.
+ */
+export async function filterTopicSendable(
+  hostId: string,
+  topicId: string | null | undefined,
+  emails: readonly string[],
+  injectedFirestore?: any,
+): Promise<string[]> {
+  const topic = String(topicId ?? '').trim()
+  if (!topic || !emails.length) return [...emails]
+  // An unkeyable address cannot carry an opt-out record, so it cannot have
+  // left this topic. It is dropped from the LOOKUP and kept in the answer —
+  // the suppression filters above have already refused it on their own
+  // stricter rule, so this one has no business refusing it a second time.
+  const lookups: Array<{ email: string; key: string }> = []
+  for (const email of emails) {
+    const key = emailSuppressionKey(email)
+    if (key) lookups.push({ email, key })
+  }
+  if (!lookups.length) return [...emails]
+  try {
+    const db = injectedFirestore ?? defaultFirestore()
+    const optOuts = db
+      .collection('hosts')
+      .doc(hostId)
+      .collection(TOPIC_OPT_OUTS_SUBCOLLECTION)
+    const snapshots = await db.getAll(
+      ...lookups.map((entry) => optOuts.doc(entry.key)),
+    )
+    const gone = new Set<string>()
+    lookups.forEach((entry, index) => {
+      const snapshot = snapshots[index]
+      if (!snapshot?.exists) return
+      const record = (snapshot.get('topics') ?? {})[topic]
+      // A `resubscribedAt` marks a lifted opt-out. The entry is kept as the
+      // evidence that the request was honored while it stood, so presence
+      // alone is not the test.
+      if (record && !record.resubscribedAt) gone.add(entry.email)
+    })
+    return emails.filter((email) => !gone.has(email))
+  } catch (error) {
+    console.error(
+      '[email-suppression] topic opt-out lookup failed; failing open',
+      error,
+    )
+    return [...emails]
   }
 }
 

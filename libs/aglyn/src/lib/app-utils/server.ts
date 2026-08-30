@@ -51,6 +51,12 @@ export * from './list-assignment-policy'
 // The dynamic-list rule (§3b/§3c), beside it for the same reasons: pure, and
 // it composes `contacts` for the segment vocabulary rather than restating it.
 export * from './dynamic-list-rule'
+// The subscribable streams a recipient can leave one at a time
+// (`docs/specs/email-competitive-gaps.md` §1f). Pure, and read from all three
+// sides of the feature: the composer picks one, the send path signs it into
+// the unsubscribe link, and the unauthenticated preference page renders the
+// catalog. No Node builtin, so it stays out of the `/server`-only group.
+export * from './email-topics'
 export * from './compose-layout-nodes'
 export * from './functions'
 export * from './compose-reusable-components'
