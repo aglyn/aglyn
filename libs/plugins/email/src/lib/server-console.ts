@@ -807,10 +807,19 @@ export const emailListRulePreviewHandler: PluginApiHandler = async (
  * Console API registration.
  *
  * None of these is on the machine-path exemption list in
- * `plugin-api-rate-limit.ts`. Each is reached by a person pressing a button in
- * a browser, so the visitor limiter's per-(site, IP) budget is far above any
- * real use of them and is the right ceiling for a surface that puts a person
- * into a marketing audience.
+ * `plugin-api-rate-limit.ts`, so each is counted against the console
+ * dispatcher's per-subject budget — the ceiling that bounds a surface which
+ * puts a person into a marketing audience, and which scans a whole contact
+ * silo to work out who that would be.
+ *
+ * The limiter these are counted by is the CONSOLE one,
+ * `consoleApiRateLimitRefusal`. The visitor limiter is a different limiter on
+ * a different dispatcher: `visitorWriteRateLimitRefusal` is installed only in
+ * `apps/tenant`, and no request to these routes has ever passed through it.
+ * The two share a counter and an exemption list and nothing else — the console
+ * key is the authenticated subject, because on an authenticated surface a
+ * per-(site, IP) bucket both isolates nothing the identity has not already
+ * isolated and hands one operator a fresh budget per site.
  */
 export function registerEmailConsoleApi(): void {
   registerPluginApiRoute('email/list-rule-preview', emailListRulePreviewHandler)

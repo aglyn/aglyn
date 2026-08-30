@@ -56,6 +56,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // means a 404 can only have come from the release gate.
   featureLockdownRefusal: jest.fn(async () => null),
   lockdownRefusal: jest.fn(async () => null),
+  // The dispatcher gained a rate limiter after this mock was written, and a
+  // hand-built factory only provides what it names. Stubbed to "allow": the
+  // limiter has its own suite, and a 404 here must only ever come from the
+  // release gate.
+  consoleApiRateLimitRefusal: jest.fn(async () => null),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
