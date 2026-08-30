@@ -25,11 +25,6 @@ import { BUNDLE_ID } from './constants/bundle-common'
 /** Code-split: the Emails console page only loads when opened. */
 const EmailsConsolePage = lazy(() => import('./components/emails-console-page'))
 
-/** Dashboard glance card, loaded only where the shell renders the slot. */
-const CampaignGlanceCard = lazy(
-  () => import('./components/campaign-glance-card.component'),
-)
-
 /**
  * Email designer feature plugin (AGL-346): email-safe blocks designed in
  * besigner like any screen — no separate editor. The render pipeline
@@ -57,34 +52,23 @@ export const EMAIL_BUNDLE: Aglyn.FeatureBundleEntry[] = [
  * Console half (AGL-395): registers the Emails nav item + page in the
  * ConsoleExtension registry. Safe to call at console app load — the page is
  * lazy, so no besigner/canvas code loads. The shell renders the Emails nav
- * item and, via its generic plugin route, the page (campaigns composer,
- * audience lists, and the dedicated email-screens list) — with no edit to
- * the console's own nav or page files.
+ * item and, via its generic plugin route, the page (the messages and their
+ * composer, the templates, the audience lists, the topic catalog, the sending
+ * identities and the suppression list) — with no edit to the console's own
+ * nav or page files.
  */
 export function registerEmailConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Email',
-    // The host dashboard's `Last campaign` card (AGL-433). The console page
-    // imported it directly, so it rendered on workspaces with the email
-    // plugin switched off — a card about sends, on a console with nowhere to
-    // send from.
-    widgets: [
-      {
-        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
-        widgetId: 'email-campaign-glance',
-        title: 'Last campaign',
-        Component: CampaignGlanceCard,
-      },
-    ],
     navItems: [
       {
         label: 'Emails',
         href: '/emails',
         icon: { path: mdiEmailOutline.path },
-        // Sections as ROUTES (AGL-2501): `/emails/campaigns` and friends are
+        // Sections as ROUTES (AGL-2501): `/emails/emails` and friends are
         // real URLs the shell resolves and gates, so the page mounts the one
-        // being read instead of subscribing all four.
+        // being read instead of subscribing all six.
         sections: EMAILS_CONSOLE_SECTIONS,
         header: {
           title: 'Emails',

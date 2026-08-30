@@ -105,7 +105,7 @@ jest.mock('@aglyn/shared-ui-next', () => ({
     ))}</div>
   ),
 }))
-jest.mock('@aglyn/plugins-email/components/campaigns-card', () => ({
+jest.mock('@aglyn/plugins-marketing/components/campaigns-card', () => ({
   __esModule: true,
   default: () => null,
 }))

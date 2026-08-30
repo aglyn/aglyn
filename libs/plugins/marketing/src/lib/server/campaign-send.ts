@@ -3274,7 +3274,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
      *
      * The id is the reason. `performCampaignSend` adopts a `campaignId` it is
      * given, so a draft becomes the sent email AT ITS OWN ID — which is what
-     * makes `/emails/campaigns/{sendId}` resolve from the moment the email is
+     * makes `/marketing/campaigns/{sendId}` resolve from the moment the email is
      * created, and what keeps the `cid=` inside every delivered unsubscribe
      * HMAC pointing at the record it was minted for. A draft in a second
      * collection would have to be copied to a new id at send time, and the

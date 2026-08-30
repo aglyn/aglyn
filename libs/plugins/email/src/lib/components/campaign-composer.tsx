@@ -137,12 +137,11 @@ export interface CampaignComposerProps {
    * The email record this composer is writing, when it is editing one.
    *
    * Present on an email's own page and absent nowhere else that matters: it
-   * is what makes Save, Schedule and Send land on the record already at
-   * `/emails/campaigns/{campaignId}` rather than minting a second one. The id
-   * is the email's identity for its whole life — `performCampaignSend` adopts
-   * it, so the URL a merchant has open is the URL the sent email keeps, and
-   * the `cid=` inside every unsubscribe link it later mints names this same
-   * document.
+   * is what makes Save, Schedule and Send land on the record the reader
+   * already has open rather than minting a second one. The id is the email's
+   * identity for its whole life — `performCampaignSend` adopts it, so the URL
+   * a merchant has open is the URL the sent email keeps, and the `cid=`
+   * inside every unsubscribe link it later mints names this same document.
    */
   campaignId?: string
   /**

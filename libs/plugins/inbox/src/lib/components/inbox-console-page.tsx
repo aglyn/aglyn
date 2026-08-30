@@ -31,7 +31,7 @@ import {
 // point the tenant's loader dynamically imports to activate each plugin's SITE
 // half, so a console card named there ships to every published page. The
 // component path reaches the same module without crossing that entry point.
-import { default as HostCampaignsCard } from '@aglyn/plugins-email/components/campaigns-card'
+import { default as HostCampaignsCard } from '@aglyn/plugins-marketing/components/campaigns-card'
 import { default as HostOrdersCard } from '@aglyn/plugins-commerce/components/console/host-orders-card.component'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'

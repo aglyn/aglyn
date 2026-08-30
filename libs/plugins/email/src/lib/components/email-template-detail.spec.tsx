@@ -79,6 +79,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 const pushed: string[] = []
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: (href: string) => pushed.push(href) }),
+  useParams: () => ({ orgSlug: 'acme', host: 'site' }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
 }))
@@ -319,8 +320,10 @@ describe('the template report names its denominators on screen', () => {
       name: 'Open its campaign',
     })
     expect(campaign.tagName).toBe('A')
+    // The MARKETING hub, not this surface's own: a campaign's page is a
+    // section of the Marketing console.
     expect(campaign.getAttribute('href')).toBe(
-      '/acme/hosts/site/emails/campaigns/camp_7',
+      '/acme/hosts/site/marketing/campaigns/camp_7',
     )
   })
 

@@ -59,11 +59,14 @@ import type { ReactNode } from 'react'
 import { EmailsListCard } from './emails-list-card'
 
 const BASE_PATH = '/acme/hosts/site/emails'
+/** The sibling hub a campaign's page lives on. */
+const MARKETING_PATH = '/acme/hosts/site/marketing'
 
 const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: () => undefined }),
   usePathname: () => `${BASE_PATH}/emails`,
+  useParams: () => ({ orgSlug: 'acme', host: 'site' }),
 }))
 
 const FIRESTORE = {}
@@ -236,7 +239,9 @@ describe('the message row’s other destinations are in the menu', () => {
       .map((item) => [item.tagName, item.getAttribute('href')])
     expect(hrefs).toEqual([
       ['A', `${BASE_PATH}/emails/msg-modern`],
-      ['A', `${BASE_PATH}/campaigns/camp-1`],
+      // The MARKETING hub for the campaign: its page is a section of the
+      // Marketing console, and this list links out to it.
+      ['A', `${MARKETING_PATH}/campaigns/camp-1`],
       ['A', `${BASE_PATH}/templates/screen-9`],
     ])
   })

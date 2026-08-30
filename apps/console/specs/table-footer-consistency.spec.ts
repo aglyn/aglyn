@@ -953,7 +953,7 @@ const NOT_A_LIST: Array<[string, string]> = [
       'footer.',
   ],
   [
-    'libs/plugins/email/src/lib/components/campaign-report-card.tsx',
+    'libs/plugins/marketing/src/lib/components/campaign-report-card.tsx',
     'Two tables, neither of which grows with the audience. The populations ' +
       'table is one row per named part of the send — consented, ' +
       'grandfathered, withheld, suppressed — a fixed taxonomy. The links ' +

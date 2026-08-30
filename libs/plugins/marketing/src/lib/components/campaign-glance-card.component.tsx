@@ -38,12 +38,12 @@ const SEARCH_CEILING = 30
  * Last campaign at a glance (AGL-353): sent, opens and clicks for the most
  * recent send.
  *
- * Registered by the email plugin rather than imported by the dashboard.
- * Campaigns are composed and sent from the Emails page, so a workspace with
- * the email plugin switched off has no campaigns and no page to send one
- * from — and the console still drew this card there, where it could only
- * ever be blank. The header links to the surface that owns the history for
- * the same reason: it is the one this widget's own plugin guarantees exists.
+ * Registered by the marketing plugin rather than imported by the dashboard.
+ * Campaigns are managed from the Marketing page, so a workspace with the
+ * marketing plugin switched off has no campaigns page to open and the card
+ * could only ever be blank there. The header links to the surface that owns
+ * the history for the same reason: it is the one this widget's own plugin
+ * guarantees exists.
  */
 export function CampaignGlanceCard(props: { hostId: string }) {
   const { hostId } = props
@@ -78,7 +78,7 @@ export function CampaignGlanceCard(props: { hostId: string }) {
         anchor: '#opens--clicks',
         excerpt:
           'Sent, opens, and clicks for your most recent campaign — open ' +
-          'Emails for the full history.',
+          'Campaigns for the full history.',
       })}
       contentGutterX
       contentGutterY
@@ -87,15 +87,15 @@ export function CampaignGlanceCard(props: { hostId: string }) {
           <Button
             component={AppLink as any}
             {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={buildRoute(Route.HOST_PLUGIN, {
+            href={`${buildRoute(Route.HOST_PLUGIN, {
               orgSlug,
               host,
-              pluginSlug: 'emails',
-            })}
+              pluginSlug: 'marketing',
+            })}/campaigns`}
             size="small"
             color="primary"
           >
-            {'Emails'}
+            {'Campaigns'}
           </Button>
         ),
       }}

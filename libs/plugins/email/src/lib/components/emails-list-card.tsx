@@ -66,6 +66,7 @@ import {
   useCampaignManageApi,
   useCampaignSendApi,
 } from './use-campaign-send-api'
+import { useMarketingHubPath } from './use-marketing-hub-path'
 
 /** How many messages one read of this list covers. */
 const EMAIL_CEILING = 30
@@ -151,6 +152,8 @@ export interface EmailsListCardProps {
 export function EmailsListCard(props: EmailsListCardProps) {
   const { hostId, basePath } = props
   const firestore = useFirestore()
+  // The sibling hub: a campaign's page belongs to the Marketing console.
+  const marketingHub = useMarketingHubPath()
   const router = useRouter()
 
   const { data: emailDocs } = useFirestoreCollection<any>(
@@ -295,12 +298,16 @@ export function EmailsListCard(props: EmailsListCardProps) {
         key: 'campaign',
         label: 'Open its campaign',
         icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
-        href: containerId
-          ? `${basePath}/campaigns/${containerId}`
-          : undefined,
-        disabled: !containerId,
-        disabledReason:
-          'Sent before campaigns grouped their emails, so it belongs to none',
+        // The campaign's page belongs to the Marketing console, so this one
+        // href is built from the sibling hub rather than this surface's own.
+        href:
+          containerId && marketingHub
+            ? `${marketingHub}/campaigns/${containerId}`
+            : undefined,
+        disabled: !containerId || !marketingHub,
+        disabledReason: containerId
+          ? 'This site’s console URL has not resolved yet'
+          : 'Sent before campaigns grouped their emails, so it belongs to none',
       },
       {
         key: 'template',
@@ -367,7 +374,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
    * written on the email's own page, which is where a record is edited
    * throughout this console: a list page carries no form.
    *
-   * The record is real from this moment: `/emails/campaigns/{id}` resolves,
+   * The record is real from this moment: `/marketing/campaigns/{id}` resolves,
    * the row appears in the table below as a Draft, and the id it is created
    * under is the id it keeps when it is eventually sent. It costs nothing to
    * exist — the route reserves no allowance and moves no meter for a draft,

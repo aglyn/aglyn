@@ -42,7 +42,7 @@
  *
  * It cannot mean anything else. A send id is cited by mail already delivered
  * — every unsubscribe footer carries `cid={sendId}` inside its own HMAC, and
- * `/emails/campaigns/{sendId}` is a URL merchants paste into their own
+ * `/marketing/campaigns/{sendId}` is a URL merchants paste into their own
  * messages — so deleting a container that destroyed its sends would break
  * opt-out links that must go on resolving forever, which is a compliance
  * failure rather than a broken page.

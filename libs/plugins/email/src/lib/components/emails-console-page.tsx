@@ -19,8 +19,6 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import type { ReactNode } from 'react'
-import CampaignDetailCard from './campaign-detail-card'
-import CampaignsCard from './campaigns-card'
 import EmailDetail from './email-detail'
 import EmailScreensCard from './email-screens-card'
 import EmailTemplateDetail from './email-template-detail'
@@ -56,40 +54,17 @@ function sectionBody(
   basePath: string,
 ): ReactNode {
   switch (section) {
-    case 'campaigns':
-      /*
-       * `/emails/campaigns/{id}` is one campaign, and it is a ROUTE rather
-       * than an expanded row for two reasons: it is linkable, which is what a
-       * merchant wants to paste into a message about last week's send; and
-       * the composer plus the campaign list are the surface's expensive
-       * listens, so a reader who came for one campaign's numbers must not pay
-       * for them.
-       *
-       * The id may name a CAMPAIGN or, for every URL minted before campaigns
-       * grouped their emails, a single SEND. `CampaignDetailCard` answers that
-       * by reading, and falls through to the send's own report — so no pasted
-       * link stops resolving.
-       *
-       * No registry entry is needed — the shell hands a section every segment
-       * beneath it, so a section owns its own subtree. The gate is the
-       * section's, which is the same gate the composer is behind.
-       */
-      return detail[0] ? (
-        <CampaignDetailCard
-          hostId={hostId}
-          campaignId={detail[0]}
-          basePath={basePath}
-        />
-      ) : (
-        <CampaignsCard hostId={hostId} basePath={basePath} />
-      )
     case 'emails':
       /*
        * `/emails/emails/{emailId}` is ONE MESSAGE — the thing that was or
        * will be sent, as against the campaign that groups messages and the
-       * template they are built from. A route for the same reasons the
-       * campaign report is one: it is linkable, and its preview, link table
-       * and recipient list are reads the list above it must not pay for.
+       * template they are built from. A ROUTE rather than an expanded row: it
+       * is linkable, which is what a merchant wants to paste into a message
+       * about last week's send, and its preview, link table and recipient
+       * list are reads the list above it must not pay for.
+       *
+       * The page links OUT to the campaign this message belongs to, which is
+       * a section of the Marketing console.
        */
       return detail[0] ? (
         <EmailDetail
@@ -107,7 +82,7 @@ function sectionBody(
        * links people keep, so the vocabulary moves and the URL does not
        * break.
        *
-       * A route for the same reasons the campaign report is one: it is
+       * A route for the same reasons a message's page is one: it is
        * linkable, and the listing above it is a cheaper surface a reader who
        * came for one template should not have to mount. The preview, the
        * aggregate figures and the recipients table all hang off this branch,
@@ -124,9 +99,9 @@ function sectionBody(
       )
     case 'audiences':
       /*
-       * A list is a resource with its own pages, on the same terms the
-       * campaign report is: `/emails/audiences/{listId}` is one audience, and
-       * `…/edit` is its settings.
+       * A list is a resource with its own pages, on the same terms a message
+       * is: `/emails/audiences/{listId}` is one audience, and `…/edit` is its
+       * settings.
        *
        * The membership used to unfold inside the audiences table. That made a
        * list unlinkable, put the back button one press from leaving the whole
@@ -158,7 +133,7 @@ function sectionBody(
       )
     case 'topics':
       // Create is a drawer on the list; EDIT is the topic's own route, which
-      // is the section owning its own subtree exactly as `campaigns` does.
+      // is the section owning its own subtree exactly as `emails` does.
       return detail[0] ? (
         <EmailTopicDetail
           hostId={hostId}
@@ -199,12 +174,19 @@ function sectionBody(
  * Emails page (AGL-395): the console surface owned by the email plugin,
  * rendered by the shell's generic plugin route.
  *
- * Five sections, and three of them are three different things a merchant
- * calls "an email": a CAMPAIGN groups sends, an EMAIL is one message that was
- * or will be sent, and a TEMPLATE is the reusable besigner document a message
- * is built from. Keeping them apart is what lets each carry its own report —
- * a message's own numbers, and a template's summed across every message sent
- * from it. Audience lists and the suppression list complete the surface.
+ * Two of its sections are two different things a merchant calls "an email":
+ * an EMAIL is one message that was or will be sent, and a TEMPLATE is the
+ * reusable besigner document a message is built from. Keeping them apart is
+ * what lets each carry its own report — a message's own numbers, and a
+ * template's summed across every message sent from it. Audience lists, the
+ * topic catalog, the sending identities and the suppression list complete the
+ * surface.
+ *
+ * The CAMPAIGN that groups messages is not here. It is a container with a
+ * window of dates, a set of lists, a topic and revenue attribution — a
+ * marketing object that reaches people by email — so it is a section of the
+ * Marketing console, and a message's page links out to the campaign it
+ * belongs to.
  *
  * Sections are ROUTES (AGL-2501). `HubTabs lazy` already mounted one panel, so
  * this is not a read saving — `emails-console-read-cost.spec.tsx` was written

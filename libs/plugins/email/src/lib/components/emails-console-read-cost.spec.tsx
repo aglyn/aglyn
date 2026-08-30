@@ -112,9 +112,8 @@ jest.mock('firebase/firestore', () => {
        * two pages below depend on the answer rather than the payload. An
        * audience page whose subject never arrives renders its loading branch
        * forever, so the membership table and the filter form are never built
-       * and the meter measures the spinner. A campaign page renders nothing
-       * until it knows whether the id names a container or a single send,
-       * because guessing flashes the wrong screen.
+       * and the meter measures the spinner. A message's page is the same
+       * shape: it renders nothing until the send document answers.
        *
        * An existing document settles both: each page gets an answer and takes
        * a branch. The payload is empty because what is metered is which
@@ -126,18 +125,13 @@ jest.mock('firebase/firestore', () => {
       if (ref?.__doc && next) {
         next({
           /*
-           * A container id that turns out to name a SEND is the campaign
-           * route's fall-through case, and it is the only absent document
-           * these meters need. Every other subject — a list, a template — is
-           * present, because a page whose subject never arrives renders its
-           * loading branch forever and the meter measures the spinner rather
-           * than the reads below it.
+           * PRESENT, whatever the subject. A page whose subject never arrives
+           * renders its loading branch forever, so the tables and forms below
+           * it are never built and the meter measures the spinner rather than
+           * the reads.
            */
-          exists: () => !String(ref.__path ?? '').includes('/emailCampaigns/'),
-          data: () =>
-            String(ref.__path ?? '').includes('/emailCampaigns/')
-              ? undefined
-              : {},
+          exists: () => true,
+          data: () => ({}),
           id: String(ref.__path ?? '').split('/').pop() ?? '',
           metadata: { hasPendingWrites: false, fromCache: false },
         })
@@ -177,19 +171,10 @@ const mockOrgId = { orgId: 'org1', ready: true }
  *
  * `useOrgDataScope` resolves the owning org with an async `getDoc` and hands
  * back `scope: null` until it lands, and every org-scoped card holds its query
- * until it does. Left unmocked, nothing behind that promise ever ran here: the
- * audiences section registered ZERO listens and the meter reported it as free,
- * which is why this file used to render it and assert `true`. A card whose
- * reads are all behind an unresolved promise is not a cheap card, it is an
- * unmeasured one.
- *
- * The printed figures move because of this, and the movement is the meter
- * catching up rather than the page getting dearer: two org-scoped listens on
- * the campaigns section were always issued in a browser and were invisible to
- * a harness whose org never resolved. One of the two — the org lists, which
- * the Lists column draws — is inside {@link CAMPAIGNS_DOCUMENT_CEILING}; the
- * other, the topic catalog, moved behind the create drawer once it could be
- * seen at all.
+ * until it does. Left unmocked, nothing behind that promise ever runs: the
+ * audiences section registers ZERO listens and the meter reports it as free.
+ * A card whose reads are all behind an unresolved promise is not a cheap
+ * card, it is an unmeasured one.
  */
 const mockScope = { orgId: 'org1', ready: true, scope: ['orgs', 'org1'] }
 const mockHostRoute = { orgSlug: 'acme', subdomain: 'site', base: '/acme/hosts/site' }
@@ -306,9 +291,15 @@ function summarize(label: string, listens: Array<{ path: string; limit: number }
   )
 }
 
-/** Collections only ONE section's cards read, keyed by that section. */
+/**
+ * Collections only ONE section's cards read, keyed by that section.
+ *
+ * `emails` reads `campaigns` because that is where a MESSAGE is stored: the
+ * collection is named for what a send used to be called, and the container
+ * that groups sends is `emailCampaigns` on the Marketing console.
+ */
 const SECTION_COLLECTIONS = {
-  campaigns: ['campaigns'],
+  emails: ['campaigns'],
   suppressions: ['suppressions'],
 } as const
 
@@ -324,36 +315,6 @@ const SECTION_COLLECTIONS = {
  * list's `members` is mounted only when a reader expands that list.
  */
 const AUDIENCES_DOCUMENT_CEILING = TABLE_PAGE_SIZE_DEFAULT + 1
-
-/**
- * The campaigns section's ceiling, in documents.
- *
- * Campaigns is the most expensive section on this surface, and this is the
- * number that says how expensive it is allowed to be. Three listens, and each
- * of the three is drawn on screen:
- *
- *   31   `campaigns`       the send ceiling, plus the probe that says there
- *                          are more
- *   51   `emailCampaigns`  the container ceiling, plus its probe
- *   50   `lists`           so the Lists column names what a campaign is aimed
- *                          at rather than printing document ids
- *
- * The org's TOPIC CATALOG is deliberately not among them, and it is the
- * biggest single read this section could make at 200 documents. It fills one
- * picker in the create drawer and is drawn nowhere in the table, so it moved
- * behind the click that opens that drawer — the same move the audiences
- * section made with a list's members, and the emails list with the campaigns
- * it offers its own drawer. `does not read the topic catalog until somebody
- * asks to create` below is the assertion that keeps it there; the reading
- * that proves it is read once the drawer OPENS is in
- * `campaigns-table.spec.tsx`, which can drive the button.
- *
- * A number rather than "no more than before" for the reason the audiences
- * ceiling gives: what is being guarded is what Firestore is asked to RETURN,
- * and a card that listens with `limit(200)` to render twenty rows is buying
- * two hundred.
- */
-const CAMPAIGNS_DOCUMENT_CEILING = 132
 
 function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
@@ -375,8 +336,8 @@ function shellSections() {
 
 /**
  * @param section the section id the URL names.
- * @param detail  segments BENEATH the section — `['camp_1']` for
- *                `/emails/campaigns/camp_1`. A section owns its own subtree,
+ * @param detail  segments BENEATH the section — `['msg_1']` for
+ *                `/emails/emails/msg_1`. A section owns its own subtree,
  *                so what those cost is a question this meter has to be able
  *                to ask.
  */
@@ -413,8 +374,8 @@ describe('emails console read cost (AGL-2501)', () => {
    * listen, and it listens for its OWN collection.
    */
   it('CONTROL: the open section does listen, and for its own collection', async () => {
-    await renderConsole('campaigns')
-    summarize('campaigns section', mockListens)
+    await renderConsole('emails')
+    summarize('emails section', mockListens)
     expect(mockListens.length).toBeGreaterThan(0)
     expect(listenedCollections()).toContain('campaigns')
   })
@@ -441,141 +402,13 @@ describe('emails console read cost (AGL-2501)', () => {
     summarize('suppressions section', mockListens)
     const seen = listenedCollections()
     expect(seen).toContain('suppressions')
-    // Campaigns is the expensive one and it is not open.
+    // The messages list is the expensive one on this surface, and it is not
+    // open — nor is anything belonging to another hub.
     expect(seen).not.toContain('campaigns')
+    expect(seen).not.toContain('emailCampaigns')
     expect(seen).not.toContain('experiments')
   })
 
-  /*==========================================
-   * THE PER-CAMPAIGN REPORT.
-   *
-   * The reason this belongs on the meter rather than in a rendering test: the
-   * obvious implementation of a campaign report aggregates the per-recipient
-   * delivery log, which is ONE DOCUMENT PER RECIPIENT, re-read on every
-   * mount. A 50,000-recipient send would then cost 50,000 reads to render
-   * seven numbers, and nothing about the screen would look different.
-   *
-   * So the counters are written at delivery time and the report is a handful
-   * of single-document reads — the campaign, its link rollup and its revenue
-   * rollup — whatever the audience was. These assertions are what stop that
-   * quietly becoming a query again.
-   *
-   * The revenue rollup is the same argument one collection along. Joining
-   * orders to campaigns at read time would mean querying the host's orders
-   * for every render of this screen; the join is done once at the sale and
-   * summed into one document, so the report pays for one listen and not for
-   * one order.
-   *=========================================*/
-  it('the campaign report reads four documents, and no collection', async () => {
-    await renderConsole('campaigns', ['camp_1'])
-    summarize('campaign report', mockListens)
-
-    /*
-     * FOUR, and the first of them is what keeps this URL working at all.
-     *
-     * `/emails/campaigns/{id}` names either a campaign CONTAINER or — for
-     * every link minted before campaigns grouped their emails, including ones
-     * merchants have pasted into their own messages — a single SEND. Which it
-     * is can only be settled by reading `emailCampaigns/{id}`, and that read
-     * is the price of never rewriting a send id.
-     *
-     * What the ceiling still buys is the property this file exists for: the
-     * report is a fixed number of SINGLE-DOCUMENT reads whatever the size of
-     * the audience, and the campaign view's own collection queries do not open
-     * on a send URL — they are gated on the container having been found.
-     */
-    expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(4)
-    expect(mockListens.map((listen) => listen.path)).toEqual([
-      'hosts/site1/emailCampaigns/camp_1',
-      'hosts/site1/campaigns/camp_1',
-      'hosts/site1/campaigns/camp_1/reports/links',
-      'hosts/site1/campaigns/camp_1/reports/revenue',
-    ])
-  })
-
-  it('the report does not mount the composer or the history', async () => {
-    await renderConsole('campaigns', ['camp_1'])
-
-    // The campaigns SECTION reads a 30-send ceiling plus the campaign
-    // containers, the org's lists, screens and experiments. A reader who came
-    // for one campaign's numbers must not pay for any of it — and
-    // `emailDeliveries` must never appear at all, at any limit.
-    const paths = mockListens.map((listen) => listen.path)
-    expect(paths).not.toContain('hosts/site1/campaigns')
-    expect(paths).not.toContain('hosts/site1/emailCampaigns')
-    expect(paths.some((path) => path.endsWith('/lists'))).toBe(false)
-    expect(paths.some((path) => path.includes('emailDeliveries'))).toBe(false)
-    expect(paths.some((path) => path.endsWith('/screens'))).toBe(false)
-    expect(paths.some((path) => path.endsWith('/experiments'))).toBe(false)
-  })
-
-  /*
-   * ANTI-VACUITY for the pair above. Both are of the form "X was not read",
-   * and a page that rendered nothing satisfies them. This is the reading that
-   * proves the section without a campaign id still costs what it always did.
-   */
-  it('CONTROL: the campaigns section itself still reads its collection', async () => {
-    await renderConsole('campaigns')
-    expect(listenedCollections()).toContain('campaigns')
-    expect(documentCeiling(mockListens)).toBeGreaterThan(2)
-  })
-
-  /*==========================================
-   * CAMPAIGNS, metered rather than merely reported.
-   *
-   * It was the other section this file rendered and then asserted `true`
-   * about — the most expensive one on the surface, logged for a reader and
-   * checked by nobody. Two of its four listens were org-scoped, which made
-   * them invisible to this harness until `useOrgDataScope` was mocked: they
-   * were always issued in a browser and the meter simply could not see them.
-   * A section whose reads are behind an unresolved promise is not a cheap
-   * section, it is an unmeasured one.
-   *=========================================*/
-  describe('the campaigns section', () => {
-    it('opens THREE listens, inside the page budget', async () => {
-      await renderConsole('campaigns')
-      summarize('campaigns section', mockListens)
-      expect(mockListens).toHaveLength(3)
-      expect(documentCeiling(mockListens)).toBeLessThanOrEqual(
-        CAMPAIGNS_DOCUMENT_CEILING,
-      )
-    })
-
-    it('reads only the collections the table DRAWS', async () => {
-      await renderConsole('campaigns')
-      // Each of the three has a column or a chip that needs it: the sends and
-      // the containers are the rows, the lists are the Lists column.
-      expect([...listenedCollections()].sort()).toEqual([
-        'campaigns',
-        'emailCampaigns',
-        'lists',
-      ])
-    })
-
-    /*
-     * THE ASSERTION. The topic catalog is 200 documents — more than the rest
-     * of the section put together — and nothing in the table shows a topic.
-     * Reading it on mount charged every operator who came to look at their
-     * campaigns for a dropdown in a drawer they never opened.
-     */
-    it('does not read the topic catalog until somebody asks to create', async () => {
-      await renderConsole('campaigns')
-      expect(listenedCollections()).not.toContain('emailTopics')
-      expect(
-        mockListens.filter((listen) => listen.path.includes('emailTopics')),
-      ).toHaveLength(0)
-    })
-
-    it('does not reach the other sections’ collections either', async () => {
-      await renderConsole('campaigns')
-      const seen = listenedCollections()
-      expect(seen).not.toContain('suppressions')
-      expect(seen).not.toContain('screens')
-      expect(seen).not.toContain('experiments')
-      expect(seen).not.toContain('contactSegments')
-    })
-  })
 
   it('reports the designs section too', async () => {
     await renderConsole('templates')

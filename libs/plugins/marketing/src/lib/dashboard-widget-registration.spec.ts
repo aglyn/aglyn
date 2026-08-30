@@ -16,18 +16,23 @@
  */
 
 /**
- * `Last campaign` belongs to the email plugin (AGL-433).
+ * `Last campaign` belongs to the marketing plugin (AGL-433).
  *
  * The console dashboard and the analytics page both imported the card, so a
- * workspace with the email plugin switched off got a card about email sends
- * on two surfaces, with no page to send from. Registering it as a widget is
- * what puts it behind the workspace's own switchboard.
+ * workspace with the plugin that owns campaigns switched off got a card about
+ * campaigns on two surfaces, with no page to open them on. Registering it as
+ * a widget is what puts it behind the workspace's own switchboard.
  */
 
 import * as Aglyn from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { registerEmailConsole } from './plugin'
+import { registerMarketingConsole } from './plugin'
 
+/**
+ * The widget id, which a reader's dashboard preferences name: hiding the card
+ * and its position in the customize order are both keyed on this string, so
+ * it is persisted and does not track the plugin that registers it.
+ */
 const CAMPAIGN_WIDGET = 'email-campaign-glance'
 
 const widgetIds = (enabled?: readonly string[]) =>
@@ -36,10 +41,10 @@ const widgetIds = (enabled?: readonly string[]) =>
     enabled,
   ).map(({ widget }) => widget.widgetId)
 
-describe('the email plugin registers the campaign glance', () => {
+describe('the marketing plugin registers the campaign glance', () => {
   beforeEach(() => {
     Aglyn.unregisterConsoleExtension(BUNDLE_ID)
-    registerEmailConsole()
+    registerMarketingConsole()
   })
 
   it('THE CONTROL: the widget is registered at all', () => {
@@ -48,24 +53,24 @@ describe('the email plugin registers the campaign glance', () => {
     expect(widgetIds()).toContain(CAMPAIGN_WIDGET)
   })
 
-  it('renders for a workspace with the email plugin enabled', () => {
+  it('renders for a workspace with the marketing plugin enabled', () => {
     expect(widgetIds([BUNDLE_ID])).toContain(CAMPAIGN_WIDGET)
   })
 
-  it('does NOT render for a workspace with email switched off', () => {
+  it('does NOT render for a workspace with marketing switched off', () => {
     expect(widgetIds(['commerce', 'workflows'])).not.toContain(CAMPAIGN_WIDGET)
   })
 
-  it('rides the same extension as the Emails page it links to', () => {
-    // The card's header sends the reader to `/emails`. If the widget were
-    // registered under an id the page does not belong to, the link could
-    // outlive the surface it points at.
+  it('rides the same extension as the Campaigns page it links to', () => {
+    // The card's header sends the reader to `/marketing/campaigns`. If the
+    // widget were registered under an id the page does not belong to, the
+    // link could outlive the surface it points at.
     const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect((extension?.widgets ?? []).map((widget) => widget.widgetId)).toEqual([
       CAMPAIGN_WIDGET,
     ])
-    expect(extension?.navItems?.[0]?.href).toBe('/emails')
+    expect(extension?.navItems?.[0]?.href).toBe('/marketing')
   })
 })

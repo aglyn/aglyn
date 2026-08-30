@@ -28,7 +28,7 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { Figure, RateRow, Section } from './report-figures'
+import { Figure, RateRow, Section } from '@aglyn/plugins-email/components/report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
@@ -79,14 +79,15 @@ import {
   type CampaignAggregate,
   type CampaignSend,
   type EmailCampaign,
-} from '../model'
-import CampaignComposer from './campaign-composer'
+} from '@aglyn/plugins-email/model'
+import CampaignComposer from '@aglyn/plugins-email/components/campaign-composer'
 import CampaignEditDrawer, {
   type CampaignEditValues,
 } from './campaign-edit-drawer'
 import CampaignReportCard from './campaign-report-card'
-import { useCampaignManageApi } from './use-campaign-send-api'
-import { useOrgEmailTopics } from './use-org-email-topics'
+import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'
+import { useEmailsHubPath } from './use-emails-hub-path'
+import { useOrgEmailTopics } from '@aglyn/plugins-email/components/use-org-email-topics'
 
 /** How many of a campaign's emails the detail page enumerates. */
 const CAMPAIGN_EMAIL_CEILING = 50
@@ -121,7 +122,7 @@ export interface CampaignDetailCardProps {
   hostId: string
   /** A campaign container id, or a send id from before containers existed. */
   campaignId: string
-  /** The emails hub URL, for the way back to the campaigns list. */
+  /** The marketing hub URL, for the way back to the campaigns list. */
   basePath: string
 }
 
@@ -130,24 +131,27 @@ export interface CampaignDetailCardProps {
  *
  * ## Why this resolves two kinds of id
  *
- * `/emails/campaigns/{id}` was the report for a single SEND before a campaign
- * became a container, and those URLs are linkable by design — a merchant
- * pastes one into a message about last week's send. So the id in the path may
- * name either thing, and it is answered by reading: a container at
- * `emailCampaigns/{id}` renders this page, and anything else falls through to
- * the send's own report, unchanged.
+ * The id in `campaigns/{id}` may name a campaign CONTAINER or a single SEND,
+ * and which it is is answered by reading: a container at `emailCampaigns/{id}`
+ * renders this page, and anything else falls through to that send's own
+ * report.
  *
- * That fallback is what makes the container additive. No send document was
- * rewritten and no id was reassigned, which also means every unsubscribe link
- * already sitting in an inbox — each carrying `cid={sendId}` inside its own
- * signature — resolves exactly as it did.
+ * Not every send belongs to a container. One written before campaigns grouped
+ * their emails names none, its own id is the only id the URL can carry, and
+ * that id is also inside the HMAC of every unsubscribe footer already
+ * delivered — so a send id has to go on addressing a page rather than a 404.
+ * The fall-through is what makes the container additive: no send document is
+ * rewritten and no id is reassigned.
  *
- * The extra read is one document, and it buys the guarantee that no existing
- * link breaks.
+ * The extra read is one document, and it buys the guarantee that a pasted
+ * report link resolves whichever kind of id it carries.
  */
 export function CampaignDetailCard(props: CampaignDetailCardProps) {
   const { hostId, campaignId, basePath } = props
   const firestore = useFirestore()
+  // The sibling hub, for the two records this page links to but does not own:
+  // each message's report and the template it was built from.
+  const emailsHub = useEmailsHubPath()
   const router = useRouter()
   const { scope: dataScope } = useOrgDataScope({ hostId })
   const { confirm } = useConfirmationContext()
@@ -419,34 +423,37 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   /*==========================================
    * ONE EMAIL'S PAGE — the same one every other route to that record opens.
    *
-   * `emails/{sendId}`, which is where the Emails tab and the template's
-   * messages table already send a reader. This table used to send them to
-   * `campaigns/{sendId}` instead, so the same record had two pages depending
-   * on which list you clicked it in, and the campaign one is the poorer of
-   * the two: it is the aggregate report, without the message preview, the
-   * list it went to, or the per-recipient tables.
+   * The Emails hub's `emails/{sendId}`, which is where the messages list and
+   * a template's messages table also send a reader. One record has one page:
+   * a link that resolved somewhere else depending on which list it was
+   * clicked in would give the same message two pages, and the reader would
+   * have no way to tell which one they were on.
    *
-   * ## What this does NOT change
+   * `campaigns/{sendId}` on THIS hub goes on resolving as well, through the
+   * fall-through at the top of this file. That is not a convenience — every
+   * unsubscribe footer already delivered carries `cid={sendId}`, those
+   * messages sit in inboxes forever, and merchants paste report URLs into
+   * their own mail. Which link the console GENERATES and which URLs ANSWER
+   * are two separate questions, and only the first is decided here.
    *
-   * `campaigns/{sendId}` goes on resolving exactly as it does today. That is
-   * not a convenience — every unsubscribe footer already delivered carries
-   * `cid={sendId}`, those messages sit in inboxes forever, and merchants have
-   * pasted the URL into their own mail. This is a change to which link the
-   * console GENERATES, and nothing about which URLs answer.
-   *
-   * Nor is it a redirect. A redirect would be a second thing to be wrong
-   * about an id that is inside an HMAC; a page that keeps working is the
-   * shape with nothing to get wrong, and it costs nothing to leave standing.
+   * Nor is a redirect the answer to the second. A redirect would be another
+   * thing to be wrong about an id that is inside an HMAC; a page that keeps
+   * working has nothing to get wrong, and it costs nothing to leave standing.
    *=========================================*/
-  const sendHref = (send: CampaignSend) => `${basePath}/emails/${send.$id}`
+  const sendHref = (send: CampaignSend) =>
+    emailsHub ? `${emailsHub}/emails/${send.$id}` : undefined
 
   /**
    * What one of this campaign's emails can be opened into.
    *
-   * The same two the Emails tab offers, less the campaign — this page IS the
-   * campaign. A message composed inline was built from no template, so that
-   * entry is shown DISABLED with the reason rather than hidden: an absent
-   * control and an inapplicable one look identical, and only one is honest.
+   * The same two the Emails hub offers, less the campaign — this page IS the
+   * campaign. Both destinations are records the Emails console owns, so they
+   * are built from {@link useEmailsHubPath} rather than from this surface's
+   * own `basePath`.
+   *
+   * A message composed inline was built from no template, so that entry is
+   * shown DISABLED with the reason rather than hidden: an absent control and
+   * an inapplicable one look identical, and only one is honest.
    */
   const sendActions = (send: CampaignSend): RowActionsMenuItem[] => {
     const templateScreenId = String((send as any).templateScreenId ?? '')
@@ -456,16 +463,21 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         label: 'Open report',
         icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
         href: sendHref(send),
+        disabled: !sendHref(send),
+        disabledReason: 'This site’s console URL has not resolved yet',
       },
       {
         key: 'template',
         label: 'Open its template',
         icon: <MdiIcon path={mdiPaletteOutline.path} size={0.8} />,
-        href: templateScreenId
-          ? `${basePath}/templates/${templateScreenId}`
-          : undefined,
-        disabled: !templateScreenId,
-        disabledReason: 'This message was not built from a template',
+        href:
+          templateScreenId && emailsHub
+            ? `${emailsHub}/templates/${templateScreenId}`
+            : undefined,
+        disabled: !templateScreenId || !emailsHub,
+        disabledReason: templateScreenId
+          ? 'This site’s console URL has not resolved yet'
+          : 'This message was not built from a template',
       },
     ]
   }
@@ -628,22 +640,33 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                   <TableRow
                     key={send.$id}
                     hover
-                    onClick={() => router.push(sendHref(send))}
+                    onClick={() => {
+                      const href = sendHref(send)
+                      if (href) router.push(href)
+                    }}
                     sx={{ cursor: 'pointer' }}
                   >
                     <TableCell>
                       {/*
                         The row's own handler would fire too and push the same
                         route twice — one history entry per back press.
+
+                        Plain text until the Emails hub resolves: a link with
+                        no destination is worse than none, and this cell is
+                        the message's subject either way.
                        */}
-                      <AppLink
-                        href={sendHref(send)}
-                        onClick={(event: { stopPropagation: () => void }) =>
-                          event.stopPropagation()
-                        }
-                      >
-                        {send.subject || send.$id}
-                      </AppLink>
+                      {sendHref(send) ? (
+                        <AppLink
+                          href={sendHref(send) as string}
+                          onClick={(event: { stopPropagation: () => void }) =>
+                            event.stopPropagation()
+                          }
+                        >
+                          {send.subject || send.$id}
+                        </AppLink>
+                      ) : (
+                        (send.subject || send.$id)
+                      )}
                     </TableCell>
                     {/*
                       WHAT THE EMAIL IS DOING, not the field it stores.

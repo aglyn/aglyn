@@ -56,11 +56,11 @@ import {
   type CampaignListRow,
   type CampaignSend,
   type EmailCampaign,
-} from '../model'
+} from '@aglyn/plugins-email/model'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { activeEmailTopics } from '@aglyn/aglyn'
-import { useCampaignManageApi } from './use-campaign-send-api'
-import { useOrgEmailTopics } from './use-org-email-topics'
+import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'
+import { useOrgEmailTopics } from '@aglyn/plugins-email/components/use-org-email-topics'
 
 /**
  * How many sends the list reads.
@@ -106,7 +106,7 @@ const WINDOW_LABEL: Record<CampaignListRow['windowState'], string> = {
 export function HostCampaignsCard(props: {
   hostId: string
   /**
-   * The emails hub URL, when the caller already has it.
+   * The marketing hub URL, when the caller already has it.
    *
    * Resolved from the host route when it does not: the inbox console page
    * embeds this card on a tab of its own, and its `basePath` names the INBOX
@@ -125,7 +125,7 @@ export function HostCampaignsCard(props: {
       ? buildRoute(Route.HOST_PLUGIN, {
           orgSlug,
           host: subdomain,
-          pluginSlug: 'emails',
+          pluginSlug: 'marketing',
         })
       : null)
   const { data: user } = useUser()
