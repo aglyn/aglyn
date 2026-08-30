@@ -21,6 +21,7 @@ import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
   Button,
+  Chip,
   Divider,
   Stack,
   Table,
@@ -44,6 +45,7 @@ import {
  * convention each new card has to remember.
  */
 import { Figure, percent, RateRow, Section } from './report-figures'
+import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
 
 /**
  * The help affordance, hoisted so BOTH headers carry it.
@@ -148,6 +150,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
   const report = campaignReport(campaign?.stats)
   const linkReport = campaignLinkReport(links)
   const subject = String(campaign?.subject ?? 'Campaign')
+  const sendTimeMs = campaign ? emailSendTimeMs(campaign) : 0
 
   const backButton = (
     <Button
@@ -198,6 +201,65 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
             {caveat.message}
           </Alert>
         ))}
+
+        {/*==========================================
+          * THE EMAIL THESE FIGURES CAME FROM.
+          *
+          * This screen is reached at `/emails/campaigns/{sendId}`, which is a
+          * CAMPAIGN url resolving to a send — the fall-through that keeps
+          * every unsubscribe footer and every pasted report link working. So
+          * a reader arrives from the campaigns table, where the row carries a
+          * "Single send" chip, and lands on a page of delivery and engagement
+          * figures with nothing on it naming what was delivered.
+          *
+          * Figures with no visible source read as a campaign holding no
+          * emails while reporting real numbers, which is a contradiction
+          * rather than a shortage of detail. Naming the one email — and
+          * saying it IS the campaign, which is what the chip already claims
+          * and what `campaignListRows` already does at read time — is what
+          * makes the page answer the question it raises.
+          *
+          * One row, from the document this card already read: no query, no
+          * second listen, and the two-document cost the header describes is
+          * unchanged.
+          *=========================================*/}
+        <Section title="The email in this campaign">
+          <Stack spacing={1}>
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+            >
+              <AppLink href={`${basePath}/emails/${campaignId}`}>
+                {subject}
+              </AppLink>
+              <Chip size="small" label={emailStateLabel(campaign.status)} />
+              <Chip
+                size="small"
+                variant="outlined"
+                label="Single send"
+                title={
+                  'One email, sent on its own rather than as part of a ' +
+                  'campaign of several. Its report and its unsubscribe links ' +
+                  'are unchanged.'
+                }
+              />
+              <Typography variant="caption" color="text.secondary">
+                {sendTimeMs
+                  ? new Date(sendTimeMs).toLocaleString()
+                  : 'not recorded'}
+              </Typography>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
+              {'This campaign is one email. Everything below is that ' +
+                'email — open it for the message itself, the links it ' +
+                'carried and the people it reached.'}
+            </Typography>
+          </Stack>
+        </Section>
+
+        <Divider />
 
         {/*==========================================
           * WHAT HAPPENED TO THE MAIL.

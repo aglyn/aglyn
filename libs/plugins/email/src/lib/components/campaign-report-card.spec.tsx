@@ -231,3 +231,52 @@ describe('the campaign report names its denominators on screen', () => {
     expect(screen.getByText(/could not be loaded/)).toBeTruthy()
   })
 })
+
+/**
+ * A CAMPAIGN OF ONE, PRESENTED AS ONE.
+ *
+ * A campaign URL resolves to this card whenever the id names a SEND rather
+ * than a container — the fall-through that keeps every already-mailed
+ * unsubscribe footer and every pasted report link working. A reader arrives
+ * from the campaigns table, where that row carries a "Single send" chip, so
+ * the page has to be the campaign of one the chip claims. Without the row
+ * below it is a campaign that appears to hold no emails while reporting real
+ * delivery and engagement figures, which reads as a contradiction rather than
+ * as a shortage of detail.
+ */
+describe('a send reached through a campaign URL says what it is', () => {
+  it('names the one email the figures came from', async () => {
+    await renderReport(STATS)
+
+    expect(screen.getByText('The email in this campaign')).toBeTruthy()
+    expect(screen.getByText(/This campaign is one email/i)).toBeTruthy()
+  })
+
+  it('links that email to its own page, where the message and its recipients are', async () => {
+    await renderReport(STATS)
+
+    /*
+     * By ROLE, because the subject is on this page twice — once as the card's
+     * own heading and once as this row. A text query would match both and
+     * could not say which one carries the href.
+     */
+    const link = screen.getByRole('link', { name: 'Spring sale' })
+    expect(link.getAttribute('href')).toBe(
+      '/acme/hosts/site/emails/emails/camp_1',
+    )
+  })
+
+  it('carries the same "Single send" wording the campaigns table uses', async () => {
+    await renderReport(STATS)
+
+    expect(screen.getByText('Single send')).toBeTruthy()
+  })
+
+  it('says nothing about an email on a campaign it could not read', async () => {
+    // A different situation, and one that must not grow a row naming an email
+    // that may not exist.
+    await renderReport(undefined)
+
+    expect(screen.queryByText('The email in this campaign')).toBeNull()
+  })
+})
