@@ -49,8 +49,8 @@ let served: Record<string, any[]> = {}
 let writes: Array<[string, Record<string, any>]> = []
 /** Every route the card pushed. */
 let pushed: string[] = []
-/** The schema the create form was handed. */
-let formSchema: any = null
+/** The extra fields the card handed the create drawer. */
+let drawerFields: any[] = []
 /** What the create form submits when its button is pressed. */
 let formValues: Record<string, any> = {}
 
@@ -117,24 +117,36 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 /**
- * The create form, stubbed at the renderer.
+ * The shared create drawer, stubbed at its own boundary.
  *
- * The schema is asserted rather than driven: what matters here is that the
- * drawer collects a name, a window and lists, and that the card turns those
- * values into the right document. Driving data-driven-forms field by field
- * would test the form library.
+ * What it collects is asserted from the fields the card HANDS it, rather than
+ * driven field by field: the drawer and data-driven-forms are library code
+ * with their own tests, and what belongs here is which fields a campaign asks
+ * for and what the card does with the values that come back.
  */
 jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
-  simpleComponentMapper: {},
-  GridFormTemplateComponent: () => null,
-  FormRenderer: ({ schema, onSubmit }: any) => {
-    formSchema = schema
-    return (
-      <button type="button" onClick={() => onSubmit(formValues)}>
-        {'Submit campaign'}
-      </button>
-    )
+  CreateArtifactDrawer: ({ open, extraFields, onSubmit, errorSlot }: any) => {
+    drawerFields = extraFields
+    return open ? (
+      <div>
+        <button type="button" onClick={() => onSubmit(formValues)}>
+          {'Submit campaign'}
+        </button>
+        {/* A refusal is shown IN the drawer, where the form still is. */}
+        {errorSlot}
+      </div>
+    ) : null
   },
+}))
+
+jest.mock('./use-org-email-topics', () => ({
+  useOrgEmailTopics: () => ({
+    topics: [
+      { id: 'marketing', name: 'Promotions and offers' },
+      { id: 'sales', name: 'Sales outreach' },
+      { id: 'retired', name: 'Old stream', archived: true },
+    ],
+  }),
 }))
 
 import HostCampaignsCard from './campaigns-card'
@@ -155,7 +167,7 @@ beforeEach(() => {
   capsAsked = {}
   writes = []
   pushed = []
-  formSchema = null
+  drawerFields = []
   formValues = {}
   served = {
     emailCampaigns: [
@@ -255,12 +267,13 @@ describe('creating a campaign', () => {
     })
   }
 
-  it('collects a name, a window and the lists', async () => {
+  it('collects a window, the lists and the topic beside the shared name field', async () => {
     await openDrawer()
 
-    const names = formSchema.fields.map((field: any) => field.name)
-    expect(names).toEqual(['name', 'startAt', 'endAt', 'listIds'])
-    const listField = formSchema.fields.find(
+    // `displayName` is the shared drawer's own field and is not repeated here.
+    const names = drawerFields.map((field: any) => field.name)
+    expect(names).toEqual(['startAt', 'endAt', 'listIds', 'topicId'])
+    const listField = drawerFields.find(
       (field: any) => field.name === 'listIds',
     )
     expect(listField.options).toEqual([
@@ -268,12 +281,27 @@ describe('creating a campaign', () => {
     ])
   })
 
+  it('offers only the topics a recipient can still leave', async () => {
+    // A campaign may not be composed under a stream nobody can unsubscribe
+    // from; one already SENT under a retired topic keeps resolving.
+    await openDrawer()
+
+    const topicField = drawerFields.find(
+      (field: any) => field.name === 'topicId',
+    )
+    expect(topicField.options).toEqual([
+      { value: 'marketing', label: 'Promotions and offers' },
+      { value: 'sales', label: 'Sales outreach' },
+    ])
+  })
+
   it('writes the campaign and opens it', async () => {
     formValues = {
-      name: 'Summer sale',
+      displayName: 'Summer sale',
       startAt: '2026-06-01',
       endAt: '2026-06-30',
       listIds: ['list-1'],
+      topicId: 'sales',
     }
     await openDrawer()
 
@@ -288,11 +316,14 @@ describe('creating a campaign', () => {
     expect(value.startAtMs).toBe(Date.parse('2026-06-01'))
     expect(value.endAtMs).toBe(Date.parse('2026-06-30'))
     expect(value.listIds).toEqual(['list-1'])
+    // The stream its emails open on, so a sales campaign is not composed as
+    // marketing and mailed to people who left sales.
+    expect(value.topicId).toBe('sales')
     expect(pushed[0]).toContain('/emails/campaigns/')
   })
 
   it('takes a campaign with no dates and no lists', async () => {
-    formValues = { name: 'Always on' }
+    formValues = { displayName: 'Always on' }
     await openDrawer()
 
     fireEvent.click(screen.getByText('Submit campaign'))
@@ -303,7 +334,11 @@ describe('creating a campaign', () => {
   })
 
   it('refuses a window that ends before it starts', async () => {
-    formValues = { name: 'Backwards', startAt: '2026-06-30', endAt: '2026-06-01' }
+    formValues = {
+      displayName: 'Backwards',
+      startAt: '2026-06-30',
+      endAt: '2026-06-01',
+    }
     await openDrawer()
 
     fireEvent.click(screen.getByText('Submit campaign'))

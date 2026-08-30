@@ -18,6 +18,7 @@
 
 import { buildRoute, checkQuota, Route } from '@aglyn/aglyn'
 import { CAMPAIGN_MERGE_TAGS } from '../model'
+import CampaignTopicSelect from './campaign-topic-select'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -107,6 +108,15 @@ export interface CampaignComposerProps {
   emailCampaignId?: string
   /** The campaign's lists — the audience picker opens on the first of them. */
   campaignListIds?: string[]
+  /**
+   * The campaign's topic, which its emails open on.
+   *
+   * A default and not a constraint: the topic is a property of the MESSAGE —
+   * it decides who this send skips, what the preference page highlights, and
+   * which stream a resulting opt-out is recorded against — and one campaign
+   * may legitimately carry a newsletter and a promotion.
+   */
+  campaignTopicId?: string
   /** Called once a send or a schedule lands. */
   onSent?: () => void
 }
@@ -120,7 +130,13 @@ export interface CampaignComposerProps {
  * many it does not.
  */
 export function CampaignComposer(props: CampaignComposerProps) {
-  const { hostId, emailCampaignId, campaignListIds, onSent } = props
+  const {
+    hostId,
+    emailCampaignId,
+    campaignListIds,
+    campaignTopicId,
+    onSent,
+  } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   // Org-shared data root. Null until the org lookup settles, and for a host
   // with no owning org — so the audience picker offers the built-ins alone
@@ -251,6 +267,17 @@ export function CampaignComposer(props: CampaignComposerProps) {
     campaignListIds?.[0] ? `list:${campaignListIds[0]}` : 'leads',
   )
   const [experimentId, setExperimentId] = useState('')
+  /*
+   * WHICH STREAM this email belongs to.
+   *
+   * Empty until the picker settles it against the org's catalog, and sent on
+   * every request that resolves an audience — the count as much as the send.
+   * `filterTopicSendable` removes the people who have left this stream, so a
+   * preview taken without the topic reports a reach the send will not deliver,
+   * and a send taken without it records `marketing` for a sales campaign,
+   * which is the opt-out a recipient already exercised being ignored.
+   */
+  const [topicId, setTopicId] = useState(campaignTopicId ?? '')
   const [templateScreenId, setTemplateScreenId] = useState('')
   // Scheduling: a future timestamp turns Send into Schedule.
   const [sendAt, setSendAt] = useState('')
@@ -414,6 +441,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
           audience: audienceKind,
           ...(segmentId ? { segmentId } : {}),
           ...(listId ? { listId } : {}),
+          ...(topicId ? { topicId } : {}),
         })
         if (!active) return
         if (!response.ok) {
@@ -439,7 +467,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
       active = false
       clearTimeout(timer)
     }
-  }, [authorizedPost, audienceKind, segmentId, listId])
+  }, [authorizedPost, audienceKind, segmentId, listId, topicId])
 
   /**
    * WHAT THE EMAIL LOOKS LIKE, rendered by the code that will mail it.
@@ -601,6 +629,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
         ...(experimentId ? { experimentId } : {}),
         ...(templateScreenId ? { templateScreenId } : {}),
         ...(emailCampaignId ? { emailCampaignId } : {}),
+        ...(topicId ? { topicId } : {}),
         fromName: fromName.trim(),
         replyTo: replyTo.trim(),
         preheader: preheader.trim(),
@@ -646,6 +675,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
     experimentId,
     templateScreenId,
     emailCampaignId,
+    topicId,
     fromName,
     replyTo,
     preheader,
@@ -770,6 +800,17 @@ export function CampaignComposer(props: CampaignComposerProps) {
         period="this month"
       />
       <Divider />
+      {/*
+        The stream this email belongs to. Its own component and its own read of
+        the org's catalog, so the picker a merchant chooses from and the list
+        the preference page renders cannot drift apart.
+       */}
+      <CampaignTopicSelect
+        hostId={hostId}
+        value={topicId}
+        onChange={setTopicId}
+        disabled={busy}
+      />
       {/*
         WHO THE EMAIL COMES FROM.
 

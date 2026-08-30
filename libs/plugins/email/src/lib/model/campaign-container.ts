@@ -85,13 +85,15 @@ export interface EmailCampaign {
   /** Org email lists this campaign is aimed at, by list id. */
   listIds?: string[]
   /**
-   * The subscription topic this campaign belongs to.
+   * The stream this campaign's emails open on.
    *
-   * The seam the preference center attaches to: a recipient who has opted out
-   * of a topic is out of every campaign carrying it, which is a decision that
-   * belongs to the campaign rather than to each of its sends. Nothing reads
-   * it yet, and it is carried through the create flow so that the reader
-   * arrives to data rather than to a migration.
+   * A DEFAULT, not a constraint. The topic decides who a send skips, what the
+   * preference page linked from the footer highlights, and which stream a
+   * resulting opt-out is recorded against — all facts about one MESSAGE, and
+   * one campaign may legitimately carry a newsletter and a promotion. So the
+   * composer's picker is what the send records; this is what the picker opens
+   * on, which is what stops a "Sales" campaign quietly mailing under
+   * `marketing`.
    */
   topicId?: string
   createdAtMs?: number

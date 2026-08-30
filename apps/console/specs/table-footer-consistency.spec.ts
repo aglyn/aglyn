@@ -898,6 +898,31 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/email/src/lib/components/email-detail.tsx',
+    'One message’s report. Its tables are the message’s own facts — state, ' +
+      'send time, campaign, list, template — the fixed population taxonomy, ' +
+      'and the link rollup, which is bounded at WRITE time by ' +
+      '`CAMPAIGN_LINK_ROLLUP_MAX` with anything past the cap counted and ' +
+      'reported instead of dropped. A 50,000-recipient send draws the same ' +
+      'number of rows as a fifty-recipient one.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/email-template-detail.tsx',
+    'One template’s report. The audiences table is one row per named ' +
+      'audience the template has been sent to and the caveats are a fixed ' +
+      'set; the messages table is the ceilinged window the card already ' +
+      'holds, and it owns up to the ceiling rather than paging a window that ' +
+      'cannot be ordered on a date every writer stamps.',
+  ],
+  [
+    'libs/plugins/email/src/lib/components/email-topics-card.tsx',
+    'The org’s topic CATALOG — one row per stream a recipient can leave. Its ' +
+      'cardinality is a merchant’s own vocabulary, read ordered and ceilinged ' +
+      'at 200, and a preference page stops being a preference page well ' +
+      'before that many checkboxes: an org that reaches the ceiling has a ' +
+      'different problem than a truncated table.',
+  ],
+  [
     'libs/plugins/email/src/lib/components/campaign-composer.tsx',
     'A FORM, not a list. Everything it maps over is a picker’s options — the ' +
       'org’s segments and lists at `limit(50)`, the site’s email designs at ' +
@@ -1305,13 +1330,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
     expect(OWES_A_FOOTER).toHaveLength(15)
-    // 30 since the campaign composer became a file of its own. Every list in
-    // it is a picker's options, and the per-campaign report beside it is
-    // capped by construction — a fixed population taxonomy, and a link rollup
-    // bounded at WRITE time — so none of them can grow with an audience,
-    // which is the property this list exists to record. Raised here
-    // deliberately rather than by a walk that quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(30)
+    // 33 since the Emails surface grew a page per message, per template and
+    // per topic. Every table on those pages is bounded by something other
+    // than the audience — a fixed taxonomy, a rollup capped at WRITE time, a
+    // ceilinged window that says so, or a merchant's own vocabulary — which
+    // is the property this list exists to record. Raised here deliberately
+    // rather than by a walk that quietly stopped reaching a file.
+    expect(NOT_A_LIST).toHaveLength(33)
   })
 })
 

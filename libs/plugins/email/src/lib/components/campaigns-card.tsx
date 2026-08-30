@@ -47,7 +47,9 @@ import {
   type CampaignSend,
   type EmailCampaign,
 } from '../model'
-import CampaignCreateDrawer from './campaign-create-drawer'
+import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import { activeEmailTopics } from '@aglyn/aglyn'
+import { useOrgEmailTopics } from './use-org-email-topics'
 
 /**
  * How many sends the list reads.
@@ -173,6 +175,18 @@ export function HostCampaignsCard(props: {
     [firestore, dataScope],
     { idField: '$id' },
   )
+  // The org's topic catalog, so a campaign can be created under the stream it
+  // belongs to rather than defaulting its emails to `marketing`.
+  const { topics } = useOrgEmailTopics(hostId)
+  const topicOptions = useMemo(
+    () =>
+      activeEmailTopics(topics).map((topic) => ({
+        value: topic.id,
+        label: topic.name,
+      })),
+    [topics],
+  )
+
   const listNames = useMemo(() => {
     const names = new Map<string, string>()
     for (const list of listDocs ?? []) {
@@ -180,6 +194,15 @@ export function HostCampaignsCard(props: {
     }
     return names
   }, [listDocs])
+
+  const listOptions = useMemo(
+    () =>
+      (listDocs ?? []).map((list: any) => ({
+        value: String(list.$id),
+        label: String(list.name ?? list.$id),
+      })),
+    [listDocs],
+  )
 
   const rows = useMemo(() => {
     const campaigns = (readCampaigns as EmailCampaign[]).filter(
@@ -206,7 +229,14 @@ export function HostCampaignsCard(props: {
   const handleCreate = useCallback(
     async (values: Record<string, any>) => {
       if (creating) return
-      const name = String(values.name ?? '').trim()
+      /*
+       * `displayName` is the shared drawer's own field, and every artifact
+       * create in the console collects a name under that key. The campaign
+       * stores it as `name` — the container has one name and no second
+       * internal label — so the mapping happens here rather than by giving
+       * this one drawer a field the others do not have.
+       */
+      const name = String(values.displayName ?? '').trim()
       if (!name) return
       const startAtMs = values.startAt ? Date.parse(String(values.startAt)) : null
       const endAtMs = values.endAt ? Date.parse(String(values.endAt)) : null
@@ -228,6 +258,7 @@ export function HostCampaignsCard(props: {
           listIds: Array.isArray(values.listIds)
             ? values.listIds.map(String)
             : [],
+          ...(values.topicId ? { topicId: String(values.topicId) } : {}),
           createdAtMs: Date.now(),
           createdBy: String((user as any)?.uid ?? ''),
         })
@@ -406,16 +437,86 @@ export function HostCampaignsCard(props: {
           </Alert>
         ) : null}
       </Stack>
-      <CampaignCreateDrawer
+      {/*
+        The console's own create drawer, from the shared library rather than a
+        second one that looks like it. What a campaign collects beyond a name
+        is its window, the lists it is aimed at and the stream its emails open
+        on; the description box is left off because the container stores none,
+        and a field the writer discards is worse than one never offered.
+       */}
+      <CreateArtifactDrawer
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        lists={(listDocs ?? []) as Array<{ $id: string; name?: string }>}
+        title="Create campaign"
+        submitLabel="Create campaign"
+        includeDescription={false}
         onSubmit={handleCreate}
-        error={createError}
+        extraFields={campaignFields(listOptions, topicOptions)}
+        errorSlot={
+          createError ? (
+            <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
+              {createError}
+            </Alert>
+          ) : null
+        }
       />
     </CardDisplay>
   )
 }
+/**
+ * What a campaign collects beyond its name.
+ *
+ * Data-driven-forms field descriptors, built from the org's own lists and
+ * topics so the drawer offers what this workspace actually has. Dates are
+ * plain `date` inputs: a campaign window is a day at each end, and a time of
+ * day would be a precision the model does not carry.
+ */
+function campaignFields(
+  lists: Array<{ value: string; label: string }>,
+  topics: Array<{ value: string; label: string }>,
+): any[] {
+  return [
+    {
+      component: 'text-field',
+      name: 'startAt',
+      label: 'Starts',
+      type: 'date',
+      helperText: 'When the campaign window opens',
+      // The label would otherwise sit on top of the browser's own date
+      // placeholder, which a date input paints whether or not it is focused.
+      InputLabelProps: { shrink: true },
+    },
+    {
+      component: 'text-field',
+      name: 'endAt',
+      label: 'Ends',
+      type: 'date',
+      helperText: 'Leave empty for an open-ended campaign',
+      InputLabelProps: { shrink: true },
+    },
+    {
+      component: 'select',
+      name: 'listIds',
+      label: 'Lists',
+      multiple: true,
+      initialValue: [],
+      // A campaign with no list is legitimate: its emails can go to leads, to
+      // site members, or to a segment. The lists are what it is AIMED at.
+      helperText: 'The lists this campaign is aimed at',
+      disableDefaultOption: true,
+      options: lists,
+    },
+    {
+      component: 'select',
+      name: 'topicId',
+      label: 'Topic',
+      helperText: 'The stream its emails open on — each one can change it',
+      disableDefaultOption: true,
+      options: topics,
+    },
+  ]
+}
+
 HostCampaignsCard.displayName = 'HostCampaignsCard'
 
 export default HostCampaignsCard

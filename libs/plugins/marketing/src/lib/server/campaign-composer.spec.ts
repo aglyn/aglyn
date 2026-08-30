@@ -141,6 +141,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldPath: { documentId: () => '__name__' },
     },
   },
+  /*
+   * Nobody here has left a topic, so the third list is a pass-through.
+   * Modeled rather than omitted: the barrel factory is a CLOSED WORLD, and an
+   * absent export arrives as `undefined` and fails the send with a TypeError
+   * that says nothing about the behavior under test.
+   */
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
   resolveHostSendingIdentity: async () =>

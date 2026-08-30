@@ -124,6 +124,15 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   }),
 }))
 
+jest.mock('./use-org-email-topics', () => ({
+  useOrgEmailTopics: () => ({
+    topics: [
+      { id: 'marketing', name: 'Promotions and offers' },
+      { id: 'sales', name: 'Sales outreach' },
+    ],
+  }),
+}))
+
 import CampaignComposer from './campaign-composer'
 
 /**
@@ -447,6 +456,48 @@ describe('the sender fields', () => {
       audience: 'list',
       listId: 'list-1',
     })
+  })
+})
+
+describe('the stream this email belongs to', () => {
+  it('carries the topic on the COUNT as well as the send', async () => {
+    /*
+     * The easy one to miss, and the one that makes the count wrong rather than
+     * merely incomplete: `filterTopicSendable` removes the people who have
+     * left this stream, so a preview taken without the topic reports a reach
+     * the send will not deliver.
+     */
+    await mount({ campaignTopicId: 'sales' })
+
+    expect(previews()[0].topicId).toBe('sales')
+  })
+
+  it('records the topic on the send', async () => {
+    // Without it the send records `marketing`, and a recipient who left the
+    // sales stream is mailed a sales campaign anyway.
+    await mount({ campaignTopicId: 'sales' })
+    type('Subject', 'Spring sale')
+    type('Message', 'Ends Sunday')
+    await settle(0)
+
+    fireEvent.click(screen.getByText('Send campaign'))
+    await waitFor(() => expect(posted.some((body) => !body.action)).toBe(true))
+
+    expect((posted.find((body) => !body.action) as any).topicId).toBe('sales')
+  })
+
+  it('settles on the org default before it counts, and counts ONCE', async () => {
+    /*
+     * The picker settles the field against the org's catalog rather than
+     * leaving it blank while the server has already decided. That settle
+     * happens inside the count's debounce window, so the composer asks for
+     * one count — under the topic it will actually send with — rather than
+     * one under no topic followed by a correction.
+     */
+    await mount()
+
+    expect(previews()).toHaveLength(1)
+    expect(previews()[0].topicId).toBe('marketing')
   })
 })
 

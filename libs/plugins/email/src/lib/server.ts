@@ -16,6 +16,13 @@
  */
 
 import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
+/*
+ * The MODULE, not the barrel. `@aglyn/aglyn` re-exports the app-utils index,
+ * which reaches `enabled-plugins-context` and therefore React — and this file
+ * is loaded by the plugin API route's SERVER graph, where a client-only
+ * module is a bundle `app-router-graph.spec.ts` refuses. Every name here is a
+ * pure function or a constant that lives in one leaf file.
+ */
 import {
   activeEmailTopics,
   mergeEmailTopics,
@@ -24,7 +31,7 @@ import {
   EMAIL_TOPICS_COLLECTION,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type EmailTopic,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/email-topics'
 import { firebaseAdmin, resolveOrgIdForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {

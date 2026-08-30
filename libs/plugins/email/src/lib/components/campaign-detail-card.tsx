@@ -414,6 +414,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
               hostId={hostId}
               emailCampaignId={campaignId}
               campaignListIds={listIds}
+              campaignTopicId={campaign.topicId}
               onSent={() => setComposing(false)}
             />
           </Box>
