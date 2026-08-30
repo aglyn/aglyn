@@ -292,10 +292,17 @@ describe('GET /v1/sites/{id}/form-submissions/{submissionId} (AGL-2127)', () => 
     expect(await response.json()).toEqual({
       id: 'sub_1',
       object: 'form_submission',
+      // The form ENTITY, `null` on a row written before the form was
+      // adopted. `form` stays the caption beside it.
+      form_id: null,
       form: 'contact',
       path: '/contact',
       fields: { email: 'avery@example.com', message: 'Hello' },
       read: false,
+      // Where the platform already sent this row. An integration syncing
+      // into a CRM could not previously tell that a dataset record had
+      // already been written for it.
+      routing: null,
       created: null,
     })
   })

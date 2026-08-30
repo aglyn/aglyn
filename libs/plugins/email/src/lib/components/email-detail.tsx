@@ -63,6 +63,14 @@ import EmailRecipientsCard from './email-recipients-card'
 import { Figure, percent, RateRow, Section } from './report-figures'
 import { useCampaignSendApi } from './use-campaign-send-api'
 
+const previewDocsHelp = pluginDocsHelp('emailCampaigns', {
+  anchor: '#the-campaign-report',
+  excerpt:
+    'The email as an inbox receives it, drawn by the same renderer the send ' +
+    'path uses. Merge tokens are left standing — a real send fills them from ' +
+    'each recipient.',
+})
+
 const emailDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#the-campaign-report',
   excerpt:
@@ -973,7 +981,12 @@ export function EmailDetail(props: EmailDetailProps) {
        * are named for the same reason — without them the 640px frame sits
        * flush against the card's edge.
        */}
-      <CardDisplay header={'Preview'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Preview'}
+        help={previewDocsHelp}
+        contentGutterX
+        contentGutterY
+      >
         {templateScreenId ? (
           <EmailDesignPreview
             hostId={hostId}

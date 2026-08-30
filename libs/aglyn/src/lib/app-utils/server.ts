@@ -92,6 +92,10 @@ export * from './plan-entitlements'
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
+export * from './forms'
+// What a form's DESIGN must still satisfy for its submissions to arrive.
+// After `forms`, whose field walk it reads the drawn fields with.
+export * from './form-contract'
 export * from './visitor-record-ceiling'
 export * from './health-report'
 // Did a webhook delivery actually DO anything (AGL-1954)? After

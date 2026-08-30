@@ -74,6 +74,14 @@ import { Figure, RateRow, Section } from './report-figures'
  */
 export const TEMPLATE_CAMPAIGN_CEILING = 100
 
+const previewDocsHelp = pluginDocsHelp('designedEmails', {
+  anchor: '#send-it',
+  excerpt:
+    'The template as an inbox receives it, drawn by the same renderer the ' +
+    'send path uses. Merge tokens are left standing — a real send fills them ' +
+    'from each recipient.',
+})
+
 const templateDocsHelp = pluginDocsHelp('designedEmails', {
   anchor: '#send-it',
   excerpt:
@@ -619,7 +627,12 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
        * the tallest thing on both, so at the top it pushes every number below
        * the fold.
        */}
-      <CardDisplay header={'Preview'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Preview'}
+        help={previewDocsHelp}
+        contentGutterX
+        contentGutterY
+      >
         <EmailDesignPreview
           hostId={hostId}
           nodes={version?.nodes}

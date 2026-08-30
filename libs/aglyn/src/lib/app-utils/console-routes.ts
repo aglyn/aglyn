@@ -363,6 +363,13 @@ export enum Route {
   // reached from here — matching SCREEN_DETAILS rather than jumping a row
   // straight into the editor.
   COMPONENT_DETAILS = '/[orgSlug]/hosts/[host]/components/[componentId]',
+  HOST_FORMS = '/[orgSlug]/hosts/[host]/forms',
+  // A form is a designable document, so its surface is the component one:
+  // a list, a detail page that owns the versions, and the besigner reached
+  // from there. Deliberately NOT a row that jumps into the editor — a form's
+  // routing and consent field are edited on the detail page, and those decide
+  // what the design is then checked against.
+  FORM_DETAILS = '/[orgSlug]/hosts/[host]/forms/[formId]',
   HOST_TEMPLATES = '/[orgSlug]/hosts/[host]/templates',
   // Template detail (AGL-694), the counterpart to COMPONENT_DETAILS. Note
   // TEMPLATE_BESIGNER carries no versionId — templates version but never
@@ -376,6 +383,7 @@ export enum Route {
   HOST_USERS = '/[orgSlug]/hosts/[host]/users',
   HOST_ANALYTICS = '/[orgSlug]/hosts/[host]/analytics',
   COMPONENT_BESIGNER = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner',
+  FORM_BESIGNER = '/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner',
   TEMPLATE_BESIGNER = '/[orgSlug]/hosts/[host]/templates/[templateId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
   // Draft preview for every besigner document kind (AGL-1203). Screens had
@@ -385,6 +393,7 @@ export enum Route {
   // deployment. TEMPLATE_PREVIEW carries no versionId, matching
   // TEMPLATE_BESIGNER.
   COMPONENT_PREVIEW = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/preview',
+  FORM_PREVIEW = '/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/preview',
   TEMPLATE_PREVIEW = '/[orgSlug]/hosts/[host]/templates/[templateId]/preview',
   LAYOUT_PREVIEW = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/preview',
   // The list sits at the bare path, like HOST_COMPONENTS. It used to be
@@ -568,6 +577,12 @@ export interface RoutePayload {
     host: string
     componentId: string
   }
+  [Route.HOST_FORMS]: { orgSlug: string; host: string }
+  [Route.FORM_DETAILS]: {
+    orgSlug: string
+    host: string
+    formId: string
+  }
   [Route.HOST_TEMPLATES]: { orgSlug: string; host: string }
   [Route.TEMPLATE_DETAILS]: {
     orgSlug: string
@@ -585,6 +600,12 @@ export interface RoutePayload {
     componentId: string
     versionId: string
   }
+  [Route.FORM_BESIGNER]: {
+    orgSlug: string
+    host: string
+    formId: string
+    versionId: string
+  }
   [Route.TEMPLATE_BESIGNER]: {
     orgSlug: string
     host: string
@@ -600,6 +621,12 @@ export interface RoutePayload {
     orgSlug: string
     host: string
     componentId: string
+    versionId: string
+  }
+  [Route.FORM_PREVIEW]: {
+    orgSlug: string
+    host: string
+    formId: string
     versionId: string
   }
   [Route.TEMPLATE_PREVIEW]: {

@@ -19,10 +19,12 @@ Submissions live **under a site**, not under your organization — the paths all
 {
   "id": "sub_1",
   "object": "form_submission",
+  "form_id": "frm_7QK2",
   "form": "contact",
   "path": "/contact",
   "fields": { "email": "hi@example.com", "message": "Hello!" },
   "read": false,
+  "routing": { "dataset": { "id": "ds_1", "name": "Leads", "recordId": "rec_9" } },
   "created": "2026-07-20T18:23:23.950Z"
 }
 ```
@@ -31,10 +33,12 @@ Submissions live **under a site**, not under your organization — the paths all
 | --- | --- | --- |
 | `id` | string | Submission id. Unique **within a site**, not across your organization. |
 | `object` | string | Always `"form_submission"`. |
-| `form` | string \| null | The form's name, as set in the Besigner. `null` on a submission that predates named forms. |
+| `form_id` | string \| null | The **form** this was sent to. Stable across renames — prefer it over `form` for grouping. `null` on a submission collected before that form was created. |
+| `form` | string \| null | The form's **name** at the time of submission — a caption, not an identity. Renaming a form changes it for later submissions only. `null` on a submission that predates named forms. |
 | `path` | string \| null | The page path the visitor submitted from. |
 | `fields` | object | Exactly what the visitor typed, field name → value. **Not writable** — see [below](#read-is-the-only-writable-field). |
 | `read` | boolean | Your processing flag. The console inbox toggles the same field. |
+| `routing` | object \| null | Where the platform already sent this submission. `null` when it went only to the inbox. Check it before writing your own copy — a row with `routing.dataset.recordId` is already in that dataset. |
 | `created` | string \| null | ISO 8601. |
 
 ## `read` is the only writable field {#read-is-the-only-writable-field}
@@ -97,7 +101,8 @@ other order means a lead you never sent and never will.
 
 | Param | Notes |
 | --- | --- |
-| `form` | Filter to one form by exact name. Omit for every form on the site. |
+| `formId` | Filter to one form by id. **Survives a rename** — see [below](#form-id-filter). Wins if you send both. |
+| `form` | Filter to one form by exact **name**. Kept for forms that have no id yet; prefer `formId`. |
 | `read` | `true` or `false`. Omit for both. Any other value is a `400` — see [below](#read-filter). |
 | `limit`, `cursor` | [Standard pagination](../conventions.md#pagination). |
 
@@ -129,8 +134,30 @@ refuses, because guessing wrong returns a *plausible* page. An **empty** `?read=
 the [absent filter](../conventions.md#filters), not an error, so a client serializing
 an unset field gets the unfiltered list.
 
-**Combining `?form=` with `?read=` gives [short pages](../conventions.md#short-pages).**
-Only `form` narrows the query itself; `read` is applied to each page after it is read.
+#### `?formId=` and why a name is not an identity {#form-id-filter}
+
+`?form=` matches the name a form had **when each submission arrived**. Rename a form
+in the Besigner and its history splits in two: rows collected before the rename answer
+to the old name, rows after it to the new one. Two different forms that happen to share
+a name have always come back as one list.
+
+`?formId=` is the filter that doesn't have either problem. It matches the form itself,
+so one form is one list no matter how often it is renamed, and two forms are two lists
+even if they are both called `contact`.
+
+```bash
+# every submission this form has ever collected, across every rename
+curl "https://app.aglyn.com/api/v1/sites/host_demo/form-submissions?formId=frm_7QK2" \
+  -H "Authorization: Bearer aglyn_sk_…"
+```
+
+Submissions collected before a form was created carry `form_id: null` and are not
+returned by any `?formId=`. They are still in the unfiltered list and still carry
+`form` and `path` — nothing is hidden, and `?form=` keeps working exactly as it did.
+
+**Combining either form filter with `?read=` gives [short pages](../conventions.md#short-pages).**
+Only the form filter narrows the query itself; `read` is applied to each page after it
+is read.
 So a page of 100 can come back with 3 rows, or with none at all, while `has_more` is
 still `true`. Stop on `next_cursor`, never on a page's length. Used on its own,
 `?read=` narrows the query directly and pages come back full.

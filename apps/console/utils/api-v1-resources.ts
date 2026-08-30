@@ -1323,10 +1323,20 @@ function formSubmissionView(doc: FirebaseFirestore.DocumentSnapshot) {
   return {
     id: doc.id,
     object: 'form_submission',
+    // The form ENTITY this was sent to, `null` for a row written before the
+    // form was adopted. `form` below stays the caption — an integration
+    // grouping by it is grouping by a display string that a rename splits,
+    // which is the whole reason this field exists.
+    form_id: doc.get('formId') ?? null,
     form: doc.get('formName') ?? null,
     path: doc.get('path') ?? null,
     fields: doc.get('fields') ?? {},
     read: Boolean(doc.get('read')),
+    // Where the platform already sent this row. Omitting it meant an
+    // integration syncing submissions into a CRM could not tell that a record
+    // had already been written to a dataset — the one fact that stops it
+    // duplicating work the platform had done.
+    routing: doc.get('routing') ?? null,
     created: serialize(doc.get('createdAt')) ?? null,
   }
 }
@@ -1385,7 +1395,15 @@ async function handleFormSubmissions(
 
     let query: FirebaseFirestore.Query = collection
     const form = url.searchParams.get('form')
-    if (form) query = query.where('formName', '==', form)
+    const formId = url.searchParams.get('formId')
+    // `formId` is the id-first filter and wins when both are sent: it is the
+    // one that survives a rename. `?form=` is NOT removed and is not
+    // deprecated here — it filters on the caption every submission still
+    // carries, which is the only thing a form that has not been adopted yet
+    // can be filtered by. The same posture the legacy `?collection=` content
+    // parameters take.
+    if (formId) query = query.where('formId', '==', formId)
+    else if (form) query = query.where('formName', '==', form)
     // `read` goes to FIRESTORE only when it is the sole filter, and is
     // applied after the read when it joins `form` (AGL-2460).
     //
@@ -1407,10 +1425,19 @@ async function handleFormSubmissions(
     // it has stamped `read: false` on every row since the feature's first
     // commit (AGL-76/77, `fc149e538`). There is no fieldless generation to
     // drop, so the cheap query is also the correct one.
-    if (read !== null && !form) query = query.where('read', '==', read)
+    // Either form filter already spent this list's one equality clause, so
+    // `read` is applied after the read exactly as it is for `?form=` — a
+    // second `where` plus the document-id ordering is a three-clause query
+    // and needs its own composite index per combination. The `formId ASC,
+    // createdAt DESC` index this work ships serves the CONSOLE's ordered
+    // list; `/v1` lists are ordered by document id and are a different query.
+    const narrowedByForm = Boolean(formId || form)
+    if (read !== null && !narrowedByForm) {
+      query = query.where('read', '==', read)
+    }
     const { docs, nextCursor } = await paginate(query, url)
     const matched =
-      read !== null && form
+      read !== null && narrowedByForm
         ? docs.filter((doc) => Boolean(doc.get('read')) === read)
         : docs
     return listResponse(matched.map(formSubmissionView), nextCursor, ctx.headers)

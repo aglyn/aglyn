@@ -45,6 +45,21 @@ export const FORM_FIELD_ID: Aglyn.ComponentId = 'formField'
 export type FormAfterSubmit = 'message' | 'redirect' | 'reveal'
 
 export interface FormProps {
+  /**
+   * The form entity this node submits as (`docs/specs/reusable-forms.md` §2c).
+   *
+   * THE identity. `formName` below is a caption and always was: it is copied
+   * onto each submission at write time and reconciled with nothing, so
+   * renaming a form split its history in two and two pages sharing a label
+   * were one list. An id survives both.
+   *
+   * This is the whole binding. Reuse across pages needs nothing further —
+   * promote the bound subtree once and the id travels inside the definition,
+   * so every instance writes the same form's submissions without the author
+   * retyping a label. Two instances of one definition are ONE form, which is
+   * the point; an author who wants two forms makes two forms.
+   */
+  formId?: string
   /** Identifies the form in the submissions inbox. */
   formName?: string
   /**
@@ -141,6 +156,7 @@ export const FORM_SUBMITTED_EVENT = 'aglyn:form-submitted'
  */
 const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   const {
+    formId,
     formName,
     datasetId,
     datasetName,
@@ -222,6 +238,11 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             hostId,
+            // The bound form entity, when there is one. Sent ALONGSIDE the
+            // caption rather than instead of it: the caption keeps the
+            // pre-entity `?form=` filter working for every form that has not
+            // been adopted yet, and no phase of the migration removes it.
+            ...(formId ? { formId } : {}),
             formName: formName || 'Form',
             // Id-first dataset binding (AGL-556); the name rides along for
             // the server's legacy fallback.
@@ -329,6 +350,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
     [
       hostId,
       status,
+      formId,
       formName,
       datasetId,
       datasetName,
@@ -673,8 +695,21 @@ export const formSchema: Aglyn.ComponentSchema<FormProps> = {
   icon: { path: mdiEmailFastOutline.path, sx: { color: '#0288d1' } },
   attributes: [
     {
+      name: 'formId',
+      description:
+        'The form this collects for, from the Forms page. Stored by id, so ' +
+        'renaming the form never splits its submission history and two ' +
+        'pages placing the same form share one list. Leave unset to keep ' +
+        'filing submissions under the name below.',
+      component: Aglyn.FieldComponentType.FORM_SELECT,
+      label: 'Form',
+    },
+    {
       name: 'formName',
-      description: 'Identifies this form in the submissions inbox.',
+      description:
+        'Caption shown in the submissions inbox, used when no form above ' +
+        'is picked. A name is not an identity: renaming it splits the ' +
+        'history of everything already submitted under the old one.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Form name',
     },

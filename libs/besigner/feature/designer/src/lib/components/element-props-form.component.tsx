@@ -677,6 +677,9 @@ export function entityKindsForAttributes(
       case Aglyn.FieldComponentType.DATASET_FIELD_SELECT:
         kinds.add('datasets')
         break
+      case Aglyn.FieldComponentType.FORM_SELECT:
+        kinds.add('forms')
+        break
       default:
         break
     }
@@ -827,6 +830,8 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             return entityOptions.categories
           case Aglyn.FieldComponentType.DATASET_SELECT:
             return entityOptions.datasets
+          case Aglyn.FieldComponentType.FORM_SELECT:
+            return entityOptions.forms
           default:
             return undefined
         }

@@ -24,6 +24,7 @@ import {
   checkQuota,
   createResourceUid,
   ENTRIES_MAX_PER_COLLECTION,
+  FORMS_MAX_PER_HOST,
   nameSearchKey,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   type OrgEntitlements,
@@ -346,6 +347,53 @@ const RESOURCES: Record<string, {
     label: 'reusable components',
     activity: { type: 'component', noun: 'reusable component' },
     fields: ['displayName', 'description', 'rootId', 'nodes'],
+  },
+  /*
+   * The form entity (`docs/specs/reusable-forms.md` §2b):
+   * `hosts/{hostId}/forms/{formId}`, the thing a submission's `formId` points
+   * at. Before it, a form's whole identity was the caption an author typed —
+   * so renaming one split its submission history, and two pages sharing a
+   * label had always been one list.
+   *
+   * Gated on `reusableComponents` rather than a `formsPerHost` plan
+   * dimension. The reuse half of a reusable form is that entitlement's engine
+   * already: a bound `Form` subtree is promoted and placed like any other
+   * definition, and the `formId` travels inside it. Selling the entity
+   * separately would price the half that was already sold.
+   *
+   * `FORMS_MAX_PER_HOST` is a flat platform cap in the `WEBHOOK_MAX_PER_HOST`
+   * family — no `OrgEntitlements` key, the same number on every plan, nothing
+   * on the price list to explain. The account owner approved that instrument
+   * for the member/lead ceilings on the stated ground that an abuse control
+   * is not something we sell.
+   *
+   * ⚠️ No `softDeletes`. That branch reads EVERY document to count live ones,
+   * and a form is deleted outright — its submissions are not, and they keep
+   * their `formId`, so the per-form list of a deleted form is still readable
+   * and nothing a visitor sent is lost with the definition.
+   */
+  form: {
+    collection: 'forms',
+    entitlement: 'reusableComponents',
+    maxPerHost: FORMS_MAX_PER_HOST,
+    label: 'forms',
+    activity: { type: 'content', noun: 'form' },
+    // `rootId` and `nodes` are the DESIGN, seeded at create the way a
+    // reusable component's are, so a form opens in the besigner with a canvas
+    // instead of needing one grafted on later. `fields` is what the form
+    // DECLARES and stays separate: the design is what an author draws, the
+    // declaration is what the submission path reads, and publishing is the
+    // moment `checkFormContract` requires the two to agree.
+    fields: [
+      'displayName',
+      'slug',
+      'fields',
+      'consentFieldName',
+      'routing',
+      'legacyMatch',
+      'rootId',
+      'nodes',
+    ],
   },
   // POS registers (AGL-472): the `posRegisters` cap becomes enforceable
   // by routing register creation here. `pos` gates access to POS at all

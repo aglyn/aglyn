@@ -100,20 +100,28 @@ export const SITE_MEMBERS_MAX_PER_HOST = 50_000
  * How many lead records one site may hold (AGL-1529).
  *
  * **Deliberately NOT the same number as {@link SITE_MEMBERS_MAX_PER_HOST}**,
- * because they are different objects with different accumulation:
+ * and the reason changed when leads were deduped.
  *
- *  - A member is DEDUPED by email — one address is one member document, ever.
- *  - A lead is APPEND-ONLY and deduped by nothing. Every sign-up writes one,
- *    and so does every booking (`libs/plugins/bookings/src/lib/server.ts`
- *    writes one on the free path and one on the paid-checkout path), so one
- *    returning customer legitimately produces many.
+ * A lead used to be APPEND-ONLY, keyed by nothing: every sign-up wrote one
+ * and so did every booking, so one returning customer legitimately produced
+ * many rows. 4× was sized to keep the MEMBER ceiling the binding one on the
+ * path they share, rather than refusing a record on a site doing nothing
+ * wrong. Since `docs/specs/reusable-forms.md` §4 a lead is one document per
+ * person per host, keyed on `personKey`, so leads and members now count the
+ * same population and that arithmetic no longer applies.
  *
- * So on any real site the lead collection outgrows the member collection, and
- * equal numbers would make the LEAD ceiling the one that trips first — on a
- * site doing nothing wrong, refusing a record for a reason that has nothing
- * to do with the visitor in front of it. 4× keeps the member ceiling the
- * binding one on the path they share while still being a bound: 200,000 lead
- * rows at ~200 bytes is ~40 MB, which is a number, and unbounded is not.
+ * **The number stays where it is.** Lowering it because the collection stopped
+ * growing per event would convert a safety margin into a plan limit, which
+ * `docs/DECISION_LOG.md` forbids — the 2026-08-23 entry made this ceiling a
+ * flat platform abuse control precisely so "unlimited leads on every plan"
+ * stays literally true. What the headroom now buys is a ceiling that is very
+ * unlikely to trip at all, which is the right shape for a control that
+ * refuses a person: 200,000 lead rows at ~200 bytes is ~40 MB, which is a
+ * number, and unbounded is not.
+ *
+ * ⚠️ It must stay ABOVE {@link SITE_MEMBERS_MAX_PER_HOST}. A site member is
+ * also a lead, so an equal or lower lead ceiling would refuse the side effect
+ * of a sign-up the member ceiling had just allowed.
  */
 export const LEADS_MAX_PER_HOST = 200_000
 
