@@ -36,6 +36,8 @@ import {
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { createEmailScreen } from '../utils/create-email-screen'
 import { useCampaignSendApi } from './use-campaign-send-api'
+import { useSendingApi } from './use-sending-identity-api'
+import CampaignTestSendDrawer from './campaign-test-send-drawer'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -87,6 +89,9 @@ interface AudiencePreview {
   grandfathered: number
   /** Of `audienceSize`, how many the consent rule refuses. */
   consentWithheld: number
+  /** Which address this send would leave on, in the server's own words. */
+  identity: string
+  identitySource: 'custom' | 'platform' | null
 }
 
 /** The message itself, rendered by the send path's own renderer. */
@@ -160,6 +165,8 @@ export interface CampaignComposerProps {
     topicId?: string
     templateScreenId?: string
     sendAtMs?: number
+    /** `platform`, or absent for the site's standing selection. */
+    sendingIdentity?: string
   }
   /** Called once a send or a schedule lands. */
   onSent?: () => void
@@ -319,6 +326,18 @@ export function CampaignComposer(props: CampaignComposerProps) {
   const [fromName, setFromName] = useState(initial?.fromName ?? '')
   const [replyTo, setReplyTo] = useState(initial?.replyTo ?? '')
   const [preheader, setPreheader] = useState(initial?.preheader ?? '')
+  /**
+   * WHICH OF THIS SITE'S IDENTITIES THIS EMAIL LEAVES ON.
+   *
+   * Two values and no more — empty for the site's standing selection, and
+   * `platform` for the shared Aglyn domain. It is deliberately not a domain
+   * name: which custom domain a site may use is an org-admin decision stored
+   * on the host, and a composer that could name one would be a way for a site
+   * editor to send as a domain their site was never given.
+   */
+  const [sendingIdentity, setSendingIdentity] = useState(
+    initial?.sendingIdentity ?? '',
+  )
   /*
    * The campaign's own list is where the composer opens, because a send
    * composed inside a campaign aimed at a list is overwhelmingly a send to
@@ -387,46 +406,16 @@ export function CampaignComposer(props: CampaignComposerProps) {
    */
   const authorizedPost = useCampaignSendApi(hostId)
 
-  const handleTestSend = useCallback(async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      const { response, payload } = await authorizedPost({
-        action: 'test',
-        subject: subject.trim() || 'Test send',
-        body: body.trim(),
-        fromName: fromName.trim(),
-        replyTo: replyTo.trim(),
-        preheader: preheader.trim(),
-        templateScreenId: templateScreenId || undefined,
-      })
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Test send failed', {
-          variant: 'warning',
-          allowDuplicate: true,
-        })
-      }
-      enqueueSnackbar('Test sent to your address', {
-        variant: 'success',
-        persist: false,
-      })
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', { variant: 'error' })
-    } finally {
-      setBusy(false)
-    }
-  }, [
-    busy,
-    authorizedPost,
-    subject,
-    body,
-    fromName,
-    replyTo,
-    preheader,
-    templateScreenId,
-    enqueueSnackbar,
-  ])
+  /*
+   * Proofing is a drawer now, not a button that mails you.
+   *
+   * "Send test to me" could only ever answer one of the three questions a
+   * proof is asked: what does this look like, to somebody with real data, at
+   * an address I can actually open. It mailed the caller, rendered against
+   * the caller, from whatever identity the site happened to hold — so a
+   * merchant checking their merge tags saw the fallbacks every time.
+   */
+  const [testOpen, setTestOpen] = useState(false)
 
   /*
    * The audience select's value packs the kind and the id into one string
@@ -458,7 +447,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * number a merchant checks before pressing Send.
    */
   const [preview, setPreview] = useState<
-    AudiencePreview | { error: string } | null
+    AudiencePreview | { error: string; blocking?: boolean } | null
   >(null)
   useEffect(() => {
     let active = true
@@ -485,13 +474,32 @@ export function CampaignComposer(props: CampaignComposerProps) {
           ...(segmentId ? { segmentId } : {}),
           ...(listId ? { listId } : {}),
           ...(topicId ? { topicId } : {}),
+          /*
+           * The identity rides the count, which is what puts the refusal in
+           * front of the Send button instead of behind it. The dry run
+           * resolves the sending identity on exactly the terms a real send
+           * does and answers 409 the same way, so an unverified domain is
+           * refused here — before any copy is written — rather than after
+           * somebody presses Send.
+           */
+          ...(sendingIdentity ? { sendingIdentity } : {}),
         })
         if (!active) return
         if (!response.ok) {
           // The refusals are useful, not noise: "The audience is empty"
           // and the monthly-cap message are exactly what a merchant needs
           // BEFORE writing the email rather than after.
-          return setPreview({ error: String(payload?.error ?? '') })
+          //
+          // A 409 is the one that must also STOP the send. Every other
+          // refusal here is about the audience and can be true while the
+          // email is still worth composing; this one says the message has
+          // nowhere to leave from, and letting Send stay live would trade a
+          // sentence the merchant can act on for the same 409 arriving after
+          // the click.
+          return setPreview({
+            error: String(payload?.error ?? ''),
+            blocking: response.status === 409,
+          })
         }
         setPreview({
           sendable: Number(payload?.sendable ?? 0),
@@ -501,6 +509,11 @@ export function CampaignComposer(props: CampaignComposerProps) {
           consented: Number(payload?.consented ?? 0),
           grandfathered: Number(payload?.grandfathered ?? 0),
           consentWithheld: Number(payload?.consentWithheld ?? 0),
+          identity: String(payload?.identity ?? ''),
+          identitySource: (payload?.identitySource ?? null) as
+            | 'custom'
+            | 'platform'
+            | null,
         })
       } catch {
         if (active) setPreview(null)
@@ -510,7 +523,49 @@ export function CampaignComposer(props: CampaignComposerProps) {
       active = false
       clearTimeout(timer)
     }
-  }, [authorizedPost, audienceKind, segmentId, listId, topicId])
+  }, [authorizedPost, audienceKind, segmentId, listId, topicId, sendingIdentity])
+
+  /**
+   * THE IDENTITIES THIS SITE MAY SEND AS, for the picker.
+   *
+   * One cheap read — the host document and at most one org subcollection
+   * document — issued once, and NOT part of the debounced count above: it
+   * answers a question about the site rather than about the message, so it
+   * cannot move while somebody types.
+   *
+   * The picker is only offered when there is a choice to make. A site with no
+   * verified domain has exactly one identity, and a select with one option is
+   * a control that reads as a decision the person failed to take.
+   */
+  const [identityOptions, setIdentityOptions] = useState<
+    { value: string; from: string | null; selectable: boolean }[] | null
+  >(null)
+  /**
+   * The value that means "the site's standing selection" in the picker.
+   *
+   * The picker's options are keyed by domain (and `platform`), while the SEND
+   * carries the two-valued thing — empty or `platform`. This is the join
+   * between them, and it is derived from the options rather than stored: the
+   * site's own domain is whichever offered option is not the platform one.
+   */
+  const siteDefaultIdentity =
+    identityOptions?.find((one) => one.value !== 'platform')?.value ?? 'platform'
+  const sendingApi = useSendingApi()
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      const { response, payload } = await sendingApi({
+        path: 'sending-identity',
+        method: 'GET',
+        query: { hostId },
+      })
+      if (!active || !response.ok) return
+      setIdentityOptions(payload?.options ?? [])
+    })().catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [sendingApi, hostId])
 
   /**
    * WHAT THE EMAIL LOOKS LIKE, rendered by the code that will mail it.
@@ -953,6 +1008,40 @@ export function CampaignComposer(props: CampaignComposerProps) {
         display name in front of that address, where a reply lands, and the
         line an inbox shows after the subject.
        */}
+      {/*
+        THE ADDRESS, when this site has more than one it may use.
+
+        Offered only when there is a choice: a site with no verified domain
+        has exactly one identity, and a select with a single option reads as a
+        decision somebody forgot to take. The options come from the server and
+        carry the whole address — a control that assembled `${localPart}@${domain}`
+        itself would be a second place the address is derived from, and the
+        two would disagree the first time either moved.
+       */}
+      {(identityOptions?.filter((one) => one.selectable).length ?? 0) > 1 ? (
+        <TextField
+          select
+          label="From address"
+          value={sendingIdentity || siteDefaultIdentity}
+          onChange={(event) =>
+            setSendingIdentity(
+              event.target.value === siteDefaultIdentity
+                ? ''
+                : event.target.value,
+            )
+          }
+          size="small"
+          helperText="Which verified address this email leaves on"
+        >
+          {(identityOptions ?? [])
+            .filter((one) => one.selectable)
+            .map((one) => (
+              <MenuItem key={one.value} value={one.value}>
+                {one.from ?? one.value}
+              </MenuItem>
+            ))}
+        </TextField>
+      ) : null}
       <Stack direction="row" spacing={1}>
         <TextField
           label="From name"
@@ -1133,12 +1222,49 @@ export function CampaignComposer(props: CampaignComposerProps) {
           </Stack>
         )
       ) : null}
+      {/*
+        WHICH ADDRESS THIS LEAVES ON, or why it cannot leave at all.
+
+        Both come from the dry run, which resolves the identity through the
+        same function the send does — so this is the answer a campaign would
+        actually get and not a second opinion. The refusing case is an Alert
+        rather than a caption because it is the one that stops the send, and
+        it names the domain and the records still to publish.
+       */}
+      {preview && 'error' in preview && preview.blocking ? (
+        <Alert severity="warning">
+          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+            {'This email cannot be sent yet'}
+          </Typography>
+          <Typography variant="body2">{preview.error}</Typography>
+          <Typography variant="body2" sx={{ mt: 0.5 }}>
+            {'Nothing has been sent, and nothing about this draft is lost — ' +
+              'finish the domain on the Sending page and come back.'}
+          </Typography>
+        </Alert>
+      ) : preview && !('error' in preview) && preview.identity ? (
+        <Typography variant="caption" color="text.secondary">
+          {preview.identity}
+        </Typography>
+      ) : null}
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Button
           variant="contained"
           color="primary"
           disabled={
-            busy || !subject.trim() || (!templateScreenId && !body.trim())
+            busy ||
+            !subject.trim() ||
+            (!templateScreenId && !body.trim()) ||
+            /*
+             * REFUSED BEFORE THE CLICK, not after it.
+             *
+             * The send would answer 409 anyway — that boundary holds whatever
+             * this component does. What a disabled button buys is that the
+             * merchant reads the reason instead of pressing Send and being
+             * told; the two are the same information, and only one of them
+             * arrives while there is still something to do about it.
+             */
+            Boolean(preview && 'error' in preview && preview.blocking)
           }
           onClick={handleSend}
         >
@@ -1163,9 +1289,9 @@ export function CampaignComposer(props: CampaignComposerProps) {
         <Button
           size="small"
           disabled={busy || (!templateScreenId && !body.trim())}
-          onClick={() => void handleTestSend()}
+          onClick={() => setTestOpen(true)}
         >
-          {'Send test to me'}
+          {'Send test'}
         </Button>
         <TextField
           size="small"
@@ -1176,6 +1302,28 @@ export function CampaignComposer(props: CampaignComposerProps) {
           onChange={(event) => setSendAt(event.target.value)}
         />
       </Stack>
+      {/*
+        The proof drawer takes the message as it stands, so a test mails what
+        is composed rather than a reconstruction of it. It shares the one
+        authorized POST with every other action on this surface.
+       */}
+      <CampaignTestSendDrawer
+        open={testOpen}
+        onClose={() => setTestOpen(false)}
+        post={authorizedPost}
+        identity={
+          preview && !('error' in preview) ? preview.identity : ''
+        }
+        message={{
+          subject: subject.trim() || 'Test send',
+          body: body.trim(),
+          fromName: fromName.trim(),
+          replyTo: replyTo.trim(),
+          preheader: preheader.trim(),
+          ...(templateScreenId ? { templateScreenId } : {}),
+          ...(sendingIdentity ? { sendingIdentity } : {}),
+        }}
+      />
     </Stack>
   )
 }
