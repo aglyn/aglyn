@@ -421,6 +421,13 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'Create is denied (AGL-1668) because the row is what the meter counts; ' +
     'update and delete stay open because the inbox marks a submission read ' +
     'and deletes it client-side.',
+  forms:
+    'Form definitions, authored on the site Forms page and bound to a `Form` ' +
+    'node by id. Create is denied so it routes through /api/hosts/resources, ' +
+    'where the entitlement and the flat per-host cap are enforced against a ' +
+    'server-read count; update and delete are re-granted by a dedicated ' +
+    'block, with delete on `canPublishHostContent` because removing a form ' +
+    'unbinds every instance placed from it.',
   suppressions:
     'Unsubscribes, permanent bounces and spam complaints. CREATE and UPDATE ' +
     'are server-only in practice — the unsubscribe handler and the Resend ' +

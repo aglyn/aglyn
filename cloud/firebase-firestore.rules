@@ -1757,6 +1757,43 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
       }
+      // The form entity (`docs/specs/reusable-forms.md` §2b):
+      // `hosts/{hostId}/forms/{formId}` — the declared field list, the
+      // consent field, and the dataset/lead routing a submission is stamped
+      // against.
+      //
+      // ⚠️ This block only decides anything because `forms` was added to the
+      // host catch-all's CREATE, UPDATE and DELETE exclusion lists in the same
+      // change. Sibling match blocks are OR'd and the looser allow wins, so a
+      // block written beside an un-excluded catch-all is theatre — the same
+      // trap the `components` block records one screen up.
+      //
+      // Reads are ordinary host membership. A form definition is authored
+      // content — labels, field names, a dataset id — and carries no visitor
+      // data and no secret; the submissions it identifies are governed
+      // separately and this change does not widen them.
+      //
+      // Creates are staff-only so they route through /api/hosts/resources,
+      // where the `reusableComponents` entitlement and `FORMS_MAX_PER_HOST`
+      // are enforced against a server-read count inside a transaction. A
+      // client-direct create is an unbounded host subcollection mintable from
+      // the browser.
+      //
+      // Delete takes the PUBLISH role, unlike update. Editing a form changes
+      // what a live page collects; deleting one is the publish act in the
+      // other direction, because every placed instance stops being bound the
+      // moment the definition goes. Submissions already written keep their
+      // `formId` and stay readable — nothing a visitor sent is deleted here.
+      match /forms/{formId} {
+        allow read: if isStaff() || isHostMember(hostId);
+        allow create: if isStaff();
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            !request.resource.data.diff(resource.data)
+              .affectedKeys().hasAny(['stats']));
+        allow delete: if isStaff() ||
+          (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+      }
       // Secret-/PII-bearing subcollections are carved out of the viewer-
       // readable catch-all below (AGL-502): `webhooks` docs hold an HMAC
       // signing secret + target URL, and `orders` hold customer PII/payment
@@ -2174,7 +2211,7 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'media', 'mediaTombstones', 'formSubmissions', 'actions',
+              'media', 'mediaTombstones', 'formSubmissions', 'forms', 'actions',
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory']));
@@ -2290,7 +2327,7 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
-              'webhooks', 'memberPosts', 'redirects', 'pluginSettings',
+              'webhooks', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
@@ -2336,7 +2373,7 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
-              'counters', 'memberPosts', 'redirects', 'pluginSettings',
+              'counters', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',

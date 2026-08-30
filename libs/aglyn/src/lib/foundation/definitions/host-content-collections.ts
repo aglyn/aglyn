@@ -216,6 +216,7 @@ export const PLUGIN_CONTENT_COLLECTIONS = [
   'discounts',
   'events',
   'experiments',
+  'forms',
   'functions',
   'installs',
   'locations',
