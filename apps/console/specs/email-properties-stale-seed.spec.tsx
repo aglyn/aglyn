@@ -58,7 +58,21 @@ jest.mock('firebase/firestore', () => ({
     path: segments.join('/'),
   }),
   setDoc: (...args: unknown[]) => mockSetDoc(...args),
+  // The entity-picker provider memoizes a constraint whether or not any
+  // picker asked for one, and this page requests none — so an opaque marker
+  // is the whole contract: it is built, never issued.
+  where: (...args: unknown[]) => ({ constraint: args }),
   Timestamp: { now: () => ({ seconds: 0 }) },
+}))
+
+/*
+ * The entity-picker provider mounts with this page and asks for a list per
+ * picker kind. This page requests none, so every path is null and the real
+ * hook would build no query — an empty settled result is the whole contract.
+ */
+jest.mock('../hooks/use-firestore-collection', () => ({
+  __esModule: true,
+  default: () => ({ data: [], status: 'success' }),
 }))
 
 jest.mock('../hooks/use-firestore-doc', () => ({
@@ -84,6 +98,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { email: 'staff@aglyn.com' } }),
   saveNodesGuarded: jest.fn().mockResolvedValue(undefined),
+  /*
+   * SETTLED with no org, which is what this page's host actually is here.
+   * The entity-picker provider calls this on mount, and a double that omits
+   * it throws before the page renders — so the spec would report the guard
+   * as broken when nothing about the guard had changed. `ready: true` with a
+   * null scope is the "there is no org and none is coming" answer, so the
+   * pickers issue no read rather than hanging on a lookup this spec never
+   * exercises.
+   */
+  useOrgDataScope: () => ({ scope: null, orgId: null, ready: true }),
   // The REAL guard (AGL-1358). A stub would let the write through whatever
   // the page passed it, which is the one thing this spec disproves.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -98,6 +122,16 @@ jest.mock('@aglyn/aglyn', () => ({
   HostViewType: { EMAIL: 'email' },
   canvas: { rootNode: null, nestedNodes: {}, didSetInitial: true },
   CANVAS_ROOT_ELEMENT_ID: 'root',
+  /*
+   * The entity-picker provider wraps this page and takes its context, window
+   * limits and search helpers from here. These are the REAL ones — each leaf
+   * imports nothing heavier than React — because a stubbed limit would let a
+   * window regression through a spec that has no other reason to notice one.
+   */
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/entity-picker-context'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-match'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
 }))
 jest.mock('@aglyn/besigner', () => ({
   focus: { getLastSelected: () => null },

@@ -115,9 +115,87 @@ describe('the attributes panel draws the Form picker', () => {
 
   it('does not resolve a caption, which is what the id replaced', async () => {
     // A node carrying the old free-text caption where the id belongs matches
-    // no option, and the picker shows nothing chosen rather than pretending.
+    // no form. The picker NAMES it rather than either pretending it resolved
+    // or rendering blank — blank reads as "nothing chosen" on an element that
+    // is bound, which is repaired by choosing again, which is how a stored
+    // reference gets replaced by a different one.
     mount(SITE_FORMS, { formId: 'Apply now' })
-    expect((await formPicker()).getAttribute('value')).toBe('')
+    const shown = (await formPicker()).getAttribute('value')
+    expect(shown).toMatch(/unrecognized form/i)
+    expect(shown).toContain('Apply now')
+    // And it is emphatically not offered as one of the site's forms: the
+    // caption happens to equal a real form's NAME, and the whole defect this
+    // replaced was a name being treated as a reference.
+    expect(shown).not.toBe('Apply now')
+  })
+
+  it('shows a stored id that is outside the browse window, by its name', async () => {
+    // The point of splitting the two jobs. `form-900` is in no list here —
+    // exactly as it would not be on a site whose catalog runs past the
+    // window — and it still renders as itself, because a keyed read answered
+    // for it.
+    mount(
+      {
+        ...SITE_FORMS,
+        resolve: () => undefined,
+        resolved: { forms: { 'form-900': { id: 'form-900', label: 'Careers' } } },
+      },
+      { formId: 'form-900' },
+    )
+    expect((await formPicker()).getAttribute('value')).toBe('Careers')
+  })
+
+  it('ASKS for the label of a stored id the list does not hold', async () => {
+    // The other half of the split, and the half an assertion on the rendered
+    // value cannot see: a panel handed a ready-made `resolved` map renders
+    // correctly whether or not it would ever have asked for one.
+    const asked: Array<[string, string]> = []
+    mount(
+      { ...SITE_FORMS, resolve: (kind, id) => asked.push([kind, id]) },
+      { formId: 'form-900' },
+    )
+    await formPicker()
+    await waitFor(() => expect(asked).toEqual([['forms', 'form-900']]))
+  })
+
+  it('asks for nothing when the list already holds the stored id', async () => {
+    // The common case, and the one that must cost no read at all.
+    const asked: Array<[string, string]> = []
+    mount(
+      { ...SITE_FORMS, resolve: (kind, id) => asked.push([kind, id]) },
+      { formId: 'form-1' },
+    )
+    await formPicker()
+    expect(asked).toEqual([])
+  })
+
+  it('names a stored id whose form is gone, rather than showing nothing', async () => {
+    mount(
+      {
+        ...SITE_FORMS,
+        resolve: () => undefined,
+        resolved: { forms: { 'form-900': null } },
+      },
+      { formId: 'form-900' },
+    )
+    const shown = (await formPicker()).getAttribute('value')
+    expect(shown).toMatch(/unavailable form/i)
+    expect(shown).toContain('form-900')
+  })
+
+  it('says the list is a page when the site has more forms than it shows', async () => {
+    mount({ ...SITE_FORMS, truncated: { forms: true } })
+    await formPicker()
+    expect(document.body.textContent).toContain('Showing the first 25 forms')
+    // Forms carry no server-side search keys, so the sentence must not
+    // promise a search it cannot run.
+    expect(document.body.textContent).toContain('Typing narrows these 25 only')
+  })
+
+  it('says nothing about truncation when the list IS the site', async () => {
+    mount(SITE_FORMS)
+    await formPicker()
+    expect(document.body.textContent).not.toContain('Showing the first')
   })
 
   it('still draws the control when the site has no forms yet', async () => {
@@ -135,6 +213,32 @@ describe('the attributes panel draws the Form picker', () => {
     mount(null)
     const options = await offered()
     expect(options).toEqual([expect.stringMatching(/cannot list forms/i)])
+  })
+
+  it('sends what an author types through to the provider', async () => {
+    // END TO END, and it is the assertion that earns its keep. The obvious
+    // way to hook the search box — a schema field's `onInputChange` — is
+    // OWNED by `@data-driven-forms/common/select` and overwritten before the
+    // mapper sees it, so the handler simply never runs while the dropdown
+    // goes on opening, filtering and selecting. Nothing about that is
+    // visible from either end on its own.
+    const asked: Array<[string, string]> = []
+    mount({ ...SITE_FORMS, search: (kind, text) => asked.push([kind, text]) })
+    const picker = await formPicker()
+    fireEvent.change(picker, { target: { value: 'appl' } })
+    expect(asked).toContainEqual(['forms', 'appl'])
+  })
+
+  it('does not treat picking an option as a search', async () => {
+    // Selecting re-emits the chosen label into the input. Spending a read on
+    // that would put one behind every selection and every panel open.
+    const asked: Array<[string, string]> = []
+    mount({ ...SITE_FORMS, search: (kind, text) => asked.push([kind, text]) })
+    const picker = await formPicker()
+    const field = picker.closest('.MuiAutocomplete-root') as HTMLElement
+    fireEvent.click(within(field).getByTitle('Open'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Apply now' }))
+    expect(asked).toEqual([])
   })
 
   it('THE CONTROL: the panel really does drop an editor it cannot draw', async () => {
