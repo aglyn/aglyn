@@ -355,7 +355,10 @@ export async function materializeDynamicList(options: {
        * there.
        */
     })
-    if (result?.created) enrolled += 1
+    // A refusal is not a materialization failure: an unusable address and a
+    // person whose row records a refusal are both simply not on this list,
+    // and a rule that selected them does not overrule either.
+    if (result.enrolled && result.created) enrolled += 1
   }
 
   /*

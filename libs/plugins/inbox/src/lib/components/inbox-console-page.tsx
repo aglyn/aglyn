@@ -79,6 +79,7 @@ import {
   submissionSender,
 } from '../model/submission-presenter'
 import SubmissionReply from './submission-reply.component'
+import SubmissionListAssignment from './submission-list-assignment.component'
 import { useCallback, useMemo, useState } from 'react'
 
 /**
@@ -815,6 +816,16 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
            */}
           {reader ? (
             <SubmissionReply hostId={hostId} submission={reader} />
+          ) : null}
+          {/*
+            Enrolling the sender in a marketing list — a SEPARATE act from
+            answering them, and a separate card, because the person asked to
+            be answered and did not ask to be marketed to. Its reads are paid
+            only when a merchant presses its own button, so opening a
+            submission to read it costs nothing extra.
+           */}
+          {reader ? (
+            <SubmissionListAssignment hostId={hostId} submission={reader} />
           ) : null}
         </DialogContent>
         <DialogActions>

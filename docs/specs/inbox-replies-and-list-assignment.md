@@ -1,10 +1,19 @@
 # Inbox replies, and assigning a sender to a list
 
-Status: **the reply is BUILT and shipped in this change. The list assignment is
-SPECIFIED AND DELIBERATELY NOT BUILT.** Written 2026-08-29 against `main` at
-`c08f3b93c`. It follows and depends on `docs/specs/email-overhaul.md`, which
-established the state of the email feature; every claim here that is about
-email in general is cited to that document rather than re-derived.
+Status: **both are BUILT.** The reply shipped first; the list assignment was
+specified here and deliberately held back, and it shipped once its three
+blockers cleared. Written 2026-08-29 against `main` at `c08f3b93c`; Part 2
+rewritten 2026-08-29 when it was built. It follows and depends on
+`docs/specs/email-overhaul.md`, which established the state of the email
+feature; every claim here that is about email in general is cited to that
+document rather than re-derived.
+
+> **Part 2 was written as a plan and is now a record.** The three blockers it
+> named are each marked with what cleared them and where the built thing
+> lives. The reasoning is kept rather than replaced: the argument for NOT
+> building it is what made the shape it was eventually built in, and a
+> document that erased it would invite the next person to build the version
+> this one refused.
 
 > ⚠️ **House convention note.** Design specs in this repository live in
 > `docs/design/` and are named `agl-####-slug.md`. This file sits beside
@@ -18,11 +27,19 @@ email in general is cited to that document rather than re-derived.
 
 ---
 
-## Verdict up front
+## Verdict up front — as written, and what changed
 
 **Replying is a transactional act with an owner already identified — it was
 built. Assigning someone to a list is a marketing act whose consent basis does
 not exist anywhere in the data model — it was not.**
+
+> ✅ **The second half no longer holds, and that is why the feature exists
+> now.** A consent basis exists in the data model and is read at send time:
+> `libs/aglyn/src/lib/app-utils/marketing-consent.ts` decides
+> `granted`/`declined`/`unrecorded`, `performCampaignSend` joins on it at the
+> audience sweep, and `enrollListMember` persists it on the membership. The
+> three facts below were each true when written and each has been closed —
+> see Part 2's blocker list for which change closed which.
 
 The distinction is not stylistic. The email overhaul spec's §1d found that
 `marketingConsent` is written by six call sites and read by **no sender**.
@@ -230,11 +247,27 @@ watching it fail. The mutation list is recorded in the commit message.
 
 ---
 
-## Part 2 — Assigning a sender to a list: the spec
+## Part 2 — Assigning a sender to a list
 
-This is what building it would require. It is written so it can be built later
-without re-deriving any of it, and so the reason it was not built now is
-inspectable.
+Written as what building it would require; kept as the record of what was
+built, because the shape is the one this section specified.
+
+### 2z. Where it lives
+
+| Piece | Where |
+| --- | --- |
+| Pure policy — what basis an enrollment may carry | `libs/plugins/inbox/src/lib/model/list-assignment-policy.ts` |
+| `POST inbox/assign-list`, and `POST inbox/list-options` for the readout | `libs/plugins/inbox/src/lib/server.ts` |
+| The card, inside the submission reader and beneath the reply | `libs/plugins/inbox/src/lib/components/submission-list-assignment.component.tsx` |
+| The basis on the membership, and the refusal backstop | `libs/tenant/data/admin/src/lib/server/list-members.ts` |
+
+Assertions: `list-assignment-policy.spec.ts` (13),
+`server-assign-list.spec.ts` (25),
+`submission-list-assignment.spec.tsx` (9), and the end-to-end
+`apps/console/specs/an-enrollment-is-not-a-license-to-send.spec.ts` (5), which
+drives the real Inbox route and the real `performCampaignSend` against one
+store. Every new assertion was verified by mutating the source and watching it
+fail; the mutation list is in the commit message.
 
 ### 2a. What the act is
 
@@ -271,6 +304,27 @@ rather than merely incomplete.**
 
 **B3 — the basis itself is an owner decision.** See Part 3, Q1 and Q2.
 
+#### What cleared them
+
+- **B1 — cleared.** A list membership now carries a basis, written by
+  `enrollListMember`. It is the `marketingConsent` family and **not** the
+  `consentAtMs`/`consentBasis`/`consentBy` names sketched above, deliberately:
+  `readMarketingBasis` is the shipped reader and it reads `marketingConsent` +
+  `marketingConsentAtMs`, so the names above would have been a basis the
+  send-time join cannot see. `marketingConsentBasis` and
+  `marketingConsentByUid` are attribution ON that field — they say *why* a
+  person is mailable, never *whether*.
+- **B1's id half — cleared.** The derivation is `personKey`, and the
+  duplicate-collapse was done as a *lookup* rather than a backfill:
+  `enrollListMember` resolves the two legacy ids and adopts an existing row,
+  so no enrollment path can add a third derivation.
+- **B2 — cleared.** `performCampaignSend` joins on consent at the audience
+  sweep, above the 500 cap. A basis written by this button is read by the one
+  thing that mails a list.
+- **B3 — NOT cleared, and it did not have to be.** See Part 3, Q1: the build
+  records the assertion and makes it attributable rather than deciding what a
+  merchant may assert.
+
 ### 2c. The design, once the blockers clear
 
 Two bases, and no third:
@@ -295,6 +349,28 @@ answered. They did not ask to be marketed to, and the checkbox that would let
 them say so is not on the form-submit path — `apps/tenant/app/api/forms/submit/route.ts`
 never passes `marketingConsent` to `upsertHostContact`.
 
+> ✅ **Built as specified, with two additions the spec did not anticipate.**
+>
+> 1. **A stored `declined` refuses OUTRIGHT, above the attestation.** The
+>    spec's "with neither, it refuses" covers the absence of a record; a
+>    recorded refusal is a different thing and needed saying. A merchant
+>    cannot attest their way past somebody who said no — if they could, there
+>    would be no difference between recording a refusal and discarding one.
+>    The check runs in two places on purpose: the route reads the person's CRM
+>    record (the one silo `marketingConsent: false` is ever written to), and
+>    `enrollListMember` refuses a membership that itself records a refusal.
+>    The second is the backstop that makes the rule true of the COLLECTION
+>    rather than only of this button — the newsletter handler, the workflow
+>    `enrollList` step and the dynamic-list materializer all go through it.
+> 2. **The pass-through keeps the person's own timestamp.** Restamping it
+>    would report every historical opt-in as having happened when a merchant
+>    pressed a button, which walks records across the forward cutoff
+>    `MARKETING_CONSENT_ENFORCED_FROM_MS` grandfathers on.
+>
+> The consent read is UNSCOPED (no `scopedToHost`), because a refusal filtered
+> out by host scoping is a refusal the route would then step over. It is safe
+> only because the caller has already been proved an org-wide member — see 2f.
+
 ### 2d. Suppression on this act
 
 A suppressed address must not be enrollable, and the reason is different from
@@ -305,6 +381,21 @@ enrollment must **also** be re-checked at send time, because an address can be
 suppressed after it is enrolled. Enrollment-time checking alone is the
 laundered-quota shape: a check that passes once and licenses an unbounded number
 of later sends.
+
+> ✅ **Both checks are in place, and the second one is asserted end to end.**
+>
+> - **At enrollment**, through `addressSuppression` — the same both-lists
+>   helper the reply uses, renamed off `replySuppression` because two acts now
+>   ask it. A suppressed address is refused with a `409` and nothing is
+>   written, so a merchant is never told they added somebody unmailable.
+> - **At send**, through `filterSendableForHost` in `campaign-send.ts`, which
+>   was already there. What was missing was a proof that the ordering holds
+>   across the two features:
+>   `apps/console/specs/an-enrollment-is-not-a-license-to-send.spec.ts` enrolls
+>   through the real Inbox route, suppresses the address afterwards, runs the
+>   real sender, and asserts the message does not go — while the membership
+>   and its basis stay intact, because a suppression is a fact about the
+>   address and not a withdrawal of consent.
 
 ### 2e. What it must not do
 
@@ -318,12 +409,24 @@ of later sends.
 
 ---
 
+### 2f. Who may do it
+
+**A host role is necessary and not sufficient.** Lists live at
+`orgs/{orgId}/lists` and their members are contacts, so the security rules put
+both behind `isOrgWideMember()`. An editor invited to ONE site is an org member
+with `allHosts: false`; gating this route on the host role alone would let a
+single-site collaborator enroll people into an audience every other site in the
+org can mail. The Admin SDK evaluates no rules, so the route is the enforcement
+rather than an echo of it, and it asks the same two questions
+`canWriteOrgWideData()` does: org-wide reach, and a role of owner/admin/editor.
+
 ## Part 3 — Open questions for the owner
 
 These are the questions that block Part 2. None can be answered from the
 repository.
 
-**Q1 — What basis may a merchant assert for a manual list add?**
+**Q1 — What basis may a merchant assert for a manual list add? — STILL OPEN,
+and the build does not answer it.**
 Every standalone ESP lets a merchant add an address by hand and makes the
 merchant responsible for having permission. That is legally coherent and it is
 what `operator-attested` above encodes. But it is also, mechanically, a way to
@@ -333,12 +436,44 @@ stand behind whatever is chosen. Refusing manual adds entirely is the other
 coherent answer, and it makes the Inbox's "add to list" impossible rather than
 merely gated.
 
-**Q2 — Does Part 2 wait for email-overhaul Phase 3, or ship ahead of it?**
+> **What was built instead of an answer.** The attestation is *recorded and
+> attributable*: `marketingConsentBasis: 'operator-attested'` and
+> `marketingConsentByUid` on the membership, plus a row under the submission
+> naming the account, the moment, the list and the address. So whatever the
+> owner decides, the question "who put this person on a marketing list, and on
+> what basis" is answerable for every row written from today, and a later
+> decision to disallow or restrict attestations can find and act on exactly
+> the rows it applies to. Three sub-questions the owner still has to settle:
+>
+> 1. **May a merchant attest at all, and on which plans?** Today any org-wide
+>    editor may. There is no entitlement gate on it.
+> 2. **Should the attestation carry the merchant's stated source?** It records
+>    *that* they claimed permission, not *where the permission came from* ("a
+>    business card", "they asked at the counter"). A free-text field would make
+>    the record far more useful in a dispute and is one input away.
+> 3. **Should an attested row be presented as consent in the send readout?**
+>    It is today: `splitByMarketingConsent` counts it under `consented`
+>    alongside a real opt-in, because `readMarketingBasis` reads
+>    `marketingConsent` and nothing else. **The data distinguishes them; the
+>    campaign composer's three-number readout does not.** Splitting that
+>    figure is a small change and a real decision — a merchant who sees
+>    "1,240 consented" is entitled to know how many of those are their own
+>    assertions.
+
+**Q2 — Does Part 2 wait for email-overhaul Phase 3, or ship ahead of it? —
+ANSWERED BY EVENTS.**
 Shipping ahead means writing a consent field that no sender reads, which is the
 defect the email audit named. Waiting means the Inbox has no list affordance
 until the send-time consent join exists, a per-org switch is built, and the
 policy documents have moved. This spec recommends waiting, and that
 recommendation is the reason nothing was built.
+
+> It waited, and the join shipped first. The recommendation held: what was
+> eventually built writes a basis into a field the audience sweep reads, so
+> there is no decorative consent signal and no screen claiming an unperformed
+> check. The per-org switch is `marketingConsentPolicy`
+> (`forward` by default, `strict` on request); the policy documents are the
+> owner's remaining half of Q1.
 
 **Q3 — May the site's own name lead the From line for an org without
 white-label?**
@@ -376,3 +511,18 @@ rest of the transactional senders have not answered either.
   derived from the form-submit route not writing `marketingConsent`, which is
   verified in code, not from counting documents.
 - **No Linear issue was opened or read.** No claim here describes any issue.
+
+### Not verified for the list assignment either
+
+- **No list membership was written outside a test.** Every assertion runs
+  against a Firestore double; the real `enrollListMember` runs against it, but
+  no production or emulator collection was touched.
+- **The org-wide gate is asserted against the predicate, not against
+  Firestore.** `isOrgWideMember` is the real function and the membership shapes
+  in the assertions are the ones `grantHostAccess` and the invite route write —
+  but nothing here proves the rules and this route agree on a live document.
+  They agree by construction: both call the same predicate.
+- **`marketingConsentBasis` has no reader yet.** It is attribution, not a gate,
+  and it is deliberately not consulted by the send — but that means nothing
+  displays it either. The console surface that shows a list's members does not
+  distinguish an attestation from an opt-in, which is Q1's third sub-question.
