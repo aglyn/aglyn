@@ -18,6 +18,10 @@
 import {
   checkQuota,
   contactMatchesSegment,
+  readMarketingBasis,
+  resolveMarketingConsentPolicy,
+  splitByMarketingConsent,
+  type MarketingConsentRecord,
   createResourceUid,
   decodeStoredNodes,
   resolveBrandingProfile,
@@ -335,8 +339,21 @@ export interface CampaignSendResult {
    * read ceiling with documents still unread. Absent means it is exact.
    */
   audienceTruncated?: boolean
-  /** Dry run only (AGL-2178): recipients left after the suppression lists. */
+  /**
+   * Dry run only (AGL-2178): recipients that will actually be mailed —
+   * after the consent join, the per-send cap and both suppression lists.
+   */
   sendable?: number
+  /** Dry run only: of `audienceSize`, how many carry a recorded consent basis. */
+  consented?: number
+  /**
+   * Dry run only: of `audienceSize`, how many are reachable only because
+   * consent enforcement is not retroactive. This is the population a strict
+   * policy would remove.
+   */
+  grandfathered?: number
+  /** Dry run only: how many of `audienceSize` the consent rule refused. */
+  consentWithheld?: number
   /** Dry run only: how many of `recipients` are suppressed. */
   suppressed?: number
   dryRun?: boolean
@@ -412,6 +429,29 @@ export async function performCampaignSend(
    */
   let audienceTruncated = false
   const names = new Map<string, string>()
+  /*
+   * The consent facts ride out of the audience sweep with the names
+   * (`docs/specs/email-overhaul.md` §3f), because paging the audience is the
+   * only point in the send where the person's DOCUMENT is in hand.
+   *
+   * That placement is the correction §3f carries: consent is a property of
+   * the PERSON, knowable while the sweep is already reading them, where
+   * suppression is a per-address keyed lookup deliberately deferred until
+   * after the cap. Reading consent back later would be a second pass over
+   * every silo, per campaign, to recover data this loop already had.
+   *
+   * An audience whose members carry no consent field records an `unrecorded`
+   * basis — a THIRD state, handled by the policy, and never a quiet `true`.
+   */
+  const consent = new Map<string, MarketingConsentRecord>()
+  const collectConsent = (email: string, data: unknown) => {
+    const cleaned = email.trim().toLowerCase()
+    if (!cleaned) return
+    consent.set(
+      cleaned,
+      readMarketingBasis(data as Record<string, unknown> | null | undefined),
+    )
+  }
   const collectName = (email: string, name: unknown) => {
     const cleaned = email.trim().toLowerCase()
     if (cleaned && typeof name === 'string' && name.trim()) {
@@ -424,6 +464,7 @@ export async function performCampaignSend(
     recipients = leads.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
       collectName(email, doc.get('name'))
+      collectConsent(email, doc.data())
       return email
     })
   } else if (audience === 'members') {
@@ -446,6 +487,7 @@ export async function performCampaignSend(
        * member, or a future writer, may carry either.
        *=========================================*/
       collectName(email, doc.get('displayName') ?? doc.get('name'))
+      collectConsent(email, doc.data())
       return email
     })
   } else if (audience === 'segment') {
@@ -502,6 +544,7 @@ export async function performCampaignSend(
       .map((doc) => {
         const email = String(doc.get('email') ?? '')
         collectName(email, doc.get('name'))
+        collectConsent(email, doc.data())
         return email
       })
   } else if (audience === 'list') {
@@ -519,6 +562,7 @@ export async function performCampaignSend(
     recipients = members.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
       collectName(email, doc.get('name'))
+      collectConsent(email, doc.data())
       return email
     })
   } else {
@@ -543,6 +587,66 @@ export async function performCampaignSend(
         .filter((email) => EMAIL_PATTERN.test(email)),
     ),
   ]
+  if (!resolved.length) {
+    throw new CampaignSendError('The audience is empty', 400)
+  }
+
+  /*
+   * THE CONSENT JOIN (`docs/specs/email-overhaul.md` §3f).
+   *
+   * `marketingConsent` had seven writers and no reader on any send path, so a
+   * recorded opt-OUT reached the same inbox as a recorded opt-in.
+   *
+   * ## Why HERE, above the cap, and not beside suppression
+   *
+   * §3f used to say "after suppression and before the cap", which is not an
+   * order this file has ever had — the cap runs first and suppression after
+   * it. Consent belongs at the SWEEP: it is a property of the person, already
+   * read into `consent` by the loop above at no extra cost, so filtering on
+   * it before the cap means the 500 slots go to people who may actually be
+   * mailed. Suppression stays where it is, because it is a keyed lookup per
+   * address and moving it up would cost the whole audience in reads on every
+   * debounced preview.
+   *
+   * It is also, necessarily, before the meter claim: a recipient the rule
+   * withholds is never counted against the org's monthly allowance. Being
+   * charged for mail that policy forbids sending would make the consent rule
+   * cost the merchant money as well as reach.
+   *
+   * ## What it does to an audience that exists today
+   *
+   * NOT retroactive by default. `resolveMarketingConsentPolicy` answers
+   * `mode: 'forward'` for an org that has configured nothing, which keeps
+   * every address captured before the cutoff reachable and reports it as
+   * grandfathered rather than mailing it silently. The one thing enforced
+   * unconditionally is a STORED refusal, which no policy may mail.
+   *
+   * The retroactive mode can shrink an audience sharply, so it is a stored
+   * per-org setting and never a default. The split below is what makes that
+   * decision informed — it rides the same readout as `audienceSize`, so a
+   * merchant sees which population is which before sending.
+   *
+   * The org is resolved here rather than at the quota block below because the
+   * policy lives on it and this is the first thing that needs it; the quota
+   * lines further down reuse the same read rather than taking a second one.
+   */
+  const orgForHost = await getOrgForHost(hostId).catch(() => null)
+  const orgId = String(orgForHost?.orgId ?? '')
+  const consentPolicy = resolveMarketingConsentPolicy(
+    (orgForHost?.org as Record<string, unknown> | undefined)?.[
+      'marketingConsentPolicy'
+    ],
+  )
+  const consentSplit = splitByMarketingConsent(resolved, consent, consentPolicy)
+  if (!consentSplit.mailable.length) {
+    throw new CampaignSendError(
+      'No recipient in this audience has a marketing consent record, so ' +
+        'nothing has been sent. Add an opt-in checkbox to the form or sign-up ' +
+        'this audience comes from, or send to an audience that has one.',
+      400,
+    )
+  }
+
   /*
    * The cap takes the FIRST N of a stable order, which is what makes taking
    * some of the audience defensible at all: two sends of the same unchanged
@@ -550,10 +654,7 @@ export async function performCampaignSend(
    * ("the first N by document name"). It was previously whichever slice
    * Firestore happened to return.
    */
-  recipients = resolved.slice(0, MAX_RECIPIENTS_PER_SEND)
-  if (!recipients.length) {
-    throw new CampaignSendError('The audience is empty', 400)
-  }
+  recipients = consentSplit.mailable.slice(0, MAX_RECIPIENTS_PER_SEND)
 
   /*
    * BOTH suppression lists, on one derivation (D6 of
@@ -598,10 +699,9 @@ export async function performCampaignSend(
   // `email-metering.ts` for the counter, the transition, and why the existing
   // per-site counters were NOT folded in.
   const monthKey = new Date().toISOString().slice(0, 7)
-  // Plan-less orgs resolve as free (AGL-247) — the cap always runs. Resolved
-  // ONCE here and reused for branding below, which used to re-fetch it.
-  const orgForHost = await getOrgForHost(hostId).catch(() => null)
-  const orgId = String(orgForHost?.orgId ?? '')
+  // Plan-less orgs resolve as free (AGL-247) — the cap always runs. The org
+  // document is read ONCE, at the consent join above, and reused here and for
+  // branding below; both used to re-fetch it.
   // The limit itself, read through the one shared resolver. `checkQuota` with
   // a usage of 0 is how a plain limit is read; the ALLOW/REFUSE decision is
   // not made here — it is made by the atomic reservation below.
@@ -659,6 +759,27 @@ export async function performCampaignSend(
       ...(audienceTruncated ? { audienceTruncated: true } : {}),
       sendable: sendable.length,
       suppressed: recipients.length - sendable.length,
+      /*
+       * The consent split, measured over the WHOLE audience and named rather
+       * than netted (§3f).
+       *
+       * Over the whole audience, not over the capped 500, because it rides
+       * the same readout as `audienceSize` and answers a question about the
+       * audience: of the 3,200 people this list holds, how many asked for
+       * this mail? Reporting it over the capped set would make the figures
+       * move whenever the cap bit, for reasons that have nothing to do with
+       * consent.
+       *
+       * Three numbers because one would hide the thing a merchant has to
+       * decide about. `consented` is who asked; `grandfathered` is who is
+       * reachable only because enforcement is not retroactive, and is
+       * therefore exactly the population that disappears the day the org
+       * turns the strict mode on; `consentWithheld` is who the rule already
+       * refuses.
+       */
+      consented: consentSplit.consented,
+      grandfathered: consentSplit.grandfathered,
+      consentWithheld: consentSplit.withheld,
       sent: 0,
       dryRun: true,
     }

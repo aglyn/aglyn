@@ -75,6 +75,9 @@ is created, no counter moves, and no campaign appears in your history.
 That means the count already reflects things you would otherwise only discover afterwards:
 
 - **Duplicates are removed.** One person on two lists is one recipient.
+- **People with no marketing consent on record are removed**, before anything else — see
+  [Who a campaign is allowed to reach](#who-a-campaign-is-allowed-to-reach). The second
+  caption line breaks the audience down by basis.
 - **Unsubscribed and undeliverable addresses are removed**, and reported separately as
   `· 12 unsubscribed or suppressed`, so a smaller-than-expected number has a visible
   reason.
@@ -83,15 +86,44 @@ That means the count already reflects things you would otherwise only discover a
   500, in a fixed order, so sending the same campaign again reaches the same people.
 - **A very large audience is reported as a floor**, with a `+`: `500 of 5,000+ in this
   audience` means there are at least 5,000 and the count stopped there.
-- **A refusal appears here rather than at send time.** An empty audience, an audience where
-  everyone is unsubscribed or suppressed, or a month already at your plan's send cap all
-  say so while you are still writing.
+- **A refusal appears here rather than at send time.** An empty audience, an audience
+  nobody in which has a consent record, an audience where everyone is unsubscribed or
+  suppressed, or a month already at your plan's send cap all say so while you are still
+  writing.
 
 While it works it reads `Counting recipients…`. It re-counts whenever you change the
 audience.
 
 Counting an audience needs the same permission as sending to it — the size of someone
 else's site's audience is not public information.
+
+### Who a campaign is allowed to reach
+
+A marketing campaign goes only to people whose consent you have a record of, or who were
+already in your audience before consent was required. The composer's second caption line
+tells you which is which:
+
+```
+1,240 with a recorded consent basis · 310 grandfathered (captured before consent was
+required) · 44 withheld — no consent on record
+```
+
+- **Recorded consent basis** — this person ticked an opt-in box on a form, a sign-up, or a
+  newsletter subscription, and the date they did it is stored on their record.
+- **Grandfathered** — this person was captured before the opt-in checkbox existed, so
+  there is no record either way. They still receive campaigns. Nothing you already had was
+  taken away.
+- **Withheld** — this person is not mailed. Either they explicitly declined, or they were
+  captured after consent became required and no opt-in was recorded for them.
+
+Consent is never assumed from an action. Submitting a form, placing an order, booking, or
+creating an account are not opt-ins on their own — a person is only counted as consenting
+when they ticked a box that says so. To grow the consented number, add a marketing opt-in
+checkbox to your forms and sign-up: a form field named `marketingConsent`, `emailOptIn`,
+`newsletterOptIn` or `subscribe` is recorded as consent when it is ticked.
+
+Withheld recipients cost you nothing — they are removed before your monthly send
+allowance is claimed.
 
 ### Schedule a send
 

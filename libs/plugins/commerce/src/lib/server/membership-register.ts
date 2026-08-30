@@ -128,6 +128,26 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
         email,
         ...(displayName ? memberNameSearchFields(displayName) : {}),
         passwordScrypt: hashMemberPassword(password),
+        /*
+         * The checkbox is PERSISTED on the member, not only forwarded.
+         *
+         * It reached the lead and the contact from the two lines below and
+         * was dropped for this document, so `hosts/{hostId}/siteMembers` had
+         * no consent field of any kind and `audience: 'members'` had nothing
+         * for the send-time join to read — the audience could not be filtered
+         * even in principle (`docs/specs/email-overhaul.md` §1d/§3f). The
+         * other two documents are not a substitute: a member is deduped in
+         * this transaction while leads append every time, and contacts are
+         * ORG-scoped where a member is the site's own.
+         *
+         * Written only when ticked. Signing up is not opting in — that is why
+         * the checkbox exists and why it defaults unchecked — so the omitted
+         * case stores nothing and reads back as an unrecorded basis rather
+         * than as a refusal.
+         */
+        ...(marketingConsent
+          ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+          : {}),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
       return null

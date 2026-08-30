@@ -37,6 +37,11 @@ export * from './console-routes'
 export * from './screen-link-value'
 export * from './analytics-path-key'
 export * from './contacts'
+// The consent JOIN (`docs/specs/email-overhaul.md` §3f). Pure, and it composes
+// `contacts` for the normalizer, so it sits directly beside it. No Node
+// builtin, which is what keeps it out of the `/server`-only group `person-key`
+// belongs to.
+export * from './marketing-consent'
 export * from './compose-layout-nodes'
 export * from './functions'
 export * from './compose-reusable-components'

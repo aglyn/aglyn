@@ -71,6 +71,26 @@ export interface EnrollListMemberInput {
   name?: string
   /** Free-form provenance: `'newsletter'`, `'action:{actionId}'`. */
   source: string
+  /**
+   * Explicit marketing opt-in, with a consent timestamp — the same shape
+   * `upsertHostContact` and `addHostLead` already carry.
+   *
+   * A list membership had NO consent field of any kind, so `audience: 'list'`
+   * had nothing for the send-time join to read
+   * (`docs/specs/email-overhaul.md` §1d/§3f). This is the field that closes
+   * it, and it is the caller's captured checkbox: enrolling is an act, and
+   * `false`/omitted therefore writes nothing rather than a basis.
+   */
+  marketingConsent?: boolean
+  /**
+   * How the person got here: enrolled by hand or by an automation
+   * (`'manual'`), or selected by a dynamic list's rule (`'rule'`).
+   *
+   * The materializer needs to tell its own rows apart from a manual one on
+   * the same list, because a person who stops matching the rule leaves and a
+   * person somebody added by hand does not.
+   */
+  via?: 'manual' | 'rule'
 }
 
 export interface EnrolledListMember {
@@ -135,6 +155,23 @@ export async function enrollListMember(
       email,
       ...(input.name ? { name: input.name } : {}),
       source: input.source,
+      ...(input.via ? { via: input.via } : {}),
+      /*
+       * Written only when the caller captured a real opt-in, and never
+       * unwritten.
+       *
+       * A merge that stamped `marketingConsent: false` on the omitted case
+       * would erase a basis this person gave on an earlier enrollment, and a
+       * withdrawn consent is not the same event as a re-enrollment that
+       * happened to carry no checkbox. Withdrawal has its own path — the
+       * unsubscribe link and the suppression list.
+       *
+       * `marketingConsentAtMs` moves with each fresh opt-in on purpose: the
+       * question a consent record answers is when the person last said yes.
+       */
+      ...(input.marketingConsent
+        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+        : {}),
       ...(existing ? {} : { addedAt: FieldValue.serverTimestamp() }),
     },
     { merge: true },
