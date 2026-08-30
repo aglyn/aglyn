@@ -1115,14 +1115,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'it on every write, so the array cannot hold a fifty-first row and the ' +
       'second page is empty for every contact that will ever exist.',
   ],
-  [
-    'apps/console/app/(app)/[orgSlug]/hosts/[host]/forms/page.tsx',
-    'The site’s form CATALOG, bounded at write time by `FORMS_MAX_PER_HOST` ' +
-      '— a flat platform ceiling of 50, enforced server-side in a transaction ' +
-      'at `/api/hosts/resources`, not a plan dimension anything can raise. ' +
-      'The read’s `limit(100)` is already twice the largest population that ' +
-      'can exist, so a footer would page a window nothing can overflow.',
-  ],
 ]
 
 /**
@@ -1341,15 +1333,18 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // the same version history the component and layout ones do, read the
     // same unordered way, and is blocked on the same `createdAt` audit.
     expect(OWES_A_FOOTER).toHaveLength(15)
-    // 34 since the forms catalog joined them: `FORMS_MAX_PER_HOST` is a flat
-    // platform ceiling of 50 enforced server-side, so the read's `limit(100)`
-    // already exceeds the largest population that can exist. Every table on
-    // this list is bounded by something other than the audience — a fixed
-    // taxonomy, a rollup capped at WRITE time, a ceilinged window that says
-    // so, or a merchant's own vocabulary — which is the property this list
-    // exists to record. Raised here deliberately rather than by a walk that
-    // quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(34)
+    // 33 since the forms catalog left this list. It was here on the ground
+    // that `FORMS_MAX_PER_HOST` bounds it at 50 and the read asked for 100 —
+    // true, and an argument for not NEEDING a footer rather than for not
+    // having one. The catalog now renders `ListTable` over the shared ordered
+    // walk with `ListPagination` under it, exactly as the components list
+    // does, so it is no longer a table without a footer and an entry for it
+    // here would be a stale exemption. Every table still on this list is
+    // bounded by something other than the audience — a fixed taxonomy, a
+    // rollup capped at WRITE time, a ceilinged window that says so, or a
+    // merchant's own vocabulary — which is the property this list exists to
+    // record.
+    expect(NOT_A_LIST).toHaveLength(33)
   })
 })
 
