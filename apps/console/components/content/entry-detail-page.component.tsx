@@ -99,6 +99,7 @@ import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
 import useCurrentOrg from '../../hooks/use-current-org'
+import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import {
   MANAGE_CATEGORIES_VALUE,
@@ -106,6 +107,7 @@ import {
   formatStampFull,
   slugify,
   useContentScope,
+  useEntrySlugOwner,
 } from './content-scope.context'
 
 /**
@@ -307,9 +309,6 @@ export function EntryDetailPage() {
     siteBase,
     selected,
     collectionsLoaded,
-    entries,
-    entriesStatus,
-    entriesFromCache,
     categories,
     authors,
     contentHref,
@@ -336,15 +335,50 @@ export function EntryDetailPage() {
   // write on this page stays client-direct.
   const createResource = useHostResourceApi()
 
-  /** The STORED entry this page is about, or `null` for a new draft. */
-  const stored = useMemo(
+  /**
+   * The STORED entry this page is about — read BY ITS KEY, or `null` for a
+   * new draft.
+   *
+   * ## Why the list cannot answer this
+   *
+   * The entries listener is a WINDOW: one page of the collection, widened as
+   * the reader pages. Resolving the open entry out of it makes the editor a
+   * function of which page the list happens to be on — an entry outside that
+   * window resolves to nothing, and this page says "not found" about a
+   * document that exists, on a link somebody pasted. Widening the window
+   * until it usually holds the answer does not fix that: it bills the whole
+   * cap on every mount and is still wrong past it.
+   *
+   * One document, addressed by the id already in the URL. Always the right
+   * one, always the same cost, whatever the list is showing.
+   */
+  const {
+    data: storedDoc,
+    /**
+     * The seed the buffer below is populated from, and therefore the read the
+     * SAVE is guarded against (AGL-1449). Both are fed to `writeGuardedBySeed`
+     * — read and dropped is how a guard becomes decoration — and both are
+     * about THIS document now that it is what the editor is seeded from.
+     */
+    status: storedStatus,
+    fromCache: storedFromCache,
+  } = useFirestoreDoc<any>(
     () =>
-      isNewEntry
+      isNewEntry || !entryId || !selected?.$id
         ? null
-        : ((entries.find((item: any) => String(item.$id) === entryId) as any) ??
-          null),
-    [isNewEntry, entries, entryId],
+        : doc(
+            firestore,
+            'hosts',
+            hostId,
+            'collections',
+            selected.$id,
+            'entries',
+            entryId,
+          ),
+    [firestore, hostId, selected?.$id, entryId, isNewEntry],
+    { idField: '$id' },
   )
+  const stored = isNewEntry ? null : (storedDoc ?? null)
 
   /* ── the buffer ────────────────────────────────────────────────────── */
 
@@ -380,10 +414,11 @@ export function EntryDetailPage() {
       return
     }
     /*
-      The listener has not answered yet, so the id is left UNCLAIMED and this
-      runs again when `entries` arrives. Seeding a blank buffer here is how a
-      pasted link opens an editor that then never fills — and an empty buffer
-      over a real entry is one Save away from blanking the post.
+      The entry's own listener has not answered yet, so the id is left
+      UNCLAIMED and this runs again when the document arrives. Seeding a blank
+      buffer here is how a pasted link opens an editor that then never fills —
+      and an empty buffer over a real entry is one Save away from blanking the
+      post.
     */
     if (!stored) return
     const next = editorStateForEntry(stored)
@@ -454,17 +489,16 @@ export function EntryDetailPage() {
    * first match, so a duplicate makes one of the two simply unreachable. This
    * was unreachable-by-construction while the slug was derived; an editable
    * slug makes it reachable on purpose, so it has to be answerable.
+   *
+   * Asked as a KEYED query rather than searched in the list. A collision is a
+   * property of the COLLECTION, and the list is a page of it — checking a
+   * page would clear an address that another entry already publishes at
+   * simply because that entry is not on screen.
    */
-  const slugOwner = useMemo(
-    () =>
-      effectiveSlug
-        ? Aglyn.findEntrySlugOwner(effectiveSlug, entries, editor?.id)
-        : null,
-    [effectiveSlug, entries, editor?.id],
+  const { ownerId: slugOwner, ownerTitle: slugOwnerTitle } = useEntrySlugOwner(
+    effectiveSlug,
+    editor?.id,
   )
-  const slugOwnerTitle = entries.find(
-    (item: any) => String(item.$id) === slugOwner,
-  )?.title
 
   /**
    * Typing a title.
@@ -540,17 +574,22 @@ export function EntryDetailPage() {
      * Never write an entry seeded from a read we cannot trust (AGL-1066,
      * AGL-1358, AGL-1449).
      *
-     * The editor is populated from the entries LISTENER, and this write
+     * The editor is populated from the ENTRY's own listener, and this write
      * carries every editor field, so `merge: true` protects none of them: they
      * are all in the payload. A seed the server never confirmed therefore does
      * not lose one edit, it reverts the whole post to whatever IndexedDB last
      * held, over an author who fixed a typo.
+     *
+     * A NEW entry answers both signals `false` rather than reading a listener
+     * that was never opened. There is no stored document to be reverted to —
+     * the buffer started blank — so the read that has not happened is not
+     * evidence of anything, and letting it stand would refuse every create.
      */
     const verdict = await writeGuardedBySeed(
       {
         subject: 'entry',
-        unreadable: entriesStatus === 'error',
-        fromCache: entriesFromCache,
+        unreadable: !isNewEntry && storedStatus === 'error',
+        fromCache: !isNewEntry && storedFromCache,
       },
       async () => {
         await setDoc(
@@ -647,8 +686,9 @@ export function EntryDetailPage() {
     firestore,
     hostId,
     createResource,
-    entriesStatus,
-    entriesFromCache,
+    isNewEntry,
+    storedStatus,
+    storedFromCache,
     enqueueSnackbar,
     logActivity,
     router,
@@ -995,7 +1035,13 @@ export function EntryDetailPage() {
    * reader.
    */
   if (!editor) {
-    const settled = collectionsLoaded && entriesStatus !== 'loading'
+    /*
+      "Not found" is a claim about the DOCUMENT, so only the document's own
+      read may settle it. Read from a windowed list, this state announces that
+      an entry does not exist whenever it falls outside the page being held —
+      about a post that is live on the site.
+    */
+    const settled = collectionsLoaded && storedStatus !== 'loading'
     return (
       <DashboardLayout
         breadcrumbItems={breadcrumbItems}

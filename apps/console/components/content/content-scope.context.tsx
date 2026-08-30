@@ -38,6 +38,7 @@ import {
   limit,
   query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -50,10 +51,16 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  collectionPage,
+  useFirestore,
+  usePagedCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
 import { buildRoute, Route } from '../../constants/route-links'
 import { hasEntitlement } from '../../constants/entitlements'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
@@ -189,9 +196,17 @@ export interface ContentScope {
   selected: any
   /** The raw segment from the URL — a slug, or a legacy document id. */
   routeCollectionKey: string | null
+  /** ONE PAGE of the selected collection's entries, in the order read. */
   entries: any[]
   entriesStatus: string
   entriesFromCache: boolean
+  /** A further page exists — a FACT from the probe row, not a guess. */
+  entriesHasMore: boolean
+  /** Zero-based, to match MUI's footer. */
+  entryPage: number
+  setEntryPage: (page: number) => void
+  entriesPerPage: number
+  setEntriesPerPage: (pageSize: number) => void
   categories: Array<{ id: string; name: string }>
   authors: Aglyn.ContentAuthorRecord[]
   screenOptions: any[]
@@ -223,6 +238,80 @@ export function useContentScope(): ContentScope {
     throw new Error('useContentScope must be used inside ContentScopeProvider')
   }
   return scope
+}
+
+/**
+ * The entry already publishing at `slug` in this collection.
+ *
+ * At most two documents: the entry being edited, which may already own the
+ * address it is being re-saved with, plus whichever other entry holds it.
+ * Nothing else has to be read to answer "is this address taken".
+ */
+const SLUG_OWNER_PROBE = 2
+
+/** {@link useEntrySlugOwner}'s answer: who holds the address, and its name. */
+export interface EntrySlugOwner {
+  /** The colliding entry's id, `''` for one with no id, or `null` for none. */
+  ownerId: string | null
+  /** That entry's title, when the probe carried one. */
+  ownerTitle: string | undefined
+}
+
+/**
+ * Is another entry in this collection already at `slug`?
+ *
+ * ## Why this is a KEYED read and not a scan
+ *
+ * The tenant resolves an entry with `where('slug','==',…)` and takes the
+ * first match, so two entries at one address means one of them is simply
+ * unreachable — with nothing anywhere saying so. Answering that from the
+ * list the console happens to be holding makes the check a function of the
+ * WINDOW rather than of the collection: over a page of ten it would miss
+ * every collision outside those ten and report a free address that is taken.
+ *
+ * So it asks the question it means. One equality on `slug`, capped at
+ * {@link SLUG_OWNER_PROBE}, answered against the whole collection and
+ * independent of which page is on screen. `slug` is a single field, so
+ * Firestore's automatic per-field index serves it and no composite index is
+ * owed.
+ *
+ * `exceptId` is the entry being edited: re-saving a post without touching its
+ * address must not collide with itself.
+ */
+export function useEntrySlugOwner(
+  slug: string,
+  exceptId?: string | null,
+): EntrySlugOwner {
+  const { hostId, selected } = useContentScope()
+  const firestore = useFirestore()
+  const { data: matches } = useFirestoreCollection<any>(
+    () =>
+      slug && selected?.$id
+        ? query(
+            collection(
+              firestore,
+              'hosts',
+              hostId,
+              'collections',
+              selected.$id,
+              'entries',
+            ),
+            where('slug', '==', slug),
+            limit(SLUG_OWNER_PROBE),
+          )
+        : null,
+    [firestore, hostId, selected?.$id, slug],
+    { idField: '$id' },
+  )
+  return useMemo(() => {
+    const ownerId = Aglyn.findEntrySlugOwner(slug, matches, exceptId)
+    return {
+      ownerId,
+      ownerTitle: (matches ?? []).find(
+        (item: any) => String(item.$id) === ownerId,
+      )?.title,
+    }
+  }, [slug, matches, exceptId])
 }
 
 export function ContentScopeProvider({ children }: { children: ReactNode }) {
@@ -480,18 +569,52 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
 
   /* ── the entries of the selected collection ────────────────────────── */
 
+  /**
+   * ONE PAGE of the collection's entries — the window IS the query.
+   *
+   * `usePagedCollection` widens the listener to cover page 0..n plus a single
+   * probe row, so the list bills what it draws and the rows past the first
+   * page are reachable by asking for them. A capped read the browser then
+   * sliced is the other shape, and it is wrong twice over: every mount pays
+   * for documents nobody renders, and the entries past the cap are not merely
+   * unrendered but UNREACHABLE, because nothing draws them and nothing asks
+   * for more.
+   *
+   * ## The order is the document NAME, and cannot be a field
+   *
+   * `collectionPage` carries `orderBy(documentId())`. Ordering on `createdAt`
+   * — the field this list reads by — would not mis-sort it, it would HIDE
+   * rows from it: `orderBy` matches only documents that HAVE the field, and
+   * `/api/hosts/import` writes entries through `cleanDoc`, whose
+   * `IMPORTABLE_FIELDS.entries` allow-list carries no `createdAt` and which
+   * stamps `updatedAt` alone. A restored archive would vanish from its own
+   * collection. A document's name cannot be absent, so id order drops nothing
+   * and the walk is TOTAL.
+   *
+   * ## The page is handed on in the order it was read
+   *
+   * Re-sorting a slice of an id-ordered walk tells the same lie an unordered
+   * cap does: rows would run in one order within a page and another across
+   * pages, and the first page would still not be the first page of anything.
+   * See `collectionPage` for the whole of that reasoning.
+   */
   const {
-    data: entryDocs,
+    rows: entries,
+    hasMore: entriesHasMore,
+    page: entryPage,
+    setPage: setEntryPage,
+    pageSize: entriesPerPage,
+    setPageSize: setEntriesPerPage,
     /**
-     * The seed the entry editor is populated from (AGL-1449). Both are fed to
-     * `writeGuardedBySeed` on save — read and dropped is how a guard becomes
-     * decoration.
+     * The health of the window itself. The entry editor guards its save
+     * against the ENTRY's own read rather than this one — a page of ten says
+     * nothing about a document that is not on it.
      */
     status: entriesStatus,
     fromCache: entriesFromCache,
-  } = useFirestoreCollection<any>(
-    () =>
-      query(
+  } = usePagedCollection<any>(
+    (pageLimit) =>
+      collectionPage(
         collection(
           firestore,
           'hosts',
@@ -500,17 +623,10 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
           selected?.$id ?? '-none-',
           'entries',
         ),
-        limit(200),
+        pageLimit,
       ),
     [firestore, hostId, selected?.$id],
-    { idField: '$id' },
-  )
-  const entries = useMemo(
-    () =>
-      [...(entryDocs ?? [])].sort(
-        (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-      ),
-    [entryDocs],
+    { idField: '$id', pageSize: TABLE_PAGE_SIZE_DEFAULT },
   )
 
   // Category taxonomy (AGL-582): `{ id, name }` pairs on the COLLECTION doc.
@@ -866,6 +982,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entries,
       entriesStatus,
       entriesFromCache,
+      entriesHasMore,
+      entryPage,
+      setEntryPage,
+      entriesPerPage,
+      setEntriesPerPage,
       categories,
       authors,
       screenOptions,
@@ -894,6 +1015,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entries,
       entriesStatus,
       entriesFromCache,
+      entriesHasMore,
+      entryPage,
+      setEntryPage,
+      entriesPerPage,
+      setEntriesPerPage,
       categories,
       authors,
       screenOptions,

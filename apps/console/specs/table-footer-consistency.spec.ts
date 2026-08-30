@@ -261,7 +261,12 @@ describe('the console has one table footer (AGL-2501)', () => {
     for (const path of [
       'apps/console/components/screens-hierarchy-table.component.tsx',
       'apps/console/components/org-members-card.component.tsx',
-      'apps/console/components/content/collection-entries-page.component.tsx',
+      // The content entries window, which the provider above the three content
+      // routes owns rather than the page that draws its footer. Asserted where
+      // the state lives, for the same reason the layouts page is not named
+      // here: a path that only MENTIONS the constant in prose satisfies a
+      // source-text check without the rule holding anywhere.
+      'apps/console/components/content/content-scope.context.tsx',
       'apps/console/components/analytics/screens-analytics-table.component.tsx',
       'libs/shared/ui/jsx/src/lib/components/list-table.component.tsx',
       // The shared window hook, which is where a server-paged list gets its
@@ -1025,7 +1030,10 @@ const NOT_A_LIST: Array<[string, string]> = [
   [
     'apps/console/components/content/content-scope.context.tsx',
     'A provider. It reads collections, authors and screens to fill the ' +
-      'content pickers its consumers render; it draws no list of its own.',
+      'content pickers its consumers render, opens the paged entries WINDOW ' +
+      'that the collection page draws the footer for, and probes one slug at ' +
+      'a time for the entry editor’s address check; it draws no list of its ' +
+      'own.',
   ],
   [
     'apps/console/components/document-preview.component.tsx',
