@@ -274,6 +274,82 @@ describe('recordEmailDeliveryEvent', () => {
     expect(stored?.clickedLinks).toEqual(['https://app.aglyn.com/billing'])
   })
 
+  /*==========================================
+   * `firstOfType` — the distinct-recipient signal.
+   *
+   * The delivery webhook's campaign counters (`delivered`, `bounced`,
+   * `complained`, `uniqueOpens`, `uniqueClicks`) are all "one per MESSAGE,
+   * not one per event", and this transaction is where that can be answered
+   * for free: it already reads the row to decide whether to stamp
+   * `firstSeenAtMs`. Deriving it anywhere else would cost a document read per
+   * delivery event.
+   *
+   * It is also the whole idempotency of those counters. A provider retry, a
+   * duplicate webhook and a dashboard replay all arrive as a second event for
+   * the same message, and each has to contribute nothing.
+   *=========================================*/
+
+  it('reports the first event of a type as first', async () => {
+    const firestore = fakeDeliveryFirestore()
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore),
+    ).toEqual({ firstOfType: true, providerMessageId: 'msg_1' })
+  })
+
+  it('reports a SECOND event of the same type as not first', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore)
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore),
+    ).toMatchObject({ firstOfType: false })
+  })
+
+  /*
+   * PER TYPE, not per document. An `opened` after a `delivered` is the first
+   * open even though the row already existed — a counter keyed on "is this
+   * row new" would count the delivery and silently never count an open.
+   */
+  it('is per event type, not per message row', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ type: 'delivered' }), firestore)
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'opened' }), firestore),
+    ).toMatchObject({ firstOfType: true })
+  })
+
+  it('is per message, so a second recipient is first again', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(
+      event({ type: 'opened', providerMessageId: 'msg_a' }),
+      firestore,
+    )
+
+    expect(
+      await recordEmailDeliveryEvent(
+        event({ type: 'opened', providerMessageId: 'msg_b' }),
+        firestore,
+      ),
+    ).toMatchObject({ firstOfType: true })
+  })
+
+  /*
+   * An event whose timestamp is 0 is still an event. Reading the flag off a
+   * truthiness check rather than off presence would report every such row as
+   * first, forever — and 0 is what a payload carrying no usable timestamp
+   * falls back to in more than one adapter.
+   */
+  it('treats a recorded timestamp of 0 as recorded', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailDeliveryEvent(event({ type: 'opened', at: 0 }), firestore)
+
+    expect(
+      await recordEmailDeliveryEvent(event({ type: 'opened', at: 9 }), firestore),
+    ).toMatchObject({ firstOfType: false })
+  })
+
   /*
    * The property the transaction exists for. Events arrive out of order, and
    * a document created by an `opened` must still be found by a read that
@@ -327,7 +403,7 @@ describe('recordEmailDeliveryEvent', () => {
     const firestore = fakeDeliveryFirestore()
     expect(
       await recordEmailDeliveryEvent(event({ to: 'not-an-address' }), firestore),
-    ).toBe(false)
+    ).toBeNull()
     expect(firestore.size()).toBe(0)
   })
 
@@ -341,7 +417,7 @@ describe('recordEmailDeliveryEvent', () => {
     // the same event forever.
     await expect(
       recordEmailDeliveryEvent(event(), exploding),
-    ).resolves.toBe(false)
+    ).resolves.toBeNull()
   })
 })
 

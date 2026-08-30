@@ -36,7 +36,15 @@ import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression
 // green test over an empty log.
 import { recordEmailDeliveryEvents } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
-import { createHmac, timingSafeEqual } from 'crypto'
+// The link rollup's key derivation and its cap live beside the READER that
+// renders them (`@aglyn/plugins-email/model`) rather than here, so the shape
+// the webhook writes and the shape the report reads cannot drift into two
+// definitions of what a "link" is.
+import {
+  CAMPAIGN_LINK_ROLLUP_MAX,
+  campaignLinkKey,
+} from '@aglyn/plugins-email/model'
+import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
 // The one list `campaign-send` reads, keyed the one way it keys it.
@@ -207,6 +215,76 @@ async function recordDeliveryFailure(args: {
 }
 
 /**
+ * Counts one click against its destination in the campaign's link rollup.
+ *
+ * A transaction because the CAP has to be enforced against the map as it
+ * stands: a merge-set cannot ask "is this key already here, and how many keys
+ * are there" and would grow the document without limit. Firestore's 1 MiB
+ * document ceiling is the hard reason, and a rollup that silently stopped
+ * being writable at that ceiling would take the campaign's other counters
+ * down with it if they shared the document — which is why this is its own.
+ *
+ * Nothing is DROPPED at the cap. A click on a destination past it lands in
+ * `overflowClicks`, and a click that arrived with no destination at all lands
+ * in `unattributedClicks`, so the table's own total plus the two excluded
+ * figures reconcile with `stats.clicks` and the screen can say where the
+ * difference went. Dropping either would leave a link table whose sum quietly
+ * disagreed with the click count printed above it.
+ *
+ * The rollup does NOT create the campaign. Same reasoning as `updateExisting`
+ * on the counters: a click arriving days after a merchant deleted a campaign
+ * must not resurrect it, here as a document holding one map of URLs.
+ */
+async function recordCampaignLinkClick(args: {
+  firestore: FirebaseFirestore.Firestore
+  campaignRef: FirebaseFirestore.DocumentReference
+  link: string | null
+}): Promise<void> {
+  const { firestore, campaignRef, link } = args
+  const ref = campaignRef.collection('reports').doc('links')
+  await firestore.runTransaction(async (transaction) => {
+    const campaign = await transaction.get(campaignRef)
+    if (!campaign.exists) return
+    const snapshot = await transaction.get(ref)
+    const stored = (snapshot.exists ? snapshot.data() : null) ?? {}
+    const links = (stored.links ?? {}) as Record<string, unknown>
+
+    if (!link) {
+      transaction.set(
+        ref,
+        { unattributedClicks: FieldValue.increment(1) },
+        { merge: true },
+      )
+      return
+    }
+    // The map key is a hash, not the URL: a Firestore field name may not
+    // contain `.`, `/` or `~`, and every URL contains at least two of them.
+    // The URL itself rides in the value, so nothing has to be un-hashed.
+    const key = createHash('sha256').update(link).digest('hex').slice(0, 32)
+    if (links[key] === undefined && Object.keys(links).length >= CAMPAIGN_LINK_ROLLUP_MAX) {
+      transaction.set(
+        ref,
+        { overflowClicks: FieldValue.increment(1) },
+        { merge: true },
+      )
+      return
+    }
+    transaction.set(
+      ref,
+      {
+        // A nested map under a merge-set, which merges at depth — the dotted
+        // form would write a field whose NAME contains dots and leave `links`
+        // empty, the exact fault `email-delivery-log.ts` records against
+        // `timestamps`.
+        links: { [key]: { url: link, clicks: FieldValue.increment(1) } },
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+  })
+}
+
+/**
  * Resend event ingestion (AGL-268), relocated from the console app route
  * into its owning plugin (AGL-418) — the URL `/api/email/events` is
  * preserved through the plugin API dispatcher. Opened/clicked events
@@ -256,15 +334,32 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
      * not turn into a non-2xx, which the provider would answer by retrying
      * the same event forever.
      *=========================================*/
-    await recordEmailDeliveryEvents(
+    const outcomes = await recordEmailDeliveryEvents(
       normalizeResendDeliveryEvents(event, Date.now()),
-    ).catch(() => 0)
+    ).catch(() => [])
+
+    /*
+     * DISTINCT RECIPIENTS this event is the first of its kind for.
+     *
+     * The log's transaction already held each message's prior state, so this
+     * is free — and it is the only honest way to count distinct openers
+     * without a second document per recipient. It is also idempotent for the
+     * same reason the replay guard below exists: a redelivered or replayed
+     * event finds the state already recorded and contributes zero.
+     *
+     * Zero when the log write failed, which loses the count rather than
+     * inventing one. That is the correct direction: a lost increment
+     * understates engagement, and a guessed one is a number nobody can
+     * defend.
+     */
+    const firstSeen = outcomes.filter((one) => one.firstOfType).length
 
     if (
       type !== 'email.opened' &&
       type !== 'email.clicked' &&
       type !== 'email.bounced' &&
-      type !== 'email.complained'
+      type !== 'email.complained' &&
+      type !== 'email.delivered'
     ) {
       return res.status(200).json({ ignored: true })
     }
@@ -282,8 +377,61 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     const hostRef = isDocumentId(hostId)
       ? firestore.collection('hosts').doc(hostId)
       : null
+    /** The campaign this event belongs to, or null when it names none. */
+    const campaignRef =
+      hostRef && isDocumentId(campaignId)
+        ? hostRef.collection('campaigns').doc(campaignId)
+        : null
+
+    /*==========================================
+     * THE DELIVERY DENOMINATOR.
+     *
+     * `email.delivered` used to be answered `200 {ignored:true}`, which is
+     * why every campaign rate had to be taken over `sent`. Sent is what the
+     * PROVIDER accepted; delivered is what the receiving server accepted, and
+     * the gap between them is the bounces. An open rate over `sent` therefore
+     * reads lower than the same campaign measured anywhere else, and a rate
+     * that only we compute differently is a rate a merchant cannot check.
+     *
+     * NO REPLAY CLAIM ON THIS ONE, and that is deliberate rather than an
+     * omission: `firstSeen` is derived from whether the delivery log had
+     * already recorded a `delivered` for this MESSAGE, so a retry, a replay
+     * and a duplicate webhook all contribute zero without a claim document
+     * being minted per delivered event. The counters below that DO carry a
+     * claim are the ones counting events rather than messages.
+     *=========================================*/
+    if (type === 'email.delivered') {
+      if (!campaignRef || !firstSeen) {
+        return res.status(200).json({ ignored: true })
+      }
+      // `updateExisting` for the AGL-1768 reason the open counter carries:
+      // a merge-set against a deleted campaign RE-CREATES it as a document
+      // holding nothing but a `stats` map.
+      await updateExisting(campaignRef, {
+        'stats.delivered': FieldValue.increment(firstSeen),
+      })
+      return res.status(200).json({ ok: true, counted: true })
+    }
 
     if (type === 'email.bounced' || type === 'email.complained') {
+      /*
+       * The campaign counter FIRST, and its failure swallowed.
+       *
+       * Ordered ahead of the suppression because the suppression is the write
+       * that must happen — it is what stops us mailing a dead or hostile
+       * address again — and `recordDeliveryFailure` owns the response. A
+       * statistic must never be able to cost a suppression, so this is
+       * wrapped rather than awaited into the same failure path.
+       *
+       * Same `firstSeen` idempotency as `delivered` above: one bounce per
+       * message, however many times the provider tells us about it.
+       */
+      if (campaignRef && firstSeen) {
+        await updateExisting(campaignRef, {
+          [type === 'email.bounced' ? 'stats.bounced' : 'stats.complained']:
+            FieldValue.increment(firstSeen),
+        }).catch(() => undefined)
+      }
       // NO `hostId` gate here since AGL-2407. It used to sit above this
       // branch, which is what made every transactional bounce a no-op: only
       // `campaign-send` stamps a `hostId` tag, so a bounce on an invite or a
@@ -367,10 +515,63 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     // REPLACES the whole `stats` map, so every open would clobber `clicks`;
     // only `set({ merge: true })` merges maps at depth.
     try {
-      await updateExisting(hostRef.collection('campaigns').doc(campaignId), {
+      /*
+       * TWO COUNTERS PER EVENT, because they answer two questions and the
+       * report has to be able to name which it is showing.
+       *
+       * `stats.opens` counts EVENTS: one reader opening four times is four.
+       * That is the number this handler has always kept, it is the honest
+       * count of what happened, and it is useless as a rate numerator — an
+       * open rate built on it exceeds 100% the moment anyone reads an email
+       * twice, and a percentage above 100 teaches a reader that the label is
+       * lying.
+       *
+       * `stats.uniqueOpens` counts MESSAGES that had never been opened
+       * before, which is distinct readers, which is what every open rate in
+       * the industry divides. `firstSeen` comes from the delivery log's own
+       * transaction, so it costs no read here.
+       */
+      const totals: Record<string, unknown> = {
         [type === 'email.opened' ? 'stats.opens' : 'stats.clicks']:
           FieldValue.increment(1),
-      })
+      }
+      if (firstSeen) {
+        totals[
+          type === 'email.opened' ? 'stats.uniqueOpens' : 'stats.uniqueClicks'
+        ] = FieldValue.increment(firstSeen)
+      }
+      await updateExisting(hostRef.collection('campaigns').doc(campaignId), totals)
+
+      /*==========================================
+       * LINK-LEVEL CLICKS — the aggregate `data.click.link` never had.
+       *
+       * The field IS present on Resend's `email.clicked` payload and has been
+       * read for a while: `normalizeResendDeliveryEvents` puts it on the
+       * event and the per-recipient delivery log stores it. What did not
+       * exist was a per-campaign rollup, and it could not be produced at read
+       * time — that would mean querying every recipient's delivery row for
+       * the campaign, which is the scan a campaign report must not do.
+       *
+       * ONE DOCUMENT, not a document per URL. The report then reads the whole
+       * table with a single `getDoc`, and the map cannot grow without bound
+       * because the transaction refuses a new key past the cap and counts the
+       * click as overflow instead. `campaignLinkKey` drops the query string,
+       * so a link personalised per recipient cannot mint a row per recipient
+       * — see that function for why that is a correctness requirement and not
+       * only a size one.
+       *
+       * Inside the claim, so a replayed click cannot inflate a link row any
+       * more than it can inflate `stats.clicks`. Best-effort: a rollup write
+       * that fails must not cost the click count above it, which is the
+       * number the whole report leans on.
+       *=========================================*/
+      if (type === 'email.clicked') {
+        await recordCampaignLinkClick({
+          firestore,
+          campaignRef: hostRef.collection('campaigns').doc(campaignId),
+          link: campaignLinkKey(data?.click?.link),
+        }).catch(() => undefined)
+      }
 
     // Experiment conversion (AGL-268): clicks are the signal.
     const experimentId = tags['experimentId']
