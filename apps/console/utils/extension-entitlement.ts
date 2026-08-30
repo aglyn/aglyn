@@ -18,6 +18,7 @@
 import {
   checkEntitlement,
   planGrantingFeature,
+  type ConsoleUpgradeNotice,
   type OrgFeatureFlags,
 } from '@aglyn/aglyn'
 
@@ -85,4 +86,59 @@ export function blockedExtensionNotice(
         'add-ons from Billing.'
     : `${title} isn't included in any plan — it's a paid add-on. Manage ` +
         'your plan and add-ons from Billing.'
+}
+
+/**
+ * Fragment ids on the billing page that sell something, and so are worth
+ * scrolling a refused reader to. Kept as a literal list rather than derived,
+ * because the thing being guarded against is a value that resolves to no
+ * element — a list built from the page could not tell the difference.
+ */
+const BILLING_UPGRADE_ANCHORS: readonly string[] = [
+  'addons',
+  'register-seats',
+  'collaborator-seats',
+]
+
+/**
+ * The billing fragment an extension asked to link to, or `undefined`.
+ *
+ * The extension names it; this decides whether it is real. An unrecognized
+ * value degrades to the plain Billing link, which is why the return is a
+ * bare fragment id and never a URL: the caller owns the route, so no value
+ * arriving here can move the destination off the console's billing page.
+ */
+export function resolveUpgradeNoticeAnchor(
+  notice: ConsoleUpgradeNotice | undefined,
+): string | undefined {
+  const anchor = notice?.billingAnchor
+  return typeof anchor === 'string' && BILLING_UPGRADE_ANCHORS.includes(anchor)
+    ? anchor
+    : undefined
+}
+
+/**
+ * The sentence a blocked org reads: the extension's own, when it supplied
+ * one, else `blockedExtensionNotice`.
+ *
+ * TWO layers, not two mechanisms. `blockedExtensionNotice` is derived — it
+ * walks `PLAN_ENTITLEMENTS` and is therefore right about every feature
+ * without being told anything, which is why it stays the floor and no
+ * surface bypasses it. What it cannot know is a specific price or which
+ * billing card sells it, because those live nowhere in the entitlement
+ * tables. An extension that knows its own commercial terms may say them
+ * instead, and one that says nothing keeps the derived sentence.
+ *
+ * Read only once `resolveExtensionEntitlement` has already answered
+ * `blocked` (AGL-2484): this phrases a refusal, it never decides one.
+ */
+export function upgradeNoticeMessage(
+  notice: ConsoleUpgradeNotice | undefined,
+  surfaceTitle: string,
+  featureFlag: keyof OrgFeatureFlags | undefined,
+): string {
+  const message = notice?.message
+  return typeof message === 'string' && message.trim()
+    ? message
+    : blockedExtensionNotice(surfaceTitle, featureFlag)
 }

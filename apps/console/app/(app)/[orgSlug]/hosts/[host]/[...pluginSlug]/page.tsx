@@ -44,8 +44,9 @@ import {
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import {
-  blockedExtensionNotice,
   resolveExtensionEntitlement,
+  resolveUpgradeNoticeAnchor,
+  upgradeNoticeMessage,
 } from '../../../../../../utils/extension-entitlement'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
@@ -272,6 +273,12 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const header = resolved?.navItem.header
   const title = header?.title ?? resolved?.navItem.label ?? 'Not found'
   const PluginComponent = resolved?.navItem.Component
+  // Validated here and used only by the refusal below. A bare fragment id,
+  // never a URL: whatever the extension named, the link it decorates is one
+  // this file builds from `Route.MANAGE_BILLING`.
+  const upgradeAnchor = resolveUpgradeNoticeAnchor(
+    resolved?.extension.upgradeNotice,
+  )
   const activeSection = resolved?.section
 
   const body = sectionRedirect ? (
@@ -316,6 +323,16 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     // place most workspaces ever go looking for the feature. The nav entry
     // is deliberately left in place for the same reason: hiding the tab
     // would hide the way to buy it.
+    //
+    // The words may be the extension's (AGL-2484). `blockedExtensionNotice`
+    // is derived from the plan tables and so is right about every feature
+    // unprompted, but the tables carry no price and no billing card, so an
+    // extension that knows its own terms may say them instead. Both are read
+    // HERE — after `extensionEntitlement` has already answered, from the org
+    // doc and the flag alone. An extension cannot reach the verdict, only
+    // the phrasing of one that went against it, and
+    // `resolveUpgradeNoticeAnchor` keeps the destination on this route no
+    // matter what it names.
     <Alert
       severity="info"
       action={
@@ -324,14 +341,20 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
             componentVariant="button"
             size="small"
             color="inherit"
-            href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+            href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}${
+              upgradeAnchor ? `#${upgradeAnchor}` : ''
+            }`}
           >
-            {'View plans'}
+            {upgradeAnchor === 'addons' ? 'View add-ons' : 'View plans'}
           </AppLink>
         ) : undefined
       }
     >
-      {blockedExtensionNotice(title, resolved?.extension.featureFlag)}
+      {upgradeNoticeMessage(
+        resolved?.extension.upgradeNotice,
+        title,
+        resolved?.extension.featureFlag,
+      )}
     </Alert>
   ) : (
     <Suspense

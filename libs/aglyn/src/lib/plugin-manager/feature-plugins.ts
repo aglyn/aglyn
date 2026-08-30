@@ -395,11 +395,52 @@ export interface ConsoleWidget {
  * that sells the feature, and a nav entry leading to the shell's own upgrade
  * notice bypasses nothing.
  */
+/**
+ * What a blocked org is told about a feature it does not hold, in the
+ * extension's own words.
+ *
+ * PRESENTATION ONLY. The shell decides entitlement from the org billing doc
+ * and this extension's `featureFlag`, and reads this object solely to render
+ * a refusal it has ALREADY decided on. Nothing here is an input to that
+ * decision, and an extension supplying it gains no access — the surface it
+ * describes stays unmounted either way.
+ *
+ * It exists because the shell's own copy can only speak in generalities. An
+ * entitlement that no plan grants — one sold as a per-organization add-on —
+ * is described exactly wrong by "not included in your current plan", which
+ * sends the reader to compare plan tiers that would not have helped.
+ */
+export interface ConsoleUpgradeNotice {
+  /**
+   * The sentence a blocked org reads. Plain text: the shell renders it as a
+   * string, never as markup, and a third-party extension writes this.
+   */
+  message: string
+  /**
+   * Which card on the billing page sells it, as a bare fragment id
+   * ('addons'). The console validates it against the anchors that page
+   * actually has and drops it otherwise — the `docsTopic` treatment, for the
+   * same reason: an extension can name any string, and an unrecognized one
+   * must degrade to the plain Billing link rather than build a dead URL.
+   *
+   * Deliberately not an href. A full URL from an extension would be an
+   * open redirect rendered by the console's own chrome; the shell keeps
+   * ownership of the route and accepts only which part of it to scroll to.
+   */
+  billingAnchor?: string
+}
+
 export interface ConsoleExtension {
   pluginId: PluginId
   displayName: string
   /** Entitlement flag gating every surface this extension registers. */
   featureFlag?: keyof OrgFeatureFlags
+  /**
+   * Refusal copy for an org that does not hold `featureFlag`, rendered by
+   * the shell in place of the surface. Omit to get the shell's generic
+   * plan-tier sentence.
+   */
+  upgradeNotice?: ConsoleUpgradeNotice
   navItems?: ConsoleNavItem[]
   dashboardCards?: ConsoleDashboardCard[]
   settingsSections?: ConsoleSettingsSection[]
