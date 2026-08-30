@@ -38,8 +38,23 @@ import {
   orgHourlyCampaignCeiling,
 } from './send-ceilings'
 import { EMAIL_SEND_RATE_DEFAULT_PER_HOUR } from './send-rate'
-// The shipped price table, so R3 can be checked against what we SELL rather
-// than only against numbers this file made up.
+/*
+ * The shipped price table, so R3 is checked against what we SELL rather than
+ * only against numbers this file made up.
+ *
+ * `shared-util-email` is tagged `scope:shared`, which may depend only on
+ * `scope:shared`, and `@aglyn/aglyn` carries no such tag — the boundary that
+ * makes `email-media-src.ts` keep a structural copy of `TENANT_APEX`. That
+ * remedy is wrong here and the disable is deliberate: a copy of
+ * `PLAN_ENTITLEMENTS` would be the made-up numbers this import exists to
+ * replace, so the assertion would go on passing while the allowance it claims
+ * to check drifted away underneath it.
+ *
+ * A SPEC may reach where the library may not, because the boundary exists to
+ * keep shipped bundles from pulling the framework in and no spec is shipped.
+ * A production import here would still be refused.
+ */
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import { PLAN_ENTITLEMENTS, SELF_SERVE_PLANS } from '@aglyn/aglyn'
 
 /** The shipped platform default, so the model is checked at its real values. */
