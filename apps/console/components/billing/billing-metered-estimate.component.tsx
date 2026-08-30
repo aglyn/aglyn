@@ -21,6 +21,7 @@ import {
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
+  METERED_BILLED_RATES_USD,
   METERED_MARKUP,
 } from '../../utils/usage-metering'
 import { Stack, Typography } from '@mui/material'
@@ -47,6 +48,32 @@ export interface BillingMeteredEstimateProps {
  * wrong in.
  */
 type UsageConfig = { orgLibraryBilledFrom: string | null } | 'unknown'
+
+/**
+ * A rate, at the precision it is actually charged at.
+ *
+ * `$0.0338/GB-month` and `$0.065 per 1,000` both round to `$0.00` at two
+ * decimal places, so the currency default would print every metered rate on
+ * the platform as free. Four decimals covers all three, and the trailing
+ * zeros are stripped so `$0.1300` does not read as spurious precision.
+ */
+function rateText(usd: number): string {
+  return `$${usd.toFixed(4).replace(/\.?0+$/, '')}`
+}
+
+/**
+ * A charge, at the precision an INVOICE is denominated in.
+ *
+ * Two decimals, because that is the unit money settles in — but a real charge
+ * below a cent is reported as `<$0.01` rather than as `$0.00`. Printing
+ * `$0.00 billable` beside a non-zero total is the contradiction a customer
+ * would (correctly) read as a broken number; the meters sum before the total
+ * is rounded, so a dimension can genuinely contribute less than a cent.
+ */
+function chargeText(usd: number): string {
+  if (usd > 0 && usd < 0.005) return '<$0.01'
+  return `$${usd.toFixed(2)}`
+}
 
 /**
  * Month-to-date metered cost estimate (AGL-41): mirrors the report-usage
@@ -257,6 +284,10 @@ export function BillingMeteredEstimateComponent(
     includedBand: string,
     billable: number,
     billableText: string,
+    /** The published overage price for this meter's unit, already marked up. */
+    unitRate: string,
+    /** This meter's own share of the charge above, in USD after markup. */
+    chargeUsd: number,
   ) => (
     <Typography variant="body2" color="text.secondary">
       {`${label}: ${used} of ${includedBand}`}
@@ -266,7 +297,15 @@ export function BillingMeteredEstimateComponent(
           variant="body2"
           sx={{ color: 'warning.main' }}
         >
-          {` · ${billableText} billable`}
+          {` · ${billableText} billable at ${unitRate} ≈ ${chargeText(chargeUsd)}`}
+        </Typography>
+      ) : included.metered ? (
+        // Inside the band. The rate still shows, because the question a
+        // customer asks about a meter they are NOT over is "what happens if I
+        // go over" — and a price learned only by crossing the line is the
+        // learn-your-cap-by-refusal shape one surface over.
+        <Typography component="span" variant="body2">
+          {` · ${unitRate} past the band`}
         </Typography>
       ) : null}
     </Typography>
@@ -301,6 +340,12 @@ export function BillingMeteredEstimateComponent(
             `${band(included.storageGb, 2)} GB`,
             billedEstimate.billableStorageGb,
             `${billedEstimate.billableStorageGb.toFixed(2)} GB`,
+            `${rateText(METERED_BILLED_RATES_USD.storagePerGbMonth)}/GB-month`,
+            // From `billedEstimate`, not `estimate`: what is called billable
+            // must be exactly what the dollars at the top of the card price,
+            // and those two differ whenever the org library is measured but
+            // not yet invoiced.
+            billedEstimate.billableUsdByMeter.storage,
           )}
           {orgLibraryGb > 0 ? (
             <Typography variant="caption" color="text.secondary">
@@ -319,6 +364,10 @@ export function BillingMeteredEstimateComponent(
             band(included.pageViews),
             billedEstimate.billablePageViews,
             Math.ceil(billedEstimate.billablePageViews).toLocaleString(),
+            // Per 1,000, not per view: the per-view price is $0.00013, which
+            // reads as zero at any precision a customer would trust.
+            `${rateText(METERED_BILLED_RATES_USD.perPageView * 1000)} per 1,000`,
+            billedEstimate.billableUsdByMeter.pageViews,
           )}
           {usageRow(
             'Form submissions',
@@ -326,6 +375,10 @@ export function BillingMeteredEstimateComponent(
             band(included.formSubmissions),
             billedEstimate.billableFormSubmissions,
             Math.ceil(billedEstimate.billableFormSubmissions).toLocaleString(),
+            `${rateText(
+              METERED_BILLED_RATES_USD.perFormSubmission * 1000,
+            )} per 1,000`,
+            billedEstimate.billableUsdByMeter.formSubmissions,
           )}
         </>
       ) : null}

@@ -96,6 +96,24 @@ export const METERED_UNIT_RATES_USD = {
 }
 
 /**
+ * What a customer is CHARGED per unit past the included band: the table above
+ * times {@link METERED_MARKUP}.
+ *
+ * The rate above is our cost; this is the published price, and they are three
+ * decimal places apart. A billing surface that printed the cost table would be
+ * quoting a number no invoice uses — the terms are "at cost + 30%", and the
+ * customer-facing figure is the product, not the input.
+ *
+ * Derived rather than written out, so a rate correction moves both together.
+ * There is exactly one rate table in this file and it is the one above.
+ */
+export const METERED_BILLED_RATES_USD = {
+  storagePerGbMonth: METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP,
+  perPageView: METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP,
+  perFormSubmission: METERED_UNIT_RATES_USD.perFormSubmission * METERED_MARKUP,
+}
+
+/**
  * Bandwidth ⇄ page views — RE-EXPORTED, not defined here (AGL-2155).
  *
  * The definitions moved down to `@aglyn/aglyn/app-utils/plan-entitlements`
@@ -248,6 +266,25 @@ export interface UsageCostEstimate {
   /** Raw infra cost of the billable excess only. */
   billableCostUsd: number
   /**
+   * What each meter contributes to the charge, in USD AFTER markup.
+   *
+   * The three add up to `billableCostUsd × METERED_MARKUP` exactly — they are
+   * the same three products `billedCents` is rounded from, split out rather
+   * than recomputed, so a surface can attribute the total to the meter that
+   * caused it without running a second cost model. Zero on a plan that hard-
+   * caps rather than metering, matching `billableCostUsd`.
+   *
+   * Not rounded to cents individually. `billedCents` rounds the SUM once, and
+   * three separately-rounded figures need not add to it; a caller showing
+   * these must round for display and must not present the sum as the invoice
+   * total, which `billedCents` already is.
+   */
+  billableUsdByMeter: {
+    storage: number
+    pageViews: number
+    formSubmissions: number
+  }
+  /**
    * What the org is billed: billable excess × METERED_MARKUP, whole cents.
    * Zero on a plan that hard-caps rather than metering.
    */
@@ -301,6 +338,16 @@ export function estimateMonthlyUsageCost(
   const billableCostUsd = included.metered
     ? priced(billableStorageGb, billablePageViews, billableFormSubmissions)
     : 0
+  // One meter's share of the charge, from the SAME `priced` call the total
+  // uses — three isolated multiplications here would be a second cost model
+  // to drift from the first. Each is `priced` with the other two dimensions
+  // zeroed, so the three provably sum to `billableCostUsd`.
+  const billableShareUsd = (
+    storage: number,
+    views: number,
+    submissions: number,
+  ): number =>
+    included.metered ? priced(storage, views, submissions) * METERED_MARKUP : 0
   return {
     storageGb,
     pageViews,
@@ -311,6 +358,11 @@ export function estimateMonthlyUsageCost(
     billableFormSubmissions,
     costUsd: priced(storageGb, pageViews, formSubmissions),
     billableCostUsd,
+    billableUsdByMeter: {
+      storage: billableShareUsd(billableStorageGb, 0, 0),
+      pageViews: billableShareUsd(0, billablePageViews, 0),
+      formSubmissions: billableShareUsd(0, 0, billableFormSubmissions),
+    },
     billedCents: Math.round(billableCostUsd * METERED_MARKUP * 100),
   }
 }
