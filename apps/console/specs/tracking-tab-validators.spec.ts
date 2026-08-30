@@ -49,12 +49,10 @@ const SOURCE = readFileSync(
     '[orgSlug]',
     'hosts',
     '[host]',
-    'setup',
-    // The schemas moved with the page when Setup's tabs became routed
-    // sections (AGL-2501): the layout is where the shared scope — and the form
-    // schemas it hands the sections — now lives.
-    '(sections)',
-    'layout.tsx',
+    // The scope both settings hubs mount, which is where the form schemas
+    // live. The Setup and Admin sections layouts each provide it; neither
+    // declares a schema of its own.
+    'host-settings-scope.tsx',
   ),
   'utf8',
 )

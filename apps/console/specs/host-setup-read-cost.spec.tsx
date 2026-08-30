@@ -21,7 +21,12 @@
  */
 
 /**
- * What one Host Setup load actually READS, per section.
+ * What one host settings load actually READS, per section — both hubs.
+ *
+ * Setup and Admin mount the SAME scope: one host-document subscription, the
+ * guarded saves and the drafts. Two hubs mounting one provider is the point at
+ * which "shared" could quietly mean "twice", so the Admin sections are metered
+ * here beside the Setup ones rather than trusted to have inherited the number.
  *
  * Written BEFORE the tabs became routes, which is the only way it can do its
  * job. Setup is the case where a conversion could quietly cost MORE: MUI's
@@ -151,9 +156,11 @@ jest.mock(
 
 /** The section the URL names, moved between renders to stand for a link. */
 let mockSection = 'details'
+/** Which settings hub that section belongs to. */
+let mockHub = 'setup'
 
 jest.mock('next/navigation', () => ({
-  usePathname: () => `/acme/hosts/shop/setup/${mockSection}`,
+  usePathname: () => `/acme/hosts/shop/${mockHub}/${mockSection}`,
   useRouter: () => ({ replace: () => undefined, push: () => undefined }),
   useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
@@ -223,6 +230,19 @@ const SECTION_PAGES: Record<string, () => JSX.Element> = {
   theme: require(`${SETUP}/theme/page`).default,
   emails: require(`${SETUP}/emails/page`).default,
 }
+/**
+ * The two Admin sections the settings scope reaches — the hub it was lifted
+ * into. `danger` rides along as the section that renders no form at all: the
+ * scope is mounted by the LAYOUT, so what it costs has to be the same whether
+ * the open section uses it or not.
+ */
+const ADMIN = '../app/(app)/[orgSlug]/hosts/[host]/admin/(sections)'
+const HostAdminLayout = require(`${ADMIN}/layout`).default
+const ADMIN_SECTION_PAGES: Record<string, () => JSX.Element> = {
+  general: require(`${ADMIN}/general/page`).default,
+  backup: require(`${ADMIN}/backup/page`).default,
+  danger: require(`${ADMIN}/danger/page`).default,
+}
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 function documentCeiling(listens: Array<{ path: string; limit: number }>) {
@@ -248,12 +268,25 @@ function listenedPaths(): string[] {
 
 function renderSetup(section: string) {
   mockSection = section
+  mockHub = 'setup'
   mockListens.length = 0
   const SectionPage = SECTION_PAGES[section]
   return render(
     <HostSetupLayout>
       <SectionPage />
     </HostSetupLayout>,
+  )
+}
+
+function renderAdmin(section: string) {
+  mockSection = section
+  mockHub = 'admin'
+  mockListens.length = 0
+  const SectionPage = ADMIN_SECTION_PAGES[section]
+  return render(
+    <HostAdminLayout>
+      <SectionPage />
+    </HostAdminLayout>,
   )
 }
 
@@ -326,5 +359,77 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(260)
     renderSetup('theme')
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(20)
+  })
+})
+
+describe('host Admin read cost, per section', () => {
+  afterEach(() => {
+    mockSection = 'details'
+    mockHub = 'setup'
+    mockListens.length = 0
+  })
+
+  /**
+   * The CONTROL for the assertions below, which are all "did not read more".
+   *
+   * A meter that recorded nothing would satisfy every one of them. This is the
+   * reading that proves it is live in this hub too: the Admin sections layout
+   * mounts the shared scope, so the host document the General form is seeded
+   * from is subscribed here exactly as it is under Setup.
+   */
+  it('CONTROL: the Admin hub subscribes the host document', () => {
+    renderAdmin('general')
+    summarize('admin/general', mockListens)
+    expect(listenedPaths()).toContain('hosts/host-1')
+  })
+
+  /**
+   * ONE host-document listen from the LAYOUT, whatever section is open.
+   *
+   * The lift put the same provider in both hubs' sections layouts, and a
+   * provider is exactly the kind of thing that comes to be mounted twice — once
+   * by the layout and once by a section that wanted the scope. Sections that
+   * subscribe nothing of their own read 1, which is the layout's, so a second
+   * copy shows up here as a number rather than as a slightly larger bill.
+   *
+   * `danger` reads 2 and that is not the scope: `DeleteSiteCard` holds its own
+   * `useHost`, because what it confirms against is the site's own name. Pinned
+   * rather than excluded — a section's own listen is a real cost, and stating
+   * it is what makes the 1 above mean "the layout's, and only the layout's".
+   */
+  it('subscribes the host document once from the layout', () => {
+    const counted: Record<string, number> = {}
+    for (const section of ['general', 'backup', 'danger'] as const) {
+      renderAdmin(section)
+      counted[section] = mockListens.filter(
+        (listen) => listen.path === 'hosts/host-1',
+      ).length
+    }
+    expect(counted).toEqual({ general: 1, backup: 1, danger: 2 })
+  })
+
+  /**
+   * The forms and cards that moved here read no COLLECTION.
+   *
+   * Basic details is seeded from the host document the layout already holds,
+   * and backup, restore and template publishing all go through API routes. So
+   * the sections that gained them cost a document read and nothing else — the
+   * budget is what says so as a number.
+   */
+  it('holds the moved sections to a document read', () => {
+    for (const section of ['general', 'backup'] as const) {
+      renderAdmin(section)
+      summarize(`admin/${section}`, mockListens)
+      expect({
+        section,
+        ceiling: documentCeiling(mockListens) <= 20,
+      }).toEqual({ section, ceiling: true })
+      // A collection listen is counted at the unbounded estimate, so anything
+      // over the per-document cost would already have failed above. This names
+      // the property directly rather than leaving it to arithmetic.
+      expect(
+        mockListens.filter((listen) => listen.path.split('/').length > 2),
+      ).toEqual([])
+    }
   })
 })

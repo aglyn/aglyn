@@ -305,6 +305,12 @@ export enum Route {
    * a read nor a byte. `HOST_ADMIN` redirects to Plugins and still honours the
    * `?tab=` ids these sections were deep-linked by.
    */
+  /*
+   * The site as an OBJECT: its name in the console and the subdomain it
+   * answers to. First in the rail because an address and a name are what
+   * identify the thing every other section governs.
+   */
+  HOST_ADMIN_GENERAL = '/[orgSlug]/hosts/[host]/admin/general',
   HOST_ADMIN_PLUGINS = '/[orgSlug]/hosts/[host]/admin/plugins',
   /*
    * One plugin, as installed on ONE site (AGL-428, AGL-1014) — the
@@ -320,6 +326,14 @@ export enum Route {
   HOST_ADMIN_DOMAIN = '/[orgSlug]/hosts/[host]/admin/domain',
   HOST_ADMIN_SECURITY = '/[orgSlug]/hosts/[host]/admin/security',
   HOST_ADMIN_ACTIVITY = '/[orgSlug]/hosts/[host]/admin/activity',
+  /*
+   * Backup, restore and publishing the site as a template — moving the whole
+   * site somewhere else, or bringing it back. Its own section rather than the
+   * Danger zone: restore overwrites, but export and publishing a template do
+   * not, and filing all three under a destructive heading mislabels two of
+   * them.
+   */
+  HOST_ADMIN_BACKUP = '/[orgSlug]/hosts/[host]/admin/backup',
   HOST_ADMIN_DANGER = '/[orgSlug]/hosts/[host]/admin/danger',
   HOST_THEME = '/[orgSlug]/hosts/[host]/theme',
   /*
@@ -532,11 +546,13 @@ export interface RoutePayload {
   [Route.HOST_SETUP_THEME]: { orgSlug: string; host: string }
   [Route.HOST_SETUP_EMAILS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_GENERAL]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGINS]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_PLUGIN]: { orgSlug: string; host: string; pluginRef: string }
   [Route.HOST_ADMIN_DOMAIN]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_SECURITY]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_ACTIVITY]: { orgSlug: string; host: string }
+  [Route.HOST_ADMIN_BACKUP]: { orgSlug: string; host: string }
   [Route.HOST_ADMIN_DANGER]: { orgSlug: string; host: string }
   [Route.HOST_PLUGIN]: { orgSlug: string; host: string; pluginSlug: string }
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }

@@ -26,6 +26,7 @@ import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
+import { HostSettingsScopeProvider } from '../../host-settings-scope'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
@@ -66,10 +67,12 @@ export default function HostAdminSectionsLayout({
    * trail by construction, instead of by somebody remembering a second copy.
    */
   const sections = [
+    section(Route.HOST_ADMIN_GENERAL, 'General'),
     section(Route.HOST_ADMIN_PLUGINS, 'Plugins'),
     section(Route.HOST_ADMIN_DOMAIN, 'Custom Domain'),
     section(Route.HOST_ADMIN_SECURITY, 'Security'),
     section(Route.HOST_ADMIN_ACTIVITY, 'Activity'),
+    section(Route.HOST_ADMIN_BACKUP, 'Backup & template'),
     section(Route.HOST_ADMIN_DANGER, 'Danger zone'),
   ]
   const active = useActiveSection(sections)
@@ -98,7 +101,21 @@ export default function HostAdminSectionsLayout({
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {isAdmin ? (
-          <HubSections sections={sections}>{children}</HubSections>
+          /*
+           * The scope the General section's form saves through — the host
+           * listener, the drafts and the unconfirmed-seed guard, shared with
+           * the Setup hub rather than copied into this one.
+           *
+           * Mounted at the LAYOUT so a half-typed name survives a trip to
+           * another section and back: sections are routes, so the page being
+           * left is unmounted and a ref held inside it goes with it.
+           *
+           * Inside the admin branch, so a reader who is refused the area
+           * opens no host listener on their way to being told so.
+           */
+          <HostSettingsScopeProvider>
+            <HubSections sections={sections}>{children}</HubSections>
+          </HostSettingsScopeProvider>
         ) : (
           <CardDisplay
             header="Admin"

@@ -24,7 +24,7 @@ export interface SetupSection {
   label: string
   href: string
   /** The form schema this section renders, when it renders one. */
-  schemaId?: 'hostDetails' | 'hostSeo' | 'hostTracking'
+  schemaId?: 'hostSeo' | 'hostTracking'
 }
 
 /** Section metadata in rail order. Hrefs are added per site below. */
@@ -34,12 +34,12 @@ const SECTIONS: ReadonlyArray<{
   route: Route
   schemaId?: SetupSection['schemaId']
 }> = [
-  {
-    id: 'details',
-    label: 'Basic details',
-    route: Route.HOST_SETUP_DETAILS,
-    schemaId: 'hostDetails',
-  },
+  /*
+   * No `schemaId`: this section renders cards only. The `hostDetails` form is
+   * the site's name and address, which the Admin hub's General section owns —
+   * naming it here would point the rail at a schema this route does not draw.
+   */
+  { id: 'details', label: 'Basic details', route: Route.HOST_SETUP_DETAILS },
   { id: 'seo', label: 'SEO', route: Route.HOST_SETUP_SEO, schemaId: 'hostSeo' },
   {
     id: 'tracking',
