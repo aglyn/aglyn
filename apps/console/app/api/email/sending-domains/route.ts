@@ -32,6 +32,7 @@ import {
   formatSendingRecord,
   sendingDnsRecords,
 } from '@aglyn/shared-util-email'
+import { issueSendingDomainRecords } from '../../../../utils/server/issue-sending-domain'
 
 export const dynamic = 'force-dynamic'
 
@@ -198,21 +199,40 @@ async function handler(request: Request): Promise<Response> {
   if (result.error) {
     return Response.json({ error: result.error }, { status: result.status })
   }
-  const records = sendingDnsRecords(result.record)
+
+  /*
+   * Ask the mail provider for a signing key, if this deployment has a
+   * credential that can create one.
+   *
+   * After the claim, never instead of it. The claim is what makes the request
+   * idempotent and what a failure has somewhere to be recorded against; the
+   * issuing call is allowed to do nothing at all — an unconfigured deployment,
+   * or a provider that refused — and the domain then stays at `requested`,
+   * which is exactly what `pendingProvider` below reports.
+   */
+  const issued = await issueSendingDomainRecords({ orgId, record: result.record })
+  const records = sendingDnsRecords(issued.record)
   return Response.json(
     {
-      ...result.record,
+      ...issued.record,
       records,
       lines: records.map(formatSendingRecord),
-      dmarc: await readDmarcPolicy(result.record.domain),
-      dmarcSuggestion: dmarcRecommendation(result.record.domain),
+      dmarc: await readDmarcPolicy(issued.record.domain),
+      dmarcSuggestion: dmarcRecommendation(issued.record.domain),
       /*
        * A domain that has no DKIM key yet cannot be published or verified.
        * Said plainly rather than shown as an empty record, because a blank
        * value in a records table reads as our bug — which, from the
        * customer's side, it is.
        */
-      pendingProvider: result.record.status === 'requested',
+      pendingProvider: issued.record.status === 'requested',
+      /*
+       * A code, never a provider's prose and never a credential — see
+       * `KNOWN_PROVIDER_ERRORS`. It is the difference between "this
+       * deployment cannot issue keys" and "the provider refused this domain",
+       * which are two different people's problems.
+       */
+      providerDetail: issued.detail ?? null,
     },
     { status: result.status },
   )
