@@ -202,6 +202,23 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         !mockStore[`hosts/${hostId}/suppressions/${key}`]
       )
     }),
+  /*
+   * No site here selects a custom sending domain, so every send resolves to
+   * the platform identity — composed from the REAL `resolveSendingIdentity`,
+   * as the marketing suites do, rather than a hand-written verdict shape this
+   * file would have to keep in step.
+   *
+   * Absent, `performCampaignSend` threw before reaching the suppression filter
+   * and every send-time assertion below failed on a TypeError — a red that
+   * says nothing about who was mailed.
+   */
+  resolveHostSendingIdentity: async () =>
+    jest
+      .requireActual('@aglyn/shared-util-email')
+      .resolveSendingIdentity({
+        selection: null,
+        platformFrom: process.env['USAGE_EMAIL_FROM'] || 'noreply@aglyn.com',
+      }),
   getOrgForHost: async () => ({ orgId: ORG_ID, org: { plan: 'business' } }),
   resolveOrgMembership: async () => ({
     orgId: ORG_ID,
@@ -235,6 +252,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     windowStartMs: 0,
     resetMs: 3_600_000,
     used: 0,
+  }),
+  /*
+   * The hourly governor's claim, PERMISSIVE — for the same reason the monthly
+   * cap above is: the rate limiter has its own file, and one that deferred
+   * here would make every assertion below a test of it rather than of who was
+   * suppressed. Matches the shape `campaign-send.ts` reads back.
+   */
+  claimOrgEmailSendBudget: async ({ count = 0 }: { count?: number } = {}) => ({
+    allowed: true,
+    used: 0,
+    ceiling: 1_000_000,
+    remaining: 1_000_000 - count,
+    retryAtMs: 3_600_000,
+    degraded: false,
   }),
   firebaseAdmin: {
     app: () => ({
