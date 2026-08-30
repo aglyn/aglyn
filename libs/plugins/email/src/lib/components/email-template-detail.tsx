@@ -382,22 +382,6 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
             </Alert>
           ))}
 
-          <Section title="Preview">
-            <EmailDesignPreview
-              hostId={hostId}
-              nodes={version?.nodes}
-              loading={version === undefined && Boolean(versionId)}
-              subject={String(screen?.emailSubject ?? '')}
-              preheader={String(screen?.emailPreheader ?? '')}
-              emptyMessage={
-                'This template has nothing in it yet. Open it in the ' +
-                'besigner to build the email.'
-              }
-            />
-          </Section>
-
-          <Divider />
-
           {/*==========================================
             * WHAT HAPPENED TO THE MAIL, SUMMED.
             *
@@ -628,6 +612,26 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
       </CardDisplay>
 
       <EmailRecipientsCard hostId={hostId} screenId={screenId} />
+
+      {/*
+       * Last, and its own card — the same order the email's own page uses.
+       * The figures are what a reader opens either page for and the frame is
+       * the tallest thing on both, so at the top it pushes every number below
+       * the fold.
+       */}
+      <CardDisplay header={'Preview'} contentGutterX contentGutterY>
+        <EmailDesignPreview
+          hostId={hostId}
+          nodes={version?.nodes}
+          loading={version === undefined && Boolean(versionId)}
+          subject={String(screen?.emailSubject ?? '')}
+          preheader={String(screen?.emailPreheader ?? '')}
+          emptyMessage={
+            'This template has nothing in it yet. Open it in the ' +
+            'besigner to build the email.'
+          }
+        />
+      </CardDisplay>
     </Stack>
   )
 }

@@ -55,8 +55,20 @@ const FIRESTORE = {}
 /** The messages the ceilinged read answers with, staged per case. */
 let emailDocs: Array<Record<string, unknown>> = []
 
+jest.mock('@aglyn/shared-ui-snackstack', () => ({
+  __esModule: true,
+  // The card reports a failed create through a snackbar. The console mounts
+  // this provider at its root and no test tree has it, so without the mock
+  // the hook answers null and the card cannot render at all.
+  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
+  // Nobody signed in. The card's create action posts through
+  // `useCampaignSendApi`, which reads the user to mint a token; no test here
+  // creates, so the hook only has to exist.
+  useUser: () => ({ data: null }),
   useFirestoreCollection: () => ({
     data: emailDocs,
     status: 'success',

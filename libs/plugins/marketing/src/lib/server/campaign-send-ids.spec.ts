@@ -90,6 +90,24 @@ function docRef(path: string): any {
     },
     set: async (value: Record<string, any>) => {
       reject()
+      /*
+       * `FieldValue.delete()` REMOVES the field rather than storing a
+       * sentinel. Merging it in as a value would leave a draft carrying a
+       * `sendAtMs` whose value happens to be an object — which is exactly the
+       * leftover send time the delete exists to clear, so a double that kept
+       * it would pass the test the product fails.
+       */
+      const merged: Record<string, any> = {
+        ...(store.get(path) ?? {}),
+        ...value,
+      }
+      for (const [field, entry] of Object.entries(value)) {
+        if (entry && (entry as any).__delete) delete merged[field]
+      }
+      store.set(path, merged)
+    },
+    update: async (value: Record<string, any>) => {
+      reject()
       store.set(path, { ...(store.get(path) ?? {}), ...value })
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
@@ -152,6 +170,20 @@ function queryRef(path: string, after?: string): any {
 
 const mockFirestore = () => ({
   collection: (name: string) => collectionRef(name),
+  /*
+   * The claim the send-now branch takes before it mails, modeled the way the
+   * scheduled processor's is: read the document, and write only if it still
+   * says what it said. Sequential here rather than concurrent, which is all
+   * the branch under test needs — what is asserted is that the claim HAPPENS
+   * and is released again, not that Firestore's isolation works.
+   */
+  runTransaction: async (body: any) =>
+    body({
+      get: async (ref: any) => ref.get(),
+      update: async (ref: any, value: any) => ref.update(value),
+      set: async (ref: any, value: any, options?: any) =>
+        ref.set(value, options),
+    }),
 })
 
 let mockUid = 'uid-1'
@@ -184,6 +216,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldValue: {
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
+        // Recognized by the document double above, which removes the field
+        // rather than storing this marker.
+        delete: () => ({ __delete: true }),
       },
       FieldPath: { documentId: () => '__name__' },
     },
@@ -572,5 +607,544 @@ describe('the ordinary campaign still sends', () => {
 
     expect(result.status).toBe(403)
     expect(campaignPaths()).toEqual([])
+  })
+})
+
+/*==========================================
+ * AN EMAIL THAT EXISTS BEFORE IT IS SENT.
+ *
+ * A draft is a state on the send record, not a document elsewhere, and the id
+ * is the reason: `performCampaignSend` adopts a `campaignId` it is given, so
+ * a draft becomes the sent email AT ITS OWN ID. That is what keeps
+ * `/emails/campaigns/{sendId}` resolving from the moment the email is
+ * created, and what keeps the `cid=` inside every delivered unsubscribe HMAC
+ * pointing at the record it was minted for.
+ *
+ * The properties held below are the ones that make it safe: it costs nothing
+ * to exist, it cannot escape on its own, and it cannot be used to rewrite an
+ * email that has already gone out.
+ *=========================================*/
+
+describe('creating a draft', () => {
+  it('writes ONE document and mails nothing', async () => {
+    const result = await post({
+      hostId: HOST,
+      action: 'draft',
+      displayName: 'The discount one',
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.status).toBe('draft')
+    // Nothing was mailed. A draft that sent anything would be a send nobody
+    // asked for, taken at create time.
+    expect(sent).toHaveLength(0)
+    const stored = store.get(
+      `hosts/${HOST}/campaigns/${result.body.campaignId}`,
+    )
+    expect(stored?.['status']).toBe('draft')
+    expect(stored?.['displayName']).toBe('The discount one')
+  })
+
+  it('needs neither a subject nor a body', async () => {
+    /*
+     * A draft is an email that has not been written yet. Requiring copy of it
+     * would mean there is no way to create one, which is the whole state.
+     */
+    const result = await post({ hostId: HOST, action: 'draft' })
+    expect(result.status).toBe(200)
+  })
+
+  it('leaves NO reach record, so it has no account of reaching anybody', async () => {
+    const result = await post({ hostId: HOST, action: 'draft' })
+
+    expect(campaignPaths()).toEqual([
+      `hosts/${HOST}/campaigns/${result.body.campaignId}`,
+    ])
+    // Specifically not `reports/reached`, which an ordinary send leaves and
+    // which is what a follow-up subtracts from.
+    expect(store.has(
+      `hosts/${HOST}/campaigns/${result.body.campaignId}/reports/reached`,
+    )).toBe(false)
+  })
+
+  it('records no stats, so no surface can read it as a send that reached nobody', async () => {
+    const result = await post({ hostId: HOST, action: 'draft' })
+    const stored = store.get(
+      `hosts/${HOST}/campaigns/${result.body.campaignId}`,
+    )
+    // An absent `stats` is what lets the report surfaces withhold the figures
+    // instead of dividing into zero and publishing a 0% delivery rate.
+    expect(stored?.['stats']).toBeUndefined()
+    expect(stored?.['sentAt']).toBeUndefined()
+  })
+
+  it('refuses a campaignId that names a path rather than an id', async () => {
+    // The same guard the schedule branch carries: a draft filed under
+    // `a/b/c` is a document the merchant can neither see nor cancel.
+    const result = await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'a/b/c',
+    })
+    expect(result.status).toBe(400)
+    expect(campaignPaths()).toEqual([])
+  })
+})
+
+describe('a draft is not follow-up-able', () => {
+  it('refuses a follow-up on a draft, and says why', async () => {
+    /*
+     * `campaignReachCovers` would refuse it anyway for want of a reach
+     * record, but the status check comes first and gives the honest reason:
+     * nothing has gone out, so there is nobody to add.
+     */
+    // FULLY written, so the refusal is about the state rather than about
+    // there being nothing to mail — an empty draft is refused either way, and
+    // would pass this test without the status check existing at all.
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'followUp',
+      campaignId: 'draft-1',
+    })
+
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toMatch(/already been sent/i)
+    expect(sent).toHaveLength(0)
+  })
+})
+
+describe('sending a draft turns THAT document into the sent email', () => {
+  it('keeps the id, so the report URL and the cid never move', async () => {
+    /*==========================================
+     * THE PROPERTY THE WHOLE MODEL RESTS ON.
+     *
+     * Every delivered unsubscribe footer carries `cid=<sendId>` inside its
+     * HMAC. A draft copied to a new id at send time would mean the URL a
+     * merchant had open stops being the email's URL, and the `cid` names a
+     * document that is not the send.
+     *=========================================*/
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'draft-1',
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.campaignId).toBe('draft-1')
+    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['status']).toBe(
+      'sent',
+    )
+    // No second document anywhere under campaigns.
+    expect(campaignPaths()).toEqual(sendPaths('draft-1'))
+  })
+
+  it('mails the copy from the RECORD, never from the request', async () => {
+    /*
+     * `sendNow` addresses an existing document by id. A caller who could also
+     * supply the copy could put arbitrary text on somebody else's send id,
+     * keep its `cid` and its report, and mail it.
+     */
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'The real subject',
+      body: 'The real body',
+      audience: 'leads',
+    })
+
+    await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'draft-1',
+      subject: 'Injected subject',
+      body: 'Injected body',
+    })
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]['subject']).toBe('The real subject')
+    expect(String(sent[0]['text'] ?? sent[0]['html'])).toContain(
+      'The real body',
+    )
+  })
+
+  it('records who it reached, so a later follow-up can subtract them', async () => {
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    await post({ hostId: HOST, action: 'sendNow', campaignId: 'draft-1' })
+
+    expect(
+      store.has(`hosts/${HOST}/campaigns/draft-1/reports/reached`),
+    ).toBe(true)
+  })
+})
+
+describe('send-now is refused on everything that has gone out', () => {
+  it('refuses a SENT email and points at the follow-up instead', async () => {
+    /*
+     * Sending it would mail the whole audience a second copy. Reaching the
+     * people it has not is what `followUp` does, minus everyone already
+     * reached.
+     */
+    await send({ campaignId: 'msg-1' })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'msg-1',
+    })
+
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toMatch(/already been sent/i)
+  })
+
+  it('refuses a CANCELED email rather than resurrecting it', async () => {
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    await post({ hostId: HOST, action: 'cancel', campaignId: 'msg-1' })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'msg-1',
+    })
+
+    expect(result.status).toBe(400)
+    expect(sent).toHaveLength(0)
+  })
+
+  it('sends a SCHEDULED email ahead of its time', async () => {
+    // The control for the two refusals above. A branch that refused
+    // everything would pass both having deleted the feature.
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'msg-1',
+    })
+
+    expect(result.status).toBe(200)
+    expect(sent).toHaveLength(1)
+    expect(store.get(`hosts/${HOST}/campaigns/msg-1`)?.['status']).toBe('sent')
+  })
+})
+
+describe('what a sent email says was delivered cannot be rewritten', () => {
+  it('refuses to schedule over an email that has already gone out', async () => {
+    /*==========================================
+     * THE GUARD THAT MAKES `schedule` SAFE TO GIVE A campaignId.
+     *
+     * The branch addresses an existing document by id and merges into it.
+     * Ungated, that merges a new subject and body onto a send that went out
+     * months ago and sets its status back to `scheduled` — rewriting the
+     * record of what was delivered, and handing the processor a message to
+     * mail a second time under a `cid` whose unsubscribe links are already in
+     * inboxes.
+     *=========================================*/
+    await send({ campaignId: 'msg-1' })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Rewritten subject',
+      body: 'Rewritten body',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(409)
+    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    expect(stored?.['status']).toBe('sent')
+    expect(stored?.['subject']).toBe('Spring sale')
+  })
+
+  it('refuses to draft over an email that has already gone out', async () => {
+    await send({ campaignId: 'msg-1' })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg-1',
+      subject: 'Rewritten subject',
+      body: 'Rewritten body',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(409)
+    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    expect(stored?.['status']).toBe('sent')
+    expect(stored?.['subject']).toBe('Spring sale')
+  })
+
+  it('DOES let a draft be rewritten', async () => {
+    // The control. A guard that refused every write would pass both refusals
+    // above having made drafts uneditable.
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'First attempt',
+      body: 'Draft body',
+      audience: 'leads',
+    })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Second attempt',
+      body: 'Draft body',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['subject']).toBe(
+      'Second attempt',
+    )
+  })
+
+  it('changes ONLY the name on a sent email, and nothing else', async () => {
+    /*
+     * The one field a sent email still owns. It is console-only text that
+     * reached no recipient and no header, so correcting it contradicts no
+     * delivered mail — and the branch writes that field alone, so a request
+     * carrying copy cannot smuggle any of it onto the record.
+     */
+    await send({ campaignId: 'msg-1' })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'update',
+      campaignId: 'msg-1',
+      displayName: 'The discount one',
+      subject: 'Injected subject',
+      body: 'Injected body',
+      audience: 'members',
+      topicId: 'injected-topic',
+    })
+
+    expect(result.status).toBe(200)
+    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    expect(stored?.['displayName']).toBe('The discount one')
+    // Every field that describes the mail is untouched.
+    expect(stored?.['subject']).toBe('Spring sale')
+    expect(stored?.['body']).toBe('Ends Sunday')
+    expect(stored?.['audience']).toBe('leads')
+    expect(stored?.['status']).toBe('sent')
+  })
+
+  it('refuses to name an email that does not exist', async () => {
+    const result = await post({
+      hostId: HOST,
+      action: 'update',
+      campaignId: 'never-existed',
+      displayName: 'Nope',
+    })
+    expect(result.status).toBe(404)
+    expect(campaignPaths()).toEqual([])
+  })
+})
+
+describe('rescheduling and unscheduling', () => {
+  it('moves a scheduled email to a new time', async () => {
+    const first = Date.now() + 60_000
+    const second = Date.now() + 120_000
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: first,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: second,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(store.get(`hosts/${HOST}/campaigns/msg-1`)?.['sendAtMs']).toBe(
+      second,
+    )
+  })
+
+  it('CLEARS the send time when a scheduled email is saved back to a draft', async () => {
+    /*
+     * `merge: true` leaves every field the write does not name, so a
+     * `sendAtMs` left standing would sit on a draft as a due date nothing
+     * acts on — and the emails list orders on exactly that field.
+     */
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    expect(stored?.['status']).toBe('draft')
+    expect(stored?.['sendAtMs']).toBeUndefined()
+  })
+})
+
+describe('an immediate send may name an email, but only an unsent one', () => {
+  /*==========================================
+   * THE DEFAULT BRANCH TAKES ITS COPY FROM THE REQUEST.
+   *
+   * That is what the composer needs — it is sending the message being typed
+   * — but the branch also accepts a `campaignId`, and `performCampaignSend`
+   * adopts it. Ungated, a request naming a send that already went out writes
+   * new copy over the record of what was delivered, replaces its counters
+   * with this send's own, and mails the whole audience a second copy under a
+   * `cid` whose unsubscribe links are already in inboxes.
+   *=========================================*/
+  it('sends a draft named by id, and keeps that id', async () => {
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Placeholder',
+      body: 'Placeholder',
+      audience: 'leads',
+    })
+
+    const result = await post({
+      hostId: HOST,
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.campaignId).toBe('draft-1')
+    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['status']).toBe(
+      'sent',
+    )
+    // The composer's copy is what went out — this branch is the one that
+    // legitimately takes it from the request.
+    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['subject']).toBe(
+      'Spring sale',
+    )
+  })
+
+  it('refuses to send over an email that has already gone out', async () => {
+    await send({ campaignId: 'msg-1' })
+    const before = store.get(`hosts/${HOST}/campaigns/msg-1`)?.['stats']
+
+    const result = await post({
+      hostId: HOST,
+      campaignId: 'msg-1',
+      subject: 'Injected subject',
+      body: 'Injected body',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(409)
+    // The record still says what it said, and nothing was mailed a second
+    // time.
+    const after = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    expect(after?.['subject']).toBe('Spring sale')
+    expect(after?.['stats']).toEqual(before)
+    expect(sent).toHaveLength(1)
+  })
+
+  it('refuses to send over a canceled email', async () => {
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    await post({ hostId: HOST, action: 'cancel', campaignId: 'msg-1' })
+
+    const result = await post({
+      hostId: HOST,
+      campaignId: 'msg-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(409)
+    expect(sent).toHaveLength(0)
+  })
+
+  it('still mints an id for a send that names none', async () => {
+    // The control. A guard that refused every id-bearing send would pass the
+    // two refusals above having broken the ordinary composer send.
+    const result = await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(String(result.body.campaignId)).toBeTruthy()
+    expect(sent).toHaveLength(1)
   })
 })

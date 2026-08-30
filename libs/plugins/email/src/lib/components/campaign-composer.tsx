@@ -128,6 +128,39 @@ export interface CampaignComposerProps {
    * discount code" months later has nothing else to look for.
    */
   displayName?: string
+  /**
+   * The email record this composer is writing, when it is editing one.
+   *
+   * Present on an email's own page and absent nowhere else that matters: it
+   * is what makes Save, Schedule and Send land on the record already at
+   * `/emails/campaigns/{campaignId}` rather than minting a second one. The id
+   * is the email's identity for its whole life — `performCampaignSend` adopts
+   * it, so the URL a merchant has open is the URL the sent email keeps, and
+   * the `cid=` inside every unsubscribe link it later mints names this same
+   * document.
+   */
+  campaignId?: string
+  /**
+   * What the record already holds, for a composer opened on an existing
+   * email.
+   *
+   * Passed down rather than read here: the email's page has the document
+   * open already, and a second listen on it would be a second read of the
+   * same thing on every mount of this component.
+   */
+  initial?: {
+    subject?: string
+    body?: string
+    fromName?: string
+    replyTo?: string
+    preheader?: string
+    audience?: string
+    listId?: string
+    segmentId?: string
+    topicId?: string
+    templateScreenId?: string
+    sendAtMs?: number
+  }
   /** Called once a send or a schedule lands. */
   onSent?: () => void
 }
@@ -147,6 +180,8 @@ export function CampaignComposer(props: CampaignComposerProps) {
     campaignListIds,
     campaignTopicId,
     displayName,
+    campaignId,
+    initial,
     onSent,
   } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
@@ -263,11 +298,27 @@ export function CampaignComposer(props: CampaignComposerProps) {
       String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
     )
 
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
-  const [fromName, setFromName] = useState('')
-  const [replyTo, setReplyTo] = useState('')
-  const [preheader, setPreheader] = useState('')
+  /*
+   * The stored audience, back in the picker's own `kind:id` form.
+   *
+   * The record keeps the kind and the id in two fields because that is what
+   * the send path reads; the picker is one control, so the two are rejoined
+   * here. A composer opened on an existing email that defaulted to Leads
+   * would be one save away from silently re-aiming it.
+   */
+  const storedAudience = initial?.audience
+    ? initial.audience === 'list' && initial.listId
+      ? `list:${initial.listId}`
+      : initial.audience === 'segment' && initial.segmentId
+        ? `segment:${initial.segmentId}`
+        : initial.audience
+    : ''
+
+  const [subject, setSubject] = useState(initial?.subject ?? '')
+  const [body, setBody] = useState(initial?.body ?? '')
+  const [fromName, setFromName] = useState(initial?.fromName ?? '')
+  const [replyTo, setReplyTo] = useState(initial?.replyTo ?? '')
+  const [preheader, setPreheader] = useState(initial?.preheader ?? '')
   /*
    * The campaign's own list is where the composer opens, because a send
    * composed inside a campaign aimed at a list is overwhelmingly a send to
@@ -275,7 +326,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * campaign is one wrong keystroke away from mailing the wrong people.
    */
   const [audience, setAudience] = useState<string>(
-    campaignListIds?.[0] ? `list:${campaignListIds[0]}` : 'leads',
+    storedAudience || (campaignListIds?.[0] ? `list:${campaignListIds[0]}` : 'leads'),
   )
   const [experimentId, setExperimentId] = useState('')
   /*
@@ -288,8 +339,12 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * and a send taken without it records `marketing` for a sales campaign,
    * which is the opt-out a recipient already exercised being ignored.
    */
-  const [topicId, setTopicId] = useState(campaignTopicId ?? '')
-  const [templateScreenId, setTemplateScreenId] = useState('')
+  const [topicId, setTopicId] = useState(
+    initial?.topicId ?? campaignTopicId ?? '',
+  )
+  const [templateScreenId, setTemplateScreenId] = useState(
+    initial?.templateScreenId ?? '',
+  )
   // Scheduling: a future timestamp turns Send into Schedule.
   const [sendAt, setSendAt] = useState('')
   const [busy, setBusy] = useState(false)
@@ -609,6 +664,14 @@ export function CampaignComposer(props: CampaignComposerProps) {
     try {
       const { response, payload } = await authorizedPost({
         ...(scheduling ? { action: 'schedule', sendAtMs } : {}),
+        /*
+         * The record this composer is editing, when it is editing one. The
+         * send path adopts the id rather than minting a new one, so sending a
+         * draft turns THAT document into the sent email — the page the
+         * merchant is looking at stays the page the email lives at, and the
+         * `cid=` in its unsubscribe links names it.
+         */
+        ...(campaignId ? { campaignId } : {}),
         subject: subject.trim(),
         body: body.trim(),
         audience: audienceKind,
@@ -641,10 +704,19 @@ export function CampaignComposer(props: CampaignComposerProps) {
           : `Sent to ${payload.sent} of ${payload.recipients} recipients`,
         { variant: 'success', persist: false },
       )
-      setSubject('')
-      setBody('')
-      setSendAt('')
-      setPreheader('')
+      /*
+       * Cleared only when this composer mints its own sends.
+       *
+       * On an email's own page the fields ARE that email, and the record now
+       * holds exactly what was just sent — blanking them would show the
+       * merchant an empty composer for a message that went out a second ago.
+       */
+      if (!campaignId) {
+        setSubject('')
+        setBody('')
+        setSendAt('')
+        setPreheader('')
+      }
       onSent?.()
     } catch (error) {
       console.error(error)
@@ -670,11 +742,83 @@ export function CampaignComposer(props: CampaignComposerProps) {
     preheader,
     sendAt,
     busy,
+    campaignId,
+    displayName,
     authorizedPost,
     confirm,
     confirmDescription,
     enqueueSnackbar,
     onSent,
+  ])
+
+  /*==========================================
+   * SAVING WITHOUT SENDING.
+   *
+   * The draft is the working document, and it has to be savable on its own —
+   * a composer whose only way out is Send is a composer that makes a merchant
+   * choose between mailing something half-written and losing it.
+   *
+   * Only offered when this composer is editing a record. Without a
+   * `campaignId` there is nothing to save INTO, and minting a draft from a
+   * surface that did not ask for one would leave unsent records behind every
+   * time somebody opened a composer and changed their mind.
+   *=========================================*/
+  const [saving, setSaving] = useState(false)
+  const handleSaveDraft = useCallback(async () => {
+    if (!campaignId || saving) return
+    setSaving(true)
+    try {
+      const { response, payload } = await authorizedPost({
+        action: 'draft',
+        campaignId,
+        subject: subject.trim(),
+        body: body.trim(),
+        audience: audienceKind,
+        ...(segmentId ? { segmentId } : {}),
+        ...(listId ? { listId } : {}),
+        ...(experimentId ? { experimentId } : {}),
+        ...(templateScreenId ? { templateScreenId } : {}),
+        ...(emailCampaignId ? { emailCampaignId } : {}),
+        ...(displayName ? { displayName } : {}),
+        ...(topicId ? { topicId } : {}),
+        fromName: fromName.trim(),
+        replyTo: replyTo.trim(),
+        preheader: preheader.trim(),
+      })
+      if (!response.ok) {
+        return void enqueueSnackbar(payload?.error ?? 'Draft not saved', {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
+      }
+      enqueueSnackbar('Draft saved', { variant: 'success', persist: false })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Draft not saved', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }, [
+    campaignId,
+    saving,
+    authorizedPost,
+    subject,
+    body,
+    audienceKind,
+    segmentId,
+    listId,
+    experimentId,
+    templateScreenId,
+    emailCampaignId,
+    displayName,
+    topicId,
+    fromName,
+    replyTo,
+    preheader,
+    enqueueSnackbar,
   ])
 
   const quotaLimit = useMemo(
@@ -1000,6 +1144,22 @@ export function CampaignComposer(props: CampaignComposerProps) {
         >
           {busy ? 'Working…' : sendAt ? 'Schedule campaign' : 'Send campaign'}
         </Button>
+        {/*
+          Never hidden while there is a record to save into. Leaving without
+          saving is the ordinary way to use a composer, and a surface that
+          only offers Send makes a half-written email something you either
+          mail or lose.
+         */}
+        {campaignId ? (
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={saving || busy}
+            onClick={() => void handleSaveDraft()}
+          >
+            {saving ? 'Saving…' : 'Save draft'}
+          </Button>
+        ) : null}
         <Button
           size="small"
           disabled={busy || (!templateScreenId && !body.trim())}

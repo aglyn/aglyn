@@ -1767,31 +1767,49 @@ export async function performCampaignSend(
 }
 
 /**
- * The stored configuration of a send, as the options that would repeat it.
+ * The stored configuration of a send, as the options that would mail it.
  *
- * A follow-up mails the email that is already there, so every field of it
- * comes off the RECORD and none of it off the request — the caller names a
- * site and an email id and nothing else. That is not tidiness: `campaignId`
- * addresses an existing document, so a caller who could also supply the body
- * and the audience could put arbitrary copy on somebody else's send id, keep
- * its `cid` and its report, and mail it.
+ * Every field comes off the RECORD and none of it off the request — the
+ * caller names a site and an email id and nothing else. That is not tidiness:
+ * `campaignId` addresses an existing document, so a caller who could also
+ * supply the body and the audience could put arbitrary copy on somebody
+ * else's send id, keep its `cid` and its report, and mail it.
  *
- * Refuses the two shapes that have nothing to repeat. A `manual` send's
- * addresses are typed into the composer and are not stored on an immediate
- * send, so there is no audience to re-resolve; a send carrying neither a
- * template nor a body has no message.
+ * Both callers rest on that. A follow-up mails the email that is already
+ * there; `sendNow` mails a draft or a scheduled email ahead of its time, and
+ * the copy it delivers has to be the copy that was composed and previewed
+ * rather than whatever a request body happens to carry.
+ *
+ * Refuses a send carrying neither a template nor a body, which has no message
+ * whichever caller asked.
  */
-function followUpOptionsFrom(
+function storedSendOptionsFrom(
   snapshot: FirebaseFirestore.DocumentSnapshot,
   hostId: string,
   senderUid: string,
+  followUp: boolean,
 ): CampaignSendOptions {
   const audience = String(snapshot.get('audience') ?? '')
-  if (audience === 'manual') {
+  /*
+   * A `manual` audience is stored on a scheduled or drafted email and is not
+   * stored on one that has already gone out, so the same audience kind is
+   * repeatable for one caller and not the other.
+   *
+   * `emails` is written by the branches that store a send for later. An
+   * immediate send takes its addresses from the request and keeps none of
+   * them, which is what leaves a follow-up with nothing to re-resolve.
+   */
+  const emails = Array.isArray(snapshot.get('emails'))
+    ? (snapshot.get('emails') as unknown[]).map(String)
+    : undefined
+  if (audience === 'manual' && (followUp || !emails?.length)) {
     throw new CampaignSendError(
-      'This email went to addresses typed into the composer, which are not ' +
-        'kept, so there is no audience to add anybody from. Compose a new ' +
-        'email to the people you want to reach.',
+      followUp
+        ? 'This email went to addresses typed into the composer, which are ' +
+          'not kept, so there is no audience to add anybody from. Compose a ' +
+          'new email to the people you want to reach.'
+        : 'This email is addressed to typed-in recipients but records none, ' +
+          'so there is nobody to send it to.',
       400,
     )
   }
@@ -1807,11 +1825,12 @@ function followUpOptionsFrom(
   return {
     hostId,
     campaignId: snapshot.id,
-    followUp: true,
+    ...(followUp ? { followUp: true } : {}),
     senderUid,
     subject: String(snapshot.get('subject') ?? ''),
     body,
     audience,
+    ...(emails?.length ? { emails } : {}),
     ...(templateScreenId ? { templateScreenId } : {}),
     ...optional('segmentId'),
     ...optional('listId'),
@@ -1822,7 +1841,7 @@ function followUpOptionsFrom(
     ...optional('displayName'),
     ...optional('emailCampaignId'),
     /*
-     * The experiment is deliberately NOT carried over.
+     * The experiment is deliberately NOT carried over on a follow-up.
      *
      * `performCampaignSend` refuses an experiment that is neither running nor
      * decided, so a finished one would fail the whole follow-up — and a
@@ -1830,15 +1849,39 @@ function followUpOptionsFrom(
      * experiment whose result the first send has already influenced. So the
      * follow-up mails the subject and body the record holds, which is the
      * campaign's own copy rather than any variant's override.
+     *
+     * A first send is the opposite case: the email has not run anywhere yet,
+     * so the experiment it was composed under is the one it is supposed to
+     * go out under, and dropping it here would silently mail the control.
      */
+    ...(followUp ? {} : optional('experimentId')),
   }
 }
 
 /**
- * Campaign API (AGL-161/272): `action` picks the operation —
- * `send` (default) delivers now, `schedule` stores the campaign with a
- * `sendAtMs` for the processor, `cancel` withdraws a scheduled campaign.
- * All three require a site admin/editor.
+ * Campaign API (AGL-161/272): `action` picks the operation.
+ *
+ * Every one of them requires a site admin or editor.
+ *
+ * ## The ones that mail something
+ *
+ * `send` (the default) delivers copy carried in the request. `sendNow` mails
+ * a draft or a scheduled email ahead of its time, and `followUp` mails an
+ * already-sent one to the people it has not reached; both of those take every
+ * field off the RECORD rather than the request. `test` delivers to the caller
+ * alone and records nothing.
+ *
+ * ## The ones that only write
+ *
+ * `draft` stores an email that has not been sent, `schedule` stores one with
+ * a `sendAtMs` for the processor to deliver, `update` corrects the merchant's
+ * own name for an email at any point in its life, and `cancel` withdraws a
+ * scheduled one. None of them reserves allowance or moves a meter.
+ *
+ * ## The ones that answer a question
+ *
+ * `preview` resolves the audience and reports the counts, `renderPreview`
+ * renders the composed message. Neither writes.
  */
 export const campaignSendHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -1911,18 +1954,28 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * direction — it renders whatever has been typed so far, including nothing.
    */
   /*
-   * `followUp` joins the exempt actions, and for a stricter reason than the
-   * other three: it does not merely need no copy, it must be given none. The
-   * message it mails is the one already on the record — see
-   * `followUpOptionsFrom` — so a subject and body in the request would be
-   * fields the route silently discards, and a required field that is
+   * `followUp` and `sendNow` join the exempt actions, and for a stricter
+   * reason than the other three: they do not merely need no copy, they must
+   * be given none. The message they mail is the one already on the record —
+   * see `storedSendOptionsFrom` — so a subject and body in the request would
+   * be fields the route silently discards, and a required field that is
    * discarded is the shape that teaches a caller it was used.
+   *
+   * `draft` is exempt for the opposite reason. A draft is an email that has
+   * not been written yet: requiring a subject and a body of it would mean
+   * there is no way to create one, which is the whole state.
+   *
+   * `update` is exempt because it edits neither — it carries a name and
+   * nothing else.
    */
   const mails =
     action !== 'cancel' &&
     action !== 'preview' &&
     action !== 'renderPreview' &&
-    action !== 'followUp'
+    action !== 'followUp' &&
+    action !== 'sendNow' &&
+    action !== 'draft' &&
+    action !== 'update'
   if (mails && !templateScreenId && (!subject || !body)) {
     return res.status(400).json({ error: 'Missing subject or body' })
   }
@@ -2094,17 +2147,42 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         return res.status(404).json({ error: 'Unknown email' })
       }
       const result = await performCampaignSend({
-        ...followUpOptionsFrom(sendSnapshot, hostId, decoded.uid),
+        ...storedSendOptionsFrom(sendSnapshot, hostId, decoded.uid, true),
         ...(req.body?.dryRun ? { dryRun: true } : {}),
       })
       return res.status(200).json(result)
     }
 
-    if (action === 'schedule') {
-      // Scheduling (AGL-272): store the full send config; the
-      // process-scheduled cron delivers it through performCampaignSend.
+    /*==========================================
+     * AN EMAIL THAT EXISTS BEFORE IT IS SENT.
+     *
+     * `draft` is the same write the `schedule` branch below makes, minus the
+     * send time — a record in the same collection, under the same id it will
+     * keep forever, carrying the copy composed so far and `status: 'draft'`.
+     *
+     * ## Why a state on the record rather than a collection of its own
+     *
+     * The id is the reason. `performCampaignSend` adopts a `campaignId` it is
+     * given, so a draft becomes the sent email AT ITS OWN ID — which is what
+     * makes `/emails/campaigns/{sendId}` resolve from the moment the email is
+     * created, and what keeps the `cid=` inside every delivered unsubscribe
+     * HMAC pointing at the record it was minted for. A draft in a second
+     * collection would have to be copied to a new id at send time, and the
+     * URL a merchant had open would stop being the email's URL.
+     *
+     * ## What a draft costs
+     *
+     * Nothing. This branch reserves no monthly allowance, claims no hourly
+     * budget and moves no meter — it writes one document, exactly as
+     * `schedule` always has. The scheduled processor queries
+     * `status == 'scheduled'`, so a draft is never picked up and cannot
+     * escape on its own; `performCampaignSend` is the only thing that mails
+     * it, and only when somebody asks.
+     *=========================================*/
+    if (action === 'draft' || action === 'schedule' || action === 'update') {
+      const scheduling = action === 'schedule'
       const sendAtMs = Number(req.body?.sendAtMs ?? 0)
-      if (!Number.isFinite(sendAtMs) || sendAtMs <= Date.now()) {
+      if (scheduling && (!Number.isFinite(sendAtMs) || sendAtMs <= Date.now())) {
         return res.status(400).json({ error: 'Pick a future send time' })
       }
       const campaignId =
@@ -2118,7 +2196,56 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (!isDocumentId(campaignId)) {
         return res.status(400).json({ error: 'Invalid campaignId' })
       }
-      await hostRef.collection('campaigns').doc(campaignId).set(
+      const targetRef = hostRef.collection('campaigns').doc(campaignId)
+      const targetSnapshot = await targetRef.get()
+      const targetState = targetSnapshot.exists
+        ? String(targetSnapshot.get('status') ?? '')
+        : ''
+
+      /*==========================================
+       * WHAT IS ALREADY IN AN INBOX IS NOT EDITABLE.
+       *
+       * These branches address an EXISTING document by id, so without this
+       * check `schedule` would happily merge a new subject and body onto an
+       * email that went out last March and set its status back to
+       * `scheduled` — rewriting the record of what was delivered, and handing
+       * the processor a message to mail a second time under a `cid` whose
+       * unsubscribe links are already in inboxes.
+       *
+       * So copy may only be written while the email is still unsent. `update`
+       * is the deliberate exception and is why it is in this branch at all:
+       * it writes the merchant's own NAME for the email and nothing else —
+       * see the write below — which is console-only text that reached no
+       * recipient and therefore contradicts no delivered mail.
+       *=========================================*/
+      const rewritable = !targetSnapshot.exists ||
+        targetState === 'draft' ||
+        targetState === 'scheduled'
+      if (action !== 'update' && !rewritable) {
+        return res.status(409).json({
+          error:
+            targetState === 'sent'
+              ? 'This email has already been sent, so its message and ' +
+                'audience can no longer be changed. Compose a new email.'
+              : 'This email was canceled, so it can no longer be scheduled. ' +
+                'Compose a new email.',
+        })
+      }
+      if (action === 'update') {
+        /*
+         * The one field a sent email still owns. It is the friendly name the
+         * create drawer captures — never the subject, which describes mail
+         * that is already in inboxes — so it can be corrected at any point in
+         * an email's life without making the record disagree with what was
+         * delivered.
+         */
+        if (!targetSnapshot.exists) {
+          return res.status(404).json({ error: 'Unknown email' })
+        }
+        await targetRef.set({ displayName }, { merge: true })
+        return res.status(200).json({ campaignId, displayName })
+      }
+      await targetRef.set(
         {
           subject,
           body,
@@ -2143,14 +2270,35 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           ...(preheader ? { preheader } : {}),
           ...(displayName ? { displayName } : {}),
           ...(emailCampaignId ? { emailCampaignId } : {}),
-          status: 'scheduled',
-          sendAtMs,
-          scheduledAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          scheduledBy: decoded.uid,
+          ...(scheduling
+            ? {
+                status: 'scheduled',
+                sendAtMs,
+                scheduledAt:
+                  firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+                scheduledBy: decoded.uid,
+              }
+            : {
+                status: 'draft',
+                /*
+                 * The send time is CLEARED rather than left standing.
+                 *
+                 * Saving a scheduled email back to a draft is how a merchant
+                 * takes it off the clock, and `merge: true` leaves any field
+                 * this write does not name — so a `sendAtMs` left behind
+                 * would sit on a draft as a due date nothing acts on, and the
+                 * emails list orders on exactly that field.
+                 */
+                sendAtMs: firebaseAdmin.firestore.FieldValue.delete(),
+                draftedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+                draftedBy: decoded.uid,
+              }),
         },
         { merge: true },
       )
-      return res.status(200).json({ campaignId, status: 'scheduled' })
+      return res
+        .status(200)
+        .json({ campaignId, status: scheduling ? 'scheduled' : 'draft' })
     }
 
     if (action === 'cancel') {
@@ -2181,6 +2329,130 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json({ campaignId, status: 'canceled' })
     }
 
+    if (action === 'sendNow') {
+      /*==========================================
+       * MAIL A DRAFTED OR SCHEDULED EMAIL, NOW.
+       *
+       * The request names a site and an email and carries nothing else that
+       * is read. Everything comes off the record through
+       * `storedSendOptionsFrom`, for the reason documented there: this branch
+       * addresses an existing document by id, and a caller who could also
+       * supply the copy could put arbitrary text on somebody else's send id
+       * and mail it under that id's `cid`.
+       *
+       * It is not a second send path. `performCampaignSend` runs whole — the
+       * same authorization, the same consent split, the same two suppression
+       * lists, the same topic filtering, the same monthly reservation and the
+       * same hourly governor — because it is the same function the scheduled
+       * processor and the composer both call.
+       *=========================================*/
+      const sendNowId = String(req.body?.campaignId ?? '')
+      if (!isDocumentId(sendNowId)) {
+        return res.status(400).json({ error: 'Invalid campaignId' })
+      }
+      const sendNowRef = hostRef.collection('campaigns').doc(sendNowId)
+      const sendNowSnapshot = await sendNowRef.get()
+      if (!sendNowSnapshot.exists) {
+        return res.status(404).json({ error: 'Unknown email' })
+      }
+      const sendNowState = String(sendNowSnapshot.get('status') ?? '')
+      /*
+       * Only an email that has not gone out yet. A sent one would be mailed a
+       * second time to the whole audience under the same id — which is what
+       * `followUp` exists to do safely, minus everyone already reached — and
+       * a canceled one was withdrawn on purpose.
+       */
+      if (sendNowState !== 'draft' && sendNowState !== 'scheduled') {
+        return res.status(400).json({
+          error:
+            sendNowState === 'sent'
+              ? 'This email has already been sent. Use "Send to more ' +
+                'recipients" to reach the people it has not.'
+              : 'Only a draft or a scheduled email can be sent now',
+        })
+      }
+      /*
+       * CLAIMED BEFORE IT IS MAILED, exactly as the scheduled processor
+       * claims one.
+       *
+       * A scheduled email whose time arrives mid-send would otherwise be
+       * picked up by the processor's `status == 'scheduled'` query while this
+       * request is still resolving its audience, and mailed twice. Moving it
+       * to `sending` first is the same claim under the same transaction the
+       * processor uses, so whichever gets there first is the only one that
+       * sends.
+       */
+      const claimed = await firestore.runTransaction(async (transaction) => {
+        const fresh = await transaction.get(sendNowRef)
+        if (String(fresh.get('status') ?? '') !== sendNowState) return false
+        transaction.update(sendNowRef, { status: 'sending' })
+        return true
+      })
+      if (!claimed) {
+        return res
+          .status(409)
+          .json({ error: 'This email is already being sent' })
+      }
+      try {
+        const result = await performCampaignSend({
+          ...storedSendOptionsFrom(sendNowSnapshot, hostId, decoded.uid, false),
+          ...(req.body?.dryRun ? { dryRun: true } : {}),
+        })
+        /*
+         * A dry run writes nothing, so the claim above is the only change it
+         * made and it has to be put back — otherwise asking how many people
+         * an email would reach would leave it stuck in `sending`.
+         */
+        if (req.body?.dryRun) {
+          await sendNowRef.set({ status: sendNowState }, { merge: true })
+        }
+        return res.status(200).json(result)
+      } catch (error) {
+        // The claim is released on every failure. `performCampaignSend`
+        // writes `status: 'sent'` itself on the way out, so nothing here
+        // needs to set it — but a refusal that left the email in `sending`
+        // would be an email the merchant can neither send nor cancel.
+        await sendNowRef.set({ status: sendNowState }, { merge: true })
+        throw error
+      }
+    }
+
+    /*==========================================
+     * AN IMMEDIATE SEND MAY NAME AN EMAIL, BUT ONLY AN UNSENT ONE.
+     *
+     * This branch takes its copy from the REQUEST, which is what the composer
+     * needs — it is sending the message being typed. But it also accepts a
+     * `campaignId`, and `performCampaignSend` adopts it, so without this check
+     * a request naming a send that already went out would write new copy over
+     * the record of what was delivered, replace its counters with this send's
+     * own, and mail the whole audience a second copy under a `cid` whose
+     * unsubscribe links are already in inboxes.
+     *
+     * Reaching the people an existing email has NOT reached is `followUp`,
+     * which takes no copy from the request at all and subtracts everyone the
+     * earlier sends recorded.
+     *=========================================*/
+    const sendId = String(req.body?.campaignId ?? '')
+    if (sendId) {
+      if (!isDocumentId(sendId)) {
+        return res.status(400).json({ error: 'Invalid campaignId' })
+      }
+      const existing = await hostRef.collection('campaigns').doc(sendId).get()
+      const existingState = existing.exists
+        ? String(existing.get('status') ?? '')
+        : ''
+      if (existing.exists && existingState !== 'draft' && existingState !== 'scheduled') {
+        return res.status(409).json({
+          error:
+            existingState === 'sent'
+              ? 'This email has already been sent. Use "Send to more ' +
+                'recipients" to reach the people it has not.'
+              : 'This email was canceled, so it cannot be sent. Compose a ' +
+                'new email.',
+        })
+      }
+    }
+
     const result = await performCampaignSend({
       hostId,
       subject,
@@ -2190,7 +2462,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       listId: String(req.body?.listId ?? ''),
       topicId: topicId || undefined,
       emails: Array.isArray(req.body?.emails) ? req.body.emails : undefined,
-      campaignId: String(req.body?.campaignId ?? ''),
+      campaignId: sendId,
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
       fromName,

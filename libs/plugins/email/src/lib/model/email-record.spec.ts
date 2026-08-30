@@ -23,6 +23,7 @@
 
 import {
   emailAudienceLabel,
+  emailIsUnsent,
   emailSendTimeMs,
   emailStateLabel,
 } from './email-record'
@@ -54,15 +55,49 @@ describe('when a message went out', () => {
 })
 
 describe('what state a message is in', () => {
-  it('labels the three states the send path writes', () => {
+  it('labels every state the send path writes', () => {
     expect(emailStateLabel('sent')).toBe('Sent')
     expect(emailStateLabel('scheduled')).toBe('Scheduled')
     expect(emailStateLabel('canceled')).toBe('Canceled')
+    expect(emailStateLabel('draft')).toBe('Draft')
+    // The claim the scheduled processor and the send-now route both take
+    // before they mail. A merchant who reloads mid-send would otherwise be
+    // shown the raw token.
+    expect(emailStateLabel('sending')).toBe('Sending')
   })
 
-  it('shows an unrecognised state as itself', () => {
-    // Flattening it into one of the three would hide a state worth seeing.
-    expect(emailStateLabel('sending')).toBe('sending')
+  it('shows an unrecognized state as itself', () => {
+    // Flattening it into one of the named ones would hide a state worth
+    // seeing.
+    expect(emailStateLabel('bounced-hard')).toBe('bounced-hard')
+  })
+})
+
+describe('whether a message has gone to anybody', () => {
+  /*
+   * The distinction the report surfaces rest on. An unsent email carries no
+   * `stats`, so a page that does not ask this question renders a column of
+   * zeros and a delivery rate of 0% — which reads as "this reached nobody"
+   * rather than "this has not been sent".
+   */
+  it('calls every pre-send state unsent', () => {
+    expect(emailIsUnsent({ status: 'draft' })).toBe(true)
+    expect(emailIsUnsent({ status: 'scheduled' })).toBe(true)
+    expect(emailIsUnsent({ status: 'sending' })).toBe(true)
+  })
+
+  it('calls a sent email sent', () => {
+    expect(emailIsUnsent({ status: 'sent' })).toBe(false)
+  })
+
+  it('does not call a canceled email unsent', () => {
+    /*
+     * A canceled email may have been canceled before it ever went out, but
+     * `canceled` is also what a withdrawn send reads as — and the record is
+     * the only thing that knows. Treating it as unsent would hide the figures
+     * of a send that did happen, so it keeps its report.
+     */
+    expect(emailIsUnsent({ status: 'canceled' })).toBe(false)
   })
 })
 

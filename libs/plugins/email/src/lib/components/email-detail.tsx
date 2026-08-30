@@ -17,7 +17,15 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import {
+  mdiCalendarClockOutline,
+  mdiCloseCircleOutline,
+  mdiPencilOutline,
+} from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import {
@@ -44,10 +52,13 @@ import {
 import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import {
   emailAudienceLabel,
+  emailIsUnsent,
   emailSendTimeMs,
   emailStateLabel,
 } from '../model/email-record'
+import CampaignComposer from './campaign-composer'
 import EmailDesignPreview from './email-design-preview'
+import EmailEditDrawer from './email-edit-drawer'
 import EmailRecipientsCard from './email-recipients-card'
 import { Figure, percent, RateRow, Section } from './report-figures'
 import { useCampaignSendApi } from './use-campaign-send-api'
@@ -157,6 +168,16 @@ export function EmailDetail(props: EmailDetailProps) {
   const composedBody = String(email?.body ?? '')
   const sendTimeMs = email ? emailSendTimeMs(email) : 0
   const state = String(email?.status ?? '')
+  /**
+   * This email has not gone to anybody yet.
+   *
+   * Everything below the state table is a REPORT, and an unsent email has
+   * nothing to report — no `stats` at all. Drawing the figures anyway would
+   * fill the page with zeros and a delivery rate of 0%, which is the reading
+   * "this reached nobody" rather than "this has not been sent", and those are
+   * different facts about an email.
+   */
+  const unsent = emailIsUnsent(email)
   /** The merchant's own name for this email, where one was given. */
   const displayName = String(email?.displayName ?? '')
   /**
@@ -268,6 +289,262 @@ export function EmailDetail(props: EmailDetailProps) {
     }
   }, [campaignSendApi, confirm, emailId, enqueueSnackbar, sendingMore])
 
+  /*==========================================
+   * THE LIFECYCLE ACTIONS.
+   *
+   * Every one of them is one POST to the same route the composer and the
+   * scheduled processor use. None of them decides anything: whether an email
+   * may be sent now, rescheduled or canceled is decided by the route against
+   * the record's stored `status`, so the rules live in one place and the
+   * header's job is only to offer the ones that apply.
+   *
+   * The copy is deliberately NOT sent with any of them. `sendNow` reads the
+   * whole message off the record — a request that could also carry a subject
+   * and a body would be a way to put arbitrary copy on an existing send id
+   * and mail it under that id's unsubscribe scope.
+   *=========================================*/
+  const [busy, setBusy] = useState('')
+  const [editing, setEditing] = useState<'details' | 'schedule' | null>(null)
+
+  /** One POST, one snackbar, one busy flag — the shape all four share. */
+  const runAction = useCallback(
+    async (
+      key: string,
+      request: Record<string, unknown>,
+      success: (payload: any) => string,
+      failure: string,
+    ) => {
+      if (busy) return false
+      setBusy(key)
+      try {
+        const { response, payload } = await campaignSendApi({
+          campaignId: emailId,
+          ...request,
+        })
+        if (!response.ok) {
+          enqueueSnackbar(payload?.error ?? failure, {
+            variant: 'warning',
+            allowDuplicate: true,
+          })
+          return false
+        }
+        enqueueSnackbar(success(payload), {
+          variant: 'success',
+          persist: false,
+        })
+        return true
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar(failure, { variant: 'error', allowDuplicate: true })
+        return false
+      } finally {
+        setBusy('')
+      }
+    },
+    [busy, campaignSendApi, emailId, enqueueSnackbar],
+  )
+
+  const handleSendNow = useCallback(async () => {
+    /*
+     * Counted before it is offered, the same two-request shape the follow-up
+     * uses: `dryRun` runs the whole resolution and writes nothing, so the
+     * confirmation can name how many people this reaches. "Send this now?"
+     * with no number in it is a question nobody can answer honestly, and this
+     * is the action on the page that cannot be taken back.
+     */
+    if (busy) return
+    setBusy('sendNow')
+    /*
+     * `null` for "the count did not happen", which is not the same answer as
+     * zero — zero is a real reach that the confirmation would go on to
+     * describe, and the failure branches below return rather than reaching it.
+     */
+    let reaching: number | null = null
+    try {
+      const counted = await campaignSendApi({
+        action: 'sendNow',
+        campaignId: emailId,
+        dryRun: true,
+      })
+      if (counted.response.ok) {
+        reaching = Number(
+          counted.payload?.sendable ?? counted.payload?.sent ?? 0,
+        )
+      } else {
+        enqueueSnackbar(counted.payload?.error ?? 'This email cannot be sent', {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
+      }
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Send failed', { variant: 'error', allowDuplicate: true })
+    }
+    setBusy('')
+    if (reaching === null) return
+    const agreed = await confirm({
+      title: 'Send this email now?',
+      description:
+        `This sends it to ${reaching.toLocaleString()} ` +
+        `${reaching === 1 ? 'person' : 'people'} straight away` +
+        (state === 'scheduled'
+          ? ', instead of at the time it is scheduled for. '
+          : '. ') +
+        'It cannot be taken back once it goes.',
+      confirmationText: 'Send now',
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (!agreed) return
+    await runAction(
+      'sendNow',
+      { action: 'sendNow' },
+      (payload) =>
+        `Sent to ${Number(payload?.sent ?? 0).toLocaleString()} recipients`,
+      'Send failed',
+    )
+  }, [
+    busy,
+    campaignSendApi,
+    confirm,
+    emailId,
+    enqueueSnackbar,
+    runAction,
+    state,
+  ])
+
+  const handleCancel = useCallback(async () => {
+    const agreed = await confirm({
+      title: 'Cancel this scheduled email?',
+      description:
+        'It will not be sent at the time it is scheduled for. The email ' +
+        'and everything written on it are kept, but a canceled email ' +
+        'cannot be put back on the schedule — you would compose a new one.',
+      confirmationText: 'Cancel send',
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (!agreed) return
+    await runAction(
+      'cancel',
+      { action: 'cancel' },
+      () => 'This email will not be sent',
+      'This email could not be canceled',
+    )
+  }, [confirm, runAction])
+
+  const handleReschedule = useCallback(
+    async (values: { sendAtMs?: number }) => {
+      const done = await runAction(
+        'schedule',
+        { action: 'schedule', sendAtMs: values.sendAtMs },
+        () =>
+          `Scheduled for ${new Date(
+            Number(values.sendAtMs ?? 0),
+          ).toLocaleString()}`,
+        'This email could not be scheduled',
+      )
+      if (done) setEditing(null)
+    },
+    [runAction],
+  )
+
+  const handleRename = useCallback(
+    async (values: { displayName?: string }) => {
+      const done = await runAction(
+        'update',
+        { action: 'update', displayName: values.displayName },
+        () => 'Name updated',
+        'The name could not be updated',
+      )
+      if (done) setEditing(null)
+    },
+    [runAction],
+  )
+
+  /*==========================================
+   * THE HEADER, IN THREE REGISTERS.
+   *
+   * Navigation reads as navigation — a naked link button, because that is
+   * what it is and a reader should be able to tell without clicking. The
+   * PRIMARY action of the state is the one contained button, so there is
+   * exactly one on the page and it is the thing a merchant came to do.
+   * Everything else goes in the overflow, and the two irreversible entries in
+   * there are marked `destructive` so they carry the error color rather than
+   * sitting in the list looking like "Rename".
+   *
+   * `RowActionsMenu` is named for table rows and its rendering is not: it is
+   * a kebab `IconButton` and a `Menu` whose items support `onClick`,
+   * `destructive`, `disabled` and `disabledReason` — exactly what a card
+   * header's overflow needs. Reusing it is what keeps the menu on this page
+   * behaving like every other overflow menu in the console.
+   *=========================================*/
+  const scheduled = state === 'scheduled'
+  const draft = state === 'draft'
+  const sending = state === 'sending'
+
+  const overflowItems: RowActionsMenuItem[] = [
+    {
+      key: 'rename',
+      label: 'Edit details',
+      icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+      onClick: () => setEditing('details'),
+    },
+    ...(draft || scheduled
+      ? [
+          {
+            key: 'schedule',
+            label: scheduled ? 'Reschedule' : 'Schedule',
+            icon: <MdiIcon path={mdiCalendarClockOutline.path} size={0.8} />,
+            onClick: () => setEditing('schedule'),
+          } as RowActionsMenuItem,
+        ]
+      : []),
+    ...(scheduled
+      ? [
+          {
+            key: 'cancel',
+            label: 'Cancel send',
+            icon: <MdiIcon path={mdiCloseCircleOutline.path} size={0.8} />,
+            destructive: true,
+            disabled: Boolean(busy),
+            disabledReason: 'Another action on this email is still running',
+            onClick: () => void handleCancel(),
+          } as RowActionsMenuItem,
+        ]
+      : []),
+  ]
+
+  /*
+   * The one contained button, and what it is per state.
+   *
+   * `draft` and `scheduled` share it: the email has not gone out, so the act
+   * is to make it go. A `sent` email's is the follow-up. A `canceled` one has
+   * no primary act at all — it was withdrawn deliberately, and offering a way
+   * to un-withdraw it would be a resurrect path this model does not have —
+   * and neither does one that is mid-send.
+   */
+  const primaryAction =
+    draft || scheduled ? (
+      <Button
+        size="small"
+        variant="contained"
+        disabled={Boolean(busy)}
+        onClick={() => void handleSendNow()}
+      >
+        {busy === 'sendNow' ? 'Checking…' : 'Send now'}
+      </Button>
+    ) : state === 'sent' ? (
+      <Button
+        size="small"
+        variant="contained"
+        disabled={sendingMore}
+        onClick={() => void handleSendToMore()}
+      >
+        {sendingMore ? 'Checking…' : 'Send to more recipients'}
+      </Button>
+    ) : null
+
   const headerActions = (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
       <Button
@@ -279,33 +556,19 @@ export function EmailDetail(props: EmailDetailProps) {
       >
         {'All emails'}
       </Button>
-      {/*
-        Offered only on an email that HAS been sent. A scheduled one has not
-        gone out and a canceled one was withdrawn, so for both of them "send
-        to more people" names an act with no meaning — and the route refuses
-        it, which is a worse way to learn that than not being offered it.
-      */}
-      {state === 'sent' ? (
-        <Button
-          size="small"
-          color="primary"
-          disabled={sendingMore}
-          onClick={() => void handleSendToMore()}
-        >
-          {sendingMore ? 'Checking…' : 'Send to more recipients'}
-        </Button>
-      ) : null}
       {templateScreenId ? (
         <Button
           component={AppLink as any}
           {...({ componentVariant: 'naked', nativeButton: false } as any)}
           href={`${basePath}/templates/${templateScreenId}`}
           size="small"
-          variant="contained"
+          color="primary"
         >
           {'Open template'}
         </Button>
       ) : null}
+      {primaryAction}
+      <RowActionsMenu label={subject} items={overflowItems} />
     </Stack>
   )
 
@@ -442,6 +705,37 @@ export function EmailDetail(props: EmailDetailProps) {
 
           <Divider />
 
+          {/*==========================================
+            * AN EMAIL THAT HAS NOT BEEN SENT HAS NO REPORT.
+            *
+            * Not an empty one — none. Every figure below divides or counts
+            * something that only exists once mail has gone out, and an unsent
+            * email carries no `stats` at all, so rendering the sections would
+            * publish a column of zeros and a delivery rate of 0%. That reads
+            * as "this reached nobody", which is a claim about a send that
+            * happened; the truth is that no send has happened.
+            *
+            * The same reasoning the rate rows already follow, one level up: a
+            * rate whose denominator is unrecorded renders absent rather than
+            * as 0%, and a report whose whole subject is unrecorded renders
+            * absent rather than as zeros.
+            *=========================================*/}
+          {unsent ? (
+            <Section title="Delivery">
+              <Typography variant="body2" color="text.secondary">
+                {sending
+                  ? 'This email is being sent right now. Its figures appear ' +
+                    'here once the send finishes.'
+                  : draft
+                    ? 'This email has not been sent, so there is nothing to ' +
+                      'report yet. Write it below, then send it or put it on ' +
+                      'the schedule.'
+                    : 'This email has not been sent yet. Its figures appear ' +
+                      'here once it goes out.'}
+              </Typography>
+            </Section>
+          ) : (
+            <>
           <Section title="Delivery">
             <Stack
               direction="row"
@@ -621,8 +915,50 @@ export function EmailDetail(props: EmailDetailProps) {
               </Typography>
             )}
           </Section>
+            </>
+          )}
         </Stack>
       </CardDisplay>
+
+      {/*==========================================
+        * THE COMPOSER, ON THE EMAIL'S OWN PAGE.
+        *
+        * This is where an email is written, and the only place. The create
+        * drawer on the Emails list collects the name and the campaign, mints
+        * the record and routes here — so a list page carries no form, and
+        * editing happens on the record's own surface exactly as it does for
+        * screens, components, layouts and templates.
+        *
+        * Mounted only while the email can still be changed. It opens listens
+        * of its own — the site's email designs, the org's lists and segments,
+        * the running experiments — and a reader who came to read the report
+        * of a sent email must not pay for a composer that could not edit it
+        * anyway.
+        *=========================================*/}
+      {draft || scheduled ? (
+        <CampaignComposer
+          hostId={hostId}
+          campaignId={emailId}
+          emailCampaignId={
+            email?.[CAMPAIGN_SEND_CONTAINER_FIELD]
+              ? String(email[CAMPAIGN_SEND_CONTAINER_FIELD])
+              : undefined
+          }
+          displayName={displayName || undefined}
+          initial={{
+            subject: String(email?.subject ?? ''),
+            body: composedBody,
+            fromName: String(email?.fromName ?? ''),
+            replyTo: String(email?.replyTo ?? ''),
+            preheader: String(email?.preheader ?? ''),
+            audience: String(email?.audience ?? ''),
+            listId: String(email?.listId ?? ''),
+            segmentId: String(email?.segmentId ?? ''),
+            topicId: String(email?.topicId ?? ''),
+            templateScreenId: templateScreenId ?? '',
+          }}
+        />
+      ) : null}
 
       <EmailRecipientsCard hostId={hostId} emailId={emailId} />
 
@@ -630,8 +966,14 @@ export function EmailDetail(props: EmailDetailProps) {
        * Last, and its own card. The numbers are what a reader came for and
        * the preview is the tallest thing on the page — above them it pushes
        * every figure below the fold.
+       *
+       * `header` rather than `title`: `CardDisplay` has no `title` prop, so
+       * one spreads through to the MUI `Card` root and lands on the DOM as a
+       * hover tooltip, leaving the card with no heading at all. The gutters
+       * are named for the same reason — without them the 640px frame sits
+       * flush against the card's edge.
        */}
-      <CardDisplay title="Preview">
+      <CardDisplay header={'Preview'} contentGutterX contentGutterY>
         {templateScreenId ? (
           <EmailDesignPreview
             hostId={hostId}
@@ -667,6 +1009,51 @@ export function EmailDetail(props: EmailDetailProps) {
           />
         )}
       </CardDisplay>
+
+      {/*
+       * Editing in a DRAWER, never a form above the content. The name is the
+       * one detail a sent email still owns — see the drawer's own header for
+       * why the subject, body, audience and topic are not on offer once mail
+       * has been delivered.
+       */}
+      <EmailEditDrawer
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        field={editing === 'schedule' ? 'schedule' : 'details'}
+        title={
+          editing === 'schedule'
+            ? scheduled
+              ? 'Reschedule this email'
+              : 'Schedule this email'
+            : 'Edit details'
+        }
+        submitLabel={
+          editing === 'schedule'
+            ? scheduled
+              ? 'Reschedule'
+              : 'Schedule'
+            : 'Save'
+        }
+        displayName={displayName}
+        sendAtMs={scheduled ? sendTimeMs : 0}
+        busy={Boolean(busy)}
+        note={
+          editing === 'schedule'
+            ? 'The email goes out at this time. You can send it sooner, or ' +
+              'cancel it, from this page.'
+            : unsent
+              ? 'The name is for finding this email in your own lists. The ' +
+                'subject and the message are written in the composer below.'
+              : 'This email has been sent, so its subject, message and ' +
+                'audience describe mail that is already in inboxes and can ' +
+                'no longer be changed. Its name is yours and stays editable.'
+        }
+        onSubmit={(values) =>
+          void (editing === 'schedule'
+            ? handleReschedule(values)
+            : handleRename(values))
+        }
+      />
     </Stack>
   )
 }
