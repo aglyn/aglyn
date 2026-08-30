@@ -71,7 +71,9 @@
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
-import { CAMPAIGN_SEND_CONTAINER_FIELD } from '@aglyn/plugins-email/model'
+import {
+  CAMPAIGN_SEND_CONTAINER_FIELD,
+} from '@aglyn/shared-ui-email-campaigns/model'
 
 /**
  * Sends detached in one write.

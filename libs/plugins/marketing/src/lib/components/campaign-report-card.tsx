@@ -38,11 +38,11 @@ import {
   campaignReport,
   type CampaignLinkRollup,
   type CampaignStats,
-} from '@aglyn/plugins-email/model/campaign-report'
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 import {
   campaignRevenueReport,
   type CampaignRevenueRollup,
-} from '@aglyn/plugins-email/model/campaign-revenue'
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-revenue'
 /*
  * The three renderers every email report shares. Imported rather than kept
  * here, so "a rate prints its denominator" is one implementation and not a
@@ -55,12 +55,14 @@ import {
   percent,
   RateRow,
   Section,
-} from '@aglyn/plugins-email/components/report-figures'
-import { emailSendTimeMs } from '@aglyn/plugins-email/model/email-record'
+} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+import {
+  emailSendTimeMs,
+} from '@aglyn/shared-ui-email-campaigns/model/email-record'
 import {
   campaignSendDisplay,
   campaignSendProgress,
-} from '@aglyn/plugins-email/model/campaign-container'
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import { useEmailsHubPath } from './use-emails-hub-path'
 
 /**

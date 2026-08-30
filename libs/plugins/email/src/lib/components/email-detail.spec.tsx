@@ -28,7 +28,9 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type { CampaignStats } from '../model/campaign-report'
+import type {
+  CampaignStats,
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 
 const mockDocs = new Map<string, unknown>()
 const mockEnqueue = jest.fn()

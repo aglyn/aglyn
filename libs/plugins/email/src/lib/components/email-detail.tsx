@@ -50,22 +50,27 @@ import {
   campaignReport,
   type CampaignLinkRollup,
   type CampaignStats,
-} from '../model/campaign-report'
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 import {
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
-} from '../model/campaign-container'
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import {
   emailAudienceLabel,
   emailIsUnsent,
   emailSendTimeMs,
-} from '../model/email-record'
+} from '@aglyn/shared-ui-email-campaigns/model/email-record'
 import CampaignComposer from './campaign-composer'
 import { useMarketingHubPath } from './use-marketing-hub-path'
 import EmailDesignPreview from './email-design-preview'
 import EmailEditDrawer from './email-edit-drawer'
 import EmailRecipientsCard from './email-recipients-card'
-import { Figure, percent, RateRow, Section } from './report-figures'
+import {
+  Figure,
+  percent,
+  RateRow,
+  Section,
+} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import {
   useCampaignManageApi,
   useCampaignSendApi,

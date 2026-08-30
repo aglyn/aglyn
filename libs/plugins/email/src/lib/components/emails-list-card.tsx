@@ -60,8 +60,11 @@ import {
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
   type CampaignSendDisplayState,
-} from '../model/campaign-container'
-import { emailListTimeMs, emailSendTimeMs } from '../model/email-record'
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+import {
+  emailListTimeMs,
+  emailSendTimeMs,
+} from '@aglyn/shared-ui-email-campaigns/model/email-record'
 import {
   useCampaignManageApi,
   useCampaignSendApi,

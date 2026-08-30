@@ -94,6 +94,8 @@
       "@aglyn/shared-svg-icons/*": ["./libs/shared/svg-icons/svg-icons/src/lib/*"],
       "@aglyn/shared-ui-color-picker": ["./libs/shared/ui/color-picker/src/index.ts"],
       "@aglyn/shared-ui-color-picker/*": ["./libs/shared/ui/color-picker/src/lib/*"],
+      "@aglyn/shared-ui-email-campaigns": ["./libs/shared/ui/email-campaigns/src/index.ts"],
+      "@aglyn/shared-ui-email-campaigns/*": ["./libs/shared/ui/email-campaigns/src/lib/*"],
       "@aglyn/shared-ui-json-editor": ["./libs/shared/ui/json-editor/src/index.ts"],
       "@aglyn/shared-ui-json-editor/*": ["./libs/shared/ui/json-editor/src/lib/*"],
       "@aglyn/shared-ui-jsx": ["./libs/shared/ui/jsx/src/index.ts"],

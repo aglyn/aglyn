@@ -205,7 +205,7 @@ import type { PluginApiResponse } from '@aglyn/aglyn/server'
 import {
   campaignListRows,
   CAMPAIGN_SEND_CONTAINER_FIELD,
-} from '@aglyn/plugins-email/model'
+} from '@aglyn/shared-ui-email-campaigns/model'
 import {
   buildUnsubscribeUrl,
   unsubscribeSignatureMatches,

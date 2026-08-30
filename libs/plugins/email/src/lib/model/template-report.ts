@@ -62,8 +62,10 @@ import {
   campaignRate,
   type CampaignRate,
   type CampaignStats,
-} from './campaign-report'
-import { emailAudienceLabel } from './email-record'
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
+import {
+  emailAudienceLabel,
+} from '@aglyn/shared-ui-email-campaigns/model/email-record'
 
 /** A rate over a sum, carrying how many campaigns the sum covers. */
 export type TemplateRate = CampaignRate

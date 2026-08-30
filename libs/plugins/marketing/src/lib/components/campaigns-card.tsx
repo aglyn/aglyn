@@ -56,7 +56,7 @@ import {
   type CampaignListRow,
   type CampaignSend,
   type EmailCampaign,
-} from '@aglyn/plugins-email/model'
+} from '@aglyn/shared-ui-email-campaigns/model'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { activeEmailTopics } from '@aglyn/aglyn'
 import { useCampaignManageApi } from '@aglyn/plugins-email/components/use-campaign-send-api'

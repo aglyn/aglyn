@@ -37,12 +37,20 @@ export {
   type RenderedEmail,
 } from '@aglyn/shared-util-email'
 
+// The campaign document model and its arithmetic live in
+// `@aglyn/shared-ui-email-campaigns`. Marketing owns the campaign console
+// section and Email owns the message surfaces; both are independently
+// toggleable plugins, so a shape either one reads has to sit in a lib they
+// depend on as peers rather than inside one of them. Re-exported here so
+// `@aglyn/plugins-email/model` remains one barrel for this plugin's own
+// callers.
+
 /**
  * Campaign reporting: the rate math, the populations the send recorded, and
  * the link rollup — pure, so every denominator is named once and provable
  * rather than chosen in JSX.
  */
-export * from './campaign-report'
+export * from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 
 /**
  * What a campaign EARNED: the last-click window, the gross/refunded pair and
@@ -50,7 +58,7 @@ export * from './campaign-report'
  * rate math because it reads a different document and answers the merchant's
  * second question rather than their first.
  */
-export * from './campaign-revenue'
+export * from '@aglyn/shared-ui-email-campaigns/model/campaign-revenue'
 
 /**
  * The same math taken across every message sent from one TEMPLATE. Separate
@@ -60,7 +68,7 @@ export * from './campaign-revenue'
 export * from './template-report'
 
 /** Reading one message record — its state, and when it went out. */
-export * from './email-record'
+export * from '@aglyn/shared-ui-email-campaigns/model/email-record'
 
 /**
  * Whose template this is: authored here, or installed from a marketplace
@@ -80,7 +88,7 @@ export * from './campaign-email-render'
  * The campaign CONTAINER — its window, its lists, and the arithmetic that
  * rolls its sends into one set of figures.
  */
-export * from './campaign-container'
+export * from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 
 /**
  * How each sending-domain state reads, said once for the list and the

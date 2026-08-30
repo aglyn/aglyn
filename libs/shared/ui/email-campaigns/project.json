@@ -1,0 +1,30 @@
+{
+  "name": "shared-ui-email-campaigns",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/ui/email-campaigns/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:ui"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/ui/email-campaigns",
+        "main": "libs/shared/ui/email-campaigns/src/index.ts",
+        "tsConfig": "libs/shared/ui/email-campaigns/tsconfig.lib.json",
+        "assets": ["libs/shared/ui/email-campaigns/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/ui/email-campaigns"],
+      "options": {
+        "jestConfig": "libs/shared/ui/email-campaigns/jest.config.ts"
+      }
+    }
+  }
+}

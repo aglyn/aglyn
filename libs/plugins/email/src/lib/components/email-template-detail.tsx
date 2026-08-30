@@ -53,9 +53,15 @@ import {
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useMemo } from 'react'
-import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
-import { emailSendTimeMs } from '../model/email-record'
-import { campaignSendDisplay } from '../model/campaign-container'
+import {
+  CAMPAIGN_SEND_CONTAINER_FIELD,
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+import {
+  emailSendTimeMs,
+} from '@aglyn/shared-ui-email-campaigns/model/email-record'
+import {
+  campaignSendDisplay,
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import { templateProvenance } from '../model/template-provenance'
 import {
   templateReport,
@@ -63,7 +69,11 @@ import {
 } from '../model/template-report'
 import EmailDesignPreview from './email-design-preview'
 import EmailRecipientsCard from './email-recipients-card'
-import { Figure, RateRow, Section } from './report-figures'
+import {
+  Figure,
+  RateRow,
+  Section,
+} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import { useMarketingHubPath } from './use-marketing-hub-path'
 
 /**
