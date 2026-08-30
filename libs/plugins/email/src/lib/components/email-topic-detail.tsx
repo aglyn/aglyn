@@ -1,0 +1,260 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import {
+  pluginDocsHelp,
+  resolveCampaignTopic,
+  DEFAULT_EMAIL_TOPICS,
+  EMAIL_TOPICS_COLLECTION,
+} from '@aglyn/aglyn'
+import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import {
+  Button,
+  Chip,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { doc, setDoc } from 'firebase/firestore'
+import Link from 'next/link'
+import { useCallback, useEffect, useState } from 'react'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useOrgEmailTopics } from './use-org-email-topics'
+
+export interface EmailTopicDetailProps {
+  hostId: string
+  topicId: string
+  /** `/…/emails`, so the page can route back to the list. */
+  basePath: string
+}
+
+/**
+ * One topic's own page — where every change to an existing topic is made.
+ *
+ * The console's shape for a list surface is create-in-a-drawer, edit-on-the
+ * record's page, and this is the second half of it for topics. The list card
+ * lists and routes; nothing about a saved topic is editable from a form
+ * stacked above that table.
+ *
+ * ## Saving a built-in
+ *
+ * The four built-ins have no stored document until somebody changes one, so
+ * this page's save is the same `setDoc` for a built-in and a custom topic:
+ * the write CREATES the override document at the built-in's id. That is the
+ * whole overlay design — see `email-topics.ts`.
+ *
+ * ## Retire, not delete
+ *
+ * A retired topic leaves the composer's picker and the recipient's preference
+ * page, and stays resolvable everywhere else. It has to: campaigns already
+ * sent under it minted unsubscribe links carrying its id, those links are in
+ * inboxes, and an id that stops resolving is a preference page that cannot
+ * name the message the recipient is holding. There is no delete on this page,
+ * and the Firestore rules refuse one too.
+ */
+export function EmailTopicDetail(props: EmailTopicDetailProps) {
+  const { hostId, topicId, basePath } = props
+  const firestore = useFirestore()
+  const { enqueueSnackbar } = useSnackbar()
+  const { confirm } = useConfirmationContext()
+  const { topics, scope } = useOrgEmailTopics(hostId)
+
+  /*
+   * `resolveCampaignTopic` rather than a bare `find`, so an id that no longer
+   * names anything lands on a real topic instead of an empty form. A stale
+   * bookmark is the common way to arrive here with one.
+   */
+  const topic = resolveCampaignTopic(topicId, topics)
+  const known = topics.some((it) => it.id === topicId)
+
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  /*
+   * Seed the fields ONCE, when the catalog first arrives.
+   *
+   * Re-seeding on every change of `topic` would overwrite what the operator is
+   * typing the moment the collection listener fires — and it fires on this
+   * page's own save.
+   */
+  useEffect(() => {
+    if (loaded || !topics.length) return
+    setName(topic.name)
+    setDescription(topic.description)
+    setLoaded(true)
+  }, [loaded, topics, topic])
+
+  const dirty =
+    loaded && (name !== topic.name || description !== topic.description)
+
+  /**
+   * Write the topic document.
+   *
+   * `archived` is written on every save rather than only when it changes, so
+   * the stored document is always a complete statement of the topic. A merge
+   * that omitted it would leave a restored topic carrying `archived: true`
+   * from an earlier save, which reads on screen as restored and behaves as
+   * retired.
+   */
+  const save = useCallback(
+    async (patch?: { archived?: boolean }) => {
+      if (!scope || busy) return
+      const nextName = name.trim()
+      if (!nextName) {
+        return void enqueueSnackbar('Give the topic a name', {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+      setBusy(true)
+      try {
+        await setDoc(
+          doc(
+            firestore,
+            scope[0],
+            scope[1],
+            EMAIL_TOPICS_COLLECTION,
+            topic.id,
+          ),
+          {
+            name: nextName,
+            description: description.trim(),
+            archived: patch?.archived ?? !!topic.archived,
+          },
+          { merge: true },
+        )
+        enqueueSnackbar('Topic saved', { variant: 'success', persist: false })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', { variant: 'error' })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [scope, busy, name, description, firestore, topic, enqueueSnackbar],
+  )
+
+  const toggleArchived = useCallback(async () => {
+    if (topic.archived) return void save({ archived: false })
+    const accepted = await confirm({
+      title: `Retire “${topic.name}”?`,
+      description:
+        'It leaves the composer and the preference page, so nothing new can ' +
+        'be sent under it and recipients stop seeing it as a choice. ' +
+        'Campaigns already sent under it keep working — their unsubscribe ' +
+        'links still name this topic. You can bring it back at any time.',
+      confirmationText: 'Retire',
+    })
+      // `confirm` resolves with NO VALUE and REJECTS on cancel, so gating on
+      // the resolved value alone makes this always return (AGL-950).
+      .then(() => true)
+      .catch(() => false)
+    if (!accepted) return
+    await save({ archived: true })
+  }, [topic, confirm, save])
+
+  return (
+    <CardDisplay
+      header={topic.name || 'Topic'}
+      subheader={
+        <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center' }}>
+          {topic.archived ? (
+            <Chip
+              size="small"
+              variant="outlined"
+              color="warning"
+              label="Retired"
+            />
+          ) : null}
+          {DEFAULT_EMAIL_TOPICS.some((it) => it.id === topic.id) ? (
+            <Typography variant="overline" color="text.secondary">
+              {'Built in'}
+            </Typography>
+          ) : null}
+        </Stack>
+      }
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#topics' })}
+      contentGutterX
+      contentGutterY
+      contentBordered="all"
+      HeaderProps={{
+        action: (
+          <Button component={Link} href={`${basePath}/topics`} size="small">
+            {'All topics'}
+          </Button>
+        ),
+      }}
+    >
+      <Stack spacing={2}>
+        {!scope ? (
+          <Typography variant="body2" color="text.secondary">
+            {'This site has no organization, so it has no topic list.'}
+          </Typography>
+        ) : (
+          <>
+            {!known && loaded ? (
+              <Typography variant="body2" color="text.secondary">
+                {'That topic no longer exists, so this is the one campaigns ' +
+                  'fall back to.'}
+              </Typography>
+            ) : null}
+            <TextField
+              label="Name"
+              size="small"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={busy || !loaded}
+              helperText="What recipients see on the preference page."
+            />
+            <TextField
+              label="Description"
+              size="small"
+              multiline
+              minRows={2}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              disabled={busy || !loaded}
+              helperText="One sentence telling them what this stream is."
+            />
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="contained"
+                disabled={!dirty || busy}
+                onClick={() => void save()}
+              >
+                {'Save'}
+              </Button>
+              <Button
+                color={topic.archived ? 'primary' : 'error'}
+                disabled={busy || !loaded}
+                onClick={() => void toggleArchived()}
+              >
+                {topic.archived ? 'Restore' : 'Retire'}
+              </Button>
+            </Stack>
+          </>
+        )}
+      </Stack>
+    </CardDisplay>
+  )
+}
+
+export default EmailTopicDetail

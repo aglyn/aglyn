@@ -24,6 +24,8 @@ import CampaignsCard from './campaigns-card'
 import EmailDetail from './email-detail'
 import EmailScreensCard from './email-screens-card'
 import EmailTemplateDetail from './email-template-detail'
+import EmailTopicDetail from './email-topic-detail'
+import EmailTopicsCard from './email-topics-card'
 import EmailsListCard from './emails-list-card'
 import ListsCard from './lists-card'
 import SuppressionsCard from './suppressions-card'
@@ -113,6 +115,18 @@ function sectionBody(
       )
     case 'audiences':
       return <ListsCard hostId={hostId} />
+    case 'topics':
+      // Create is a drawer on the list; EDIT is the topic's own route, which
+      // is the section owning its own subtree exactly as `campaigns` does.
+      return detail[0] ? (
+        <EmailTopicDetail
+          hostId={hostId}
+          topicId={detail[0]}
+          basePath={basePath}
+        />
+      ) : (
+        <EmailTopicsCard hostId={hostId} />
+      )
     case 'suppressions':
       return <SuppressionsCard hostId={hostId} />
     default:

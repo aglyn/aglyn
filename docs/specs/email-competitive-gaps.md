@@ -30,11 +30,13 @@ claims are now false. Anyone planning from it will plan the wrong thing.
 
 Two of the spec's defects remain open and are confirmed live:
 
-- **D5 — two suppression key derivations.** `libs/plugins/email/src/lib/server.ts:81`
+- **D5 — two suppression key derivations.** ~~`libs/plugins/email/src/lib/server.ts:81`
   hashes the address **without lowercasing or trimming**;
-  `campaign-send.ts:160` lowercases. They agree today only because `performCampaignSend`
-  lowercases every address upstream before the unsubscribe link is built. It is a trap
-  for the next caller, not a live defect — ranked accordingly ([G11](#g11)).
+  `campaign-send.ts:160` lowercases.~~ The link routes now key through
+  `personKey`, which normalizes and refuses a value that is not an address, so
+  the variant that hashed the raw string is gone. Two derivations remain —
+  `suppressionId` and `emailSuppressionKey` — and both normalize identically,
+  so the trap the entry describes is closed.
 - **D7 — stale customer documentation.**
   `apps/docs/docs/marketing-and-automation/email-campaigns/overview.md` still says the
   send cap is "counted **per site**, so each site in your organization has its own
@@ -153,7 +155,7 @@ Aglyn state is one of:
 | Consent **provenance** — person vs operator assertion | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔★)** `assertedBy: 'person' \| 'operator'` travels with the basis |
 | **Pre-send consent preview** of who will be dropped and why | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔★)** consented / by-operator / grandfathered / withheld / suppressed, before you press send |
 | Double opt-in | ✅ optional, off by default | ✅ | ✅ | ✅ | ✅ recommended, not forced | ➖ DIY recipe | **(A)** — no vendor *requires* it either |
-| Preference center / subscription topics | ✅ | ✅ up to 1,000 types | ✅ | ✅ | ✅ | ✅ topics | **(A)** unsubscribe is all-or-nothing per site |
+| Preference center / subscription topics | ✅ | ✅ up to 1,000 types | ✅ | ✅ | ✅ | ✅ topics | **(✔)** org-shared topics, four built in; the footer link opens a hosted preference page with per-topic opt-out and an unsubscribe-from-everything button |
 | **Frequency opt-down** ("send me less", chosen by the recipient) | ➖ | ❌ emulated with granular types | ➖ | ➖ | ➖ | ➖ | **(A)** — genuinely thin across the field; see [G10](#g10) |
 | Resubscribe that refuses to reverse a bounce or complaint | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔★)** correctly modeled as sender protection, not a user preference |
 | Suppression is an **evidence record**, not a delete | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔)** `releasedAt` field; the record is the proof it was honored |

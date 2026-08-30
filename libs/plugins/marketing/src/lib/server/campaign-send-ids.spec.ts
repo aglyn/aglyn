@@ -170,6 +170,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldPath: { documentId: () => '__name__' },
     },
   },
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
   // Nobody in this file is suppressed; document ids are what is under test.
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   // Starter, so the monthly campaign cap does not refuse before the write.

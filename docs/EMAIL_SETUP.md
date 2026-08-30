@@ -551,6 +551,33 @@ What matters more than a ramp, and is tracked separately:
   `mailto:` fallback in the header, because it needs a monitored
   inbox (see "Later hardening" below), and nothing outside campaigns
   carries an unsubscribe at all.
+- **Topics and a preference center are shipped.** A campaign belongs to a
+  topic (`orgs/{orgId}/emailTopics`, org-shared like `lists`, with four
+  built-in defaults that need no migration), and the topic is signed into the
+  link as `tid`. Two URLs come off that one signature, and which one goes
+  where is the whole compliance story:
+  - `List-Unsubscribe` names `/api/email/unsubscribe`, whose POST writes the
+    whole-site suppression immediately. A mailbox provider POSTs it with no
+    human present, so it must not be a page anybody has to submit — and it
+    stays a FULL unsubscribe, because that is what the button promises.
+  - the footer link names `/api/email/preferences`, the preference center: a
+    checkbox per topic, an "Unsubscribe from everything" button, and a result
+    page with an undo. All three routes keep the safe-GET / mutating-POST
+    split.
+
+  Per-topic opt-outs are recorded at `hosts/{hostId}/topicOptOuts/{emailKey}`
+  — per site, beside the suppression list, keyed on the same derivation — and
+  the send path consults them through `filterTopicSendable` after both
+  suppression lists. An opt-out that is later lifted keeps its record and
+  gains a `resubscribedAt`, the same evidence rule the suppression lists
+  follow. A resubscribe from any of these routes still refuses to clear a
+  bounce or a complaint.
+- D5 of `docs/specs/email-competitive-gaps.md` — the two suppression key
+  derivations — is **closed on the link routes**: they now key through
+  `personKey`, which normalizes and refuses a value that is not an address.
+  `campaign-send.ts`'s `suppressionId` and `email-suppression.ts`'s
+  `emailSuppressionKey` still exist and still agree; the third variant that
+  hashed the raw string is gone.
 - There is no send-rate governor anywhere, so if volume ever does need a ramp
   there is nothing to turn — AGL-2409.
 

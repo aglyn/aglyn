@@ -206,6 +206,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   // Nobody in this file is suppressed; the hourly governor is under test.
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
   // No site here selects a custom sending domain, so every send resolves to

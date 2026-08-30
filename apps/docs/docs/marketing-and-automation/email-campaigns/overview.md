@@ -314,11 +314,48 @@ only in their tracking parameters count as one row.
 
 - Every send includes an **unsubscribe** link, and the header mailbox
   providers look for — Gmail and Yahoo's one-click `List-Unsubscribe`.
-- Clicking it opens a confirmation page; only confirming actually
-  unsubscribes. That matters because corporate mail scanners open every link
-  in a message before the recipient sees it, and a link that unsubscribed on
-  open would quietly shrink your list.
+- Clicking it opens a page; only submitting that page actually changes
+  anything. That matters because corporate mail scanners open every link in a
+  message before the recipient sees it, and a link that unsubscribed on open
+  would quietly shrink your list.
 - Unsubscribes are honored automatically so you stay compliant.
+
+### Topics {#topics}
+
+A **topic** is a stream of email somebody can leave on its own. Every campaign
+belongs to one, picked in the composer, and the link in that email offers to
+stop *that* stream rather than all of them.
+
+Four topics come with every organization — Promotions and offers, Newsletter,
+Product updates, and Sales outreach. Rename them, change what recipients are
+told they get, or add your own under **Emails ▸ Topics**. Topics are shared
+across every site in your organization, the same way your lists are.
+
+You cannot delete a topic, only **retire** it. A retired topic disappears from
+the composer and from the preference page, and campaigns already sent under it
+keep working — their unsubscribe links still name it. Restore it at any time.
+
+### The preference page {#preference-page}
+
+The link at the bottom of every campaign opens a page where the recipient sees
+your topics, ticks the ones they want to keep, and saves. Whatever they untick
+stops; everything else carries on. "Unsubscribe from everything" is on the same
+page, one button away, for anyone who wants it.
+
+This is why an unsubscribe is no longer all-or-nothing: somebody who only
+wanted the sales mail to stop can stop it and keep your newsletter, instead of
+leaving your list entirely — or reaching for "report spam", which costs you
+far more.
+
+One exception, and it is deliberate: **the one-click unsubscribe in the mail
+client's own header still unsubscribes from everything.** That button is
+pressed with no page in front of it, and a mailbox provider expects it to mean
+"stop". Narrowing it would be a promise the recipient did not make.
+
+Somebody who unsubscribed can also **resubscribe** from the same link — except
+when the address was suppressed by a bounce or a spam complaint. Those protect
+your sending reputation rather than expressing a preference, so no link can
+clear them.
 
 ### Suppressions
 

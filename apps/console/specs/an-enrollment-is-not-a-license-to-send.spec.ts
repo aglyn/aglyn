@@ -191,6 +191,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       ],
     ),
   // The SEND-time check. Both lists, as `filterSendableForHost` does.
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
   filterSendableForHost: async (hostId: string, emails: string[]) =>
     emails.filter((email) => {
       const key = require('crypto')
