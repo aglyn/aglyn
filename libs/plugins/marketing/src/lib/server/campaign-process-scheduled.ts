@@ -99,6 +99,14 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
           campaignId: campaignDoc.id,
           experimentId: String(data['experimentId'] ?? ''),
           templateScreenId: String(data['templateScreenId'] ?? '') || undefined,
+          // The sender fields the composer chose. Read back rather than
+          // resolved fresh: a scheduled campaign must go out as the message
+          // that was composed, not as whatever the org's branding says an hour
+          // later.
+          fromName: String(data['fromName'] ?? ''),
+          replyTo: String(data['replyTo'] ?? ''),
+          preheader: String(data['preheader'] ?? ''),
+          emailCampaignId: String(data['emailCampaignId'] ?? ''),
           senderUid: String(data['scheduledBy'] ?? 'scheduler'),
         })
         results.push(result)

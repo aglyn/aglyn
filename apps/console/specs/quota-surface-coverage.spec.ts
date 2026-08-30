@@ -88,7 +88,7 @@ const USAGE_SURFACES = [
   'libs/plugins/bookings/src/lib/components/bookings-console-page.tsx',
   'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
   'libs/plugins/contacts/src/lib/components/contacts-console-page.tsx',
-  'libs/plugins/email/src/lib/components/campaigns-card.tsx',
+  'libs/plugins/email/src/lib/components/campaign-composer.tsx',
 ]
 
 /**
@@ -326,7 +326,7 @@ describe('AGL-2246 · every quota key is visible somewhere', () => {
     expect(meter).toContain('limit={entitlements.emailSendsPerMonth}')
 
     const composer = USAGE_TEXT.find(({ file }) =>
-      file.endsWith('campaigns-card.tsx'),
+      file.endsWith('campaign-composer.tsx'),
     )?.text
     expect(composer).toContain("'campaignEmailSends'")
     // Both halves of the wire, not the word: a card that destructured

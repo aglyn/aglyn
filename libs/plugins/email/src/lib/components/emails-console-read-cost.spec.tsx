@@ -105,25 +105,41 @@ jest.mock('firebase/firestore', () => {
         limit: ref?.__doc ? 1 : (ref?.__limit ?? 0),
       })
       /*
-       * A DOCUMENT listen is answered, with an empty document that EXISTS.
+       * A DOCUMENT listen ANSWERS, with an empty document that EXISTS.
        *
-       * Silence is not free here. A page whose subject document never arrives
-       * renders its "loading" branch forever, and everything below that branch
-       * — the membership table, the filter form and their listens — is never
-       * built. The meter would then report those routes as costing one
-       * document each and be measuring the spinner. The payload is empty
-       * because what is being metered is which collections get read, not what
-       * is in them.
+       * Collection listens stay silent, which is all this meter needs: a query
+       * is recorded when it is opened. A document listen is different, because
+       * two pages below depend on the answer rather than the payload. An
+       * audience page whose subject never arrives renders its loading branch
+       * forever, so the membership table and the filter form are never built
+       * and the meter measures the spinner. A campaign page renders nothing
+       * until it knows whether the id names a container or a single send,
+       * because guessing flashes the wrong screen.
+       *
+       * An existing document settles both: each page gets an answer and takes
+       * a branch. The payload is empty because what is metered is which
+       * collections get read, not what is in them.
        */
-      const next = rest.find((arg) => typeof arg === 'function') as
+      const next = rest.find((argument) => typeof argument === 'function') as
         | ((snapshot: unknown) => void)
         | undefined
       if (ref?.__doc && next) {
         next({
-          id: (ref.__path ?? '').split('/').pop(),
-          exists: () => true,
-          data: () => ({}),
-          metadata: { fromCache: false, hasPendingWrites: false },
+          /*
+           * A container id that turns out to name a SEND is the campaign
+           * route's fall-through case, and it is the only absent document
+           * these meters need. Every other subject — a list, a template — is
+           * present, because a page whose subject never arrives renders its
+           * loading branch forever and the meter measures the spinner rather
+           * than the reads below it.
+           */
+          exists: () => !String(ref.__path ?? '').includes('/emailCampaigns/'),
+          data: () =>
+            String(ref.__path ?? '').includes('/emailCampaigns/')
+              ? undefined
+              : {},
+          id: String(ref.__path ?? '').split('/').pop() ?? '',
+          metadata: { hasPendingWrites: false, fromCache: false },
         })
       }
       return () => undefined
@@ -412,15 +428,28 @@ describe('emails console read cost (AGL-2501)', () => {
    * audience was. These assertions are what stop that quietly becoming a
    * query again.
    *=========================================*/
-  it('the campaign report reads two documents, and no collection', async () => {
+  it('the campaign report reads three documents, and no collection', async () => {
     await renderConsole('campaigns', ['camp_1'])
     summarize('campaign report', mockListens)
 
-    // Every listen is a single document. A collection query would carry a
-    // limit above 1 (or none at all, which the meter scores at ~100).
+    /*
+     * THREE, and the first of them is what keeps this URL working at all.
+     *
+     * `/emails/campaigns/{id}` names either a campaign CONTAINER or — for
+     * every link minted before campaigns grouped their emails, including ones
+     * merchants have pasted into their own messages — a single SEND. Which it
+     * is can only be settled by reading `emailCampaigns/{id}`, and that read
+     * is the price of never rewriting a send id.
+     *
+     * What the ceiling still buys is the property this file exists for: the
+     * report is a fixed number of SINGLE-DOCUMENT reads whatever the size of
+     * the audience, and the campaign view's own collection queries do not open
+     * on a send URL — they are gated on the container having been found.
+     */
     expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(2)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(3)
     expect(mockListens.map((listen) => listen.path)).toEqual([
+      'hosts/site1/emailCampaigns/camp_1',
       'hosts/site1/campaigns/camp_1',
       'hosts/site1/campaigns/camp_1/reports/links',
     ])
@@ -429,12 +458,14 @@ describe('emails console read cost (AGL-2501)', () => {
   it('the report does not mount the composer or the history', async () => {
     await renderConsole('campaigns', ['camp_1'])
 
-    // The campaigns SECTION reads a 30-campaign ceiling plus segments, lists,
-    // screens and experiments. A reader who came for one campaign's numbers
-    // must not pay for any of it — and `emailDeliveries` must never appear at
-    // all, at any limit.
+    // The campaigns SECTION reads a 30-send ceiling plus the campaign
+    // containers, the org's lists, screens and experiments. A reader who came
+    // for one campaign's numbers must not pay for any of it — and
+    // `emailDeliveries` must never appear at all, at any limit.
     const paths = mockListens.map((listen) => listen.path)
     expect(paths).not.toContain('hosts/site1/campaigns')
+    expect(paths).not.toContain('hosts/site1/emailCampaigns')
+    expect(paths.some((path) => path.endsWith('/lists'))).toBe(false)
     expect(paths.some((path) => path.includes('emailDeliveries'))).toBe(false)
     expect(paths.some((path) => path.endsWith('/screens'))).toBe(false)
     expect(paths.some((path) => path.endsWith('/experiments'))).toBe(false)

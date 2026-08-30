@@ -31,7 +31,10 @@ import {
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import type { PluginRevocation } from '@aglyn/aglyn/server'
-import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@aglyn/plugins-email/model'
+import {
+  renderCampaignEmail,
+  type EmailRenderProduct,
+} from '@aglyn/plugins-email/model'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
@@ -57,7 +60,6 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHash, createHmac } from 'crypto'
 import {
   EMAIL_MAX_RECIPIENTS_PER_SEND,
-  EMAIL_NODE_ROOT_ID,
   isEmailConfigured,
   rateLimitedRetryAtMs,
   sendEmail,
@@ -280,6 +282,33 @@ export interface CampaignSendOptions {
    * `body` becomes the plain-text fallback.
    */
   templateScreenId?: string
+  /**
+   * The sender's DISPLAY NAME for this campaign, overriding the org's
+   * branding default.
+   *
+   * A display name and nothing more: `applyFromName` keeps the verified
+   * address it is applied to, so this cannot move the mail onto a domain the
+   * org has not proved. The route strips control characters before it gets
+   * here, because the value is merchant-typed and lands in a header.
+   */
+  fromName?: string
+  /** Where replies go, when it is not the sending address. */
+  replyTo?: string
+  /**
+   * The CAMPAIGN this send belongs to — `hosts/{hostId}/emailCampaigns/{id}`.
+   *
+   * Not the send's own id, which is what `campaignId` means here and what
+   * every delivered unsubscribe link carries as `cid`. Absent on a send
+   * composed outside a campaign, and on every send that predates containers;
+   * the campaigns list adopts those as a campaign of one at read time rather
+   * than rewriting them.
+   */
+  emailCampaignId?: string
+  /**
+   * The preview line inboxes show after the subject. Overrides a designed
+   * template's own, and gives a plain-text campaign one at all.
+   */
+  preheader?: string
   /** Test sends (AGL-349) skip the campaign record and stats. */
   recordCampaign?: boolean
   /**
@@ -1217,74 +1246,41 @@ export async function performCampaignSend(
       const variant = experiment
         ? assignExperimentVariant(experiment, experiment.$id, email)
         : null
-      // Merge tags (AGL-272): personalize after the variant override so
-      // variant copy can use tags too.
-      const mergeRecipient = { email, name: names.get(email) }
-      const recipientSubject = resolveMergeTags(
-        variant?.subject?.trim() || subject || template?.subject || '',
-        mergeRecipient,
-      )
-      const recipientBody = resolveMergeTags(
-        variant?.body?.trim() || body,
-        mergeRecipient,
-      )
-      // Designed emails render per recipient (AGL-349): merge tokens fill
-      // from the contact, product links become absolute on the site base.
-      let rendered: { html: string; text: string } | null = null
-      if (template) {
-        const name = names.get(email) ?? ''
-        rendered = renderEmailHtml({
-          nodes: template.nodes,
-          // Besigner maps are rooted at '_@_', not renderEmailHtml's default
-          // 'root' (AGL-765). Without this the renderer finds no root and emits
-          // an empty 600px shell — for BOTH storage forms, so every designed
-          // campaign shipped a blank body regardless of how it was stored. The
-          // other two send paths, renderLoadedSystemEmail and
-          // renderLoadedHostEmail, have always passed it; this one never did.
-          rootId: EMAIL_NODE_ROOT_ID,
-          subject: recipientSubject,
-          preheader: template.preheader,
-          // An image the author picked is stored as a `media:` reference and
-          // resolves site-RELATIVE; an inbox has no page to resolve it against,
-          // so without an origin the renderer drops it (AGL-1224). `siteBase` is
-          // this site's own origin, and the host id qualifies an `org:`-scoped
-          // asset so the unauthenticated CDN will serve it.
-          mediaOrigin: siteBase,
-          mediaHostId: hostId,
-          merge: {
-            'contact.email': email,
-            'contact.name': name,
-            'contact.firstName': name.split(/\s+/)[0] ?? '',
-            'site.url': siteBase,
-            unsubscribeUrl,
-          },
-          products: Object.fromEntries(
-            Object.entries(template.products).map(([id, product]) => [
-              id,
-              {
-                ...product,
-                url: product.url?.startsWith('/')
-                  ? `${siteBase}${product.url}`
-                  : product.url,
-              },
-            ]),
-          ),
-        })
-      }
+      /*
+       * THIS RECIPIENT'S MESSAGE, through the renderer the composer previews
+       * with (`@aglyn/plugins-email/model`).
+       *
+       * Merge tags resolve after the variant override so variant copy can use
+       * tags too, a designed template renders per recipient, and a plain-text
+       * body gets the HTML part `sendEmail` would otherwise synthesize for it.
+       * Shared rather than inlined because a preview rendered by a second
+       * implementation is a preview of something else — the two defects this
+       * send path has already shipped, product blocks silently dropped and
+       * merge tags resolving to empty strings for a whole audience, are both
+       * invisible to a preview that does not run this exact code.
+       */
+      const message = renderCampaignEmail({
+        subject: variant?.subject?.trim() || subject,
+        body: variant?.body?.trim() || body,
+        preheader: options.preheader,
+        template,
+        recipient: { email, name: names.get(email) },
+        siteBase,
+        hostId,
+        unsubscribeUrl,
+      })
       const result = await sendEmail({
         to: email,
-        subject: recipientSubject,
-        ...(rendered ? { html: rendered.html } : {}),
+        subject: message.subject,
+        ...(message.html ? { html: message.html } : {}),
         // The plain-text footer names what the link actually opens. "Choose
         // which emails you get" in front of "or unsubscribe" is the only place
         // a text-only reader learns that leaving one stream is an option at
         // all, and the word "unsubscribe" stays in the line because that is
-        // what a recipient scans the footer for.
-        text: rendered
-          ? `${rendered.text}\n\n—\nChoose which emails you get, or ` +
-            `unsubscribe: ${unsubscribeUrl}`
-          : `${recipientBody}\n\n—\nChoose which emails you get, or ` +
-            `unsubscribe: ${unsubscribeUrl}`,
+        // what a recipient scans the footer for. It is written by
+        // `renderCampaignEmail`, so the composer's preview shows the footer
+        // that is actually mailed.
+        text: message.text,
         // RFC 8058 one-click (AGL-2408). `List-Unsubscribe` alone does NOT
         // satisfy Gmail's and Yahoo's bulk-sender rules — the pair does, and
         // Gmail is where most of a merchant's list lives. A client honouring
@@ -1300,7 +1296,12 @@ export async function performCampaignSend(
           'List-Unsubscribe': `<${oneClickUrl}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
-        fromName: branding.fromName,
+        // The campaign's own display name where the composer set one, and the
+        // org's branding default otherwise. Either way the ADDRESS is the
+        // resolved identity's — `applyFromName` replaces the display name in
+        // front of it and nothing else.
+        fromName: options.fromName || branding.fromName,
+        ...(options.replyTo ? { replyTo: options.replyTo } : {}),
         // The server's answer to which verified address this leaves on. The
         // send path re-checks it, so a refusal holds even here where the
         // route has already passed one.
@@ -1423,6 +1424,15 @@ export async function performCampaignSend(
       ...(options.templateScreenId
         ? { templateScreenId: options.templateScreenId }
         : {}),
+      // What this send actually left as, recorded beside the copy: the report
+      // is read months later, by which time the org's branding default may be
+      // a different name than the one this campaign went out under.
+      ...(options.fromName ? { fromName: options.fromName } : {}),
+      ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+      ...(options.preheader ? { preheader: options.preheader } : {}),
+      ...(options.emailCampaignId
+        ? { emailCampaignId: options.emailCampaignId }
+        : {}),
       ...(experiment ? { experimentId: experiment.$id } : {}),
       stats: {
         recipients: sendable.length,
@@ -1523,10 +1533,49 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
     .slice(0, 20000)
   const audience = String(req.body?.audience ?? 'leads')
   const templateScreenId = String(req.body?.templateScreenId ?? '')
+  /*
+   * The composer's sender fields, and the one rule they all obey: a value a
+   * merchant typed reaches a MIME header, so it is flattened to a single line
+   * before it goes anywhere. `applyFromName` quotes the display name and
+   * strips quotes from it, but nothing downstream removes a CR or an LF, and
+   * a header value carrying one is the injection shape.
+   */
+  const headerSafe = (value: unknown, max: number): string =>
+    String(value ?? '')
+      .replace(/[\s\u0000-\u001f\u007f]+/g, ' ')
+      .trim()
+      .slice(0, max)
+  // 78 characters is the line length a display name has to live inside.
+  const fromName = headerSafe(req.body?.fromName, 78)
+  const replyTo = headerSafe(req.body?.replyTo, 254).toLowerCase()
+  const preheader = headerSafe(req.body?.preheader, 200)
+  // The campaign this send joins. Validated as a document id here because it
+  // is stored and later queried as one.
+  const emailCampaignId = String(req.body?.emailCampaignId ?? '')
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  // Designed emails carry their content in the template; plain sends
-  // still need subject + body.
-  if (action !== 'cancel' && !templateScreenId && (!subject || !body)) {
+  if (emailCampaignId && !isDocumentId(emailCampaignId)) {
+    return res.status(400).json({ error: 'Invalid campaign' })
+  }
+  if (replyTo && !EMAIL_PATTERN.test(replyTo)) {
+    return res.status(400).json({ error: 'Reply-to must be an email address' })
+  }
+  /*
+   * Designed emails carry their content in the template; plain sends still
+   * need subject + body.
+   *
+   * THE ACTIONS THAT MAIL NOTHING ARE EXEMPT, and the composer is the reason.
+   * It asks for the recipient count as soon as it mounts — before any copy
+   * exists, which is the whole point of asking — so requiring copy of
+   * `preview` refused every count a plain-text campaign ever asked for, and
+   * the readout under the Subject field showed this message instead of the
+   * audience size and the consent split. The preview branch below substitutes
+   * placeholder copy precisely because it needs none: the count is a fact
+   * about the audience, and no part of resolving it reads the subject or the
+   * body. `renderPreview` is exempt for the same reason in the other
+   * direction — it renders whatever has been typed so far, including nothing.
+   */
+  const mails = action !== 'cancel' && action !== 'preview' && action !== 'renderPreview'
+  if (mails && !templateScreenId && (!subject || !body)) {
     return res.status(400).json({ error: 'Missing subject or body' })
   }
   if (!['leads', 'members', 'manual', 'segment', 'list'].includes(audience)) {
@@ -1591,6 +1640,63 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json({ ...result, test: true })
     }
 
+    if (action === 'renderPreview') {
+      /*
+       * THE MESSAGE, RENDERED, AND NOT ONE ADDRESS RESOLVED.
+       *
+       * Separate from `preview` because the two answer different questions at
+       * different costs. `preview` sweeps the audience — up to 5,000 documents
+       * — to count people, and its answer changes only when the audience does.
+       * This one answers "what does my email look like", which changes on
+       * every keystroke, and reads at most the template and its products.
+       * Folding the render into `preview` would page the merchant's whole
+       * contact list once per debounce tick, for a number that had not moved.
+       *
+       * Rendered through `renderCampaignEmail`, which is what the per-recipient
+       * send loop calls, so this is the HTML that will be mailed and not a
+       * likeness of it.
+       */
+      const template = templateScreenId
+        ? await loadEmailTemplate(hostId, templateScreenId)
+        : null
+      const siteBase =
+        hostPublicOrigin({
+          cname: hostSnapshot.get('cname'),
+          subdomain: hostSnapshot.get('subdomain'),
+        }) ?? ''
+      const orgForHost = await getOrgForHost(hostId)
+      const branding = resolveBrandingProfile(orgForHost?.org as never)
+      /*
+       * Personalized for the REQUESTER, because a preview showing raw
+       * `{{firstName|there}}` tells a merchant nothing about what a recipient
+       * will read, and inventing a fictional contact would make a merge tag
+       * that resolves to nothing look like one that works.
+       */
+      const rendered = renderCampaignEmail({
+        subject,
+        body,
+        preheader,
+        template,
+        recipient: {
+          email: String(decoded.email ?? ''),
+          name: String((decoded as Record<string, unknown>)['name'] ?? ''),
+        },
+        siteBase,
+        hostId,
+        // Unsigned, and it is not a working opt-out: minting a real signature
+        // here would put a live preference link for the requester's own
+        // address into a page they are only reading. The footer's presence,
+        // and its wording, is what the preview is showing.
+        unsubscribeUrl: `${siteBase}/api/email/preferences`,
+      })
+      return res.status(200).json({
+        ...rendered,
+        preheader: preheader || template?.preheader || '',
+        fromName: fromName || branding.fromName,
+        ...(replyTo ? { replyTo } : {}),
+      })
+    }
+
     if (action === 'preview') {
       // Read-only, and it needs the same admin/editor role as a send: the
       // audience size of someone else's site is not public information.
@@ -1647,6 +1753,13 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
             ? { experimentId: String(req.body.experimentId) }
             : {}),
           ...(templateScreenId ? { templateScreenId } : {}),
+          // The composer's sender fields ride on the stored campaign so the
+          // scheduled processor mails the message that was composed rather
+          // than one that reverts to the org's branding defaults.
+          ...(fromName ? { fromName } : {}),
+          ...(replyTo ? { replyTo } : {}),
+          ...(preheader ? { preheader } : {}),
+          ...(emailCampaignId ? { emailCampaignId } : {}),
           status: 'scheduled',
           sendAtMs,
           scheduledAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
@@ -1697,6 +1810,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       campaignId: String(req.body?.campaignId ?? ''),
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
+      fromName,
+      replyTo,
+      preheader,
+      emailCampaignId,
       senderUid: decoded.uid,
     })
     return res.status(200).json(result)

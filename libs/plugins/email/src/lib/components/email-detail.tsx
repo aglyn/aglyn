@@ -40,6 +40,7 @@ import {
   type CampaignLinkRollup,
   type CampaignStats,
 } from '../model/campaign-report'
+import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import { emailAudienceLabel, emailSendTimeMs, emailStateLabel } from '../model/email-record'
 import EmailDesignPreview from './email-design-preview'
 import EmailRecipientsCard from './email-recipients-card'
@@ -156,13 +157,18 @@ export function EmailDetail(props: EmailDetailProps) {
   /*
    * The campaign this message belongs to.
    *
-   * A message carries its own id, and a campaign that groups several carries
-   * a reference to itself on each. Until a message names a different
-   * container, its own id IS the campaign — which is what every unsubscribe
-   * footer already in somebody's inbox resolves against, since those links
-   * carry `cid=<this id>`.
+   * `emailCampaignId` — {@link CAMPAIGN_SEND_CONTAINER_FIELD} — is the one
+   * linkage, and it is deliberately not spelled `campaignId`: on a message
+   * document that name already means the message's OWN id, which is what the
+   * report route addresses and what every delivered unsubscribe footer
+   * carries as `cid=`.
+   *
+   * The fallback is the migration. A message written before campaigns grouped
+   * anything names no container, and its own id IS the campaign the URL
+   * resolves — the campaign detail route answers an id it does not recognize
+   * as a container with that message's own report.
    */
-  const campaignId = String(email?.campaignId ?? emailId)
+  const campaignId = String(email?.[CAMPAIGN_SEND_CONTAINER_FIELD] ?? emailId)
 
   const headerActions = (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>

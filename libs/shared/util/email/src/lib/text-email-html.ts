@@ -121,10 +121,24 @@ function linkifyEscaped(escaped: string): string {
  *
  * @param text The plain-text body being sent alongside this.
  * @param subject Used only for the document `<title>`.
+ * @param preheader The hidden line inboxes show after the subject. Same
+ *        markup `renderEmailHtml` emits for a designed email, so a campaign
+ *        gets the same treatment whichever body it carries.
  */
-export function renderTextEmailHtml(text: string, subject = ''): string {
+export function renderTextEmailHtml(
+  text: string,
+  subject = '',
+  preheader = '',
+): string {
   const body = String(text ?? '').trim()
   if (!body) return ''
+
+  const preview = String(preheader ?? '').trim()
+  const preheaderHtml = preview
+    ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">` +
+      escapeEmailHtml(preview) +
+      `</div>`
+    : ''
 
   const paragraphs = body
     .split(/\n\s*\n/)
@@ -143,6 +157,7 @@ export function renderTextEmailHtml(text: string, subject = ''): string {
     `<meta name="viewport" content="width=device-width, initial-scale=1" />` +
     `<title>${escapeEmailHtml(String(subject ?? ''))}</title></head>` +
     `<body style="margin:0;padding:0;background-color:#f4f4f4;">` +
+    preheaderHtml +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ` +
     `style="background-color:#f4f4f4;"><tr><td style="padding:24px 8px;">` +
     `<table role="presentation" width="600" cellpadding="0" cellspacing="0" ` +
