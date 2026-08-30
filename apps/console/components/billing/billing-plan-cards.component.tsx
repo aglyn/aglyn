@@ -820,18 +820,25 @@ function FocusedTierView(props: {
                     a card that reorders its own sections cannot be read
                     across from its neighbours, which is the entire job of
                     three cards side by side. */}
-                <Stack spacing={0.5}>
-                  {(rung === 'enterprise'
-                    ? ENTERPRISE_HIGHLIGHTS.slice(0, 6).map(
-                        (highlight) => highlight.label,
-                      )
-                    : headlineLimits(PLAN_ENTITLEMENTS[rung as OrgPlan])
-                  ).map((line) => (
-                    <Typography key={line} variant="body2" color="text.secondary">
-                      {line}
-                    </Typography>
-                  ))}
-                </Stack>
+                {/* Enterprise has no numeric quotas to fill this slot — its
+                    limits ARE "unlimited, arranged with us" — so it skips
+                    straight to the tick list. Substituting its highlights
+                    here printed the same five lines twice in one card. */}
+                {rung === 'enterprise' ? null : (
+                  <Stack spacing={0.5}>
+                    {headlineLimits(PLAN_ENTITLEMENTS[rung as OrgPlan]).map(
+                      (line) => (
+                        <Typography
+                          key={line}
+                          variant="body2"
+                          color="text.secondary"
+                        >
+                          {line}
+                        </Typography>
+                      ),
+                    )}
+                  </Stack>
+                )}
 
                 {/* Every section below is the same three parts in the same
                     order — rule, heading, list — so the eye can travel
