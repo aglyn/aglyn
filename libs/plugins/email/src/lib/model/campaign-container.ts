@@ -118,6 +118,166 @@ export interface CampaignSend {
   sentAt?: { seconds?: number } | null
   sendAtMs?: number
   stats?: CampaignStats
+  /** How far a send that goes out over several batches has got. */
+  resume?: CampaignResume
+}
+
+/**
+ * The batch state the sender writes on an email that is still going out.
+ *
+ * Absent on every send that finished in one batch, and on every send that
+ * predates batching — which is why {@link campaignSendProgress} treats a
+ * missing record as "this is not a batched send" rather than as zero.
+ */
+export interface CampaignResume {
+  /** People the email has resolved and not yet addressed. */
+  remaining?: number
+  /** Batches it has run. */
+  batch?: number
+  /** When the next batch may go, ms. Zero when there is not going to be one. */
+  nextAtMs?: number
+  /** Why it stopped short, when it did. */
+  stop?: string
+}
+
+/**
+ * WHAT A SEND IS ACTUALLY DOING, for a row that would otherwise lie.
+ *
+ * An email larger than one send may carry is delivered over several batches,
+ * and between them it is stored as `scheduled` — the state the processor
+ * claims, and the only one that resumes it without a second index and a
+ * second query. Read literally, that is a row saying "not sent yet" about an
+ * email that has already put five hundred messages in five hundred inboxes.
+ *
+ * So the stored fields are not the sentence. This is: it takes the status,
+ * the delivered count and the batch record, and answers what a person needs
+ * to see. Derived at read time and never persisted, exactly as
+ * `campaignWindowState` beside it is, because it is a description of stored
+ * facts and not a fact of its own.
+ *
+ * ## The four states, and which stored shape each one is
+ *
+ * - `pending` — `scheduled`, nothing delivered. A campaign waiting for its
+ *   time. This is what `scheduled` meant before batching and still does.
+ * - `sending` — `scheduled` or `sending` with something delivered and more to
+ *   come. The state this function exists for.
+ * - `sent` — finished, whether in one batch or six.
+ * - `stopped` — finished with people it never addressed: canceled mid-flight,
+ *   failed mid-flight, or stopped by the batch guard. The count is what makes
+ *   this legible rather than alarming — an email that reached 2,400 of 3,000
+ *   and stopped is a different conversation from one that reached nobody.
+ */
+export type CampaignSendProgressState =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'stopped'
+
+export interface CampaignSendProgress {
+  state: CampaignSendProgressState
+  /** Messages this email has delivered. */
+  reached: number
+  /**
+   * The audience it is working through, when one was recorded. Null when the
+   * send never recorded an audience size, which is every send that predates
+   * the figure — reported as null rather than as `reached` so a surface does
+   * not present a floor as a total.
+   */
+  audience: number | null
+  /** People it has resolved and not yet addressed. */
+  remaining: number
+  /** Batches it has run. Zero for a send that never batched. */
+  batch: number
+  /** When the next batch may go, ms. Zero unless {@link state} is `sending`. */
+  nextAtMs: number
+  /** One line a surface may show verbatim. */
+  label: string
+}
+
+/** A stored count as a non-negative integer, or 0. */
+function progressCount(raw: unknown): number {
+  const value = Math.floor(Number(raw))
+  return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+export function campaignSendProgress(
+  send: CampaignSend | null | undefined,
+): CampaignSendProgress {
+  const status = String(send?.status ?? 'sent')
+  const reached = progressCount(send?.stats?.sent)
+  const rawAudience = send?.stats?.audienceSize
+  const audience =
+    rawAudience === undefined || rawAudience === null
+      ? null
+      : progressCount(rawAudience)
+  const resume = send?.resume
+  const remaining = progressCount(resume?.remaining)
+  const batch = progressCount(resume?.batch)
+  const nextAtMs = progressCount(resume?.nextAtMs)
+  const of = audience !== null ? ` of ${audience.toLocaleString()}` : ''
+
+  // Still going: more to address, and a run that will address it. A campaign
+  // a merchant CANCELED is not still going however much is left, which is why
+  // the status is read before the remainder.
+  if (
+    remaining > 0 &&
+    nextAtMs > 0 &&
+    (status === 'scheduled' || status === 'sending')
+  ) {
+    return {
+      state: 'sending',
+      reached,
+      audience,
+      remaining,
+      batch,
+      nextAtMs,
+      label: `Sending — reached ${reached.toLocaleString()}${of}`,
+    }
+  }
+  // Waiting for its time, with nothing delivered. The pre-batching meaning of
+  // `scheduled`, and still the common one.
+  if ((status === 'scheduled' || status === 'sending') && reached === 0) {
+    return {
+      state: 'pending',
+      reached: 0,
+      audience,
+      remaining,
+      batch,
+      nextAtMs: 0,
+      label: status === 'sending' ? 'Sending' : 'Scheduled',
+    }
+  }
+  if (remaining > 0) {
+    const why =
+      status === 'canceled'
+        ? 'canceled'
+        : status === 'failed'
+          ? 'stopped by an error'
+          : 'stopped'
+    return {
+      state: 'stopped',
+      reached,
+      audience,
+      remaining,
+      batch,
+      nextAtMs: 0,
+      label:
+        `Reached ${reached.toLocaleString()}${of} — ${why} with ` +
+        `${remaining.toLocaleString()} not addressed`,
+    }
+  }
+  return {
+    state: 'sent',
+    reached,
+    audience,
+    remaining: 0,
+    batch,
+    nextAtMs: 0,
+    label:
+      batch > 1
+        ? `Sent to ${reached.toLocaleString()}${of} over ${batch} runs`
+        : `Sent to ${reached.toLocaleString()}${of}`,
+  }
 }
 
 /**

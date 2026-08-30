@@ -79,9 +79,28 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
       })
       if (!claimed) continue
       const data = campaignDoc.data()
+      /*
+       * IS THIS A CAMPAIGN, OR THE REST OF ONE?
+       *
+       * An audience larger than one send may carry goes out over several
+       * runs. Each batch writes the email back as `scheduled` with a `resume`
+       * map, so this query picks it up again — the same claim, the same
+       * transaction, the same send core. The presence of a batch count is
+       * what tells the two apart, and it is read off the record rather than
+       * passed in because there is nobody to pass it: a merchant pressed Send
+       * once, possibly hours ago.
+       *
+       * It matters more than a label. A continuation subtracts everyone the
+       * email has already SETTLED and leaves the audience figures the first
+       * batch recorded alone; a first send does neither. Getting this wrong
+       * in the false direction mails people a second copy.
+       */
+      const resumingBatch =
+        Math.max(0, Math.floor(Number(data['resume']?.batch ?? 0)) || 0) > 0
       try {
         const result = await performCampaignSend({
           hostId: hostRef.id,
+          ...(resumingBatch ? { continuation: true } : {}),
           subject: String(data['subject'] ?? ''),
           body: String(data['body'] ?? ''),
           audience: String(data['audience'] ?? 'leads'),
@@ -107,7 +126,16 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
           replyTo: String(data['replyTo'] ?? ''),
           preheader: String(data['preheader'] ?? ''),
           emailCampaignId: String(data['emailCampaignId'] ?? ''),
-          senderUid: String(data['scheduledBy'] ?? 'scheduler'),
+          /*
+           * Whoever sent it, and `scheduledBy` is not that person on a
+           * campaign a merchant sent by hand — an immediate send that batches
+           * has no `scheduledBy` at all. `sentBy` is what the first batch
+           * recorded, so the later ones are attributed to the same person
+           * rather than to the cron.
+           */
+          senderUid: String(
+            data['scheduledBy'] ?? data['sentBy'] ?? 'scheduler',
+          ),
         })
         results.push(result)
       } catch (error) {
@@ -133,6 +161,15 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
                 status: 'scheduled',
                 deferredReason: error.message,
                 deferredUntilMs: error.retryAtMs,
+                /*
+                 * Due when the window that deferred it rolls, rather than
+                 * immediately. Without this the row stays due and every
+                 * fifteen-minute run re-resolves an audience of up to five
+                 * thousand documents to be told the same no — which for a
+                 * workspace ramped to a day is ninety-six pointless
+                 * resolutions of somebody's whole contact list.
+                 */
+                sendAtMs: error.retryAtMs,
               },
               { merge: true },
             )

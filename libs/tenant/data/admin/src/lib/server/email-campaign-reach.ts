@@ -64,6 +64,7 @@
  * write that starts failing.
  */
 
+import { EMAIL_MAX_AUDIENCE_PER_SEND } from '@aglyn/shared-util-email'
 import firebaseAdmin from './firebase-admin'
 import { emailSuppressionKey } from './email-suppression'
 
@@ -86,10 +87,12 @@ export const CAMPAIGN_REACH_SUBCOLLECTION = 'reports'
 /**
  * The most people one email may reach across all of its sends.
  *
- * Matches `AUDIENCE_SCAN_CEILING` in the sender. See the header for why the
- * two are the same number.
+ * The sender's audience read budget, taken from the one place it is stated
+ * rather than restated here. See the header for why the two are necessarily
+ * the same number: an email cannot reach more people than one resolution of
+ * its audience can hold.
  */
-export const CAMPAIGN_REACH_CEILING = 5000
+export const CAMPAIGN_REACH_CEILING = EMAIL_MAX_AUDIENCE_PER_SEND
 
 function reachDoc(
   hostId: string,
@@ -111,6 +114,28 @@ export interface CampaignReachRecord {
   keys: string[]
   /** `keys.length`, so a reader can size the record without loading it. */
   count: number
+  /**
+   * `sha256` of each address a send CONSIDERED and did not mail — suppressed,
+   * or gone from the topic the email opens on.
+   *
+   * See {@link readCampaignSettled} for why a batched send needs this and a
+   * merchant's follow-up must not read it.
+   */
+  skipped?: string[]
+  /** `skipped.length`, alongside `count` for the same reason. */
+  skippedCount?: number
+}
+
+/**
+ * Everything one send of this email has DECIDED about, either way.
+ *
+ * `reached` is who got it. `skipped` is who was addressed by a batch, refused
+ * by a suppression list or a topic opt-out, and must not consume a slot in
+ * every later batch of the same email.
+ */
+export interface CampaignSettledRecord {
+  reached: Set<string>
+  skipped: Set<string>
 }
 
 /**
@@ -135,6 +160,60 @@ export async function readCampaignReach(
   const stored = snapshot.exists ? snapshot.get('keys') : null
   if (!Array.isArray(stored)) return new Set<string>()
   return new Set<string>(stored.map((key: unknown) => String(key)))
+}
+
+/**
+ * Everything one email has decided about, in ONE read.
+ *
+ * ## Why a batch subtracts more than a follow-up does
+ *
+ * A merchant's follow-up subtracts {@link readCampaignReach} alone, and that
+ * is right: somebody who was suppressed when the email first went out, and
+ * has since been released, has never had it and should get it.
+ *
+ * A BATCH of the same email cannot use that rule, and the reason is the same
+ * one that puts the reach subtraction above the per-send cap rather than
+ * below it. The cap takes the first N of a stable order. An address the last
+ * batch addressed and could not mail is still at the head of that order, so
+ * it is selected again, and again, and it consumes a slot every time. A
+ * hundred suppressed addresses at the head of a list cost a hundred of every
+ * batch's five hundred; five hundred of them stop the campaign dead, having
+ * addressed nobody, forever.
+ *
+ * So a batch subtracts everything the email has SETTLED — mailed or refused —
+ * and the frontier advances by the whole cap every time. The distinction is
+ * kept in two fields rather than one because the two questions are different
+ * and only one of them is "who has this email".
+ *
+ * FAILS CLOSED, exactly as {@link readCampaignReach} does and for the same
+ * reason: a batch that cannot say who it has already mailed must not run.
+ *
+ * @throws when the record cannot be read.
+ */
+export async function readCampaignSettled(
+  hostId: string,
+  sendId: string,
+  firestore?: any,
+): Promise<CampaignSettledRecord> {
+  const snapshot = await reachDoc(hostId, sendId, firestore).get()
+  const keys = snapshot.exists ? snapshot.get('keys') : null
+  const skipped = snapshot.exists ? snapshot.get('skipped') : null
+  const toSet = (stored: unknown) =>
+    Array.isArray(stored)
+      ? new Set<string>(stored.map((key: unknown) => String(key)))
+      : new Set<string>()
+  return { reached: toSet(keys), skipped: toSet(skipped) }
+}
+
+/**
+ * How many addresses this email's record accounts for, either way.
+ *
+ * The figure {@link CAMPAIGN_REACH_CEILING} bounds. Both halves count,
+ * because both halves are stored on the one document Firestore's size limit
+ * applies to.
+ */
+export function campaignSettledSize(settled: CampaignSettledRecord): number {
+  return settled.reached.size + settled.skipped.size
 }
 
 /**
@@ -202,6 +281,45 @@ export async function recordCampaignReach(
     return keys.length
   } catch (error) {
     console.error('[email-campaign-reach] reach record failed', error)
+    return 0
+  }
+}
+
+/**
+ * Adds the addresses a send CONSIDERED and did not mail.
+ *
+ * The same document, the same `arrayUnion` and the same never-throws posture
+ * as {@link recordCampaignReach}, under a field of its own so that a
+ * merchant's follow-up and an automatic batch can read different questions
+ * off one record. A failed write costs a later batch a repeated suppression
+ * lookup and nothing else — nobody is mailed twice by it, because the
+ * addresses in here are the ones nothing may mail at all.
+ */
+export async function recordCampaignSkipped(
+  hostId: string,
+  sendId: string,
+  emails: readonly string[],
+  firestore?: any,
+): Promise<number> {
+  const keys = [
+    ...new Set(
+      emails
+        .map((email) => emailSuppressionKey(email))
+        .filter((key): key is string => Boolean(key)),
+    ),
+  ]
+  if (!keys.length || !hostId || !sendId) return 0
+  try {
+    await reachDoc(hostId, sendId, firestore).set(
+      {
+        skipped: firebaseAdmin.firestore.FieldValue.arrayUnion(...keys),
+        skippedCount: firebaseAdmin.firestore.FieldValue.increment(keys.length),
+      },
+      { merge: true },
+    )
+    return keys.length
+  } catch (error) {
+    console.error('[email-campaign-reach] skipped record failed', error)
     return 0
   }
 }

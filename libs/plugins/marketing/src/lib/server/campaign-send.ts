@@ -79,17 +79,42 @@ import { recordMarketingSends } from '@aglyn/tenant-data-admin/server/email-mark
 import {
   CAMPAIGN_REACH_CEILING,
   campaignReachCovers,
+  campaignSettledSize,
   partitionByCampaignReach,
   readCampaignReach,
+  readCampaignSettled,
   recordCampaignReach,
+  recordCampaignSkipped,
 } from '@aglyn/tenant-data-admin/server/email-campaign-reach'
+/*
+ * The LEAF module for the reputation controls too, and for the same reason
+ * as the three above it: every spec that reaches this file mocks the
+ * `@aglyn/tenant-data-admin` barrel, so a breaker resolved through it would
+ * be whatever a factory happened to contain — which for a control that
+ * REFUSES a send means a test could pass against a breaker that is not there.
+ * Resolved from the module itself, the real control runs, and it fails open
+ * against a harness that cannot serve it.
+ */
+import {
+  claimOrgEmailSendDay,
+  orgAgeDays,
+  readSenderReputation,
+  reconcileOrgEmailSendDay,
+  recordCampaignAccepted,
+  resolveOrgEmailRamp,
+  type OrgEmailSendDayReservation,
+  type SenderReputationRead,
+} from '@aglyn/tenant-data-admin/server/email-sender-reputation'
 import { createHash, createHmac } from 'crypto'
 import {
+  EMAIL_MAX_AUDIENCE_PER_SEND,
   EMAIL_MAX_RECIPIENTS_PER_SEND,
+  campaignBatchPlan,
   isEmailConfigured,
   rateLimitedRetryAtMs,
   sendEmail,
   sendingIdentityRefusal,
+  type EmailRampVerdict,
 } from '@aglyn/shared-util-email'
 
 /**
@@ -120,10 +145,12 @@ const AUDIENCE_PAGE_SIZE = 500
  * Reaching it does not truncate anything silently. The resolution reports
  * {@link CampaignSendResult.audienceTruncated}, `audienceSize` becomes a
  * floor rather than a total, and the composer and the History row both say so.
- * An audience that regularly exceeds this is asking for the batched send §5d
- * of `docs/specs/email-overhaul.md` proposes, not a bigger number here.
+ * An audience larger than one send may carry is delivered across several
+ * batches; an audience larger than THIS is one the sender cannot resolve at
+ * all, and batching does not change that. It is the same number as
+ * `CAMPAIGN_REACH_CEILING`, taken from the one place both are stated.
  */
-const AUDIENCE_SCAN_CEILING = 5000
+const AUDIENCE_SCAN_CEILING = EMAIL_MAX_AUDIENCE_PER_SEND
 
 /**
  * Page a query to exhaustion in document-name order.
@@ -350,6 +377,32 @@ export interface CampaignSendOptions {
    */
   followUp?: boolean
   /**
+   * THE NEXT BATCH OF AN EMAIL THAT IS STILL GOING OUT.
+   *
+   * Set by the scheduled-campaign processor, never by a request. An audience
+   * larger than {@link EMAIL_MAX_RECIPIENTS_PER_SEND} is delivered across
+   * several invocations; each one addresses the people the earlier ones did
+   * not, and the campaign is written back as `scheduled` until nothing is
+   * left. See the batch plan at the bottom of this function.
+   *
+   * ## Why it is not {@link followUp}
+   *
+   * They share the subtraction and the additive write, and they differ on the
+   * two things that matter. A follow-up is a MERCHANT's act on an email that
+   * has finished — it subtracts who was reached, and somebody suppressed at
+   * the time who has since been released is entitled to get it. A batch is
+   * one email still in flight — it subtracts everyone the email has SETTLED,
+   * reached or refused, because a refused address sitting at the head of a
+   * stable order would consume a slot in every remaining batch and, in
+   * enough numbers, stop the campaign dead having mailed nobody.
+   *
+   * They also record differently. A follow-up measures a NEW population, so
+   * the audience size and the consent split add. A batch measures a slice of
+   * the population the first batch already measured, so those figures are
+   * left exactly as the first batch wrote them.
+   */
+  continuation?: boolean
+  /**
    * The requester's OWN verified address, for the composer's test send
    * (AGL-349). Exempts exactly this address from the marketing-consent rule.
    *
@@ -558,6 +611,20 @@ export interface CampaignSendResult {
   alreadyReached?: number
   /** Whether this send added to an existing email rather than starting one. */
   followUp?: boolean
+  /**
+   * People this email has resolved and not yet addressed.
+   *
+   * Non-zero on a send that is still going out, and the figure that makes
+   * "reached 500 of 3,000" a sentence rather than a truncation. Zero when the
+   * email is finished.
+   */
+  remaining?: number
+  /** True when another batch of this email will run on its own. */
+  resuming?: boolean
+  /** When the next batch may go, ms. Present only while {@link resuming}. */
+  nextAtMs?: number
+  /** Batches this email has run, including this one. */
+  batch?: number
 }
 
 export async function performCampaignSend(
@@ -617,6 +684,18 @@ export async function performCampaignSend(
     throw new CampaignSendError('Invalid topicId', 400)
   }
   const topicId = options.topicId || DEFAULT_CAMPAIGN_TOPIC_ID
+  /**
+   * Whether this send ADDS to an email that already exists, rather than
+   * starting one.
+   *
+   * True for a merchant's follow-up and for an automatic batch. The two
+   * differ in what they subtract and in what they record — see
+   * `CampaignSendOptions.continuation` — but they agree on the one thing this
+   * flag decides: every counter on the campaign is an increment rather than a
+   * replacement, so no rate can come out over a denominator that counts less
+   * mail than its numerator.
+   */
+  const addsToExistingSend = Boolean(options.followUp || options.continuation)
 
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
@@ -636,6 +715,117 @@ export async function performCampaignSend(
    * costs.
    *=========================================*/
   let reachedKeys: ReadonlySet<string> | null = null
+  /**
+   * Batches this email has already run, so the plan below can tell the second
+   * from the twentieth. Zero on every first send.
+   */
+  let batchesSoFar = 0
+  /*==========================================
+   * THE NEXT BATCH'S ADMISSION CHECKS.
+   *
+   * The same two properties the follow-up checks below, read off the same
+   * record and refused for the same reasons — with `skipped` folded into the
+   * subtraction, which is the whole difference between the two. See
+   * `CampaignSendOptions.continuation`.
+   *=========================================*/
+  if (options.continuation) {
+    if (!options.campaignId) {
+      throw new CampaignSendError(
+        'A batch has to name the email it is continuing',
+        400,
+      )
+    }
+    const sendSnapshot = await hostRef
+      .collection('campaigns')
+      .doc(options.campaignId)
+      .get()
+    if (!sendSnapshot.exists) {
+      throw new CampaignSendError('Unknown email', 404)
+    }
+    /*
+     * A batch continues an email the processor has CLAIMED. `sending` is what
+     * that claim writes; `scheduled` is accepted beside it so a campaign that
+     * was written back by a deferral and is picked up again is not refused by
+     * its own retry.
+     */
+    const status = String(sendSnapshot.get('status') ?? '')
+    if (status !== 'sending' && status !== 'scheduled') {
+      throw new CampaignSendError(
+        'This email is not in the middle of being sent',
+        400,
+      )
+    }
+    /*
+     * FAILS CLOSED, exactly as the follow-up does. The record of who this
+     * email has already mailed is the only thing standing between a resumed
+     * send and a second copy in somebody's inbox, and a batch that cannot
+     * read it must not run.
+     */
+    const settled = await readCampaignSettled(
+      hostId,
+      options.campaignId,
+      firestore,
+    )
+    const sentSoFar = Number(sendSnapshot.get('stats')?.sent ?? 0)
+    if (!campaignReachCovers(settled.reached, sentSoFar)) {
+      throw new CampaignSendError(
+        'This email does not have a complete record of who it reached, so ' +
+          'the rest of it cannot be sent without risking a second copy for ' +
+          'somebody who already has it.',
+        409,
+      )
+    }
+    if (campaignSettledSize(settled) >= CAMPAIGN_REACH_CEILING) {
+      throw new CampaignSendError(
+        `This email has already addressed ${CAMPAIGN_REACH_CEILING.toLocaleString()} ` +
+          'people, which is the most one email may reach. Compose a new ' +
+          'email for the rest of the audience.',
+        409,
+      )
+    }
+    reachedKeys = new Set([...settled.reached, ...settled.skipped])
+    batchesSoFar = Math.max(
+      0,
+      Math.floor(Number(sendSnapshot.get('resume')?.batch ?? 0)) || 0,
+    )
+  }
+  /**
+   * A batch that found nothing left to do: the email is FINISHED, not broken.
+   *
+   * Every "there is nobody to send to" refusal below is a 400 that tells a
+   * merchant their audience is empty — which is the right answer to a send
+   * they just pressed, and the wrong one to a batch of an email that has
+   * already delivered two thousand messages. The processor would mark it
+   * `failed`, and a campaign that reached most of its list would be filed
+   * under the same word as one that never left.
+   *
+   * So a continuation closes the email out instead, with the counters the
+   * earlier batches wrote left exactly as they are.
+   */
+  const finishContinuation = async (): Promise<CampaignSendResult> => {
+    const sendId = String(options.campaignId ?? '')
+    await hostRef
+      .collection('campaigns')
+      .doc(sendId)
+      .set(
+        {
+          status: 'sent',
+          resume: { remaining: 0, batch: batchesSoFar + 1, nextAtMs: 0 },
+          lastSentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    return {
+      campaignId: sendId,
+      recipients: 0,
+      audienceSize: 0,
+      sent: 0,
+      remaining: 0,
+      resuming: false,
+      batch: batchesSoFar + 1,
+    }
+  }
+
   if (options.followUp) {
     if (!options.campaignId) {
       throw new CampaignSendError(
@@ -879,6 +1069,7 @@ export async function performCampaignSend(
     ),
   ]
   if (!addressable.length) {
+    if (options.continuation) return finishContinuation()
     throw new CampaignSendError('The audience is empty', 400)
   }
 
@@ -920,6 +1111,7 @@ export async function performCampaignSend(
   const alreadyReached = partitioned.alreadyReached
   const resolved = partitioned.unreached
   if (!resolved.length) {
+    if (options.continuation) return finishContinuation()
     throw new CampaignSendError(
       'Everyone in this audience has already had this email, so nothing has ' +
         'been sent.',
@@ -1018,6 +1210,7 @@ export async function performCampaignSend(
   )
   if (proofAddress) consentSplit.mailable.unshift(proofAddress)
   if (!consentSplit.mailable.length) {
+    if (options.continuation) return finishContinuation()
     throw new CampaignSendError(
       'No recipient in this audience has a marketing consent record, so ' +
         'nothing has been sent. Add an opt-in checkbox to the form or sign-up ' +
@@ -1026,14 +1219,114 @@ export async function performCampaignSend(
     )
   }
 
+  /*==========================================
+   * THE TWO PLATFORM CONTROLS THAT SIZE THIS BATCH.
+   *
+   * Both read the same seven-day window, so they are resolved together and
+   * the window is read once. Both are campaign-only by construction — this
+   * function is the only caller, and transactional mail cannot reach it.
+   *
+   * A TEST SEND is exempt from both. It delivers one message to the address
+   * of the person who pressed the button, it writes no campaign record, and
+   * refusing it would leave a merchant whose list has a problem unable to
+   * even look at the email they are trying to fix.
+   *=========================================*/
+  const platformRate = await readEmailSendRateConfig()
+  const proofOnly = options.recordCampaign === false
+  /**
+   * How many people this batch may address.
+   *
+   * The per-send cap unless the new-sender ramp is lower, in which case the
+   * ramp is what the batch takes and the rest of the audience goes out on the
+   * following days. Shrinking rather than deferring is the only shape that
+   * works: a workspace on a 200-a-day step would defer a 500-recipient batch
+   * every single day and never send anything at all.
+   */
+  let batchCap = MAX_RECIPIENTS_PER_SEND
+  /** Today's ramp, resolved once and claimed against below. */
+  let ramp: EmailRampVerdict | null = null
+  if (!proofOnly) {
+    /** This workspace's seven-day grade, and the window both controls read. */
+    const reputation: SenderReputationRead = await readSenderReputation({
+      orgId,
+      policy: (orgForHost?.org as Record<string, unknown> | undefined)?.[
+        'emailReputationPolicy'
+      ],
+      reinstatedUntilMs: (
+        orgForHost?.org as Record<string, unknown> | undefined
+      )?.['emailReputationReinstatedUntilMs'],
+    })
+    /*
+     * THE CIRCUIT BREAKER.
+     *
+     * A 409 rather than a deferral, and that difference is the point. A
+     * deferral says "not this hour" and retries itself; this says "not until
+     * something changes", and the thing that has to change is the list. A
+     * campaign that rescheduled itself against a tripped breaker would mail
+     * the same bad addresses on a timer.
+     *
+     * NOTHING IS REMOVED. No contact is deleted, no audience is trimmed,
+     * nobody is unsubscribed and no list membership moves — the refusal is on
+     * the SEND, which is a flow, and refusing a flow strands nobody's data.
+     * That is the enforce-at-the-reduction rule (`over-limit.ts`) applied to
+     * the one control in this file that could be tempted to break it.
+     *
+     * The message carries the numbers and what to do about them, because a
+     * merchant who cannot send and cannot find out why will open a ticket
+     * that says the product is broken.
+     */
+    if (reputation.blocked) {
+      throw new CampaignSendError(reputation.reason, 409)
+    }
+    /*
+     * THE NEW-SENDER RAMP.
+     *
+     * A workspace created today may not put its whole first import onto the
+     * domain every other tenant's receipts leave on. The step it is on is
+     * earned by clean volume as well as reached by age, and a workspace past
+     * its first week — which is every existing customer, and every org whose
+     * record predates the creation timestamp — is not ramped at all.
+     */
+    ramp = resolveOrgEmailRamp({
+      ageDays: orgAgeDays(
+        (orgForHost?.org as Record<string, unknown> | undefined)?.['createdAt'],
+      ),
+      deliveredLifetime: reputation.window.accepted,
+      platformPerHour: platformRate.perHour,
+    })
+    if (!ramp.graduated && platformRate.enabled) {
+      const dayRemaining = Math.max(
+        0,
+        ramp.perDay - reputation.window.claimedToday,
+      )
+      if (dayRemaining <= 0) {
+        throw new CampaignSendDeferredError(
+          `${ramp.detail} It has already sent ` +
+            `${reputation.window.claimedToday.toLocaleString()} today, so ` +
+            'this campaign has not been sent and nothing has been counted — ' +
+            'it goes out automatically tomorrow. Transactional mail — ' +
+            'receipts, booking reminders, password resets — keeps sending.',
+          Math.floor(Date.now() / 86_400_000) * 86_400_000 + 86_400_000,
+        )
+      }
+      batchCap = Math.min(batchCap, dayRemaining)
+    }
+  }
+
   /*
    * The cap takes the FIRST N of a stable order, which is what makes taking
    * some of the audience defensible at all: two sends of the same unchanged
    * audience now address the same people, and which people is answerable
    * ("the first N by document name"). It was previously whichever slice
    * Firestore happened to return.
+   *
+   * What is left over is not lost. The plan at the bottom of this function
+   * writes the email back as `scheduled` with a record of how far it got, and
+   * the next run addresses the first N of the REMAINDER — the same rule
+   * pointed at what is left, which is the same move the follow-up's
+   * subtraction makes one block above.
    */
-  recipients = consentSplit.mailable.slice(0, MAX_RECIPIENTS_PER_SEND)
+  recipients = consentSplit.mailable.slice(0, batchCap)
 
   /*
    * BOTH suppression lists, on one derivation (D6 of
@@ -1071,7 +1364,20 @@ export async function performCampaignSend(
     notSuppressed,
     firestore,
   )
-  if (!sendable.length) {
+  /*
+   * NOBODY IN THIS BATCH, BUT SOMEBODY AFTER IT.
+   *
+   * A send whose whole audience is suppressed is a 400 a merchant needs to
+   * see. A BATCH whose five hundred are all suppressed is not — there are
+   * two and a half thousand people behind them, and refusing here would end
+   * the campaign at the first block of bad addresses in the list.
+   *
+   * The batch falls through instead: it addresses nobody, records the
+   * addresses it refused so the next batch does not spend its slots on them
+   * again, and the plan at the bottom schedules the remainder.
+   */
+  if (!sendable.length && consentSplit.mailable.length <= recipients.length) {
+    if (options.continuation) return finishContinuation()
     throw new CampaignSendError(
       'Every recipient has unsubscribed or been suppressed',
       400,
@@ -1190,6 +1496,13 @@ export async function performCampaignSend(
       sendable: sendable.length,
       suppressed: recipients.length - sendable.length,
       /*
+       * What this send will NOT reach on its first pass, so the composer can
+       * say "3,000 people, 500 in the first batch, the rest over the next few
+       * runs" instead of showing 500 beside an audience of 3,000 and leaving
+       * a merchant to guess which number is the promise.
+       */
+      remaining: Math.max(0, consentSplit.mailable.length - recipients.length),
+      /*
        * The consent split, measured over the WHOLE audience and named rather
        * than netted (§3f).
        *
@@ -1285,10 +1598,12 @@ export async function performCampaignSend(
    * rather than assuming this settled it.
    */
   {
-    const [config, window] = await Promise.all([
-      readEmailSendRateConfig(),
-      readEmailSendRateWindow(),
-    ])
+    // The configuration was read above, where it sized this batch against the
+    // new-sender ramp. One read, two controls: a second one here could answer
+    // differently inside one send, which would let a campaign be sized
+    // against one ceiling and admitted against another.
+    const config = platformRate
+    const window = await readEmailSendRateWindow()
     if (config.enabled && window.used + sendable.length > config.perHour) {
       throw new CampaignSendDeferredError(
         `The platform is sending at its hourly limit (${config.perHour}/hour). ` +
@@ -1343,6 +1658,42 @@ export async function performCampaignSend(
   }
 
   /*
+   * THE DAY'S RAMP, CLAIMED.
+   *
+   * Between the hourly claim and the monthly reservation, and the ordering is
+   * the same argument both of its neighbours make. AFTER the hourly one, so a
+   * workspace deferred for the hour has not spent a day's budget. BEFORE the
+   * monthly one, because an unreconciled claim costs whatever its window is
+   * and a day is cheaper to leak than a month.
+   *
+   * A graduated workspace claims nothing and pays no read; see
+   * `claimOrgEmailSendDay`.
+   */
+  const dayClaim = await claimOrgEmailSendDay({
+    orgId,
+    count: sendable.length,
+    ramp:
+      ramp ??
+      resolveOrgEmailRamp({
+        ageDays: null,
+        deliveredLifetime: 0,
+        platformPerHour: platformRate.perHour,
+      }),
+    enabled: platformRate.enabled,
+  })
+  if (!dayClaim.allowed) {
+    throw new CampaignSendDeferredError(
+      `This workspace may send ${dayClaim.ceiling.toLocaleString()} campaign ` +
+        `emails a day while it establishes a sending history, and has sent ` +
+        `${dayClaim.used.toLocaleString()} today. Nothing has been sent and ` +
+        'nothing has been counted — the rest goes out automatically ' +
+        'tomorrow. Transactional mail — receipts, booking reminders, ' +
+        'password resets — keeps sending.',
+      dayClaim.retryAtMs,
+    )
+  }
+
+  /*
    * THE MONTHLY CLAIM (AGL-2267), taken here and not at the pre-check above.
    *
    * As late as possible on purpose: everything between the pre-check and this
@@ -1357,8 +1708,16 @@ export async function performCampaignSend(
     count: sendable.length,
     limit: campaignSendLimit,
   })
-  if (!claim.ok) throw overCapError()
+  if (!claim.ok) {
+    // The day's claim was taken a few lines above and this campaign is not
+    // going out, so it is given back before the throw. The `finally` below
+    // has not been entered yet, which is exactly why this cannot be left to
+    // it.
+    await reconcileOrgEmailSendDay(dayClaim.reservation, 0)
+    throw overCapError()
+  }
   const reservation: CampaignSendReservation = claim.reservation
+  const dayReservation: OrgEmailSendDayReservation | null = dayClaim.reservation
 
   const variantSends: Record<string, number> = {}
   /**
@@ -1373,11 +1732,33 @@ export async function performCampaignSend(
    * already one awaited HTTP POST per person.
    */
   const reached: string[] = []
+  /**
+   * WHO THIS BATCH CONSIDERED AND WILL NOT MAIL, so the next one does not
+   * consider them again.
+   *
+   * Two populations, and the reason they belong together is what the next
+   * batch does with them. The suppression and topic filters above removed
+   * people from `sendable`; the loop below removes any address the provider
+   * would not take. Both stay at the head of a stable order, so a batch that
+   * did not record them would re-select them, spend a slot on each, and — at
+   * enough of them — address five hundred people it cannot mail and make no
+   * progress at all.
+   *
+   * A message that failed for a transient reason is settled out with the
+   * rest. That is not a new loss: before batching, a failed recipient was
+   * never retried either, because there was no second pass. What it buys is
+   * that one unreachable address cannot stall the two thousand behind it.
+   */
+  const sendableSet = new Set(sendable)
+  const settledOut: string[] = recipients.filter(
+    (email) => !sendableSet.has(email),
+  )
   let sent = 0
   /** Recipients the hourly governor refused mid-batch, if any. */
   let deferred = 0
   try {
-    for (const email of sendable) {
+    for (let index = 0; index < sendable.length; index += 1) {
+      const email = sendable[index]
       // `cid` is what lets an unsubscribe be attributed to the campaign that
       // caused it. Without it the suppression list records that somebody left
       // and nothing about which mailing they left over, which is the one
@@ -1511,9 +1892,23 @@ export async function performCampaignSend(
        * the loop continues, exactly as before.
        */
       if (rateLimitedRetryAtMs(result) !== null) {
-        deferred = sendable.length - sent
+        /*
+         * Everything from HERE ON is untouched and retryable, which is what
+         * makes it the remainder rather than a loss: the campaign schedules
+         * itself for the next window and addresses these people then.
+         * Counted from the index rather than from `sent`, so a rejection
+         * earlier in the batch is not counted twice — once as settled and
+         * again as deferred.
+         */
+        deferred = sendable.length - index
         break
       }
+      /*
+       * The provider would not take this address. Settled rather than left
+       * for the next batch — see `settledOut` above for why an address that
+       * keeps failing must not keep consuming a slot.
+       */
+      settledOut.push(email)
     }
   } finally {
     /*
@@ -1525,6 +1920,12 @@ export async function performCampaignSend(
      * `reconcileCampaignSendReservation` never throws.
      */
     await reconcileCampaignSendReservation(reservation, sent)
+    /*
+     * And the day's, for the same reason one line up. The hourly claim is
+     * deliberately NOT reconciled — its window is an hour — but a day is long
+     * enough that a failed batch would cost a new workspace the rest of it.
+     */
+    await reconcileOrgEmailSendDay(dayReservation, sent)
   }
   // Both meters, from one call, on the DELIVERED count (AGL-1438). Ahead of
   // the `recordCampaign` early return below, because a test send is a real
@@ -1539,6 +1940,19 @@ export async function performCampaignSend(
   // first. `recordMarketingSends` never throws.
   await recordMarketingSends(hostId, reached)
   await meterHostEmail(hostId, sent, 'campaign')
+  /*
+   * The DENOMINATOR every per-tenant rate divides by.
+   *
+   * Recorded on the DELIVERED count and not on what was attempted, so a
+   * bounce rate is bounces over messages that actually left. It is also the
+   * volume the new-sender ramp reads to decide which step a workspace has
+   * earned, which is why it is written from the send rather than inferred
+   * from the delivery webhook: a ramp that only moved when a provider
+   * reported back would stall a new tenant on the day the webhook was slow.
+   *
+   * Never throws, like both meters above it.
+   */
+  await recordCampaignAccepted(orgId, sent)
 
   /*
    * WHO THIS EMAIL HAS NOW REACHED, so a later send can subtract them.
@@ -1562,6 +1976,16 @@ export async function performCampaignSend(
    */
   if (options.recordCampaign !== false) {
     await recordCampaignReach(hostId, campaignId, reached, firestore)
+    /*
+     * And who it decided NOT to mail, under a field of its own.
+     *
+     * Written for every real send rather than only for a batched one, for the
+     * reason the reach record itself is: the record has to exist before
+     * anybody asks for one, and the batch that asks is the NEXT invocation of
+     * this function, which will have no way to know that these five hundred
+     * addresses were already considered.
+     */
+    await recordCampaignSkipped(hostId, campaignId, settledOut, firestore)
   }
 
   // Sends are the email variant's exposures (AGL-255).
@@ -1591,6 +2015,39 @@ export async function performCampaignSend(
     }
   }
 
+  /*==========================================
+   * WHAT HAPPENS TO THE REST OF THE AUDIENCE.
+   *
+   * The cap took the first N of the people this send may mail. Everyone past
+   * it, plus anybody an hourly cut left untouched, is the REMAINDER — and
+   * until now the remainder was simply not mailed, and a merchant with three
+   * thousand contacts pressed Send six times to reach them.
+   *
+   * The plan is pure and lives in `send-ceilings.ts` with the numbers it
+   * reasons about. It answers two things: how many are left, and whether
+   * another batch runs. The second is the one that matters, because a job
+   * that reschedules itself has exactly one interesting failure — doing it
+   * forever — and there are three ways this one stops: nothing left, the
+   * batch guard, and a batch that settled nobody.
+   *=========================================*/
+  const plan = campaignBatchPlan({
+    mailable: consentSplit.mailable.length,
+    addressed: recipients.length,
+    retryable: deferred,
+    settled: sent + settledOut.length,
+    batchesSoFar,
+  })
+  /**
+   * When the next batch may go.
+   *
+   * Now, in the ordinary case: the scheduled-campaign processor claims
+   * anything `scheduled` and due, and its next run is what continues this
+   * email. A window the send was paced by moves it out — but a send paced by
+   * the hour or the day THREW rather than reaching here, so the only reason
+   * this is not immediate is a batch that ran to the end of its own cap.
+   */
+  const nextAtMs = plan.resuming ? Date.now() : 0
+
   if (options.recordCampaign === false) {
     return {
       campaignId,
@@ -1619,9 +2076,26 @@ export async function performCampaignSend(
    * sends reached — so the sums are totals rather than double counts.
    *=========================================*/
   const additive = (value: number) =>
-    options.followUp
+    addsToExistingSend
       ? (firebaseAdmin.firestore.FieldValue.increment(value) as never)
       : value
+  /**
+   * The figures a BATCH must not add to, because it did not measure a second
+   * population — it measured a slice of the one the first batch already
+   * counted.
+   *
+   * `audienceSize` is the arithmetic that makes this concrete. A first batch
+   * over three thousand people records 3,000; a second batch sees the 2,500
+   * that are left and, adding, would record 5,500 — an audience that does not
+   * exist, under every rate on the report. The same holds for the consent
+   * split, which is measured over the whole remaining audience rather than
+   * over the capped slice.
+   *
+   * So a continuation omits them entirely and the first batch's figures
+   * stand, which is the same "recorded, not recomputed" rule the populations
+   * below are stored under: they are true of the send that happened.
+   */
+  const measuresTheAudience = !options.continuation
   await hostRef.collection('campaigns').doc(campaignId).set(
     {
       subject,
@@ -1674,12 +2148,27 @@ export async function performCampaignSend(
          * stopped at its read ceiling, so the audience is at least this and
          * the shortfall is at least the difference.
          */
-        audienceSize: additive(resolved.length),
-        ...(audienceTruncated ? { audienceSizeTruncated: true } : {}),
-        // Recorded, not silent (AGL-2409): a campaign that stopped at the
-        // hourly ceiling delivered fewer than it resolved, and the History
-        // row is the only place a merchant can find out.
-        ...(deferred ? { deferred: additive(deferred) } : {}),
+        ...(measuresTheAudience
+          ? {
+              audienceSize: additive(resolved.length),
+              ...(audienceTruncated ? { audienceSizeTruncated: true } : {}),
+            }
+          : {}),
+        /*
+         * WHAT THIS EMAIL ENDED UP NOT DELIVERING.
+         *
+         * Written only once the email has STOPPED, and as an absolute figure
+         * rather than an increment, because a shortfall is a state and not a
+         * sum. A batch that was cut short by the hourly ceiling has not
+         * fallen short of anything — the people it did not reach are in
+         * `resume.remaining` and the next run addresses them — and recording
+         * a shortfall there would leave the report carrying "held back by the
+         * hourly limit" about recipients who got the mail twenty minutes
+         * later.
+         */
+        ...(!plan.resuming && plan.remaining > 0
+          ? { deferred: plan.remaining }
+          : {}),
         ...(Object.keys(variantSends).length
           ? {
               variantSends: Object.fromEntries(
@@ -1711,10 +2200,14 @@ export async function performCampaignSend(
          * resolved audience, and `suppressed` over the capped recipient list,
          * because that is where each check actually runs.
          *=========================================*/
-        consented: additive(consentSplit.consented),
-        consentedByOperator: additive(consentSplit.consentedByOperator),
-        grandfathered: additive(consentSplit.grandfathered),
-        consentWithheld: additive(consentSplit.withheld),
+        ...(measuresTheAudience
+          ? {
+              consented: additive(consentSplit.consented),
+              consentedByOperator: additive(consentSplit.consentedByOperator),
+              grandfathered: additive(consentSplit.grandfathered),
+              consentWithheld: additive(consentSplit.withheld),
+            }
+          : {}),
         suppressed: additive(recipients.length - sendable.length),
         /*
          * That this send's links were trackable at all.
@@ -1729,7 +2222,41 @@ export async function performCampaignSend(
          */
         clickTracked: true,
       },
-      status: 'sent',
+      /*
+       * `scheduled` WHILE AN EMAIL IS STILL GOING OUT, and it is a real
+       * state rather than a convenience.
+       *
+       * The scheduled-campaign processor claims anything `scheduled` and due,
+       * and that claim is the resume beat — including for a send a merchant
+       * pressed by hand, which has no beat of its own. Reusing the state also
+       * means the existing collection-group index serves it and that Cancel
+       * already works: a merchant who decides mid-campaign that the copy is
+       * wrong can stop the rest of it, which is a thing they could not do
+       * before because there was no rest.
+       *
+       * ⚠️ IT READS AS "NOT SENT YET" UNLESS A SURFACE SAYS OTHERWISE. The
+       * `resume` map below is what makes the row honest — "reached 500 of
+       * 3,000, sending" rather than a scheduled email that has in fact
+       * already delivered five hundred messages. `campaignSendProgress` in
+       * `@aglyn/plugins-email/model` derives that sentence from these fields
+       * and is the one place it is composed.
+       */
+      status: plan.resuming ? 'scheduled' : 'sent',
+      ...(plan.resuming ? { sendAtMs: nextAtMs } : {}),
+      /*
+       * HOW FAR THIS EMAIL HAS GOT, written absolutely on every batch.
+       *
+       * Not part of `stats`, because `stats` is what the email DID and this
+       * is where it currently is. A finished email keeps the record — batches
+       * of 6, remaining 0 — so "this went out over six runs" is answerable
+       * afterwards rather than only while it is happening.
+       */
+      resume: {
+        remaining: plan.remaining,
+        batch: plan.batch,
+        nextAtMs,
+        ...(plan.stop ? { stop: plan.stop } : {}),
+      },
       /*
        * `sentAt` is WHEN THIS EMAIL WENT OUT, and a follow-up does not change
        * that. The emails list orders on it and the campaign rollup takes its
@@ -1742,7 +2269,7 @@ export async function performCampaignSend(
        * are what the detail page needs to say "sent twice, most recently on
        * the 14th" instead of presenting one date for two mailings.
        */
-      ...(options.followUp
+      ...(addsToExistingSend
         ? {
             lastSentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
             lastSentBy: options.senderUid,
@@ -1751,7 +2278,13 @@ export async function performCampaignSend(
             sentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
             sentBy: options.senderUid,
           }),
-      sendCount: additive(1),
+      /*
+       * How many times a PERSON sent this email, which is not how many
+       * batches it took. A merchant who pressed Send once and watched it go
+       * out over six runs sent it once; counting the batches would put "sent
+       * 6 times" on the detail page of a campaign nobody re-sent.
+       */
+      ...(options.continuation ? {} : { sendCount: additive(1) }),
     },
     { merge: true },
   )
@@ -1763,6 +2296,10 @@ export async function performCampaignSend(
     ...(options.followUp ? { followUp: true, alreadyReached } : {}),
     sent,
     ...(deferred ? { deferred } : {}),
+    remaining: plan.remaining,
+    resuming: plan.resuming,
+    batch: plan.batch,
+    ...(plan.resuming ? { nextAtMs } : {}),
   }
 }
 
