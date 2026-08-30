@@ -418,28 +418,6 @@ function headlineLimits(
 }
 
 /**
- * A few things the tier turns ON, under its quotas.
- *
- * Numbers alone do not say what a plan IS — "10 GB storage" and "Scheduled
- * publishing" answer different questions, and a card carrying only the first
- * reads as a capacity meter. Capped, because the point is a sense of the
- * tier: the exhaustive tick-list is the comparison grid, one click away.
- *
- * Read from the same source the grid derives its checklist from, so a flag
- * added to a tier appears here without a second edit.
- */
-function keyFeatures(
-  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
-  brand: string,
-): string[] {
-  return featureGroups(brand)
-    .flatMap((group) => group.rows)
-    .filter((row) => entitlements.features[row.key])
-    .slice(0, 5)
-    .map((row) => row.label)
-}
-
-/**
  * What moving up one tier actually BUYS, as a delta rather than a restatement.
  *
  * A card listing "3 hosts" next to a card listing "1 host" makes the reader do
@@ -452,31 +430,72 @@ function keyFeatures(
  * shape of the step, and a list long enough to need scanning is the
  * reference table again.
  */
+/**
+ * What one step up ADDS over the tier immediately to its left.
+ *
+ * ⚠️ FEATURES ONLY, and relative to the NEIGHBOUR — not to the current plan.
+ * Two reasons, both of which were visible on screen:
+ *
+ * 1. Every card already prints its own quotas directly above this list, so
+ *    including quota lines here restated "25 screens per host" twice in one
+ *    card, six inches apart. The step in capacity is legible by reading the
+ *    quota lists across the row, which is what putting them in the same order
+ *    on every card is for.
+ * 2. Measured against the CURRENT plan, the third card re-listed everything
+ *    the second card had already granted — so the two upgrade cards looked
+ *    almost identical and neither said what it alone was worth. Measured
+ *    against its neighbour, each card answers only "and what does this one
+ *    add", which is the question a ladder is read to answer.
+ */
 function upgradeGains(
   from: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   to: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   brand: string,
 ): string[] {
-  const gains: string[] = []
-  const bumped = (a: number, b: number) => b > a
-  if (bumped(from.hostLimit, to.hostLimit))
-    gains.push(
-      `${quotaLabel(to.hostLimit)} hosts, up from ${quotaLabel(from.hostLimit)}`,
+  return featureGroups(brand)
+    .flatMap((group) => group.rows)
+    .filter((row) => !from.features[row.key] && to.features[row.key])
+    .map((row) => row.label)
+}
+
+/**
+ * A few things the tier turns ON, under its quotas.
+ *
+ * Numbers alone do not say what a plan IS — "10 GB storage" and "Scheduled
+ * publishing" answer different questions, and a card carrying only the first
+ * reads as a capacity meter. Capped, because the point is a sense of the
+ * tier: the exhaustive tick-list is the comparison grid, one click away.
+ */
+function keyFeatures(
+  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+  brand: string,
+): string[] {
+  return featureGroups(brand)
+    .flatMap((group) => group.rows)
+    .filter((row) => entitlements.features[row.key])
+    .map((row) => row.label)
+}
+
+/**
+ * What the current tier does NOT include, and something above it does.
+ *
+ * A card that lists only what you have cannot tell you what you are missing,
+ * and "what am I missing" is the question a billing page exists to answer.
+ * Derived by asking what any HIGHER tier turns on that this one does not — so
+ * a flag nobody sells above you is correctly absent rather than listed as a
+ * loss, and nothing here is a feature that does not exist to be bought.
+ */
+function missingFromTier(plan: OrgPlan, brand: string): string[] {
+  const mine = PLAN_ENTITLEMENTS[plan]
+  const above = PLAN_ORDER.slice(PLAN_ORDER.indexOf(plan) + 1)
+  return featureGroups(brand)
+    .flatMap((group) => group.rows)
+    .filter(
+      (row) =>
+        !mine.features[row.key] &&
+        above.some((tier) => PLAN_ENTITLEMENTS[tier].features[row.key]),
     )
-  if (bumped(from.screensPerHost, to.screensPerHost))
-    gains.push(`${quotaLabel(to.screensPerHost)} screens per host`)
-  if (bumped(from.storagePerHostMb, to.storagePerHostMb))
-    gains.push(`${mbLabel(to.storagePerHostMb)} storage`)
-  if (bumped(from.managersPerOrg, to.managersPerOrg))
-    gains.push(`${quotaLabel(to.managersPerOrg)} team seats`)
-  if (bumped(from.contactsPerHost, to.contactsPerHost))
-    gains.push(`${quotaCount(to.contactsPerHost)} contacts`)
-  // Newly-ticked flags, read from the same source the checklist derives from,
-  // so a feature added to a tier shows up here without a second edit.
-  for (const row of featureGroups(brand).flatMap((group) => group.rows)) {
-    if (!from.features[row.key] && to.features[row.key]) gains.push(row.label)
-  }
-  return gains.slice(0, 7)
+    .map((row) => row.label)
 }
 
 /**
@@ -500,6 +519,24 @@ function upgradeGains(
  * pattern and would also lose the downsell the retention funnel depends on
  * (AGL-1863) — what changes is which view is the DEFAULT.
  */
+/**
+ * How many rows a card shows before it says how many it is holding back.
+ *
+ * ⚠️ A TRUNCATED LIST THAT DOES NOT SAY SO IS A LIE BY OMISSION, and on the
+ * "Not in your plan" list specifically it is the expensive direction: a
+ * customer reading six things they lack, with no sign there are more, is
+ * being under-sold by the page that exists to sell them.
+ */
+const CARD_ROW_CAP = 6
+
+/** The rows to draw, plus the "and N more" line when the cap bit. */
+function capped(rows: string[]): { shown: string[]; more: number } {
+  return {
+    shown: rows.slice(0, CARD_ROW_CAP),
+    more: Math.max(0, rows.length - CARD_ROW_CAP),
+  }
+}
+
 /** A rung in the focused view: a self-serve tier, or Enterprise above them. */
 type FocusedRung = OrgPlan | 'enterprise'
 
@@ -522,15 +559,19 @@ type FocusedRung = OrgPlan | 'enterprise'
  * be showing a customer a decision they cannot make from this page.
  */
 function focusedRungs(plan: OrgPlan, enterprise: boolean): FocusedRung[] {
-  if (enterprise) return []
+  // An Enterprise org is shown its own plan and nothing else. Every rung
+  // below it is a downgrade it cannot self-serve, and the one thing this page
+  // could offer it — a step up — does not exist.
+  if (enterprise) return ['enterprise']
   const ladder: FocusedRung[] = [...PLAN_ORDER, 'enterprise']
   const at = ladder.indexOf(plan)
   if (at < 0) return []
-  const above = ladder.slice(at + 1, at + 3)
-  // Back-fill downward only when the top of the ladder cut the walk short.
-  const short = 3 - (1 + above.length)
-  const below = short > 0 ? ladder.slice(Math.max(0, at - short), at) : []
-  return [...below, plan, ...above]
+  // Current plus the next two, and NOTHING below. A shorter row at the top of
+  // the ladder is the honest shape: Agency has one step left, so it shows
+  // one. Padding it out with a downgrade would make the cheapest thing on
+  // screen the only alternative on offer, which is the opposite of the page's
+  // job — the way down is still one click away, named and counted.
+  return ladder.slice(at, at + 3)
 }
 
 /**
@@ -543,8 +584,14 @@ function focusedRungs(plan: OrgPlan, enterprise: boolean): FocusedRung[] {
  */
 type RungRole = 'current' | 'recommended' | 'higher' | 'lower' | 'enterprise'
 
-function rungRole(rung: FocusedRung, plan: OrgPlan): RungRole {
-  if (rung === 'enterprise') return 'enterprise'
+function rungRole(
+  rung: FocusedRung,
+  plan: OrgPlan,
+  enterpriseOrg: boolean,
+): RungRole {
+  // The Enterprise card is a sales card to everyone except the org that is
+  // already on it, for whom it is simply their plan.
+  if (rung === 'enterprise') return enterpriseOrg ? 'current' : 'enterprise'
   if (rung === plan) return 'current'
   // Positions on the LADDER, never positions in the rendered array — those
   // two are not the same number, and confusing them made every rung read as
@@ -554,32 +601,6 @@ function rungRole(rung: FocusedRung, plan: OrgPlan): RungRole {
   const currently = PLAN_ORDER.indexOf(plan)
   if (at < currently) return 'lower'
   return at === currently + 1 ? 'recommended' : 'higher'
-}
-
-/**
- * What the current tier does NOT include, and something above it does.
- *
- * A card that lists only what you have cannot tell you what you are missing,
- * and "what am I missing" is the question a billing page exists to answer.
- * Derived by asking what any HIGHER tier turns on that this one does not — so
- * a flag nobody sells above you is correctly absent rather than listed as a
- * loss, and nothing here is a feature that does not exist to be bought.
- *
- * Rendered on the current card only. On an upgrade card the same information
- * is already the gains list, from the other direction.
- */
-function missingFromTier(plan: OrgPlan, brand: string): string[] {
-  const mine = PLAN_ENTITLEMENTS[plan]
-  const above = PLAN_ORDER.slice(PLAN_ORDER.indexOf(plan) + 1)
-  return featureGroups(brand)
-    .flatMap((group) => group.rows)
-    .filter(
-      (row) =>
-        !mine.features[row.key] &&
-        above.some((tier) => PLAN_ENTITLEMENTS[tier].features[row.key]),
-    )
-    .slice(0, 6)
-    .map((row) => row.label)
 }
 
 /**
@@ -600,6 +621,7 @@ function missingFromTier(plan: OrgPlan, brand: string): string[] {
  */
 function FocusedTierView(props: {
   currentTier: OrgPlan
+  enterpriseOrg: boolean
   rungs: FocusedRung[]
   interval: 'month' | 'year'
   taglines: Record<OrgPlan, string>
@@ -611,6 +633,7 @@ function FocusedTierView(props: {
 }) {
   const {
     currentTier,
+    enterpriseOrg,
     rungs,
     interval,
     taglines,
@@ -632,9 +655,41 @@ function FocusedTierView(props: {
   return (
     <>
       {rungs.map((rung, index) => {
-        const role = rungRole(rung, currentTier)
+        const role = rungRole(rung, currentTier, enterpriseOrg)
         const label =
           rung === 'enterprise' ? 'Enterprise' : PLAN_LABELS[rung as OrgPlan]
+        /*
+         * An upgrade card states its DELTA over the card to its left; every
+         * other card states what it simply has. `adds` is that distinction,
+         * and it decides the heading, the colour and the list in one place so
+         * the three cannot disagree.
+         */
+        const leftward = rungs[index - 1]
+        const adds =
+          (role === 'recommended' || role === 'higher') &&
+          leftward !== undefined &&
+          leftward !== 'enterprise'
+        const gained = adds
+          ? upgradeGains(
+              PLAN_ENTITLEMENTS[leftward as OrgPlan],
+              PLAN_ENTITLEMENTS[rung as OrgPlan],
+              brand,
+            )
+          : []
+        const tickRows = adds
+          ? // A tier can add capacity and no new flags. Saying so beats an
+            // empty section, which reads as a rendering fault.
+            gained.length
+            ? gained
+            : // A tier can add capacity and no new flags; the heading has
+              // already said what it builds on, so this only has to say what
+              // kind of step it is.
+              ['Higher limits across the board']
+          : rung === 'enterprise'
+            ? ENTERPRISE_HIGHLIGHTS.slice(0, 5).map(
+                (highlight) => highlight.label,
+              )
+            : keyFeatures(PLAN_ENTITLEMENTS[rung as OrgPlan], brand)
         return (
           <Grid key={String(rung)} size={{ xs: 12, md: span }}>
             <Card
@@ -729,6 +784,18 @@ function FocusedTierView(props: {
                   >
                     {'Contact us'}
                   </Button>
+                ) : rung === 'enterprise' ? (
+                  // Already on it. Changing this agreement is a conversation,
+                  // not a button, so the card says where that happens.
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    href={ENTERPRISE_CONTACT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {'Contact us to change'}
+                  </Button>
                 ) : (
                   <Button fullWidth disabled>
                     {'Your plan'}
@@ -771,26 +838,21 @@ function FocusedTierView(props: {
                     straight across three cards instead of re-finding the
                     shape on each one. */}
                 <Divider sx={{ my: 1.5 }} />
+                {/* The heading carries the cumulativeness. Without it, a
+                    card listing only its DELTA reads as a short feature list
+                    rather than as everything below it plus these — which is
+                    the misreading the delta itself invites. */}
                 <Typography
                   variant="overline"
-                  color={role === 'recommended' ? 'secondary' : 'text.secondary'}
-                  sx={{ display: 'block' }}
+                  color={adds ? 'secondary' : 'text.secondary'}
+                  sx={{ display: 'block', lineHeight: 1.4 }}
                 >
-                  {role === 'recommended' ? 'What you gain' : 'Included'}
+                  {adds
+                    ? `Everything in ${PLAN_LABELS[leftward as OrgPlan]}, plus`
+                    : 'Included'}
                 </Typography>
                 <Stack spacing={0.75} sx={{ mt: 0.75 }}>
-                  {(role === 'recommended'
-                    ? upgradeGains(
-                        current,
-                        PLAN_ENTITLEMENTS[rung as OrgPlan],
-                        brand,
-                      )
-                    : rung === 'enterprise'
-                      ? ENTERPRISE_HIGHLIGHTS.slice(0, 5).map(
-                          (highlight) => highlight.label,
-                        )
-                      : keyFeatures(PLAN_ENTITLEMENTS[rung as OrgPlan], brand)
-                  ).map((line) => (
+                  {capped(tickRows).shown.map((line) => (
                     <Stack
                       key={line}
                       direction="row"
@@ -805,6 +867,15 @@ function FocusedTierView(props: {
                       <Typography variant="body2">{line}</Typography>
                     </Stack>
                   ))}
+                  {capped(tickRows).more ? (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ pl: 4 }}
+                    >
+                      {`and ${capped(tickRows).more} more`}
+                    </Typography>
+                  ) : null}
                 </Stack>
 
                 {role === 'current' &&
@@ -819,26 +890,39 @@ function FocusedTierView(props: {
                       {'Not in your plan'}
                     </Typography>
                     <Stack spacing={0.75} sx={{ mt: 0.75 }}>
-                      {missingFromTier(currentTier, brand).map((line) => (
-                        <Stack
-                          key={line}
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'flex-start' }}
+                      {capped(missingFromTier(currentTier, brand)).shown.map(
+                        (line) => (
+                          <Stack
+                            key={line}
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'flex-start' }}
+                          >
+                            {/* A cross, not a dash. A dash reads as "not
+                                applicable"; the point of this list is that
+                                these are things you are going without. */}
+                            <MdiIcon
+                              color="error"
+                              fontSize="small"
+                              path={ICON_VARIANT_CLOSE.path}
+                            />
+                            <Typography variant="body2" color="text.secondary">
+                              {line}
+                            </Typography>
+                          </Stack>
+                        ),
+                      )}
+                      {capped(missingFromTier(currentTier, brand)).more ? (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ pl: 4 }}
                         >
-                          {/* A cross, not a dash. A dash reads as "not
-                              applicable"; the point of this list is that
-                              these are things you are going without. */}
-                          <MdiIcon
-                            color="error"
-                            fontSize="small"
-                            path={ICON_VARIANT_CLOSE.path}
-                          />
-                          <Typography variant="body2" color="text.secondary">
-                            {line}
-                          </Typography>
-                        </Stack>
-                      ))}
+                          {`and ${
+                            capped(missingFromTier(currentTier, brand)).more
+                          } more`}
+                        </Typography>
+                      ) : null}
                     </Stack>
                   </>
                 ) : null}
@@ -1012,7 +1096,9 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
    */
   const rungs = plan ? focusedRungs(plan, enterprise) : []
   const canFocus =
-    currentIndex >= 0 && !enterprise && highlightIndex < 0 && rungs.length > 0
+    (enterprise || currentIndex >= 0) &&
+    highlightIndex < 0 &&
+    rungs.length > 0
   const [compareAll, setCompareAll] = useState(() => !canFocus)
 
   if (!compareAll && plan) {
@@ -1020,6 +1106,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
       <Grid container spacing={2} id="plans">
         <FocusedTierView
           currentTier={plan}
+          enterpriseOrg={enterprise}
           rungs={rungs}
           interval={interval}
           taglines={taglines}

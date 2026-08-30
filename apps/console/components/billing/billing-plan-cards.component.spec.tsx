@@ -37,7 +37,7 @@ import {
 } from '@aglyn/aglyn/app-utils/platform-brand'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { BillingPlanCardsComponent } from './billing-plan-cards.component'
 
 /**
@@ -145,20 +145,47 @@ describe('the page opens on the decision, not the catalogue', () => {
     expect(cardShown('Enterprise')).toBe(true)
   })
 
-  it('on the top self-serve tier, back-fills one downward', () => {
+  it('the top self-serve tier shows itself and the one step left', () => {
     renderCards({ plan: 'agency' })
-    expect(cardShown('Advanced')).toBe(true)
     expect(cardShown('Agency')).toBe(true)
     expect(cardShown('Enterprise')).toBe(true)
+    // A shorter row is the honest shape. Padding it with a downgrade would
+    // make the cheapest thing on screen the only alternative on offer.
+    expect(cardShown('Advanced')).toBe(false)
     expect(cardShown('Scale')).toBe(false)
   })
 
-  it('names what the step up buys, rather than restating the tier', () => {
+  it('an upgrade card lists what it ADDS, not what it also has', () => {
+    renderCards({ plan: 'free' })
+    // Screen versioning is off on Free and on from Pro up, so the Pro card
+    // earns it. Starter does not have it, so Starter must not claim it.
+    expect(screen.getByText('Everything in Free, plus')).toBeTruthy()
+    expect(screen.queryAllByText('Screen versioning').length).toBeGreaterThan(0)
+  })
+
+  /**
+   * The duplication that made the card unreadable: the quota rows are printed
+   * directly above this list, so repeating them here said "25 screens per
+   * host" twice in one card, six inches apart.
+   */
+  it('does not restate a quota the same card already printed', () => {
+    renderCards({ plan: 'free' })
+    // One occurrence per card that lists it as a limit — never a second copy
+    // inside that card's own gains list.
+    expect(screen.queryAllByText(/up from/)).toHaveLength(0)
+    expect(screen.queryAllByText('25 screens per host')).toHaveLength(1)
+  })
+
+  /**
+   * Measured against the CURRENT plan, the third card re-listed everything
+   * the second had already granted, so the two upgrade cards looked nearly
+   * identical and neither said what it alone was worth.
+   */
+  it('the third card does not repeat what the second already granted', () => {
     renderCards({ plan: 'starter' })
-    // The delta is the whole point: a card saying "3 hosts" beside one saying
-    // "1 host" makes the reader subtract.
-    expect(screen.getByText('What you gain')).toBeTruthy()
-    expect(screen.queryAllByText(/up from/).length).toBeGreaterThan(0)
+    // Starter already has Custom domain, so neither upgrade card may bill it
+    // as its own gain — one occurrence, in Starter's own Included list.
+    expect(screen.queryAllByText('Custom domain')).toHaveLength(1)
   })
 
   it('exactly one contained control, and it is the step up', () => {
@@ -226,32 +253,24 @@ describe('the page opens on the decision, not the catalogue', () => {
     ).toBeNull()
   })
 
-  it('an enterprise org has no self-serve step to recommend', () => {
-    renderCards({ plan: 'pro', enterprise: true })
-    expect(cardShown('Agency')).toBe(true)
-    expect(
-      screen.queryByRole('button', { name: /Compare all/ }),
-    ).toBeNull()
-  })
-
   it('a deep link lands on the card it named (AGL-1117)', () => {
     renderCards({ plan: 'pro', highlight: 'agency' })
     expect(cardShown('Agency')).toBe(true)
   })
 
   /**
-   * The back-filled rung under Agency is a DOWNGRADE, and the first version
-   * of the role logic compared a position in the rendered array against a
-   * position on the ladder — so it offered "Upgrade to Advanced" to an
-   * Agency org, and nothing anywhere was ever marked recommended.
+   * No rung is ever below the current one, so no card here can offer a
+   * downgrade. The route down is the compare control, where it is named,
+   * counted and collapsed — never a peer of an upgrade on the opening view.
    */
-  it('the rung below the top tier is a downgrade, quietly', () => {
-    renderCards({ plan: 'agency' })
-    const down = screen.getByRole('button', { name: /Downgrade to Advanced/ })
-    expect(down.className).toMatch(/MuiButton-text/)
-    expect(
-      screen.queryByRole('button', { name: /Upgrade to Advanced/ }),
-    ).toBeNull()
+  it('the focused view never offers a downgrade', () => {
+    for (const plan of ['free', 'pro', 'agency'] as const) {
+      renderCards({ plan })
+      expect(screen.queryAllByRole('button', { name: /Downgrade/ })).toHaveLength(
+        0,
+      )
+      cleanup()
+    }
   })
 
   /**
@@ -259,11 +278,13 @@ describe('the page opens on the decision, not the catalogue', () => {
    * another breaks the comparison. Every card carries a heading over its tick
    * list; only the wording differs.
    */
-  it('every card labels its tick list', () => {
+  it('every card labels its tick list, and both upgrades label it alike', () => {
     renderCards({ plan: 'starter' })
-    // Two neighbours say Included, the recommended one says what it adds.
-    expect(screen.queryAllByText('Included')).toHaveLength(2)
-    expect(screen.getByText('What you gain')).toBeTruthy()
+    // The current card states what it has; each upgrade card names what it
+    // BUILDS ON, so a short delta reads as cumulative rather than as a gap.
+    expect(screen.queryAllByText('Included')).toHaveLength(1)
+    expect(screen.getByText('Everything in Starter, plus')).toBeTruthy()
+    expect(screen.getByText('Everything in Pro, plus')).toBeTruthy()
   })
 
   it('says what the current tier is MISSING, not only what it has', () => {
@@ -280,13 +301,18 @@ describe('the page opens on the decision, not the catalogue', () => {
     expect(screen.queryByText('Not in your plan')).toBeNull()
   })
 
-  it('an enterprise org is offered no ladder at all', () => {
+  it('an enterprise org sees its own plan and nothing else', () => {
     renderCards({ plan: 'pro', enterprise: true })
-    // Nothing here is a step it can take — that agreement changes by talking
-    // to us — so the page does not open on a decision it cannot make.
+    expect(cardShown('Enterprise')).toBe(true)
+    // Every rung below is a downgrade it cannot self-serve, and there is no
+    // step up to offer, so the page opens on no decision at all.
+    expect(cardShown('Pro')).toBe(false)
+    expect(cardShown('Agency')).toBe(false)
     expect(
       screen.queryAllByRole('button', { name: /^Upgrade to/ }),
     ).toHaveLength(0)
+    // The ladder is still reachable — it just is not what it opens on.
+    expect(screen.getByRole('button', { name: /Compare all/ })).toBeTruthy()
   })
 })
 
