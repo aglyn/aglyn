@@ -17,6 +17,7 @@
 
 export * from './lib/send-email'
 export * from './lib/send-rate'
+export * from './lib/sending-domain'
 export * from './lib/email-health'
 export * from './lib/system-email-catalog'
 export * from './lib/tenant-email-catalog'
