@@ -142,6 +142,63 @@ describe('creating a form creates a design, not just a declaration', () => {
   })
 })
 
+/**
+ * The check is only worth having if it stands BETWEEN the author and the
+ * write.
+ *
+ * `form-contract.spec.ts` proves the rule is right. Nothing there proves it
+ * runs, and a contract check that is called after the publish, or whose
+ * result is computed and not acted on, is indistinguishable from no check at
+ * all while looking exactly like one in review.
+ */
+describe('the besigner publish path is gated on the contract', () => {
+  const FORM_BESIGNER_PAGE =
+    'app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx'
+
+  const source = () => read(FORM_BESIGNER_PAGE)
+
+  it('runs the check before the write that publishes', () => {
+    const text = source()
+    const checkedAt = text.indexOf('checkFormContract')
+    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
+    expect(checkedAt).toBeGreaterThan(-1)
+    expect(publishedAt).toBeGreaterThan(-1)
+    expect(checkedAt).toBeLessThan(publishedAt)
+  })
+
+  it('returns on a violation rather than only reporting one', () => {
+    // A computed-and-ignored result is the shape this is guarding against.
+    // The early return has to sit between the two positions above.
+    const text = source()
+    const refusedAt = text.indexOf('if (!Aglyn.formContractIsSatisfied(violations)) {')
+    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
+    expect(refusedAt).toBeGreaterThan(-1)
+    expect(refusedAt).toBeLessThan(publishedAt)
+    expect(text.slice(refusedAt, publishedAt)).toContain('return enqueueSnackbar')
+  })
+
+  it('makes the refusal persist, so it cannot be missed', () => {
+    // An auto-dismissed warning is how somebody walks away believing the form
+    // shipped.
+    const text = source()
+    const refusedAt = text.indexOf('if (!Aglyn.formContractIsSatisfied(violations)) {')
+    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
+    expect(text.slice(refusedAt, publishedAt)).toContain('persist: true')
+  })
+
+  it('publishes the declaration derived from the same tree it checked', () => {
+    // `fields` is what the submit route reads and what the detail page's
+    // consent picker offers. Writing `nodes` without it is how the two drift
+    // straight back apart after the check passed.
+    const text = source()
+    const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
+    const write = text.slice(publishedAt, publishedAt + 400)
+    expect(text).toContain('formFieldDeclsFromNodes')
+    expect(write).toContain('fields,')
+    expect(write).toContain('nodes: publishedNodes')
+  })
+})
+
 describe('the rules let a form version be written at all', () => {
   const formsBlock = () => {
     const source = readRepo(RULES)
