@@ -99,12 +99,14 @@ import {
   listSendingDomains,
   readDmarcPolicy,
   recordIssuedSendingDomain,
+  recordSendingDomainIssueFailure,
   releaseSendingDomain,
   requestSendingDomain,
   resolveHostSendingIdentity,
   sendingDkimSelector,
   verifySendingDomain,
 } from './sending-domains'
+import { sendingDomainRequiredRecords } from '@aglyn/shared-util-email'
 
 const ORG = 'org123'
 const DOMAIN = 'acme.com'
@@ -392,6 +394,165 @@ describe('the record', () => {
     const domains = await listSendingDomains(ORG)
 
     expect(domains.map((entry) => entry.domain).sort()).toEqual(['acme.com', 'other.com'])
+  })
+})
+
+/*==========================================
+  Recording what a provider issued — or refused
+==========================================*/
+
+/**
+ * The seam the console's provider driver feeds.
+ *
+ * Its whole job is that there is no path from a provider that issued nothing
+ * to a domain that says it has records. `records-issued` is a promise the
+ * customer acts on: they open their registrar because we told them there is
+ * something to publish.
+ */
+describe('the issuing seam', () => {
+  it('records the key AND the selector the provider actually signs under', async () => {
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+
+    // Resend signs on a selector of its own choosing, not the per-org name
+    // `sendingDkimSelector` proposes.
+    const result = await recordIssuedSendingDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      dkimPublicKey: DKIM_KEY,
+      dkimSelector: 'resend',
+      providerDomainId: 'd91cd9bd',
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.record.status).toBe('records-issued')
+    expect(result.record.dkimSelector).toBe('resend')
+    expect(result.record.providerDomainId).toBe('d91cd9bd')
+
+    const view = await getSendingDomain(ORG, DOMAIN)
+    expect(view.records[1].name).toBe(`resend._domainkey.${DOMAIN}`)
+  })
+
+  it('keeps the proposed selector when the provider named none', async () => {
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+
+    const result = await recordIssuedSendingDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      dkimPublicKey: DKIM_KEY,
+    })
+
+    expect(result.record.dkimSelector).toBe(SELECTOR)
+  })
+
+  /**
+   * The invariant the whole seam exists for: a domain that reports
+   * `records-issued` HAS records. A status saying otherwise beside an empty
+   * DKIM row is a blank the customer reads as our bug, and it can never
+   * verify — `assessSendingRecords` refuses it from the other side.
+   */
+  it('refuses to reach records-issued without a publishable DKIM record', async () => {
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+
+    const empty = await recordIssuedSendingDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      dkimPublicKey: '   ',
+    })
+
+    expect(empty.status).toBe(400)
+    expect((await getSendingDomain(ORG, DOMAIN)).record.status).toBe('requested')
+  })
+
+  it('never overwrites a key the customer may already have published', async () => {
+    await seedIssued()
+
+    const clobber = await recordIssuedSendingDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      dkimPublicKey: 'ADIFFERENTKEYENTIRELY',
+    })
+
+    expect(clobber.status).toBe(409)
+    expect((await getSendingDomain(ORG, DOMAIN)).record.dkimPublicKey).toBe(DKIM_KEY)
+  })
+
+  it('is a no-op when the same key arrives twice, so a retry is safe', async () => {
+    await seedIssued()
+
+    const again = await recordIssuedSendingDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      dkimPublicKey: DKIM_KEY,
+    })
+
+    expect(again.status).toBe(200)
+    expect(again.record.status).toBe('records-issued')
+  })
+
+  /**
+   * A `4xx` from the provider means no key exists. The domain stays where it
+   * was — refusing sends, with nothing to publish — and carries a reason,
+   * rather than a status that says the work is done.
+   */
+  it('records a provider failure as a REASON, never as a status', async () => {
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+
+    await recordSendingDomainIssueFailure({
+      orgId: ORG,
+      domain: DOMAIN,
+      detail: 'http-403:restricted_api_key',
+    })
+
+    const view = await getSendingDomain(ORG, DOMAIN)
+    expect(view.record.status).toBe('requested')
+    expect(view.record.dkimPublicKey).toBeNull()
+    expect(view.record.lastIssueError).toBe('http-403:restricted_api_key')
+    // Nothing publishable, so nothing a surface could print as a record.
+    expect(sendingDomainRequiredRecords(view.record)).toHaveLength(2)
+  })
+
+  it('a failure on a verified domain does not unverify it', async () => {
+    await seedIssued()
+    dnsAllPublished()
+    await verifySendingDomain(ORG, DOMAIN)
+
+    await recordSendingDomainIssueFailure({ orgId: ORG, domain: DOMAIN, detail: 'timeout' })
+
+    expect((await getSendingDomain(ORG, DOMAIN)).record.status).toBe('verified')
+  })
+
+  it('clears a stale failure once a key is recorded', async () => {
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+    await recordSendingDomainIssueFailure({ orgId: ORG, domain: DOMAIN, detail: 'timeout' })
+
+    await recordIssuedSendingDomain({ orgId: ORG, domain: DOMAIN, dkimPublicKey: DKIM_KEY })
+
+    expect((await getSendingDomain(ORG, DOMAIN)).record.lastIssueError).toBeNull()
+  })
+
+  /**
+   * The store is the last place a leaked credential could land, and a
+   * Firestore document is the worst of the three places it could land in —
+   * it outlives the request, the log retention and the deploy.
+   */
+  it('redacts anything key-shaped before it reaches the document', async () => {
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+
+    await recordSendingDomainIssueFailure({
+      orgId: ORG,
+      domain: DOMAIN,
+      detail: 'rejected Bearer re_domains_notarealkey_0123456789abcdef',
+    })
+
+    const stored = String((await getSendingDomain(ORG, DOMAIN)).record.lastIssueError)
+    expect(stored).not.toContain('notarealkey')
+    expect(stored).toContain('[redacted]')
+  })
+
+  it('will not write a failure against a domain with no claim', async () => {
+    await recordSendingDomainIssueFailure({ orgId: ORG, domain: DOMAIN, detail: 'timeout' })
+
+    expect(await getSendingDomain(ORG, DOMAIN)).toBeNull()
   })
 })
 

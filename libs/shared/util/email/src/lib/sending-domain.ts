@@ -121,17 +121,64 @@ export interface SendingDomainRecord {
    * The DKIM selector this domain signs with. Per-org rather than a shared
    * `resend`, so two orgs verifying the same name cannot collide on one
    * record — and so revoking one org's identity cannot invalidate another's.
+   *
+   * Requested per-org, but ISSUED by the provider: a provider that signs on a
+   * selector of its own choosing overwrites this when the key is recorded,
+   * because the record the customer publishes has to be the record the
+   * provider will actually sign under. See `sendingDomainProvider`.
    */
   dkimSelector: string
   /** The public key the provider issued, base64, without the `p=` prefix. */
   dkimPublicKey?: string | null
   /** The provider's return-path host for bounce and complaint routing. */
   returnPathHost?: string | null
+  /**
+   * The provider's own id for the domain object it created.
+   *
+   * Stored so a re-request can recognize a domain this deployment already
+   * created rather than creating a second one, and so an operator can find
+   * the object in the provider's dashboard. Never a credential.
+   */
+  providerDomainId?: string | null
   createdAtMs?: number | null
   verifiedAtMs?: number | null
   lastCheckedAtMs?: number | null
+  /**
+   * Why the last issuing attempt did not produce a key.
+   *
+   * A REASON on a record still at `requested`, never a half-written
+   * `records-issued`. A provider that answered `4xx` has issued nothing, and
+   * a domain whose status says records exist while its DKIM value is empty
+   * would print a blank record for the customer to publish — which reads as
+   * our bug and cannot ever verify.
+   */
+  lastIssueError?: string | null
+  lastIssueAtMs?: number | null
   /** What the last conclusive lookup saw, for a surface that shows the gap. */
   lastMissing?: string[] | null
+}
+
+/**
+ * A provider's failure reduced to something safe to store, log and print.
+ *
+ * Provider error bodies are attacker-adjacent text we did not write, and the
+ * one thing that must never appear in a Firestore document, a log line or an
+ * admin surface is the credential that made the call. Vendor keys have a
+ * recognizable shape — a short prefix, an underscore, a long opaque body
+ * (`re_`, `sk_`, `rk_`, `whsec_`) — and an `Authorization` header echoed into
+ * an error message carries the whole thing.
+ *
+ * This is the LAST line rather than the only one: callers build their detail
+ * from a fixed vocabulary and never from response prose, so nothing should
+ * reach here that needs redacting. A guard that is only ever a no-op in
+ * practice is exactly the guard worth having on a secret.
+ */
+export function safeProviderDetail(input: string | null | undefined): string {
+  return String(input ?? '')
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/\b[A-Za-z]{2,8}_[A-Za-z0-9]{12,}\b/g, '[redacted]')
+    .trim()
+    .slice(0, 120)
 }
 
 /**

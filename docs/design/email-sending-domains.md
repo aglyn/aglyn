@@ -55,11 +55,17 @@ matters commercially. Per-site alone would make an agency repeat the same DNS
 chore for every site on one client's domain. Splitting them costs one extra
 field and answers both.
 
-Two orgs verifying the same name is not a takeover vector, because each must
-publish a DKIM record in that zone under a **per-org selector**
-(`aglyn-{orgId}._domainkey.<domain>`). A selector shared between orgs would let
-whichever verified second inherit the first's proof; per-org selectors make
-each verification independent.
+Two orgs verifying the same name was to be kept independent by a **per-org
+selector** (`aglyn-{orgId}._domainkey.<domain>`): a selector shared between
+orgs lets whichever verified second inherit the first's proof.
+
+⚠️ **The provider does not honor that.** Resend signs on a selector of its own
+choosing and holds one domain object per name for the whole account, so once a
+key is issued the stored selector is the provider's and two orgs on one name
+share it. `sendingDkimSelector` now proposes rather than decides. Each org must
+still publish the record in that zone, so a domain nobody controls cannot be
+taken over — but an org that claims a name a second time inherits a
+verification the first org's DNS satisfies. See "Issuing the key" below.
 
 ---
 
@@ -73,7 +79,7 @@ and documents the three separate issues that came from breaking it.
 | Record | Host | Value | Required |
 | --- | --- | --- | --- |
 | **SPF** | `send.<domain>` | `v=spf1 include:amazonses.com ~all` | yes |
-| **DKIM** | `aglyn-{orgId}._domainkey.<domain>` | `p=<issued public key>` | yes |
+| **DKIM** | `<issued selector>._domainkey.<domain>` — `aglyn-{orgId}` until a provider names its own | `p=<issued public key>` | yes |
 | **Return path** | `send.<domain>` | `MX 10 feedback-smtp.us-east-1.amazonses.com` | yes |
 | **DMARC** | `_dmarc.<domain>` | **read, never written** — `v=DMARC1; p=none; rua=…` offered as a suggestion | no |
 
@@ -144,39 +150,103 @@ string.
 | DMARC read and the report-only suggestion | same |
 | The identity decision and the refusal | same (`resolveSendingIdentity`) |
 | The record-vs-live comparison, three-outcome | same (`assessSendingRecords`) |
-| Firestore store, DNS verification, per-org selector | `libs/tenant/data/admin/src/lib/server/sending-domains.ts` |
+| Firestore store, DNS verification, the proposed per-org selector | `libs/tenant/data/admin/src/lib/server/sending-domains.ts` |
+| Recording an issued key, and recording a provider refusal without a status | same (`recordIssuedSendingDomain`, `recordSendingDomainIssueFailure`) |
 | Pinned-resolver TXT/MX lookup, extracted from two inline copies | `libs/tenant/data/admin/src/lib/server/dns-probe.ts` |
 | The send path's refusal and custom-address send | `libs/shared/util/email/src/lib/send-email.ts` |
 | The campaign `409`, and `preview` reporting which identity is in use | `libs/plugins/marketing/src/lib/server/campaign-send.ts` |
 | Request / list / verify / release, with the records in the response | `apps/console/app/api/email/sending-domains/route.ts` |
 | Client-deny rules for the subcollection, with a rules test | `cloud/firebase-firestore.rules` |
+| The provider seam that issues the key, plus a `resend` driver and a `none` | `apps/console/utils/server/sending-domain-provider.ts` |
+| The join from that driver to the record | `apps/console/utils/server/issue-sending-domain.ts` |
+| The credential's isolation from the tenant runtime, asserted by a tree sweep | `apps/console/specs/sending-domain-credential-isolation.spec.ts` |
+
+---
+
+## Issuing the key: built, and inert until a credential exists
+
+The provider call is now written, behind the same kind of seam as
+`AGLYN_DOMAIN_PROVIDER`: `AGLYN_SENDING_DOMAIN_PROVIDER` selects `resend` or
+`none`, and with the variable unset the driver is chosen by whether the
+credential is present. **One real driver and a `none` is the whole set.** A
+self-host operator fronting a different mail provider writes a third; imagining
+it now would be design against a provider nobody has.
+
+`recordIssuedSendingDomain` is still the seam that moves a domain from
+`requested` to `records-issued`, and it still takes what it was given rather
+than calling anything — an operator can complete the step by hand on a
+deployment that has no key at all.
+
+### The credential is the console's, and structurally so
+
+Creating a domain needs a key that can create things. `RESEND_API_KEY` cannot:
+it is **send-only restricted**, which is exactly why `email-health.ts` can use
+the domains endpoint as a read-only credential probe, "because it cannot create
+anything". So the driver reads a separate **`RESEND_DOMAINS_API_KEY`**, and a
+key that can create a domain can also list every domain in the account and mint
+further keys.
+
+That key must never be reachable from the tenant runtime, which serves
+published sites to the public internet. The isolation is a property of where
+the file lives rather than a convention:
+
+- the driver is in `apps/console/utils/server/`, and `tsconfig.base.json` maps
+  `@aglyn/*` to `libs/*` and nothing to an app, so the tenant app has no
+  specifier for it; nx's `enforce-module-boundaries` forbids app→app besides;
+- the seam it feeds, `recordIssuedSendingDomain`, is in
+  `@aglyn/tenant-data-admin` — which the tenant runtime **does** import — and
+  takes the key as an argument, reading no environment at all;
+- a spec sweeps `apps`, `libs`, `tools` and `cloud` and fails if the variable
+  is read anywhere but that one file, or named anywhere outside the console.
+
+### What the driver does and does not take from the provider
+
+**Only the DKIM record.** SPF and the return path come from
+`sendingSpfInclude()` and `sendingReturnPathHost()`, which is what
+`sendingDnsRecords` prints and what the verifier compares against; taking them
+from a response would put a second source of truth behind the one function that
+exists so there is only one.
+
+The DKIM **selector** comes from the provider too, not just the key. Resend
+signs on a selector of its own choosing, so `sendingDkimSelector` now
+*proposes* the per-org name and the issued one is what is stored — printing our
+proposal against the provider's key would give the customer a record at a name
+nothing ever signs from, which is a verification that can never pass.
+
+⚠️ **That re-opens the collision the per-org selector was written to close.**
+Resend holds one domain object per name for the whole account, so two orgs
+claiming the same name share a key and a selector. Each still has to publish
+that record in the zone to verify, so it is not a takeover of a domain nobody
+controls; it does mean the second org inherits a verification the first org's
+DNS satisfies. Closing it needs a provider that accepts a selector, or an
+org-level claim on the name. Neither is built.
+
+### A failure leaves the record alone
+
+There is no path from a provider error to `records-issued`. A `4xx`/`5xx`
+writes `lastIssueError` — a short code from a fixed vocabulary, never the
+provider's prose and never a credential — and the domain stays `requested`,
+where it has nothing to publish and refuses sends. `recordIssuedSendingDomain`
+refuses outright to reach `records-issued` unless
+`sendingDomainRequiredRecords` yields a DKIM record with a value, so **a domain
+that reports `records-issued` has records.**
+
+Idempotency is resolved against our own record before the network: a domain
+that already has a key never reaches the provider, so a second click creates no
+second domain and cannot overwrite a key the customer may already have
+published. A `422` duplicate is adopted rather than failed, but only after the
+account listing and the fetched object both confirm the name.
+
+**No Resend domain was created and no credential was provisioned by this work.**
+See "What a human must still do" below.
+
+---
 
 ## What is SPECIFIED, not built
 
 Each of these is a deliberate boundary, not an oversight.
 
-### 1. Issuing the DKIM key needs a credential that does not exist
-
-`recordIssuedSendingDomain` is the seam that moves a domain from `requested` to
-`records-issued`, and **nothing calls the provider to fill it.** Creating a
-domain at Resend is `POST /domains`, and the production `RESEND_API_KEY` is
-**send-only restricted** — that restriction is exactly why `email-health.ts`
-uses the domains endpoint as a read-only credential probe, "because it cannot
-create anything".
-
-**A separate full-access credential is required** — call it
-`RESEND_DOMAINS_API_KEY` — held only by the console, never by the tenant
-runtime. It is a different key from `RESEND_READ_API_KEY`, which is scoped for
-message history and also unset.
-
-Until such a key exists, a domain stops at `requested`, has no records to
-publish, and therefore refuses sends. That is the correct behavior for a domain
-with no signing key, and the route says `pendingProvider: true` rather than
-rendering an empty records table that reads as our bug.
-
-**No Resend domain was created and no credential was provisioned by this work.**
-
-### 2. Nothing re-checks a verified domain
+### 1. Nothing re-checks a verified domain
 
 Verification happens when someone asks for it. A customer who removes their
 DKIM record months later keeps sending until somebody verifies again.
@@ -193,7 +263,7 @@ It should also carry the drift discipline `sso-drift-logic.ts` already
 implements — N consecutive conclusive failures **and** a wall-clock floor
 before acting — rather than un-verifying on a single bad sweep.
 
-### 3. There is no console card
+### 2. There is no console card
 
 The route returns the records, the DMARC read and the verification state; no UI
 renders them. The model is `custom-domain-card.component.tsx`: `CardDisplay`,
@@ -205,18 +275,79 @@ above has no way to be set.
 **The composer does not yet show the identity in the UI.** `preview` returns
 `identity` and `identitySource` and nothing renders them.
 
-### 4. The `from` override is still open
+### 3. The `from` override is still open
 
 `SendEmailOptions.from` remains reachable. A resolved identity now outranks it,
 so a campaign cannot be moved off a verified domain — but a caller that passes
 `from` and no identity still bypasses the configured sender. Closing it means
 auditing all 39 senders and is its own change.
 
-### 5. Not attempted
+### 4. Not attempted
 
 Dedicated IPs (need consistent volume to warm, and damage deliverability
 below it), BIMI/VMC (needs DMARC enforcement plus a registered trademark),
 domain registration, and per-message `From` overrides.
+
+---
+
+## What a human must still do
+
+The code is finished and inert. Nothing below can be done from a repository.
+
+1. **Mint a Resend API key with full access.** Resend dashboard → API Keys →
+   Create, permission **Full access**. It cannot be a sending key: a
+   sending-scoped key answers `POST /domains` with `restricted_api_key`, which
+   the driver reports as `http-403:restricted_api_key` and which leaves the
+   domain at `requested`. Domain-scoping the key to one domain is also wrong —
+   it has to create domains that do not exist yet.
+2. **Put it in `RESEND_DOMAINS_API_KEY` on the CONSOLE Vercel project only.**
+   Not the tenant project, and not a shared/team-level record that would link
+   to both. The console is the only app whose code reads it, and the isolation
+   spec exists so that stays true; a shared record would hand the key to the
+   runtime that serves published sites, where nothing reads it and everything
+   could.
+3. **Environments: production and preview.** Development can stay unset — with
+   no key the flow is the honest `pendingProvider` path, which is what a
+   developer should be looking at anyway. Set it on preview only if sending
+   domains are to be exercised there, and understand that a preview deployment
+   then creates real domain objects in the live Resend account.
+4. **Redeploy the console.** Vercel injects environment at build; an added
+   variable does not reach a running deployment.
+5. **Add it to `SECRET_ROTATION.md`'s inventory** in the same tier as
+   `RESEND_API_KEY` or above — it is strictly more powerful than the sending
+   key, since it can enumerate the account and create further keys.
+
+Verify with a request for a domain in the console: `pendingProvider` should
+become `false` and the DKIM row should carry a `p=` value. If it stays true,
+`lastIssueError` on the record names why, as a code — `http-403:…`,
+`duplicate-mismatch`, `timeout`.
+
+### Could `RESEND_READ_API_KEY` serve instead?
+
+It could. It is specified as full-access for the delivery-history import, and a
+full-access key can create domains, so pointing the driver at it would work
+today with no new secret to mint. There is a real argument each way.
+
+**For reusing it.** Two full-access keys are two things to rotate, two things
+to leak and two things to forget. `SECRET_ROTATION.md` already records that a
+shared record linked to no project is inert and that duplicate records are how
+rotation goes half-done. And `RESEND_READ_API_KEY` is *also* unset today, so
+reusing it is one key to provision rather than two.
+
+**Against, and this is the side to take.** The two keys have different blast
+radii and, more importantly, different *homes*. The read key is documented as
+`Runtime` and is consumed by a staff action; the domains key must be
+console-only, and the isolation spec asserts that its NAME appears nowhere
+outside `apps/console`. Sharing one variable between a staff read path and the
+domain-creation path means either widening where the read key may live —
+undoing the isolation — or narrowing the read key to the console and moving the
+import action, which is a bigger change than minting a key.
+
+The sharper argument is the one `RESEND_READ_API_KEY`'s own documentation makes
+about `RESEND_API_KEY`: a key is scoped to the smallest thing that needs it so
+that a leak is bounded by what that thing does. A read key that can also create
+sending domains is exactly the widening that rule exists to prevent. Two keys
+with one job each is the cheaper mistake.
 
 ---
 
@@ -234,3 +365,24 @@ domain from request options rather than the host document.
 One real defect was found by a test before any mutation: a domain with no
 issued DKIM key satisfied SPF and the return path alone and reached `verified`
 — a sending identity that could not sign anything.
+
+### The provider seam, mutation by mutation
+
+Fourteen mutations, each applied alone, run, and reverted. Every one turned its
+spec red. Two did not on the first attempt, and both were defects in the guard
+rather than in the test:
+
+- Making the `none` driver return `issued` with a fabricated key left the
+  route's spec green, because the orchestrator refuses on `configured()` before
+  it ever calls `issue()`. Flipping `configured()` too — an unconfigured
+  deployment claiming to have issued something — turns 3 and 2 assertions red
+  across the two files. The layered check is correct; the first mutation simply
+  did not reach it.
+- The "`records-issued` must have records" guard was a **tautology**. It sat
+  behind an earlier `!key` early return, so no input could reach it with a
+  blank key, and deleting it changed nothing. The early return's key check was
+  removed and the records check made the only gate — so the guard is now what
+  actually refuses, and deleting it lets a blank key reach `records-issued`.
+
+A guard that cannot fail is worth less than no guard, because it reads as
+protection. Only the mutation found it.

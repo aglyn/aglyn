@@ -44,15 +44,27 @@
  * rule against unrequested reads on a hot path applies here more than most,
  * because a campaign resolves an identity once for thousands of messages.
  *
- * ## What this module cannot do yet
+ * ## Why the provider call is not in here
  *
- * Issuing a DKIM key means creating a domain at the mail provider, and the
- * production `RESEND_API_KEY` is send-only — it cannot create anything, which
- * is exactly why `email-health.ts` uses the domains endpoint as a read-only
- * credential probe. `requestSendingDomain` therefore stops at `requested` and
- * {@link recordIssuedSendingDomain} is the seam an operator-supplied key fills
- * in. A domain stuck at `requested` refuses sends, which is the correct
- * behavior for a domain that has no signing key.
+ * Issuing a DKIM key means creating a domain at the mail provider, which needs
+ * a credential that can create things — a different one from the send-only
+ * `RESEND_API_KEY`, which is exactly why `email-health.ts` can use the domains
+ * endpoint as a read-only credential probe.
+ *
+ * That credential belongs to the console alone, so the driver that reads it
+ * lives in the console app — `apps/console/utils/server/` — and not here.
+ * **This library is imported by the tenant runtime**, which
+ * serves untrusted published sites; a module it can import is a module whose
+ * environment read is one bug away from being reachable from a site request.
+ * A file in `apps/console` is not importable from the tenant app at all —
+ * there is no path mapping to it and nx's module boundaries forbid app→app —
+ * so the isolation is structural rather than a convention.
+ *
+ * What stays here is the seam: {@link recordIssuedSendingDomain} takes what a
+ * provider returned, and {@link recordSendingDomainIssueFailure} takes what it
+ * refused. `requestSendingDomain` still stops at `requested`, and a domain
+ * stopped there refuses sends, which is the correct behavior for a domain that
+ * has no signing key.
  */
 
 import {
@@ -61,8 +73,10 @@ import {
   normalizeLocalPart,
   normalizeSendingDomain,
   resolveSendingIdentity,
+  safeProviderDetail,
   SENDING_SUBDOMAIN,
   sendingDnsRecords,
+  sendingDomainRequiredRecords,
   sendingRecordKey,
   validateSendingDomain,
   type DmarcAssessment,
@@ -121,9 +135,12 @@ function readRecord(
     dkimSelector: String(data.dkimSelector ?? ''),
     dkimPublicKey: data.dkimPublicKey ?? null,
     returnPathHost: data.returnPathHost ?? null,
+    providerDomainId: data.providerDomainId ?? null,
     createdAtMs: Number(data.createdAtMs) || null,
     verifiedAtMs: Number(data.verifiedAtMs) || null,
     lastCheckedAtMs: Number(data.lastCheckedAtMs) || null,
+    lastIssueError: data.lastIssueError ?? null,
+    lastIssueAtMs: Number(data.lastIssueAtMs) || null,
     lastMissing: Array.isArray(data.lastMissing) ? data.lastMissing : null,
   }
 }
@@ -172,18 +189,42 @@ export async function requestSendingDomain(options: {
  * that may not exist. Nothing here calls the provider: the caller supplies
  * what it was given, so a deployment whose key cannot create domains still has
  * a working path — an operator can complete this step by hand — and this
- * module never grows a dependency on a credential it cannot assume.
+ * module never grows a dependency on a credential it cannot assume. The
+ * console holds the credential and the driver that uses it; this library,
+ * which the tenant runtime also imports, holds neither.
+ *
+ * ## `records-issued` is a promise that records exist
+ *
+ * The write is refused unless the resulting record actually yields a DKIM
+ * record with a value. The alternative is the failure this whole feature is
+ * arranged against: a status saying the customer has records to publish, next
+ * to a records table with an empty DKIM row, which cannot ever verify and
+ * reads to the customer as our bug.
+ *
+ * ## An issued key is never overwritten
+ *
+ * A second call carrying a DIFFERENT key is refused rather than applied. The
+ * customer may already have published the first one, and replacing it turns a
+ * finished setup into a domain that silently stops signing. Re-recording the
+ * SAME key is a no-op and succeeds, so a retried request is safe.
+ *
+ * The SELECTOR, by contrast, comes from the provider when it supplies one:
+ * the record a customer publishes has to be the name the provider will sign
+ * under, and `sendingDkimSelector` only proposes it.
  */
 export async function recordIssuedSendingDomain(options: {
   orgId: string
   domain: string
   dkimPublicKey: string
+  /** The selector the provider issued, when it chose its own. */
+  dkimSelector?: string
   returnPathHost?: string
+  providerDomainId?: string
 }): Promise<SendingDomainResult> {
   const domain = normalizeSendingDomain(options?.domain)
   const key = String(options?.dkimPublicKey ?? '').trim()
-  if (!domain || !key) {
-    return { record: null, error: 'Missing domain or DKIM key', status: 400 }
+  if (!domain) {
+    return { record: null, error: 'Missing domain', status: 400 }
   }
 
   const ref = domainRef(options.orgId, domain)
@@ -192,17 +233,92 @@ export async function recordIssuedSendingDomain(options: {
     return { record: null, error: 'No claim on that domain', status: 404 }
   }
 
+  const existing = readRecord(snapshot)
+  const held = String(existing?.dkimPublicKey ?? '').trim()
+  if (held && held !== key) {
+    return {
+      record: existing,
+      error:
+        'That domain already has an issued signing key. Release the domain ' +
+        'and add it again to start over.',
+      status: 409,
+    }
+  }
+
+  const selector =
+    String(options?.dkimSelector ?? '').trim() || existing?.dkimSelector || ''
+  const returnPathHost = options.returnPathHost || existing?.returnPathHost
+
+  /*
+   * The only thing standing between a caller and `records-issued`, and it is
+   * asked of the SAME function that prints the records for the customer and
+   * that the verifier compares against — not a truthiness check on the key,
+   * which would be this write's private opinion of what "publishable" means
+   * and could agree with nothing else.
+   */
+  const issued = sendingDomainRequiredRecords({
+    domain,
+    dkimSelector: selector,
+    dkimPublicKey: key,
+    returnPathHost,
+  })
+  if (!issued.some((entry) => entry.purpose === 'dkim')) {
+    return {
+      record: existing,
+      error: 'Refusing to issue records for a domain with no publishable DKIM record',
+      status: 400,
+    }
+  }
+
   await ref.set(
     {
       status: 'records-issued',
       dkimPublicKey: key,
+      ...(selector ? { dkimSelector: selector } : {}),
       ...(options.returnPathHost
         ? { returnPathHost: options.returnPathHost }
         : {}),
+      ...(options.providerDomainId
+        ? { providerDomainId: String(options.providerDomainId) }
+        : {}),
+      // A previous failure is not part of the record once it succeeded.
+      lastIssueError: firebaseAdmin.firestore.FieldValue.delete(),
     },
     { merge: true },
   )
   return { record: readRecord(await ref.get()), error: null, status: 200 }
+}
+
+/**
+ * Record that the provider did not issue anything, WITHOUT moving the status.
+ *
+ * The point of a separate function is that there is no path from a provider
+ * failure to `records-issued`. A `4xx` or `5xx` means no key exists, so the
+ * domain stays `requested` — where it refuses sends, which is correct for a
+ * domain that cannot sign — and carries a reason an admin can act on instead
+ * of appearing to have finished.
+ *
+ * `detail` is a short code the caller built from a fixed vocabulary, never a
+ * provider's response body. {@link safeProviderDetail} is the second line:
+ * an `Authorization` header echoed back by a provider must not become a
+ * Firestore document.
+ */
+export async function recordSendingDomainIssueFailure(options: {
+  orgId: string
+  domain: string
+  detail: string
+}): Promise<void> {
+  const domain = normalizeSendingDomain(options?.domain)
+  if (!options?.orgId || !domain) return
+  const ref = domainRef(options.orgId, domain)
+  if (!(await ref.get()).exists) return
+  await ref.set(
+    {
+      lastIssueError: safeProviderDetail(options.detail) || 'unknown',
+      lastIssueAtMs: Date.now(),
+    },
+    { merge: true },
+  )
 }
 
 export interface SendingDomainView {
