@@ -21,17 +21,18 @@
  *
  * ## Why the whole rule, and why in one place
  *
- * The rule model carries nine fields. The console offered four — sources,
- * tags, form names, created-after — so `segmentId`, `captureSources`,
- * `createdBeforeMs` and the entire `behavior` block were stored by the
- * matcher, evaluated by the materializer and indexed in Firestore while being
- * unreachable from any screen. Needing to hand-write a stored structure to
- * reach a shipped engine is a missing picker, not a power-user affordance.
+ * Every dimension the matcher reads has a control here, including the two
+ * that are answered by a keyed lookup rather than by the person's own record
+ * — engagement, and membership of another audience — and the combinator that
+ * decides whether the filters are ANDed, ORed or inverted. Needing to
+ * hand-write a stored structure to reach a shipped engine is a missing
+ * picker, not a power-user affordance, which is the standard this form is
+ * held to rather than a count of fields.
  *
  * One component rather than a form on the create card and a second on the edit
  * page: the two would drift, and the half that drifts is whichever the
  * merchant is not looking at. A rule authored at creation and the same rule
- * reopened for editing are the same nine questions.
+ * reopened for editing are the same questions.
  *
  * ## The draft is text, the value is a rule
  *
@@ -61,6 +62,7 @@ import {
   CONTACT_SOURCE_LABELS,
   normalizeDynamicListRule,
   type ContactSource,
+  type DynamicListDimensions,
   type DynamicListRule,
   type DynamicListSource,
 } from '@aglyn/aglyn'
@@ -74,6 +76,7 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOrgContactSegments } from '../hooks/use-org-contact-segments'
+import { useOrgLists } from '../hooks/use-org-lists'
 
 /** How each silo reads on screen. */
 const SOURCE_LABELS: Record<DynamicListSource, string> = {
@@ -104,16 +107,24 @@ const dayLabel = (ms: number) => new Date(ms).toISOString().slice(0, 10)
  * the question a filter form has to answer continuously is "who does this
  * describe", and a form of eleven boxes does not answer it on its own.
  */
-export function describeDynamicListRule(rule: DynamicListRule): string[] {
+/** Names for the ids a rule stores, so a clause can say "Customers", not a uid. */
+export interface DynamicListRuleNames {
+  /** List id → its name. */
+  lists?: Record<string, string>
+  /** Segment id → its name. */
+  segments?: Record<string, string>
+}
+
+/** An id, as its name when one is known and as itself when none is. */
+const named = (id: string, names: Record<string, string> | undefined): string =>
+  names?.[id] || id
+
+/** One AND-block, as clauses. The rule's own block and each branch share it. */
+function describeDimensions(
+  rule: DynamicListDimensions,
+  names?: DynamicListRuleNames,
+): string[] {
   const clauses: string[] = []
-  clauses.push(
-    rule.sources.length
-      ? `Draws from ${rule.sources
-          .map((source) => SOURCE_PHRASES[source] ?? source)
-          .join(', ')}.`
-      : 'Draws from nothing, so it matches nobody.',
-  )
-  if (rule.segmentId) clauses.push(`Reuses saved segment ${rule.segmentId}.`)
   if (rule.tags?.length) {
     clauses.push(`Tagged any of: ${rule.tags.join(', ')}.`)
   }
@@ -148,12 +159,130 @@ export function describeDynamicListRule(rule: DynamicListRule): string[] {
   if (behavior?.noPurchaseForDays !== undefined) {
     clauses.push(`Has bought nothing for ${behavior.noPurchaseForDays} days.`)
   }
+  /*
+   * The quiet arms say "or never" out loud.
+   *
+   * The engine counts a person with no open on record as having not opened,
+   * which is the opposite lean from `noPurchaseForDays` two clauses above —
+   * and a reader checking a paragraph against their intent cannot be expected
+   * to remember which dimension leans which way. So the sentence carries it.
+   */
+  const engagement = rule.engagement
+  if (engagement?.openedWithinDays !== undefined) {
+    clauses.push(
+      `Opened one of your emails in the last ${engagement.openedWithinDays} days.`,
+    )
+  }
+  if (engagement?.clickedWithinDays !== undefined) {
+    clauses.push(
+      `Clicked a link in one of your emails in the last ` +
+        `${engagement.clickedWithinDays} days.`,
+    )
+  }
+  if (engagement?.notOpenedForDays !== undefined) {
+    clauses.push(
+      `Has opened nothing for ${engagement.notOpenedForDays} days, or never ` +
+        `opened anything.`,
+    )
+  }
+  if (engagement?.notClickedForDays !== undefined) {
+    clauses.push(
+      `Has clicked nothing for ${engagement.notClickedForDays} days, or never ` +
+        `clicked anything.`,
+    )
+  }
+  if (rule.inListIds?.length) {
+    clauses.push(
+      `Already on: ${rule.inListIds
+        .map((id) => named(id, names?.lists))
+        .join(', ')}.`,
+    )
+  }
+  if (rule.notInListIds?.length) {
+    clauses.push(
+      `Not on: ${rule.notInListIds
+        .map((id) => named(id, names?.lists))
+        .join(', ')}.`,
+    )
+  }
   return clauses
 }
+
+export function describeDynamicListRule(
+  rule: DynamicListRule,
+  names?: DynamicListRuleNames,
+): string[] {
+  const clauses: string[] = []
+  clauses.push(
+    rule.sources.length
+      ? `Draws from ${rule.sources
+          .map((source) => SOURCE_PHRASES[source] ?? source)
+          .join(', ')}.`
+      : 'Draws from nothing, so it matches nobody.',
+  )
+  if (rule.segmentId) {
+    clauses.push(
+      `Reuses saved segment ${named(rule.segmentId, names?.segments)}.`,
+    )
+  }
+  const own = describeDimensions(rule, names)
+  if (rule.negate && own.length) {
+    /*
+     * A negated block is ONE clause, not a list of them.
+     *
+     * "Excludes anyone who is tagged vip. Excludes anyone who has spent over
+     * 500." would read as two independent exclusions, and the rule is one:
+     * it excludes people who are BOTH. Somebody checking a paragraph against
+     * their intent would come away with the wrong audience.
+     */
+    clauses.push(
+      `Excludes anyone matching all of: ${own
+        .map((clause) => clause.replace(/\.$/, ''))
+        .join('; ')}.`,
+    )
+  } else {
+    clauses.push(...own)
+  }
+  /*
+   * The OR branches are ONE clause covering all of them, not one clause each.
+   *
+   * A candidate has to satisfy at least one branch — so "at least one of"
+   * printed once per branch would read as a separate requirement per branch,
+   * which is the AND this operator exists to escape. The whole disjunction is
+   * therefore rendered as a single sentence, with each branch's own filters
+   * joined by "and" inside it.
+   */
+  const branches = (rule.any ?? [])
+    .map((group) => {
+      const inner = describeDimensions(group, names)
+      if (!inner.length) return ''
+      const joined = inner
+        .map((clause) => clause.replace(/\.$/, '').toLowerCase())
+        .join(' and ')
+      return group.negate ? `not (${joined})` : joined
+    })
+    .filter(Boolean)
+  if (branches.length) {
+    clauses.push(`And at least one of these: ${branches.join('; or ')}.`)
+  }
+  return clauses
+}
+
+/**
+ * How the filters below combine.
+ *
+ * The three shapes this form authors, mapped onto the rule's two operators:
+ * `all` is the plain AND block, `none` is that block with `negate`, and `any`
+ * puts each filter into its own OR branch. A saved segment is outside all
+ * three — it is resolved once from `segmentId` and always applies, which the
+ * control says on screen rather than leaving to be discovered.
+ */
+export type DynamicListRuleMatch = 'all' | 'any' | 'none'
 
 /** The rule as the controls hold it: what was typed, not what it means. */
 export interface DynamicListRuleDraft {
   sources: DynamicListSource[]
+  match: DynamicListRuleMatch
   segmentId: string
   tags: string
   captureSources: ContactSource[]
@@ -166,10 +295,17 @@ export interface DynamicListRuleDraft {
   ltvAtLeast: string
   lastPurchaseWithinDays: string
   noPurchaseForDays: string
+  openedWithinDays: string
+  clickedWithinDays: string
+  notOpenedForDays: string
+  notClickedForDays: string
+  inListIds: string[]
+  notInListIds: string[]
 }
 
 export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   sources: ['contacts'],
+  match: 'all',
   segmentId: '',
   tags: '',
   captureSources: [],
@@ -180,6 +316,12 @@ export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   ltvAtLeast: '',
   lastPurchaseWithinDays: '',
   noPurchaseForDays: '',
+  openedWithinDays: '',
+  clickedWithinDays: '',
+  notOpenedForDays: '',
+  notClickedForDays: '',
+  inListIds: [],
+  notInListIds: [],
 }
 
 /** Comma-separated free text → the trimmed, non-empty values. */
@@ -200,33 +342,59 @@ export const splitRuleList = (value: string): string[] =>
 const dayStamp = (ms: number | undefined): string =>
   ms === undefined || !Number.isFinite(ms) ? '' : dayLabel(ms)
 
-/** A stored rule, as the controls should show it. */
+/**
+ * A stored rule, as the controls should show it.
+ *
+ * ⚠️ The three shapes {@link DynamicListRuleMatch} names are the shapes this
+ * form AUTHORS. A rule written through the REST API can hold branches the
+ * controls have no place for — a branch with its own `negate`, or top-level
+ * filters alongside branches — and this reads such a rule back as the union
+ * of every filter in it, in `any` mode. It is not a silent rewrite: the
+ * sentences above the controls are computed from `draftToRule(draft)`, so
+ * what a save would store is on screen before the reader saves it.
+ */
 export function ruleToDraft(rule: DynamicListRule): DynamicListRuleDraft {
-  const behavior = rule.behavior ?? {}
+  // Every filter the rule carries, wherever it carries it. The branches are
+  // read for their VALUES; how they combined is answered by `match` below.
+  const blocks = [rule, ...(rule.any ?? [])]
+  const first = <T,>(read: (block: DynamicListDimensions) => T | undefined): T | undefined => {
+    for (const block of blocks) {
+      const value = read(block)
+      if (value !== undefined) return value
+    }
+    return undefined
+  }
+  const list = (read: (block: DynamicListDimensions) => string[] | undefined): string[] => {
+    const found = new Set<string>()
+    for (const block of blocks) for (const entry of read(block) ?? []) found.add(entry)
+    return [...found]
+  }
+  const number = (read: (block: DynamicListDimensions) => number | undefined): string => {
+    const value = first(read)
+    return value === undefined ? '' : String(value)
+  }
+  const ltvCents = first((block) => block.behavior?.ltvCentsAtLeast)
   return {
     sources: rule.sources ?? [],
+    match: rule.any?.length ? 'any' : rule.negate ? 'none' : 'all',
     segmentId: rule.segmentId ?? '',
-    tags: (rule.tags ?? []).join(', '),
-    captureSources: rule.captureSources ?? [],
-    formNames: (rule.formNames ?? []).join(', '),
-    createdAfter: dayStamp(rule.createdAfterMs),
-    createdBefore: dayStamp(rule.createdBeforeMs),
-    ordersCountAtLeast:
-      behavior.ordersCountAtLeast === undefined
-        ? ''
-        : String(behavior.ordersCountAtLeast),
-    ltvAtLeast:
-      behavior.ltvCentsAtLeast === undefined
-        ? ''
-        : String(behavior.ltvCentsAtLeast / 100),
-    lastPurchaseWithinDays:
-      behavior.lastPurchaseWithinDays === undefined
-        ? ''
-        : String(behavior.lastPurchaseWithinDays),
-    noPurchaseForDays:
-      behavior.noPurchaseForDays === undefined
-        ? ''
-        : String(behavior.noPurchaseForDays),
+    tags: list((block) => block.tags).join(', '),
+    captureSources: list((block) => block.captureSources) as ContactSource[],
+    formNames: list((block) => block.formNames).join(', '),
+    createdAfter: dayStamp(first((block) => block.createdAfterMs)),
+    createdBefore: dayStamp(first((block) => block.createdBeforeMs)),
+    ordersCountAtLeast: number((block) => block.behavior?.ordersCountAtLeast),
+    ltvAtLeast: ltvCents === undefined ? '' : String(ltvCents / 100),
+    lastPurchaseWithinDays: number(
+      (block) => block.behavior?.lastPurchaseWithinDays,
+    ),
+    noPurchaseForDays: number((block) => block.behavior?.noPurchaseForDays),
+    openedWithinDays: number((block) => block.engagement?.openedWithinDays),
+    clickedWithinDays: number((block) => block.engagement?.clickedWithinDays),
+    notOpenedForDays: number((block) => block.engagement?.notOpenedForDays),
+    notClickedForDays: number((block) => block.engagement?.notClickedForDays),
+    inListIds: list((block) => block.inListIds),
+    notInListIds: list((block) => block.notInListIds),
   }
 }
 
@@ -245,28 +413,99 @@ const typedNumber = (value: string): number | undefined => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
 }
 
-/** What the controls mean, coerced by the function the matcher reads through. */
-export function draftToRule(draft: DynamicListRuleDraft): DynamicListRule {
-  const ordersCountAtLeast = typedNumber(draft.ordersCountAtLeast)
-  const ltv = typedNumber(draft.ltvAtLeast)
-  const lastPurchaseWithinDays = typedNumber(draft.lastPurchaseWithinDays)
-  const noPurchaseForDays = typedNumber(draft.noPurchaseForDays)
-  const behavior = {
-    ...(ordersCountAtLeast !== undefined ? { ordersCountAtLeast } : {}),
-    // Whole units in, cents out — rounded, because a half-cent threshold is
-    // not a quantity any order total can be compared against.
-    ...(ltv !== undefined ? { ltvCentsAtLeast: Math.round(ltv * 100) } : {}),
-    ...(lastPurchaseWithinDays !== undefined
-      ? { lastPurchaseWithinDays }
-      : {}),
-    ...(noPurchaseForDays !== undefined ? { noPurchaseForDays } : {}),
+/**
+ * One filter of the draft, as the smallest block it can live in.
+ *
+ * `any` mode puts each of these in its own OR branch, so this list is what
+ * decides how finely "any of these filters" is read: per CONTROL, which is
+ * what a reader who just typed into eleven boxes means by "any of them". A
+ * coarser split — the whole purchase-history block as one branch — would ask
+ * them to satisfy three purchase conditions together to match the branch.
+ */
+function draftDimensions(draft: DynamicListRuleDraft): Record<string, unknown>[] {
+  const blocks: Record<string, unknown>[] = []
+  const tags = splitRuleList(draft.tags)
+  if (tags.length) blocks.push({ tags })
+  if (draft.captureSources.length) {
+    blocks.push({ captureSources: draft.captureSources })
   }
+  const formNames = splitRuleList(draft.formNames)
+  if (formNames.length) blocks.push({ formNames })
   const createdAfterMs = draft.createdAfter
     ? Date.parse(draft.createdAfter)
     : undefined
+  if (createdAfterMs !== undefined && Number.isFinite(createdAfterMs)) {
+    blocks.push({ createdAfterMs })
+  }
   const createdBeforeMs = draft.createdBefore
     ? Date.parse(draft.createdBefore)
     : undefined
+  if (createdBeforeMs !== undefined && Number.isFinite(createdBeforeMs)) {
+    blocks.push({ createdBeforeMs })
+  }
+  const ordersCountAtLeast = typedNumber(draft.ordersCountAtLeast)
+  if (ordersCountAtLeast !== undefined) {
+    blocks.push({ behavior: { ordersCountAtLeast } })
+  }
+  // Whole units in, cents out — rounded, because a half-cent threshold is not
+  // a quantity any order total can be compared against.
+  const ltv = typedNumber(draft.ltvAtLeast)
+  if (ltv !== undefined) {
+    blocks.push({ behavior: { ltvCentsAtLeast: Math.round(ltv * 100) } })
+  }
+  const lastPurchaseWithinDays = typedNumber(draft.lastPurchaseWithinDays)
+  if (lastPurchaseWithinDays !== undefined) {
+    blocks.push({ behavior: { lastPurchaseWithinDays } })
+  }
+  const noPurchaseForDays = typedNumber(draft.noPurchaseForDays)
+  if (noPurchaseForDays !== undefined) {
+    blocks.push({ behavior: { noPurchaseForDays } })
+  }
+  const openedWithinDays = typedNumber(draft.openedWithinDays)
+  if (openedWithinDays !== undefined) {
+    blocks.push({ engagement: { openedWithinDays } })
+  }
+  const clickedWithinDays = typedNumber(draft.clickedWithinDays)
+  if (clickedWithinDays !== undefined) {
+    blocks.push({ engagement: { clickedWithinDays } })
+  }
+  const notOpenedForDays = typedNumber(draft.notOpenedForDays)
+  if (notOpenedForDays !== undefined) {
+    blocks.push({ engagement: { notOpenedForDays } })
+  }
+  const notClickedForDays = typedNumber(draft.notClickedForDays)
+  if (notClickedForDays !== undefined) {
+    blocks.push({ engagement: { notClickedForDays } })
+  }
+  if (draft.inListIds.length) blocks.push({ inListIds: draft.inListIds })
+  if (draft.notInListIds.length) {
+    blocks.push({ notInListIds: draft.notInListIds })
+  }
+  return blocks
+}
+
+/** The blocks merged into one AND-block, for `all` and `none`. */
+function mergeDimensions(
+  blocks: Record<string, unknown>[],
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {}
+  for (const block of blocks) {
+    for (const [key, value] of Object.entries(block)) {
+      // `behavior` and `engagement` arrive one leaf at a time, so they are
+      // merged at depth. A shallow assign would keep only the last leaf of
+      // each and silently drop the other three.
+      merged[key] =
+        key === 'behavior' || key === 'engagement'
+          ? { ...((merged[key] as object) ?? {}), ...(value as object) }
+          : value
+    }
+  }
+  return merged
+}
+
+/** What the controls mean, coerced by the function the matcher reads through. */
+export function draftToRule(draft: DynamicListRuleDraft): DynamicListRule {
+  const blocks = draftDimensions(draft)
   /*
    * Normalized on the way IN by the same function the materializer reads it
    * back through. A rule coerced on the way out but not on the way in is a
@@ -275,22 +514,17 @@ export function draftToRule(draft: DynamicListRuleDraft): DynamicListRule {
   return normalizeDynamicListRule({
     sources: draft.sources,
     ...(draft.segmentId ? { segmentId: draft.segmentId } : {}),
-    ...(splitRuleList(draft.tags).length
-      ? { tags: splitRuleList(draft.tags) }
-      : {}),
-    ...(draft.captureSources.length
-      ? { captureSources: draft.captureSources }
-      : {}),
-    ...(splitRuleList(draft.formNames).length
-      ? { formNames: splitRuleList(draft.formNames) }
-      : {}),
-    ...(createdAfterMs !== undefined && Number.isFinite(createdAfterMs)
-      ? { createdAfterMs }
-      : {}),
-    ...(createdBeforeMs !== undefined && Number.isFinite(createdBeforeMs)
-      ? { createdBeforeMs }
-      : {}),
-    ...(Object.keys(behavior).length ? { behavior } : {}),
+    ...(draft.match === 'any'
+      ? // Each filter its own branch. The top-level block stays empty, which
+        // is no constraint — so the rule is `sources AND (one of these)`.
+        { any: blocks }
+      : {
+          ...mergeDimensions(blocks),
+          // `none` on an empty set of filters would be "exclude everyone
+          // matching nothing", which excludes everyone. The flag is written
+          // only when there is something to invert.
+          ...(draft.match === 'none' && blocks.length ? { negate: true } : {}),
+        }),
   })
 }
 
@@ -299,11 +533,22 @@ export interface DynamicListRuleFieldsProps {
   scope: readonly [string, string]
   draft: DynamicListRuleDraft
   onChange: (draft: DynamicListRuleDraft) => void
+  /**
+   * The audience being edited, when there is one.
+   *
+   * Kept out of its own list pickers. A rule that referred to the list it
+   * fills would oscillate — see `dynamicListRuleWithoutListReference`, which
+   * strips it at the sweep as well, because a rule outlives any one form.
+   * Offering it here and stripping it there would show a merchant a filter
+   * that quietly does nothing.
+   */
+  listId?: string
 }
 
 export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
-  const { scope, draft, onChange } = props
+  const { scope, draft, onChange, listId } = props
   const segmentDocs = useOrgContactSegments(scope)
+  const listDocs = useOrgLists(scope)
 
   /*
    * The saved segment the rule already names, even when the picker's window
@@ -321,6 +566,25 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
     }
     return [{ $id: draft.segmentId, name: draft.segmentId }, ...rows]
   }, [segmentDocs, draft.segmentId])
+
+  /** Every audience except the one being edited — see the prop's note. */
+  const lists = useMemo(
+    () => listDocs.filter((row) => row.$id !== listId),
+    [listDocs, listId],
+  )
+
+  /** Ids the pickers can show, so a clause names an audience rather than a uid. */
+  const names = useMemo(
+    () => ({
+      lists: Object.fromEntries(
+        listDocs.map((row) => [row.$id, row.name ?? row.$id]),
+      ),
+      segments: Object.fromEntries(
+        segments.map((row) => [row.$id, row.name ?? row.$id]),
+      ),
+    }),
+    [listDocs, segments],
+  )
 
   const set = <K extends keyof DynamicListRuleDraft>(
     key: K,
@@ -353,7 +617,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
         <Typography variant="overline" color="text.secondary">
           {'This audience'}
         </Typography>
-        {describeDynamicListRule(draftToRule(draft)).map((clause) => (
+        {describeDynamicListRule(draftToRule(draft), names).map((clause) => (
           <Typography key={clause} variant="body2">
             {clause}
           </Typography>
@@ -376,6 +640,27 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
               {label}
             </MenuItem>
           ))}
+        </TextField>
+        {/*
+          The combinator, beside the source picker rather than buried below
+          the filters it governs. It changes what every control under it
+          means, and a reader who found it after filling the form in would
+          have been answering a different question the whole time.
+         */}
+        <TextField
+          select
+          size="small"
+          label="Match"
+          value={draft.match}
+          onChange={(event) =>
+            set('match', event.target.value as DynamicListRuleMatch)
+          }
+          helperText="A saved segment always applies"
+          sx={{ minWidth: 210 }}
+        >
+          <MenuItem value="all">{'All of the filters below'}</MenuItem>
+          <MenuItem value="any">{'Any one of the filters below'}</MenuItem>
+          <MenuItem value="none">{'Nobody matching all of them'}</MenuItem>
         </TextField>
         <TextField
           type="date"
@@ -509,6 +794,101 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
           onChange={(event) => set('noPurchaseForDays', event.target.value)}
           sx={{ minWidth: 220 }}
         />
+      </Stack>
+
+      <Divider />
+      <Typography variant="overline" color="text.secondary">
+        {'Email engagement'}
+      </Typography>
+      {/*
+        The two quiet fields carry their lean in the helper text, not only in
+        the sentences above. They read the OPPOSITE way from "Nothing bought
+        for", one section up — somebody who never opened anything counts as
+        not having opened, where somebody who never bought is not lapsed — and
+        a form that put two opposite defaults next to each other without
+        saying so is a form that produces the wrong audience quietly.
+       */}
+      <Typography variant="caption" color="text.secondary">
+        {'Opens and clicks across every email this workspace has sent the ' +
+          'person. Clicks are the stronger signal: mail apps that preload ' +
+          'images record an open the reader never made.'}
+      </Typography>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+        <TextField
+          type="number"
+          size="small"
+          label="Opened within (days)"
+          value={draft.openedWithinDays}
+          onChange={(event) => set('openedWithinDays', event.target.value)}
+          sx={{ minWidth: 190 }}
+        />
+        <TextField
+          type="number"
+          size="small"
+          label="Clicked within (days)"
+          value={draft.clickedWithinDays}
+          onChange={(event) => set('clickedWithinDays', event.target.value)}
+          sx={{ minWidth: 190 }}
+        />
+        <TextField
+          type="number"
+          size="small"
+          label="Nothing opened for (days)"
+          helperText="Never opened counts"
+          value={draft.notOpenedForDays}
+          onChange={(event) => set('notOpenedForDays', event.target.value)}
+          sx={{ minWidth: 210 }}
+        />
+        <TextField
+          type="number"
+          size="small"
+          label="Nothing clicked for (days)"
+          helperText="Never clicked counts"
+          value={draft.notClickedForDays}
+          onChange={(event) => set('notClickedForDays', event.target.value)}
+          sx={{ minWidth: 210 }}
+        />
+      </Stack>
+
+      <Divider />
+      <Typography variant="overline" color="text.secondary">
+        {'Other audiences'}
+      </Typography>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+        <TextField
+          select
+          size="small"
+          label="Already on"
+          value={draft.inListIds}
+          onChange={(event) => set('inListIds', asArray<string>(event.target.value))}
+          slotProps={{ select: { multiple: true } }}
+          helperText="Members of every audience picked"
+          sx={{ minWidth: 220 }}
+        >
+          {lists.map((row) => (
+            <MenuItem key={row.$id} value={row.$id}>
+              {row.name ?? row.$id}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Not on"
+          value={draft.notInListIds}
+          onChange={(event) =>
+            set('notInListIds', asArray<string>(event.target.value))
+          }
+          slotProps={{ select: { multiple: true } }}
+          helperText="Excludes members of any audience picked"
+          sx={{ minWidth: 220 }}
+        >
+          {lists.map((row) => (
+            <MenuItem key={row.$id} value={row.$id}>
+              {row.name ?? row.$id}
+            </MenuItem>
+          ))}
+        </TextField>
       </Stack>
     </Stack>
   )

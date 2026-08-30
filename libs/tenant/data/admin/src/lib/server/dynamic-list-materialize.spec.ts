@@ -416,3 +416,219 @@ describe('the rule can draw from silos other than contacts', () => {
     expect(memberEmails()).toEqual(['new@example.com'])
   })
 })
+
+/*==========================================
+ * ENRICHMENT — the dimensions the scan cannot read off a silo row.
+ *
+ * Engagement and other-audience membership describe an ADDRESS, so they come
+ * from keyed lookups rather than from the document the sweep just paged. The
+ * assertions here are about the two things that could break the sweep: those
+ * reads must be charged to the SAME budget, and the cursor must still resume
+ * where it stopped.
+ *=========================================*/
+
+/** The person rollup document, at the key the delivery log writes it under. */
+function seedEngagement(email: string, engagement: Record<string, number>) {
+  store[`emailDeliveries/${personKey(email)}`] = engagement
+}
+
+describe('an engagement rule reads the per-person rollup', () => {
+  const OPENED_30 = {
+    sources: ['contacts'],
+    engagement: { openedWithinDays: 30 },
+  }
+  const NOW = Date.UTC(2026, 7, 29)
+  const DAY = 86_400_000
+
+  beforeEach(() => {
+    seedMatchingContacts(3)
+    seedEngagement('person0@example.com', { lastOpenedAtMs: NOW - 5 * DAY })
+    seedEngagement('person1@example.com', { lastOpenedAtMs: NOW - 90 * DAY })
+    // person2 has no rollup at all — never opened anything.
+  })
+
+  it('enrolls the people who opened inside the window and nobody else', async () => {
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: OPENED_30,
+      nowMs: NOW,
+    })
+
+    expect(result.matched).toBe(1)
+    expect(memberEmails()).toEqual(['person0@example.com'])
+  })
+
+  it('selects the quiet ones, silence included, on the other arm', async () => {
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { sources: ['contacts'], engagement: { notOpenedForDays: 30 } },
+      nowMs: NOW,
+    })
+
+    expect(memberEmails()).toEqual([
+      'person1@example.com',
+      'person2@example.com',
+    ])
+  })
+
+  /**
+   * ⚠️ The reads are CHARGED, which is what keeps the budget honest.
+   *
+   * Three contacts and three rollup lookups is six documents. A budget of
+   * five must therefore stop the sweep — and if the lookups were free, this
+   * run would sail through and the budget would be describing a different
+   * amount of work than the one being done.
+   */
+  it('charges the lookups to the same scan budget', async () => {
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: OPENED_30,
+      nowMs: NOW,
+      scanBudget: 5,
+    })
+
+    expect(result.complete).toBe(false)
+    expect(result.cursor).toMatchObject({ source: 'contacts' })
+    // And an incomplete run still removes nobody and publishes no count.
+    expect(result.removed).toBe(0)
+    expect(store[LIST]['memberCount']).toBeUndefined()
+  })
+
+  it('resumes an engagement sweep from its cursor rather than restarting', async () => {
+    const first = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: OPENED_30,
+      nowMs: NOW,
+      scanBudget: 5,
+    })
+    expect(first.complete).toBe(false)
+
+    const second = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: OPENED_30,
+      nowMs: NOW,
+      resume: first.cursor,
+    })
+    expect(second.complete).toBe(true)
+    // The resumed run saw only the remainder, and a resumed run may not
+    // reconcile: everybody the first run enrolled is still here.
+    expect(second.removed).toBe(0)
+    expect(memberEmails()).toEqual(['person0@example.com'])
+  })
+
+  /*
+   * A rule with no engagement clause must not pay for one. The budget is the
+   * observable: six documents of work would stop at a budget of five, and
+   * three would not.
+   */
+  it('spends nothing on a rule that asks for no engagement', async () => {
+    const result = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: VIP_RULE,
+      scanBudget: 5,
+    })
+
+    expect(result.complete).toBe(true)
+    expect(memberRows()).toHaveLength(3)
+  })
+})
+
+describe('a rule can exclude the members of another audience', () => {
+  beforeEach(() => {
+    seedMatchingContacts(3)
+    store[`orgs/org-1/lists/customers/members/${personKey('person1@example.com')}`] =
+      { email: 'person1@example.com' }
+  })
+
+  it('leaves out everyone already on the named audience', async () => {
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { ...VIP_RULE, notInListIds: ['customers'] },
+    })
+
+    expect(memberEmails()).toEqual([
+      'person0@example.com',
+      'person2@example.com',
+    ])
+  })
+
+  it('keeps only the members of it on the positive arm', async () => {
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { ...VIP_RULE, inListIds: ['customers'] },
+    })
+
+    expect(memberEmails()).toEqual(['person1@example.com'])
+  })
+
+  /*
+   * TWO named lists, which is what proves the lookups accumulate. Each list
+   * is its own `getAll`, so a pass that replaced the membership it found
+   * instead of appending to it would leave every candidate holding only the
+   * last list — and every multi-list rule would then select nobody.
+   */
+  it('accumulates membership across every list the rule names', async () => {
+    store[`orgs/org-1/lists/vips/members/${personKey('person1@example.com')}`] =
+      { email: 'person1@example.com' }
+    store[`orgs/org-1/lists/vips/members/${personKey('person2@example.com')}`] =
+      { email: 'person2@example.com' }
+
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { ...VIP_RULE, inListIds: ['customers', 'vips'] },
+    })
+
+    // Only person1 is on both.
+    expect(memberEmails()).toEqual(['person1@example.com'])
+  })
+
+  /**
+   * ⛔ THE OSCILLATION GUARD.
+   *
+   * A rule that referred to the audience it fills would flip its membership
+   * on every beat: nobody is a member on the first sweep so everybody
+   * matches, everybody is a member on the second so nobody does, and
+   * reconciliation DELETES every row the first sweep created. Half of those
+   * beats are deletions, which is the one thing a materializer may never do
+   * for a reason that is not a membership change.
+   */
+  it('ignores a rule that names the audience it is filling', async () => {
+    const rule = { ...VIP_RULE, notInListIds: ['list-1'] }
+    const first = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule,
+    })
+    expect(first.enrolled).toBe(3)
+
+    // The second sweep, with everybody now a member of `list-1` itself.
+    const second = await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule,
+    })
+    expect(second.removed).toBe(0)
+    expect(memberRows()).toHaveLength(3)
+  })
+
+  it('selects nobody through an audience that no longer exists', async () => {
+    await materializeDynamicList({
+      listRef: listRef(),
+      hostId: 'host-1',
+      rule: { ...VIP_RULE, inListIds: ['deleted'] },
+    })
+
+    // Not "matches everybody": a membership filter whose audience vanished
+    // must not start selecting the whole silo.
+    expect(memberRows()).toHaveLength(0)
+  })
+})

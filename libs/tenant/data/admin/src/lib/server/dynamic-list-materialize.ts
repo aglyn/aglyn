@@ -60,6 +60,9 @@ import type {
 import {
   candidateMatchesDynamicListRule,
   dynamicListRuleIsEmpty,
+  dynamicListRuleListIds,
+  dynamicListRuleWithoutListReference,
+  dynamicListRuleNeedsEngagement,
   extractEmailFromFields,
   normalizeContactEmail,
   normalizeDynamicListRule,
@@ -70,6 +73,7 @@ import {
   type ResolvedSegmentFilters,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
+import { readPersonEngagementByKeys } from './email-delivery-log'
 import { enrollListMember } from './list-members'
 import { orgDataCollectionForHost, scopedToHost } from './organizations'
 
@@ -228,6 +232,142 @@ function toCandidate(
   }
 }
 
+/*==========================================
+ * ENRICHMENT — the two dimensions the scan cannot read off a silo row.
+ *
+ * Engagement lives on `emailDeliveries/{personKey}` and list membership on
+ * `orgs/{orgId}/lists/{listId}/members/{personKey}`. Both describe an ADDRESS
+ * rather than a contact, a lead or a submission, so neither is in the
+ * document the sweep just paged.
+ *
+ * Three properties, and each of them is a thing that could otherwise go
+ * wrong here:
+ *
+ *  1. **KEYED reads, never queries.** `getAll` over document references. No
+ *     `where`, no `orderBy`, so no composite index, nothing that can be
+ *     truncated by a `limit`, and — the failure this codebase has hit
+ *     nineteen times — nothing that silently drops a document for missing
+ *     the field being ordered on.
+ *  2. **Opt-in.** A rule with no engagement clause and no list reference
+ *     pays nothing at all. The cost belongs to the rules that ask for it,
+ *     not to every sweep.
+ *  3. **Charged to the SAME scan budget.** Every enrichment read is counted
+ *     in `read`, so a rule that asks for engagement fills the budget faster
+ *     and its sweep simply takes more runs. The budget and the resume cursor
+ *     keep working exactly as they did; what changes is how much of the
+ *     budget one page costs.
+ *=========================================*/
+
+/** What a rule needs looked up, resolved once per scan rather than per page. */
+interface EnrichmentPlan {
+  engagement: boolean
+  /** `listId` → that list's `members` collection. */
+  listMembers: Map<string, FirebaseFirestore.CollectionReference>
+}
+
+/**
+ * Resolves what a rule needs enriched.
+ *
+ * A named list that no longer exists resolves to a collection with no
+ * documents, which reads as "nobody is a member" — the same direction a
+ * deleted `segmentId` takes, and the safe one: an `inListIds` naming a
+ * deleted list selects nobody rather than everybody, and a `notInListIds`
+ * naming one excludes nobody rather than the whole audience.
+ */
+async function planEnrichment(
+  rule: DynamicListRule,
+  hostId: string,
+): Promise<EnrichmentPlan> {
+  const listIds = dynamicListRuleListIds(rule)
+  const listMembers = new Map<string, FirebaseFirestore.CollectionReference>()
+  if (listIds.length) {
+    const lists = await orgDataCollectionForHost(hostId, 'lists')
+    for (const listId of listIds) {
+      listMembers.set(listId, lists.doc(listId).collection('members'))
+    }
+  }
+  return { engagement: dynamicListRuleNeedsEngagement(rule), listMembers }
+}
+
+/** True when nothing needs looking up, so the page loop can skip the work. */
+function planIsEmpty(plan: EnrichmentPlan): boolean {
+  return !plan.engagement && plan.listMembers.size === 0
+}
+
+/**
+ * Fills the enrichment fields on one page's candidates.
+ *
+ * Keys are de-duplicated first: two silos can produce the same person on one
+ * page, and looking them up twice would spend budget on an answer already in
+ * hand.
+ *
+ * @returns how many documents were read, for the caller's budget.
+ */
+async function enrichCandidates(
+  candidates: DynamicListCandidate[],
+  plan: EnrichmentPlan,
+): Promise<number> {
+  if (!candidates.length || planIsEmpty(plan)) return 0
+  const keyed = new Map<string, DynamicListCandidate[]>()
+  for (const candidate of candidates) {
+    const key = personKey(candidate.email)
+    if (!key) continue
+    const held = keyed.get(key)
+    if (held) held.push(candidate)
+    else keyed.set(key, [candidate])
+  }
+  const keys = [...keyed.keys()]
+  if (!keys.length) return 0
+  const firestore = firebaseAdmin.app().firestore()
+  let read = 0
+
+  if (plan.engagement) {
+    // The scan's own Firestore handle, passed rather than defaulted: the
+    // rollup lives in another module with its own default, and two handles in
+    // one sweep is two things a caller has to configure to reach one store.
+    const engagement = await readPersonEngagementByKeys(keys, firestore)
+    read += keys.length
+    for (const [key, rows] of keyed) {
+      const found = engagement.get(key)
+      for (const candidate of rows) {
+        candidate.lastOpenedAtMs = found?.lastOpenedAtMs ?? null
+        candidate.lastClickedAtMs = found?.lastClickedAtMs ?? null
+      }
+    }
+  }
+
+  if (plan.listMembers.size) {
+    // No pre-seeding of `listIds`. A candidate found on no list keeps the
+    // field absent, and the matcher reads absent as "on no list" — see
+    // `candidateMatchesDynamicListRule` for why that direction is the safe
+    // one. Writing an empty array first would be a line saying the same thing
+    // the matcher already says.
+    for (const [listId, members] of plan.listMembers) {
+      let snapshots: FirebaseFirestore.DocumentSnapshot[] = []
+      try {
+        snapshots = await firestore.getAll(
+          ...keys.map((key) => members.doc(key)),
+        )
+      } catch (error) {
+        // A failed membership lookup leaves every candidate reading as a
+        // non-member of this list. That keeps an `inListIds` rule from
+        // enrolling people it could not confirm, and it is the direction a
+        // reader can recover from — the next sweep asks again.
+        console.error('[dynamic-list] list membership lookup failed', listId, error)
+      }
+      read += keys.length
+      for (const snapshot of snapshots) {
+        if (!snapshot?.exists) continue
+        for (const candidate of keyed.get(snapshot.id) ?? []) {
+          candidate.listIds = [...(candidate.listIds ?? []), listId]
+        }
+      }
+    }
+  }
+
+  return read
+}
+
 /**
  * WHO A RULE SELECTS, without writing anything.
  *
@@ -285,6 +425,10 @@ export async function collectDynamicListCandidates(options: {
     }
   }
 
+  // Resolved once for the whole scan: it names collections, and re-resolving
+  // the org for every page would be a read per page for an unchanging answer.
+  const enrichment = await planEnrichment(rule, options.hostId)
+
   /** Matched people, de-duplicated across silos by their person key. */
   const matches = new Map<string, DynamicListCandidate>()
   let read = 0
@@ -321,11 +465,24 @@ export async function collectDynamicListCandidates(options: {
       if (after) page = page.startAfter(after)
       const snapshot = await page.get()
       if (snapshot.empty) break
+      /*
+       * The page is read into candidates FIRST, then enriched, then matched.
+       *
+       * A per-document match would mean a per-document enrichment lookup, and
+       * the whole reason enrichment is affordable is that one page's people
+       * are fetched in one `getAll`. Only candidates are enriched — a
+       * document with no usable address is dropped by `toCandidate` before it
+       * can cost a lookup.
+       */
+      const pageCandidates: DynamicListCandidate[] = []
       for (const doc of snapshot.docs) {
         read += 1
         after = doc.id
         const candidate = toCandidate(source, doc)
-        if (!candidate) continue
+        if (candidate) pageCandidates.push(candidate)
+      }
+      read += await enrichCandidates(pageCandidates, enrichment)
+      for (const candidate of pageCandidates) {
         if (
           !candidateMatchesDynamicListRule(candidate, rule, { segment, nowMs })
         ) {
@@ -376,9 +533,21 @@ export async function materializeDynamicList(options: {
    */
   scanBudget?: number
 }): Promise<MaterializeDynamicListResult> {
+  /*
+   * The rule cannot refer to the list it materializes — see
+   * `dynamicListRuleWithoutListReference` for the oscillation that produces,
+   * and note that half of its beats are DELETIONS of rows this sweep created.
+   * Stripped here rather than at authoring time because the rule outlives any
+   * one form: an API caller, an import and a copied list would each need to
+   * remember, and the sweep is the one place all of them arrive.
+   */
+  const rule = dynamicListRuleWithoutListReference(
+    normalizeDynamicListRule(options.rule),
+    options.listRef.id,
+  )
   const scan = await collectDynamicListCandidates({
     hostId: options.hostId,
-    rule: options.rule,
+    rule,
     ...(options.resume ? { resume: options.resume } : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
     ...(options.scanBudget !== undefined

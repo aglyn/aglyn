@@ -574,7 +574,30 @@ describe('emails console read cost (AGL-2501)', () => {
       const paths = mockListens.map((listen) => listen.path)
       expect(paths).toContain('orgs/org1/lists/list_1')
       expect(paths.some((path) => path.endsWith('/members'))).toBe(false)
-      expect(paths).not.toContain('orgs/org1/lists')
+    })
+
+    /**
+     * The filter form's "other audiences" pickers read the list of lists, and
+     * the assertion that keeps that honest is about the BOUND, not about the
+     * path.
+     *
+     * A rule can say "and not the people already on my customers list", which
+     * needs the names of the other audiences to choose from — the same shape
+     * and the same justification as the segment picker below. What must never
+     * happen is the audiences TABLE being dragged onto this route: that read
+     * is paged and grows with the org, where a dropdown's is capped at fifty
+     * whatever the org holds.
+     */
+    it('reads the other audiences only as a bounded picker', async () => {
+      await renderConsole('audiences', ['list_1', 'edit'])
+      const listsListens = mockListens.filter(
+        (listen) => listen.path === 'orgs/org1/lists',
+      )
+      expect(listsListens).not.toHaveLength(0)
+      for (const listen of listsListens) {
+        expect(listen.limit).toBeGreaterThan(0)
+        expect(listen.limit).toBeLessThanOrEqual(50)
+      }
     })
 
     it('the SEGMENT picker is read on the edit route and nowhere else', async () => {
