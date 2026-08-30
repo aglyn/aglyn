@@ -67,7 +67,7 @@ export function DocumentPresenceLive({
   size = 24,
 }: {
   hostId: string | undefined
-  docType: 'screen' | 'layout' | 'component' | 'template' | 'email'
+  docType: 'screen' | 'layout' | 'component' | 'template' | 'email' | 'form'
   docId: string | undefined
   /**
    * The version this page is ABOUT — the one its open action would take you

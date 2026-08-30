@@ -74,6 +74,7 @@ const KIND_LABEL: Record<PreviewKind, string> = {
   component: 'component',
   layout: 'layout',
   template: 'template',
+  form: 'form',
 }
 
 /**
