@@ -216,6 +216,20 @@ function seedLeads() {
   mockState.org = { plan: 'starter' }
 }
 
+/**
+ * Stores a policy on the org the send resolves.
+ *
+ * Cases whose outcome depends on how `unrecorded` is treated call this rather
+ * than leaning on the policy an unconfigured org falls back to. Grandfathering
+ * and retroactive enforcement are opposite answers to the same question, so a
+ * case that asserts either one while saying nothing about the mode is really
+ * asserting which way the DEFAULT points, and moving that default would move
+ * this file's meaning without a word of it changing.
+ */
+const configurePolicy = (mode: 'forward' | 'strict') => {
+  mockState.org = { plan: 'starter', marketingConsentPolicy: { mode } }
+}
+
 const send = (over: Record<string, unknown> = {}) =>
   performCampaignSend({
     hostId: 'host-1',
@@ -268,12 +282,12 @@ describe('a marketing campaign sends only where a basis permits it', () => {
   })
 
   /**
-   * The NON-RETROACTIVE guarantee, which is the half that protects existing
-   * customers. Turning the join on must not empty an audience: everybody
-   * captured before the cutoff stays reachable and is merely reported
-   * differently.
+   * The NON-RETROACTIVE guarantee, which is the half that protects an existing
+   * audience. Under `forward` the join must not empty one: everybody captured
+   * before the cutoff stays reachable and is merely reported differently.
    */
-  it('still mails everyone captured before consent was required', async () => {
+  it('under forward, still mails everyone captured before consent was required', async () => {
+    configurePolicy('forward')
     await send()
     expect(delivered()).toEqual([
       'consented@example.com',
@@ -288,33 +302,71 @@ describe('a marketing campaign sends only where a basis permits it', () => {
    * sending would make the rule cost the merchant money as well as reach.
    */
   it('never meters or claims allowance for a withheld recipient', async () => {
+    // `forward`, so the four seeded leads split two and two and the numbers
+    // below are a filter doing its job rather than an audience that collapsed.
+    configurePolicy('forward')
     await send()
     expect(mockState.reserved).toEqual([2])
     expect(mockState.metered).toEqual([['host-1', 2, 'campaign']])
   })
 
   /**
+   * The same audience under the other mode. `strict` is retroactive: the
+   * grandfathered population goes, and the allowance claim follows it down
+   * rather than staying at the audience's size.
+   */
+  it('claims only the consented population once the org turns strict', async () => {
+    configurePolicy('strict')
+    await send()
+    expect(delivered()).toEqual(['consented@example.com'])
+    expect(mockState.reserved).toEqual([1])
+    expect(mockState.metered).toEqual([['host-1', 1, 'campaign']])
+  })
+
+  /**
    * The owner's decision, and what it costs. `strict` is the retroactive
    * mode: it removes the grandfathered population, which on a real audience
-   * is most of it. It is a stored per-org setting and never a default.
+   * is most of it.
    */
   it('drops the grandfathered population once the org opts into strict', async () => {
-    mockState.org = {
-      plan: 'starter',
-      marketingConsentPolicy: { mode: 'strict' },
-    }
+    configurePolicy('strict')
     await send()
     expect(delivered()).toEqual(['consented@example.com'])
   })
 
   /**
    * A `manual` audience is hand-typed addresses with no person record behind
-   * them, so there is nothing to read. They grandfather — which is also what
-   * keeps the composer's test send to the admin's own address working.
+   * them, so there is nothing to read. Under `forward` they grandfather —
+   * which is also what keeps the composer's test send to the admin's own
+   * address working, since that send is a `manual` audience of one.
    */
-  it('mails a hand-typed address, which has no record to read', async () => {
+  it('under forward, mails a hand-typed address, which has no record to read', async () => {
+    configurePolicy('forward')
     await send({ audience: 'manual', emails: ['someone@example.com'] })
     expect(delivered()).toEqual(['someone@example.com'])
+  })
+
+  /**
+   * ⚠️ WHAT RETROACTIVE ENFORCEMENT COSTS THE `manual` AUDIENCE.
+   *
+   * A hand-typed address reads as `unrecorded` because there is no document
+   * behind it, and `strict` withholds every `unrecorded` recipient before it
+   * ever reaches the clause that grandfathers a record with no capture date.
+   * So under `strict` a `manual` audience has no mailable member by
+   * construction and the send is refused whatever was typed.
+   *
+   * That is the rule applied consistently — a pasted list of addresses is the
+   * case consent exists for — but it takes the composer's test send with it,
+   * and that send is an admin proofing an email to their OWN address rather
+   * than marketing to a stranger. Asserted here so the cost is a fact this
+   * suite states rather than something discovered from a support ticket.
+   */
+  it('under strict, refuses a hand-typed address for want of a record', async () => {
+    configurePolicy('strict')
+    await expect(
+      send({ audience: 'manual', emails: ['someone@example.com'] }),
+    ).rejects.toThrow(/consent record/i)
+    expect(mockState.sent).toHaveLength(0)
   })
 
   /**
@@ -323,10 +375,7 @@ describe('a marketing campaign sends only where a basis permits it', () => {
    * have, because the two have different fixes.
    */
   it('refuses the send, naming consent, when nobody is mailable', async () => {
-    mockState.org = {
-      plan: 'starter',
-      marketingConsentPolicy: { mode: 'strict' },
-    }
+    configurePolicy('strict')
     delete mockState.store['hosts/host-1/leads/l1']
     await expect(send()).rejects.toThrow(CampaignSendError)
     await expect(send()).rejects.toThrow(/consent record/i)
@@ -342,6 +391,9 @@ describe('the send preview says which population is which', () => {
    * they write the email rather than after an audience collapses.
    */
   it('reports consented, grandfathered and withheld separately', async () => {
+    // `forward`, because a non-zero `grandfathered` is the whole point: it is
+    // the population that disappears if this org ever turns strict on.
+    configurePolicy('forward')
     await expect(send({ dryRun: true })).resolves.toMatchObject({
       // The WHOLE audience, which is what the breakdown is measured over —
       // the same figure the `500 of 3,200` readout uses.
@@ -360,6 +412,7 @@ describe('the send preview says which population is which', () => {
 
   /** `sendable` is what will really go out, so the composer cannot overstate it. */
   it('counts sendable after consent, not merely after suppression', async () => {
+    configurePolicy('forward')
     const preview = await send({ dryRun: true })
     expect(preview.sendable).toBe(2)
     const actual = await send()

@@ -94,6 +94,25 @@ describe('the default policy is NOT retroactive', () => {
   })
 
   /**
+   * The line above is the only place the default's VALUE is written down; this
+   * one is why moving it there is enough.
+   *
+   * `resolveMarketingConsentPolicy` is the sole path from a stored setting to
+   * a policy any send applies, so a mode spelled out inside it would be the
+   * operative default and {@link DEFAULT_MARKETING_CONSENT_POLICY} would be a
+   * constant nothing reads — the exported value could be changed, this file
+   * would follow it, and not one campaign would be filtered differently.
+   */
+  it('takes its fallback FROM the exported default, not from a literal', () => {
+    expect(resolveMarketingConsentPolicy(undefined)).toEqual(
+      DEFAULT_MARKETING_CONSENT_POLICY,
+    )
+    expect(resolveMarketingConsentPolicy({ mode: 'off' }).mode).toBe(
+      DEFAULT_MARKETING_CONSENT_POLICY.mode,
+    )
+  })
+
+  /**
    * The reachability guarantee. Everybody in the product on the day this
    * ships was captured before the cutoff, so turning the join on removes
    * nobody from an existing audience — it only reports them differently.
