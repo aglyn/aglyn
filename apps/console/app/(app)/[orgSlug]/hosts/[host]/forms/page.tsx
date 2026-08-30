@@ -18,25 +18,17 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { Container } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
-import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import {
-  Button,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material'
-import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
-import { collection, limit, query } from 'firebase/firestore'
+import { Button, Stack } from '@mui/material'
+import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
+import HostFormsCard, {
+  type FormQuotaReadout,
+} from '../../../../../../components/forms/host-forms-card.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import {
   useHostId,
@@ -45,38 +37,31 @@ import {
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
-import { docsHelp } from '../../../../../../constants/docs-links'
-import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
 /**
  * Forms list.
  *
- * A form is a designable document, so this is the components listing's shape:
- * create opens a drawer, a row opens the form's own page, and the besigner is
- * reached from there rather than from the row. The extra column a component
- * list does not have is what the form COLLECTS — a form nobody has submitted
- * to is the one an author most needs to find.
+ * A form is a designable document, so this is the components listing's shape
+ * down to the primitives: the card renders `ListTable` with the console's one
+ * footer under it, create opens a drawer from the page header, a row opens the
+ * form's own page, and the besigner is reached from there rather than from the
+ * row. The extra columns a component list does not have are what the form
+ * COLLECTS — a form nobody has submitted to is the one an author most needs to
+ * find.
  */
 const HostForms: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const firestore = useFirestore()
   const router = useRouter()
   const createHostResource = useHostResourceApi()
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createError, setCreateError] = useState<unknown>(null)
   const [creating, setCreating] = useState(false)
-
-  const { data: formDocs } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'forms'), limit(100)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const forms = (formDocs ?? []).filter((one: any) => !one.archivedAt)
+  /** The card publishes its own count and cap; see `onQuota`. */
+  const [quota, setQuota] = useState<FormQuotaReadout | null>(null)
 
   // Name first, then create (AGL-700) — writing "Untitled form" and
   // navigating leaves a library of rows nobody can tell apart.
@@ -131,9 +116,6 @@ const HostForms: NextPageWithLayout<Record<string, never>> = () => {
     [creating, createHostResource, hostId, router, orgSlug, host],
   )
 
-  const openForm = (formId: string) =>
-    router.push(buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId }))
-
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -153,14 +135,17 @@ const HostForms: NextPageWithLayout<Record<string, never>> = () => {
       }}
       headerRight={
         // The readout leads the create button, as it does on every other
-        // artifact list.
+        // artifact list. The numbers come from the CARD, which owns the
+        // listener they are counted from.
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-          <QuotaReadoutComponent
-            ready={formDocs !== undefined}
-            used={forms.length}
-            limit={Aglyn.FORMS_MAX_PER_HOST}
-            noun="form"
-          />
+          {quota ? (
+            <QuotaReadoutComponent
+              ready={quota.ready}
+              used={quota.used}
+              limit={quota.limit}
+              noun="form"
+            />
+          ) : null}
           <Button
             size="small"
             variant="contained"
@@ -182,100 +167,13 @@ const HostForms: NextPageWithLayout<Record<string, never>> = () => {
       }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <CardDisplay
-          header="Forms"
-          help={docsHelp('forms', {
-            anchor: '#build-a-form',
-            excerpt:
-              'A form collects submissions, dedupes the people who send them, ' +
-              'and can route them to a lead.',
-          })}
-          contentGutterX
-          contentGutterY
-        >
-          {forms.length === 0 ? (
-            <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>
-              <Typography variant="body2" color="text.secondary">
-                {'No forms yet. A form collects submissions, dedupes the people who send them, and can route them to a lead.'}
-              </Typography>
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() => setCreateOpen(true)}
-              >
-                {'Create Form'}
-              </Button>
-            </Stack>
-          ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Name'}</TableCell>
-                  <TableCell>{'Slug'}</TableCell>
-                  {/* Numeric columns align right in head AND body. */}
-                  <TableCell align="right">{'Submissions'}</TableCell>
-                  <TableCell align="right">{'Leads'}</TableCell>
-                  <TableCell align="right">{'Actions'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {forms.map((form: any) => (
-                  <TableRow
-                    key={form.$id}
-                    hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => openForm(form.$id)}
-                  >
-                    <TableCell>
-                      <Typography variant="body2">
-                        {form.displayName ?? form.$id}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {form.slug ?? '--'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      {form.stats?.submissions ?? 0}
-                    </TableCell>
-                    <TableCell align="right">
-                      {form.stats?.leads ?? 0}
-                    </TableCell>
-                    <TableCell align="right">
-                      <RowActionsMenu
-                        label={form.displayName ?? form.$id}
-                        items={[
-                          {
-                            key: 'details',
-                            label: 'View details',
-                            href: buildRoute(Route.FORM_DETAILS, {
-                              orgSlug,
-                              host,
-                              formId: form.$id,
-                            }),
-                          },
-                          {
-                            key: 'besigner',
-                            label: 'Edit in besigner',
-                            // Through the detail page, which is the one place
-                            // that decides what an initial version looks like.
-                            // A second minting path is how the two drift.
-                            href: buildRoute(Route.FORM_DETAILS, {
-                              orgSlug,
-                              host,
-                              formId: form.$id,
-                            }),
-                          },
-                        ]}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardDisplay>
+        <HostFormsCard
+          hostId={hostId}
+          onQuota={setQuota}
+          // The same drawer the header opens, so the empty state cannot open a
+          // second one that knows nothing about the page's create state.
+          onCreate={() => setCreateOpen(true)}
+        />
       </Container>
     </DashboardLayout>
   )

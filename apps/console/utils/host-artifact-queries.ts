@@ -25,12 +25,24 @@ import {
   type Query,
 } from 'firebase/firestore'
 
-/** The per-site artifact collections that render as a console list. */
+/**
+ * The per-site artifact collections that render as a console list.
+ *
+ * `forms` joined them when a form became a designable document: it is created
+ * through the same resources route, keyed by the same generated uid, and
+ * listed by the same table, so it faces the ordering question below in exactly
+ * the same form. Its cap is enforced over the WHOLE collection rather than
+ * over live documents — a form is deleted outright, and its submissions keep
+ * their `formId` either way — so the aggregate `useLiveArtifactCount` takes
+ * matches what `/api/hosts/resources` counts, with the tombstone subtraction
+ * a no-op because nothing writes `deletedAt` on a form.
+ */
 export type HostArtifactCollection =
   | 'screens'
   | 'layouts'
   | 'components'
   | 'templates'
+  | 'forms'
 
 /**
  * ONE ordering decision for the site artifact lists (AGL-2501).

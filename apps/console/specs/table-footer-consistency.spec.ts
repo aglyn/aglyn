@@ -898,6 +898,16 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/email/src/lib/components/sending-domains-card.tsx',
+    'The org’s proved sending identities. Not a growing collection: a domain ' +
+      'is here because somebody published DNS records for it and waited for ' +
+      'them to verify, so its cardinality is how many domains the business ' +
+      'owns — a handful, and bounded by an act outside this product rather ' +
+      'than by a read. The set arrives whole from the sending-identity ' +
+      'route, so there is no client window to truncate and nothing a footer ' +
+      'could page through.',
+  ],
+  [
     'libs/plugins/email/src/lib/components/email-detail.tsx',
     'One message’s report. Its tables are the message’s own facts — state, ' +
       'send time, campaign, list, template — the fixed population taxonomy, ' +
@@ -1114,19 +1124,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       '`CONTACT_INTERACTIONS_CAP` is 50 — `mergeContactInteraction` slices to ' +
       'it on every write, so the array cannot hold a fifty-first row and the ' +
       'second page is empty for every contact that will ever exist.',
-  ],
-  [
-    'apps/console/app/(app)/[orgSlug]/hosts/[host]/forms/page.tsx',
-    'The site’s form CATALOG, bounded at write time by the `formsPerHost` ' +
-      'ceiling, enforced server-side in a transaction at ' +
-      '`/api/hosts/resources`. ⚠️ THE MARGIN IS GONE: that ceiling is ' +
-      '`FORMS_PER_HOST_CEILING`, and the read’s `limit(100)` now sits BELOW ' +
-      'it rather than twice above it, so a large catalog is truncated with ' +
-      'nothing on screen saying so — and `used` under-reports against the ' +
-      'readout’s own denominator. Listed here because the page has no ' +
-      'footer today, NOT because it is safe without one: the read must clear ' +
-      'the ceiling and disclose a cut list, the way the inbox form filter ' +
-      'does. Whoever raises the read decides whether this entry moves.',
   ],
 ]
 
@@ -1346,15 +1343,17 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // the same version history the component and layout ones do, read the
     // same unordered way, and is blocked on the same `createdAt` audit.
     expect(OWES_A_FOOTER).toHaveLength(15)
-    // 34 since the forms catalog joined them. That entry's own note records
-    // that its margin has since gone: the read's `limit(100)` no longer
-    // clears the `formsPerHost` ceiling, so it is listed as un-footered
-    // rather than as safe. Every other table on
-    // this list is bounded by something other than the audience — a fixed
-    // taxonomy, a rollup capped at WRITE time, a ceilinged window that says
-    // so, or a merchant's own vocabulary — which is the property this list
-    // exists to record. Raised here deliberately rather than by a walk that
-    // quietly stopped reaching a file.
+    // 33 since the forms catalog left this list. It was here on the ground
+    // that `FORMS_MAX_PER_HOST` bounds it at 50 and the read asked for 100 —
+    // true, and an argument for not NEEDING a footer rather than for not
+    // having one. The catalog now renders `ListTable` over the shared ordered
+    // walk with `ListPagination` under it, exactly as the components list
+    // does, so it is no longer a table without a footer and an entry for it
+    // here would be a stale exemption. Every table still on this list is
+    // bounded by something other than the audience — a fixed taxonomy, a
+    // rollup capped at WRITE time, a ceilinged window that says so, or a
+    // merchant's own vocabulary — which is the property this list exists to
+    // record.
     expect(NOT_A_LIST).toHaveLength(34)
   })
 })

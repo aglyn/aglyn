@@ -53,6 +53,8 @@ import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import ArtifactNotFound from '../../../../../../../components/artifact-not-found.component'
+import FormDesignPreview from '../../../../../../../components/forms/form-design-preview.component'
+import FormMetricsCard from '../../../../../../../components/forms/form-metrics-card.component'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import {
   useHostId,
@@ -63,9 +65,11 @@ import DashboardLayout from '../../../../../../../components/layouts/dashboard.l
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../constants/docs-links'
+import useFormPromoteApi from '../../../../../../../hooks/use-form-promote-api'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
+import useHostRole from '../../../../../../../hooks/use-host-role'
 import { useDeclareDocumentSubject } from '../../../../../../../components/document-subject'
 
 /**
@@ -85,6 +89,21 @@ import { useDeclareDocumentSubject } from '../../../../../../../components/docum
  * that let an author change both in one motion would let them satisfy the
  * check by moving whichever side happened to be easier — which is how a form
  * ends up with lead routing pointed at a field nobody fills in.
+ *
+ * ## Promotion lives here, not only in the besigner
+ *
+ * A component's version history offers Publish on any version: promotion is
+ * how you go back, not only how you go forward, and an author restoring last
+ * week's design should not have to open a canvas to do it. Forms had no such
+ * control at all — the only way to move `versionId` was to be standing in the
+ * besigner on the version you wanted.
+ *
+ * It rides `/api/hosts/forms/promote` rather than an `updateDoc` here, because
+ * a form's promotion has to run `checkFormContract` on the tree it is about to
+ * write and REFUSE. A check in this component would be advice a determined
+ * client could skip; the route reads the stored version itself, so nothing
+ * about the design crosses the wire inbound and there is no version of this
+ * page that can publish a design the check has not seen.
  */
 const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ formId: string }>()
@@ -94,9 +113,14 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
   const host = useHostSubdomain()
   const firestore = useFirestore()
   const createHostVersion = useHostVersionApi()
+  const promoteForm = useFormPromoteApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
+  // The `author` host role edits content and may NOT publish it (AGL-2334).
+  // Disabled with a reason rather than hidden, so the console says no instead
+  // of the route answering with a bare 403.
+  const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
 
   const { data: form, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'forms', formId),
@@ -129,6 +153,18 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
   const [lead, setLead] = useState<boolean | null>(null)
   const [consentField, setConsentField] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
+  const [promoting, setPromoting] = useState<string | null>(null)
+  /**
+   * What a REFUSED promotion said, kept on the page rather than in a toast.
+   *
+   * A contract violation is a list of things to go and fix in the besigner,
+   * and a snackbar is gone by the time the author has read the second one.
+   * The besigner's own refusal persists for the same reason.
+   */
+  const [promoteRefusal, setPromoteRefusal] = useState<{
+    message: string
+    violations: Aglyn.FormContractViolation[]
+  } | null>(null)
 
   /** The fields the PUBLISHED design draws, which is what a submission can carry. */
   const declaredFields: Aglyn.FormFieldDecl[] = useMemo(
@@ -204,13 +240,64 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
   ])
 
   /**
+   * Makes one version the version the live sites serve.
+   *
+   * The route decides, not this handler: it re-reads the stored version, runs
+   * `checkFormContract` on the tree it is about to write, and answers 422 with
+   * the violations when a publish would stop the submissions arriving. So the
+   * only thing here is what to do with each answer — and a refusal is put on
+   * the page rather than in a toast, because it is a list of things to fix.
+   */
+  const handlePromote = useCallback(
+    (targetVersionId: string) => async () => {
+      if (promoting) return
+      setPromoting(targetVersionId)
+      setPromoteRefusal(null)
+      try {
+        const result = await promoteForm({ hostId, formId, versionId: targetVersionId })
+        if (!result.ok) {
+          const message = result.message ?? 'Publish failed'
+          setPromoteRefusal({
+            message,
+            violations: result.violations ?? [],
+          })
+          // `persist` because this is a refusal an author has to act on: an
+          // auto-dismissed warning is how someone walks away believing the
+          // form shipped.
+          enqueueSnackbar(message, {
+            variant: 'warning',
+            allowDuplicate: true,
+            persist: true,
+          })
+          return
+        }
+        enqueueSnackbar(
+          'Published. The live sites now serve this version, and the form’s ' +
+            'declared fields match it.',
+          { variant: 'success', persist: false },
+        )
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('Could not publish that version', {
+          variant: 'error',
+          allowDuplicate: true,
+          persist: true,
+        })
+      } finally {
+        setPromoting(null)
+      }
+    },
+    [promoting, promoteForm, hostId, formId, enqueueSnackbar],
+  )
+
+  /**
    * Opens a version in the besigner, minting the first one when the form has
    * none.
    *
-   * Forms adopted from a page (AGL-2404's sibling migration) carry a declared
-   * field list and, since the design moved onto the document, a `nodes` map
-   * seeded from the page they were adopted from — so the first version opens
-   * on the form the site was ALREADY submitting rather than a blank canvas.
+   * Forms adopted from a page carry a declared field list and, since the
+   * design moved onto the document, a `nodes` map seeded from the page they
+   * were adopted from — so the first version opens on the form the site was
+   * ALREADY submitting rather than a blank canvas.
    */
   const handleOpen = useCallback(
     (targetVersionId?: string) => async () => {
@@ -283,6 +370,11 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
 
   const listUrl = buildRoute(Route.HOST_FORMS, { orgSlug, host })
   const dirty = name != null || lead != null || consentField != null
+  // Named before it is used on every row, so a role denial reads as a reason
+  // rather than as a control that does nothing.
+  const publishBlock = hostRoleLoaded
+    ? 'Your role on this site can edit content but not publish it'
+    : 'Checking what your role can do…'
 
   return (
     <DashboardLayout
@@ -302,8 +394,12 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
         children: form?.displayName ?? 'Form',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },
       }}
-      // Withheld when there is no form: Open Besigner would mint a version
-      // document under an id that has none (AGL-706).
+      // The besigner is what this page exists to reach, so it belongs in the
+      // hero like the component detail page's. Withheld when there is no form:
+      // it would mint a version document under an id that has none (AGL-706).
+      // Presence sits BESIDE the button that would join the room, and watches
+      // without announcing — a page that joined on arrival would report every
+      // browser as an editor.
       headerRight={
         notFound ? null : (
           <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
@@ -311,6 +407,7 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
               hostId={hostId}
               docType="form"
               docId={formId}
+              // The version Edit in besigner would actually take you to.
               versionId={publishedVersionId ?? versions[0]?.$id}
             />
             <Button
@@ -322,7 +419,7 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
                 <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
               }
             >
-              {opening ? 'Opening…' : 'Open Besigner'}
+              {opening ? 'Opening…' : 'Edit in besigner'}
             </Button>
           </Stack>
         )
@@ -454,6 +551,17 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
                 ),
               },
               {
+                size: { xs: 12, lg: 5 },
+                children: (
+                  <FormMetricsCard
+                    stats={form?.stats}
+                    fields={declaredFields}
+                    leadRouting={effectiveLead}
+                    loading={status === 'loading'}
+                  />
+                ),
+              },
+              {
                 size: { xs: 12, lg: 7 },
                 children: (
                   <CardDisplay
@@ -467,65 +575,148 @@ const FormDetails: NextPageWithLayout<Record<string, never>> = () => {
                     contentGutterX
                     contentGutterY
                   >
-                    {versions.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        {'No versions yet — opening the besigner creates the first one.'}
-                      </Typography>
-                    ) : (
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>{'Version'}</TableCell>
-                            <TableCell>{'Created'}</TableCell>
-                            <TableCell>{'Updated'}</TableCell>
-                            <TableCell align="right">{'Actions'}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {versions.map((version: any) => (
-                            <TableRow key={version.$id} hover>
-                              <TableCell>
-                                <Stack
-                                  direction="row"
-                                  spacing={1}
-                                  sx={{ alignItems: 'center' }}
+                    <Stack spacing={2}>
+                      {promoteRefusal ? (
+                        <Alert
+                          severity="warning"
+                          onClose={() => setPromoteRefusal(null)}
+                        >
+                          <AlertTitle>{promoteRefusal.message}</AlertTitle>
+                          {promoteRefusal.violations.length ? (
+                            <Stack component="ul" sx={{ pl: 2, m: 0 }}>
+                              {promoteRefusal.violations.map((violation) => (
+                                <Typography
+                                  component="li"
+                                  variant="body2"
+                                  key={`${violation.code}:${violation.nodeId ?? violation.fieldName ?? ''}`}
                                 >
-                                  <Typography variant="body2">
-                                    {version.displayName ?? version.$id}
-                                  </Typography>
-                                  {version.$id === publishedVersionId ? (
-                                    <Chip
-                                      label="Current"
-                                      color="success"
-                                      size="small"
-                                    />
-                                  ) : null}
-                                </Stack>
-                              </TableCell>
-                              <TableCell>
-                                {version.createdAt
-                                  ?.toDate?.()
-                                  .toLocaleString() ?? '--'}
-                              </TableCell>
-                              <TableCell>
-                                {version.updatedAt
-                                  ?.toDate?.()
-                                  .toLocaleString() ?? '--'}
-                              </TableCell>
-                              <TableCell align="right">
-                                <Button
-                                  size="small"
-                                  disabled={opening}
-                                  onClick={handleOpen(version.$id)}
-                                >
-                                  {'Open'}
-                                </Button>
-                              </TableCell>
+                                  {violation.message}
+                                </Typography>
+                              ))}
+                            </Stack>
+                          ) : null}
+                        </Alert>
+                      ) : null}
+                      {versions.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {'No versions yet — opening the besigner creates the first one.'}
+                        </Typography>
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>{'Version'}</TableCell>
+                              <TableCell>{'Created'}</TableCell>
+                              <TableCell>{'Updated'}</TableCell>
+                              <TableCell align="right">{'Actions'}</TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
+                          </TableHead>
+                          <TableBody>
+                            {versions.map((version: any) => (
+                              <TableRow key={version.$id} hover>
+                                <TableCell>
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ alignItems: 'center' }}
+                                  >
+                                    <Typography variant="body2">
+                                      {version.displayName ?? version.$id}
+                                    </Typography>
+                                    {version.$id === publishedVersionId ? (
+                                      <Chip
+                                        label="Current"
+                                        color="success"
+                                        size="small"
+                                      />
+                                    ) : null}
+                                  </Stack>
+                                </TableCell>
+                                <TableCell>
+                                  {version.createdAt
+                                    ?.toDate?.()
+                                    .toLocaleString() ?? '--'}
+                                </TableCell>
+                                <TableCell>
+                                  {version.updatedAt
+                                    ?.toDate?.()
+                                    .toLocaleString() ?? '--'}
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ justifyContent: 'flex-end' }}
+                                  >
+                                    <Button
+                                      size="small"
+                                      disabled={opening}
+                                      onClick={handleOpen(version.$id)}
+                                    >
+                                      {'Open'}
+                                    </Button>
+                                    {/*
+                                      The version the sites already serve has
+                                      nothing to promote to, so the control is
+                                      disabled rather than absent — an absent
+                                      control and an inapplicable one look
+                                      identical, and only one of them is
+                                      honest.
+                                    */}
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      title={
+                                        canPublish ? undefined : publishBlock
+                                      }
+                                      disabled={
+                                        !canPublish ||
+                                        promoting !== null ||
+                                        version.$id === publishedVersionId
+                                      }
+                                      onClick={handlePromote(version.$id)}
+                                    >
+                                      {promoting === version.$id
+                                        ? 'Publishing…'
+                                        : version.$id === publishedVersionId
+                                          ? 'Published'
+                                          : 'Publish'}
+                                    </Button>
+                                  </Stack>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+              {
+                // Full width: the frame is a document, and a document in a
+                // five-column card is a column of one-word lines.
+                size: { xs: 12 },
+                children: (
+                  <CardDisplay
+                    header="What a submission will carry"
+                    help={docsHelp('forms', {
+                      anchor: '#field-types',
+                      excerpt:
+                        'Each field arrives under its own name. Two fields ' +
+                        'sharing one name arrive as a single answer.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <FormDesignPreview
+                      formId={formId}
+                      nodes={form?.nodes}
+                      consentFieldName={
+                        effectiveConsent ? effectiveConsent : undefined
+                      }
+                      loading={status === 'loading'}
+                    />
                   </CardDisplay>
                 ),
               },

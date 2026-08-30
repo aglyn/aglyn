@@ -276,9 +276,13 @@ export function SendingDomainDetail(props: SendingDomainDetailProps) {
           : `The claim and the signing key are dropped. The DNS records stay ` +
             `in your zone — nothing is changed at your registrar — and you ` +
             `can add the domain again later, which issues a new key.`,
-      confirmText: 'Remove domain',
-      destructive: true,
+      confirmationText: 'Remove domain',
+      confirmationButtonProps: { color: 'error' },
     })
+      // `confirm` resolves with no value and REJECTS on cancel, so the
+      // resolved value alone can never gate this.
+      .then(() => true)
+      .catch(() => false)
     if (!ok) return
     const { response, payload } = await call({
       path: 'sending-domains',
