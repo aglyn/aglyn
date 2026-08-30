@@ -85,10 +85,10 @@ describe('reading a basis off a person record', () => {
   })
 })
 
-describe('the default policy is NOT retroactive', () => {
-  it('defaults to forward enforcement for an org that has configured nothing', () => {
+describe('the default policy is RETROACTIVE while pre-release', () => {
+  it('defaults to strict enforcement for an org that has configured nothing', () => {
     expect(resolveMarketingConsentPolicy(undefined)).toEqual({
-      mode: 'forward',
+      mode: 'strict',
       enforceFromMs: MARKETING_CONSENT_ENFORCED_FROM_MS,
     })
   })
@@ -113,16 +113,35 @@ describe('the default policy is NOT retroactive', () => {
   })
 
   /**
-   * The reachability guarantee. Everybody in the product on the day this
-   * ships was captured before the cutoff, so turning the join on removes
-   * nobody from an existing audience — it only reports them differently.
+   * Nothing is grandfathered. A record predating the cutoff is withheld like
+   * any other record without a basis, which is the whole content of the
+   * retroactive decision.
    */
-  it('keeps a pre-cutoff record with no basis reachable, as grandfathered', () => {
+  it('withholds a pre-cutoff record with no basis', () => {
     expect(
       marketingConsentVerdict(
         record({ capturedAtMs: BEFORE }),
         DEFAULT_MARKETING_CONSENT_POLICY,
       ),
+    ).toBe('withheld')
+  })
+
+  /**
+   * ⚠️ THE ESCAPE HATCH, which is the thing that must not quietly rot.
+   *
+   * Strict is only safe here because the product is pre-release and the
+   * records it withholds are seed data. A deployment holding a real audience
+   * sets `forward` and keeps those people reachable. If grandfathering ever
+   * stops working, the default stops being reversible and becomes the only
+   * behavior — so this is asserted against an EXPLICIT forward policy rather
+   * than against whatever the default happens to be.
+   */
+  it('still grandfathers under forward, which a live deployment sets', () => {
+    expect(
+      marketingConsentVerdict(record({ capturedAtMs: BEFORE }), {
+        mode: 'forward',
+        enforceFromMs: MARKETING_CONSENT_ENFORCED_FROM_MS,
+      }),
     ).toBe('grandfathered')
   })
 
@@ -137,15 +156,18 @@ describe('the default policy is NOT retroactive', () => {
   })
 
   /**
-   * A hand-typed address has no record at all. It leans toward reachable for
-   * the same reason the missing-field case does — the unknown must not
-   * silently withhold somebody's mail — and it is what keeps a test send to
-   * the admin's own address working.
+   * Under strict the direction of the unknown reverses: a record carrying
+   * neither a basis nor a capture time is withheld rather than reachable.
+   *
+   * A hand-typed address is exactly this shape, which is why the composer's
+   * test send no longer rides on grandfathering — it is carved out explicitly
+   * as a proof of your own draft. See the self-proof block in
+   * `campaign-send-consent.spec.ts`.
    */
-  it('grandfathers a record with no capture time at all', () => {
+  it('withholds a record with no capture time at all', () => {
     expect(
       marketingConsentVerdict(record(), DEFAULT_MARKETING_CONSENT_POLICY),
-    ).toBe('grandfathered')
+    ).toBe('withheld')
   })
 
   /**
@@ -190,7 +212,9 @@ describe('the default policy is NOT retroactive', () => {
    * mode of "off" is mail to people who declined.
    */
   it('falls back to the default rather than to no enforcement', () => {
-    expect(resolveMarketingConsentPolicy({ mode: 'off' }).mode).toBe('forward')
+    expect(resolveMarketingConsentPolicy({ mode: 'off' }).mode).toBe(
+      DEFAULT_MARKETING_CONSENT_POLICY.mode,
+    )
     expect(
       resolveMarketingConsentPolicy({ enforceFromMs: 'soon' }).enforceFromMs,
     ).toBe(MARKETING_CONSENT_ENFORCED_FROM_MS)
@@ -207,12 +231,37 @@ describe('splitting an audience', () => {
         ['c@x.com', record({ capturedAtMs: AFTER })],
         ['d@x.com', record({ basis: 'declined' })],
       ]),
-      DEFAULT_MARKETING_CONSENT_POLICY,
+      // FORWARD, deliberately: all three populations only coexist under a
+      // non-retroactive policy. What this pins is that the split reports them
+      // APART rather than netting them into one number — the property that
+      // lets a merchant see what a stricter policy would cost before setting
+      // it. Under the strict default the grandfathered column is always 0,
+      // which would make this assertion pass while testing nothing.
+      { mode: 'forward', enforceFromMs: MARKETING_CONSENT_ENFORCED_FROM_MS },
     )
     expect(split.mailable).toEqual(['a@x.com', 'b@x.com'])
     expect(split.consented).toBe(1)
     expect(split.grandfathered).toBe(1)
     expect(split.withheld).toBe(2)
+  })
+
+  /**
+   * The same audience under the shipped default. `b@x.com` is reachable above
+   * and withheld here on identical data, which is the entire operational
+   * consequence of the retroactive decision expressed as one diff.
+   */
+  it('has no grandfathered population under the strict default', () => {
+    const split = splitByMarketingConsent(
+      ['a@x.com', 'b@x.com'],
+      new Map([
+        ['a@x.com', record({ basis: 'granted' })],
+        ['b@x.com', record({ capturedAtMs: BEFORE })],
+      ]),
+      DEFAULT_MARKETING_CONSENT_POLICY,
+    )
+    expect(split.mailable).toEqual(['a@x.com'])
+    expect(split.grandfathered).toBe(0)
+    expect(split.withheld).toBe(1)
   })
 
   /**

@@ -75,14 +75,19 @@ export interface MarketingConsentRecord {
  */
 export interface MarketingConsentPolicy {
   /**
-   * `'forward'` — the default, and NOT retroactive. A record captured on or
-   * after {@link enforceFromMs} needs a recorded basis; one captured before
-   * it stays reachable and is reported as grandfathered. Nobody currently in
-   * an audience is dropped by turning this on.
+   * `'forward'` — NOT retroactive. A record captured on or after
+   * {@link enforceFromMs} needs a recorded basis; one captured before it
+   * stays reachable and is reported as grandfathered. Turning this on drops
+   * nobody who is currently in an audience, which is what makes it the mode
+   * a deployment with a real back catalog wants.
    *
-   * `'strict'` — retroactive. Every recipient needs a recorded basis. This
-   * can shrink an existing audience sharply, possibly to near zero, so it is
-   * the account owner's decision and never a default.
+   * `'strict'` — retroactive. Every recipient needs a recorded basis, and
+   * nothing grandfathers. It can shrink an existing audience sharply,
+   * possibly to near zero.
+   *
+   * `'strict'` is the current default; see
+   * {@link DEFAULT_MARKETING_CONSENT_POLICY} for the pre-release condition
+   * that makes a retroactive default safe, and for when it stops being so.
    */
   mode: 'forward' | 'strict'
   /**
@@ -99,21 +104,42 @@ export interface MarketingConsentPolicy {
 /**
  * The default forward cutoff: 2026-09-01T00:00:00Z.
  *
- * A date rather than a per-org stamp so the rule has an answer on an org that
- * has never opened the setting, and a FUTURE-facing one so it cannot reach
- * back over anybody already captured. Every address in the product on the day
- * this ships predates it and is therefore grandfathered; every capture from
- * the checkbox-bearing surfaces onward carries a basis or is withheld.
+ * A date rather than a per-org stamp, so the rule has an answer on an org that
+ * has never opened the setting.
+ *
+ * It divides the audience only under `'forward'`, where a record predating it
+ * grandfathers and every capture from the checkbox-bearing surfaces onward
+ * carries a basis or is withheld. Under `'strict'` it decides nothing, since
+ * no record grandfathers at any date.
  *
  * An org may move it later (a longer grace period) or earlier (voluntarily
- * enforcing over its own back catalog) through
+ * enforcing over more of its own back catalog) through
  * {@link resolveMarketingConsentPolicy}.
  */
 export const MARKETING_CONSENT_ENFORCED_FROM_MS = Date.UTC(2026, 8, 1)
 
-/** The policy an org gets when it has never configured one. */
+/**
+ * The policy an org gets when it has never configured one.
+ *
+ * `'strict'` — every recipient needs a recorded basis, and nothing is
+ * grandfathered. That is defensible because of WHEN it ships: the product is
+ * pre-release with no real customers, so the population a retroactive rule
+ * removes is test and seeded demo data. The usual objection to retroactive
+ * enforcement — that it silently shrinks a live audience, sometimes to
+ * nothing — has nobody here to injure.
+ *
+ * ⚠️ It stops being defensible the moment real addresses exist. A deployment
+ * that has already collected an audience under the old rule sets `'forward'`
+ * on its orgs rather than inheriting this, because flipping to strict over a
+ * live back catalog withholds mail from people who were legitimately
+ * reachable the day before.
+ *
+ * `enforceFromMs` stays populated and is still read: under `'strict'` it
+ * decides nothing, but an org moving back to `'forward'` gets a real cutoff
+ * rather than a missing field.
+ */
 export const DEFAULT_MARKETING_CONSENT_POLICY: MarketingConsentPolicy = {
-  mode: 'forward',
+  mode: 'strict',
   enforceFromMs: MARKETING_CONSENT_ENFORCED_FROM_MS,
 }
 
