@@ -17,8 +17,16 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import {
+  mdiBullhornOutline,
+  mdiEyeOutline,
+  mdiPaletteOutline,
+} from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   ceilingedWindow,
@@ -37,7 +45,9 @@ import {
   Typography,
 } from '@mui/material'
 import { collection } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
+import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
 
 /** How many messages one read of this list covers. */
@@ -82,6 +92,7 @@ export interface EmailsListCardProps {
 export function EmailsListCard(props: EmailsListCardProps) {
   const { hostId, basePath } = props
   const firestore = useFirestore()
+  const router = useRouter()
 
   const { data: emailDocs } = useFirestoreCollection<any>(
     () =>
@@ -111,6 +122,54 @@ export function EmailsListCard(props: EmailsListCardProps) {
     [emails, page, pageSize],
   )
 
+  const emailHref = (email: any) => `${basePath}/emails/${email.$id}`
+
+  /**
+   * What a message can be opened INTO, from the list.
+   *
+   * All three are places the message's own report already links to, moved one
+   * screen earlier: the report itself, the campaign it belongs to, and the
+   * template it was rendered from. A message need have neither of the last
+   * two — one sent before campaigns grouped anything names no container, and
+   * one composed inline was built from no template — so those entries are
+   * shown DISABLED with the reason rather than hidden. A control that
+   * disappears and a control that does not apply look identical, and only one
+   * of them tells the reader which case they are in.
+   */
+  const rowActions = (email: any): RowActionsMenuItem[] => {
+    const containerId = String(email?.[CAMPAIGN_SEND_CONTAINER_FIELD] ?? '')
+    const templateScreenId = String(email?.templateScreenId ?? '')
+    return [
+      {
+        key: 'details',
+        label: 'Open report',
+        icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+        href: emailHref(email),
+      },
+      {
+        key: 'campaign',
+        label: 'Open its campaign',
+        icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
+        href: containerId
+          ? `${basePath}/campaigns/${containerId}`
+          : undefined,
+        disabled: !containerId,
+        disabledReason:
+          'Sent before campaigns grouped their emails, so it belongs to none',
+      },
+      {
+        key: 'template',
+        label: 'Open its template',
+        icon: <MdiIcon path={mdiPaletteOutline.path} size={0.8} />,
+        href: templateScreenId
+          ? `${basePath}/templates/${templateScreenId}`
+          : undefined,
+        disabled: !templateScreenId,
+        disabledReason: 'This message was not built from a template',
+      },
+    ]
+  }
+
   return (
     <CardDisplay
       header={'Emails'}
@@ -135,15 +194,30 @@ export function EmailsListCard(props: EmailsListCardProps) {
                   <TableCell align="right">{'Addressed'}</TableCell>
                   <TableCell align="right">{'Opens'}</TableCell>
                   <TableCell align="right">{'Clicks'}</TableCell>
+                  <TableCell align="right" />
                 </TableRow>
               </TableHead>
               <TableBody>
                 {visible.map((email: any) => {
                   const at = emailSendTimeMs(email)
                   return (
-                    <TableRow key={email.$id} hover>
+                    <TableRow
+                      key={email.$id}
+                      hover
+                      onClick={() => router.push(emailHref(email))}
+                      sx={{ cursor: 'pointer' }}
+                    >
                       <TableCell>
-                        <AppLink href={`${basePath}/emails/${email.$id}`}>
+                        {/*
+                          The row's own handler would fire too and push the
+                          same route twice — one history entry per back press.
+                         */}
+                        <AppLink
+                          href={emailHref(email)}
+                          onClick={(event: { stopPropagation: () => void }) =>
+                            event.stopPropagation()
+                          }
+                        >
                           {email.subject || 'Untitled email'}
                         </AppLink>
                       </TableCell>
@@ -166,6 +240,16 @@ export function EmailsListCard(props: EmailsListCardProps) {
                       </TableCell>
                       <TableCell align="right">
                         {Number(email.stats?.clicks ?? 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{ width: 56 }}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <RowActionsMenu
+                          label={String(email.subject || 'Untitled email')}
+                          items={rowActions(email)}
+                        />
                       </TableCell>
                     </TableRow>
                   )
