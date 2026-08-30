@@ -174,7 +174,8 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   { id: 'logic', label: 'Logic', description: 'Variables, functions, and reference health.', releaseFlag: 'release_logic' },
   { id: 'marketing', label: 'Marketing', description: 'Overlays, campaigns, and experiments.', releaseFlag: 'release_marketing' },
   { id: 'redirects', label: 'Redirects', description: 'URL redirect rules.', releaseFlag: 'release_redirects' },
-  { id: 'workflows', label: 'Workflows', description: 'Automations, webhooks, and run logs.', releaseFlag: 'release_workflows' },
+  // `id` is stored on every org's enabled-plugin list; only the label moved.
+  { id: 'workflows', label: 'Automation', description: 'Workflows, actions, webhooks, and run logs.', releaseFlag: 'release_workflows' },
 ] as const
 
 /** Ids loaded for orgs that have never touched the switchboard. */

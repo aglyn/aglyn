@@ -82,7 +82,7 @@ appears only if you're an owner or admin of the site; it holds per-site plugin s
 the custom domain, the site's security lists, the full activity log, and the danger zone.
 
 :::note Sections that come and go
-Tabs such as **Data**, **Products**, **Logic**, **Workflows**, **Inbox**, **Bookings**,
+Tabs such as **Data**, **Products**, **Logic**, **Automation**, **Inbox**, **Bookings**,
 **Events**, **Redirects**, **Marketing** and **Marketplace** are contributed by plugins
 and appear only where that plugin is enabled for your workspace (they're inserted after
 **Analytics**). If a section these docs describe isn't in your tab strip, that's usually

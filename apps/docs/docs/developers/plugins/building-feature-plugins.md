@@ -517,7 +517,7 @@ Conventions the scaffold already applies:
   The first relocated plugin to consume the media browser — the popup image
   picker calls `useMediaPicker()` (the shell mounts the provider around plugin
   pages), so the app media dialog never leaves the console app.
-- **Workflows** (`libs/plugins/workflows`) — console-only (AGL-395): the
+- **Automation** (`libs/plugins/workflows`) — console-only (AGL-395): the
   workflow builder, actions builder, and webhooks tabs, plus the shared
   `HostActivityCard` (exported for the app dashboard + screen-view). Each tab
   gates on its own plan flag (workflows / actions / webhooks), so all three

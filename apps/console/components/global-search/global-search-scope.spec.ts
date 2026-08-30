@@ -299,7 +299,7 @@ describe('where a result row goes', () => {
     )
     expect(href('collections', { $id: 'x' })).toBe('/acme/hosts/demo/content')
     expect(href('authors', { $id: 'a1' })).toBe('/acme/hosts/demo/content')
-    expect(href('workflows', { $id: 'w1' })).toBe('/acme/hosts/demo/workflows')
+    expect(href('workflows', { $id: 'w1' })).toBe('/acme/hosts/demo/automation')
     expect(href('products', { $id: 'p1' })).toBe('/acme/hosts/demo/products')
     expect(href('redirects', { $id: 'r1' })).toBe('/acme/hosts/demo/redirects')
     expect(href('services', { $id: 'sv1' })).toBe('/acme/hosts/demo/bookings')

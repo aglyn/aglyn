@@ -71,7 +71,7 @@ function sectionBody(
 }
 
 /**
- * Workflows page (AGL-101/148/149 → AGL-395): the automation surface —
+ * Automation page (AGL-101/148/149 → AGL-395): the automation surface —
  * workflow builder, event-triggered actions, and webhooks — owned by the
  * workflows plugin and rendered by the shell's generic plugin route. Each card
  * runs its own entitlement check (workflows / actions / webhooks are distinct
@@ -83,6 +83,11 @@ function sectionBody(
  * same counts after. What routing adds is that the URL names the section: it is
  * linkable, the back button walks sections, the breadcrumb says where you are,
  * and "mount only what is open" is structural rather than a `lazy` flag.
+ *
+ * The section ids are unchanged by the Automation rename: they are the
+ * addresses people bookmark and the docs link to. A workflow belongs to the
+ * site and an ACTION belongs to the site too; an interaction belongs to the
+ * document that holds it and is edited on the element, not here.
  */
 export function WorkflowsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org, section, sections, basePath } = props

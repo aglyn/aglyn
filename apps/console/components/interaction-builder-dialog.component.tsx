@@ -343,7 +343,7 @@ EventParamsEditor.displayName = 'EventParamsEditor'
 /**
  * Fluent interaction builder (AGL-319): the whole trigger + actions +
  * frequency configuration in one dialog on the canvas — replacing the
- * old "create disabled, finish on the Workflows page" detour. Pickers
+ * old "create disabled, finish on the Automation page" detour. Pickers
  * only for workflows/overlays (id-based, AGL-261); element/class steps
  * pick their target by clicking it on the canvas (AGL-574) and Test runs
  * class steps against the live canvas DOM.
@@ -1321,7 +1321,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
           <Alert severity="warning">{problem}</Alert>
         ) : null}
         <Typography variant="caption" color="text.secondary">
-          {'Saved interactions are enabled immediately — no Workflows-page ' +
+          {'Saved interactions are enabled immediately — no Automation-page ' +
             'detour.'}
         </Typography>
       </DialogContent>

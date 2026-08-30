@@ -160,6 +160,16 @@ module.exports = withAglyn({
         destination: `/org/${section}`,
         permanent: true,
       })),
+      // Workflows → Automation. The section holds a Workflows tab, so the
+      // parent could not keep that name; this is the address it used to have.
+      // Next carries the query string across, which is what makes the tab
+      // deep links (`?tab=actions`, `?tab=webhooks`) survive the move — their
+      // ids are unchanged. Mirrors `Route.HOST_WORKFLOWS`.
+      {
+        source: '/:orgSlug/hosts/:host/workflows',
+        destination: '/:orgSlug/hosts/:host/automation',
+        permanent: true,
+      },
     ]
   },
 })

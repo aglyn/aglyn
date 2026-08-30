@@ -322,6 +322,24 @@ export enum Route {
   HOST_ADMIN_ACTIVITY = '/[orgSlug]/hosts/[host]/admin/activity',
   HOST_ADMIN_DANGER = '/[orgSlug]/hosts/[host]/admin/danger',
   HOST_THEME = '/[orgSlug]/hosts/[host]/theme',
+  /*
+   * The automation section: Workflows, Actions and Webhooks under one parent.
+   * The parent is named for what the three have in common, so no tab shares a
+   * name with the section that contains it.
+   */
+  HOST_AUTOMATION = '/[orgSlug]/hosts/[host]/automation',
+  /**
+   * The address the automation section answered to before it had a name of
+   * its own. Nothing links here — `HOST_AUTOMATION` is what the nav, the
+   * search results and the activity feed build — but the console redirects it
+   * permanently, so a held bookmark still lands on the section (and keeps its
+   * `?tab=`, which never changed).
+   *
+   * Kept on the table rather than as a bare literal in `next.config.js`
+   * because the redirect and the address it serves are one fact:
+   * `automation-section.spec.ts` reads this entry and fails if the rule for
+   * it goes missing.
+   */
   HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
   HOST_DATA = '/[orgSlug]/hosts/[host]/data',
   HOST_LOGIC = '/[orgSlug]/hosts/[host]/logic',
@@ -523,6 +541,7 @@ export interface RoutePayload {
   [Route.HOST_PLUGIN]: { orgSlug: string; host: string; pluginSlug: string }
   [Route.HOST_MEDIA]: { orgSlug: string; host: string }
   [Route.HOST_THEME]: { orgSlug: string; host: string }
+  [Route.HOST_AUTOMATION]: { orgSlug: string; host: string }
   [Route.HOST_WORKFLOWS]: { orgSlug: string; host: string }
   [Route.HOST_DATA]: { orgSlug: string; host: string }
   [Route.HOST_LOGIC]: { orgSlug: string; host: string }

@@ -505,7 +505,7 @@ export function buildResultHref(
     case 'authors':
       return host ? buildRoute(Route.HOST_CONTENT, { orgSlug, host }) : null
     case 'workflows':
-      return host ? buildRoute(Route.HOST_WORKFLOWS, { orgSlug, host }) : null
+      return host ? buildRoute(Route.HOST_AUTOMATION, { orgSlug, host }) : null
     case 'products':
       return host ? buildRoute(Route.HOST_PRODUCTS, { orgSlug, host }) : null
     case 'redirects':
