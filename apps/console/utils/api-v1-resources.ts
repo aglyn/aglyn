@@ -2993,12 +2993,17 @@ export async function handleUsage(
   }
   const orgRef = ctx.firestore.collection('orgs').doc(ctx.orgId)
   const month = apiUsageMonth()
-  const [apiSnap, storageSnap, contactsSnap, datasetsSnap] = await Promise.all([
-    orgRef.collection('apiUsage').doc(month).get(),
-    orgRef.collection('usage').doc(month).get(),
-    orgRef.collection('contacts').count().get(),
-    orgRef.collection('datasets').count().get(),
-  ])
+  const [apiSnap, storageSnap, contactsSnap, datasetsSnap, campaignEmailSnap] =
+    await Promise.all([
+      orgRef.collection('apiUsage').doc(month).get(),
+      orgRef.collection('usage').doc(month).get(),
+      orgRef.collection('contacts').count().get(),
+      orgRef.collection('datasets').count().get(),
+      // The ORG counter, which is what `reserveCampaignEmailSends` claims
+      // against. The per-site counter beside it is site history and answers a
+      // different question; reporting it here would disagree with the gate.
+      orgRef.collection('counters').doc('campaignEmailSends').get(),
+    ])
 
   const apiQuota = checkApiRequestQuota(
     ctx.org as never,
@@ -3012,6 +3017,18 @@ export async function handleUsage(
   const storageQuota = checkDataStorageQuota(
     ctx.org as never,
     Number(storageSnap.get('dataStorageMb') ?? 0),
+  )
+  // A corrupt or negative counter must not read as headroom, the same clamp
+  // `orgCampaignEmailSendsForMonth` applies on the server.
+  const rawCampaignEmails = Number(campaignEmailSnap.get(month) ?? 0)
+  const campaignEmailsUsed =
+    Number.isFinite(rawCampaignEmails) && rawCampaignEmails > 0
+      ? Math.floor(rawCampaignEmails)
+      : 0
+  const campaignEmailQuota = checkQuota(
+    ctx.org as never,
+    'emailSendsPerMonth',
+    campaignEmailsUsed,
   )
 
   return apiJson(
@@ -3045,6 +3062,24 @@ export async function handleUsage(
         storageQuota.includedMb,
         storageQuota.remainingMb,
         storageQuota.overageRateUsd,
+      ),
+      /*
+       * CAMPAIGN emails, not every email. `emailSendsPerMonth` governs
+       * campaign volume alone — transactional mail is counted for cost and
+       * never refused at any tier — so a band named `emails` would report a
+       * limit the product does not enforce.
+       *
+       * `metered: false`, because this band is REFUSED rather than billed.
+       * It is the one dimension here that hard-walls on a paid plan; the
+       * others accept the excess and put it on the invoice. Passing a null
+       * rate is how that difference reaches a caller rather than being
+       * something they discover from a 403.
+       */
+      campaignEmails: usageBand(
+        campaignEmailsUsed,
+        campaignEmailQuota.limit,
+        campaignEmailQuota.remaining,
+        null,
       ),
     },
     { headers: ctx.headers },

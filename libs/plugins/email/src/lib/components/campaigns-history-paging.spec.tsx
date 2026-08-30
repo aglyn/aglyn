@@ -91,6 +91,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: jest.fn() } }),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
   useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
+  // The campaign allowance is claimed against the ORG counter, so the card
+  // resolves the owning org to read the same figure the gate decides on.
+  useHostOrgId: () => 'org-1',
   useHostActivityLogger: () => jest.fn(),
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),

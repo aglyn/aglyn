@@ -50,6 +50,7 @@ import {
   useFirestoreCollection,
   useFirestoreDoc,
   useOrgDataScope,
+  useHostOrgId,
   useOrgPlan,
   useHostResourceApi,
   useHostVersionApi,
@@ -191,11 +192,9 @@ export function HostCampaignsCard(props: { hostId: string }) {
   /**
    * The monthly campaign allowance, standing rather than only on refusal.
    *
-   * `emailSendsPerMonth` is enforced in `campaign-send.ts` against
-   * `hosts/{hostId}/counters/campaignEmailSends[YYYY-MM]` and nothing else,
-   * and until now that number reached the customer in exactly two places:
-   * the 403 that refuses a send, and the usage-alert email that fires at
-   * 80%. The composer showed `Recipients 1,240` with no hint that the plan
+   * `emailSendsPerMonth` reached the customer in exactly two places before
+   * this: the 403 that refuses a send, and the usage-alert email that fires
+   * at 80%. The composer showed `Recipients 1,240` with no hint that the plan
    * allows 500 a month — so the cap arrived as a rejection after the
    * campaign was written, which is the defect AGL-2113 fixed for five
    * per-site quotas and AGL-2246 for `templatesPerHost`.
@@ -205,22 +204,30 @@ export function HostCampaignsCard(props: { hostId: string }) {
    * (AGL-1438); showing that total against this cap would tell a merchant
    * they had spent their campaign allowance on order confirmations.
    *
-   * Per HOST because enforcement is per host — `campaign-send.ts` reads this
-   * host's counter. The usage-alert cron sums the org's hosts against the
-   * same cap, so on a multi-site org the alert can fire while no single site
-   * has been refused; that discrepancy is the cron's, and a readout that
-   * quietly averaged the two would agree with neither.
+   * PER ORG, because that is where the cap is enforced.
+   * `emailSendsPerMonth` is an ORG entitlement and `reserveCampaignEmailSends`
+   * claims against `orgs/{orgId}/counters/campaignEmailSends[YYYY-MM]`. A
+   * readout of this host's own counter disagreed with the gate on every
+   * multi-site org: three sites at 100 each showed `100/5,000` on each site
+   * while the org stood at 300, and on a busier org the composer showed room
+   * right up to the moment the send was refused. A readout and its gate must
+   * read the same counter — the number a merchant checks before pressing Send
+   * is the worst possible place for a second opinion.
    */
   const { org, ready: orgReady } = useOrgPlan(hostId)
+  const campaignOrgId = useHostOrgId(hostId)
   const campaignMonthKey = new Date().toISOString().slice(0, 7)
   const { data: campaignSendCounter } = useFirestoreDoc<
     Record<string, unknown>
   >(
-    () => doc(firestore, 'hosts', hostId, 'counters', 'campaignEmailSends'),
-    [firestore, hostId],
+    () =>
+      campaignOrgId
+        ? doc(firestore, 'orgs', campaignOrgId, 'counters', 'campaignEmailSends')
+        : null,
+    [firestore, campaignOrgId],
   )
-  // A host that has never sent a campaign has no counter document at all;
-  // that is a settled zero, and the same zero `campaignEmailSendsForMonth`
+  // An org that has never sent a campaign has no counter document at all;
+  // that is a settled zero, and the same zero `orgCampaignEmailSendsForMonth`
   // resolves it to on the server.
   const campaignSendsUsed = Number(
     campaignSendCounter?.[campaignMonthKey] ?? 0,
