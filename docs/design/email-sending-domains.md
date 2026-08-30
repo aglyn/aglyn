@@ -287,17 +287,31 @@ status would otherwise make its domains silently untouchable.
 yet deployed. Until it is, the sweep's query throws, the runner isolates the
 failure, and the beat retries.
 
-### 2. There is no console card
+### 2. ~~There is no console card~~ — BUILT
 
-The route returns the records, the DMARC read and the verification state; no UI
-renders them. The model is `custom-domain-card.component.tsx`: `CardDisplay`,
-monospace `Typography` record lines on `action.hover`, a state `Chip`, and a
-verify button. It also needs the per-host selector that writes
-`hosts/{hostId}.sendingDomain`, without which the per-host half of the model
-above has no way to be set.
+`Emails → Sending` is the surface. `sending-domains-card.tsx` lists the org's
+domains beside what THIS site currently sends as, and
+`sending-domain-detail.tsx` is one domain's own route: its state, the records
+to publish, the DMARC read, Check DNS, the per-host selector and Remove.
 
-**The composer does not yet show the identity in the UI.** `preview` returns
-`identity` and `identitySource` and nothing renders them.
+The five states are described once, in
+`libs/plugins/email/src/lib/model/sending-domain-status.ts`, so the list and
+the detail page cannot disagree. Four of them are stored;
+**`inconclusive` is deliberately not one of them** — it is held as transient
+surface state BESIDE whatever the record still says, because a lookup nobody
+answered changed nothing and rendering it as `failed` sends a customer whose
+DNS is correct to go and edit a zone that is fine.
+
+The per-host selector writes through `/api/email/sending-identity`, which is
+`org.settings`-gated on write and admin-or-editor on read — the composer has to
+be able to SEE the identity without being able to change it. The two host keys
+are Admin-SDK-only in the rules, because a site `admin` may be a site-scoped
+collaborator with no org standing at all.
+
+**The composer shows the identity, and refuses on it.** The choice rides the
+dry run, so a domain whose DNS is unfinished is refused at the composer with
+the records named — before any copy is written — rather than as a 409 after
+the click.
 
 ### 3. The `from` override is still open
 
@@ -306,11 +320,24 @@ so a campaign cannot be moved off a verified domain — but a caller that passes
 `from` and no identity still bypasses the configured sender. Closing it means
 auditing all 39 senders and is its own change.
 
+The COMPOSER's identity choice is not this hazard and deliberately does not
+resemble it: `sendingIdentity` has exactly two values, empty and `platform`,
+reduced to those at the route's edge. It can only DROP the site's selection,
+never introduce one, so no domain name from a request ever reaches the
+resolver — which is what keeps an editor of one site in an agency org from
+sending as another client's verified domain.
+
 ### 4. Not attempted
 
 Dedicated IPs (need consistent volume to warm, and damage deliverability
 below it), BIMI/VMC (needs DMARC enforcement plus a registered trademark),
-domain registration, and per-message `From` overrides.
+domain registration, and per-message `From` overrides — a message may choose
+between the identities its SITE already holds, and cannot name one.
+
+**Several custom identities per site.** The model gives a site one selection,
+so the composer offers that or the shared domain. An agency wanting two
+`From:` addresses on one site would need a per-host allow-list over the org's
+verified set, which is a scope that does not exist yet.
 
 ---
 

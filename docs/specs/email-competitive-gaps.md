@@ -175,7 +175,7 @@ Aglyn state is one of:
 | Resubscribe that refuses to reverse a bounce or complaint | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔★)** correctly modeled as sender protection, not a user preference |
 | Suppression is an **evidence record**, not a delete | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔)** `releasedAt` field; the record is the proof it was honored |
 | Add a suppression by hand | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(✔)** a drawer on the Suppressions card, recorded as its own reason with a note; the platform list has a staff reader and an audited release |
-| Tenant sends from **their own** verified domain | ✅ | ✅ | ✅ | ✅ | ✅ automatic DNS write | ✅ | **(C)** server complete, **no UI**, and the DKIM key cannot be issued yet |
+| Tenant sends from **their own** verified domain | ✅ | ✅ | ✅ | ✅ | ✅ automatic DNS write | ✅ | **(✔)** Emails → Sending: add, publish, verify, choose per site, remove. Still needs `RESEND_DOMAINS_API_KEY` before a key can be issued, and the surface says so in words rather than showing an empty records table |
 | Engagement-based sunsetting | ➖ playbook | ➖ | ➖ | ➖ playbook, manual bulk action | ➖ primitives | ➖ playbook | **(✔)** at the `sendEmail` marketing gate, as a third refusal beside suppression and the frequency ceiling — **off unless an operator sets a window**, and it removes nobody. See [P5](#p5) |
 | Import an existing list | ✅ | ✅ | ✅ | ✅ | ✅ with an opt-in attestation | ✅ | **(A)** export only — see [G5](#g5) |
 
@@ -184,7 +184,7 @@ Aglyn state is one of:
 | Capability | MC | HS | PD | KL | BV | CIO | Aglyn |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Many brands under one account, isolated at send | ❌ one account each | ➖ | ➖ | ❌ | ➖ *Enterprise* | ➖ workspaces | **(✔★)** org-scoped contacts with `visibleTo`; the send path **refuses** cross-site reach |
-| Many sending identities under one account | ➖ | ✅ | ✅ | ➖ | ➖ | ➖ | **(C)** the model is per-org with a per-host selector; blocked on the credential |
+| Many sending identities under one account | ➖ | ✅ | ✅ | ➖ | ➖ | ➖ | **(✔)** per-org records with a per-host selector, both on screen; a send picks between its site's identity and the shared domain. Several custom identities on ONE site is not modeled |
 | **Self-hostable** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ US/EU regions only | **(C)** SPF and return-path are configurable; **sending is hardcoded to Resend's HTTP API** |
 | Runs on the customer's **own** payment account | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔★)** commerce is Stripe Connect |
 | Provider-agnostic delivery record | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔)** only `normalizeResendDeliveryEvents` knows a vendor wire format |

@@ -54,16 +54,68 @@ and the unsubscribe links in mail already delivered are untouched.
 
 ### Who the email comes from {#who-the-email-comes-from}
 
-Three fields sit under the audience picker, and they are per email rather than per site:
+These fields sit under the audience picker, and they are per email rather than per site:
 
+- **From address** — which verified identity this email leaves on. It is offered only
+  when your site has more than one to choose between: your own verified domain, or the
+  shared Aglyn domain. See [sending domains](#sending-domains) below.
 - **From name** — the display name in front of your sending address. The address itself
-  is always your site's verified sending identity; a from name changes what a recipient
-  reads, never which domain the mail leaves on.
+  is always a verified sending identity; a from name changes what a recipient reads,
+  never which domain the mail leaves on.
 - **Reply-to** — where replies land, when that is not the sending address.
 - **Preheader** — the preview line an inbox shows after the subject.
 
 Left empty, the from name falls back to your workspace's branding and no reply-to or
 preheader is set.
+
+### Sending from your own domain {#sending-domains}
+
+**Emails → Sending** is where a workspace proves it owns the domain its mail comes from.
+Until you add one, campaigns leave on a shared Aglyn address. That works, and it means
+your delivery reputation is pooled with every other workspace's rather than being yours.
+
+Add a domain and you are given the exact DNS records to publish — an authorization
+record, a signing key and a bounce-routing record. Publish them wherever your DNS is
+hosted, then press **Check DNS**. A domain has five things it can be telling you:
+
+| State | What it means | What to do |
+| --- | --- | --- |
+| **Waiting on a signing key** | The domain is claimed, but no key has been issued for it yet, so there is nothing to publish. | Nothing at your registrar will help. Press **Request records**. |
+| **Key request failed** | The mail provider refused to issue a key. | Press **Request records** again; it creates no second domain. If it persists, this is ours to fix. |
+| **Publish the records** | The records are issued and waiting for you. | Add them at your DNS host, then **Check DNS**. |
+| **Verified** | Every required record is live and we can see it. | Nothing — this domain can send. |
+| **Records not found** | We looked, and one or more records are not published. | Compare them against what is shown and check again. |
+
+**"DNS unreachable" is none of the five.** It means our lookup did not complete — a
+resolver outage, a timeout — so nothing changed, including the domain's state. Your zone
+is not the problem and there is nothing to edit. Try again in a few minutes.
+
+A domain is proved once for the whole workspace; which site sends as it is a separate
+choice, made with **Send this site's email as this domain** on the domain's own page.
+Removing a domain does **not** move a site sending as it back to the shared address —
+that site stops sending until you choose another identity, which is deliberate: quietly
+changing the address your recipients see is not a safe way to fail.
+
+Adding a domain and choosing what a site sends as need the organization admin role.
+
+### Send a test {#send-a-test}
+
+**Send test** proofs one copy of the email you are writing. It asks three things, and
+only one of them decides who receives mail:
+
+- **Fill the merge tags with** — a contact, lead or site user whose stored data the
+  merge tags resolve against, so you see real personalization instead of the
+  `{{firstName|there}}` fallbacks. **Choosing somebody here sends them nothing.**
+- **Deliver it to** — the only address the test goes to. You can pick yourself or
+  anyone with an account on the workspace. You cannot send a test to a contact: a test
+  is exempt from the consent rules a campaign obeys, and that exemption is not something
+  to spend on somebody who never agreed to hear from you.
+- **From address** — the identity it leaves on, taken from the composer.
+
+A test writes nothing. No recipient count, no report figures, and nobody is recorded as
+having received it, so proofing an email six times does not make its report say seven.
+It is not a way around the other rules either: an address that has unsubscribed, bounced
+or been marked as spam is still refused, and so is one with a recorded marketing opt-out.
 
 ### Preview the email {#preview-the-email}
 
@@ -73,8 +125,8 @@ your own account so you can see what a merge tag actually resolves to. It re-ren
 you type and it resolves no audience, so previewing costs nothing against your caps and
 sends nothing to anybody.
 
-**Send test to me** is the other half: it delivers one real message to your own account
-address, which is the way to check how a mail client renders it.
+**Send test** is the other half: it delivers one real message to an inbox you can open,
+which is the way to check how a mail client renders it. See [Send a test](#send-a-test).
 
 ### Your monthly send cap {#monthly-send-cap}
 
