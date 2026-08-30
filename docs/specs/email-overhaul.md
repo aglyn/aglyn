@@ -65,17 +65,29 @@ Three findings dominate everything else in this document:
    is absent.** `vercel env ls` truncating (117 shown of 152) is the same trap;
    so is `git grep` honouring `.gitignore`. Distrust any "it is not set" that
    came from a reader rather than from the running system.
-2. **Consent is captured and never read.** `marketingConsent` is written by six
-   call sites and consulted by **zero senders**. `campaign-send.ts` filters an
-   audience against the suppression lists and nothing else. The shipped
-   consent/opt-in arc built the input and never wired the output.
-3. **Custom sending domains do not exist in any form.** Not a stub, not a
-   disabled button — zero product code mentions SPF, DKIM or DMARC. Everything
-   the platform sends leaves as `noreply@aglyn.com`, and the only white-label
-   affordance is the display name in front of that address.
+2. ~~**Consent is captured and never read.**~~ ✅ **CLOSED 2026-08-30.**
+   `marketingConsent` was written by six call sites and consulted by zero
+   senders; `campaign-send.ts` filtered on suppression and nothing else. The
+   join is now built and enforced, the default policy is `strict`, and consent
+   carries PROVENANCE — a backfilled basis is distinguishable from a person's
+   own opt-in. A pre-send readout reports the split before the button. See
+   `libs/aglyn/src/lib/app-utils/marketing-consent.ts` and AGL-2499.
+3. ~~**Custom sending domains do not exist in any form.**~~ ⚠️ **MOSTLY BUILT.**
+   The record lifecycle, the DNS records, the DMARC read, the verifier, the
+   send-path refusal and the route all exist; see
+   `docs/design/email-sending-domains.md` for what is built versus specified.
+   What remains is a provider credential and a console surface — the provider
+   call itself is written on `feature/sending-domain-provider`.
 
-The first is a configuration change measured in minutes. The second is a policy
-decision the owner has to make. The third is the real build.
+⚠️ **THIS FILE HAS BEEN OVERTAKEN BY THE WORK IT DESCRIBES.** Two of the three
+headline problems above are closed and the third is largely built. Dynamic
+lists — described further down as something nothing re-evaluates — are also
+built, with a rule model, a materializer and a `*/15` sweep.
+
+**Read `docs/specs/email-competitive-gaps.md` for the current gap register.**
+That document was written against the shipped code and ranks what is actually
+missing; planning from the sections below without checking it first is how a
+team builds something twice.
 
 ---
 
@@ -116,7 +128,7 @@ decision the owner has to make. The third is the real build.
 ### 1c. Absent
 
 - **Custom or per-org sending domains.** Zero product code matches `dkim|dmarc|spf`. The only reference to Resend's domains API is `RESEND_DOMAINS_ENDPOINT` in `email-health.ts`, used as a read-only credential probe *because it cannot create anything*. Domain setup is a human runbook: `docs/EMAIL_SETUP.md`.
-- **Dynamic lists.** Nothing re-evaluates membership from a rule. The only rule-shaped audience is `orgs/{orgId}/contactSegments` — tags and sources, contacts only, evaluated once at send time.
+- ~~**Dynamic lists.**~~ ✅ **BUILT.** A nine-field rule model, a materializer and a `*/15` sweep re-evaluate membership; the index is deployed. `orgs/{orgId}/contactSegments` remains the send-time segment. ⚠️ The console exposes four of the nine rule fields and none of the purchase-behaviour block, so most of what was built is unreachable from the UI — see `email-competitive-gaps.md`.
 - **Any credit or balance concept.** Searched repo-wide: no prepaid ledger, no top-up, no balance on an org. "Credit" in this codebase means Stripe proration, merchant gift cards, or attribution.
 - **Manual suppression entry.** The suppressions card views and removes; it cannot add.
 - **Cross-silo identity.** See §1e.
