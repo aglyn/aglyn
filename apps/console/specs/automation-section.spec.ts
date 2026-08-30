@@ -38,7 +38,17 @@ const REPO = join(__dirname, '..', '..', '..')
 const readRepo = (path: string) => readFileSync(join(REPO, path), 'utf8')
 
 const PLUGIN = 'libs/plugins/workflows/src/lib/plugin.ts'
-const PAGE = 'libs/plugins/workflows/src/lib/components/workflows-console-page.tsx'
+/**
+ * The section ids, read from where they are DEFINED.
+ *
+ * They used to be inline in the console page; the routed-sections conversion
+ * moved them into their own module, and a regex still pointing at the page
+ * matched nothing and reported the section as having no tabs at all — a guard
+ * about which ids exist, answering "none" and calling that a pass. Read the
+ * canonical list so a future move breaks the import rather than the meaning.
+ */
+const PAGE =
+  'libs/plugins/workflows/src/lib/components/workflows-console-sections.ts'
 const NEXT_CONFIG = 'apps/console/next.config.js'
 const RELEASE_FLAGS = 'libs/aglyn/src/lib/app-utils/release-flags.ts'
 const ENABLED_PLUGINS = 'libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts'
@@ -48,7 +58,15 @@ const asNextSource = (route: string) => route.replace(/\[(\w+)]/g, ':$1')
 
 /** Every `id:` on the console page's `HubTabs` list, in order. */
 const tabIds = (source: string): string[] =>
-  [...source.matchAll(/^\s+id: '([a-z-]+)',$/gm)].map((match) => match[1])
+  (() => {
+    // The exported array only. ⚠️ Anchor on `= [`, not on the constant name:
+    // the type annotation `ConsoleNavSection[]` carries a `]` of its own, and
+    // slicing to the first one stops before a single id — which reads as "this
+    // section has no tabs" and passes a guard about which tabs exist.
+    const open = source.indexOf('= [', source.indexOf('WORKFLOWS_CONSOLE_SECTIONS'))
+    const body = source.slice(open, source.indexOf(']', open))
+    return [...body.matchAll(/\bid: '([a-z-]+)'/g)].map((match) => match[1])
+  })()
 
 describe('the automation section', () => {
   it('THE DEFECT: no tab inside the section shares the section name', () => {
