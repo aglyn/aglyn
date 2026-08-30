@@ -436,6 +436,18 @@ function headlineLimits(
       pricing.extraContactsUsdPer1k,
       '/1k over',
     )}`,
+    /*
+     * CAMPAIGN sends, and only those (AGL-1438). The cap does not apply to
+     * transactional mail — invites, receipts, password resets — so the row
+     * must not read as though a plan rations those.
+     *
+     * It belongs here because it was on NO pricing surface a customer can
+     * see: not this card, not the comparison grid, not the marketing pricing
+     * page. The only place the console showed it was the current-plan chip,
+     * which tells you what you already have and nothing about what a tier
+     * you are considering would give you.
+     */
+    `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`,
   ]
 }
 
@@ -1177,7 +1189,22 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
         const isCurrent = !enterprise && tier === plan
         const isRecommended = index === recommendedIndex
         return (
-          <Grid key={tier} size={{ xs: 12, sm: 6, lg: 3 }}>
+          /*
+           * THREE per row, not four. Each card carries eight quota rows and a
+           * thirty-line checklist, and at `lg: 3` every one of those lines
+           * wrapped — "3 site collaborators (+$3/extra, max 10)" became three
+           * ragged lines, and the columns stopped being scannable across,
+           * which is the only thing a comparison table is for.
+           *
+           * The top rung takes HALF a row instead, so the Enterprise card can
+           * sit beside it: Enterprise is the step above Agency, and leaving
+           * Agency alone on a row of three put the two ends of the ladder in
+           * different places with a gap between them.
+           */
+          <Grid
+            key={tier}
+            size={{ xs: 12, sm: 6, lg: index === PLAN_ORDER.length - 1 ? 6 : 4 }}
+          >
             <Card
               variant="outlined"
               sx={{
@@ -1388,6 +1415,13 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
                       : ''}
                   </Typography>
+                  {/* CAMPAIGN sends only (AGL-1438) — transactional mail is
+                      not rationed by a plan, and this row must not imply it
+                      is. Absent from every customer-facing pricing surface
+                      until now. */}
+                  <Typography variant="body2">
+                    {`${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`}
+                  </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
                       `${quotaLabel(entitlements.functionsPerHost)} functions · ` +
@@ -1481,29 +1515,14 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           </Grid>
         )
       })}
-      <LowerTierDisclosure
-        count={lowerTierCount}
-        expanded={showLowerTiers}
-        onToggle={() => setShowLowerTiers((shown) => !shown)}
-      />
-      {/* The way back, offered only where there is a focused view to go back
-          TO. An org with no plan, an enterprise org and a deep link all open
-          here and have nothing narrower to return to. */}
-      {canFocus ? (
-        <Grid size={{ xs: 12 }}>
-          <Button
-            size="small"
-            color="inherit"
-            onClick={() => setCompareAll(false)}
-            sx={{ color: 'text.secondary', textTransform: 'none' }}
-          >
-            {'Show just my plan and the next step'}
-          </Button>
-        </Grid>
-      ) : null}
       {/* Enterprise (AGL-1118): custom-priced, so it shows what it includes
-          and how to get it — never a headline price or a checkout button. */}
-      <Grid size={{ xs: 12 }}>
+          and how to get it — never a headline price or a checkout button.
+
+          It sits IMMEDIATELY after the ladder, sharing a row with Agency at
+          half width each. It is the rung above Agency, so the two belong side
+          by side — and the disclosure below is full width, which would push
+          them onto separate rows if it came between them. */}
+      <Grid size={{ xs: 12, lg: 6 }}>
         <Card
           variant="outlined"
           sx={{
@@ -1613,6 +1632,26 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           </CardContent>
         </Card>
       </Grid>
+      <LowerTierDisclosure
+        count={lowerTierCount}
+        expanded={showLowerTiers}
+        onToggle={() => setShowLowerTiers((shown) => !shown)}
+      />
+      {/* The way back, offered only where there is a focused view to go back
+          TO. An org with no plan, an enterprise org and a deep link all open
+          here and have nothing narrower to return to. */}
+      {canFocus ? (
+        <Grid size={{ xs: 12 }}>
+          <Button
+            size="small"
+            color="inherit"
+            onClick={() => setCompareAll(false)}
+            sx={{ color: 'text.secondary', textTransform: 'none' }}
+          >
+            {'Show just my plan and the next step'}
+          </Button>
+        </Grid>
+      ) : null}
     </Grid>
   )
 }

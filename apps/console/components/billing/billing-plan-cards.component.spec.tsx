@@ -312,6 +312,25 @@ describe('the page opens on the decision, not the catalogue', () => {
    * the rate turns a meter into a wall, and a customer choosing on that
    * reading is choosing on the wrong fact.
    */
+  /**
+   * The allowance was on NO customer-facing pricing surface — not this card,
+   * not the comparison grid, not the marketing pricing page. The console
+   * showed it only on the current-plan chip, which says what you already have
+   * and nothing about the tier you are weighing.
+   */
+  it('every card states its campaign email allowance', () => {
+    renderCards({ plan: 'starter' })
+    // Starter's own, and the two rungs above it.
+    expect(screen.queryAllByText(/campaign emails\/mo/).length).toBe(3)
+  })
+
+  it('and says CAMPAIGN, because transactional mail is not rationed', () => {
+    renderCards({ plan: 'starter' })
+    // A row reading "emails/mo" would imply a plan caps invites, receipts and
+    // password resets. It does not (AGL-1438).
+    expect(screen.queryAllByText(/^[\d,]+ emails\/mo$/)).toHaveLength(0)
+  })
+
   it('a metered limit carries its rate, not just its number', () => {
     renderCards({ plan: 'starter' })
     expect(screen.queryAllByText(/contacts \(\+\$[\d.]+\/1k over\)/).length).toBeGreaterThan(0)
