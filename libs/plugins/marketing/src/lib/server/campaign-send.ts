@@ -45,6 +45,7 @@ import {
   reconcileCampaignSendReservation,
   reserveCampaignEmailSends,
   type CampaignSendReservation,
+  resolveHostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHash, createHmac } from 'crypto'
@@ -53,6 +54,7 @@ import {
   isEmailConfigured,
   rateLimitedRetryAtMs,
   sendEmail,
+  sendingIdentityRefusal,
 } from '@aglyn/shared-util-email'
 
 const MAX_RECIPIENTS_PER_SEND = 500
@@ -356,6 +358,10 @@ export interface CampaignSendResult {
   consentWithheld?: number
   /** Dry run only: how many of `recipients` are suppressed. */
   suppressed?: number
+  /** Dry run only: which sending identity this campaign would leave on. */
+  identity?: string
+  /** Dry run only: `'custom'` for a verified tenant domain, else `'platform'`. */
+  identitySource?: 'custom' | 'platform' | null
   dryRun?: boolean
   /** Recipients the hourly governor refused mid-batch (AGL-2409). */
   deferred?: number
@@ -751,6 +757,37 @@ export async function performCampaignSend(
    * read — so an early return here leaves no campaign document, no
    * counter and no id behind.
    */
+  /*
+   * THE SENDING IDENTITY, and the refusal when it is not usable.
+   *
+   * Resolved ABOVE the dry run on purpose. `preview` is where a merchant finds
+   * out what a send will do before writing copy, so it must answer the same
+   * question a real send would — both which identity the mail leaves on, and
+   * whether it may leave at all. Resolving after this point would let
+   * `preview` report a healthy dry run for a campaign that Send then refuses.
+   *
+   * The address comes from the org document by way of the host's selection,
+   * never from `options`. A `From:` assembled from request input is the
+   * spoofing path the verified-identity rule exists to close.
+   *
+   * A refusal is a 409 rather than a silent no-op because that is the whole
+   * point: `USAGE_EMAIL_FROM` was empty in production for weeks and no surface
+   * ever said so, since every sender treats mail as best-effort. A tenant
+   * whose DNS is unfinished has to be told, by name, at the composer.
+   */
+  const sendingIdentity = await resolveHostSendingIdentity({
+    orgId,
+    selectedDomain: hostSnapshot.get('sendingDomain'),
+    selectedLocalPart: hostSnapshot.get('sendingLocalPart'),
+  })
+  const identityRefusal = sendingIdentityRefusal(sendingIdentity)
+  if (identityRefusal) {
+    const missing = identityRefusal.missing?.length
+      ? ` Missing: ${identityRefusal.missing.join(', ')}.`
+      : ''
+    throw new CampaignSendError(`${identityRefusal.message}${missing}`, 409)
+  }
+
   if (options.dryRun) {
     return {
       campaignId: '',
@@ -780,6 +817,10 @@ export async function performCampaignSend(
       consented: consentSplit.consented,
       grandfathered: consentSplit.grandfathered,
       consentWithheld: consentSplit.withheld,
+      // Which identity this campaign would leave on, so the composer can say
+      // so rather than leaving a merchant to assume.
+      identity: sendingIdentity.summary,
+      identitySource: sendingIdentity.source,
       sent: 0,
       dryRun: true,
     }
@@ -964,6 +1005,10 @@ export async function performCampaignSend(
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
         fromName: branding.fromName,
+        // The server's answer to which verified address this leaves on. The
+        // send path re-checks it, so a refusal holds even here where the
+        // route has already passed one.
+        sendingIdentity,
         // Event attribution (AGL-268): the opens/clicks webhook maps
         // deliveries back to the campaign (and experiment) via tags.
         tags: [

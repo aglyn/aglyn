@@ -887,6 +887,23 @@ service cloud.firestore {
       match /ssoDomains/{domain} {
         allow read, write: if false;
       }
+
+      // Custom email sending domains. Admin SDK only, on the same reasoning as
+      // `ssoDomains` above and for a closely related security property.
+      //
+      // `status` is what decides whether mail may leave as this domain. A
+      // client that could write it would set `verified` on a domain whose DKIM
+      // record was never published — sending as a domain it does not control,
+      // which is the whole of what the DNS check exists to prevent. It would
+      // also defeat the refusal the send path is built around, since that
+      // refusal reads exactly this field.
+      //
+      // The read denial stands on its own: the document holds `dkimSelector`,
+      // and knowing which selector an org was issued is the first half of
+      // impersonating its sending setup.
+      match /sendingDomains/{domain} {
+        allow read, write: if false;
+      }
     }
 
     // Workspace-subdomain resolution ({slug}.aglyn.com): public read so

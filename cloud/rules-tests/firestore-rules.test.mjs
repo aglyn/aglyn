@@ -7896,4 +7896,74 @@ describe('a site activity entry is appended by the member who caused it (AGL-118
   })
 })
 
+/**
+ * A sending domain's `status` is what decides whether mail may leave as that
+ * domain, so a client that could write it could send as a domain it does not
+ * control — and would defeat the send path's refusal at the same time, since
+ * that refusal reads exactly this field.
+ *
+ * The read denial stands on its own: `dkimSelector` names the record an org
+ * was issued, which is the first half of impersonating its sending setup.
+ */
+describe('a custom sending domain is unwritable and unreadable from any client', () => {
+  const DOMAIN = 'sender.test'
+  const claimPath = (orgId = ORG) => ['orgs', orgId, 'sendingDomains', DOMAIN]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      // A record midway through the honest path: key issued, DNS not proved.
+      // Exactly the document an attacker wants one field flipped on.
+      await setDoc(doc(db, ...claimPath()), {
+        domain: DOMAIN,
+        status: 'records-issued',
+        dkimSelector: 'aglyn-org-acme',
+        dkimPublicKey: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A',
+        createdAtMs: Date.now(),
+      })
+    })
+  })
+
+  it('nobody marks their own sending domain verified — owner, staff alike', async () => {
+    for (const [label, db] of [
+      ['an anonymous visitor', anon()],
+      ['the org owner', authed(OWNER)],
+      ['an editor', authed(EDITOR)],
+      ['an outsider', authed(OUTSIDER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} marking orgs/${ORG}/sendingDomains/${DOMAIN} verified`,
+        updateDoc(doc(db, ...claimPath()), { status: 'verified' }),
+      )
+      await mustDeny(
+        `${label} creating a pre-verified sending domain`,
+        setDoc(doc(db, 'orgs', ORG, 'sendingDomains', 'someone-else.test'), {
+          domain: 'someone-else.test',
+          status: 'verified',
+        }),
+      )
+      await mustDeny(
+        `${label} deleting a sending domain to start it over`,
+        deleteDoc(doc(db, ...claimPath())),
+      )
+      await mustDeny(
+        `${label} reading the DKIM selector`,
+        getDoc(doc(db, ...claimPath())),
+      )
+    }
+  })
+
+  it('an outsider cannot plant a verified sending domain on another org', async () => {
+    await mustDeny(
+      `${OUTSIDER} planting a sending domain on ${OTHER_ORG}`,
+      setDoc(doc(authed(OUTSIDER), 'orgs', OTHER_ORG, 'sendingDomains', DOMAIN), {
+        domain: DOMAIN,
+        status: 'verified',
+      }),
+    )
+  })
+})
+
+
 assert.ok(true)

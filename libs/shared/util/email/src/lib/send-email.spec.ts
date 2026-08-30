@@ -410,6 +410,180 @@ describe('sendEmail', () => {
     })
   })
 
+  /**
+   * The send path's own refusal, independent of the campaign route's.
+   *
+   * Every assertion here is about the WIRE, not the return value: a refusal
+   * that still called Resend would be a refusal in name only, and the return
+   * shape would look identical either way.
+   */
+  describe('sending identity', () => {
+    const unverified = {
+      from: null,
+      source: null,
+      domain: 'acme.com',
+      summary: 'Blocked: acme.com is not verified.',
+      refusal: {
+        code: 'domain-unverified' as const,
+        domain: 'acme.com',
+        missing: ['TXT:send.acme.com'],
+        message: 'acme.com has not been verified yet.',
+      },
+    }
+
+    it('refuses an unverified domain and never reaches Resend', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: unverified,
+      })
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result).toEqual({
+        sent: false,
+        reason: 'unverified-domain',
+        detail: 'acme.com has not been verified yet.',
+      })
+    })
+
+    it('does not silently fall back to the configured platform sender', async () => {
+      // The platform identity is fully configured and usable here. That is
+      // the whole point: the refusal must not be a side effect of there being
+      // nothing else to send as.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: unverified,
+      })
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result.sent).toBe(false)
+      expect(JSON.stringify(result)).not.toContain('noreply@aglyn.com')
+    })
+
+    it('refuses even when an explicit from was supplied', async () => {
+      // A verdict is the server's answer to whether this may leave at all; an
+      // options-level address is not a way around it.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        from: 'anything@elsewhere.com',
+        sendingIdentity: unverified,
+      })
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect((result as { reason?: string }).reason).toBe('unverified-domain')
+    })
+
+    it('reports a refusal as unverified-domain, never as unconfigured', async () => {
+      // Opposite owners, opposite fixes: `unconfigured` is the operator's,
+      // this is the customer's DNS. Asserted with the env ALSO empty, which is
+      // the case a precedence mistake would collapse into `unconfigured`.
+      configure(null, null)
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: unverified,
+      })
+
+      expect((result as { reason?: string }).reason).toBe('unverified-domain')
+    })
+
+    it('sends from the verified custom address when the verdict allows it', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      })
+
+      expect(result.sent).toBe(true)
+      expect(lastBody(fetchMock).from).toBe('hello@acme.com')
+    })
+
+    it('outranks an explicit from on the allowed path too', async () => {
+      // The refusal arm returns before `from` is read, so refusing with a
+      // `from` present proves nothing about precedence. This is the case that
+      // does: a verdict that ALLOWS, with an options-level address competing.
+      // Losing here would let any caller move mail off the verified identity
+      // while verification still reported success.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        from: 'anything@elsewhere.com',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      })
+
+      expect(lastBody(fetchMock).from).toBe('hello@acme.com')
+    })
+
+    it('applies the white-label display name to the custom address', async () => {
+      // The `applyFromName` invariant carried onto the new identity: the
+      // display name varies, the address stays on the verified domain.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        fromName: 'Acme',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      })
+
+      expect(lastBody(fetchMock).from).toBe('"Acme" <hello@acme.com>')
+    })
+
+    it('leaves every caller that passes no identity exactly as it was', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({ to: 'a@b.com', subject: 'Hi', text: 'Hi' })
+
+      expect(lastBody(fetchMock).from).toBe(FROM)
+    })
+  })
+
+
   describe('failure handling', () => {
     beforeEach(() => configure('re_test', FROM))
 

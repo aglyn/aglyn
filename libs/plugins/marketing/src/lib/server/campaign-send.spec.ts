@@ -33,7 +33,14 @@ const mockState: {
   store: Record<string, Record<string, unknown>>
   sent: Array<Record<string, any>>
   metered: Array<[string, number, string]>
-} = { store: {}, sent: [], metered: [] }
+  /** The site's sending-domain selection; null means the platform identity. */
+  sendingDomain: {
+    domain: string
+    status: string
+    localPart: string
+    missing?: string[]
+  } | null
+} = { store: {}, sent: [], metered: [], sendingDomain: null }
 
 // The module graph behind `@aglyn/tenant-data-admin` reaches the admin SDK,
 // which does not load under the jest environment. Nothing real is needed:
@@ -71,6 +78,40 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // A plan whose emailSendsPerMonth is non-zero, or the cap refuses the send
   // before any of this is reached. Free is 0 by design.
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  /*
+   * The sending identity. The REAL `resolveSendingIdentity` runs — only the
+   * document reads behind it are faked — so these tests exercise the decision
+   * the product makes rather than a stand-in for it. `mockState.sendingDomain`
+   * is what a test sets to put a site on a custom domain.
+   */
+  resolveHostSendingIdentity: async (options: {
+    selectedDomain?: string
+    selectedLocalPart?: string
+  }) => {
+    /*
+     * Mirrors the real store rather than short-circuiting it: the record is
+     * found only for the domain actually ASKED about, so a caller that reads
+     * the selection from the wrong place gets the wrong answer here too. A
+     * domain with no record refuses, exactly as `resolveHostSendingIdentity`
+     * does for a released or cross-org claim.
+     */
+    const claimed = mockState.sendingDomain
+    const asked = options?.selectedDomain
+    const selection = !asked
+      ? null
+      : claimed && claimed.domain === asked
+        ? { ...claimed, localPart: options.selectedLocalPart || claimed.localPart }
+        : { domain: asked, status: 'failed', localPart: '', missing: [] }
+    return jest
+      .requireActual('@aglyn/shared-util-email')
+      .resolveSendingIdentity({
+        selection,
+        // `isEmailConfigured` is mocked true below without the env being
+        // set, so the platform address is supplied here to match. In the
+        // product both read the same variable and cannot disagree.
+        platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
+      })
+  },
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),
   // The meter (AGL-1438). Recorded rather than executed: `email-metering.spec`
@@ -299,6 +340,20 @@ function seed(nodes: unknown) {
   }
   mockState.sent = []
   mockState.metered = []
+  mockState.sendingDomain = null
+}
+
+/**
+ * Put a site on a custom sending domain: the org's RECORD, plus the host
+ * document's selection. Both, because the route reads the selection off the
+ * host and the store looks the record up from that.
+ */
+function selectSendingDomain(record: typeof mockState.sendingDomain) {
+  mockState.sendingDomain = record
+  ;(mockState.store['hosts/host-1'] as Record<string, unknown>).sendingDomain =
+    record?.domain
+  ;(mockState.store['hosts/host-1'] as Record<string, unknown>).sendingLocalPart =
+    record?.localPart
 }
 
 const send = () =>
@@ -596,5 +651,189 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     expect(
       mockState.store['orgs/org-1/counters/campaignEmailSends']?.[month],
     ).toBe(1)
+  })
+})
+
+/**
+ * The VISIBLE refusal.
+ *
+ * `send-email.spec.ts` proves the send path will not put a message on the
+ * wire for an unverified identity. That is the backstop. This file proves the
+ * thing a person actually experiences: the campaign route says no, with a
+ * status, naming the domain — instead of returning `{sent: 0}` and leaving a
+ * merchant to guess.
+ *
+ * The distinction is the whole lesson of `USAGE_EMAIL_FROM` being empty in
+ * production for weeks. That outage sent nothing and reported nothing, because
+ * mail is best-effort at every call site. A refusal nobody is told about is
+ * the same defect with a different cause.
+ */
+describe('a campaign refuses an unverified sending domain, visibly', () => {
+  beforeEach(() => {
+    seed(pooledBuffer())
+    selectSendingDomain({
+      domain: 'acme.com',
+      status: 'records-issued',
+      localPart: 'hello',
+      missing: ['TXT:send.acme.com'],
+    })
+  })
+
+  const campaign = (extra: Record<string, unknown> = {}) =>
+    performCampaignSend({
+      hostId: 'host-1',
+      subject: 'Spring sale',
+      body: 'plain-text fallback',
+      audience: 'leads',
+      templateScreenId: 'screen-1',
+      recordCampaign: false,
+      senderUid: 'uid-1',
+      ...extra,
+    })
+
+  it('answers 409 and names the domain', async () => {
+    await expect(campaign()).rejects.toBeInstanceOf(CampaignSendError)
+    await campaign().catch((error: CampaignSendError) => {
+      // 409, not 501: the deployment is fine, the customer's DNS is not, and
+      // the two need opposite messages pointed at opposite people.
+      expect(error.status).toBe(409)
+      expect(error.message).toContain('acme.com')
+      // And the record they still have to publish, so the message is
+      // actionable rather than merely correct.
+      expect(error.message).toContain('TXT:send.acme.com')
+    })
+  })
+
+  it('sends nothing at all', async () => {
+    await campaign().catch(() => undefined)
+
+    expect(mockState.sent).toHaveLength(0)
+  })
+
+  it('does not fall back to the platform identity', async () => {
+    await campaign().catch(() => undefined)
+
+    // The platform address is configured and usable. Not one message left on
+    // it, which is the property the whole feature exists to hold: a tenant's
+    // reputation risk must not land back on the shared domain.
+    expect(mockState.sent.map((message) => message.from)).toEqual([])
+    expect(JSON.stringify(mockState.sent)).not.toContain('aglyn.com')
+  })
+
+  it('refuses the dry run too, so the composer learns before anyone writes copy', async () => {
+    // `preview` resolves the identity for the same reason a real send does.
+    // A preview that reported a healthy dry run for a campaign Send then
+    // refuses would be worse than no preview.
+    await expect(campaign({ dryRun: true })).rejects.toMatchObject({
+      status: 409,
+    })
+  })
+
+  it('writes no campaign document and no counter', async () => {
+    await campaign().catch(() => undefined)
+
+    const written = Object.keys(mockState.store).filter((path) =>
+      path.includes('/campaigns/'),
+    )
+    expect(written).toEqual([])
+    expect(mockState.metered).toEqual([])
+  })
+
+  it('refuses a domain a lookup has already failed', async () => {
+    selectSendingDomain({
+      domain: 'acme.com',
+      status: 'failed',
+      localPart: 'hello',
+      missing: ['MX:send.acme.com'],
+    })
+
+    await campaign().catch((error: CampaignSendError) => {
+      expect(error.status).toBe(409)
+      expect(error.message).toMatch(/checked the DNS/i)
+    })
+    expect(mockState.sent).toHaveLength(0)
+  })
+})
+
+describe('a campaign on a verified sending domain', () => {
+  beforeEach(() => {
+    seed(pooledBuffer())
+    selectSendingDomain({
+      domain: 'acme.com',
+      status: 'verified',
+      localPart: 'news',
+    })
+  })
+
+  const campaign = (extra: Record<string, unknown> = {}) =>
+    performCampaignSend({
+      hostId: 'host-1',
+      subject: 'Spring sale',
+      body: 'plain-text fallback',
+      audience: 'leads',
+      templateScreenId: 'screen-1',
+      recordCampaign: false,
+      senderUid: 'uid-1',
+      ...extra,
+    })
+
+  it('hands the send path the tenant’s own address, not the platform one', async () => {
+    await campaign()
+
+    // Asserted on the verdict the route passes down rather than on a rendered
+    // `from`, because `sendEmail` is stubbed here. Turning this verdict into
+    // the address on the wire is `send-email.spec.ts`'s job and is proved
+    // there; what this suite owns is that the route resolves the identity
+    // server-side and hands over the right one.
+    expect(mockState.sent).toHaveLength(1)
+    expect(mockState.sent[0].sendingIdentity).toMatchObject({
+      from: 'news@acme.com',
+      source: 'custom',
+      refusal: null,
+    })
+  })
+
+  it('tells the composer which identity is in use', async () => {
+    // The surface requirement. A merchant should never have to guess whether
+    // their campaign goes out as their brand or as the shared domain.
+    const preview = await campaign({ dryRun: true })
+
+    expect(preview.identitySource).toBe('custom')
+    expect(preview.identity).toContain('news@acme.com')
+  })
+
+  it('names the platform domain when the site selects nothing', async () => {
+    selectSendingDomain(null)
+
+    const preview = await campaign({ dryRun: true })
+
+    expect(preview.identitySource).toBe('platform')
+    expect(preview.identity).toMatch(/shared platform domain/i)
+  })
+
+  it('ignores a sending domain named in the request', async () => {
+    /*
+     * The spoofing path, closed.
+     *
+     * `campaignSendHandler` builds its options from the request body, so a
+     * field read off `options` is a field an authenticated site editor can
+     * choose. Resolving the identity from anything but the host document
+     * would let them send as any domain they can name — including one this
+     * org never claimed and never proved.
+     *
+     * The site here has selected NOTHING, so the platform identity is the
+     * correct answer and a request-supplied domain is the only way the custom
+     * one could appear.
+     */
+    selectSendingDomain(null)
+
+    const preview = await campaign({
+      dryRun: true,
+      sendingDomain: 'acme.com',
+      sendingLocalPart: 'ceo',
+    })
+
+    expect(preview.identitySource).toBe('platform')
+    expect(preview.identity).not.toContain('acme.com')
   })
 })
