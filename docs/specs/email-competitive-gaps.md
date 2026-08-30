@@ -5,8 +5,10 @@ have since been built. The register itself proposes work and does not do it;
 each ✅ below names the commit subject that closed the row, so a reader planning
 from this document does not re-propose something shipped.
 
-**Closed since this was written:** [P1](#p1), [G9](#g9), [G10](#g10)/[P6](#p6),
-and the D5 and D7 rows of [G11](#g11). Everything else stands.
+**Closed since this was written:** [G1](#g1), [G2](#g2), [P1](#p1), [P2](#p2),
+[P6](#p6), [P7](#p7), [G9](#g9), [G10](#g10), and the D5 and D7 rows of
+[G11](#g11). [P11](#p11) is half closed — the enforcement is split, the domain
+is not. Everything else stands.
 Written 2026-08-30 against `main` at `39f979587`. Competitor facts were gathered live
 from vendor documentation on 2026-08-30; every claim carries the source it came from,
 and the appendix lists what could not be verified.
@@ -112,7 +114,7 @@ Aglyn state is one of:
 
 | Capability | MC | HS | PD | KL | BV | CIO | Aglyn |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Send to an audience of **any size** in one action | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(A)** hard cap of **500 recipients per send**, no batching — see [G1](#g1) |
+| Send to an audience of **any size** in one action | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(✔)** batched: 500 a run, resumed by the scheduler until the audience is reached — see [G1](#g1) |
 | Schedule a send, and cancel it | ✅ *not on Free* | ✅ | ✅ | ✅ | ✅ | ✅ | **(✔)** `datetime-local` picker, cancel from the History row |
 | Recurring or RSS-driven campaigns | ✅ | ✅ | ✅ | ➖ | ➖ | ✅ | **(A)** scheduling is one-shot |
 | Send in the **recipient's** timezone | ✅ Timewarp *Standard+* | ✅ *Pro+*, not with A/B | ❌ none | ➖ | ❌ | ✅ time windows | **(A)** |
@@ -215,9 +217,57 @@ Aglyn state is one of:
 Ranked by **what a paying customer meets first and feels worst**, not by cost to build.
 Sizes are rough: **S** days · **M** a week or two · **L** longer, or needs a decision first.
 
-### G1 — A campaign cannot reach an audience larger than 500 people {#g1}
+### G1 — ~~A campaign cannot reach an audience larger than 500 people~~ ✅ SHIPPED {#g1}
 
-**What it is.** `EMAIL_MAX_RECIPIENTS_PER_SEND = 500`. There is no batching: an audience
+> ✅ **Closed.** The per-send cap stays exactly where it was and for the reason
+> it was picked — 500 messages is most of a function invocation, so raising it
+> was never the fix. What changed is what happens to the remainder: a send
+> that leaves people unaddressed writes itself back as `scheduled` with a
+> `resume` record, and the scheduled-campaign processor continues it. Nothing
+> new resumes it, and that is the point — the deferral machinery
+> `CampaignSendDeferredError` already had was the resume mechanism, and this
+> extends it rather than building a second one.
+>
+> **The subtraction is the existing reach record**, one field wider. A
+> follow-up subtracts who the email REACHED; a batch subtracts everyone it
+> SETTLED, reached or refused. The difference is not tidiness: the cap takes
+> the first N of a stable order, so an address a batch could not mail sits at
+> the head of that order and consumes a slot in every batch after it — a
+> hundred of them cost a hundred of every five hundred, and five hundred of
+> them stop the campaign dead having mailed nobody. `readCampaignSettled` is
+> that read; `readCampaignReach` is unchanged and still what a follow-up uses,
+> so somebody suppressed at the time and since released still gets a
+> follow-up.
+>
+> **The allowance stays exact.** Each batch takes its own monthly reservation
+> and reconciles it to what it delivered, so six batches over three thousand
+> people spend three thousand — never six reservations' worth. The counters
+> that describe the send add across batches; the ones that describe the
+> AUDIENCE are written once, because a batch measures a slice of a population
+> the first batch already counted and adding them would record an audience of
+> 10,500 for a list of 3,000.
+>
+> **An immediate send has no beat of its own, so it borrows one.** A campaign
+> a merchant sent by hand is stored as `scheduled` between its batches — the
+> state the processor claims, reusing the collection-group index that already
+> exists. ⚠️ **That is UI-visible and the surfaces must say so.**
+> `campaignSendProgress` in `@aglyn/plugins-email/model` turns the stored
+> fields into the sentence a row needs — "Sending — reached 500 of 3,000" —
+> and is the one place it is composed. A row that renders `status` literally
+> will say "Scheduled" about an email that has already delivered five hundred
+> messages. Reusing `scheduled` also means Cancel already works on a campaign
+> mid-flight, which is a thing a merchant could not do before because there
+> was no rest of it.
+>
+> **It terminates three ways**, and `campaignBatchPlan` is where that argument
+> lives: nothing left, the batch guard, and a batch that settled nobody. The
+> last is the only way a self-rescheduling job loops.
+>
+> **Not batched:** a `manual` audience, whose addresses are typed into the
+> composer and deliberately not stored, and a test send. Both report the
+> shortfall exactly as before.
+
+**What it was.** `EMAIL_MAX_RECIPIENTS_PER_SEND = 500`. There is no batching: an audience
 of 3,000 is mailed 500 at a time by a human pressing Send six times, and the composer
 truthfully reports `Recipients 500 of 3,000`. The send loop is a strictly sequential
 `for` over `sendable` with one awaited HTTP POST per recipient, so **raising the number
@@ -239,9 +289,14 @@ emails and 100,000 included contacts; delivering one newsletter to the audience 
 the product cannot physically deliver through its own UI.** This is the gap most likely
 to produce a refund request.
 
-### G2 — A campaign never records whether it was delivered {#g2}
+### G2 — ~~A campaign never records whether it was delivered~~ ✅ SHIPPED {#g2}
 
-**What it is.** `performCampaignSend` writes `stats: { recipients, sent, audienceSize,
+> ✅ **Already closed when this register was re-read.** `email-events.ts`
+> increments `stats.delivered`, `stats.bounced` and `stats.complained` behind
+> the same `firstSeen` replay guard the open and click counters use. The row
+> below described the state before that landed and is kept for the reasoning.
+
+**What it was.** `performCampaignSend` writes `stats: { recipients, sent, audienceSize,
 deferred, variantSends }`, and the webhook increments `stats.opens` and `stats.clicks`.
 Nothing ever writes `delivered`, `bounced`, `complained` or `unsubscribed` onto a
 campaign. So the first question anyone asks after pressing Send — *did it arrive?* — has
@@ -721,9 +776,68 @@ capped, suppressed, unsubscribable path — and gets an **uncapped** one next to
 `filterSendableForHost` — closes a Google/Yahoo compliance failure, a suppression-honoring
 failure and an uncapped volume path simultaneously, for all four callers at once.
 
-### P2 — No per-tenant complaint or bounce rate, so no circuit breaker {#p2}
+### P2 — ~~No per-tenant complaint or bounce rate, so no circuit breaker~~ ✅ SHIPPED {#p2}
 
-Nothing computes a rate at any scope. There is no per-org number, no threshold, no pause,
+> ✅ **Closed, with the caveat this row itself insisted on.** The rate and the
+> breaker are built; the ATTRIBUTION they rest on is ours and not the mailbox
+> provider's, and no amount of work here changes that — see "what is still
+> missing" below.
+>
+> **The rate.** `rateLimits/emailRep_{YYYY-MM-DD}_{orgId}` holds four numbers
+> per workspace per day — `claimed`, `accepted`, `bounced`, `complained` — and
+> a seven-day window is one `getAll` over seven documents. A day per document
+> rather than a map of days on one, so the `expiresAt` TTL policy that already
+> serves this collection prunes the window instead of a job nobody would
+> write. Per ORG, because the org is what a plan, an allowance and an hourly
+> share are all keyed on, and three sites on one domain are one sender to
+> Gmail.
+>
+> **The denominator is `accepted`, written by the SENDER** on the delivered
+> count, not by the webhook. A rate whose denominator waited on a provider
+> callback would read as infinite for the minutes between a send and its
+> first report.
+>
+> **The grades are the published ones.** Complaint rate is graded against
+> Google's own bulk-sender rule — under 0.10%, never at or above 0.30% — so
+> both thresholds are numbers a merchant can check against Postmaster Tools
+> rather than numbers we chose. Bounce rate has no published cross-provider
+> figure; 5% and 10% are SES's.
+>
+> **Two guards stand in front of every threshold** and both must clear: a
+> minimum volume (200) and a minimum event count (3). A threshold crossed with
+> either unmet is a recorded FINDING that stops nothing — which is deliberate,
+> because a control whose first appearance is a refused campaign is a control
+> nobody could have seen coming.
+>
+> **The policies are SES's three**, stored on the org: `standard` (stop on a
+> high-severity finding, the default), `strict` (stop on any), `none` (record
+> only). Plus `reinstated` — a grace period that ignores active findings so a
+> merchant who has cleaned their list is not held by a window that has not
+> rolled off yet. An unreadable policy resolves to `standard` and never to
+> `none`: a control switched off by a typo is how a ceiling stops existing.
+>
+> **It refuses a SEND and removes nothing.** No contact is deleted, no
+> audience trimmed, nobody unsubscribed, no membership moved — the
+> enforce-at-the-reduction rule (`over-limit.ts`) applied to the one control
+> here that could be tempted to break it. And it is legible: the refusal
+> carries the rate, the window, the threshold, the fact that nobody was
+> removed, what to do about it, and that transactional mail keeps sending.
+>
+> **A transient bounce is not counted.** The attribution sits below the
+> permanence filter, with the suppression — a full mailbox is not a
+> list-quality signal, and counting one would trip a merchant's breaker on
+> their subscribers' holiday auto-replies.
+>
+> **What is still missing, and this row said so first.** Google Postmaster
+> keys on the DKIM `d=` and Yahoo's feedback loop is DKIM-only and enrolled
+> per domain. With one shared `d=` this buys per-tenant accounting of what WE
+> can see — our own delivery events — and not per-tenant visibility into what
+> the provider saw. Per-tenant DKIM on a per-tenant subdomain remains the
+> prerequisite for that, and it is the sending-domain work already in flight.
+> The reasoning below is unchanged and is why that work has platform value
+> beyond white-labelling.
+
+**What it was.** Nothing computes a rate at any scope. There is no per-org number, no threshold, no pause,
 no staff review queue. Grep returns zero for `complaintRate`, `bounceRate`,
 `circuitBreaker`. The inputs exist — every delivery event carries `tags.hostId` — but
 [G2](#g2) is the missing roll-up.
@@ -868,9 +982,30 @@ model — composable shared and per-channel limits, with a 48-hour retry window 
 the recipient in the journey rather than dropping them silently — is the better of the two
 shipped designs; Klaviyo's Smart Sending drops silently.
 
-### P7 — No new-tenant volume ramp {#p7}
+### P7 — ~~No new-tenant volume ramp~~ ✅ SHIPPED {#p7}
 
-The only ramp control in the product is a single platform-wide `perHour` number a staff
+> ✅ **Closed, on the SES shape this row picked.** A workspace inside its first
+> week sends 200 campaign emails a day, then 1,000, then 5,000, and after
+> seven days the ramp stops binding entirely. A step is gated on BOTH age and
+> delivered volume, because a ramp gated on age alone is one you skip by
+> signing up and waiting a week.
+>
+> **It paces; it never refuses.** A batch over the day's step is SHRUNK to fit
+> rather than deferred — a workspace on 200 a day would defer a 500-recipient
+> batch every day forever — and what is left rides G1's batching out over the
+> following days. The claim is a transaction on the same day document the
+> rates read, and the undelivered part is given back, unlike the hourly claim:
+> an hour is cheap to leak and a day is a new workspace's whole allowance.
+>
+> ⚠️ **An org with no readable `createdAt` GRADUATES.** That is not a
+> preference. `Number(null)` is `0`, a finite non-negative number that reads as
+> "created today", and taking it at face value would ramp every existing
+> paying customer down to 200 a day on the deploy. The guard is asserted from
+> both sides.
+>
+> **The packaging implication is recorded in [§6.5](#65-a-new-workspace-cannot-spend-its-first-weeks-allowance-on-day-one) and stops there.**
+
+**What it was.** The only ramp control in the product is a single platform-wide `perHour` number a staff
 member edits in `staff-email-send-rate-card.component.tsx`. A brand-new, unvetted signup
 gets the same 25% share of the platform hour as a customer with a year of clean sending.
 
@@ -929,11 +1064,45 @@ every customer at once; what is missing is the sweep and the drift discipline
 it, so a campaign cannot be moved off a verified domain, but a caller passing `from` with
 no identity still wins. Closing it means auditing 39 senders.
 
-### P11 — Bulk and transactional share one domain {#p11}
+### P11 — Bulk and transactional share one domain {#p11} — ➖ HALF CLOSED
 
-Open question Q2 in the existing spec, unchanged. One merchant's complaint rate can
-hard-fail every customer's password resets under `p=reject`. Splitting costs a warm-up
-measured in weeks and must happen before volume, not after.
+Open question Q2 in the existing spec. One merchant's complaint rate can hard-fail every
+customer's password resets under `p=reject`. Splitting the DOMAIN costs a warm-up
+measured in weeks and must happen before volume, not after — that half is untouched.
+
+> ➖ **What is separated, and it is the half that was actionable.** Every
+> control that can stop marketing is now structurally unable to reach
+> transactional mail, and that is a property of the shape rather than of a
+> flag somebody remembered to check:
+>
+> - The reputation breaker, the new-sender ramp and the per-workspace hourly
+>   claim are called from `performCampaignSend` and from nowhere else. A
+>   transactional message never crosses `sendEmail`'s path into any of them.
+> - The one policy a transactional message DOES cross,
+>   `emailSendRateVerdict`, cannot return a refusal for it at any ceiling —
+>   and `sendEmail` ignores a refusal for a transactional priority whatever
+>   the installed governor says. Two independent enforcements, and a third now
+>   stands in front of them by construction.
+> - The breaker's rate is computed over CAMPAIGN mail alone. A bounce on a
+>   password reset carries no `hostId` tag, so it neither inflates the rate
+>   that stops a merchant sending nor dilutes it.
+> - The monthly allowance has always been enforced against `campaignEmailSends`
+>   and never against `emailSends`.
+>
+> **What is left, and why.** One sending domain, therefore one DKIM `d=`,
+> therefore one reputation at the mailbox provider. Nothing above changes what
+> Gmail grades — a merchant whose list is bad still contributes to the domain
+> the receipts leave on, and the breaker's job is to stop them BEFORE that
+> happens rather than to isolate them after it. The two things that would
+> actually separate reputation are per-tenant DKIM on a per-tenant subdomain
+> (the sending-domain work in flight, and the same prerequisite [P2](#p2)
+> names) and a separate marketing subdomain warmed independently. Neither is
+> code this register can write: the first needs the provider credential, and
+> the second needs weeks of warm-up scheduled before volume arrives, which is
+> a decision about when to start rather than a decision about what to build.
+> **A `news.` subdomain seam added now, resolving to the same identity, would
+> separate the `From:` and not the reputation — the appearance of the fix
+> without the fix**, so it is deliberately not built.
 
 ### Lowest — pre-send content and link scanning
 
@@ -1110,6 +1279,22 @@ uncapped one beside it. Closing the compliance half (unsubscribe headers, suppre
 filtering) is unambiguously a bug fix and should not wait. **Whether member posts and
 restock alerts should then count against an allowance is a packaging decision**, because
 it changes what a plan delivers. Recorded, not recommended.
+
+### 6.5 A new workspace cannot spend its first week's allowance on day one
+
+[P7](#p7)'s ramp paces a brand-new workspace at 200 campaign emails on its first day,
+1,000 from day one and 5,000 from day three, graduating at day seven. It changes no
+price and no allowance — every included email is still included and still sends, and a
+campaign over the day's step is carried to the following day by [G1](#g1)'s batching
+rather than refused. But a customer who buys Business on the first of the month and
+expects to mail 50,000 people that afternoon **will not**, and that is a promise the
+pricing page does not currently qualify.
+
+Three options, none taken here: leave it and let the ramp be invisible to everyone but
+the largest first-day sender; say so on the pricing page and in the welcome email; or
+shorten the ramp for a paid plan, which trades the protection the shared domain gets
+from exactly the signups most likely to arrive with a purchased list. **Recorded, not
+recommended.**
 
 ---
 
