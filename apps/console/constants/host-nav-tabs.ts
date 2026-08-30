@@ -87,6 +87,14 @@ export function hostNavTabItems(
       label: 'Content',
       href: buildRoute(Route.HOST_CONTENT, { orgSlug, host }),
     },
+    // Beside Content because a form is authored the way content is — a
+    // besigner document with versions — while what it COLLECTS is read in
+    // the Inbox, which is the plugin's own nav item.
+    {
+      id: 'nav-tab-forms',
+      label: 'Forms',
+      href: buildRoute(Route.HOST_FORMS, { orgSlug, host }),
+    },
     // Inbox (nav + page) now comes from the inbox plugin's ConsoleExtension,
     // served by the generic route (AGL-395).
     // Contacts (nav + page) now comes from the contacts plugin's
