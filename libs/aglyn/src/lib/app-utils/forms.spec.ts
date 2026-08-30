@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
+import { PLAN_ENTITLEMENTS } from './plan-entitlements'
 import {
   collectFormFieldNodeIds,
+  FORMS_MAX_PER_HOST,
   formFieldDeclsFromNodes,
   discoverFormNodes,
   matchSubmissionToForm,
@@ -314,5 +316,40 @@ describe('a form slug is a handle, never an identity', () => {
 
   it('never ends in a separator after truncation', () => {
     expect(normalizeFormSlug('a'.repeat(63) + ' tail')).not.toMatch(/-$/)
+  })
+})
+
+describe('the listing bound is not the allowance', () => {
+  /**
+   * `FORMS_MAX_PER_HOST` pages a READ of `hosts/{hostId}/forms`; the plan's
+   * `formsPerHost` is what a site may hold. Two numbers with one obvious
+   * failure between them: a page size below the allowance drops forms the
+   * customer made, silently, from a picker and a filter that show no sign of
+   * having truncated anything.
+   */
+  const finiteAllowances = Object.entries(PLAN_ENTITLEMENTS)
+    .map(([plan, value]) => [plan, value.formsPerHost] as const)
+    .filter(([, allowance]) => Number.isFinite(allowance))
+
+  it('pages at or above every finite per-plan allowance', () => {
+    // Reported as pairs rather than a boolean so a failure names the plan.
+    expect(
+      finiteAllowances.filter(([, allowance]) => allowance > FORMS_MAX_PER_HOST),
+    ).toEqual([])
+  })
+
+  it('has finite allowances to compare against at all', () => {
+    // The control. `filter` over an empty list passes vacuously, so a rename
+    // of the entitlement key would otherwise turn the guard above green while
+    // it compared nothing.
+    expect(finiteAllowances.length).toBeGreaterThan(0)
+  })
+
+  it('is NOT the number a surface should publish as the cap', () => {
+    // It disagrees with most plans on purpose. A surface reading this instead
+    // of the entitlement publishes one plan's terms to every plan.
+    expect(
+      finiteAllowances.filter(([, allowance]) => allowance !== FORMS_MAX_PER_HOST),
+    ).not.toEqual([])
   })
 })

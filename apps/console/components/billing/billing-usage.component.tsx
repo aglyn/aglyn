@@ -161,6 +161,7 @@ function HostUsageMeters(props: {
     variables: number | null
     functions: number | null
     members: number | null
+    forms: number | null
     storageMb: number | null
     workflowRuns: number | null
   }>({
@@ -169,6 +170,7 @@ function HostUsageMeters(props: {
     variables: null,
     functions: null,
     members: null,
+    forms: null,
     storageMb: null,
     workflowRuns: null,
   })
@@ -201,6 +203,13 @@ function HostUsageMeters(props: {
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'members'),
       ).catch(() => null),
+      // The saved-form CATALOG, which is what `formsPerHost` bounds. An
+      // aggregation, so it stays one billed read however large the catalog
+      // is — and it counts definitions, never submissions, which are metered
+      // on their own axis against an org-wide band.
+      getCountFromServer(
+        collection(firestore, 'hosts', host.$id, 'forms'),
+      ).catch(() => null),
       // Media bytes counter maintained by the media library (AGL-72).
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
@@ -209,7 +218,7 @@ function HostUsageMeters(props: {
       getDoc(
         doc(firestore, 'hosts', host.$id, 'counters', 'workflowRuns'),
       ).catch(() => null),
-    ]).then(([screens, layouts, variables, functions, members, media, runs]) => {
+    ]).then(([screens, layouts, variables, functions, members, forms, media, runs]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       const monthKey = new Date().toISOString().slice(0, 7)
@@ -219,6 +228,7 @@ function HostUsageMeters(props: {
         variables: variables?.data().count ?? null,
         functions: functions?.data().count ?? null,
         members: members?.data().count ?? null,
+        forms: forms?.data().count ?? null,
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
         workflowRuns: runs?.exists()
           ? Number(runs.data()?.[monthKey] ?? 0)
@@ -261,6 +271,14 @@ function HostUsageMeters(props: {
         label="Site collaborators"
         used={counts.members}
         limit={memberSeatLimit}
+      />
+      {/* The form CATALOG. Submissions are not metered here: their band is
+          org-wide and monthly, so a per-site meter would show each site its
+          own slice against the whole org's allowance. */}
+      <UsageMeter
+        label="Saved forms"
+        used={counts.forms}
+        limit={entitlements.formsPerHost}
       />
       <UsageMeter
         label="Variables"

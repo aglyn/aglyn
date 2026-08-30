@@ -349,6 +349,20 @@ export interface OrgEntitlements {
   bandwidthGb?: number
   /** Form submissions accepted per calendar month (Forms & Lead Capture). */
   formSubmissionsPerMonth?: number
+  /**
+   * Saved form DEFINITIONS per host — documents under
+   * `hosts/{hostId}/forms`, the entity a submission's `formId` points at.
+   *
+   * Not the same dimension as `formSubmissionsPerMonth`, and the two are
+   * routinely confused: this is how many distinct intake forms an author may
+   * build, that is how many replies the site may accept. A plan can be
+   * generous on one and tight on the other.
+   *
+   * Counts the CATALOG, never the traffic. A `Form` node drawn on a page and
+   * left unbound submits without a definition and spends nothing here, which
+   * is why a plan resolving to 0 still accepts submissions.
+   */
+  formsPerHost?: number
   /** Component-builder caps (AGL-99): host variables. */
   variablesPerHost?: number
   /** Component-builder caps (AGL-99): host functions. */

@@ -34,25 +34,28 @@
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
 
 /**
- * How many forms one site may hold.
+ * How many forms one query for a site's catalog reads.
  *
- * A FLAT platform ceiling, not a plan dimension, and deliberately so.
- * `docs/DECISION_LOG.md`'s 2026-08-23 entry settled this instrument for the
- * member/lead ceilings in the account owner's own words — an abuse control is
- * not something we sell — and a numeric `formsPerHost` would instead be a
- * six-place packaging move under the Sept-1 price lock, carrying a Decision
- * Log entry, a feature-matrix row and a console odometer with it.
+ * ⛔ **NOT the allowance.** How many forms a site may hold is
+ * `PLAN_ENTITLEMENTS[plan].formsPerHost`, enforced at creation through
+ * `checkQuota` in `/api/hosts/resources`, and it varies by plan — from none
+ * on Free to uncapped on Enterprise. A surface that shows a customer their
+ * ceiling MUST read that entitlement. Reading this number instead publishes
+ * one plan's terms to every plan.
  *
- * Access to forms rides the `reusableComponents` entitlement, which is already
- * Starter-and-above, already server-enforced at `/api/hosts/resources`, and
- * already on the published feature matrix. This number is only the bound that
- * stops one site holding an unreasonable number of them.
+ * What this bounds is a READ. `hosts/{hostId}/forms` is small enough to list
+ * in one page, and the listing surfaces (the submissions filter, the entity
+ * picker) say so — but a bound below the allowance would make them silently
+ * drop forms the customer made and can see elsewhere, which is the invisible
+ * half of a wrong limit and the expensive one to discover.
  *
- * Generous against the real shape of the artifact: a site with fifty distinct
- * forms has fifty distinct intake purposes, which is far past the point where
- * the reuse engine is the answer instead.
+ * So it sits at or above every FINITE per-plan allowance, and
+ * `forms.spec.ts` pins that relationship rather than trusting the two numbers
+ * to be moved together. A contract-provisioned Enterprise catalog can exceed
+ * it; a surface that must list one needs real pagination, not a larger
+ * constant.
  */
-export const FORMS_MAX_PER_HOST = 50
+export const FORMS_MAX_PER_HOST = 1000
 
 /** Field types a `FormField` node offers; the form declares the same set. */
 export type FormFieldType =

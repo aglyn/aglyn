@@ -2361,3 +2361,170 @@ describe('a first payment that never completed is not a paid workspace', () => {
     expect(checkSeatQuota(withAddons, 'managers', 0).purchased).toBe(0)
   })
 })
+
+describe('the saved-form catalog is a plan allowance', () => {
+  const FORM_PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
+
+  it('publishes a ladder that never goes backwards', () => {
+    // Read as a list rather than compared pairwise so a failure prints the
+    // whole shape, which is what a pricing reviewer needs to see.
+    expect(FORM_PLANS.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost)).toEqual([
+      0,
+      50,
+      200,
+      500,
+      1000,
+      UNLIMITED,
+      UNLIMITED,
+      UNLIMITED,
+    ])
+  })
+
+  it('is a different dimension from the submissions band', () => {
+    // The two are routinely confused, and the confusion is expensive in one
+    // direction: a catalog ceiling read as a submissions cap refuses metered
+    // revenue. They disagree on most plans, which is what makes them two rows
+    // on a price list rather than one row stated twice.
+    const differing = FORM_PLANS.filter(
+      (plan) =>
+        PLAN_ENTITLEMENTS[plan].formsPerHost !==
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+    )
+    expect(differing.length).toBeGreaterThan(FORM_PLANS.length / 2)
+  })
+
+  it('gives Enterprise no cap at all', () => {
+    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(UNLIMITED)
+    expect(isUnlimitedQuota(PLAN_ENTITLEMENTS.enterprise.formsPerHost)).toBe(true)
+  })
+
+  it('refuses the create only once the allowance is spent', () => {
+    const pro = { plan: 'pro', subscription: { status: 'active' } } as any
+    const allowance = PLAN_ENTITLEMENTS.pro.formsPerHost
+    // Under: another form is still creatable while one slot remains.
+    expect(checkQuota(pro, 'formsPerHost', allowance - 1).allowed).toBe(true)
+    // At: the next one is not.
+    expect(checkQuota(pro, 'formsPerHost', allowance).allowed).toBe(false)
+    // The number the refusal quotes is the plan's, not a platform constant.
+    expect(checkQuota(pro, 'formsPerHost', allowance).limit).toBe(allowance)
+  })
+
+  it('refuses nothing on Enterprise, at any catalog size', () => {
+    const enterprise = {
+      plan: 'enterprise',
+      subscription: { status: 'active' },
+    } as any
+    expect(checkQuota(enterprise, 'formsPerHost', 0).allowed).toBe(true)
+    expect(checkQuota(enterprise, 'formsPerHost', 100_000).allowed).toBe(true)
+    expect(checkQuota(enterprise, 'formsPerHost', 100_000).remaining).toBe(UNLIMITED)
+  })
+
+  it('refuses every form on Free, which has no catalog', () => {
+    // The lower control. Without it "Enterprise allows everything" is
+    // satisfied by a comparison that allows everybody.
+    const free = { plan: 'free' } as any
+    expect(checkQuota(free, 'formsPerHost', 0).allowed).toBe(false)
+    expect(checkQuota(free, 'formsPerHost', 0).limit).toBe(0)
+  })
+
+  it('takes a per-org override, so a contract can raise or lower it', () => {
+    const capped = {
+      plan: 'enterprise',
+      subscription: { status: 'active' },
+      entitlements: { formsPerHost: 25 },
+    } as any
+    expect(resolveOrgEntitlements(capped).formsPerHost).toBe(25)
+    expect(checkQuota(capped, 'formsPerHost', 25).allowed).toBe(false)
+  })
+
+  describe('the sentinel survives the wire', () => {
+    /**
+     * `JSON.stringify(Infinity)` is `null`, and `Number(null)` is `0` — so an
+     * entitlement that crosses a route boundary and is read back naively
+     * renders "no forms at all" for the one plan that has no limit. Worse,
+     * `Number.isFinite(0)` is true, so every guard written to reject a payload
+     * that cannot state its terms waves it through.
+     */
+    const roundTrip = (value: number) =>
+      JSON.parse(JSON.stringify({ value })).value
+
+    it('is destroyed by a naive round-trip, which is why the flag exists', () => {
+      // The hazard itself, asserted rather than described. If JSON ever
+      // preserved Infinity this whole apparatus would be unnecessary, and this
+      // row going red is how anyone would find out.
+      expect(roundTrip(PLAN_ENTITLEMENTS.enterprise.formsPerHost)).toBeNull()
+      expect(Number(roundTrip(PLAN_ENTITLEMENTS.enterprise.formsPerHost))).toBe(0)
+    })
+
+    it('reads as unlimited again through the predicate', () => {
+      expect(
+        isUnlimitedQuota(roundTrip(PLAN_ENTITLEMENTS.enterprise.formsPerHost)),
+      ).toBe(true)
+      expect(
+        formatQuotaLimit(roundTrip(PLAN_ENTITLEMENTS.enterprise.formsPerHost)),
+      ).toBe('Unlimited')
+    })
+
+    it('rebuilds to a limit that still refuses nothing', () => {
+      // The half that matters for enforcement rather than display: after
+      // `restoreQuotaLimit` the comparison is ordinary arithmetic again, and an
+      // Enterprise site can still create its next form.
+      const rebuilt = restoreQuotaLimit(
+        roundTrip(PLAN_ENTITLEMENTS.enterprise.formsPerHost),
+        true,
+      )
+      expect(rebuilt).toBe(UNLIMITED)
+      expect(
+        checkQuota(
+          { plan: 'enterprise', entitlements: { formsPerHost: rebuilt } } as any,
+          'formsPerHost',
+          50_000,
+        ).allowed,
+      ).toBe(true)
+    })
+
+    it('reads as ZERO forms when the flag says the number is real', () => {
+      // The failure direction, pinned. `unlimited: false` is a route saying
+      // "this really is a number", so a `null` beside it is a bug in the route
+      // and must not be laundered into "unlimited" by the restorer.
+      expect(restoreQuotaLimit(roundTrip(UNLIMITED), false)).toBe(0)
+    })
+
+    it('a finite allowance crosses unharmed', () => {
+      // The control for the whole block: the round-trip only damages the
+      // sentinel, so a suite that passed by mangling every value fails here.
+      expect(roundTrip(PLAN_ENTITLEMENTS.pro.formsPerHost)).toBe(
+        PLAN_ENTITLEMENTS.pro.formsPerHost,
+      )
+      expect(
+        restoreQuotaLimit(roundTrip(PLAN_ENTITLEMENTS.pro.formsPerHost), false),
+      ).toBe(PLAN_ENTITLEMENTS.pro.formsPerHost)
+    })
+  })
+
+  describe('a downgrade strands forms, it does not take them', () => {
+    it('computes no excess to release', () => {
+      // A capacity the customer is told to RELEASE is one a plan change can
+      // strand. The catalog is not one: the forms already built stay, stay
+      // editable, and only the next one is refused. So there is a refusal at
+      // the create and no reduction computed anywhere.
+      const before = resolveOrgEntitlements({ plan: 'advanced' } as any)
+      const after = resolveOrgEntitlements({ plan: 'starter' } as any)
+      expect(before.formsPerHost).toBe(UNLIMITED)
+      expect(after.formsPerHost).toBe(50)
+      const held = checkQuota({ plan: 'starter' } as any, 'formsPerHost', 80)
+      expect(held.allowed).toBe(false)
+      expect(held.remaining).toBe(0)
+    })
+
+    it('keeps accepting submissions on a site past its catalog ceiling', () => {
+      // The consequence that costs money if it is wrong. Submissions are
+      // metered revenue on their own band; a catalog ceiling that reached them
+      // would refuse the customer's leads AND our billing.
+      const starter = { plan: 'starter', subscription: { status: 'active' } } as any
+      expect(checkQuota(starter, 'formsPerHost', 80).allowed).toBe(false)
+      expect(checkFormSubmissionQuota(starter, 0).allowed).toBe(true)
+      expect(checkFormSubmissionQuota(starter, 199).allowed).toBe(true)
+    })
+  })
+})
