@@ -35,6 +35,38 @@ import {
 export const UNLIMITED = Number.POSITIVE_INFINITY
 
 /**
+ * How many saved form definitions one site may hold, on every plan that can
+ * build them at all.
+ *
+ * ⛔ **Not a tier lever, and must not become one.** The website-building field
+ * does not meter form COUNT: Squarespace, HubSpot and Mailchimp publish no cap
+ * whatsoever, Webflow abandoned the lever above its free tier, and of the two
+ * that do meter it one is Wix (4/10/25/75) and the other is Jotform
+ * (5/25/50/100), a form-first product where a form IS the billable unit. What
+ * this platform meters on the forms axis is `formSubmissionsPerMonth`, which
+ * is tiered, metered and part of a charged price.
+ *
+ * So this is an abuse ceiling wearing an entitlement's clothes. It rides
+ * `formsPerHost` because that is where `checkQuota` can refuse a create inside
+ * the counting transaction, not because the number is sold — and it resolves
+ * to the same value on Starter through Enterprise. Only Free differs, and only
+ * because the form entity rides `reusableComponents`, which Free lacks.
+ *
+ * The value clears every published competitor number by 5x and the largest
+ * real catalog by far, and it stays STRICTLY below `FORMS_MAX_PER_HOST` — the
+ * page size two listing reads use. The gap is deliberate: a catalog can sit
+ * above this ceiling when a per-org override is withdrawn, and the two
+ * numbers must stay tellable apart so a surface reading the window where it
+ * means the ceiling is never accidentally right. `forms.spec.ts` pins both
+ * halves.
+ *
+ * A per-org `entitlements.formsPerHost` override still resolves ahead of this,
+ * so a contract can raise or lower it for one org without moving the ceiling
+ * everyone else is measured against.
+ */
+export const FORMS_PER_HOST_CEILING = 500
+
+/**
  * Is this quota value "no cap"? (AGL-2482; AGL-2223 is the same class.)
  *
  * WHY A PREDICATE AND NOT `x === UNLIMITED`. `UNLIMITED` is
@@ -161,12 +193,15 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // No saved-form CATALOG on Free: the form entity rides
     // `reusableComponents`, which is Starter-and-above, so
     // `/api/hosts/resources` refuses the create on the entitlement before it
-    // ever reaches this number. Zero is what a Free site actually gets, and
-    // publishing it is what makes the row true rather than aspirational.
+    // ever reaches this number. Zero is what a Free site actually gets.
     //
     // It does NOT mean a Free site has no forms. A `Form` node placed on a
     // page needs no definition to collect, and the 20 submissions above are
     // the band those replies spend.
+    //
+    // Every other plan carries `FORMS_PER_HOST_CEILING`. This is the one
+    // number on the axis that differs, and it differs because the entitlement
+    // gate above it says so, not because the catalog is sold by the tier.
     formsPerHost: 0,
     variablesPerHost: 3,
     functionsPerHost: 1,
@@ -254,14 +289,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 10,
     bandwidthGb: 50,
     formSubmissionsPerMonth: 200,
-    // The catalog ceiling exists to bound a collection, not to sell a tier.
-    // Website builders overwhelmingly do not meter form COUNT — Squarespace,
-    // Webflow, HubSpot and Typeform all publish no cap at all — so the ladder
-    // here is set generously against the two that do (Wix: 4/10/25/75;
-    // Jotform: 5/25/50/100) and goes uncapped from Advanced up. What Aglyn
-    // meters on this axis is `formSubmissionsPerMonth`, which is the lever
-    // the field actually pulls.
-    formsPerHost: 50,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 25,
     functionsPerHost: 10,
     workflowsPerHost: 3,
@@ -335,7 +363,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 25,
     bandwidthGb: 250,
     formSubmissionsPerMonth: 1000,
-    formsPerHost: 200,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
     functionsPerHost: 50,
     workflowsPerHost: 25,
@@ -407,7 +435,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 100,
     bandwidthGb: 1000,
     formSubmissionsPerMonth: 10000,
-    formsPerHost: 500,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
     functionsPerHost: 250,
     workflowsPerHost: 100,
@@ -480,7 +508,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 150,
     bandwidthGb: 2500,
     formSubmissionsPerMonth: 50000,
-    formsPerHost: 1000,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
     functionsPerHost: 500,
     workflowsPerHost: 250,
@@ -550,7 +578,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 250,
     bandwidthGb: 5000,
     formSubmissionsPerMonth: 100000,
-    formsPerHost: UNLIMITED,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
     workflowsPerHost: 500,
@@ -624,7 +652,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: 1000,
     bandwidthGb: 20000,
     formSubmissionsPerMonth: UNLIMITED,
-    formsPerHost: UNLIMITED,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,
@@ -706,7 +734,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxMembersPerHost: UNLIMITED,
     bandwidthGb: UNLIMITED,
     formSubmissionsPerMonth: UNLIMITED,
-    formsPerHost: UNLIMITED,
+    formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
     workflowsPerHost: UNLIMITED,

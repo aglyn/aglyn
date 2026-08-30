@@ -21,15 +21,16 @@
  */
 
 /**
- * The saved-form catalog is a PLAN allowance, refused at the create.
+ * The saved-form catalog is an abuse ceiling, refused at the create.
  *
  * Three claims, and the second two are the ones worth having:
  *
- *  1. the allowance varies by plan and the route reads the plan's number, not
- *     a platform constant every tier shares;
- *  2. a site whose allowance is spent — or was never large enough, because the
- *     org downgraded — keeps every form it already has, editable and readable.
- *     Nothing is deleted, hidden or archived by a ceiling;
+ *  1. the ceiling is the SAME on every plan that can build forms — Starter and
+ *     Enterprise are refused at the identical count — and the route reads the
+ *     resolved entitlement, so a per-org override still lands;
+ *  2. a site holding more forms than the ceiling keeps every one of them,
+ *     editable and readable. Nothing is deleted, hidden or archived by a
+ *     ceiling, including for a customer who moved to a cheaper plan;
  *  3. and those forms keep collecting. Submissions are metered revenue on
  *     their own band, so a catalog ceiling that reached them would refuse the
  *     customer's leads and our billing in the same request.
@@ -37,8 +38,8 @@
  * The REAL `checkQuota` / `checkEntitlement` and the REAL `PLAN_ENTITLEMENTS`
  * are wired in on purpose. A double that stubbed the policy module would make
  * every limit read zero, and a suite can then go green having proved that the
- * platform refuses everybody — which is why the Enterprise and under-cap rows
- * below exist beside the refusals.
+ * platform refuses everybody — which is why every refusal below is paired
+ * with the acceptance one form under it.
  */
 
 const mockVerifyIdToken = jest.fn()
@@ -140,7 +141,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PLAN_ENTITLEMENTS, UNLIMITED } from '@aglyn/aglyn'
+import { FORMS_PER_HOST_CEILING, PLAN_ENTITLEMENTS } from '@aglyn/aglyn'
 import { FORMS_MAX_PER_HOST } from '@aglyn/aglyn/app-utils/forms'
 import { POST } from '../app/api/hosts/resources/route'
 
@@ -162,7 +163,7 @@ const createForm = (body: Record<string, unknown> = {}) =>
 const savedForms = (n: number) =>
   Array.from({ length: n }, (_, index) => ({ displayName: `form ${index}` }))
 
-describe('the catalog ceiling is the PLAN allowance', () => {
+describe('the catalog ceiling does not vary by plan', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     state.memberRoles = { 'user-1': 'admin' }
@@ -171,40 +172,68 @@ describe('the catalog ceiling is the PLAN allowance', () => {
     mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
   })
 
-  it('creates the last form the allowance covers', async () => {
-    state.forms = savedForms(PLAN_ENTITLEMENTS.starter.formsPerHost - 1)
+  it('creates the last form the ceiling covers', async () => {
+    state.forms = savedForms(FORMS_PER_HOST_CEILING - 1)
     expect((await createForm()).status).toBe(200)
     expect(mockCreate).toHaveBeenCalledTimes(1)
   })
 
-  it('refuses the next one, quoting the plan number', async () => {
-    state.forms = savedForms(PLAN_ENTITLEMENTS.starter.formsPerHost)
+  it('refuses the next one, quoting the number', async () => {
+    state.forms = savedForms(FORMS_PER_HOST_CEILING)
     const response = await createForm()
     expect(response.status).toBe(403)
-    expect((await response.json()).error).toContain(
-      String(PLAN_ENTITLEMENTS.starter.formsPerHost),
-    )
+    expect((await response.json()).error).toContain(String(FORMS_PER_HOST_CEILING))
     expect(mockCreate).not.toHaveBeenCalled()
   })
 
-  it('lets a larger plan through at the smaller plan’s ceiling', async () => {
-    // The row that makes the refusal above mean something. Same count, same
-    // route, same collection — only the plan differs, so a suite that passed
-    // by refusing everybody fails here.
-    state.org = { plan: 'business', subscription: { status: 'active' } }
-    state.forms = savedForms(PLAN_ENTITLEMENTS.starter.formsPerHost)
-    expect((await createForm()).status).toBe(200)
-    expect(mockCreate).toHaveBeenCalledTimes(1)
+  it('answers the same for every plan that has forms, in BOTH directions', async () => {
+    /*
+     * The row that makes the refusal above mean something, and the one that
+     * catches a policy module reading 0 for every ceiling: each plan is walked
+     * through the real route twice, once one form under the ceiling and once
+     * at it, and both verdicts are asserted. A suite that passed by refusing
+     * everybody fails on the first acceptance.
+     */
+    const plansWithForms = (
+      Object.keys(PLAN_ENTITLEMENTS) as Array<keyof typeof PLAN_ENTITLEMENTS>
+    ).filter((plan) => PLAN_ENTITLEMENTS[plan].features?.reusableComponents)
+    expect(plansWithForms.length).toBeGreaterThan(5)
+
+    for (const plan of plansWithForms) {
+      state.org = { plan, subscription: { status: 'active' } }
+
+      jest.clearAllMocks()
+      state.forms = savedForms(FORMS_PER_HOST_CEILING - 1)
+      expect([plan, (await createForm()).status]).toEqual([plan, 200])
+      expect([plan, mockCreate.mock.calls.length]).toEqual([plan, 1])
+
+      jest.clearAllMocks()
+      state.forms = savedForms(FORMS_PER_HOST_CEILING)
+      expect([plan, (await createForm()).status]).toEqual([plan, 403])
+      expect([plan, mockCreate.mock.calls.length]).toEqual([plan, 0])
+    }
   })
 
-  it('never refuses Enterprise, whose allowance is uncapped', async () => {
-    // `UNLIMITED` is `Number.POSITIVE_INFINITY`, and every comparison against
-    // it is ordinary arithmetic that happens to be right. A plan whose number
-    // reached this route as a JSON `null` would read as 0 and refuse the first
-    // form on the most expensive tier we sell.
-    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(UNLIMITED)
+  it('refuses Enterprise at the identical count, because a ceiling is not a tier', async () => {
+    // The most expensive plan we sell is uncapped on the dimensions it buys.
+    // This is not one of them: an unbounded catalog is a storage vector at any
+    // price. A deal that needs more takes a per-org override.
+    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
     state.org = { plan: 'enterprise', subscription: { status: 'active' } }
-    state.forms = savedForms(5_000)
+    state.forms = savedForms(FORMS_PER_HOST_CEILING)
+    expect((await createForm()).status).toBe(403)
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('honors a per-org override above the ceiling', async () => {
+    // The route reads the RESOLVED entitlement, not the constant — which is
+    // the whole reason the ceiling rides an entitlement key at all.
+    state.org = {
+      plan: 'starter',
+      subscription: { status: 'active' },
+      entitlements: { formsPerHost: FORMS_PER_HOST_CEILING + 100 },
+    }
+    state.forms = savedForms(FORMS_PER_HOST_CEILING)
     expect((await createForm()).status).toBe(200)
     expect(mockCreate).toHaveBeenCalledTimes(1)
   })
@@ -226,7 +255,7 @@ describe('the catalog ceiling is the PLAN allowance', () => {
   })
 
   it('cannot be talked out of the count by anything in the body', async () => {
-    state.forms = savedForms(PLAN_ENTITLEMENTS.starter.formsPerHost)
+    state.forms = savedForms(FORMS_PER_HOST_CEILING)
     const response = await createForm({
       count: 0,
       used: 0,
@@ -238,41 +267,49 @@ describe('the catalog ceiling is the PLAN allowance', () => {
 
   it('does not read the listing bound as the ceiling', async () => {
     // `FORMS_MAX_PER_HOST` pages a read; it is not what a site may hold. A
-    // route that used it would admit a Starter site far past its allowance.
-    expect(FORMS_MAX_PER_HOST).toBeGreaterThan(
-      PLAN_ENTITLEMENTS.starter.formsPerHost,
-    )
+    // route that used it would admit a site far past its ceiling.
+    expect(FORMS_MAX_PER_HOST).toBeGreaterThan(FORMS_PER_HOST_CEILING)
     state.forms = savedForms(FORMS_MAX_PER_HOST - 1)
     expect((await createForm()).status).toBe(403)
     expect(mockCreate).not.toHaveBeenCalled()
   })
 })
 
-describe('a spent allowance takes nothing away', () => {
+describe('a ceiling reached takes nothing away', () => {
+  /**
+   * More forms than the ceiling allows. A site reaches this by having the
+   * number lowered under a catalog already built — a per-org override
+   * withdrawn, or the platform ceiling itself coming down.
+   *
+   * The rule under test is the capacity rule, not a data migration: a limit
+   * binds the ALLOCATION of the next form and never access to the ones held.
+   * Refusing at use time would delete a customer's intake and their leads
+   * with it.
+   */
+  const HELD = FORMS_PER_HOST_CEILING + 30
+
   beforeEach(() => {
     jest.clearAllMocks()
     state.memberRoles = { 'user-1': 'admin' }
-    // The downgrade case: 80 forms built on a plan that allowed them, now on
-    // one that includes 50. This is the state the product must survive.
     state.org = { plan: 'starter', subscription: { status: 'active' } }
-    state.forms = savedForms(80)
+    state.forms = savedForms(HELD)
     mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
   })
 
-  it('refuses the next form and deletes none of the 80', async () => {
+  it('refuses the next form and deletes none of the ones held', async () => {
     expect((await createForm()).status).toBe(403)
     expect(mockCreate).not.toHaveBeenCalled()
     // The collection is untouched. This route has no delete path at all, and
     // the refusal is the whole of what a ceiling does.
-    expect(state.forms).toHaveLength(80)
+    expect(state.forms).toHaveLength(HELD)
   })
 
   it('is refused for CAPACITY, not for the feature', async () => {
     // The two refusals are different products. "Not included in your plan"
     // sends a paying customer to a feature comparison for something they can
-    // already do 80 of; the capacity message names the number and the remedy.
+    // already do hundreds of; the capacity message names the number.
     const error = (await (await createForm()).json()).error
-    expect(error).toContain(String(PLAN_ENTITLEMENTS.starter.formsPerHost))
+    expect(error).toContain(String(FORMS_PER_HOST_CEILING))
     expect(error).not.toContain('not included')
   })
 
@@ -280,7 +317,7 @@ describe('a spent allowance takes nothing away', () => {
     /*
      * The load-bearing separation, checked at the source because the two
      * routes are in different apps and the failure is a route learning about
-     * the wrong number. A submit path that consulted the catalog allowance
+     * the wrong number. A submit path that consulted the catalog ceiling
      * would refuse a visitor on a site that has done nothing wrong — and
      * refuse the metered revenue that submission represents.
      */
@@ -295,16 +332,19 @@ describe('a spent allowance takes nothing away', () => {
     expect(submitRoute).not.toContain('FORMS_MAX_PER_HOST')
   })
 
-  it('is published on the plan card as the plan’s own number', () => {
+  it('is not published as a per-plan number on the plan cards', () => {
     /*
-     * The billing page is where a customer reads what they are buying, and
-     * the allowance has to come off the resolved entitlements — a card that
-     * printed a constant would publish one plan's terms on all eight.
-     * Checked at the source because the assertion is about WHICH value is
-     * rendered, which a rendered string cannot distinguish once two keys
-     * happen to hold the same number.
+     * The plan cards exist to be COMPARED. A ceiling identical on all eight
+     * would render as eight matching cells and send a buyer hunting for a
+     * difference that is not there, so the cards carry the submissions band —
+     * genuinely tiered, genuinely charged — and not this. The ceiling is
+     * published against the site's own count on the usage meters, where it is
+     * a fact rather than an implied comparison.
+     *
+     * Checked at the source: a rendered card cannot say which of two keys
+     * produced a number once both are on screen.
      */
-    const card = readFileSync(
+    const cards = readFileSync(
       join(
         __dirname,
         '..',
@@ -314,9 +354,17 @@ describe('a spent allowance takes nothing away', () => {
       ),
       'utf8',
     )
-    // The key and the words it is printed beside, matched together: the card
-    // also BRANCHES on `formsPerHost`, so asserting the identifier alone stays
-    // satisfied by a line that renders some other quota under this label.
-    expect(card).toMatch(/quotaLabel\(entitlements\.formsPerHost\)[^`]{0,40}saved forms/)
+    expect(cards).not.toContain('formsPerHost')
+    expect(cards).toMatch(
+      /quotaCount\(entitlements\.formSubmissionsPerMonth\)[^`]{0,40}form submissions/,
+    )
+
+    // The odometer keeps it, against a real count. Dropping it from the cards
+    // must not have dropped it from the product.
+    const meters = readFileSync(
+      join(__dirname, '..', 'components', 'billing', 'billing-usage.component.tsx'),
+      'utf8',
+    )
+    expect(meters).toMatch(/limit=\{entitlements\.formsPerHost\}/)
   })
 })

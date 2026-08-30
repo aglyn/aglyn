@@ -111,10 +111,13 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   /*
    * The site's forms, for the Submissions filter.
    *
-   * Bounded and cheap: `FORMS_MAX_PER_HOST` is a flat platform cap, so this
-   * collection cannot grow past it and the read is one small page rather
-   * than the unbounded-collection scan the submissions list itself is
-   * carefully not doing.
+   * `FORMS_MAX_PER_HOST` is a read WINDOW, not a cap on the collection — how
+   * many forms a site may hold is `formsPerHost`, enforced at the create in
+   * `/api/hosts/resources`, and a staff-set per-org override can raise it
+   * past this window. So the window can be smaller than the catalog, and one
+   * more document than fits is read on purpose: a filter that quietly listed
+   * the first N would report "this form does not exist" and "this form is
+   * past the window" as the same empty answer.
    *
    * Ordered by `__name__`. `displayName` would be the nicer order and is the
    * wrong instrument: `orderBy` on a data field DROPS every document missing
@@ -127,18 +130,22 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
       query(
         collection(firestore, 'hosts', hostId, 'forms'),
         orderBy('__name__'),
-        limit(FORMS_MAX_PER_HOST),
+        limit(FORMS_MAX_PER_HOST + 1),
       ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  /** More forms exist than the window shows; the filter has to say so. */
+  const formsTruncated = (formDocs?.length ?? 0) > FORMS_MAX_PER_HOST
   const forms = useMemo(
     () =>
-      [...(formDocs ?? [])].sort((left: any, right: any) =>
-        String(left.displayName ?? left.$id).localeCompare(
-          String(right.displayName ?? right.$id),
+      [...(formDocs ?? [])]
+        .slice(0, FORMS_MAX_PER_HOST)
+        .sort((left: any, right: any) =>
+          String(left.displayName ?? left.$id).localeCompare(
+            String(right.displayName ?? right.$id),
+          ),
         ),
-      ),
     [formDocs],
   )
   /*
@@ -532,6 +539,13 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
               label={'Form'}
               value={formFilter ?? ''}
               onChange={(event) => setFormFilter(event.target.value || null)}
+              helperText={
+                formsTruncated
+                  ? `Showing the first ${FORMS_MAX_PER_HOST.toLocaleString()} ` +
+                    'forms. Narrow by form is incomplete; All forms still ' +
+                    'covers every submission.'
+                  : undefined
+              }
               sx={{ mb: 2, minWidth: 240 }}
             >
               <MenuItem value="">{'All forms'}</MenuItem>

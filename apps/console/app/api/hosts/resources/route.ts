@@ -358,7 +358,10 @@ const RESOURCES: Record<string, {
    * the plan has the reuse engine a bound form rides at all — a promoted
    * `Form` subtree is placed like any other definition and the `formId`
    * travels inside it. `formsPerHost` asks how many distinct intake forms one
-   * site may hold, which is a capacity and is priced as one.
+   * site may hold, and answers `FORMS_PER_HOST_CEILING` on every plan that
+   * passes the first gate: it is an abuse ceiling, not a tier. It rides an
+   * entitlement key so the refusal happens inside the counting transaction,
+   * and so one org's number can be overridden by contract.
    *
    * The catalog is the only thing this counts. A `Form` node drawn on a page
    * and left unbound has no document here, so a site whose allowance is spent

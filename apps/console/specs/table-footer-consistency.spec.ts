@@ -1117,11 +1117,16 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'apps/console/app/(app)/[orgSlug]/hosts/[host]/forms/page.tsx',
-    'The site’s form CATALOG, bounded at write time by `FORMS_MAX_PER_HOST` ' +
-      '— a flat platform ceiling of 50, enforced server-side in a transaction ' +
-      'at `/api/hosts/resources`, not a plan dimension anything can raise. ' +
-      'The read’s `limit(100)` is already twice the largest population that ' +
-      'can exist, so a footer would page a window nothing can overflow.',
+    'The site’s form CATALOG, bounded at write time by the `formsPerHost` ' +
+      'ceiling, enforced server-side in a transaction at ' +
+      '`/api/hosts/resources`. ⚠️ THE MARGIN IS GONE: that ceiling is ' +
+      '`FORMS_PER_HOST_CEILING`, and the read’s `limit(100)` now sits BELOW ' +
+      'it rather than twice above it, so a large catalog is truncated with ' +
+      'nothing on screen saying so — and `used` under-reports against the ' +
+      'readout’s own denominator. Listed here because the page has no ' +
+      'footer today, NOT because it is safe without one: the read must clear ' +
+      'the ceiling and disclose a cut list, the way the inbox form filter ' +
+      'does. Whoever raises the read decides whether this entry moves.',
   ],
 ]
 
@@ -1341,9 +1346,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // the same version history the component and layout ones do, read the
     // same unordered way, and is blocked on the same `createdAt` audit.
     expect(OWES_A_FOOTER).toHaveLength(15)
-    // 34 since the forms catalog joined them: `FORMS_MAX_PER_HOST` is a flat
-    // platform ceiling of 50 enforced server-side, so the read's `limit(100)`
-    // already exceeds the largest population that can exist. Every table on
+    // 34 since the forms catalog joined them. That entry's own note records
+    // that its margin has since gone: the read's `limit(100)` no longer
+    // clears the `formsPerHost` ceiling, so it is listed as un-footered
+    // rather than as safe. Every other table on
     // this list is bounded by something other than the audience — a fixed
     // taxonomy, a rollup capped at WRITE time, a ceilinged window that says
     // so, or a merchant's own vocabulary — which is the property this list
