@@ -20,27 +20,32 @@ import BusinessDetailsCard from '../../../../../../../../components/business-det
 import ErrorScreensCard from '../../../../../../../../components/error-screens-card.component'
 import LanguagesCard from '../../../../../../../../components/languages-card.component'
 import LogoCard from '../../../../../../../../components/logo-card.component'
-import SiteBackupCard from '../../../../../../../../components/site-backup-card.component'
-import SiteTemplateCard from '../../../../../../../../components/site-template-card.component'
-import { SetupForm, useSetupScope } from '../layout'
+import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
- * Basic details — the site's name and address, and the cards that belong with
- * them (AGL-2501).
+ * What the site presents to a visitor: its mark, the details its tokens read
+ * from, its error screens and its languages.
  *
- * Delete site is NOT here: it moved to the host Admin area's Danger zone
- * (AGL-1014), so destructive actions no longer sit in a page collaborators
- * otherwise have reason to visit. Designable auth screens moved to the User
- * Accounts plugin's per-site page (AGL-428/1014) — they designate screens that
- * exist only while that plugin is on, so they are settings OF the plugin.
+ * The site's own NAME and ADDRESS are not here. Those describe the site as an
+ * object rather than as an experience, so the Basic details form lives in the
+ * Admin hub's General section beside the custom domain it points at. Backup,
+ * restore and publishing a template moved with them, to Admin's Backup &
+ * template: a restore writes documents into the host, and a template
+ * distributes the whole site.
+ *
+ * Delete site is NOT here either: it moved to the host Admin area's Danger
+ * zone (AGL-1014), so destructive actions no longer sit in a page
+ * collaborators otherwise have reason to visit. Designable auth screens moved
+ * to the User Accounts plugin's per-site page (AGL-428/1014) — they designate
+ * screens that exist only while that plugin is on, so they are settings OF the
+ * plugin.
  */
 export default function HostSetupDetailsSection() {
-  const { hostId } = useSetupScope()
+  const { hostId } = useHostSettingsScope()
   return (
     <>
-      <SetupForm schemaId="hostDetails" />
       {/* Site brand mark (AGL-594): shown by the tenant's navigation loader. */}
-      <div style={{ marginTop: 24 }}>
+      <div>
         <LogoCard hostId={hostId} />
       </div>
       {/* Contact details `host.*` tokens read from (AGL-1022) — without these
@@ -54,12 +59,6 @@ export default function HostSetupDetailsSection() {
       </div>
       <div style={{ marginTop: 24 }}>
         <LanguagesCard hostId={hostId} />
-      </div>
-      <div style={{ marginTop: 24 }}>
-        <SiteBackupCard hostId={hostId} />
-      </div>
-      <div style={{ marginTop: 24 }}>
-        <SiteTemplateCard hostId={hostId} />
       </div>
     </>
   )

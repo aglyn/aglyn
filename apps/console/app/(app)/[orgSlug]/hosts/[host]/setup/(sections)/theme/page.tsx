@@ -19,7 +19,7 @@
 import ThemeEditor from '../../../../../../../../components/theme-editor/theme-editor.component'
 import ThemeOverridesCard from '../../../../../../../../components/theme-editor/theme-overrides-card.component'
 import ThemeSourceCard from '../../../../../../../../components/theme-editor/theme-source-card.component'
-import { useSetupScope } from '../layout'
+import { useHostSettingsScope } from '../../../host-settings-scope'
 
 /**
  * Theme — where the site's theme came from, what has been changed in it, and
@@ -39,7 +39,7 @@ export default function HostSetupThemeSection() {
     themeSaving,
     handleThemeSave,
     handleWriteOverride,
-  } = useSetupScope()
+  } = useHostSettingsScope()
   if (!hostHasEmitted) return null
   return (
     <>

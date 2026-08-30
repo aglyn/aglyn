@@ -17,7 +17,10 @@
 'use client'
 
 import ConsentBannerCard from '../../../../../../../../components/consent-banner-card.component'
-import { SetupForm, useSetupScope } from '../layout'
+import {
+  HostSettingsForm,
+  useHostSettingsScope,
+} from '../../../host-settings-scope'
 
 /**
  * Tracking — the measurement ids, and the consent banner that governs whether
@@ -33,10 +36,10 @@ import { SetupForm, useSetupScope } from '../layout'
  * form that writes on save.
  */
 export default function HostSetupTrackingSection() {
-  const { hostId } = useSetupScope()
+  const { hostId } = useHostSettingsScope()
   return (
     <>
-      <SetupForm schemaId="hostTracking" />
+      <HostSettingsForm schemaId="hostTracking" />
       <div style={{ marginTop: 24 }}>
         <ConsentBannerCard hostId={hostId} />
       </div>

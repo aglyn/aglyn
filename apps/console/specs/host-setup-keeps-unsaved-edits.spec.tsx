@@ -325,6 +325,10 @@ jest.mock('../components/site-branding-badge-card.component', () => nullCard)
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostSubdomain: () => 'shop',
+  // The Admin sections layout draws its rail only for a site admin, and the
+  // Basic details form is behind it. A non-admin gets the refusal notice, and
+  // there would be no form to type into.
+  useIsHostAdmin: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 jest.mock('../hooks/use-host-activity-logger', () => ({
@@ -334,7 +338,12 @@ jest.mock('../hooks/use-host-activity-logger', () => ({
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 jest.mock('../constants/route-links', () => ({
   buildRoute: () => '/x',
-  Route: { HOST_SETUP: 'host-setup', HOST_DASHBOARD: 'host-dashboard' },
+  Route: {
+    HOST_SETUP: 'host-setup',
+    HOST_DASHBOARD: 'host-dashboard',
+    HOST_ADMIN: 'host-admin',
+    HOST_ADMIN_GENERAL: 'host-admin-general',
+  },
 }))
 jest.mock('firebase/analytics', () => ({ logEvent: () => undefined }))
 jest.mock('next/navigation', () => ({
@@ -385,6 +394,30 @@ const HostSetup = ({ section = 'details' }: { section?: string } = {}) => {
     </SetupLayout>
   )
 }
+
+const ADMIN = '../app/(app)/[orgSlug]/hosts/[host]/admin/(sections)'
+const AdminLayout = require(`${ADMIN}/layout`).default
+const ADMIN_SECTION_PAGES: Record<string, () => JSX.Element> = {
+  general: require(`${ADMIN}/general/page`).default,
+  backup: require(`${ADMIN}/backup/page`).default,
+}
+
+/**
+ * The same shape for the Admin hub, which is where Basic details now lives.
+ *
+ * Through the REAL Admin sections layout, not the scope provider alone: what
+ * keeps the draft is a ref held ABOVE the route, so a harness that provided
+ * its own scope would prove the ref works and say nothing about whether the
+ * hub the reader actually visits mounts one.
+ */
+const HostAdmin = ({ section = 'general' }: { section?: string } = {}) => {
+  const SectionPage = ADMIN_SECTION_PAGES[section]
+  return (
+    <AdminLayout>
+      <SectionPage />
+    </AdminLayout>
+  )
+}
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 /** No network: a refused save must never have reached the rename API. */
@@ -416,7 +449,7 @@ const setTab = (value: string) => {
 const field = (id: string) =>
   screen.getByLabelText(`${id}-displayName`) as HTMLInputElement
 
-describe('host Setup keeps an unsaved edit across a section change', () => {
+describe('host settings keep an unsaved edit across a section change', () => {
   beforeEach(() => {
     mockCurrentTab = 'hostDetails'
     hostDoc.status = 'success'
@@ -426,36 +459,59 @@ describe('host Setup keeps an unsaved edit across a section change', () => {
   /**
    * The CONTROL, and it is not decoration.
    *
-   * The assertion below is "the typed value came back", and a page that never
-   * unmounted the form would satisfy it while proving nothing — the edit would
-   * have survived because it was never discarded. Sections are ROUTES, so Next
-   * mounts one page: this proves the harness really does destroy the section
-   * being left, which is both how the read cost stays flat and why a draft has
-   * to be held above it.
+   * The assertions below are "the typed value came back", and a hub that never
+   * unmounted the form would satisfy them while proving nothing — the edit
+   * would have survived because it was never discarded. Sections are ROUTES,
+   * so Next mounts one page: this proves the harness really does destroy the
+   * section being left, which is both how the read cost stays flat and why a
+   * draft has to be held above it.
+   *
+   * Once per hub, because each hub's sections layout mounts its own scope: a
+   * control that only covered Setup would leave the Admin claim resting on the
+   * Setup harness.
    */
-  it('CONTROL: leaving a section really does unmount its form', () => {
-    const { rerender } = render(<HostSetup section="details" />)
-    expect(screen.queryByLabelText('hostDetails-displayName')).not.toBeNull()
-    expect(screen.queryByLabelText('hostSeo-displayName')).toBeNull()
-
-    rerender(<HostSetup section="seo" />)
-    expect(screen.queryByLabelText('hostDetails-displayName')).toBeNull()
+  it('CONTROL: leaving a Setup section really does unmount its form', () => {
+    const { rerender } = render(<HostSetup section="seo" />)
     expect(screen.queryByLabelText('hostSeo-displayName')).not.toBeNull()
+    expect(screen.queryByLabelText('hostTracking-displayName')).toBeNull()
+
+    rerender(<HostSetup section="tracking" />)
+    expect(screen.queryByLabelText('hostSeo-displayName')).toBeNull()
+    expect(screen.queryByLabelText('hostTracking-displayName')).not.toBeNull()
   })
 
-  it('brings a half-typed edit back when the reader returns to the section', () => {
-    const { rerender } = render(<HostSetup section="details" />)
+  it('CONTROL: leaving the Admin General section really does unmount its form', () => {
+    const { rerender } = render(<HostAdmin section="general" />)
+    expect(screen.queryByLabelText('hostDetails-displayName')).not.toBeNull()
+
+    rerender(<HostAdmin section="backup" />)
+    expect(screen.queryByLabelText('hostDetails-displayName')).toBeNull()
+  })
+
+  it('brings a half-typed name back when the reader returns to General', () => {
+    const { rerender } = render(<HostAdmin section="general" />)
 
     fireEvent.change(field('hostDetails'), {
       target: { value: 'Shop — half typed' },
     })
 
-    rerender(<HostSetup section="seo" />)
-    rerender(<HostSetup section="details" />)
+    rerender(<HostAdmin section="backup" />)
+    rerender(<HostAdmin section="general" />)
 
     // The section page was destroyed and rebuilt in between; the draft, held
     // in the LAYOUT that survives the navigation, is what it was rebuilt from.
     expect(field('hostDetails').value).toBe('Shop — half typed')
+  })
+
+  it('brings a half-typed Setup edit back too', () => {
+    const { rerender } = render(<HostSetup section="seo" />)
+
+    fireEvent.change(field('hostSeo'), { target: { value: 'Half typed' } })
+
+    rerender(<HostSetup section="tracking" />)
+    rerender(<HostSetup section="seo" />)
+
+    expect(field('hostSeo').value).toBe('Half typed')
   })
 
   /**
@@ -472,11 +528,11 @@ describe('host Setup keeps an unsaved edit across a section change', () => {
    * the stored host document, and the draft arrives on top as an edit.
    */
   it('restores the draft as an edit, not as the saved state', () => {
-    const { rerender } = render(<HostSetup section="details" />)
+    const { rerender } = render(<HostAdmin section="general" />)
     fireEvent.change(field('hostDetails'), { target: { value: 'Half typed' } })
 
-    rerender(<HostSetup section="seo" />)
-    rerender(<HostSetup section="details" />)
+    rerender(<HostAdmin section="backup" />)
+    rerender(<HostAdmin section="general" />)
 
     expect(field('hostDetails').value).toBe('Half typed')
     // Seeded from the host document — 'Shop' — so the restored text reads as a
@@ -486,17 +542,17 @@ describe('host Setup keeps an unsaved edit across a section change', () => {
 
   /*
    * A draft belongs to the section that owns it. Leaking one across would show
-   * a reader their Details edit inside the SEO form, which is a different and
+   * a reader their SEO edit inside the Tracking form, which is a different and
    * worse bug than the one being fixed.
    */
   it('keeps each section draft to itself', () => {
-    const { rerender } = render(<HostSetup section="details" />)
-    fireEvent.change(field('hostDetails'), { target: { value: 'Details edit' } })
+    const { rerender } = render(<HostSetup section="seo" />)
+    fireEvent.change(field('hostSeo'), { target: { value: 'SEO edit' } })
 
-    rerender(<HostSetup section="seo" />)
+    rerender(<HostSetup section="tracking" />)
 
-    // Seeded from the host doc, not from the Details draft.
-    expect(field('hostSeo').value).toBe('Shop')
+    // Seeded from the host doc, not from the SEO draft.
+    expect(field('hostTracking').value).toBe('Shop')
   })
 
   /*
@@ -505,14 +561,14 @@ describe('host Setup keeps an unsaved edit across a section change', () => {
    * shown a stale copy of what they already committed.
    */
   it('drops the draft after a successful save', async () => {
-    const { rerender } = render(<HostSetup section="details" />)
+    const { rerender } = render(<HostAdmin section="general" />)
     fireEvent.change(field('hostDetails'), { target: { value: 'Before save' } })
 
     fireEvent.click(screen.getByText('Submit hostDetails'))
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
 
-    rerender(<HostSetup section="seo" />)
-    rerender(<HostSetup section="details" />)
+    rerender(<HostAdmin section="backup" />)
+    rerender(<HostAdmin section="general" />)
 
     expect(field('hostDetails').value).toBe('Shop')
   })

@@ -33,7 +33,10 @@
  * - the OVERRIDE patch, same shape, plus the patch itself is diffed against
  *   the same stale `data`.
  * - the DETAILS/SEO form. `FormRenderer` gets `initialValues: data` and
- *   submits every field it holds, so `merge: true` protects nothing.
+ *   submits every field it holds, so `merge: true` protects nothing. The two
+ *   are in different hubs — Basic details under Admin, SEO under Setup — and
+ *   share one save path, so the guard is asserted where the form that carries
+ *   the rename actually mounts.
  *
  * Both directions are asserted for each. The positive controls matter most —
  * these guards stand in front of the ordinary save on the page every site
@@ -243,6 +246,10 @@ jest.mock('../components/site-branding-badge-card.component', () => nullCard)
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostSubdomain: () => 'shop',
+  // The Admin sections layout renders its rail only for a site admin, and the
+  // Basic details form is behind it. A non-admin sees the refusal notice, and
+  // a spec driving a save against that would be driving nothing.
+  useIsHostAdmin: () => true,
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 jest.mock('../hooks/use-host-activity-logger', () => ({
@@ -252,7 +259,12 @@ jest.mock('../hooks/use-host-activity-logger', () => ({
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 jest.mock('../constants/route-links', () => ({
   buildRoute: () => '/x',
-  Route: { HOST_SETUP: 'host-setup', HOST_DASHBOARD: 'host-dashboard' },
+  Route: {
+    HOST_SETUP: 'host-setup',
+    HOST_DASHBOARD: 'host-dashboard',
+    HOST_ADMIN: 'host-admin',
+    HOST_ADMIN_GENERAL: 'host-admin-general',
+  },
 }))
 jest.mock('firebase/analytics', () => ({ logEvent: () => undefined }))
 jest.mock('next/navigation', () => ({
@@ -283,6 +295,32 @@ const HostSetup = ({ section = 'details' }: { section?: string } = {}) => {
     <SetupLayout>
       <SectionPage />
     </SetupLayout>
+  )
+}
+
+const ADMIN = '../app/(app)/[orgSlug]/hosts/[host]/admin/(sections)'
+const AdminLayout = require(`${ADMIN}/layout`).default
+const ADMIN_SECTION_PAGES: Record<string, () => JSX.Element> = {
+  general: require(`${ADMIN}/general/page`).default,
+  backup: require(`${ADMIN}/backup/page`).default,
+}
+
+/**
+ * The same shape for the Admin hub, which is where the Basic details form and
+ * its guarded save now live.
+ *
+ * Mounted through the REAL Admin sections layout rather than the scope
+ * provider on its own, and that is the half worth having: the guard the three
+ * cases below assert is only reached if that layout actually mounts the shared
+ * scope. A harness that provided the scope itself would pass over an Admin hub
+ * that mounts none, and the form would throw for every reader.
+ */
+const HostAdmin = ({ section = 'general' }: { section?: string } = {}) => {
+  const SectionPage = ADMIN_SECTION_PAGES[section]
+  return (
+    <AdminLayout>
+      <SectionPage />
+    </AdminLayout>
   )
 }
 /* eslint-enable @typescript-eslint/no-var-requires */
@@ -410,10 +448,10 @@ describe('Host Setup override reset (AGL-1358)', () => {
   })
 })
 
-describe('Host Setup details save (AGL-1358)', () => {
+describe('Host Admin details save (AGL-1358)', () => {
   it('REFUSES the whole save from an unconfirmed seed — including the rename', async () => {
     hostDoc.fromCache = true
-    render(<HostSetup />)
+    render(<HostAdmin />)
 
     click('Submit details')
 
@@ -431,7 +469,7 @@ describe('Host Setup details save (AGL-1358)', () => {
 
   it('REFUSES when the host read failed, and says so differently', async () => {
     hostDoc.status = 'error'
-    render(<HostSetup />)
+    render(<HostAdmin />)
 
     click('Submit details')
 
@@ -443,7 +481,7 @@ describe('Host Setup details save (AGL-1358)', () => {
   })
 
   it('SAVES the details once the server has confirmed the seed', async () => {
-    render(<HostSetup />)
+    render(<HostAdmin />)
 
     click('Submit details')
 

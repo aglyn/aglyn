@@ -17,7 +17,10 @@
 'use client'
 
 import SearchIndexingCard from '../../../../../../../../components/search-indexing-card.component'
-import { SetupForm, useSetupScope } from '../layout'
+import {
+  HostSettingsForm,
+  useHostSettingsScope,
+} from '../../../host-settings-scope'
 
 /**
  * SEO — the metadata a search engine reads, plus the switch that decides
@@ -28,10 +31,10 @@ import { SetupForm, useSetupScope } from '../layout'
  * save.
  */
 export default function HostSetupSeoSection() {
-  const { hostId } = useSetupScope()
+  const { hostId } = useHostSettingsScope()
   return (
     <>
-      <SetupForm schemaId="hostSeo" />
+      <HostSettingsForm schemaId="hostSeo" />
       <div style={{ marginTop: 24 }}>
         <SearchIndexingCard hostId={hostId} />
       </div>
