@@ -254,6 +254,18 @@ describe('the page opens on the decision, not the catalogue', () => {
     ).toBeNull()
   })
 
+  /**
+   * The cards are read ACROSS, so a section present on one and absent on
+   * another breaks the comparison. Every card carries a heading over its tick
+   * list; only the wording differs.
+   */
+  it('every card labels its tick list', () => {
+    renderCards({ plan: 'starter' })
+    // Two neighbours say Included, the recommended one says what it adds.
+    expect(screen.queryAllByText('Included')).toHaveLength(2)
+    expect(screen.getByText('What you gain')).toBeTruthy()
+  })
+
   it('says what the current tier is MISSING, not only what it has', () => {
     renderCards({ plan: 'free' })
     expect(screen.getByText('Not in your plan')).toBeTruthy()

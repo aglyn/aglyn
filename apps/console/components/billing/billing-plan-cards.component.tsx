@@ -30,6 +30,7 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import {
+  ICON_VARIANT_CLOSE,
   ICON_VARIANT_SYMBOL_CONFIRMED,
   ICON_VARIANT_SYMBOL_MINUS,
 } from '@aglyn/shared-data-enums'
@@ -765,87 +766,82 @@ function FocusedTierView(props: {
                   ))}
                 </Stack>
 
-                {role === 'recommended' ? (
-                  <>
-                    <Divider sx={{ my: 1.5 }} />
-                    <Typography variant="overline" color="primary">
-                      {'What you gain'}
-                    </Typography>
-                    <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-                      {upgradeGains(
+                {/* Every section below is the same three parts in the same
+                    order — rule, heading, list — so the eye can travel
+                    straight across three cards instead of re-finding the
+                    shape on each one. */}
+                <Divider sx={{ my: 1.5 }} />
+                <Typography
+                  variant="overline"
+                  color={role === 'recommended' ? 'secondary' : 'text.secondary'}
+                  sx={{ display: 'block' }}
+                >
+                  {role === 'recommended' ? 'What you gain' : 'Included'}
+                </Typography>
+                <Stack spacing={0.75} sx={{ mt: 0.75 }}>
+                  {(role === 'recommended'
+                    ? upgradeGains(
                         current,
                         PLAN_ENTITLEMENTS[rung as OrgPlan],
                         brand,
-                      ).map((line) => (
+                      )
+                    : rung === 'enterprise'
+                      ? ENTERPRISE_HIGHLIGHTS.slice(0, 5).map(
+                          (highlight) => highlight.label,
+                        )
+                      : keyFeatures(PLAN_ENTITLEMENTS[rung as OrgPlan], brand)
+                  ).map((line) => (
+                    <Stack
+                      key={line}
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'flex-start' }}
+                    >
+                      <MdiIcon
+                        color="success"
+                        fontSize="small"
+                        path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
+                      />
+                      <Typography variant="body2">{line}</Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+
+                {role === 'current' &&
+                missingFromTier(currentTier, brand).length ? (
+                  <>
+                    <Divider sx={{ my: 1.5 }} />
+                    <Typography
+                      variant="overline"
+                      color="error"
+                      sx={{ display: 'block' }}
+                    >
+                      {'Not in your plan'}
+                    </Typography>
+                    <Stack spacing={0.75} sx={{ mt: 0.75 }}>
+                      {missingFromTier(currentTier, brand).map((line) => (
                         <Stack
                           key={line}
                           direction="row"
                           spacing={1}
-                          sx={{ alignItems: 'center' }}
+                          sx={{ alignItems: 'flex-start' }}
                         >
+                          {/* A cross, not a dash. A dash reads as "not
+                              applicable"; the point of this list is that
+                              these are things you are going without. */}
                           <MdiIcon
-                            color="success"
+                            color="error"
                             fontSize="small"
-                            path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
+                            path={ICON_VARIANT_CLOSE.path}
                           />
-                          <Typography variant="body2">{line}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {line}
+                          </Typography>
                         </Stack>
                       ))}
                     </Stack>
                   </>
-                ) : (
-                  <Stack spacing={0.5}>
-                    {rung === 'enterprise' ? null : (
-                      <>
-                        <Divider sx={{ my: 1.5 }} />
-                        {keyFeatures(
-                          PLAN_ENTITLEMENTS[rung as OrgPlan],
-                          brand,
-                        ).map((line) => (
-                          <Stack
-                            key={line}
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'center' }}
-                          >
-                            <MdiIcon
-                              color="success"
-                              fontSize="small"
-                              path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
-                            />
-                            <Typography variant="body2">{line}</Typography>
-                          </Stack>
-                        ))}
-                      </>
-                    )}
-                    {role === 'current' &&
-                    missingFromTier(currentTier, brand).length ? (
-                      <>
-                        <Divider sx={{ my: 1.5 }} />
-                        <Typography variant="overline" color="text.secondary">
-                          {'Not in your plan'}
-                        </Typography>
-                        {missingFromTier(currentTier, brand).map((line) => (
-                          <Stack
-                            key={line}
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'center', opacity: 0.66 }}
-                          >
-                            <MdiIcon
-                              color="disabled"
-                              fontSize="small"
-                              path={ICON_VARIANT_SYMBOL_MINUS.path}
-                            />
-                            <Typography variant="body2" color="text.secondary">
-                              {line}
-                            </Typography>
-                          </Stack>
-                        ))}
-                      </>
-                    ) : null}
-                  </Stack>
-                )}
+                ) : null}
               </CardContent>
             </Card>
           </Grid>
