@@ -17,15 +17,26 @@
 'use client'
 
 import {
-  buildRoute,
   createResourceUid,
   isEmailTopicId,
   pluginDocsHelp,
-  Route,
   DEFAULT_EMAIL_TOPICS,
   EMAIL_TOPICS_COLLECTION,
 } from '@aglyn/aglyn'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import {
+  mdiArchiveArrowUpOutline,
+  mdiArchiveOutline,
+  mdiPencilOutline,
+} from '@aglyn/shared-data-mdi'
+import {
+  AppLink,
+  CardDisplay,
+  MdiIcon,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -42,14 +53,13 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
-import {
-  useConsoleHostRoute,
-  useFirestore,
-} from '@aglyn/tenant-feature-instance'
-import { useOrgEmailTopics } from './use-org-email-topics'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useOrgEmailTopics, writeEmailTopic } from './use-org-email-topics'
 
 export interface EmailTopicsCardProps {
   hostId: string
+  /** The emails hub URL, which every topic route hangs beneath. */
+  basePath: string
 }
 
 /**
@@ -80,35 +90,33 @@ export interface EmailTopicsCardProps {
  * Templates use, and changing an existing record happens on that record's
  * page rather than in a form stacked above the table. So this card lists and
  * routes, and `email-topic-detail.tsx` edits.
+ *
+ * ## The row grammar the rest of the surface uses
+ *
+ * The same one the audiences table sets: the row opens the topic, the topic's
+ * name is ALSO a real link so it can be middle-clicked and copied, and the
+ * secondary actions sit behind the shared `RowActionsMenu` rather than as text
+ * buttons in the row. Retire is the reason the menu has more than one entry —
+ * it is the only thing that can be done to a topic without opening it, and it
+ * is destructive enough that it should not sit one mis-click from the row's
+ * own open handler.
  */
 export function EmailTopicsCard(props: EmailTopicsCardProps) {
-  const { hostId } = props
+  const { hostId, basePath } = props
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
+  const { confirm } = useConfirmationContext()
   const { topics, scope } = useOrgEmailTopics(hostId)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  const [busyTopicId, setBusyTopicId] = useState('')
 
-  /*
-   * The topic's own page, built from the org slug and the subdomain (AGL-685).
-   *
-   * Null until the host route resolves, because a link built before they
-   * arrive points at `/null/hosts/null` — the same guard the campaigns card
-   * applies to its report link.
-   */
+  /** The topic's own page, which is also its edit page. */
   const topicHref = useCallback(
-    (topicId: string) =>
-      orgSlug && subdomain
-        ? `${buildRoute(Route.HOST_PLUGIN, {
-            orgSlug,
-            host: subdomain,
-            pluginSlug: 'emails',
-          })}/topics/${topicId}`
-        : null,
-    [orgSlug, subdomain],
+    (topicId: string) => `${basePath}/topics/${topicId}`,
+    [basePath],
   )
 
   const create = useCallback(
@@ -140,8 +148,7 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
         setError(null)
         enqueueSnackbar('Topic added', { variant: 'success', persist: false })
         // Straight to the record, which is where every further change is made.
-        const href = topicHref(id)
-        if (href) router.push(href)
+        router.push(topicHref(id))
       } catch (caught) {
         console.error(caught)
         setError(caught)
@@ -149,6 +156,92 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
     },
     [scope, firestore, enqueueSnackbar, topicHref, router],
   )
+
+  /**
+   * Retire a topic, or bring one back.
+   *
+   * Retire and not delete: campaigns already sent under a topic minted
+   * unsubscribe links carrying its id, those links are sitting in inboxes, and
+   * an id that stops resolving is a preference page that cannot name the
+   * message the recipient is holding. The Firestore rules refuse a delete for
+   * the same reason.
+   *
+   * Restoring is not asked about — it puts a choice back rather than taking
+   * one away, and it is undone by retiring again.
+   */
+  const toggleArchived = useCallback(
+    async (topic: { id: string; name: string; description: string; archived?: boolean }) => {
+      if (!scope || busyTopicId) return
+      if (!topic.archived) {
+        const accepted = await confirm({
+          title: `Retire “${topic.name}”?`,
+          description:
+            'It leaves the composer and the preference page, so nothing new ' +
+            'can be sent under it and recipients stop seeing it as a choice. ' +
+            'Campaigns already sent under it keep working — their ' +
+            'unsubscribe links still name this topic. You can bring it back ' +
+            'at any time.',
+          confirmationText: 'Retire',
+        })
+          // `confirm` resolves with NO VALUE and REJECTS on cancel, so gating
+          // on the resolved value alone makes this always return (AGL-950).
+          .then(() => true)
+          .catch(() => false)
+        if (!accepted) return
+      }
+      setBusyTopicId(topic.id)
+      try {
+        await writeEmailTopic(firestore, scope, {
+          id: topic.id,
+          name: topic.name,
+          description: topic.description,
+          archived: !topic.archived,
+        })
+        enqueueSnackbar(topic.archived ? 'Topic restored' : 'Topic retired', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (caught) {
+        console.error(caught)
+        enqueueSnackbar('An error has occurred', { variant: 'error' })
+      } finally {
+        setBusyTopicId('')
+      }
+    },
+    [scope, busyTopicId, confirm, firestore, enqueueSnackbar],
+  )
+
+  const rowActions = (topic: {
+    id: string
+    name: string
+    description: string
+    archived?: boolean
+  }): RowActionsMenuItem[] => [
+    {
+      key: 'edit',
+      label: 'Edit topic',
+      icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+      href: topicHref(topic.id),
+    },
+    {
+      key: 'archive',
+      label: topic.archived ? 'Restore' : 'Retire',
+      icon: (
+        <MdiIcon
+          path={
+            topic.archived
+              ? mdiArchiveArrowUpOutline.path
+              : mdiArchiveOutline.path
+          }
+          size={0.8}
+        />
+      ),
+      destructive: !topic.archived,
+      disabled: Boolean(busyTopicId),
+      disabledReason: busyTopicId ? 'Another topic is being saved' : undefined,
+      onClick: () => void toggleArchived(topic),
+    },
+  ]
 
   return (
     <CardDisplay
@@ -190,19 +283,30 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
               {topics.map((topic) => {
                 const href = topicHref(topic.id)
                 return (
-                  <TableRow key={topic.id}>
+                  <TableRow
+                    key={topic.id}
+                    hover
+                    onClick={() => router.push(href)}
+                    sx={{ cursor: 'pointer' }}
+                  >
                     <TableCell>
                       <Stack
                         direction="row"
                         spacing={1}
                         sx={{ flexWrap: 'wrap', alignItems: 'center' }}
                       >
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 'bold' }}
+                        {/*
+                          The row's own handler would fire too and push the
+                          same route twice — one history entry per back press.
+                         */}
+                        <AppLink
+                          href={href}
+                          onClick={(event: { stopPropagation: () => void }) =>
+                            event.stopPropagation()
+                          }
                         >
                           {topic.name}
-                        </Typography>
+                        </AppLink>
                         {topic.archived ? (
                           <Chip
                             size="small"
@@ -228,14 +332,15 @@ export function EmailTopicsCard(props: EmailTopicsCardProps) {
                         {topic.description || '—'}
                       </Typography>
                     </TableCell>
-                    <TableCell align="right">
-                      <Button
-                        size="small"
-                        disabled={!href}
-                        onClick={() => href && router.push(href)}
-                      >
-                        {'Edit'}
-                      </Button>
+                    <TableCell
+                      align="right"
+                      sx={{ width: 56 }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <RowActionsMenu
+                        label={topic.name}
+                        items={rowActions(topic)}
+                      />
                     </TableCell>
                   </TableRow>
                 )

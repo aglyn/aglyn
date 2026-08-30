@@ -20,7 +20,6 @@ import {
   pluginDocsHelp,
   resolveCampaignTopic,
   DEFAULT_EMAIL_TOPICS,
-  EMAIL_TOPICS_COLLECTION,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -31,11 +30,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, setDoc } from 'firebase/firestore'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { useOrgEmailTopics } from './use-org-email-topics'
+import { useOrgEmailTopics, writeEmailTopic } from './use-org-email-topics'
 
 export interface EmailTopicDetailProps {
   hostId: string
@@ -106,13 +104,11 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
     loaded && (name !== topic.name || description !== topic.description)
 
   /**
-   * Write the topic document.
+   * Save what is in the form, optionally changing the retired flag with it.
    *
-   * `archived` is written on every save rather than only when it changes, so
-   * the stored document is always a complete statement of the topic. A merge
-   * that omitted it would leave a restored topic carrying `archived: true`
-   * from an earlier save, which reads on screen as restored and behaves as
-   * retired.
+   * The write itself is `writeEmailTopic`, which the list card's row menu also
+   * goes through — a topic retired from the list and one retired here have to
+   * leave the same document behind.
    */
   const save = useCallback(
     async (patch?: { archived?: boolean }) => {
@@ -126,21 +122,12 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
       }
       setBusy(true)
       try {
-        await setDoc(
-          doc(
-            firestore,
-            scope[0],
-            scope[1],
-            EMAIL_TOPICS_COLLECTION,
-            topic.id,
-          ),
-          {
-            name: nextName,
-            description: description.trim(),
-            archived: patch?.archived ?? !!topic.archived,
-          },
-          { merge: true },
-        )
+        await writeEmailTopic(firestore, scope, {
+          id: topic.id,
+          name: nextName,
+          description: description.trim(),
+          archived: patch?.archived ?? !!topic.archived,
+        })
         enqueueSnackbar('Topic saved', { variant: 'success', persist: false })
       } catch (error) {
         console.error(error)
