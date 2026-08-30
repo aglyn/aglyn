@@ -154,6 +154,114 @@ export function unsubscribeSignatureMatches(args: {
 }
 
 /**
+ * The purpose component that distinguishes a CONFIRMATION subject.
+ *
+ * See {@link confirmSignatureSubject}. Exported because the plugin's verifier
+ * imports it rather than restating the literal.
+ */
+export const CONFIRM_SUBJECT_PREFIX = 'confirm'
+
+/**
+ * The signed subject for a double opt-in confirmation link.
+ *
+ * ## Why it is not one of the three forms above
+ *
+ * A confirmation names a host, an address and a topic, and it has NO
+ * campaign — nobody is unsubscribing from a message, they are joining a
+ * stream. The forms above refuse exactly that combination: a topic with no
+ * campaign would leave an empty middle component, and `host:email::t` is the
+ * same string as a three-part subject whose campaign id is `:t`.
+ *
+ * So it gets a leading PURPOSE component. That is a fourth form of the same
+ * scheme, not a second scheme: the digest, the secret and the comparison are
+ * unchanged.
+ *
+ * ## The one collision, and the guard for it
+ *
+ * `confirm:H:E:T` is byte-identical to the four-part unsubscribe subject
+ * `A:B:C:D` when the site's id is literally `confirm`, which would let one
+ * signature verify as both. Ids are not ours to constrain after the fact, so
+ * the subject is refused for that host rather than the collision being
+ * reasoned about: the cost is one unusable document id, and the alternative
+ * is a signature that means two things.
+ *
+ * @returns the subject, or `''` for a combination it cannot sign
+ *          unambiguously. Empty rather than a partial subject, so
+ *          {@link confirmSignature} yields no signature rather than one over
+ *          the empty string — which would verify for every other caller that
+ *          also produced one.
+ */
+export function confirmSignatureSubject(
+  hostId: string,
+  email: string,
+  topicId: string,
+): string {
+  const address = String(email ?? '')
+    .trim()
+    .toLowerCase()
+  const host = String(hostId ?? '')
+  const topic = String(topicId ?? '')
+  if (!host || !address || !topic) return ''
+  if (host === CONFIRM_SUBJECT_PREFIX) return ''
+  if (host.includes(':') || topic.includes(':')) return ''
+  return `${CONFIRM_SUBJECT_PREFIX}:${host}:${address}:${topic}`
+}
+
+/** HMAC for a confirmation link; empty for an unsignable subject. */
+export function confirmSignature(
+  hostId: string,
+  email: string,
+  topicId: string,
+  secret: string,
+): string {
+  const subject = confirmSignatureSubject(hostId, email, topicId)
+  if (!subject || !secret) return ''
+  return createHmac('sha256', secret).update(subject).digest('hex')
+}
+
+/**
+ * The absolute confirmation URL for one address and one topic.
+ *
+ * Minted where the signup happens, because the message carrying it is sent
+ * from there — and that message is TRANSACTIONAL, not marketing: the person
+ * just asked for this, so asking them to confirm it is the transaction they
+ * started. It carries no unsubscribe header for the same reason a receipt
+ * does not.
+ *
+ * Empty when there is no secret or no origin, for the reason
+ * {@link buildUnsubscribeUrl} gives: a link pointing at nothing is worse than
+ * no link, because the recipient believes they have confirmed.
+ */
+export function buildConfirmUrl(input: {
+  siteBase: string
+  hostId: string
+  email: string
+  topicId: string
+  /** Defaults to {@link unsubscribeLinkSecret} — the same signing secret. */
+  secret?: string
+}): string {
+  const secret = input.secret ?? unsubscribeLinkSecret()
+  const siteBase = String(input.siteBase ?? '').replace(/\/+$/, '')
+  const address = String(input.email ?? '')
+    .trim()
+    .toLowerCase()
+  const signature = confirmSignature(
+    input.hostId,
+    address,
+    input.topicId,
+    secret,
+  )
+  if (!siteBase || !signature) return ''
+  return (
+    `${siteBase}/api/email/confirm` +
+    `?hostId=${encodeURIComponent(input.hostId)}` +
+    `&email=${encodeURIComponent(address)}` +
+    `&tid=${encodeURIComponent(input.topicId)}` +
+    `&sig=${signature}`
+  )
+}
+
+/**
  * The absolute unsubscribe URL for one recipient of one site's mail.
  *
  * @returns the URL, or empty string when there is no secret to sign with or

@@ -463,6 +463,56 @@ describe('filterTopicSendable', () => {
     ).resolves.toEqual([ADDRESS])
   })
 
+  /**
+   * DOUBLE OPT-IN, at the point where it is either a real quarantine or a
+   * stored fact nothing reads
+   * (`docs/specs/email-competitive-gaps.md` P8). ActiveCampaign's is worth
+   * copying because an unconfirmed subscriber genuinely cannot be mailed;
+   * Customer.io's recipe warns in its own documentation that it "doesn't
+   * automatically check this attribute before sending messages".
+   */
+  it('drops an address that has been asked to confirm and has not', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { pendingAt: 1, confirmedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS, OTHER], firestore),
+    ).resolves.toEqual([OTHER])
+  })
+
+  it('mails them once they confirm', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { pendingAt: 1, confirmedAt: 2 } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'newsletter', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('holds them for the stream they were asked about and no other', async () => {
+    const firestore = fakeFirestore({
+      [optOuts]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { pendingAt: 1, confirmedAt: null } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(HOST, 'marketing', [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
   it('does not apply another site’s opt-outs to this one', async () => {
     const firestore = fakeFirestore({
       'hosts/host-2/topicOptOuts': {

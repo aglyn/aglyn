@@ -27,16 +27,20 @@ import {
   activeEmailTopics,
   mergeEmailTopics,
   normalizeEmailTopic,
+  readTopicSubscriptionState,
   resolveCampaignTopic,
   EMAIL_TOPICS_COLLECTION,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type EmailTopic,
+  type TopicSubscriptionEntry,
 } from '@aglyn/aglyn/app-utils/email-topics'
 import {
+  confirmTopicSubscription,
   EMAIL_FREQUENCY_SUBCOLLECTION,
   firebaseAdmin,
   resolveOrgIdForHost,
   setMarketingCadence,
+  type ConfirmTopicResult,
 } from '@aglyn/tenant-data-admin'
 /*
  * The pure cadence rule from the shared email library, where the SEND path
@@ -707,6 +711,14 @@ interface SubscriptionState {
   protectedRecord: boolean
   /** Topic ids this address has left and not rejoined. */
   optedOut: Set<string>
+  /**
+   * Topic ids this address was asked to confirm and has not.
+   *
+   * Held apart from {@link optedOut} even though neither is mailable, because
+   * the page says something different about each: one is a choice the person
+   * made and the other is a question they have not answered.
+   */
+  pending: Set<string>
   /** The pace this address last asked for, or `'all'` for never asked. */
   cadence: MarketingCadence
 }
@@ -749,18 +761,27 @@ async function readSubscriptionState(
   ])
   const stored = (optOuts?.exists ? optOuts.get('topics') : null) ?? {}
   const optedOut = new Set<string>()
+  const pending = new Set<string>()
   for (const [id, record] of Object.entries(
-    stored as Record<string, { resubscribedAt?: unknown } | null>,
+    stored as Record<string, TopicSubscriptionEntry | null>,
   )) {
-    // An entry with a `resubscribedAt` is EVIDENCE of an opt-out that has been
-    // lifted, not a live one. See `writeTopicOptOuts` for why the entry stays.
-    if (record && !record.resubscribedAt) optedOut.add(id)
+    /*
+     * The shared reader, not a field test. An entry with a `resubscribedAt`
+     * is EVIDENCE of an opt-out that has been lifted rather than a live one —
+     * see `writeTopicOptOuts` for why the entry stays — and an entry with a
+     * `confirmedAt` carries the same shape of evidence for a confirmation.
+     * Only one function knows all three states.
+     */
+    const state = readTopicSubscriptionState(record)
+    if (state === 'opted-out') optedOut.add(id)
+    if (state === 'pending') pending.add(id)
   }
   return {
     suppressed: !!suppression?.exists,
     protectedRecord:
       !!suppression?.exists && suppression.get('reason') !== 'unsubscribe',
     optedOut,
+    pending,
     cadence: normalizeMarketingCadence(
       frequency?.exists ? frequency.get('cadence') : null,
     ),
@@ -784,6 +805,25 @@ async function readSubscriptionState(
  * (address, topic): the send path reads this by key alongside the suppression
  * lists, and one `get()` per address is what keeps a topic-filtered send the
  * same cost as an unfiltered one.
+ *
+ * ## Ticking a box here IS the confirmation a double opt-in asks for
+ *
+ * The entry also carries a pending-confirmation pair, and a recipient who
+ * ticks a topic on this page has done more than the confirmation link asks:
+ * they clicked a signed link delivered to that mailbox and then made a
+ * choice in it. Leaving them pending would mean the page recorded a
+ * subscription the send path refuses — a form whose submit does not take
+ * effect, which this page refuses to be anywhere else. So a resumed topic
+ * that is still pending is confirmed here, stamped with the moment they did
+ * it.
+ *
+ * ## Every write CARRIES the entry forward
+ *
+ * Each branch spreads the previous entry rather than replacing it. Two pairs
+ * of timestamps now live on one entry, and a branch that wrote only its own
+ * pair would silently discard the other — an opt-out would erase the record
+ * that somebody confirmed, and the erasure would look exactly like a person
+ * who never confirmed.
  */
 async function writeTopicOptOuts(
   firestore: any,
@@ -803,18 +843,35 @@ async function writeTopicOptOuts(
     const topics: Record<string, unknown> = {}
     for (const id of fields.optOut) {
       const previous = stored[id]
-      // Already opted out and never rejoined: leave the original timestamp
-      // alone. Re-submitting the same form must not restamp the date the
-      // person actually left, for the reason `createdAt` is not restamped on
-      // the suppression.
+      /*
+       * Already opted out and never rejoined: leave the original timestamp
+       * alone. Re-submitting the same form must not restamp the date the
+       * person actually left, for the reason `createdAt` is not restamped on
+       * the suppression.
+       *
+       * The state reader, not "an entry with no `resubscribedAt`". That
+       * shorthand reads a CONFIRMED double opt-in — which carries `pendingAt`
+       * and `confirmedAt` and no `resubscribedAt` — as somebody who had
+       * already left, so unticking their box would record no opt-out at all
+       * and the send path would go on mailing them.
+       */
       topics[id] =
-        previous && !previous['resubscribedAt']
+        readTopicSubscriptionState(previous) === 'opted-out'
           ? previous
-          : { optedOutAt: FieldValue.serverTimestamp(), resubscribedAt: null }
+          : {
+              ...(previous ?? {}),
+              optedOutAt: FieldValue.serverTimestamp(),
+              resubscribedAt: null,
+            }
     }
     for (const id of fields.resume) {
       const previous = stored[id]
       if (!previous) continue
+      const state = readTopicSubscriptionState(previous)
+      if (state === 'pending') {
+        topics[id] = { ...previous, confirmedAt: Date.now() }
+        continue
+      }
       topics[id] = previous['resubscribedAt']
         ? previous
         : { ...previous, resubscribedAt: FieldValue.serverTimestamp() }
@@ -842,6 +899,17 @@ function topicRow(
   topic: EmailTopic,
   checked: boolean,
   highlighted: boolean,
+  /**
+   * Asked to confirm and has not.
+   *
+   * The box is EMPTY for a pending topic, because empty is the truth: the
+   * send path refuses this stream until it is confirmed, and a ticked box
+   * over a stream nothing will send would be the page telling a lie the
+   * recipient can only discover by waiting for mail that never comes. The
+   * note beside it is what turns "not ticked" from a puzzle into an answer,
+   * and ticking it here confirms — see `writeTopicOptOuts`.
+   */
+  pending = false,
 ): string {
   return (
     `<label style="display:flex;gap:12px;align-items:flex-start;padding:14px 0;` +
@@ -858,6 +926,11 @@ function topicRow(
         'This email</span>'
       : '') +
     '</span>' +
+    (pending
+      ? `<span style="display:block;margin-top:2px;font-size:13px;line-height:1.45;` +
+        `color:${PAL.muted}">Waiting for you to confirm — tick this and save ` +
+        'to start receiving it.</span>'
+      : '') +
     (topic.description
       ? `<span style="display:block;margin-top:2px;font-size:13px;line-height:1.45;` +
         `color:${PAL.muted}">${escapeAttribute(topic.description)}</span>`
@@ -946,9 +1019,14 @@ function preferencesFormBody(args: {
           topic,
           // A whole-site suppression outranks the per-topic record, so an
           // unsubscribed recipient sees every box empty — which is the state
-          // they are actually in, and the state the form must round-trip.
-          !state.suppressed && !state.optedOut.has(topic.id),
+          // they are actually in, and the state the form must round-trip. An
+          // unconfirmed topic is empty for the same reason: the send path
+          // refuses it, so a ticked box would not be what is true.
+          !state.suppressed &&
+            !state.optedOut.has(topic.id) &&
+            !state.pending.has(topic.id),
           topic.id === current.id,
+          !state.suppressed && state.pending.has(topic.id),
         ),
       )
       .join('') +
@@ -1005,11 +1083,146 @@ function changeSummary(args: {
   return `${address} will stop receiving ${names}, and keeps the rest.`
 }
 
+/**
+ * `email/confirm` — the click that turns a pending subscription into a real
+ * one (`docs/specs/email-competitive-gaps.md` P8).
+ *
+ * Same signed-link shape as its three siblings and the same safe-GET /
+ * mutating-POST split, which matters here for exactly the reason it mattered
+ * to the unsubscribe: a security gateway fetching every URL in the message
+ * would otherwise confirm the subscription on the recipient's behalf, and a
+ * confirmation nobody made is the one thing a double opt-in exists to
+ * prevent. A prescanner following this link renders a page and changes
+ * nothing.
+ *
+ * The subject it verifies is the confirmation form — see
+ * `signedConfirmSubject` for why a topic without a campaign needs one — and
+ * it is checked through the same comparison every other link goes through.
+ */
+const confirmHandler: PluginApiHandler = async (req, res) => {
+  const method = String(req.method ?? 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST')
+    return void res.status(405).send('Method not allowed')
+  }
+
+  const params = readParams(req)
+  const secret = linkSecret()
+  if (!params.hostId || !params.email || !params.signature || !secret) {
+    return void res.status(400).send('Invalid confirmation link')
+  }
+  if (!signatureMatches({ ...params, secret, purpose: 'confirm' })) {
+    return void res.status(403).send('Invalid confirmation link')
+  }
+  if (!suppressionKeyFor(params.email)) {
+    return void res.status(400).send('Invalid confirmation link')
+  }
+  const { hostId, email, topicId } = params
+  const query = signedQuery(params)
+
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const topics = await loadTopicCatalog(firestore, hostId)
+    const topic = resolveCampaignTopic(topicId, topics)
+
+    if (method !== 'POST') {
+      // SAFE. A prescanner lands here and confirms nothing.
+      return void sendPage(
+        res,
+        page(
+          heading('Confirm your subscription') +
+            paragraph(
+              `Confirm that <strong style="color:${PAL.ink}">${escapeAttribute(
+                email,
+              )}</strong> should receive ` +
+                `<strong style="color:${PAL.ink}">${escapeAttribute(
+                  topic.name,
+                )}</strong> from this site.`,
+            ) +
+            `<form method="post" action="/api/email/confirm?${escapeAttribute(
+              query,
+            )}">` +
+            submitButton('Yes, subscribe me') +
+            '</form>',
+        ),
+      )
+    }
+
+    const outcome = await confirmTopicSubscription(hostId, email, topicId)
+    return void sendPage(res, page(confirmationBody(outcome, topic.name)))
+  } catch (error) {
+    console.error(error)
+    return void res.status(500).send('Confirmation failed — please try again')
+  }
+}
+
+/**
+ * What each outcome tells the person in front of it.
+ *
+ * Every arm names what is TRUE rather than what went wrong. Somebody who
+ * clicked an expired link has not made a mistake, and somebody who clicked
+ * twice has not either — telling either of them "invalid" would read as the
+ * subscription having failed when the first case needs a fresh signup and the
+ * second is already done.
+ */
+function confirmationBody(
+  outcome: ConfirmTopicResult,
+  topicName: string,
+): string {
+  const stream = `<strong style="color:${PAL.ink}">${escapeAttribute(
+    topicName,
+  )}</strong>`
+  switch (outcome) {
+    case 'confirmed':
+      return (
+        successBadge() +
+        heading("You're subscribed") +
+        paragraph(`You'll start receiving ${stream} from this site.`, 0)
+      )
+    case 'already-confirmed':
+      return (
+        successBadge() +
+        heading('Already confirmed') +
+        paragraph(`${stream} is already on its way to you.`, 0)
+      )
+    case 'expired':
+      return (
+        heading('This link has expired') +
+        paragraph(
+          `Confirmation links are good for three days. Sign up again and ` +
+            `we'll send a fresh one — you are not subscribed to ${stream} in ` +
+            'the meantime.',
+          0,
+        )
+      )
+    case 'opted-out':
+      return (
+        heading("Can't subscribe this address") +
+        paragraph(
+          `This address asked to stop receiving ${stream} from this site, so ` +
+            'a confirmation link cannot put it back. Sign up again if that ' +
+            'was not what you meant.',
+          0,
+        )
+      )
+    default:
+      return (
+        heading('Nothing to confirm') +
+        paragraph(
+          `There is no pending request for ${stream} at this address. If you ` +
+            'meant to subscribe, sign up on the site.',
+          0,
+        )
+      )
+  }
+}
+
 /** Registers the email plugin's public API routes (AGL-396). */
 export function registerEmailApi(): void {
   registerPluginApiRoute('email/unsubscribe', unsubscribeHandler)
   registerPluginApiRoute('email/resubscribe', resubscribeHandler)
   registerPluginApiRoute('email/preferences', preferencesHandler)
+  registerPluginApiRoute('email/confirm', confirmHandler)
 }
 
 /*

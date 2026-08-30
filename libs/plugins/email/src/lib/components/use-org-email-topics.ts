@@ -23,7 +23,15 @@ import {
   type EmailTopic,
 } from '@aglyn/aglyn'
 import type { Firestore } from 'firebase/firestore'
-import { collection, doc, limit, orderBy, query, setDoc } from 'firebase/firestore'
+import {
+  collection,
+  deleteField,
+  doc,
+  limit,
+  orderBy,
+  query,
+  setDoc,
+} from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   useFirestore,
@@ -58,7 +66,24 @@ import {
 export async function writeEmailTopic(
   firestore: Firestore,
   scope: readonly [string, string],
-  topic: { id: string; name: string; description: string; archived: boolean },
+  topic: {
+    id: string
+    name: string
+    description: string
+    archived: boolean
+    /**
+     * Whether this stream needs a confirmation click, or `null`/omitted for
+     * "whatever the site says".
+     *
+     * The only field on this document with THREE states, which is why it is
+     * the only one written conditionally: `archived` is written on every save
+     * because a merge that omitted it would carry an old value forward, and a
+     * `doubleOptIn` written on every save could never be un-chosen back to
+     * the site default. `deleteField()` is what returns it, so clearing is a
+     * real act rather than a value that happens to look like an absence.
+     */
+    doubleOptIn?: boolean | null
+  },
 ): Promise<void> {
   await setDoc(
     doc(firestore, scope[0], scope[1], EMAIL_TOPICS_COLLECTION, topic.id),
@@ -66,6 +91,12 @@ export async function writeEmailTopic(
       name: topic.name,
       description: topic.description,
       archived: topic.archived,
+      ...(topic.doubleOptIn === undefined
+        ? {}
+        : {
+            doubleOptIn:
+              topic.doubleOptIn === null ? deleteField() : topic.doubleOptIn,
+          }),
     },
     { merge: true },
   )

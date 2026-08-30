@@ -247,6 +247,10 @@ let orgIdForHost: string | null = 'org-1'
 /** Forced failure for the next cadence write, to model an outage. */
 let cadenceWriteFails = false
 
+/** What the confirmation writer answers, and what the route asked it. */
+let confirmOutcome = 'confirmed'
+let confirmCalls: Array<{ hostId: string; email: string; topicId: string }> = []
+
 /*
  * The cadence write is a DOUBLE that writes into the same fake store.
  *
@@ -272,6 +276,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       .digest('hex')}`
     docs.set(path, { ...(docs.get(path) ?? {}), email, cadence })
     return true
+  },
+  /*
+   * The confirmation write is a double over the same store.
+   *
+   * `email-topic-confirmation.spec.ts` certifies what it stores and what it
+   * refuses, against the Admin SDK's transaction shape. What this file
+   * certifies is the ROUTE: that the GET writes nothing, that the POST acts,
+   * and that every outcome reaches a page saying what is true.
+   */
+  confirmTopicSubscription: async (
+    hostId: string,
+    email: string,
+    topicId: string,
+  ) => {
+    confirmCalls.push({ hostId, email, topicId })
+    return confirmOutcome
   },
 }))
 
@@ -388,6 +408,8 @@ beforeEach(() => {
   clock = 0
   transactionFailure = null
   cadenceWriteFails = false
+  confirmOutcome = 'confirmed'
+  confirmCalls = []
   orgIdForHost = 'org-1'
   process.env.EMAIL_UNSUBSCRIBE_SECRET = SECRET
 })
@@ -1100,6 +1122,200 @@ describe('how often the recipient wants to hear', () => {
     expect(docs.has(SUPPRESSION_PATH)).toBe(true)
     expect(reply.body).not.toContain('name="cadence"')
     expect(docs.has(FREQUENCY_PATH)).toBe(false)
+  })
+})
+
+/**
+ * DOUBLE OPT-IN — the click that turns a pending subscription into a real one
+ * (`docs/specs/email-competitive-gaps.md` P8).
+ *
+ * The route earns no looser a contract than its three siblings: the same
+ * signed link, the same safe GET, the same mutating POST. The GET's safety
+ * matters more here than anywhere — a security gateway that fetched every URL
+ * in the message would otherwise confirm the subscription on the recipient's
+ * behalf, which is the one thing a double opt-in exists to prevent.
+ */
+describe('the confirmation link', () => {
+  const confirmSig = (options?: {
+    hostId?: string
+    email?: string
+    tid?: string
+  }) =>
+    createHmac('sha256', SECRET)
+      .update(
+        `confirm:${options?.hostId ?? HOST}:${options?.email ?? RECIPIENT}:${
+          options?.tid ?? TOPIC
+        }`,
+      )
+      .digest('hex')
+
+  const confirmQuery = (options?: Record<string, string>) => ({
+    hostId: HOST,
+    email: RECIPIENT,
+    tid: TOPIC,
+    sig: confirmSig(),
+    ...options,
+  })
+
+  const confirm = (method: string, query = confirmQuery()) =>
+    call({ method, route: 'email/confirm', query })
+
+  it('renders a confirmation page on GET and writes NOTHING', async () => {
+    const reply = await confirm('GET')
+    expect(reply.status).toBe(200)
+    expect(reply.body).toContain('Confirm your subscription')
+    expect(reply.body).toContain('method="post"')
+    expect(confirmCalls).toHaveLength(0)
+    expect(docs.size).toBe(0)
+  })
+
+  it('confirms on POST, for the address and topic the link names', async () => {
+    const reply = await confirm('POST')
+    expect(reply.status).toBe(200)
+    expect(reply.body).toContain("You're subscribed")
+    expect(confirmCalls).toEqual([
+      { hostId: HOST, email: RECIPIENT, topicId: TOPIC },
+    ])
+  })
+
+  it('refuses a signature that is not this link’s', async () => {
+    const reply = await confirm(
+      'POST',
+      confirmQuery({ sig: confirmSig({ tid: 'marketing' }) }),
+    )
+    expect(reply.status).toBe(403)
+    expect(confirmCalls).toHaveLength(0)
+  })
+
+  /**
+   * An unsubscribe link is not a confirmation link. The two subjects differ
+   * by the purpose component, so a signature over one must not verify the
+   * other — which is the property the prefix exists for.
+   */
+  it('refuses an unsubscribe signature presented here', async () => {
+    const reply = await confirm(
+      'POST',
+      confirmQuery({ sig: sign({ cid: CAMPAIGN, tid: TOPIC }) }),
+    )
+    expect(reply.status).toBe(403)
+    expect(confirmCalls).toHaveLength(0)
+  })
+
+  it('refuses a confirmation signature presented to the unsubscribe route', async () => {
+    const reply = await call({
+      method: 'POST',
+      route: 'email/unsubscribe',
+      query: { hostId: HOST, email: RECIPIENT, tid: TOPIC, sig: confirmSig() },
+    })
+    expect(reply.status).toBe(403)
+    expect(docs.size).toBe(0)
+  })
+
+  it('refuses a link with no topic', async () => {
+    const reply = await call({
+      method: 'POST',
+      route: 'email/confirm',
+      query: { hostId: HOST, email: RECIPIENT, sig: confirmSig() },
+    })
+    expect(reply.status).toBe(403)
+    expect(confirmCalls).toHaveLength(0)
+  })
+
+  it('refuses an `email` that is not an address, rather than keying one', async () => {
+    const malformed = 'not-an-address'
+    const reply = await confirm(
+      'POST',
+      confirmQuery({ email: malformed, sig: confirmSig({ email: malformed }) }),
+    )
+    expect(reply.status).toBe(400)
+    expect(confirmCalls).toHaveLength(0)
+  })
+
+  it('names what is TRUE for every outcome, never "invalid"', async () => {
+    for (const [outcome, expected] of [
+      ['already-confirmed', 'Already confirmed'],
+      ['expired', 'This link has expired'],
+      ['opted-out', "Can't subscribe this address"],
+      ['not-pending', 'Nothing to confirm'],
+    ] as const) {
+      confirmOutcome = outcome
+      const reply = await confirm('POST')
+      expect(reply.status).toBe(200)
+      expect(reply.body).toContain(expected)
+    }
+  })
+
+  it('names the stream, from the site’s own catalog', async () => {
+    docs.set(`orgs/org-1/emailTopics/${TOPIC}`, { name: 'The Weekly' })
+    const reply = await confirm('GET')
+    expect(reply.body).toContain('The Weekly')
+  })
+
+  it('is never indexed and never cached', async () => {
+    const reply = await confirm('GET')
+    expect(reply.headers['x-robots-tag']).toContain('noindex')
+    expect(reply.headers['cache-control']).toBe('no-store')
+  })
+})
+
+describe('a topic waiting for confirmation', () => {
+  const pendingEntry = { pendingAt: 1, confirmedAt: null }
+
+  it('is shown UNTICKED, with a note saying why', async () => {
+    docs.set(OPT_OUT_PATH, {
+      email: RECIPIENT,
+      topics: { [TOPIC]: pendingEntry },
+    })
+    const reply = await call({ method: 'GET', query: topicQuery() })
+    expect(checkedTopics(reply.body)).not.toContain(TOPIC)
+    expect(reply.body).toContain('Waiting for you to confirm')
+  })
+
+  /**
+   * Ticking a box on this page is a click on a signed link delivered to that
+   * mailbox followed by a choice made in it — more than the confirmation link
+   * asks for. Leaving them pending would mean the page recorded a
+   * subscription the send path refuses.
+   */
+  it('is confirmed by ticking it here', async () => {
+    docs.set(OPT_OUT_PATH, {
+      email: RECIPIENT,
+      topics: { [TOPIC]: pendingEntry },
+    })
+    await call({
+      method: 'POST',
+      query: topicQuery(),
+      body: Object.fromEntries(
+        DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']),
+      ),
+    })
+    const stored = (docs.get(OPT_OUT_PATH) as any).topics[TOPIC]
+    expect(stored.confirmedAt).toEqual(expect.any(Number))
+    expect(stored.pendingAt).toBe(1)
+  })
+
+  /**
+   * Two pairs of timestamps live on one entry now. A branch that wrote only
+   * its own pair would erase the other, and the erasure would look exactly
+   * like somebody who never confirmed.
+   */
+  it('keeps its confirmation when the recipient later leaves the stream', async () => {
+    docs.set(OPT_OUT_PATH, {
+      email: RECIPIENT,
+      topics: { [TOPIC]: { pendingAt: 1, confirmedAt: 2 } },
+    })
+    await call({
+      method: 'POST',
+      query: topicQuery(),
+      body: Object.fromEntries(
+        DEFAULT_EMAIL_TOPICS.filter((topic) => topic.id !== TOPIC).map(
+          (topic) => [`topic:${topic.id}`, 'on'],
+        ),
+      ),
+    })
+    const stored = (docs.get(OPT_OUT_PATH) as any).topics[TOPIC]
+    expect(stored.confirmedAt).toBe(2)
+    expect(stored.optedOutAt).toBeDefined()
   })
 })
 
