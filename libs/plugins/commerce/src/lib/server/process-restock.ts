@@ -156,10 +156,14 @@ export async function scanRestockAlerts(
       )
     }
     const designed = loaded
-      ? renderLoadedHostEmail(loaded, {
-          'product.name': String(product.name ?? ''),
-          'product.url': productUrl,
-        })
+      ? renderLoadedHostEmail(
+          loaded,
+          {
+            'product.name': String(product.name ?? ''),
+            'product.url': productUrl,
+          },
+          Aglyn.sanitizeAuthorHtml,
+        )
       : null
     /*
      * MARKETING, and `'bulk'` priority, which this sweep is entitled to

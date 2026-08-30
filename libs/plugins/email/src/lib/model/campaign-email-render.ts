@@ -42,6 +42,15 @@ import {
   type EmailRenderProduct,
   type MergeTagRecipient,
 } from '@aglyn/shared-util-email'
+/*
+ * The LEAF app-util, not `@aglyn/aglyn/server`: this module is pure and is
+ * imported by client components, so a server entry point here would pull the
+ * Admin SDK into a browser bundle. `sanitizeCustomHtml`, which the besigner
+ * previews these same nodes under, is a one-line delegation to this function
+ * — so the mailed copy and the previewed copy are the same policy over the
+ * same string rather than two policies kept in step by hand.
+ */
+import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 
 /**
  * A designed email, loaded. `nodes` is the DECODED besigner map: the stored
@@ -130,6 +139,7 @@ export function renderCampaignEmail(
     rootId: EMAIL_NODE_ROOT_ID,
     subject,
     preheader,
+    sanitize: sanitizeAuthorHtml,
     // An author-picked image is stored as a `media:` reference and resolves
     // site-relative; an inbox has no page to resolve it against, so without an
     // origin the renderer drops it.

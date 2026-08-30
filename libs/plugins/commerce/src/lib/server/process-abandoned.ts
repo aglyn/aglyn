@@ -148,9 +148,11 @@ export async function scanAbandonedCheckouts(
       templateCache.set(hostId, loaded)
     }
     const designed = loaded
-      ? renderLoadedHostEmail(loaded, {
-          'cart.url': String(data.resumeUrl ?? ''),
-        })
+      ? renderLoadedHostEmail(
+          loaded,
+          { 'cart.url': String(data.resumeUrl ?? '') },
+          Aglyn.sanitizeAuthorHtml,
+        )
       : null
     /*
      * MARKETING, and `'bulk'` priority, which this sweep is entitled to

@@ -18,6 +18,7 @@
 
 import { decodeStoredNodes } from '@aglyn/aglyn'
 import { EMAIL_NODE_ROOT_ID, renderEmailHtml } from '@aglyn/shared-util-email'
+import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import { Box, Stack, Typography } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -101,6 +102,13 @@ export function EmailDesignPreview(props: EmailDesignPreviewProps) {
   const rendered = useMemo(() => {
     if (!Object.keys(nodes).length) return null
     return renderEmailHtml({
+      /*
+       * The same policy the send path applies, so what is previewed here is
+       * what an inbox receives. The sandboxed frame below is a second wall,
+       * not this one's replacement — a preview that showed markup the mailed
+       * copy strips would be a preview of a different email.
+       */
+      sanitize: sanitizeAuthorHtml,
       nodes,
       // Besigner maps are rooted at '_@_'. Rendering one as the default
       // 'root' finds no root and emits an empty 600px shell.

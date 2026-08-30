@@ -78,13 +78,25 @@ const NODES = {
   },
 }
 
+/**
+ * The policy these tests hand the renderer. Identity on purpose: nothing here
+ * is about WHAT the sanitizer keeps — `email-render.spec.ts` owns that — only
+ * that this layer has one to pass and passes it. The real senders supply
+ * `sanitizeAuthorHtml`.
+ */
+const SANITIZE = (html: string) => html
+
 describe('renderHostEmail (AGL-770)', () => {
   beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => undefined))
 
   it('returns null for an unknown key without reading Firestore', async () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore(null, null, reads)
-    expect(await renderHostEmail(fs, 'h1', 'not-a-real-email')).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'not-a-real-email', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
     expect(reads.templates).toBe(0)
   })
 
@@ -92,15 +104,27 @@ describe('renderHostEmail (AGL-770)', () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore(null, null, reads)
     // member-post is `fixed`, campaign is `external` — neither is besigner.
-    expect(await renderHostEmail(fs, 'h1', 'member-post')).toBeNull()
-    expect(await renderHostEmail(fs, 'h1', 'campaign')).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'member-post', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'campaign', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
     expect(reads.templates).toBe(0)
   })
 
   it('falls back (null) when no version is published', async () => {
     const reads = { templates: 0, versions: 0 }
     const fs = fakeFirestore({ versionId: null }, null, reads)
-    expect(await renderHostEmail(fs, 'h1', 'booking-confirmed')).toBeNull()
+    expect(
+      await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
   })
 
   it('renders a published designable template', async () => {
@@ -112,7 +136,7 @@ describe('renderHostEmail (AGL-770)', () => {
     )
     const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {
       name: 'Alex',
-    })
+    }, { sanitize: SANITIZE })
     expect(result?.subject).toBe('See you Alex')
     expect(result?.html).toContain('Hi Alex')
   })
@@ -129,8 +153,8 @@ describe('renderHostEmail (AGL-770)', () => {
     expect(reads.templates).toBe(1)
     expect(reads.versions).toBe(1)
 
-    const a = renderLoadedHostEmail(loaded!, { name: 'Alex' })
-    const b = renderLoadedHostEmail(loaded!, { name: 'Sam' })
+    const a = renderLoadedHostEmail(loaded!, { name: 'Alex' }, SANITIZE)
+    const b = renderLoadedHostEmail(loaded!, { name: 'Sam' }, SANITIZE)
     expect(a?.subject).toBe('Hello Alex')
     expect(b?.subject).toBe('Hello Sam')
     // Rendering touched Firestore no further.
@@ -162,7 +186,13 @@ describe('renderHostEmail (AGL-770)', () => {
         subdomain: 'acme',
         cname: 'shop.acme.com',
       })
-      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        {},
+        { sanitize: SANITIZE },
+      )
       expect(result?.html).toContain(
         'src="https://shop.acme.com/api/media/cdn/org:o1:h1/med7"',
       )
@@ -173,7 +203,13 @@ describe('renderHostEmail (AGL-770)', () => {
       const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {
         subdomain: 'acme',
       })
-      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        {},
+        { sanitize: SANITIZE },
+      )
       expect(result?.html).toContain(
         'src="https://acme.aglyn.app/api/media/cdn/org:o1:h1/med7"',
       )
@@ -182,7 +218,13 @@ describe('renderHostEmail (AGL-770)', () => {
     it('drops the image when the host has no origin at all', async () => {
       const reads = { templates: 0, versions: 0 }
       const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {})
-      const result = await renderHostEmail(fs, 'h1', 'booking-confirmed')
+      const result = await renderHostEmail(
+        fs,
+        'h1',
+        'booking-confirmed',
+        {},
+        { sanitize: SANITIZE },
+      )
       expect(result?.html).not.toContain('media:org')
       expect(result?.html).not.toContain('src="/api/media/cdn')
     })
@@ -197,7 +239,7 @@ describe('renderHostEmail (AGL-770)', () => {
         'h1',
         'booking-confirmed',
         {},
-        { origin: 'https://passed.test' },
+        { origin: 'https://passed.test', sanitize: SANITIZE },
       )
       expect(result?.html).toContain('src="https://passed.test/api/media/cdn/')
       expect(reads.hosts).toBe(0)
@@ -209,8 +251,8 @@ describe('renderHostEmail (AGL-770)', () => {
         subdomain: 'acme',
       })
       const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder')
-      renderLoadedHostEmail(loaded!, { name: 'Alex' })
-      renderLoadedHostEmail(loaded!, { name: 'Sam' })
+      renderLoadedHostEmail(loaded!, { name: 'Alex' }, SANITIZE)
+      renderLoadedHostEmail(loaded!, { name: 'Sam' }, SANITIZE)
       expect(reads.hosts).toBe(1)
     })
 
@@ -221,7 +263,11 @@ describe('renderHostEmail (AGL-770)', () => {
       const fs = fakeFirestore({ versionId: null }, null, reads, {
         subdomain: 'acme',
       })
-      expect(await renderHostEmail(fs, 'h1', 'booking-confirmed')).toBeNull()
+      expect(
+        await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+          sanitize: SANITIZE,
+        }),
+      ).toBeNull()
       expect(reads.hosts).toBe(0)
     })
   })
@@ -233,7 +279,13 @@ describe('renderHostEmail (AGL-770)', () => {
       { nodes: NODES },
       reads,
     )
-    const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {})
+    const result = await renderHostEmail(
+      fs,
+      'h1',
+      'booking-confirmed',
+      {},
+      { sanitize: SANITIZE },
+    )
     expect(result?.subject).not.toContain('{{')
     expect(result?.html).not.toContain('{{')
   })

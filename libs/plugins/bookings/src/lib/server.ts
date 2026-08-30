@@ -22,6 +22,7 @@ import { checkEntitlement,
   registerPluginJob,
   resolveBrandingProfile,
   resolveTransactionFeeCents,
+  sanitizeAuthorHtml,
 } from '@aglyn/aglyn/server'
 import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import {
@@ -851,11 +852,15 @@ export async function scanBookingReminders(
     }
     const serviceName = String(data['serviceName'] ?? 'your booking')
     const designed = loaded
-      ? renderLoadedHostEmail(loaded, {
-          name: String(data['name'] ?? ''),
-          'service.name': serviceName,
-          when,
-        })
+      ? renderLoadedHostEmail(
+          loaded,
+          {
+            name: String(data['name'] ?? ''),
+            'service.name': serviceName,
+            when,
+          },
+          sanitizeAuthorHtml,
+        )
       : null
     const result = await sendEmail({
       to: String(data['email']),

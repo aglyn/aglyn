@@ -20,6 +20,7 @@ import {
   EMAIL_NODE_ROOT_ID,
   renderEmailHtml,
   substituteMergeTokens,
+  type EmailRenderOptions,
 } from './email-render'
 import {
   getTenantEmail,
@@ -166,9 +167,15 @@ export async function loadHostEmail(
 export function renderLoadedHostEmail(
   loaded: LoadedHostEmail,
   merge: Record<string, string> = {},
+  sanitize: EmailRenderOptions['sanitize'],
 ): RenderedHostEmail | null {
   const rendered = renderEmailHtml({
     nodes: loaded.nodes as never,
+    // A site owner designs these in the besigner, so a template's richtext is
+    // author markup exactly as a campaign's is. The policy has to arrive from
+    // above for the reason this lib documents everywhere: `scope:shared`
+    // cannot import the aglyn-scoped sanitizer.
+    sanitize,
     // Besigner maps are rooted at '_@_' (AGL-765).
     rootId: EMAIL_NODE_ROOT_ID,
     subject: substituteMergeTokens(loaded.subjectTemplate, merge),
@@ -200,8 +207,12 @@ export async function renderHostEmail(
   hostId: string,
   templateKey: string,
   merge: Record<string, string> = {},
-  options: { origin?: string } = {},
+  options: {
+    origin?: string
+    /** See {@link EmailRenderOptions.sanitize} — required, deliberately. */
+    sanitize: EmailRenderOptions['sanitize']
+  },
 ): Promise<RenderedHostEmail | null> {
   const loaded = await loadHostEmail(firestore, hostId, templateKey, options)
-  return loaded ? renderLoadedHostEmail(loaded, merge) : null
+  return loaded ? renderLoadedHostEmail(loaded, merge, options.sanitize) : null
 }
