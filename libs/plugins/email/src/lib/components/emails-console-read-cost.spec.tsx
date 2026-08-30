@@ -97,13 +97,35 @@ jest.mock('firebase/firestore', () => {
     sum: marker('sum'),
     onSnapshot: (
       ref: { __path?: string; __limit?: number; __doc?: boolean },
-      ..._rest: unknown[]
+      ...rest: unknown[]
     ) => {
       mockListens.push({
         path: ref?.__path ?? '(unknown)',
         // A single-document listen reads exactly one document.
         limit: ref?.__doc ? 1 : (ref?.__limit ?? 0),
       })
+      /*
+       * A DOCUMENT listen is answered, with an empty document that EXISTS.
+       *
+       * Silence is not free here. A page whose subject document never arrives
+       * renders its "loading" branch forever, and everything below that branch
+       * — the membership table, the filter form and their listens — is never
+       * built. The meter would then report those routes as costing one
+       * document each and be measuring the spinner. The payload is empty
+       * because what is being metered is which collections get read, not what
+       * is in them.
+       */
+      const next = rest.find((arg) => typeof arg === 'function') as
+        | ((snapshot: unknown) => void)
+        | undefined
+      if (ref?.__doc && next) {
+        next({
+          id: (ref.__path ?? '').split('/').pop(),
+          exists: () => true,
+          data: () => ({}),
+          metadata: { fromCache: false, hasPendingWrites: false },
+        })
+      }
       return () => undefined
     },
     getDocs: async () => ({ docs: [], empty: true, size: 0 }),
@@ -475,6 +497,67 @@ describe('emails console read cost (AGL-2501)', () => {
       for (const collection of Object.values(SECTION_COLLECTIONS).flat()) {
         expect(seen).not.toContain(collection)
       }
+    })
+
+    /*==========================================
+     * ONE AUDIENCE, AND ITS SETTINGS.
+     *
+     * The membership moved out of the table and onto its own route, and the
+     * whole point of that move is a cost one: a member document is PII and
+     * there is one per subscriber, so the collection that grows fastest on
+     * this surface is now read only by the page whose subject it is. These
+     * assertions are what stop the table quietly reading it again — and what
+     * stop the detail page dragging the list of lists along with it.
+     *=========================================*/
+    it('the detail route reads ONE list and its members, not the lists', async () => {
+      await renderConsole('audiences', ['list_1'])
+      summarize('one audience', mockListens)
+      const paths = mockListens.map((listen) => listen.path)
+      expect(paths).toContain('orgs/org1/lists/list_1')
+      expect(paths.some((path) => path.endsWith('/members'))).toBe(true)
+      // The table of tables is not mounted underneath it.
+      expect(paths).not.toContain('orgs/org1/lists')
+    })
+
+    it('the detail route reads the list as ONE document', async () => {
+      // A page that read the collection to find one list would cost the whole
+      // collection to render one row of it.
+      await renderConsole('audiences', ['list_1'])
+      const listListens = mockListens.filter((listen) =>
+        listen.path.startsWith('orgs/org1/lists/list_1'),
+      )
+      expect(
+        listListens.find((listen) => listen.path === 'orgs/org1/lists/list_1')
+          ?.limit,
+      ).toBe(1)
+    })
+
+    it('the edit route reads no MEMBERS at all', async () => {
+      /*
+       * Editing the filters is a question about the list, not about who is on
+       * it. Mounting the membership underneath the form would charge a reader
+       * who came to rename an audience for every subscriber in it.
+       */
+      await renderConsole('audiences', ['list_1', 'edit'])
+      summarize('audience settings', mockListens)
+      const paths = mockListens.map((listen) => listen.path)
+      expect(paths).toContain('orgs/org1/lists/list_1')
+      expect(paths.some((path) => path.endsWith('/members'))).toBe(false)
+      expect(paths).not.toContain('orgs/org1/lists')
+    })
+
+    it('the SEGMENT picker is read on the edit route and nowhere else', async () => {
+      // It fills one dropdown in the filter form. Reading it on the audiences
+      // table, or on a list's detail page, would be a read for a control
+      // neither of them draws.
+      await renderConsole('audiences', ['list_1', 'edit'])
+      expect(listenedCollections()).toContain('contactSegments')
+
+      await renderConsole('audiences')
+      expect(listenedCollections()).not.toContain('contactSegments')
+
+      await renderConsole('audiences', ['list_1'])
+      expect(listenedCollections()).not.toContain('contactSegments')
     })
   })
 })

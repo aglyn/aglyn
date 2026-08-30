@@ -19,6 +19,7 @@
 import {
   checkContactQuota,
   contactMatchesSegment,
+  CONTACT_SOURCE_LABELS,
   type ContactSegment,
   type ContactSource,
   type HostContact,
@@ -73,18 +74,13 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-const SOURCE_LABELS: Record<ContactSource, string> = {
-  form: 'Form',
-  member: 'Member',
-  order: 'Customer',
-  booking: 'Booking',
-  newsletter: 'Newsletter',
-  // AGL-2276: added by an integration through `POST /v1/contacts`, rather
-  // than captured on a site. The map is typed `Record<ContactSource, string>`
-  // precisely so a new source cannot be added to the union without landing a
-  // label here.
-  api: 'API',
-}
+/**
+ * The shared labels, under the name this file has always called them.
+ *
+ * The map lives beside the `ContactSource` union so the dynamic-list rule
+ * editor and this filter cannot disagree about what `order` is called.
+ */
+const SOURCE_LABELS = CONTACT_SOURCE_LABELS
 
 type ContactDoc = HostContact & {
   $id: string

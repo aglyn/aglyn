@@ -893,6 +893,7 @@ export {
   registerEmailConsoleApi,
   emailListMembersAddHandler,
   emailListMembersPreviewHandler,
+  emailListRulePreviewHandler,
   CONSOLE_ADD_SOURCE,
   LIST_MEMBER_BATCH_MAX,
 } from './server-console'

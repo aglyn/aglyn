@@ -37,6 +37,24 @@ export type ContactSource =
   // string written past the type would render as `api` and match no filter.
   | 'api'
 
+/**
+ * How a capture source reads on screen.
+ *
+ * Typed `Record<ContactSource, string>` so a source added to the union cannot
+ * ship without a label, and kept beside the union rather than in the console
+ * that first needed it: the contacts filter, the campaign audience and the
+ * dynamic-list rule editor all name the same six sources, and three copies of
+ * this map is three places for `order` to stop reading as "Customer".
+ */
+export const CONTACT_SOURCE_LABELS: Record<ContactSource, string> = {
+  form: 'Form',
+  member: 'Member',
+  order: 'Customer',
+  booking: 'Booking',
+  newsletter: 'Newsletter',
+  api: 'API',
+}
+
 export interface ContactInteraction {
   type: ContactSource
   /** Source doc id (formSubmissions/siteMembers/orders/bookings). */

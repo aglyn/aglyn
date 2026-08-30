@@ -80,6 +80,7 @@ const firestoreAnswer = (
 
 const FIRESTORE = {}
 const SCOPE = { scope: ['orgs', 'org-1'] }
+const mockConfirm = jest.fn(() => Promise.resolve())
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
@@ -149,10 +150,17 @@ jest.mock('firebase/firestore', () => ({
   deleteDoc: jest.fn().mockResolvedValue(undefined),
 }))
 
-jest.mock('@aglyn/aglyn', () => ({
-  createResourceUid: () => 'uid-new',
-  pluginDocsHelp: () => undefined,
-}))
+jest.mock('@aglyn/aglyn', () => {
+  // Spread over the REAL module: the rule helpers the card asks about are
+  // policy, and a stub of them would make the create button's refusal a
+  // property of this file rather than of the code.
+  const actual = jest.requireActual('@aglyn/aglyn')
+  return {
+    ...actual,
+    createResourceUid: () => 'uid-new',
+    pluginDocsHelp: () => undefined,
+  }
+})
 jest.mock('@aglyn/shared-util-timestamp', () => ({
   Timestamp: { now: () => ({ seconds: 0 }) },
 }))
@@ -161,13 +169,39 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  useConfirmationContext: () => ({ confirm: jest.fn() }),
+  useConfirmationContext: () => ({ confirm: mockConfirm }),
+  /*
+   * Stubbed for the CARD's own use. The overflow menu is deliberately NOT
+   * stubbed — it is imported from its own module path, so it renders the real
+   * shared component with the real `AppLink` inside it, which is the whole
+   * point of the link assertions below.
+   */
+  AppLink: ({ href, children, onClick }: any) => (
+    <a href={href} onClick={onClick}>
+      {children}
+    </a>
+  ),
+  MdiIcon: () => null,
 }))
+
+/**
+ * The router the row click drives.
+ *
+ * `usePathname` is here because the REAL `AppLink` inside the real overflow
+ * menu reads it to decide whether it is pointing at the current page.
+ */
+const mockPush = jest.fn()
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: () => undefined }),
+  usePathname: () => '/acme/hosts/site/emails/audiences',
+}))
+
+const BASE_PATH = '/acme/hosts/site/emails'
 
 const mountCard = async () => {
   mockBuiltQueries.length = 0
   mockBuiltRefs.length = 0
-  render(<OrgListsCard hostId="host-1" />)
+  render(<OrgListsCard hostId="host-1" basePath={BASE_PATH} />)
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
@@ -241,10 +275,11 @@ describe('the email-list table walks the collection (AGL-2501)', () => {
    * from. Each list's `members` is a collection of PII with one document per
    * subscriber; opening one per row would charge an agency for the membership
    * of every list they own to render a page whose subject is the list of
-   * lists. Counted in queries BUILT rather than rows displayed, because the
-   * two are indistinguishable on a fixture with one list.
+   * lists. The membership is a ROUTE of its own now, so this table reads none
+   * of it at any time — counted in queries BUILT rather than rows displayed,
+   * because the two are indistinguishable on a fixture with one list.
    */
-  it('reads no list’s MEMBERS until a list is opened', async () => {
+  it('reads no list’s MEMBERS at all', async () => {
     await mountCard()
     expect(renderedNames()).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
     expect(memberQueries()).toEqual([])
@@ -254,25 +289,6 @@ describe('the email-list table walks the collection (AGL-2501)', () => {
     expect(
       mockBuiltRefs.filter((path) => path.endsWith('/members')),
     ).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
-  })
-
-  it('reads exactly the ONE list opened, and stops when it is closed', async () => {
-    await mountCard()
-    fireEvent.click(screen.getAllByText('Members')[0])
-    await waitFor(() => expect(memberQueries().length).toBeGreaterThan(0))
-    // The first row of the alphabetical walk is `List 00`, whose id is the
-    // LAST — so this also proves the panel is given the row's own id rather
-    // than the index it happens to sit at.
-    expect(new Set(memberQueries())).toEqual(
-      new Set([
-        `orgs/org-1/lists/uid-${String(TOTAL - 1).padStart(2, '0')}/members`,
-      ]),
-    )
-
-    mockBuiltQueries.length = 0
-    fireEvent.click(screen.getByText('Close'))
-    await waitFor(() => expect(screen.queryByText('Close')).toBeNull())
-    expect(memberQueries()).toEqual([])
   })
 
   it('THE TRAP: ordering on a field a writer can omit would hide lists', () => {

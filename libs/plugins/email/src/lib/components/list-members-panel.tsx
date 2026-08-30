@@ -17,20 +17,22 @@
 'use client'
 
 /**
- * Who is on one list, and the four things you can do about it.
+ * Who is on one list, and the three things you can do about it.
  *
  * The audience card could create a list and delete a list. It could not show
  * you a single name on one. This panel is the rest of it: read the membership,
- * rename the list, add somebody, take somebody off.
+ * add somebody, take somebody off. The list's own settings — its name, and the
+ * rule behind a dynamic one — belong to the edit route, because they are
+ * facts about the LIST rather than about who is on it.
  *
- * ## It mounts only when a list is opened
+ * ## It mounts only on a list's own page
  *
- * The card renders this for the ONE list the reader expanded, and unmounts it
- * when they collapse it. A membership listener per row would open one per list
- * on the page, on a surface where most visits are to read the list of lists —
- * the read-on-mount shape `emails-console-read-cost.spec.tsx` meters. Nothing
- * here reads anything until a list is opened, and the add form reads nothing
- * until an address is typed.
+ * The audience detail route renders this for the ONE list being read. A
+ * membership listener per row would open one per list on the audiences table,
+ * on a surface where most visits are to read the list of lists — the
+ * read-on-mount shape `emails-console-read-cost.spec.tsx` meters. Nothing here
+ * reads anything until a list is opened, and the add form reads nothing until
+ * an address is typed.
  *
  * ## The consent facts come from the server, always
  *
@@ -50,6 +52,7 @@
  * blur is a console where "remove" is quietly relied on as an unsubscribe.
  */
 
+import type { DynamicListRule } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -77,7 +80,6 @@ import {
   limit,
   orderBy,
   query,
-  updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -95,14 +97,27 @@ export interface ListMembersPanelProps {
   /**
    * Called after a membership is added or removed.
    *
-   * The card's `Subscribers` column is a server aggregate taken once per set
-   * of visible lists. Left alone, it would go on reporting the figure from
-   * before the add — a stale total directly above a live table that disagrees
-   * with it, which reads as the add having failed. The card re-takes the
-   * aggregate on this signal and at no other time, so nothing is re-counted
-   * while somebody is only reading.
+   * The audience page's subscriber total is a server aggregate, taken once.
+   * Left alone it would go on reporting the figure from before the add — a
+   * stale total directly above a live table that disagrees with it, which
+   * reads as the add having failed. The page re-takes the aggregate on this
+   * signal and at no other time, so nothing is re-counted while somebody is
+   * only reading.
    */
   onMembershipChanged?: () => void
+  /**
+   * The list's saved filters, when it has any and its membership is FIXED.
+   *
+   * Present, the panel offers to find the people they select and add them —
+   * the same act as typing addresses, with the search doing the typing. Absent
+   * (a live list, or one with no filters saved), the add form is the address
+   * box alone: a live list's membership is the sweep's to decide, and offering
+   * to add its own matches by hand would produce hand-added copies of rows the
+   * sweep already owns.
+   */
+  findRule?: DynamicListRule | null
+  /** The same filters in sentences, so the button says what it will find. */
+  ruleSummary?: readonly string[]
 }
 
 /** One member row, as stored. */
@@ -132,6 +147,17 @@ interface Preview {
   optedIn: number
   needAttestation: number
   refused: number
+}
+
+/** What a filter search found, as `email/list-rule-preview` reports it. */
+interface FoundPeople extends Preview {
+  /** People the filters matched — NOT the length of `emails`. */
+  matched: number
+  /** `emails` is one batch of a larger match. */
+  truncated: boolean
+  /** False when the scan hit its budget, so `matched` is itself a floor. */
+  complete: boolean
+  emails: string[]
 }
 
 /** What one address's outcome was, after the add. */
@@ -174,7 +200,15 @@ export function splitAddresses(value: string): string[] {
 }
 
 export function ListMembersPanel(props: ListMembersPanelProps) {
-  const { hostId, scope, listId, listName, onMembershipChanged } = props
+  const {
+    hostId,
+    scope,
+    listId,
+    listName,
+    onMembershipChanged,
+    findRule,
+    ruleSummary,
+  } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -210,22 +244,24 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
     { idField: '$id' },
   )
 
-  const [renaming, setRenaming] = useState(listName)
-  // A new list means a new name in the field; the panel stays mounted while
-  // the reader moves between lists, so last list's name would otherwise be
-  // offered as this one's.
-  useEffect(() => {
-    setRenaming(listName)
-  }, [listName, listId])
-
   const [addInput, setAddInput] = useState('')
   const [addName, setAddName] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [attested, setAttested] = useState(false)
   const [results, setResults] = useState<AddResult[] | null>(null)
   const [busy, setBusy] = useState(false)
+  /*
+   * The addresses a SEARCH found, when the operator ran one.
+   *
+   * A second way to fill the same candidate set, not a second way to add. Once
+   * this holds addresses, everything below it — the consent readout, the
+   * attestation, the Add button — is the code the typed path already used, so
+   * there is exactly one place in this component where somebody is put on a
+   * list and exactly one gate in front of it.
+   */
+  const [found, setFound] = useState<FoundPeople | null>(null)
 
-  const addresses = splitAddresses(addInput)
+  const addresses = found ? found.emails : splitAddresses(addInput)
 
   /*
    * Any edit to the box invalidates the answer.
@@ -233,12 +269,16 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
    * A preview belongs to the exact addresses it was run for. Leaving a stale
    * one on screen would show a count, and an attestation checkbox, for a set
    * the operator has since changed — so the number they stand behind would
-   * not be the number that acts.
+   * not be the number that acts. Typing also abandons a search: the two are
+   * alternative ways of naming a candidate set, and holding both at once
+   * would leave the Add button acting on whichever the code happened to
+   * prefer.
    */
   useEffect(() => {
     setPreview(null)
     setAttested(false)
     setResults(null)
+    setFound(null)
   }, [addInput])
 
   const post = useCallback(
@@ -258,25 +298,6 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
     },
     [user, hostId, listId],
   )
-
-  const handleRename = useCallback(async () => {
-    const next = renaming.trim()
-    // An empty name is not a rename. The list table orders on `name`, and
-    // `orderBy` drops a document that does not carry the field — so a list
-    // renamed to nothing would vanish from the page it was renamed on.
-    if (!next || next === listName) return
-    try {
-      await updateDoc(
-        doc(firestore, scope[0], scope[1], 'lists', listId),
-        { name: next },
-      )
-      enqueueSnackbar('List renamed', { variant: 'success', persist: false })
-    } catch (error) {
-      console.error(error)
-      setRenaming(listName)
-      enqueueSnackbar('The list was not renamed', { variant: 'error' })
-    }
-  }, [renaming, listName, firestore, scope, listId, enqueueSnackbar])
 
   const handlePreview = useCallback(async () => {
     if (busy || !addresses.length) return
@@ -301,6 +322,46 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
       setBusy(false)
     }
   }, [busy, addresses, post, enqueueSnackbar])
+
+  const handleFind = useCallback(async () => {
+    if (busy || !findRule) return
+    setBusy(true)
+    try {
+      const { ok, payload } = await post('list-rule-preview', {
+        rule: findRule,
+      })
+      if (!ok) {
+        return void enqueueSnackbar(
+          payload?.error ?? 'The audience could not be worked out.',
+          { variant: 'warning', allowDuplicate: true },
+        )
+      }
+      /*
+       * The verdicts come back from the SAME resolution the typed path runs,
+       * so what lands in `preview` here is the same object the consent
+       * readout below already knows how to draw. A search that returned its
+       * own shaped summary would be a second consent readout, and the second
+       * one is the one nobody reviews.
+       */
+      setFound(payload as FoundPeople)
+      setPreview(payload as Preview)
+      setAttested(false)
+      setResults(null)
+      if (!Number(payload?.matched ?? 0)) {
+        enqueueSnackbar('These filters match nobody', {
+          variant: 'info',
+          persist: false,
+        })
+      }
+    } catch {
+      enqueueSnackbar('The audience could not be worked out.', {
+        variant: 'warning',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }, [busy, findRule, post, enqueueSnackbar])
 
   const handleAdd = useCallback(async () => {
     if (busy || !preview) return
@@ -328,6 +389,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
       if (added) {
         setAddInput('')
         setAddName('')
+        setFound(null)
         onMembershipChanged?.()
       }
       enqueueSnackbar(
@@ -410,26 +472,58 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
 
   return (
     <Stack spacing={2} sx={{ py: 2 }}>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <TextField
-          size="small"
-          label="List name"
-          value={renaming}
-          onChange={(event) => setRenaming(event.target.value)}
-          onBlur={() => void handleRename()}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void handleRename()
-          }}
-          sx={{ minWidth: 240 }}
-        />
-        <Button
-          size="small"
-          onClick={() => void handleRename()}
-          disabled={!renaming.trim() || renaming.trim() === listName}
+      {/*
+        FINDING people, for a list whose membership is fixed.
+        The filters are the same ones a live list is swept by; here they run
+        once, on request, and what they find is offered for adding rather than
+        enrolled. The count and the consent readout arrive together, because
+        the second is the thing that decides how much of the first can act.
+       */}
+      {findRule ? (
+        <Stack
+          spacing={1}
+          sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}
         >
-          {'Rename'}
-        </Button>
-      </Stack>
+          <Typography variant="overline" color="text.secondary">
+            {'Find people'}
+          </Typography>
+          {(ruleSummary ?? []).map((clause) => (
+            <Typography key={clause} variant="body2">
+              {clause}
+            </Typography>
+          ))}
+          <Box>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={busy}
+              onClick={() => void handleFind()}
+            >
+              {busy ? 'Searching…' : 'Find matching people'}
+            </Button>
+          </Box>
+          {found ? (
+            <Alert severity={found.matched ? 'info' : 'warning'}>
+              {(found.matched === 1
+                ? '1 person matches'
+                : `${found.matched.toLocaleString()} people match`) +
+                (found.truncated
+                  ? ` — this batch covers the first ${found.emails.length}. ` +
+                    'Add them, then search again for the rest.'
+                  : '') +
+                (found.complete
+                  ? ''
+                  : ' The search stopped at its read budget, so this is at ' +
+                    'least that many rather than exactly.')}
+            </Alert>
+          ) : null}
+          <Typography variant="caption" color="text.secondary">
+            {'Whoever you add stays on this list. It does not keep growing — ' +
+              'change the membership to live on the edit page if you want ' +
+              'new matches enrolled automatically.'}
+          </Typography>
+        </Stack>
+      ) : null}
 
       <Typography variant="body2" color="text.secondary">
         {'Add someone by typing their address, or paste a column of them. ' +
