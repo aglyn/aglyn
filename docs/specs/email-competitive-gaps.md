@@ -656,6 +656,21 @@ no staff review queue. Grep returns zero for `complaintRate`, `bounceRate`,
 `circuitBreaker`. The inputs exist — every delivery event carries `tags.hostId` — but
 [G2](#g2) is the missing roll-up.
 
+**And the problem is worse than a missing aggregate, because the mailbox providers cannot
+attribute either.** Google Postmaster Tools keys on the **DKIM `d=` or SPF Return-Path
+domain**, and Yahoo's Complaint Feedback Loop is DKIM-only and enrolled per domain. With
+one shared `d=`, we do not merely lack *isolation* — **we lack *visibility***: we cannot
+tell which tenant caused a complaint spike even after it has happened, and no amount of
+work on our own delivery log recovers a signal the provider never separated.
+
+That makes **per-tenant DKIM on a per-tenant subdomain the prerequisite for this entire
+section**, not an alternative to it. It is M3AAWG's explicit prescription for shared
+environments, it unlocks independent Postmaster dashboards and per-tenant CFL attribution,
+and it is largely the same machinery as the custom-sending-domain work already in flight —
+which is a strong argument for finishing that work for its *platform* value, not only as
+a white-label feature. The honest caveat, again: this buys verified **attribution**;
+reputation isolation at Gmail is undocumented.
+
 **The reference implementation is published and recent.** Amazon SES launched *Tenants*
 on 2025-08-01, framed at our exact problem: it *"addresses the challenge where one
 customer's poor email practices could previously pause an entire SES account, affecting
