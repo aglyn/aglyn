@@ -129,6 +129,24 @@ and Create button) carried the entire console list-pagination arc, and
 `AGL-2306` (a rejected plugin version stays advertised) was cited by the
 citation guard itself. Both now have real issues — AGL-2501 and AGL-2500.
 
+## 2026-08-30 — Advanced and Agency email allowances come down to what the platform can deliver
+
+- **Decided by:** the account owner — Agency sold 1,000,000 campaign emails a month against a 360,000 deliverable ceiling, and the repair is to lower the allowance rather than buy capacity that abuse controls have not yet earned.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS.advanced.emailSendsPerMonth` (250,000 → 125,000); `PLAN_ENTITLEMENTS.agency.emailSendsPerMonth` (1,000,000 → 250,000); `libs/shared/util/email/src/lib/send-ceilings.spec.ts` → *R3 holds for the plans we actually sell*; full reasoning in Drive → Pricing & Packaging → 05-Pricing-Decision-Log
+
+**No charged price moves.** Two entitlements come DOWN; every price stays where the Sept-1 lock put it.
+
+One org may claim a quarter of the 2,000/hour platform rate — 500/hour, so 360,000 in a 30-day month is everything it could physically send. Agency's allowance needed about 2,000 hours inside a 720-hour month. Nobody had hit it because there are no customers, but an agency using what it bought would have been throttled to roughly a third with no explanation on any screen.
+
+Advanced moves too, even though 250,000 was already deliverable: leaving it while Agency fell to 250,000 makes the two identical on this dimension across a 2× price step. The pair keeps a 2× step, and Agency sits at 69% of the ceiling — headroom for bursts, retries and warm-up.
+
+Both are floors to raise once abuse controls are tested and the capacity is justifiable. `enterprise` stays `UNLIMITED` deliberately: it is contract-bound, and a number in the entitlement table would be fiction.
+
+A guard now reads the shipped table rather than a number invented in the test file — which is why the model could be proven correct while the plans oversold.
+
+---
+
 ## 2026-08-26 — CDN delivery moves to every plan; the feature matrix becomes a tracked, generated document
 
 - **Decided by:** the account owner — the CDN path is the cheaper one to serve, so gating it raised the cost of the tier that pays nothing; the feature matrix becomes a tracked, generated document in the same pass.

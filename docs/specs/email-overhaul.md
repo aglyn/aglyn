@@ -207,17 +207,34 @@ These are not part of the proposal; they are things that are wrong now.
     of an unchanged audience reach the same people and which people is
     answerable.
 - **D2 — `MAX_RECIPIENTS_PER_SEND = 500` versus what the plans sell.** Agency
-  includes 1,000,000 campaign emails a month. At 500 per send that is 2,000
+  includes 250,000 campaign emails a month. At 500 per send that is 500
   separate manual sends. The documented behavior ("a larger audience is counted
   at the cap") is honest about the number and silent about *which* 500, which is
   D1 again.
-- **D3 — the three ceilings are not dimensioned against each other.** Platform
-  default is 2,000/hour *for all tenants combined*. Business includes
-  50,000/month — 25 platform-hours. Agency includes 1,000,000 — about 500
-  platform-hours, roughly three weeks of the entire platform sending nothing
-  else. One org's campaign can also consume the whole hourly window, denying
-  every other tenant's campaigns (transactional is protected by priority;
-  campaigns are not).
+- **D3 — the three ceilings are dimensioned against each other.** ✅ **CLOSED
+  2026-08-30.** Platform default is 2,000/hour *for all tenants combined*, and
+  an org may claim a quarter of it — 500/hour, so 360,000 in a 30-day month is
+  everything one org could physically send.
+
+  Agency sold **1,000,000**, which is 2.78× that: about 2,000 hours of sending
+  inside a 720-hour month. Nobody had hit it because there are no customers
+  yet, but an agency using what it bought would have been throttled to roughly
+  a third of it with no explanation on any screen.
+
+  The repair was to lower the allowance rather than raise the platform ceiling.
+  Raising it to ~5,556/hour is a deliverability decision on a shared domain
+  under `p=reject`, and it costs money; neither is justified before the abuse
+  controls are tested. **Advanced 250,000 → 125,000 and Agency 1,000,000 →
+  250,000** (Zach, 2026-08-30), both comfortably inside the ceiling, to be
+  raised once warm-up and abuse handling are proven.
+
+  `enterprise` stays `UNLIMITED` deliberately: it is custom-priced and
+  contract-bound, so the real limit is what the agreement says, and a number in
+  the entitlement table would be fiction.
+
+  One org's campaign can still consume the whole hourly window, denying every
+  other tenant's campaigns (transactional is protected by priority; campaigns
+  are not) — that half of D3 is open.
 - **D4 — list member ids use two derivations.** ✅ **CLOSED.** `newsletter.ts`
   used full `sha256(email)`; `run-event-actions.ts` used
   `hmac('aglyn-list-member', email).slice(0, 20)`, so the same address enrolled
