@@ -28,6 +28,7 @@ export * from './lib/email-render'
 export * from './lib/text-email-html'
 export * from './lib/marketing-send'
 export * from './lib/email-delivery-events'
+export * from './lib/email-revenue-window'
 // Exported so the console drift guard can pin it against @aglyn/aglyn.
 export * from './lib/email-media-src'
 export * from './lib/email-merge'

@@ -345,6 +345,7 @@ let mockFirstOfType = true
  * is the entire reason a replay costs nothing.
  */
 const recordedEngagement: unknown[][] = []
+const recordedTouches: unknown[] = []
 jest.mock(
   '@aglyn/tenant-data-admin/server/email-delivery-log',
   () => ({
@@ -361,6 +362,17 @@ jest.mock(
     recordPersonEngagement: jest.fn(async (outcomes: unknown[]) => {
       recordedEngagement.push(outcomes)
       return 0
+    }),
+    /*
+     * The campaign touch revenue attribution is taken over. Recorded rather
+     * than asserted-on-storage here for the same reason the engagement rollup
+     * is: this file's subject is what the WEBHOOK does, and the touch's own
+     * storage rules — forward-only, per host, capped — are proved against a
+     * real double in `email-revenue-attribution.spec.ts`.
+     */
+    recordEmailCampaignTouch: jest.fn(async (touch: unknown) => {
+      recordedTouches.push(touch)
+      return true
     }),
   }),
 )
@@ -563,6 +575,7 @@ beforeEach(() => {
   docs.clear()
   recordedDeliveryEvents.length = 0
   recordedEngagement.length = 0
+  recordedTouches.length = 0
   fixtureMessageCounter = 0
   mockFirstOfType = true
   updateFailure = null
@@ -1637,6 +1650,74 @@ const linkRows = () =>
     string,
     { url: string; clicks: number }
   >)
+
+/*==========================================
+ * THE TOUCH REVENUE ATTRIBUTION IS TAKEN OVER.
+ *
+ * The webhook's half of the commerce↔email join: a click, and only a click,
+ * writes down which campaign this person last engaged with, so an order
+ * placed later can find it with one keyed read instead of a scan over every
+ * message ever sent to them.
+ *=========================================*/
+describe('the campaign touch', () => {
+  it('records a click against the campaign and the site that sent it', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(clickOn('https://shop.example/sale'))
+
+    expect(recordedTouches).toEqual([
+      expect.objectContaining({
+        email: RECIPIENT,
+        hostId: HOST,
+        campaignId: CAMPAIGN,
+      }),
+    ])
+  })
+
+  it('does NOT record an open as a touch', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.opened'))
+
+    // Since Mail Privacy Protection an open is substantially a statement
+    // about the recipient's mail client. Crediting money to one would hand a
+    // campaign the orders of people who never read it.
+    expect(recordedTouches).toEqual([])
+  })
+
+  it('does not record a bounce, a complaint or a delivery as a touch', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.delivered'))
+    await deliver(deliveryEvent('email.bounced'))
+    await deliver(deliveryEvent('email.complained'))
+
+    expect(recordedTouches).toEqual([])
+  })
+
+  it('takes the provider’s instant for the click, not the moment we heard', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(clickOn('https://shop.example/sale'))
+
+    // A delayed webhook must credit the click at the time it happened: for a
+    // click near the edge of the window that is the difference between inside
+    // and outside it. The outcome carries the normalized provider time.
+    const outcomes = recordedDeliveryEvents.at(-1) as any[]
+    expect((recordedTouches[0] as any).atMs).toBe(outcomes[0].at)
+  })
+
+  it('records nothing for a click that names no campaign', async () => {
+    // A receipt or a password reset carries no campaign tag. There is nothing
+    // to credit, and a touch naming no campaign would sit in the map blocking
+    // one that does.
+    await deliver(
+      deliveryEvent('email.clicked', { click: { link: 'https://x.example' } }, {}),
+    )
+
+    expect(recordedTouches).toEqual([])
+  })
+})
 
 describe('the per-campaign link rollup', () => {
   it('counts a click against its destination', async () => {

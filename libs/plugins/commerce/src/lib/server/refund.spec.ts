@@ -297,6 +297,25 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // permissive stub would report "the contact was updated" for a document that
 // never existed, which is the one case the tests below turn on.
 
+/*
+ * The campaign revenue reversal IS mocked, and the distinction from
+ * `updateExisting` above is what it is being asked to prove. Whether a
+ * reversal lands correctly on the rollup is settled against a real double in
+ * `email-revenue-attribution.spec.ts`; what this file is the only place to
+ * prove is that a refund REACHES it, with the amount this attempt moved
+ * rather than the order total. Left unmocked it would reach the real
+ * firebase-admin, which this suite has no app for.
+ */
+const reverseAttributedRevenue = jest.fn(async () => true)
+jest.mock(
+  '@aglyn/tenant-data-admin/server/email-revenue-attribution',
+  () => ({
+    __esModule: true,
+    reverseEmailAttributedRevenue: (...args: unknown[]) =>
+      (reverseAttributedRevenue as any)(...args),
+  }),
+)
+
 // ---------------------------------------------------------------------------
 // Stripe boundary — counted, never reached
 // ---------------------------------------------------------------------------
@@ -1708,6 +1727,37 @@ describe('line-scoped refunds are reachable from this suite', () => {
     // The per-line record the arrayUnion write produces — the field that makes
     // a partial refund say WHICH goods came back.
     expect(storedOrder()['refundedLineItemIds']).toEqual([1])
+  })
+
+  it('takes the campaign’s credit back off it, for the amount THIS attempt moved', async () => {
+    seedTwoLineOrder()
+    reverseAttributedRevenue.mockClear()
+
+    await post({ lineItemIds: [1] })
+
+    // $30 of an $80 order: the reversal follows the attempt, not the order
+    // total, and the order is not closed by it.
+    expect(reverseAttributedRevenue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: 'host-1',
+        orderId: 'order-1',
+        amountCents: 3000,
+        closedTheOrder: false,
+      }),
+    )
+  })
+
+  it('tells the reversal when a refund closed the order', async () => {
+    seedTwoLineOrder()
+    reverseAttributedRevenue.mockClear()
+
+    await post({ lineItemIds: [0, 1] })
+
+    // The whole order came back, so the campaign loses a whole order too —
+    // the flag `refundedOrders` is counted off.
+    expect(reverseAttributedRevenue).toHaveBeenCalledWith(
+      expect.objectContaining({ amountCents: 8000, closedTheOrder: true }),
+    )
   })
 
   it('ACCUMULATES two line refunds instead of replacing the first', async () => {

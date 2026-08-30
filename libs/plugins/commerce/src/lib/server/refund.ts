@@ -23,6 +23,11 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { createHash } from 'crypto'
 import { recordContactRefund } from './contact-refund'
 import { flagOrderRestock } from './restock-flag'
+// Leaf import, not the barrel, for the reason `contact-refund.ts` states about
+// `updateExisting`: the specs in this library mock `@aglyn/tenant-data-admin`
+// wholesale, and a permissive stub would turn a reversal that never happened
+// green.
+import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -646,6 +651,29 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       hostId,
       orderId,
       email: order.customerEmail,
+      amountCents: refundCents,
+      closedTheOrder,
+    })
+    /*
+     * The campaign's side of the same ledger.
+     *
+     * If a campaign was credited with this order, that credit is now partly
+     * or wholly wrong — a campaign cannot go on being paid for a sale the
+     * merchant reversed, and revenue attribution that only ever rises is the
+     * flattering half of a measurement. Recorded beside the gross rather than
+     * subtracted from it, for the reason `recordContactRefund` above records
+     * `refundedCents` beside `ltvCents`.
+     *
+     * Keyed by the ORDER and not by the buyer, so it needs no email and works
+     * for a guest checkout: the attribution record holds which campaign and
+     * which currency, and this reads them back. Same placement, same
+     * swallow-all contract and same awaited call as the two ledgers around
+     * it — nothing here may fail a refund that has already left the
+     * merchant's account.
+     */
+    await reverseEmailAttributedRevenue({
+      hostId,
+      orderId,
       amountCents: refundCents,
       closedTheOrder,
     })

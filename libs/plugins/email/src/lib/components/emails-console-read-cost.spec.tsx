@@ -455,17 +455,23 @@ describe('emails console read cost (AGL-2501)', () => {
    * mount. A 50,000-recipient send would then cost 50,000 reads to render
    * seven numbers, and nothing about the screen would look different.
    *
-   * So the counters are written at delivery time and the report is two
-   * single-document reads — the campaign and its link rollup — whatever the
-   * audience was. These assertions are what stop that quietly becoming a
-   * query again.
+   * So the counters are written at delivery time and the report is a handful
+   * of single-document reads — the campaign, its link rollup and its revenue
+   * rollup — whatever the audience was. These assertions are what stop that
+   * quietly becoming a query again.
+   *
+   * The revenue rollup is the same argument one collection along. Joining
+   * orders to campaigns at read time would mean querying the host's orders
+   * for every render of this screen; the join is done once at the sale and
+   * summed into one document, so the report pays for one listen and not for
+   * one order.
    *=========================================*/
-  it('the campaign report reads three documents, and no collection', async () => {
+  it('the campaign report reads four documents, and no collection', async () => {
     await renderConsole('campaigns', ['camp_1'])
     summarize('campaign report', mockListens)
 
     /*
-     * THREE, and the first of them is what keeps this URL working at all.
+     * FOUR, and the first of them is what keeps this URL working at all.
      *
      * `/emails/campaigns/{id}` names either a campaign CONTAINER or — for
      * every link minted before campaigns grouped their emails, including ones
@@ -479,11 +485,12 @@ describe('emails console read cost (AGL-2501)', () => {
      * on a send URL — they are gated on the container having been found.
      */
     expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(3)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(4)
     expect(mockListens.map((listen) => listen.path)).toEqual([
       'hosts/site1/emailCampaigns/camp_1',
       'hosts/site1/campaigns/camp_1',
       'hosts/site1/campaigns/camp_1/reports/links',
+      'hosts/site1/campaigns/camp_1/reports/revenue',
     ])
   })
 

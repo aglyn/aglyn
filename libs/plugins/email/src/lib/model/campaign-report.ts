@@ -189,6 +189,12 @@ export interface CampaignCaveat {
     | 'click-tracking-unrecorded'
     | 'audience-truncated'
     | 'send-deferred'
+    /* Raised by `campaign-revenue.ts`, which reports through this shape so
+     * the screen has one way of saying "a number is being withheld and here
+     * is why" rather than one per section. */
+    | 'revenue-denominator-unrecorded'
+    | 'revenue-multi-currency'
+    | 'revenue-mid-flight'
   message: string
 }
 

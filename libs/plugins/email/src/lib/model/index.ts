@@ -45,6 +45,14 @@ export {
 export * from './campaign-report'
 
 /**
+ * What a campaign EARNED: the last-click window, the gross/refunded pair and
+ * the per-currency buckets that are never added together. Separate from the
+ * rate math because it reads a different document and answers the merchant's
+ * second question rather than their first.
+ */
+export * from './campaign-revenue'
+
+/**
  * The same math taken across every message sent from one TEMPLATE. Separate
  * from `campaign-report` because a sum has a membership: which messages went
  * into it, and therefore which population the rate describes.
