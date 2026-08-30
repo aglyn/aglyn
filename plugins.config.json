@@ -1,5 +1,5 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests \u2014 the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry).",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests \u2014 the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry). `alwaysOn` here is the LOADER's meaning \u2014 the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead.",
   "plugins": [
     {
       "id": "mui",
@@ -7,6 +7,14 @@
       "alwaysOn": true,
       "register": {
         "site": "registerMuiPlugin"
+      }
+    },
+    {
+      "id": "forms",
+      "package": "@aglyn/plugins-forms",
+      "register": {
+        "site": "registerFormsPlugin",
+        "console": "registerFormsConsole"
       }
     },
     {

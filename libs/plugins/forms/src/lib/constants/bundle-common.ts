@@ -18,10 +18,15 @@
 /**
  * The bundle id, persisted as `pluginId` on every node this bundle places.
  *
- * Rendering resolves by `componentId` alone, so a node naming another bundle
- * still draws — but `requiredSitePlugins` reads `pluginId` to decide which
- * chunks must register before first paint, so one that names the wrong bundle
- * draws LATE. `tools/scripts/backfill-node-plugin-ids.mjs` is what keeps saved
- * nodes agreeing with this string.
+ * It is not a label. `requiredSitePlugins` reads `pluginId` off each saved
+ * node to decide which bundles must register before first paint, so this
+ * string is the answer to "which chunk does this page need in front of the
+ * render". A node whose `pluginId` names a bundle that no longer registers
+ * its `componentId` still RESOLVES — resolution is by component id alone —
+ * but it resolves a beat late, after the post-hydration load of the rest of
+ * the enabled set.
+ *
+ * `tools/scripts/backfill-node-plugin-ids.mjs` is what keeps the two in
+ * agreement across a bundle move.
  */
-export const BUNDLE_ID = 'events-calendar'
+export const BUNDLE_ID = 'forms'

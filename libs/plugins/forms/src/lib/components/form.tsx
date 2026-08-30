@@ -18,7 +18,11 @@
 import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
 import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiEmailFastOutline, mdiFormTextbox } from '@aglyn/shared-data-mdi'
+import {
+  mdiEmailFastOutline,
+  mdiEmailOutline,
+  mdiFormTextbox,
+} from '@aglyn/shared-data-mdi'
 import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
@@ -36,6 +40,12 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { type FormEvent, forwardRef, useCallback, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+/*
+ * The heading and the stack this block's form sits inside are mui elements,
+ * so the nodes that carry them say so. A node's `pluginId` names the bundle
+ * that REGISTERS its component, not the bundle whose preset placed it.
+ */
+import { BUNDLE_ID as MUI_BUNDLE_ID } from '@aglyn/plugins-mui/constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -942,6 +952,73 @@ export const formPresets: Aglyn.PresetSchema[] = [
     },
   },
 ]
+
+/**
+ * The composed section a form usually arrives inside.
+ *
+ * It lives here rather than with the generic block library because it PLACES
+ * form nodes, and a preset's `data` carries the `pluginId` those nodes are
+ * saved with — so authoring it anywhere else stamps every contact form on
+ * every new site with the wrong bundle. The heading and the stack around it
+ * name `mui`, which is correct: they ARE mui elements, and a page holding this
+ * section needs both bundles registered before it paints.
+ */
+export const formBlockPresets: Aglyn.PresetSchema[] = [
+  {
+    $id: generatePresetId(FORM_ID, 'contact-section'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Contact Section',
+    pluginId: BUNDLE_ID,
+    description: 'Heading with a name/email/message form',
+    category: Aglyn.ComponentCategory.BLOCKS,
+    icon: { path: mdiEmailOutline.path, sx: { color: '#0288d1' } },
+    data: {
+      $id: null,
+      componentId: 'muiStack',
+      pluginId: MUI_BUNDLE_ID,
+      props: { spacing: 2 },
+      sx: {
+        paddingLeft: 4,
+        paddingRight: 4,
+        paddingTop: 6,
+        paddingBottom: 6,
+        maxWidth: 560,
+      },
+      nodes: [
+        {
+          $id: null,
+          componentId: 'muiTypography',
+          pluginId: MUI_BUNDLE_ID,
+          props: { variant: 'h4', children: 'Get in touch' },
+        },
+        {
+          $id: null,
+          componentId: FORM_ID,
+          pluginId: BUNDLE_ID,
+          props: {
+            formName: 'Contact',
+            submitLabel: 'Send message',
+            successMessage: 'Thanks — we will get back to you soon.',
+          },
+          nodes: [
+            contactField('name', 'Name'),
+            contactField('email', 'Email', { fieldType: 'email' }),
+            contactField('message', 'Message', { fieldType: 'textarea' }),
+          ],
+        },
+      ],
+    },
+  },
+]
+
+function contactField(fieldName: string, label: string, extra?: object) {
+  return {
+    $id: null,
+    componentId: FORM_FIELD_ID,
+    pluginId: BUNDLE_ID,
+    props: { fieldName, label, required: true, ...extra },
+  }
+}
 
 export { Form, FormField }
 export default Form

@@ -200,6 +200,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestoreInstance(),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 't' } }),
   useHostVersionApi: () => jest.fn(),
+  /*
+   * The catalog's head-count, which reaches the card through the barrel now
+   * that a plugin surface needs it too. Answered rather than left to the real
+   * hook so the card's quota arithmetic stays real without a network read.
+   */
+  useLiveArtifactCount: () => 0,
   writeGuardedBySeed: jest.fn(),
   usePagedCollection: jest.requireActual(
     '../../../libs/tenant/feature/instance/src/lib/hooks/use-paged-collection',

@@ -95,6 +95,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
   useHostVersionApi: () => jest.fn(),
   useHostResourceApi: () => jest.fn(),
+  /*
+   * The catalog's head-count, which reaches the card through the barrel now
+   * that a plugin surface needs it too. Answered rather than left to the real
+   * hook so the card's quota arithmetic stays real without a network read.
+   */
+  useLiveArtifactCount: () => 0,
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
   /*
    * The components card reads a PAGE now (AGL-2501), so its rows and — the

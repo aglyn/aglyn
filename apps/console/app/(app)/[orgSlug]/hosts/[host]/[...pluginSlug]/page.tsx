@@ -49,6 +49,7 @@ import {
   upgradeNoticeMessage,
 } from '../../../../../../utils/extension-entitlement'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
+import useHostRole from '../../../../../../hooks/use-host-role'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 import { useReleaseFlags } from '../../../../../../hooks/use-release-flags'
 
@@ -92,6 +93,14 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const pluginHref = segments.length ? `/${segments.join('/')}` : ''
   const { org, ready: orgReady } = useCurrentOrg()
   const { permissions, loaded: permissionsLoaded } = useOrgPermissions()
+  // The site role, handed DOWN like the release verdict (AGL-2334). A plugin
+  // surface that publishes has to disable its control with a reason, and the
+  // member read it takes is `scope:app`.
+  const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const hostRole = useMemo(
+    () => ({ canPublish, loaded: hostRoleLoaded }),
+    [canPublish, hostRoleLoaded],
+  )
 
   // Scoped to this workspace's plugins (AGL-758): the registry is a
   // session-wide union, so an unscoped lookup would serve a page from a
@@ -371,6 +380,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           org={org}
           permissions={permissions}
           releaseFlag={releaseFlagVerdict}
+          hostRole={hostRole}
           basePath={basePath}
           sections={resolvedSections}
           section={resolved?.section?.id}

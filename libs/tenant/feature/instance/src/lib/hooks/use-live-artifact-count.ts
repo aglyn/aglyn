@@ -19,8 +19,24 @@
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { collection, getCountFromServer, query, where } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import type { HostArtifactCollection } from '../utils/host-artifact-queries'
+import { useFirestore } from './firebase/firebase-services'
+
+/**
+ * The per-site artifact collections that render as a console list.
+ *
+ * `forms` is one of them: it is created through the same resources route,
+ * keyed by the same generated uid, and listed by the same table. Its cap is
+ * enforced over the WHOLE collection rather than over live documents — a form
+ * is deleted outright, and its submissions keep their `formId` either way —
+ * so the aggregate below matches what `/api/hosts/resources` counts, with the
+ * tombstone subtraction a no-op because nothing writes `deletedAt` on a form.
+ */
+export type HostArtifactCollection =
+  | 'screens'
+  | 'layouts'
+  | 'components'
+  | 'templates'
+  | 'forms'
 
 /**
  * Every timestamp is greater than this one, and no `null` is.
@@ -30,8 +46,13 @@ import type { HostArtifactCollection } from '../utils/host-artifact-queries'
  * exactly the documents whose `deletedAt` holds a real timestamp. Documents
  * with no `deletedAt` field are excluded from an inequality outright, which
  * is the other half of the same answer.
+ *
+ * Built where it is used rather than at module scope. This module is reached
+ * through the library's barrel, so a `Timestamp` call up here runs for every
+ * consumer of every hook in it — including the many that stand a stub in for
+ * `@aglyn/shared-util-timestamp` and never touch this one.
  */
-const BEFORE_EVERY_TOMBSTONE = Timestamp.fromMillis(0)
+const beforeEveryTombstone = () => Timestamp.fromMillis(0)
 
 /**
  * How many artifacts of a kind a site actually holds — a server aggregate,
@@ -84,7 +105,7 @@ export function useLiveArtifactCount(
     void Promise.all([
       getCountFromServer(artifacts),
       getCountFromServer(
-        query(artifacts, where('deletedAt', '>', BEFORE_EVERY_TOMBSTONE)),
+        query(artifacts, where('deletedAt', '>', beforeEveryTombstone())),
       ),
     ])
       .then(([total, tombstones]) => {

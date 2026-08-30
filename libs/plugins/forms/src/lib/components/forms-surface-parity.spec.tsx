@@ -37,9 +37,11 @@ import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 
-/** The rows the mocked page hands the card. Reassigned per test. */
+/** The rows the mocked query hands the card. Reassigned per test. */
 let mockRows: any[] = []
 let mockStatus: 'loading' | 'success' = 'success'
+/** What the server aggregate answers for the quota readout. */
+const mockLiveCount: number | null = 0
 
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
@@ -72,6 +74,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     return mockDb
   },
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 't' } }),
+  // The site's console address, which the row links and the besigner button
+  // resolve through. Answered so the table draws links rather than the
+  // pre-resolution placeholder.
+  useConsoleHostRoute: () => ({
+    base: '/acme/hosts/demo',
+    orgSlug: 'acme',
+    subdomain: 'demo',
+  }),
+  useHostResourceApi: () => jest.fn().mockResolvedValue(undefined),
+  useLiveArtifactCount: () => mockLiveCount,
   usePagedCollection: () => ({
     status: mockStatus,
     fromCache: false,
@@ -86,14 +98,26 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   __esModule: true,
-  AppLink: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-  CardDisplay: ({ header, children }: any) => (
+  AppLink: ({ children, href }: { children: ReactNode; href?: string }) => (
+    <a href={href}>{children}</a>
+  ),
+  // `HeaderProps.action` is rendered: the quota readout and the create button
+  // ride it now that the shell owns the page header, so a mock that dropped it
+  // would hide the two controls this surface gained in the move.
+  CardDisplay: ({ header, children, HeaderProps }: any) => (
     <div>
       {header ? <h2>{header}</h2> : null}
+      {HeaderProps?.action ?? null}
       {children}
     </div>
   ),
   MdiIcon: () => null,
+}))
+
+jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
+  __esModule: true,
+  CreateArtifactDrawer: ({ open, title }: any) =>
+    open ? <div>{title}</div> : null,
 }))
 
 jest.mock('next/navigation', () => ({
@@ -101,40 +125,19 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }))
 
-jest.mock('../hooks/use-presence-summary', () => ({
-  __esModule: true,
-  default: () => ({ peopleIn: () => [], ready: true }),
-}))
-
-jest.mock('../hooks/use-org-scope', () => ({
-  __esModule: true,
-  useOrgSlug: () => 'acme',
-}))
-
-jest.mock('../components/host-id-provider', () => ({
-  __esModule: true,
-  useHostSubdomain: () => 'demo',
-  useHostId: () => 'host-1',
-}))
-
-jest.mock('../components/document-presence-chips.component', () => ({
-  __esModule: true,
-  default: () => null,
-}))
-
 /*
  * `require` rather than `import`: the mocks above have to be installed before
  * these modules are evaluated, and a top-level `import` is hoisted past them.
  */
-const HostFormsCard = require('../components/forms/host-forms-card.component')
-  .default as typeof import('../components/forms/host-forms-card.component').default
-const FormMetricsCard = require('../components/forms/form-metrics-card.component')
-  .default as typeof import('../components/forms/form-metrics-card.component').default
+const HostFormsCard = require('./host-forms-card.component')
+  .default as typeof import('./host-forms-card.component').default
+const FormMetricsCard = require('./form-metrics-card.component')
+  .default as typeof import('./form-metrics-card.component').default
 const {
   buildFormPreviewDocument,
   default: FormDesignPreview,
-} = require('../components/forms/form-design-preview.component') as typeof import('../components/forms/form-design-preview.component') & {
-  default: typeof import('../components/forms/form-design-preview.component').FormDesignPreview
+} = require('./form-design-preview.component') as typeof import('./form-design-preview.component') & {
+  default: typeof import('./form-design-preview.component').FormDesignPreview
 }
 
 /**
@@ -162,7 +165,7 @@ const NUMERIC_COLUMNS = ['Submissions', 'Leads']
  * ONE mount for the whole table block, deliberately.
  *
  * The grid is expensive in jsdom — toolbar, virtualization, the lot — and this
- * file pushed a neighbouring 130-second suite past its `waitFor` timeouts when
+ * file pushed a neighboring 130-second suite past its `waitFor` timeouts when
  * it mounted one per assertion. The empty state and the populated one are the
  * SAME table in two states, so they are asserted across one mount and a
  * `rerender`, which is also closer to what a reader does: they sit on the list
@@ -173,7 +176,7 @@ describe('the forms list is a table in both of its states', () => {
     mockRows = []
     mockStatus = 'success'
     const { rerender } = render(
-      <HostFormsCard hostId="host-1" onCreate={jest.fn()} />,
+      <HostFormsCard hostId="host-1" basePath="/acme/hosts/demo/forms" />,
     )
 
     /* ── EMPTY ──────────────────────────────────────────────────────────── */
@@ -211,7 +214,7 @@ describe('the forms list is a table in both of its states', () => {
         stats: { submissions: 12 },
       },
     ]
-    rerender(<HostFormsCard hostId="host-1" onCreate={jest.fn()} />)
+    rerender(<HostFormsCard hostId="host-1" basePath="/acme/hosts/demo/forms" />)
 
     // THE CONTROL for everything above: without a state that DOES draw rows,
     // all of it could be satisfied by a table that renders headers and nothing

@@ -25,7 +25,7 @@ import {
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import { Divider, Stack, Typography } from '@mui/material'
-import { docsHelp } from '../../constants/docs-links'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface FormMetricsCardProps {
   /** The stored counters, or `undefined` while the document is in flight. */
@@ -112,7 +112,7 @@ export function FormMetricsCard(props: FormMetricsCardProps) {
   return (
     <CardDisplay
       header="What this form has collected"
-      help={docsHelp('forms', {
+      help={pluginDocsHelp('forms', {
         anchor: '#the-inbox',
         excerpt:
           'Every submission reaches the Inbox. These counters ride the same ' +

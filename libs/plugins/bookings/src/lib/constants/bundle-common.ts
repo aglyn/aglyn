@@ -16,8 +16,12 @@
  */
 
 /**
- * Persisted as pluginId in NEW screen docs (AGL-313). Legacy nodes
- * carry pluginId 'mui' with componentId 'event-list' — resolution is by
- * componentId, so they keep rendering after the extraction.
+ * The bundle id, persisted as `pluginId` on every node this bundle places.
+ *
+ * Rendering resolves by `componentId` alone, so a node naming another bundle
+ * still draws — but `requiredSitePlugins` reads `pluginId` to decide which
+ * chunks must register before first paint, so one that names the wrong bundle
+ * draws LATE. `tools/scripts/backfill-node-plugin-ids.mjs` is what keeps saved
+ * nodes agreeing with this string.
  */
 export const BUNDLE_ID = 'bookings'

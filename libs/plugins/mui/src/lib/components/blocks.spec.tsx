@@ -24,7 +24,6 @@ import {
 } from './blocks'
 import { schema as button } from './button'
 import { schema as container } from './container'
-import { formFieldSchema, formSchema } from './form'
 import { schema as icon } from './icon'
 import { schema as image } from './image'
 import { schema as screenLink } from './screen-link'
@@ -39,8 +38,6 @@ const REGISTERED_COMPONENT_IDS = new Set(
     appBar,
     button,
     container,
-    formSchema,
-    formFieldSchema,
     icon,
     image,
     screenLink,
@@ -83,7 +80,6 @@ describe('mui block presets', () => {
       'Feature Grid',
       'Image + Text',
       'Call to Action',
-      'Contact Section',
       'Footer',
     ]) {
       expect(names).toContain(expected)
@@ -130,28 +126,12 @@ describe('mui block presets', () => {
   it('honors parent placement constraints inside every subtree', () => {
     for (const preset of blockPresets) {
       walk(preset.data as PresetNode, (node, parent) => {
-        // muiToolbar is LIMIT_TO muiAppBar; formField belongs to form.
+        // muiToolbar is LIMIT_TO muiAppBar.
         if (node.componentId === toolbar.$id) {
           expect(parent?.componentId).toBe(appBar.$id)
         }
-        if (node.componentId === formFieldSchema.$id) {
-          expect(parent?.componentId).toBe(formSchema.$id)
-        }
       })
     }
-  })
-
-  it('gives the contact section the starter-template field set', () => {
-    const contact = blockPresets.find(
-      (preset) => preset.displayName === 'Contact Section',
-    )
-    const fieldNames: string[] = []
-    walk(contact?.data as PresetNode, (node) => {
-      if (node.componentId === formFieldSchema.$id) {
-        fieldNames.push((node as any).props?.fieldName)
-      }
-    })
-    expect(fieldNames).toEqual(['name', 'email', 'message'])
   })
 
   /**

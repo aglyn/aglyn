@@ -15,13 +15,5 @@
  * limitations under the License.
  */
 
-/**
- * The bundle id, persisted as `pluginId` on every node this bundle places.
- *
- * Rendering resolves by `componentId` alone, so a node naming another bundle
- * still draws — but `requiredSitePlugins` reads `pluginId` to decide which
- * chunks must register before first paint, so one that names the wrong bundle
- * draws LATE. `tools/scripts/backfill-node-plugin-ids.mjs` is what keeps saved
- * nodes agreeing with this string.
- */
-export const BUNDLE_ID = 'events-calendar'
+export * from './lib/constants/bundle-common'
+export * from './lib/plugin'

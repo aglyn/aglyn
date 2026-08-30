@@ -141,6 +141,17 @@ jest.mock('../hooks/use-current-org', () => ({
     ready: true,
   }),
 }))
+/*
+ * The site role the shell resolves and hands down (AGL-2334). It reads the
+ * viewer's org member document, which these specs stub nothing for — and what
+ * they are about is the gate in front of a surface, not who may publish on it.
+ */
+jest.mock('../hooks/use-host-role', () => ({
+  __esModule: true,
+  default: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
+  useHostRole: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
+}))
+
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ permissions: {}, can: () => true, loaded: true }),

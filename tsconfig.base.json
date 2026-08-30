@@ -58,6 +58,8 @@
       "@aglyn/plugins-bookings/*": ["./libs/plugins/bookings/src/lib/*"],
       "@aglyn/plugins-events-calendar": ["./libs/plugins/events-calendar/src/index.ts"],
       "@aglyn/plugins-events-calendar/*": ["./libs/plugins/events-calendar/src/lib/*"],
+      "@aglyn/plugins-forms": ["./libs/plugins/forms/src/index.ts"],
+      "@aglyn/plugins-forms/*": ["./libs/plugins/forms/src/lib/*"],
       "@aglyn/plugins-inbox": ["./libs/plugins/inbox/src/index.ts"],
       "@aglyn/plugins-inbox/*": ["./libs/plugins/inbox/src/lib/*"],
       "@aglyn/plugins-logic": ["./libs/plugins/logic/src/index.ts"],

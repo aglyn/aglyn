@@ -45,7 +45,6 @@ import * as FunctionWidget from './components/function-widget'
 import * as Product from './components/product'
 import * as Blocks from './components/blocks'
 import * as Collection from './components/collection'
-import * as FormComponents from './components/form'
 import * as Image from './components/image'
 import * as Icon from './components/icon'
 import * as InlineText from './components/inline-text'
@@ -94,8 +93,7 @@ export const MUI_BUNDLE: Array<{
     { component: List.default, schema: List.schema, presets: List.presets },
     { component: ListItem.default, schema: ListItem.schema, presets: ListItem.presets },
     { component: ListItemText.default, schema: ListItemText.schema, presets: ListItemText.presets },
-    { component: FormComponents.Form, schema: FormComponents.formSchema, presets: FormComponents.formPresets },
-    { component: FormComponents.FormField, schema: FormComponents.formFieldSchema },
+    // form, formField moved to @aglyn/plugins-forms (AGL-395).
     { component: Blocks.VideoEmbed, schema: Blocks.videoEmbedSchema, presets: Blocks.blockPresets },
     { component: Blocks.SocialLinks, schema: Blocks.socialLinksSchema },
     // Content collections (AGL-551/582): entries repeater, markdown entry
@@ -114,7 +112,7 @@ export const MUI_BUNDLE: Array<{
     { component: Video.default, schema: Video.schema, presets: Video.presets },
     { component: Icon.default, schema: Icon.schema, presets: Icon.presets },
     // booking moved to @aglyn/plugins-bookings (AGL-395).
-    // event-list moved to @aglyn/plugins-events-calendar (AGL-313).
+    // eventList moved to @aglyn/plugins-events-calendar (AGL-313).
     { component: LanguageSwitcher.default, schema: LanguageSwitcher.schema, presets: LanguageSwitcher.presets },
     { component: ReusableInstance.default, schema: ReusableInstance.schema, presets: ReusableInstance.presets },
     { component: ScreenLink.default, schema: ScreenLink.schema, presets: ScreenLink.presets },

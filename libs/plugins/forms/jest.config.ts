@@ -1,6 +1,7 @@
+/* eslint-disable */
 /**
  * @license
- * Copyright 2026 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +16,18 @@
  * limitations under the License.
  */
 
-/**
- * The bundle id, persisted as `pluginId` on every node this bundle places.
- *
- * Rendering resolves by `componentId` alone, so a node naming another bundle
- * still draws — but `requiredSitePlugins` reads `pluginId` to decide which
- * chunks must register before first paint, so one that names the wrong bundle
- * draws LATE. `tools/scripts/backfill-node-plugin-ids.mjs` is what keeps saved
- * nodes agreeing with this string.
- */
-export const BUNDLE_ID = 'events-calendar'
+export default {
+  displayName: 'plugins-forms',
+  preset: '../../../jest.preset.js',
+  testEnvironment: 'jsdom',
+  transform: {
+    '^.+\\.[tj]sx?$': [
+      '@swc/jest',
+      // swcrc: false keeps the build-oriented .swcrc (which excludes spec
+      // files) from being applied to the jest transform.
+      { swcrc: false, jsc: { transform: { react: { runtime: 'automatic' } } } },
+    ],
+  },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  coverageDirectory: '../../../coverage/libs/plugins/forms',
+}
