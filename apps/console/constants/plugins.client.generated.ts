@@ -59,6 +59,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'inbox',
+    apiPrefixes: ["inbox"],
     register: {"console":"registerInboxConsole"},
     load: () => import('@aglyn/plugins-inbox'),
   },

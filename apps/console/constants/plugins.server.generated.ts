@@ -30,6 +30,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-marketplace/server'),
   },
   {
+    id: 'inbox',
+    apiPrefixes: ["inbox"],
+    register: {"consoleApi":"registerInboxConsoleApi"},
+    load: () => import('@aglyn/plugins-inbox/server'),
+  },
+  {
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
     register: {"consoleApi":"registerMarketingConsoleApi"},

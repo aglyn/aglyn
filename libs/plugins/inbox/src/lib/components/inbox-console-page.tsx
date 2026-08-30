@@ -78,6 +78,7 @@ import {
   senderHue,
   submissionSender,
 } from '../model/submission-presenter'
+import SubmissionReply from './submission-reply.component'
 import { useCallback, useMemo, useState } from 'react'
 
 /**
@@ -804,6 +805,17 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
               />
             ))}
           </Stack>
+          {/*
+            Answering the person is the act the Inbox exists for, and it is
+            inside the reader rather than on the row because a reply written
+            without the message in front of you is the reply that answers the
+            wrong question. Mounted with the dialog, so its reads — the site
+            name and the replies already sent — are paid when a merchant opens
+            a submission and not once per visit to this page.
+           */}
+          {reader ? (
+            <SubmissionReply hostId={hostId} submission={reader} />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button
