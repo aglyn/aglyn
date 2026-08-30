@@ -2417,6 +2417,42 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    /*==========================================
+     * AN IMMEDIATE SEND MAY NAME AN EMAIL, BUT ONLY AN UNSENT ONE.
+     *
+     * This branch takes its copy from the REQUEST, which is what the composer
+     * needs — it is sending the message being typed. But it also accepts a
+     * `campaignId`, and `performCampaignSend` adopts it, so without this check
+     * a request naming a send that already went out would write new copy over
+     * the record of what was delivered, replace its counters with this send's
+     * own, and mail the whole audience a second copy under a `cid` whose
+     * unsubscribe links are already in inboxes.
+     *
+     * Reaching the people an existing email has NOT reached is `followUp`,
+     * which takes no copy from the request at all and subtracts everyone the
+     * earlier sends recorded.
+     *=========================================*/
+    const sendId = String(req.body?.campaignId ?? '')
+    if (sendId) {
+      if (!isDocumentId(sendId)) {
+        return res.status(400).json({ error: 'Invalid campaignId' })
+      }
+      const existing = await hostRef.collection('campaigns').doc(sendId).get()
+      const existingState = existing.exists
+        ? String(existing.get('status') ?? '')
+        : ''
+      if (existing.exists && existingState !== 'draft' && existingState !== 'scheduled') {
+        return res.status(409).json({
+          error:
+            existingState === 'sent'
+              ? 'This email has already been sent. Use "Send to more ' +
+                'recipients" to reach the people it has not.'
+              : 'This email was canceled, so it cannot be sent. Compose a ' +
+                'new email.',
+        })
+      }
+    }
+
     const result = await performCampaignSend({
       hostId,
       subject,
@@ -2426,7 +2462,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       listId: String(req.body?.listId ?? ''),
       topicId: topicId || undefined,
       emails: Array.isArray(req.body?.emails) ? req.body.emails : undefined,
-      campaignId: String(req.body?.campaignId ?? ''),
+      campaignId: sendId,
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
       fromName,

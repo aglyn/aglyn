@@ -1046,3 +1046,105 @@ describe('rescheduling and unscheduling', () => {
     expect(stored?.['sendAtMs']).toBeUndefined()
   })
 })
+
+describe('an immediate send may name an email, but only an unsent one', () => {
+  /*==========================================
+   * THE DEFAULT BRANCH TAKES ITS COPY FROM THE REQUEST.
+   *
+   * That is what the composer needs — it is sending the message being typed
+   * — but the branch also accepts a `campaignId`, and `performCampaignSend`
+   * adopts it. Ungated, a request naming a send that already went out writes
+   * new copy over the record of what was delivered, replaces its counters
+   * with this send's own, and mails the whole audience a second copy under a
+   * `cid` whose unsubscribe links are already in inboxes.
+   *=========================================*/
+  it('sends a draft named by id, and keeps that id', async () => {
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Placeholder',
+      body: 'Placeholder',
+      audience: 'leads',
+    })
+
+    const result = await post({
+      hostId: HOST,
+      campaignId: 'draft-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.campaignId).toBe('draft-1')
+    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['status']).toBe(
+      'sent',
+    )
+    // The composer's copy is what went out — this branch is the one that
+    // legitimately takes it from the request.
+    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['subject']).toBe(
+      'Spring sale',
+    )
+  })
+
+  it('refuses to send over an email that has already gone out', async () => {
+    await send({ campaignId: 'msg-1' })
+    const before = store.get(`hosts/${HOST}/campaigns/msg-1`)?.['stats']
+
+    const result = await post({
+      hostId: HOST,
+      campaignId: 'msg-1',
+      subject: 'Injected subject',
+      body: 'Injected body',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(409)
+    // The record still says what it said, and nothing was mailed a second
+    // time.
+    const after = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    expect(after?.['subject']).toBe('Spring sale')
+    expect(after?.['stats']).toEqual(before)
+    expect(sent).toHaveLength(1)
+  })
+
+  it('refuses to send over a canceled email', async () => {
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    await post({ hostId: HOST, action: 'cancel', campaignId: 'msg-1' })
+
+    const result = await post({
+      hostId: HOST,
+      campaignId: 'msg-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(409)
+    expect(sent).toHaveLength(0)
+  })
+
+  it('still mints an id for a send that names none', async () => {
+    // The control. A guard that refused every id-bearing send would pass the
+    // two refusals above having broken the ordinary composer send.
+    const result = await post({
+      hostId: HOST,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+
+    expect(result.status).toBe(200)
+    expect(String(result.body.campaignId)).toBeTruthy()
+    expect(sent).toHaveLength(1)
+  })
+})
