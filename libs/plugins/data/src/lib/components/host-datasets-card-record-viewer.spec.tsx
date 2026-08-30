@@ -72,11 +72,12 @@ const DATASET = {
   $id: 'ds-1',
   displayName: 'Leads',
   model: {
-    order: ['title', 'note', 'count', 'owner'],
+    order: ['title', 'note', 'count', 'tags', 'owner'],
     fields: {
       title: { name: 'Title', type: 'text' },
       note: { name: 'Note', type: 'text' },
       count: { name: 'Count', type: 'int32' },
+      tags: { name: 'Tags', type: 'sorted' },
       owner: {
         name: 'Owner',
         type: 'reference',
@@ -104,6 +105,9 @@ const RECORD_FULL = {
   values: {
     title: 'Kettle',
     note: '',
+    // The first item CONTAINS a comma, so the joined form a cell shows is
+    // ambiguous about whether this list holds two items or three.
+    tags: ['red, blue', 'green'],
     owner: 'p1',
     auditedBy: 'p9',
     legacy_code: 'X-17',
@@ -406,6 +410,19 @@ describe('values render honestly', () => {
     // `--` for both.
     expect(within(open).getByText('Empty text')).toBeTruthy()
     expect(within(open).getByText('Not set')).toBeTruthy()
+  })
+
+  it('renders a list one item per line, not as a join', () => {
+    mount()
+    // The table's cell for this row is the ambiguous join.
+    expect(screen.getByText('red, blue, green')).toBeTruthy()
+    fireEvent.click(screen.getByText('Kettle'))
+    const items = within(viewer()).getAllByRole('listitem')
+    // Two items, and the one holding a comma is one item rather than two.
+    expect(items.map((item) => item.textContent)).toEqual([
+      'red, blue',
+      'green',
+    ])
   })
 
   it('says null where null is stored', () => {

@@ -141,6 +141,26 @@ function RecordFieldValue(props: { field: DatasetRecordField }) {
       </Stack>
     )
   }
+  if (value.items) {
+    return (
+      // One line per item. The comma-joined form a cell shows cannot say
+      // whether `a, b` is one item or two; a list of lines can.
+      <Stack component="ul" spacing={0.25} sx={{ m: 0, pl: 2.5 }}>
+        {value.items.map((item, index) => (
+          <Typography
+            // Items are values, not identities — two equal strings are two
+            // real entries and the position is what tells them apart.
+            key={`${index}:${item}`}
+            component="li"
+            variant="body2"
+            sx={{ overflowWrap: 'anywhere' }}
+          >
+            {item}
+          </Typography>
+        ))}
+      </Stack>
+    )
+  }
   return (
     <Typography
       variant="body2"

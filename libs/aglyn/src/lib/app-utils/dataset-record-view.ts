@@ -105,6 +105,17 @@ export interface DatasetDisplayValue {
   block: boolean
   /** Present only for a `reference` field, one entry per target ID. */
   references?: DatasetDisplayReference[]
+  /**
+   * A list field's items, one entry each.
+   *
+   * `formatDatasetValue` joins a `sorted` array with `", "`, which is the only
+   * thing a cell has room for and is ambiguous in both directions: the
+   * one-item list `['a, b']` and the two-item list `['a', 'b']` produce the
+   * same string, and nothing in it says which was stored. A record view has a
+   * line per item, so it renders the items rather than the join. `text` keeps
+   * the joined form for anywhere the structure is flattened.
+   */
+  items?: string[]
 }
 
 /** A field slot in a record view: what it is called, and what it holds. */
@@ -184,6 +195,40 @@ function describeStructure(value: unknown): DatasetDisplayValue {
   } catch {
     // A cycle, or a `toJSON` that throws.
     return { kind: 'opaque', text: 'Value cannot be displayed', block: false }
+  }
+}
+
+/**
+ * A list's items, kept apart instead of joined.
+ *
+ * The join `formatDatasetValue` performs is lossy: `['a, b']` and
+ * `['a', 'b']` render to the identical string, so a reader cannot tell a
+ * one-item list holding a comma from a two-item list. One line per item
+ * removes the ambiguity, and `text` keeps the joined form for a flattened
+ * context such as a copy to the clipboard.
+ *
+ * An item that is itself a structure is serialized on its own; a list of
+ * objects reads as a list of objects rather than as `[object Object]`
+ * repeated.
+ */
+function describeList(
+  field: DatasetFieldDefinition | undefined,
+  value: unknown[],
+): DatasetDisplayValue {
+  const items = value.map((item) => {
+    if (typeof item === 'string') return item
+    if (item === null) return 'null'
+    if (typeof item === 'object') {
+      const described = describeStructure(item)
+      return described.kind === 'value' ? described.text : described.text
+    }
+    return String(item)
+  })
+  return {
+    kind: 'value',
+    text: field ? formatDatasetValue(field, value) : items.join(', '),
+    block: false,
+    items,
   }
 }
 
@@ -271,6 +316,12 @@ export function describeDatasetValue(
   // Raw octets stored against a field the model does not declare as `bytes`.
   if (typeof value === 'object' && byteLength(value) != null) {
     return describeBytes(value)
+  }
+  // A list is rendered per item rather than joined. An array stored against a
+  // field declared `map` is not one — `validateDocument` reports the mismatch
+  // and the value is pretty-printed as the structure it is.
+  if (Array.isArray(value) && (!field || field.type === 'sorted')) {
+    return describeList(field, value)
   }
 
   if (field) {

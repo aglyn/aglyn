@@ -110,6 +110,29 @@ describe('describeDatasetValue — the states a cell collapses', () => {
     expect(describe1('inStock', { inStock: false }).kind).toBe('value')
   })
 
+  it('keeps a list’s items apart instead of joining them', () => {
+    // The ambiguity being removed: both of these join to the same string.
+    const two = describe1('tags', { tags: ['a', 'b'] })
+    const one = describe1('tags', { tags: ['a, b'] })
+    expect(two.text).toBe(one.text)
+    expect(two.items).toEqual(['a', 'b'])
+    expect(one.items).toEqual(['a, b'])
+  })
+
+  it('serializes a list item that is itself a structure', () => {
+    // `String({})` is `[object Object]`, repeated once per item.
+    const value = describe1('tags', { tags: [{ a: 1 }, 2, null] })
+    expect(value.items).toEqual(['{\n  "a": 1\n}', '2', 'null'])
+  })
+
+  it('does not treat an array stored against a map field as a list', () => {
+    // Declared `map`, holding an array: a mismatch `validateDocument` reports.
+    // Printing it as a list would dress the mismatch up as a list field.
+    const value = describe1('meta', { meta: [1, 2] })
+    expect(value.items).toBeUndefined()
+    expect(value.text).toBe('[\n  1,\n  2\n]')
+  })
+
   it('pretty-prints a nested map across lines', () => {
     const value = describe1('meta', { meta: { a: { b: 1 } } })
     expect(value.kind).toBe('value')
