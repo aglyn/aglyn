@@ -84,10 +84,19 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
             // Glanceable widgets (AGL-352/353): summaries only — the
             // Users and Analytics sections own the deep views. Feature
             // widgets (commerce, campaigns) hide until the host uses them.
+            /*
+             * Traffic spans the container. It is the widest card the console
+             * has — six figures, a bar per day of the selected range, and
+             * four ranked breakdowns — and at `md: 6` all of it competed for
+             * half a page: the figures wrapped into a ragged block, ninety
+             * bars shared the width of one column, and the breakdowns
+             * stacked into a scroll. It is also the card everything else on
+             * this dashboard is read against, which is the other half of the
+             * argument for giving it the row.
+             */
             {
               size: {
                 xs: 12,
-                md: 6,
               },
               children: (
                 <HostAnalyticsCard
