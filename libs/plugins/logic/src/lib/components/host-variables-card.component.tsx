@@ -55,7 +55,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -78,6 +84,15 @@ import {
  * cannot be paged by the server without making the duplicate-name check lie.
  */
 const VARIABLE_CEILING = 100
+
+/**
+ * How many workflows the computed-variable picker offers.
+ *
+ * Paid for only while the editor is open, which is what makes a ceiling this
+ * size affordable: it is one reader mid-edit rather than every visitor to the
+ * page.
+ */
+const WORKFLOW_OPTION_CEILING = 100
 
 export interface HostVariablesCardProps {
   hostId: string
@@ -240,14 +255,49 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   )
   const { rows: readVariables, truncated: variablesTruncated } =
     ceilingedWindow<any>(variableDocs, VARIABLE_CEILING)
-  // Workflow picker options (AGL-261): computed variables reference the
-  // workflow by doc id instead of a typed name.
+  const [draft, setDraft] = useState<VariableDraft | null>(null)
+  /**
+   * The editor has been opened at least once in this session.
+   *
+   * A LATCH rather than `draft` itself, because the workflow picker below keys its
+   * listeners on it. Tracking the dialog would tear that subscription down
+   * on Cancel and pay for them again on the next Edit, so a merchant working
+   * through ten variables would buy the same window ten times — worse than
+   * the mount-time read this replaces. Latched, a reader who never edits pays
+   * nothing and a reader who edits pays once.
+   */
+  const [editorOpened, setEditorOpened] = useState(false)
+  if (draft && !editorOpened) setEditorOpened(true)
+  /*
+   * Workflow picker options (AGL-261): computed variables reference the
+   * workflow by doc id instead of a typed name.
+   *
+   * READ WHEN THE EDITOR OPENS, not when the card mounts (AGL-2501). Nothing
+   * outside the dialog below touches these rows — the table shows a computed
+   * variable's stored `workflowName`, never a name looked up here — so an
+   * unconditional listener would charge every visitor to this page for a
+   * hundred workflows to fill a select most of them never see.
+   *
+   * Ceilinged and ordered for the same reason as the variables above: a bare
+   * `limit` is answered in document-id order, so the `localeCompare` below
+   * would arrange a pseudo-random hundred into a convincing alphabet and a
+   * workflow past it could not be picked, with nothing saying why.
+   */
   const { data: workflowDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
-    [firestore, hostId],
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'workflows'),
+            WORKFLOW_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const workflowOptions = [...(workflowDocs ?? [])]
+  const { rows: readWorkflows, truncated: workflowOptionsTruncated } =
+    ceilingedWindow<any>(workflowDocs, WORKFLOW_OPTION_CEILING)
+  // Sorting the whole ceiling, not a page of it.
+  const workflowOptions = readWorkflows
     .filter((workflow: any) => !workflow.deletedAt && workflow.name)
     .map((workflow: any) => ({
       id: workflow.$id as string,
@@ -322,7 +372,6 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   }, [firestore, hostId, variableCountEpoch])
   const variableCount = serverVariableCount ?? variables.length
 
-  const [draft, setDraft] = useState<VariableDraft | null>(null)
   const validName = VARIABLE_NAME_PATTERN.test(draft?.name ?? '')
   // Case-insensitive (AGL-185): names must stay unambiguous for legacy
   // {{name}} token resolution and picker display.
@@ -648,8 +697,12 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             select
             label="Computed from workflow (optional)"
             helperText={
-              'Pick a workflow — its result becomes this variable\u2019s ' +
-              'value at render; the value above is the fallback (AGL-129)'
+              workflowOptionsTruncated
+                ? `Showing ${WORKFLOW_OPTION_CEILING} workflows, ordered by ` +
+                  'id. This site has more, so one of them is not offered here.'
+                : 'Pick a workflow — its result becomes this ' +
+                  'variable\u2019s value at render; the value above is the ' +
+                  'fallback (AGL-129)'
             }
             value={
               draft?.workflowId ||

@@ -41,16 +41,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import {
-  collection,
-  doc,
-  getDoc,
-  limit,
-  query,
-  setDoc,
-} from 'firebase/firestore'
+import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
@@ -61,6 +56,19 @@ import {
   EntitlementUpsell,
   useCommerceEntitlement,
 } from './entitlement-gate.component'
+
+/**
+ * What each picker in this dialog will offer.
+ *
+ * Every one is a chooser rather than a list, so the ceiling is the number of
+ * options a reader can meaningfully scan, and the walk that reaches it is
+ * ordered by document name — a picker that silently omits an option is worse
+ * than one that admits it stops, because the omission looks like the option
+ * not existing.
+ */
+const CATEGORY_CEILING = 250
+const RELATED_PRODUCT_CEILING = 300
+const SUPPLIER_CEILING = 50
 
 export interface ProductEditorDialogProps {
   hostId: string
@@ -125,24 +133,63 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
+  /**
+   * The three pickers this dialog draws, read only once it is OPEN.
+   *
+   * `ProductEditorDialog` is rendered unconditionally by the products hub and
+   * takes `open` as a prop, so its body runs on every render of that page. A
+   * listener built here without the gate subscribes whether or not anyone
+   * opens the editor, which charges every visit to the catalog for three
+   * collections the visitor never sees.
+   *
+   * `null` is what `useFirestoreCollection` takes to mean "do not subscribe",
+   * so the closed dialog costs nothing and the open one pays once.
+   */
   const { data: categoryDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'productCategories'),
-        limit(250),
-      ),
-    [firestore, hostId],
+      open
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'productCategories'),
+            CATEGORY_CEILING,
+          )
+        : null,
+    [firestore, hostId, open],
     { idField: '$id' },
   )
   const { data: allProductDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'products'), limit(300)),
-    [firestore, hostId],
+    () =>
+      open
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'products'),
+            RELATED_PRODUCT_CEILING,
+          )
+        : null,
+    [firestore, hostId, open],
     { idField: '$id' },
   )
   const { data: supplierDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'suppliers'), limit(50)),
-    [firestore, hostId],
+    () =>
+      open
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'suppliers'),
+            SUPPLIER_CEILING,
+          )
+        : null,
+    [firestore, hostId, open],
     { idField: '$id' },
+  )
+  const categories = useMemo(
+    () => ceilingedWindow<any>(categoryDocs ?? undefined, CATEGORY_CEILING),
+    [categoryDocs],
+  )
+  const relatedProducts = useMemo(
+    () =>
+      ceilingedWindow<any>(allProductDocs ?? undefined, RELATED_PRODUCT_CEILING),
+    [allProductDocs],
+  )
+  const suppliers = useMemo(
+    () => ceilingedWindow<any>(supplierDocs ?? undefined, SUPPLIER_CEILING),
+    [supplierDocs],
   )
 
   const lifted = useMemo(
@@ -479,7 +526,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             <MenuItem value="active">{'Active'}</MenuItem>
             <MenuItem value="archived">{'Archived'}</MenuItem>
           </TextField>
-          {(supplierDocs?.length ?? 0) > 0 ? (
+          {suppliers.rows.length > 0 ? (
             <TextField
               label="Supplier"
               value={current.supplierId ?? ''}
@@ -492,7 +539,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               helperText="Routes paid orders"
             >
               <MenuItem value="">{'None (self-fulfilled)'}</MenuItem>
-              {(supplierDocs ?? []).map((supplier: any) => (
+              {suppliers.rows.map((supplier: any) => (
                 <MenuItem key={supplier.$id} value={supplier.$id}>
                   {supplier.name}
                 </MenuItem>
@@ -525,15 +572,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             />
           )}
         />
-        {(categoryDocs?.length ?? 0) > 0 ? (
+        {categories.rows.length > 0 ? (
           <Autocomplete
             multiple
-            options={categoryDocs ?? []}
+            options={categories.rows}
             getOptionLabel={(category: any) => category.name}
             isOptionEqualToValue={(option: any, value: any) =>
               option.$id === value.$id
             }
-            value={(categoryDocs ?? []).filter((category: any) =>
+            value={categories.rows.filter((category: any) =>
               (current.categoryIds ?? []).includes(category.$id),
             )}
             onChange={(_event, picked) =>
@@ -1109,14 +1156,14 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
         <Autocomplete
           multiple
-          options={(allProductDocs ?? []).filter(
+          options={relatedProducts.rows.filter(
             (item: any) => !item.deletedAt && item.$id !== product?.$id,
           )}
           getOptionLabel={(item: any) => item.name ?? item.$id}
           isOptionEqualToValue={(option: any, value: any) =>
             option.$id === value.$id
           }
-          value={(allProductDocs ?? []).filter((item: any) =>
+          value={relatedProducts.rows.filter((item: any) =>
             (current.relatedProductIds ?? []).includes(item.$id),
           )}
           onChange={(_event, picked) =>

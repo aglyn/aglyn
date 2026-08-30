@@ -243,15 +243,14 @@ describe('the variables cap is a server aggregate (AGL-1716)', () => {
     // rendered, sorted or counted.
     //
     // Asserted as the FULL set of caps this card asks for, because a bare
-    // `toHaveBeenCalledWith(100)` passed here for the wrong reason: the card
-    // also reads `workflows` at `limit(100)` for its picker, so the assertion
-    // was satisfied by a query that is not the list under test and would have
-    // gone on passing if the list had stopped capping altogether.
-    // Re-renders repeat both reads, so the SET is the claim: exactly two
-    // distinct caps, the picker's 100 and the list's ceiling-plus-probe.
+    // `toHaveBeenCalledWith(101)` would be satisfied by any capped query on
+    // the card and would go on passing if the list had stopped capping
+    // altogether. The set holds ONE value because the workflow picker's read
+    // waits for the editor to open: a closed card asks for one
+    // window, not two.
     expect(
       [...new Set(limitSpy.mock.calls.map(([value]) => value))].sort(),
-    ).toEqual([100, 101])
+    ).toEqual([101])
     expect(countSpy).toHaveBeenCalledTimes(1)
     expect(countSpy).toHaveBeenCalledWith('variables')
   })

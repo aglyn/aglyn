@@ -69,6 +69,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
     .listFilterConstraints,
   useFirestore: () => ({}),
+  /*
+   * The product editor asks for its pickers through the shared builders, and
+   * skips them entirely while it is closed. Both carry the collection
+   * reference through unchanged.
+   */
+  collectionCeiling: (ref: unknown) => ref,
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
   useOrgPlan: () => orgPlan,
   useHostResourceApi: () => jest.fn(),
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),

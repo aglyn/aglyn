@@ -20,17 +20,45 @@ import { pluginDocsHelp, scopeTokensForHost } from '@aglyn/aglyn'
 import { auditHostReferences } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
-import { collection, limit, query, where } from 'firebase/firestore'
+import {
+  collection,
+  documentId,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — the specs that render
+ * this card mock `@aglyn/tenant-feature-instance` wholesale to stage their
+ * Firestore hooks, and a query builder imported through that barrel disappears
+ * under the mock. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 
 export interface HostReferenceHealthCardProps {
   hostId: string
 }
+
+/**
+ * How much of each collection the audit judges against.
+ *
+ * Thirteen collections at this ceiling is what an open of this page costs, so
+ * the number is a bill as much as a bound. It is stated once because every one
+ * of those windows has to agree: the audit compares references drawn from
+ * three of them against names drawn from the other ten, and a wider window on
+ * one side than the other would report the difference as broken wiring.
+ */
+const REFERENCE_CEILING = 100
 
 /**
  * Reference health (wave v7): id references are rename-safe (AGL-261)
@@ -48,13 +76,39 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   // to a host path (AGL-1050).
   const { scope: dataScope } = useOrgDataScope({ hostId })
 
-  const useHostCollection = (name: string) =>
+  /*
+   * ORDERED AND CEILINGED (AGL-2501), the same decision the actions and
+   * workflows cards reached.
+   *
+   * `limit(100)` alone is answered in DOCUMENT-ID order, so an unnamed window
+   * is a pseudo-random hundred — and on THIS card that is worse than a
+   * mis-drawn list. The audit asks whether a reference resolves and answers
+   * from the windows, so a workflow that exists but falls outside the
+   * `workflows` hundred is indistinguishable from one that was deleted, and
+   * the card reports live wiring as broken. `collectionCeiling` does not
+   * change WHICH hundred — document-id order is what a bare cap returns
+   * anyway. What it changes is that the order is NAMED, which is what makes
+   * the probe row meaningful and catches the obvious next edit: ordering on
+   * `name` would HIDE every row written without one rather than mis-sort
+   * anything.
+   */
+  const useHostCollection = (name: string) => {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useFirestoreCollection<any>(
-      () => query(collection(firestore, 'hosts', hostId, name), limit(100)),
+    const { data } = useFirestoreCollection<any>(
+      () =>
+        collectionCeiling(
+          collection(firestore, 'hosts', hostId, name),
+          REFERENCE_CEILING,
+        ),
       [firestore, hostId],
       { idField: '$id' },
-    ).data
+    )
+    // Memoised so the window keeps one identity while the rows do. The audit
+    // below is eleven set builds and a sweep of three collections; a fresh
+    // `slice` every render would re-run all of it every render.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useMemo(() => ceilingedWindow<any>(data, REFERENCE_CEILING), [data])
+  }
   const actionDocs = useHostCollection('actions')
   const workflowDocs = useHostCollection('workflows')
   const variableDocs = useHostCollection('variables')
@@ -82,29 +136,71 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   // It used to be conditional on having an org, for the host fallback's
   // sake — those rows carried no `visibleTo` and the filter would have
   // matched nothing.
-  const { data: datasetDocs } = useFirestoreCollection<any>(
+  /*
+   * `documentId()` rather than a field, for the reason the audience sweep in
+   * `campaign-send.ts` gives: Firestore's automatic single-field index for an
+   * array member is keyed on the value and the document name, so
+   * `array-contains-any` plus `orderBy(__name__)` is served by it. Ordering on
+   * anything else here would need a composite index that does not exist.
+   */
+  const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
       dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
             where('visibleTo', 'array-contains-any', scopeTokens),
-            limit(100),
+            orderBy(documentId()),
+            limit(REFERENCE_CEILING + 1),
           )
         : null,
     [firestore, dataScope, scopeTokens],
     { idField: '$id' },
   )
-  const { data: listDocs } = useFirestoreCollection<any>(
+  const datasetDocs = useMemo(
+    () => ceilingedWindow<any>(datasetRead, REFERENCE_CEILING),
+    [datasetRead],
+  )
+  const { data: listRead } = useFirestoreCollection<any>(
     () =>
       dataScope
-        ? query(
+        ? collectionCeiling(
             collection(firestore, dataScope[0], dataScope[1], 'lists'),
-            limit(100),
+            REFERENCE_CEILING,
           )
         : null,
     [firestore, dataScope],
     { idField: '$id' },
   )
+  const listDocs = useMemo(
+    () => ceilingedWindow<any>(listRead, REFERENCE_CEILING),
+    [listRead],
+  )
+
+  /**
+   * At least one collection holds more than the audit read.
+   *
+   * The verdict this card renders is computed entirely from the windows, so a
+   * ceiling that bit anywhere makes both halves of it unsafe: a reference into
+   * the unread part of a `known` collection is reported broken, and a
+   * reference held by an unread action, workflow or variable is not checked at
+   * all. Neither shows up as a gap in the list, which is why it has to be said
+   * outright.
+   */
+  const truncated = [
+    actionDocs,
+    workflowDocs,
+    variableDocs,
+    functionDocs,
+    campaignDocs,
+    overlayDocs,
+    webhookDocs,
+    screenDocs,
+    productDocs,
+    collectionDocs,
+    categoryDocs,
+    datasetDocs,
+    listDocs,
+  ].some((window) => window.truncated)
 
   const issues = useMemo(() => {
     const alive = (docs: any[] | undefined) =>
@@ -119,21 +215,21 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
       return set
     }
     return auditHostReferences({
-      actions: alive(actionDocs),
-      workflows: alive(workflowDocs),
-      variables: alive(variableDocs),
+      actions: alive(actionDocs.rows),
+      workflows: alive(workflowDocs.rows),
+      variables: alive(variableDocs.rows),
       known: {
-        workflows: knownSet(workflowDocs),
-        functions: knownSet(functionDocs),
-        datasets: knownSet(datasetDocs),
-        lists: knownSet(listDocs),
-        campaigns: knownSet(campaignDocs),
-        overlays: knownSet(overlayDocs),
-        webhooks: knownSet(webhookDocs),
-        screens: knownSet(screenDocs, 'displayName'),
-        products: knownSet(productDocs),
-        collections: knownSet(collectionDocs),
-        categories: knownSet(categoryDocs),
+        workflows: knownSet(workflowDocs.rows),
+        functions: knownSet(functionDocs.rows),
+        datasets: knownSet(datasetDocs.rows),
+        lists: knownSet(listDocs.rows),
+        campaigns: knownSet(campaignDocs.rows),
+        overlays: knownSet(overlayDocs.rows),
+        webhooks: knownSet(webhookDocs.rows),
+        screens: knownSet(screenDocs.rows, 'displayName'),
+        products: knownSet(productDocs.rows),
+        collections: knownSet(collectionDocs.rows),
+        categories: knownSet(categoryDocs.rows),
       },
     })
   }, [
@@ -160,42 +256,54 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
       contentGutterY
       contentBordered="all"
     >
-      {issues.length === 0 ? (
-        <Alert severity="success">
-          {'Every automation, workflow, and variable reference resolves.'}
-        </Alert>
-      ) : (
-        <Stack spacing={1}>
-          <Alert severity="warning">
-            {`${issues.length} broken reference${
-              issues.length === 1 ? '' : 's'
-            } — these steps do nothing until re-pointed or removed.`}
+      <Stack spacing={1}>
+        {truncated ? (
+          <Alert severity="info">
+            {`Audited against the first ${REFERENCE_CEILING} rows of each ` +
+              'collection, ordered by id. At least one of them holds more, ' +
+              'so a step pointing past that window is listed here as broken ' +
+              'when it is not, and a step held past it is not checked at all.'}
           </Alert>
-          {issues.map((issue, index) => (
-            <Stack
-              key={`${issue.sourceId}:${index}`}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
-              <Chip size="small" label={issue.source} />
-              <Typography variant="body2" noWrap sx={{ maxWidth: '40%' }}>
-                {issue.sourceName}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {`→ missing ${issue.refType} `}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="error"
-                sx={{ fontFamily: 'monospace' }}
+        ) : null}
+        {issues.length === 0 ? (
+          <Alert severity="success">
+            {truncated
+              ? 'Every reference the audit read resolves.'
+              : 'Every automation, workflow, and variable reference resolves.'}
+          </Alert>
+        ) : (
+          <Stack spacing={1}>
+            <Alert severity="warning">
+              {`${issues.length} broken reference${
+                issues.length === 1 ? '' : 's'
+              } — these steps do nothing until re-pointed or removed.`}
+            </Alert>
+            {issues.map((issue, index) => (
+              <Stack
+                key={`${issue.sourceId}:${index}`}
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center' }}
               >
-                {issue.missing || '(empty)'}
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
-      )}
+                <Chip size="small" label={issue.source} />
+                <Typography variant="body2" noWrap sx={{ maxWidth: '40%' }}>
+                  {issue.sourceName}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {`→ missing ${issue.refType} `}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="error"
+                  sx={{ fontFamily: 'monospace' }}
+                >
+                  {issue.missing || '(empty)'}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        )}
+      </Stack>
     </CardDisplay>
   )
 }

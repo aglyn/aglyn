@@ -59,7 +59,9 @@ import {
 import {
   collection,
   doc,
+  documentId,
   limit,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -90,6 +92,17 @@ const CUSTOM_EVENT_VALUE = '__custom__'
  * beside it is what says when it has.
  */
 const ACTION_CEILING = 100
+
+/**
+ * How many rows each of the step editor's six pickers offers.
+ *
+ * One number for all six because they are read together, by the same click,
+ * and a reader comparing two of them should not have to know which one was cut
+ * at fifty. Paid for only while the editor is open, which is what makes a
+ * ceiling this size affordable: one author mid-edit rather than every visitor
+ * to the page.
+ */
+const EDITOR_OPTION_CEILING = 100
 
 /** One editable condition row (AGL-565); a lone row with an empty op
  * means "always run" and clears the stored conditions. */
@@ -275,12 +288,47 @@ export function HostActionsCard(props: {
   )
   const { rows: readActions, truncated: actionsTruncated } =
     ceilingedWindow<any>(actionDocs, ACTION_CEILING)
-  const { data: workflowDocs } = useFirestoreCollection<any>(
+  const [draft, setDraft] = useState<ActionDraft | null>(null)
+  /**
+   * The editor has been opened at least once in this session.
+   *
+   * A LATCH rather than `draft` itself, because the pickers below key their
+   * listeners on it. Tracking the dialog would tear those subscriptions down
+   * on Cancel and pay for them again on the next Edit, so a merchant working
+   * through ten actions would buy the same six windows ten times — worse than
+   * the mount-time read this replaces. Latched, a reader who never edits pays
+   * nothing and a reader who edits pays once.
+   */
+  const [editorOpened, setEditorOpened] = useState(false)
+  if (draft && !editorOpened) setEditorOpened(true)
+  /*
+   * THE STEP EDITOR'S OPTION LISTS, read when the editor opens.
+   *
+   * Six collections, and nothing outside the dialog below reads any of them:
+   * the table renders a step's stored name, never one looked up here. Mounting
+   * them unconditionally charges every visitor to this page six windows to
+   * populate selects most of them never open — the largest read on the
+   * automation surface, paid whether or not anybody edits anything.
+   *
+   * Each is ceilinged and ordered for the reason the actions query above
+   * gives: a bare `limit` is answered in document-id order, so the
+   * `localeCompare` on every option list would arrange a pseudo-random sample
+   * into a convincing alphabet, and a workflow or dataset past the window
+   * could not be picked with nothing saying why.
+   */
+  const { data: workflowRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
-    [firestore, hostId],
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'workflows'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
+  const { rows: workflowDocs, truncated: workflowsTruncated } =
+    ceilingedWindow<any>(workflowRead, EDITOR_OPTION_CEILING)
   // Scoped (AGL-1044): the AGL-1041 rules reject a scoped member's
   // UNFILTERED list outright, so without this the picker errors rather than
   // offering fewer datasets.
@@ -295,45 +343,83 @@ export function HostActionsCard(props: {
   // Unconditional now: the only scope this hook yields is an org one, and
   // every org dataset carries `visibleTo` (AGL-1041). The filter used to be
   // conditional for the host fallback's sake, whose rows had no scope.
-  const { data: datasetDocs } = useFirestoreCollection<any>(
+  /*
+   * `documentId()` rather than a field, for the reason the audience sweep in
+   * `campaign-send.ts` gives: Firestore's automatic single-field index for an
+   * array member is keyed on the value and the document name, so
+   * `array-contains-any` plus `orderBy(__name__)` is served by it. Ordering on
+   * anything else here would need a composite index that does not exist.
+   */
+  const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
-      dataScope
+      editorOpened && dataScope
         ? query(
             collection(firestore, dataScope[0], dataScope[1], 'datasets'),
             where('visibleTo', 'array-contains-any', scopeTokens),
-            limit(100),
+            orderBy(documentId()),
+            limit(EDITOR_OPTION_CEILING + 1),
           )
         : null,
-    [firestore, dataScope, scopeTokens],
+    [firestore, dataScope, scopeTokens, editorOpened],
     { idField: '$id' },
   )
-  const { data: overlayDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  // Lists live on the org (AGL-254); campaigns on the host.
-  const { data: listDocs } = useFirestoreCollection<any>(
+  const { rows: datasetDocs, truncated: datasetsTruncated } =
+    ceilingedWindow<any>(datasetRead, EDITOR_OPTION_CEILING)
+  const { data: overlayRead } = useFirestoreCollection<any>(
     () =>
-      dataScope
-        ? query(
-            collection(firestore, dataScope[0], dataScope[1], 'lists'),
-            limit(50),
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'overlays'),
+            EDITOR_OPTION_CEILING,
           )
         : null,
-    [firestore, dataScope],
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { data: campaignDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(50)),
-    [firestore, hostId],
+  const { rows: overlayDocs, truncated: overlaysTruncated } =
+    ceilingedWindow<any>(overlayRead, EDITOR_OPTION_CEILING)
+  // Lists live on the org (AGL-254); campaigns on the host.
+  const { data: listRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened && dataScope
+        ? collectionCeiling(
+            collection(firestore, dataScope[0], dataScope[1], 'lists'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, dataScope, editorOpened],
     { idField: '$id' },
   )
-  const { data: webhookDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
-    [firestore, hostId],
+  const { rows: listDocs, truncated: listsTruncated } = ceilingedWindow<any>(
+    listRead,
+    EDITOR_OPTION_CEILING,
+  )
+  const { data: campaignRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'campaigns'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
+  const { rows: campaignDocs, truncated: campaignsTruncated } =
+    ceilingedWindow<any>(campaignRead, EDITOR_OPTION_CEILING)
+  const { data: webhookRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'webhooks'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
+    { idField: '$id' },
+  )
+  const { rows: webhookDocs, truncated: webhooksTruncated } =
+    ceilingedWindow<any>(webhookRead, EDITOR_OPTION_CEILING)
   const liveActions = readActions.filter((action: any) => !action.deletedAt)
   /**
    * Element interactions are not listed here.
@@ -369,6 +455,21 @@ export function HostActionsCard(props: {
     () => actions.slice(page * pageSize, page * pageSize + pageSize),
     [actions, page, pageSize],
   )
+  /**
+   * Which of the six pickers the ceiling actually bit, named.
+   *
+   * One notice rather than six, because they are one read and an author who
+   * has just been told the workflow list is short does not learn anything from
+   * being told again about datasets.
+   */
+  const truncatedPickers = [
+    workflowsTruncated ? 'workflows' : null,
+    webhooksTruncated ? 'webhooks' : null,
+    datasetsTruncated ? 'datasets' : null,
+    overlaysTruncated ? 'overlays' : null,
+    listsTruncated ? 'audiences' : null,
+    campaignsTruncated ? 'campaigns' : null,
+  ].filter((name): name is string => name !== null)
   // Options carry ids (AGL-261): selects store the doc id, keep the name
   // as the display hint, and legacy name-only steps map back to their id.
   const workflowOptions = (workflowDocs ?? [])
@@ -420,7 +521,6 @@ export function HostActionsCard(props: {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  const [draft, setDraft] = useState<ActionDraft | null>(null)
   const patch = useCallback(
     (updater: (previous: ActionDraft) => ActionDraft) =>
       setDraft((previous) => (previous ? updater(previous) : previous)),
@@ -843,6 +943,18 @@ export function HostActionsCard(props: {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
         >
+          {/*
+            A short picker is worse than an empty one, because it looks
+            complete: the target an author cannot find reads as deleted, and
+            the step gets pointed somewhere else.
+           */}
+          {truncatedPickers.length > 0 ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              {`Offering the first ${EDITOR_OPTION_CEILING} rows, ordered by ` +
+                `id, for: ${truncatedPickers.join(', ')}. This site has ` +
+                'more, so a step target may not be listed below.'}
+            </Alert>
+          ) : null}
           <TextField
             label="Name"
             value={draft?.name ?? ''}

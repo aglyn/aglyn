@@ -56,7 +56,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -80,6 +86,15 @@ import {
  * cannot be paged by the server without making the duplicate-name check lie.
  */
 const WORKFLOW_CEILING = 100
+
+/**
+ * How many functions and variables the step editor offers.
+ *
+ * Paid for only while the editor is open, which is what makes a ceiling this
+ * size affordable: it is one author mid-edit rather than every visitor to the
+ * page.
+ */
+const EDITOR_OPTION_CEILING = 100
 
 export interface HostWorkflowsCardProps {
   hostId: string
@@ -152,17 +167,65 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   )
   const { rows: readWorkflows, truncated: workflowsTruncated } =
     ceilingedWindow<any>(workflowDocs, WORKFLOW_CEILING)
-  const { data: functionDocs } = useFirestoreCollection<any>(
+  const [draft, setDraft] = useState<WorkflowDraft | null>(null)
+  /**
+   * The editor has been opened at least once in this session.
+   *
+   * A LATCH rather than `draft` itself, because the two reads below key their
+   * listeners on it. Tracking the dialog would tear those subscriptions down
+   * on Cancel and pay for them again on the next Edit, so a merchant working
+   * through ten actions would buy the same two windows ten times — worse than
+   * the mount-time read this replaces. Latched, a reader who never edits pays
+   * nothing and a reader who edits pays once.
+   */
+  const [editorOpened, setEditorOpened] = useState(false)
+  if (draft && !editorOpened) setEditorOpened(true)
+  /*
+   * THE EDITOR'S WORKING SET, read when the editor opens.
+   *
+   * Nothing outside the dialog reads either of these: the table renders a
+   * workflow's stored step names, and `runWorkflow` is only reachable from the
+   * test-run button inside the dialog. Mounting them unconditionally charges
+   * every visitor to this page two windows to fill a select and seed a
+   * scratchpad most of them never open.
+   *
+   * Ceilinged and ordered for the reason the workflows query above gives: a
+   * bare `limit` is answered in document-id order, so the `localeCompare` on
+   * the options below would arrange a pseudo-random hundred into a convincing
+   * alphabet, and a function past the window could not be picked with nothing
+   * saying why.
+   */
+  const { data: functionRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
-    [firestore, hostId],
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'functions'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
   )
-  const { data: variableDocs } = useFirestoreCollection<any>(
+  // Memoised so the window keeps one identity while the rows do — the option
+  // list and the two lookup maps below are all built from it.
+  const { rows: functionDocs, truncated: functionsTruncated } = useMemo(
+    () => ceilingedWindow<any>(functionRead, EDITOR_OPTION_CEILING),
+    [functionRead],
+  )
+  const { data: variableRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
-    [firestore, hostId],
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'variables'),
+            EDITOR_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
     { idField: '$id' },
+  )
+  const { rows: variableDocs, truncated: variablesTruncated } = useMemo(
+    () => ceilingedWindow<any>(variableRead, EDITOR_OPTION_CEILING),
+    [variableRead],
   )
   // Sorting is safe here in a way it is not on a paged list: these rows are
   // the whole collection below the ceiling, not a slice of one.
@@ -250,8 +313,6 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     }
     return map
   }, [variableDocs])
-
-  const [draft, setDraft] = useState<WorkflowDraft | null>(null)
 
   // Where-used dialog (AGL-193).
   const [usage, setUsage] = useState<{
@@ -581,6 +642,25 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           <Typography variant="overline" color="text.secondary">
             {'Steps'}
           </Typography>
+          {/*
+            The pickers and the test run speak only for what was read. A step
+            calling a function past the ceiling still RUNS on the site — this
+            editor simply cannot name it, and a test run resolves its
+            expression against an incomplete variable set.
+           */}
+          {functionsTruncated || variablesTruncated ? (
+            <Alert severity="info">
+              {`Offering the first ${EDITOR_OPTION_CEILING} ` +
+                (functionsTruncated && variablesTruncated
+                  ? 'functions and variables'
+                  : functionsTruncated
+                    ? 'functions'
+                    : 'variables') +
+                ' on this site, ordered by id. There are more, so the ' +
+                'pickers below are short and a test run may not resolve ' +
+                'every expression.'}
+            </Alert>
+          ) : null}
           {(draft?.steps ?? []).map((step, index) => {
             const definition =
               functions[(step as any).functionId ?? ''] ??

@@ -40,18 +40,35 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useFirestore,
   useOrgPlan,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+
 import CommerceStatTile from './commerce-stat-tile.component'
 import OrderDetailDialog, {
   DISPUTE_COLOR,
 } from './order-detail-dialog.component'
+
+/**
+ * How far back the table, its filters and its export reach.
+ *
+ * This window cannot be paged the way a plain list can. Five filters and the
+ * CSV export all run over what was read, so a page of ten would quietly narrow
+ * every one of them — a status filter would search a tenth of the orders and
+ * report confidently on what it found. Bounding the read and saying where the
+ * bound falls keeps the filters honest about their own scope.
+ */
+const ORDERS_WINDOW = 200
+
+/** A name map for the filter menu; it renders no product rows of its own. */
+const PRODUCT_NAME_WINDOW = 100
 
 export interface HostOrdersCardProps {
   hostId: string
@@ -65,23 +82,49 @@ export interface HostOrdersCardProps {
 export function HostOrdersCard(props: HostOrdersCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  /**
+   * The most recent orders, in the order the table shows them.
+   *
+   * `createdAtMs` is the field every order writer in the plugin stamps and the
+   * one `reconcile-stock` already walks the collection by. Ordering on it is
+   * what makes this window the RECENT orders: an unordered cap is answered in
+   * document-id order, and orders are keyed by generated ids, so it returns a
+   * pseudo-random sample that a client sort then dresses as newest-first.
+   */
   const { data: orderDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'orders'), limit(200)),
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'orders'),
+        orderBy('createdAtMs', 'desc'),
+        limit(ORDERS_WINDOW + 1),
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
   const { data: productDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'products'), limit(100)),
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'products'),
+        PRODUCT_NAME_WINDOW,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const orderWindow = useMemo(
+    () => ceilingedWindow<any>(orderDocs ?? undefined, ORDERS_WINDOW),
+    [orderDocs],
+  )
+  const productWindow = useMemo(
+    () => ceilingedWindow<any>(productDocs ?? undefined, PRODUCT_NAME_WINDOW),
+    [productDocs],
+  )
   const productNames = useMemo(() => {
     const map: Record<string, string> = {}
-    for (const product of productDocs ?? []) {
+    for (const product of productWindow.rows) {
       map[product.$id] = product.name ?? product.$id
     }
     return map
-  }, [productDocs])
+  }, [productWindow])
 
   /**
    * The money tiles are the `commerceAnalytics` surface (AGL-1938,
@@ -95,11 +138,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   const showStats =
     orgReady && checkEntitlement(org as never, 'commerceAnalytics')
 
-  // Sorted client-side: orderBy would drop docs missing createdAt.
-  const orders = [...(orderDocs ?? [])].sort(
-    (a: any, b: any) =>
-      (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-  )
+  // The query returns the window already newest-first; re-sorting it here
+  // would only restate the order it arrived in.
+  const orders = orderWindow.rows
 
   // Filters + CSV export (AGL-96) over the loaded window.
   const [productFilter, setProductFilter] = useState('')
@@ -161,7 +202,10 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       ) {
         return false
       }
-      const created = order.createdAt?.seconds ?? 0
+      // The same field the query orders by. `createdAt` is not universal
+      // across order writers, and a row missing it read as epoch zero — which
+      // both date filters excluded outright.
+      const created = (order.createdAtMs ?? 0) / 1000
       if (dateFilter === '7d' && now - created > 7 * 86400) return false
       if (dateFilter === '30d' && now - created > 30 * 86400) return false
       return true
@@ -316,8 +360,8 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
 
   /** What the draft dialog can actually offer. */
   const selectableProducts = useMemo(
-    () => (productDocs ?? []).filter((product: any) => !product.deletedAt),
-    [productDocs],
+    () => productWindow.rows.filter((product: any) => !product.deletedAt),
+    [productWindow],
   )
 
   return (
@@ -433,7 +477,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               sx={{ minWidth: 160 }}
             >
               <MenuItem value="">{'All products'}</MenuItem>
-              {(productDocs ?? []).map((product: any) => (
+              {productWindow.rows.map((product: any) => (
                 <MenuItem key={product.$id} value={product.$id}>
                   {product.name ?? product.$id}
                 </MenuItem>
@@ -650,6 +694,16 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               })}
             </TableBody>
           </Table>
+          {orderWindow.truncated ? (
+            /*
+             * Where the filters and the export stop. Both run over what was
+             * read, so a store past this window would otherwise see a status
+             * filter return nothing and read it as having no such orders.
+             */
+            <Typography variant="caption" color="text.secondary">
+              {`Showing the ${ORDERS_WINDOW} most recent orders. Filters and Export CSV cover these.`}
+            </Typography>
+          ) : null}
         </Stack>
       )}
       {selectedOrder ? (
@@ -699,7 +753,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             ))}
           </TextField>
           {(() => {
-            const product = (productDocs ?? []).find(
+            const product = productWindow.rows.find(
               (item: any) => item.$id === draft?.productId,
             )
             const variants = product

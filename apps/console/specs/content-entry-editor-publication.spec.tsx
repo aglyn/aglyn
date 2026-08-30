@@ -151,7 +151,15 @@ jest.mock('firebase/firestore', () => ({
     segments[segments.length - 1],
   query: (name: string) => name,
   limit: () => undefined,
-  doc: () => ({}),
+  // The slug-uniqueness probe asks the collection by KEY rather than
+  // searching the page it is holding. Constraints are erased here, so the
+  // probe reads back every mock entry and the real rule filters them.
+  where: () => undefined,
+  // A PATH, because the entry editor now reads its entry BY KEY — the hook
+  // mock below answers on it.
+  doc: (_db: unknown, ...segments: string[]) => ({
+    __path: segments.join('/'),
+  }),
   deleteDoc: jest.fn(),
   deleteField: () => '__delete__',
   setDoc: jest.fn().mockResolvedValue(undefined),
@@ -160,6 +168,25 @@ jest.mock('firebase/firestore', () => ({
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  /*
+    The entries WINDOW. `usePagedCollection` asks the builder for one page
+    plus a probe row and hands back the page; this stands in for it so the
+    suite can keep naming the collection it wants without a live listener.
+  */
+  usePagedCollection: (build: (pageLimit: number) => string) => ({
+    rows: build(11) === 'entries' ? mockEntries.data : [],
+    hasMore: false,
+    page: 0,
+    setPage: () => undefined,
+    pageSize: 10,
+    setPageSize: () => undefined,
+    status: mockEntries.status,
+    fromCache: mockEntries.fromCache,
+  }),
+  // The ordering the window is read in. This mock erases query constraints
+  // anyway, so the builder is the identity here; the read-cost suite is where
+  // the `orderBy` it carries is asserted.
+  collectionPage: (ref: unknown) => ref,
   useHostResourceApi: () => jest.fn(async () => ({ id: 'created-id' })),
   useUser: () => ({ data: { uid: 'uid-editor', getIdToken: jest.fn() } }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -283,9 +310,28 @@ jest.mock('../hooks/use-firestore-collection', () => ({
     return { data: [], status: 'success', fromCache: false }
   },
 }))
+/**
+ * The host document AND the open ENTRY, told apart by path.
+ *
+ * The editor reads its entry by key, so this hook is the entry's seed — and
+ * therefore the read `writeGuardedBySeed` is consulted about. Answering every
+ * ref with one blank object would leave the guard asserting nothing and the
+ * editor seeded from a document that does not exist.
+ */
 jest.mock('../hooks/use-firestore-doc', () => ({
   __esModule: true,
-  default: () => ({ data: {}, status: 'success', fromCache: false }),
+  default: (build: () => { __path?: string } | null) => {
+    const path = build()?.__path ?? ""
+    if (path.includes("/entries/")) {
+      const id = path.split("/").pop()
+      return {
+        data: mockEntries.data.find((entry: any) => entry.$id === id),
+        status: mockEntries.status,
+        fromCache: mockEntries.fromCache,
+      }
+    }
+    return { data: {}, status: 'success', fromCache: false }
+  },
 }))
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 jest.mock('next/navigation', () => ({

@@ -69,6 +69,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgPlan: () => ({ org: { plan: 'pro' }, ready: true }),
   useConsoleHostRoute: () => ({ base: '/o/h', orgSlug: 'o' }),
   useFirestoreCollection: () => ({ data: orderRows }),
+  collectionCeiling: () => ({}),
+  // The real one, which is pure: the rows under audit here must reach the
+  // card unaltered, and a stub returning them whole would hide a ceiling that
+  // had started dropping them.
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -76,6 +84,8 @@ jest.mock('firebase/firestore', () => ({
   collection: () => ({}),
   query: () => ({}),
   limit: () => ({}),
+  orderBy: () => ({}),
+  where: () => ({}),
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({

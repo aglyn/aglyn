@@ -90,7 +90,6 @@ import {
 import {
   CONTENT_MAX_WIDTH,
   TABLE_HEAD_HEIGHT,
-  TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
   TABLE_ROWS_PER_PAGE_LABEL,
 } from '../../constants/shared'
@@ -147,6 +146,12 @@ export function CollectionEntriesPage() {
     collections,
     selected,
     entries,
+    entriesStatus,
+    entriesHasMore,
+    entryPage,
+    setEntryPage,
+    entriesPerPage,
+    setEntriesPerPage,
     authors,
     screenOptions,
     screensById,
@@ -538,42 +543,42 @@ export function CollectionEntriesPage() {
    * /{slug} routes the site publishes, which is not a content edit.
    */
   /**
-   * Entry pagination (AGL-2501).
+   * Entry pagination, where the page IS the query (AGL-2501).
    *
-   * The listener already caps at 200 entries — this is about the READING, not
-   * the query: a collection with a hundred posts rendered as one uninterrupted
-   * table, so the collection settings above it and the Authors tab beside it
-   * were a scroll away from anything. Every other artifact list pages, and
-   * this is the list with the most rows on it.
+   * The window belongs to the SCOPE: the footer below and the Firestore read
+   * behind it are one control, so `page` and `pageSize` are the query's own —
+   * `usePagedCollection`, opened at `TABLE_PAGE_SIZE_DEFAULT`, the smallest
+   * option the console offers, by the rule that every paginated list defaults
+   * to its minimum. Paging a slice of an array the provider already read
+   * would leave this footer in charge of nothing: the rows past that read
+   * would still be unreachable, and every one of them still billed.
    *
-   * Starts at `TABLE_PAGE_SIZE_DEFAULT` — the smallest option the console
-   * offers, by the rule that every paginated list defaults to its minimum.
+   * A different collection is a different list, and the hook resets the page
+   * with the subject — page 3 of the last collection means nothing here.
    */
-  const [entryPage, setEntryPage] = useState(0)
-  const [entriesPerPage, setEntriesPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const pagedEntries = useMemo(
-    () =>
-      entries.slice(
-        entryPage * entriesPerPage,
-        entryPage * entriesPerPage + entriesPerPage,
-      ),
-    [entries, entryPage, entriesPerPage],
-  )
   /*
-    Deleting the last entry on the last page, or switching to a shorter
-    collection, would otherwise strand the reader past the end — an empty
-    table with no control that says so. Clamp rather than reset: staying on
-    page 3 of 4 is right; jumping home on every delete is not.
+    Deleting the last entry on the last page strands the reader past the end:
+    an empty table under a footer that says there is nothing further. Step
+    back one, and only once the read has SETTLED — an in-flight page is empty
+    too, and clamping on it would walk the reader home while their page
+    loads.
   */
   useEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(entries.length / entriesPerPage) - 1)
-    if (entryPage > lastPage) setEntryPage(lastPage)
-  }, [entryPage, entries.length, entriesPerPage])
-  // A different collection is a different list; page 3 of the last one means
-  // nothing here.
-  useEffect(() => {
-    setEntryPage(0)
-  }, [selected?.$id])
+    if (
+      entryPage > 0 &&
+      entries.length === 0 &&
+      !entriesHasMore &&
+      entriesStatus === 'success'
+    ) {
+      setEntryPage(entryPage - 1)
+    }
+  }, [
+    entryPage,
+    entries.length,
+    entriesHasMore,
+    entriesStatus,
+    setEntryPage,
+  ])
 
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
@@ -581,8 +586,10 @@ export function CollectionEntriesPage() {
   /**
    * The same rule the route enforces, run here for fast feedback — so the
    * dialog can NAME what still depends on the collection instead of arming a
-   * button that 409s. The server owns the truth: `entries` is capped at 200 by
-   * the listener, while the route counts them for real.
+   * button that 409s. The server owns the truth: `entries` is ONE PAGE of the
+   * collection, so this understates a long one, while the route counts them
+   * for real. It cannot understate the only thing the gate turns on — a
+   * collection with any entries at all has them on its first page.
    */
   const deleteDenial = selected
     ? Aglyn.collectionDeleteDenial({
@@ -1348,7 +1355,12 @@ export function CollectionEntriesPage() {
                             </Stack>
                           </AccordionDetails>
                         </Accordion>
-                        {entries.length === 0 ? (
+                        {/* An empty FIRST page is an empty collection. An
+                            empty later one is a page that has been emptied
+                            underneath the reader, and the effect above walks
+                            them back rather than telling them they have never
+                            written anything. */}
+                        {entries.length === 0 && entryPage === 0 ? (
                           <Stack
                             spacing={1.5}
                             sx={{
@@ -1427,7 +1439,7 @@ export function CollectionEntriesPage() {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {pagedEntries.map((entry) => {
+                              {entries.map((entry: any) => {
                                 const published = entry.status === 'published'
                                 /*
                                   Five equal text links (EDIT · UNPUBLISH ·
@@ -1639,21 +1651,36 @@ export function CollectionEntriesPage() {
                             </TableBody>
                           </Table>
                         )}
-                        {entries.length > 0 ? (
+                        {entries.length > 0 || entryPage > 0 ? (
                           <TablePagination
                             component="div"
-                            count={entries.length}
+                            /*
+                              Nobody has paid to learn how many entries the
+                              collection holds, and counting them is the cost
+                              paging exists to avoid. MUI models that: `-1`
+                              renders "1–10 of more than 10" and leaves Next
+                              live. On the LAST page the total stops being
+                              unknown — `page × size + rows` IS it — and
+                              handing MUI the real number there is what
+                              disables Next and stops the count line saying
+                              "more than" at the moment that would be false.
+                            */
+                            count={
+                              entriesHasMore
+                                ? -1
+                                : entryPage * entriesPerPage + entries.length
+                            }
                             page={entryPage}
                             onPageChange={(_event, next) =>
                               setEntryPage(next)
                             }
                             rowsPerPage={entriesPerPage}
-                            onRowsPerPageChange={(event) => {
-                              setEntriesPerPage(
-                                parseInt(event.target.value, 10),
-                              )
-                              setEntryPage(0)
-                            }}
+                            // Back to the first page with it: the hook does
+                            // that, because page four of a ten-row list does
+                            // not exist once fifty at a time are asked for.
+                            onRowsPerPageChange={(event) =>
+                              setEntriesPerPage(parseInt(event.target.value, 10))
+                            }
                             rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
                             labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
                           />
@@ -1777,11 +1804,11 @@ export function CollectionEntriesPage() {
                                   />
                                 </TableCell>
                                 <TableCell>
-                                  {/* Counted off the SELECTED collection's
-                                      loaded entries only — the listener holds
-                                      one collection at a time, so this is a
-                                      hint about where a byline is in use, not a
-                                      site-wide total it cannot know. */}
+                                  {/* Counted off the entries ON THE PAGE the
+                                      Entries tab is showing — one page of one
+                                      collection. A hint about where a byline
+                                      is in use, not a site-wide total it
+                                      cannot know without reading for it. */}
                                   {
                                     entries.filter(
                                       (entry: any) =>
