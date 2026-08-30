@@ -898,6 +898,15 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/email/src/lib/components/list-import-drawer.tsx',
+    'The import drawer’s two tables are BOUNDED READOUTS of one act, not ' +
+      'windows onto a collection. The first shows at most ten of the sampled ' +
+      'addresses the server checked, beside the sample size and the file ' +
+      'total, so its length is a constant; the second is one row per refusal ' +
+      'REASON, and there are six reasons. Neither grows with the size of the ' +
+      'file, and a pager on either would offer to page a fixed list.',
+  ],
+  [
     'libs/plugins/email/src/lib/components/email-detail.tsx',
     'One message’s report. Its tables are the message’s own facts — state, ' +
       'send time, campaign, list, template — the fixed population taxonomy, ' +
@@ -1328,13 +1337,15 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // row grammar: it reads a ceiling that names its order, probes one past
     // it, and pages the window it holds on the shared footer.
     expect(OWES_A_FOOTER).toHaveLength(14)
-    // 33 since the Emails surface grew a page per message, per template and
-    // per topic. Every table on those pages is bounded by something other
-    // than the audience — a fixed taxonomy, a rollup capped at WRITE time, a
-    // ceilinged window that says so, or a merchant's own vocabulary — which
-    // is the property this list exists to record. Raised here deliberately
-    // rather than by a walk that quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(33)
+    // 34 since the Emails surface grew a page per message, per template and
+    // per topic, and an import drawer on an audience's own page. Every table
+    // on those surfaces is bounded by something other than the audience — a
+    // fixed taxonomy, a rollup capped at WRITE time, a ceilinged window that
+    // says so, a merchant's own vocabulary, or a readout of one act whose
+    // length does not follow the size of the file it describes — which is the
+    // property this list exists to record. Raised here deliberately rather
+    // than by a walk that quietly stopped reaching a file.
+    expect(NOT_A_LIST).toHaveLength(34)
   })
 })
 

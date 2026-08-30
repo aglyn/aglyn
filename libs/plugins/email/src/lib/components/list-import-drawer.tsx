@@ -57,7 +57,8 @@
  * resume it from where it stopped.
  */
 
-import { LIST_IMPORT_MAX_CHARACTERS } from '@aglyn/aglyn'
+import { LIST_IMPORT_MAX_CHARACTERS, pluginDocsHelp } from '@aglyn/aglyn'
+import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
@@ -389,6 +390,14 @@ export function ListImportDrawer(props: ListImportDrawerProps) {
           <Typography variant="h6" component="div">
             {`Import into "${listName}"`}
           </Typography>
+          {/*
+            The help affordance every console surface carries, pointed at the
+            section that explains what happens to an imported address — which
+            is the question an operator has at exactly this moment.
+           */}
+          <HelpTip
+            {...pluginDocsHelp('emailCampaigns', { anchor: '#import-a-list' })}
+          />
         </>
       }
       appBarRight={

@@ -5,8 +5,9 @@ have since been built. The register itself proposes work and does not do it;
 each ✅ below names the commit subject that closed the row, so a reader planning
 from this document does not re-propose something shipped.
 
-**Closed since this was written:** [P1](#p1), [G9](#g9), [G10](#g10)/[P6](#p6),
-and the D5 and D7 rows of [G11](#g11). Everything else stands.
+**Closed since this was written:** [P1](#p1), [G5](#g5)/[P4](#p4), [G9](#g9),
+[G10](#g10)/[P6](#p6), [P8](#p8), and the D5 and D7 rows of [G11](#g11).
+Everything else stands.
 Written 2026-08-30 against `main` at `39f979587`. Competitor facts were gathered live
 from vendor documentation on 2026-08-30; every claim carries the source it came from,
 and the appendix lists what could not be verified.
@@ -18,6 +19,8 @@ and the appendix lists what could not be verified.
 > ⚠️ **Pricing is locked for Sept 1.** Three findings here imply a packaging change.
 > Each is recorded in [§6](#6-decisions-that-belong-to-the-owner) as a decision for the
 > owner and **stops there**. Nothing in this document recommends changing a charged price.
+> §6 also holds two decisions that are not about packaging: the first-send gate an
+> import does not have, and whether an import into a confirming site should confirm.
 
 ---
 
@@ -160,15 +163,15 @@ Aglyn state is one of:
 | A recorded consent basis consulted at send | ➖ | ✅ | ✅ | ➖ | ➖ | ➖ | **(✔)** `splitByMarketingConsent` on the send path |
 | Consent **provenance** — person vs operator assertion | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔★)** `assertedBy: 'person' \| 'operator'` travels with the basis |
 | **Pre-send consent preview** of who will be dropped and why | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔★)** consented / by-operator / grandfathered / withheld / suppressed, before you press send |
-| Double opt-in | ✅ optional, off by default | ✅ | ✅ | ✅ | ✅ recommended, not forced | ➖ DIY recipe | **(A)** — no vendor *requires* it either |
+| Double opt-in | ✅ optional, off by default | ✅ | ✅ | ✅ | ✅ recommended, not forced | ➖ DIY recipe | **(✔)** per topic with a per-site default, off unless a merchant turns it on; an unconfirmed address is refused by the send path, not merely flagged |
 | Preference center / subscription topics | ✅ | ✅ up to 1,000 types | ✅ | ✅ | ✅ | ✅ topics | **(✔)** org-shared topics, four built in; the footer link opens a hosted preference page with per-topic opt-out and an unsubscribe-from-everything button |
-| **Frequency opt-down** ("send me less", chosen by the recipient) | ➖ | ❌ emulated with granular types | ➖ | ➖ | ➖ | ➖ | **(A)** — genuinely thin across the field; see [G10](#g10) |
+| **Frequency opt-down** ("send me less", chosen by the recipient) | ➖ | ❌ emulated with granular types | ➖ | ➖ | ➖ | ➖ | **(✔★)** four paces on the preference page, honored at the send and binding on a campaign; genuinely thin across the field, so there was nothing to copy |
 | Resubscribe that refuses to reverse a bounce or complaint | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔★)** correctly modeled as sender protection, not a user preference |
 | Suppression is an **evidence record**, not a delete | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔)** `releasedAt` field; the record is the proof it was honored |
 | Add a suppression by hand | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(✔)** a drawer on the Suppressions card, recorded as its own reason with a note; the platform list has a staff reader and an audited release |
 | Tenant sends from **their own** verified domain | ✅ | ✅ | ✅ | ✅ | ✅ automatic DNS write | ✅ | **(C)** server complete, **no UI**, and the DKIM key cannot be issued yet |
 | Engagement-based sunsetting | ➖ playbook | ➖ | ➖ | ➖ playbook, manual bulk action | ➖ primitives | ➖ playbook | **(A)** — and note **no vendor automates this either** |
-| Import an existing list | ✅ | ✅ | ✅ | ✅ | ✅ with an opt-in attestation | ✅ | **(A)** export only — see [G5](#g5) |
+| Import an existing list | ✅ | ✅ | ✅ | ✅ | ✅ with an opt-in attestation | ✅ | **(✔)** CSV or a pasted column, through the same consent gate a typed address passes, with the attestation and the screening [P4](#p4) specifies |
 
 ### 1g. Platform shape
 
@@ -324,7 +327,31 @@ already store `ltvCents`, `ordersCount` and `lastPurchaseAtMs` on every contact,
 same database as the orders — and a merchant cannot express it. Nothing else in this
 register converts so little work into so much product.
 
-### G5 — A customer cannot bring their existing list {#g5}
+### G5 — A customer cannot bring their existing list {#g5} — ✅ CLOSED
+
+> ✅ **Closed, with the controls [P4](#p4) specifies rather than before them.**
+> *"a customer can bring the list they already have"* added four routes over
+> one durable job — read the file, record the attestation and stage it, enroll
+> a bounded batch from a cursor, and hand back an unfinished job so a closed
+> tab is not a half-filled audience nobody can see. A fifty-thousand-address
+> file is five hundred bounded requests, and the run budget is the same number
+> of addresses one hand-typed batch already resolves.
+>
+> Every imported address goes through the SAME functions a typed one does.
+> That gate moved to `server-list-gate.ts`, where the add path, the filter
+> search and the importer share one copy: a bulk path with its own idea of
+> suppression and its own idea of consent is the defect class [P1](#p1) is
+> closed for. A suppressed address is refused on either list, a stored refusal
+> is refused with the attestation on the table, and the cursor advances over a
+> refusal so a large file terminates.
+>
+> An import is an operator assertion and is now recorded as one:
+> `readMarketingBasis` reads a membership's own basis field, so an attested
+> enrollment reports `assertedBy: 'operator'`. Until this landed, every
+> address a merchant added by hand read back as a checkbox the person ticked —
+> on exactly the records where that claim is least true.
+>
+> The description below is the state it was written in.
 
 **What it is.** There is no CSV import for contacts or lists anywhere in the product.
 `contacts-console-page.tsx` exports; nothing imports. Members reach a list only through
@@ -432,9 +459,33 @@ functions are written and unwired.
 compliance exposure: CAN-SPAM requires honoring an opt-out received by any means within
 10 business days, and a merchant forwarding "please stop emailing me" has no button.
 
-### G10 — A contact can receive five different emails with no ceiling {#g10} — ➖ HALF CLOSED
+### G10 — A contact can receive five different emails with no ceiling {#g10} — ✅ CLOSED
 
-> ➖ **The cap half is closed; the preference-center half is not.** *"bulk mail
+> ✅ **Both halves.** The preference-center half closed with *"a recipient can
+> ask for less mail instead of none"*: four paces on the hosted preference
+> page — as they come, at most one a day, a week, a month — submitted with the
+> topic checkboxes, because "less of this, and less often" is one decision.
+>
+> A minimum interval since the last message, not a second rolling window. The
+> ceiling guards against a burst and counts inside a day; this guards against
+> a drip, and a drip is answered by one stored instant rather than a month of
+> them. The choice lives on the send counter the gate already reads, so
+> honoring it costs no round trip where it has to be honored.
+>
+> **It binds a campaign, which the ceiling does not.** `capped: false` exempts
+> a reviewed one-shot send from a control the merchant cannot see; it does not
+> reach a request the recipient made, because a campaign that overrode it
+> would make the preference page a form recording a choice nothing honors. The
+> count on screen stays true a different way — `filterCadenceSendable`
+> subtracts these people where the two suppression lists and the topic
+> opt-outs are already subtracted.
+>
+> Nothing is cancelled and nobody is removed. A refused message reports as
+> `frequency-capped`, so every sweep already built to come back does, rather
+> than stamping the subject and discarding a message the recipient asked to
+> receive later.
+>
+> The cap half closed earlier. *"bulk mail
 > carries an unsubscribe, a suppression check and a ceiling"* added a rolling
 > ceiling of five marketing messages per person per site per day, enforced at
 > the SEND — nobody is unsubscribed, no audience is trimmed, no contact is
@@ -443,8 +494,7 @@ compliance exposure: CAN-SPAM requires honoring an opt-out received by any means
 > it and is exempt from its refusal: a cap that silently removed people from a
 > reviewed one-shot send would make the recipient count on screen a lie.
 >
-> **The preference center is still (A)**, and this register's own judgement —
-> that it is the better investment of the two — stands unchanged.
+> The description below is the state it was written in.
 
 **What it is.** No frequency capping of any kind. A single person can receive a campaign,
 an abandoned-cart reminder, a restock alert, a member post and an automation email in one
@@ -781,7 +831,45 @@ one send: mail a campaign to a seed address and read the `DKIM-Signature` `h=` t
 this before building anything else in this section; it is an hour, and it either confirms
 compliance or invalidates a claim we are making to customers and to Google.
 
-### P4 — Import does not exist yet, which is the best possible moment to design it {#p4}
+### P4 — Import does not exist yet, which is the best possible moment to design it {#p4} — ✅ CLOSED
+
+> ✅ **Closed with [G5](#g5), and the moment was used.** Four of the five
+> mechanical checks below are built:
+>
+> - **The file is screened** for role accounts and for headers carrying
+>   purchase tells (`jigsaw`, `append`, and the vocabulary the brokers
+>   actually use). It refuses nothing — a role account is indicative of poor
+>   acquisition practice, not proof of it — and is put in front of the
+>   operator BEFORE they attest, because the attestation is the thing with
+>   teeth. Somebody who states they have permission for a file whose headers
+>   say it was appended has made a claim their own console showed them the
+>   evidence against.
+> - **A declared basis per address is read and kept.** A file may carry an
+>   opt-in source and date per row; both ride onto the row they were made
+>   about as the REASON for the operator's assertion. They never become the
+>   person's own opt-in — nothing arriving in a spreadsheet is a checkbox
+>   somebody ticked — so the basis stays `operator-attested` however many
+>   columns it arrives in.
+> - **A bare CSV is never accepted as consent.** An address with nothing on
+>   record and nobody asserting anything is refused; an address with a stored
+>   opt-in carries the PERSON's own date across; an address with a stored
+>   refusal is refused with the attestation on the table.
+> - **The attestation is retained** with the account that made it and the
+>   moment they did, on the job and on every row it admitted — and the account
+>   answerable is the one that ATTESTED, not whoever pressed Resume.
+>
+> **What is NOT built, and is a decision rather than an omission:** the
+> first-send gate. M3AAWG's own sizing caveat is that test sends below ten
+> thousand recipients may not yield statistically significant results, which
+> at our volumes means a measured gate would be reading noise. Mailchimp's
+> Omnivore is the shape to copy if it is ever built — it refuses the SEND,
+> audience-scoped, and never the people — and it needs prediction rather than
+> measurement. See [§6.5](#65-an-import-has-no-first-send-gate).
+>
+> **An import does not trigger a double opt-in**, which is [P8](#p8)'s hole
+> and is left open deliberately: see [§6.6](#66-an-import-does-not-confirm).
+>
+> The premise correction below stands and is worth keeping.
 
 [G5](#g5) is the product gap; this is its condition.
 
@@ -889,7 +977,33 @@ than a judgment, and the attestation it collects is the same one [P4](#p4) needs
 Public signup opens Sept 1, which makes this the item whose deadline is fixed by something
 other than our own planning.
 
-### P8 — No double opt-in {#p8}
+### P8 — No double opt-in {#p8} — ✅ CLOSED
+
+> ✅ **Closed as an OPTION, which is what the calibration below argues for.**
+> *"a merchant can require a confirmation click, per stream"* built it per
+> topic with a per-site default, off unless somebody turns it on.
+>
+> **Per topic, and why.** The recipient-facing vocabulary is already per
+> topic — the signed link carries it, the opt-out record is keyed by it, the
+> preference page is a list of them — so a confirmation scoped to anything
+> else would need a second vocabulary the recipient also meets. It is the axis
+> Brevo and Klaviyo chose (per list), and a topic is our per-list. The site
+> default exists because a merchant who wants this usually wants it
+> everywhere; a topic overrules the site in BOTH directions, so "confirm
+> everything except the order-related stream" is expressible.
+>
+> **It has ActiveCampaign's teeth, not Customer.io's.** An unconfirmed address
+> is a third state of the record `filterTopicSendable` already reads, so it is
+> refused in the same pass that refuses an opt-out. Re-asking keeps the
+> original moment; an expired link admits nobody, so the 72-hour window is a
+> gate rather than a delay to wait out; and a confirmation cannot reverse an
+> unsubscribe, because a signup form must not become a way to mail somebody
+> who told this site to stop by asking them again.
+>
+> **Klaviyo's hole is still open, deliberately.** An import does not trigger a
+> confirmation. See [§6.6](#66-an-import-does-not-confirm) for the decision.
+>
+> The calibration below stands, and so does the instruction about the law.
 
 Zero occurrences in the tree. Calibration: of ten vendors examined, **none mandates it**.
 Mailchimp defaults it off except that EU-based accounts may get it by default;
@@ -1110,6 +1224,52 @@ uncapped one beside it. Closing the compliance half (unsubscribe headers, suppre
 filtering) is unambiguously a bug fix and should not wait. **Whether member posts and
 restock alerts should then count against an allowance is a packaging decision**, because
 it changes what a plan delivers. Recorded, not recommended.
+
+### 6.5 An import has no first-send gate {#65-an-import-has-no-first-send-gate}
+
+[P4](#p4) shipped four of its five mechanical checks. The fifth — a bounded first send to
+a random segment, measured on bounce rate, bounce-type mix and complaint rate by domain
+before unfettered provisioning — is not built, and the reason is M3AAWG's own sizing
+caveat: *"test sends to fewer than ten thousand recipients may not yield statistically
+significant results."* At our volumes a measured gate would be reading noise and refusing
+real merchants on it.
+
+The shape to copy if this is ever built is **Mailchimp's Omnivore**, which is the only
+named import gate in the industry and gets the enforcement right: it refuses the SEND,
+scoped to the audience, and never touches the people or the account. It also throttles
+deliberately — the first campaign after a large import *"will send slowly so that our
+system has time to verify the imported addresses."*
+
+**The decision:** whether to build a predictive gate (which needs a signal we do not have
+yet), a deliberate throttle on the first send after a large import (which needs no signal
+at all and is cheap), or neither before public signup. Recorded, not recommended.
+
+⚠️ Note what does exist in the meantime: the import screens the file, requires an
+attributed attestation, and refuses every suppressed and every declined address. What is
+absent is a gate on the first SEND to the imported audience.
+
+### 6.6 An import does not confirm {#66-an-import-does-not-confirm}
+
+[P8](#p8) named Klaviyo's *"list imports do not trigger double opt-in"* as the hole every
+implementation leaves, and this one leaves it too. An import records an
+`operator-attested` basis and the imported addresses are mailable without a confirmation
+click, even on a site that confirms its signups.
+
+**The argument for leaving it.** An import that quarantined its addresses would either
+send tens of thousands of confirmation messages at once — which is itself the
+deliverability event the whole area exists to avoid, on a shared sending domain — or
+leave a merchant with a freshly imported audience that is entirely unmailable and no
+obvious way to fix it. Every vendor surveyed makes the same choice.
+
+**The argument against it.** It is the one place where a merchant can reach an address
+that the product's own confirmation rule would have held, and the rule is one they turned
+on themselves.
+
+**The decision:** whether an import into a confirming site should (a) admit as it does
+now, (b) mark imported addresses pending and send confirmations on a paced sweep, or (c)
+mark them pending and send nothing, leaving the merchant to invite them. Recorded, not
+recommended. Note that (b) and (c) are only meaningful once a site has turned confirmation
+on, which nothing does by default.
 
 ---
 
