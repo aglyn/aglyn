@@ -185,7 +185,7 @@ export function EmailDetail(props: EmailDetailProps) {
         <Button
           component={AppLink as any}
           {...({ componentVariant: 'naked', nativeButton: false } as any)}
-          href={`${basePath}/designs/${templateScreenId}`}
+          href={`${basePath}/templates/${templateScreenId}`}
           size="small"
           variant="contained"
         >
@@ -300,7 +300,7 @@ export function EmailDetail(props: EmailDetailProps) {
                     <TableCell>{'Template'}</TableCell>
                     <TableCell align="right">
                       <AppLink
-                        href={`${basePath}/designs/${templateScreenId}`}
+                        href={`${basePath}/templates/${templateScreenId}`}
                       >
                         {template?.displayName ?? 'Untitled template'}
                       </AppLink>

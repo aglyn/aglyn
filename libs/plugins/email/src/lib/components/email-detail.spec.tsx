@@ -160,7 +160,7 @@ describe('a message names where it went', () => {
     await renderEmail()
     const link = screen.getByText('Spring promo').closest('a')
     expect(link?.getAttribute('href')).toBe(
-      '/acme/hosts/site/emails/designs/scr_1',
+      '/acme/hosts/site/emails/templates/scr_1',
     )
   })
 })

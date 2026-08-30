@@ -98,9 +98,9 @@ function sectionBody(
       ) : (
         <EmailsListCard hostId={hostId} basePath={basePath} />
       )
-    case 'designs':
+    case 'templates':
       /*
-       * `/emails/designs/{screenId}` is one TEMPLATE's page. The section id
+       * `/emails/templates/{screenId}` is one TEMPLATE's page. The section id
        * stays `designs` while the label says Templates — an id appears in
        * links people keep, so the vocabulary moves and the URL does not
        * break.

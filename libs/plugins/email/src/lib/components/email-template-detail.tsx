@@ -208,7 +208,7 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
   )
   const provenance = useMemo(() => templateProvenance(screen), [screen])
 
-  const listUrl = `${basePath}/designs`
+  const listUrl = `${basePath}/templates`
   const besignerUrl =
     orgSlug && subdomain && versionId
       ? buildRoute(Route.SCREEN_BESIGNER, {

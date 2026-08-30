@@ -20,7 +20,7 @@ import type { ConsoleNavSection } from '@aglyn/aglyn'
 export type EmailsConsoleSectionId =
   | 'campaigns'
   | 'emails'
-  | 'designs'
+  | 'templates'
   | 'audiences'
   | 'topics'
   | 'suppressions'
@@ -32,10 +32,11 @@ export type EmailsConsoleSectionId =
  * item so the shell can route and gate each section, and the page switches its
  * body on the id the shell resolves back.
  *
- * Ids appear in links people keep — treat them as persisted, and rename a
- * LABEL rather than an id. These four are the `?tab=` ids this page already
- * deep-linked by, kept deliberately so a bookmark that named a tab names the
- * same section as a route.
+ * Ids appear in links people keep — treat them as persisted, and prefer
+ * renaming a LABEL over an id. `campaigns`, `audiences` and `suppressions`
+ * are also the `?tab=` ids this page deep-linked by before its sections
+ * became routes, so a bookmark that named one of those tabs still names the
+ * same section.
  *
  * No `navTabId` on any of them: every section ships with the surface, so they
  * inherit the Emails nav item's gate.
@@ -48,11 +49,12 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   /*
    * The reusable besigner documents a message is built from.
    *
-   * The id stays `designs` while the label says Templates, which is this
-   * registry's own rule applied: an id appears in links people keep and a
-   * label does not, so the vocabulary moves and the URL does not break.
+   * Id and label say the same word on purpose: a template is the vocabulary
+   * everywhere else in this surface — an email names the template it renders,
+   * and the marketplace publishes them — so a URL saying anything else would
+   * be the one place the reader has to translate.
    */
-  { id: 'designs', label: 'Templates' },
+  { id: 'templates', label: 'Templates' },
   { id: 'audiences', label: 'Audiences' },
   // Between the audiences and the suppressions, which is where a topic sits
   // conceptually: an audience is who you may reach, a suppression is who you

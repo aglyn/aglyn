@@ -167,7 +167,7 @@ export function EmailScreensCard(props: {
                  * about.
                  */}
                 {basePath ? (
-                  <AppLink href={`${basePath}/designs/${screen.$id}`}>
+                  <AppLink href={`${basePath}/templates/${screen.$id}`}>
                     {screen.displayName ?? 'Untitled template'}
                   </AppLink>
                 ) : (

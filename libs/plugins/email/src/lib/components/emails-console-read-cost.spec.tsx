@@ -483,7 +483,7 @@ describe('emails console read cost (AGL-2501)', () => {
   })
 
   it('reports the designs section too', async () => {
-    await renderConsole('designs')
+    await renderConsole('templates')
     summarize('designs section', mockListens)
     expect(true).toBe(true)
   })
