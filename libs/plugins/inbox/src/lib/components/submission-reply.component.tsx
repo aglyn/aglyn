@@ -111,7 +111,10 @@ export function SubmissionReply(props: SubmissionReplyProps) {
               'replies',
             ),
             orderBy('sentAtMs', 'desc'),
-            limit(SENT_REPLIES_LIMIT),
+            // One past the window, so a thread longer than the cap can say
+            // so rather than silently dropping its oldest replies. The probe row
+            // is never rendered.
+            limit(SENT_REPLIES_LIMIT + 1),
           )
         : null,
     [firestore, hostId, submission?.$id],
@@ -167,7 +170,7 @@ export function SubmissionReply(props: SubmissionReplyProps) {
   }
 
   return (
-    <CardDisplay title="Reply" sx={{ mt: 2 }}>
+    <CardDisplay title="Reply">
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {`To ${(recipient as { email: string }).email}`}
@@ -215,7 +218,12 @@ export function SubmissionReply(props: SubmissionReplyProps) {
             <Typography variant="overline" color="text.secondary">
               {'Replies sent'}
             </Typography>
-            {sentReplies.map((reply: any) => (
+            {sentReplies.length > SENT_REPLIES_LIMIT ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Showing the ${SENT_REPLIES_LIMIT} most recent. This thread has more.`}
+              </Typography>
+            ) : null}
+            {sentReplies.slice(0, SENT_REPLIES_LIMIT).map((reply: any) => (
               <Stack key={reply.$id} spacing={0.25}>
                 <Typography variant="caption" color="text.secondary">
                   {`${new Date(reply.sentAtMs).toLocaleString()} · to ${reply.to}`}

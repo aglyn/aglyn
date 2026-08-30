@@ -1081,6 +1081,14 @@ const NOT_A_LIST: Array<[string, string]> = [
  */
 const OWES_A_FOOTER: Array<[string, string]> = [
   [
+    'libs/plugins/inbox/src/lib/components/submission-reply.component.tsx',
+    'Replies sent on one submission. The row count is a function of how often ' +
+      'the merchant answered, not of any taxonomy, so it is a list by this ' +
+      'file’s own test. It over-fetches by one and SAYS when the thread is ' +
+      'longer than the window — which makes the truncation honest but does ' +
+      'not make it navigable, and the eleventh reply is still unreachable.',
+  ],
+  [
     // The invoice table moved to its own section when billing was split
     // (AGL-2501). Same table, same reason, same scope decision — only the file
     // it lives in changed.
@@ -1275,7 +1283,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(14)
+    expect(OWES_A_FOOTER).toHaveLength(15)
     // 28 since the inbox glance joined the dashboard: a new preview card is
     // a new classification, and it is raised here deliberately rather than
     // by a walk that quietly stopped reaching the file.
