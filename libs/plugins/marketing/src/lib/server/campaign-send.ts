@@ -228,6 +228,15 @@ export interface CampaignSendOptions {
   templateScreenId?: string
   /** Test sends (AGL-349) skip the campaign record and stats. */
   recordCampaign?: boolean
+  /**
+   * The requester's OWN verified address, for the composer's test send
+   * (AGL-349). Exempts exactly this address from the marketing-consent rule.
+   *
+   * See the carve-out at the consent join for why a proof of your own draft
+   * is not a marketing send, and for the two properties that keep the
+   * exemption one address wide.
+   */
+  selfProofFor?: string
   /** Recorded as `sentBy`; the scheduler passes the scheduling user. */
   senderUid: string
 }
@@ -654,7 +663,50 @@ export async function performCampaignSend(
       'marketingConsentPolicy'
     ],
   )
-  const consentSplit = splitByMarketingConsent(resolved, consent, consentPolicy)
+  /*
+   * THE SELF-PROOF CARVE-OUT.
+   *
+   * A proof delivered to the requester's own verified address is not a
+   * marketing send. The recipient is the person who pressed the button, and
+   * the consent rule exists to protect somebody from mail they did not ask
+   * for — which is not something you can do to yourself.
+   *
+   * Without this the composer's test send is dead under `strict`: it delivers
+   * to the caller's account address through the `manual` audience, a
+   * hand-typed address is backed by no document, and `unrecorded` is withheld
+   * before reaching the clause that grandfathers a record carrying no capture
+   * date. Proofing your own email would be refused on consent grounds.
+   *
+   * ⚠️ TWO PROPERTIES KEEP THE EXEMPTION ONE ADDRESS WIDE, and both are here
+   * rather than at the call site, because a caller that could widen it is
+   * exactly what this must not be:
+   *
+   *   1. The address must ALREADY be in the resolved audience. The option can
+   *      therefore only exempt a recipient, never introduce one — passing an
+   *      address that is not being sent to does nothing at all.
+   *   2. A stored `declined` is still refused, below. A refusal is the one
+   *      thing no policy may mail, and a self-proof is not the first
+   *      exception to it: an admin who declined marketing to their own site
+   *      un-declines rather than being quietly overridden.
+   */
+  const proofFor = String(options.selfProofFor ?? '')
+    .trim()
+    .toLowerCase()
+  const proofAddress = proofFor && resolved.includes(proofFor) ? proofFor : ''
+  if (proofAddress && consent.get(proofAddress)?.basis === 'declined') {
+    throw new CampaignSendError(
+      'Your account address has a recorded marketing opt-out on this site, ' +
+        'so the test send was not delivered. Opt back in to proof designed ' +
+        'emails to yourself.',
+      400,
+    )
+  }
+  const consentSplit = splitByMarketingConsent(
+    proofAddress ? resolved.filter((one) => one !== proofAddress) : resolved,
+    consent,
+    consentPolicy,
+  )
+  if (proofAddress) consentSplit.mailable.unshift(proofAddress)
   if (!consentSplit.mailable.length) {
     throw new CampaignSendError(
       'No recipient in this audience has a marketing consent record, so ' +
@@ -1272,6 +1324,8 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         templateScreenId: templateScreenId || undefined,
         recordCampaign: false,
         senderUid: decoded.uid,
+        // Not marketing: the recipient is the account making the request.
+        selfProofFor: testEmail,
       })
       return res.status(200).json({ ...result, test: true })
     }

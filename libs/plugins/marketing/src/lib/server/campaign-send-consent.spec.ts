@@ -392,6 +392,89 @@ describe('a marketing campaign sends only where a basis permits it', () => {
   })
 
   /**
+   * THE SELF-PROOF CARVE-OUT, which is what keeps the composer's test send
+   * alive under `strict` now that a `manual` audience has no mailable member.
+   *
+   * A proof to the requester's own verified address is not a marketing send:
+   * the recipient is the person who pressed the button. The exemption is one
+   * address wide, and the three cases below are the walls — without them this
+   * is a parameter that turns the consent rule off.
+   */
+  describe('a proof of your own draft, sent to your own address', () => {
+    it('sends under strict, where the same address as marketing would not', async () => {
+      configurePolicy('strict')
+      await send({
+        audience: 'manual',
+        emails: ['admin@example.com'],
+        selfProofFor: 'admin@example.com',
+      })
+      expect(delivered()).toEqual(['admin@example.com'])
+    })
+
+    /**
+     * WALL 1 — it may only exempt a recipient, never introduce one. Naming an
+     * address that is not in the audience does nothing, so the option cannot
+     * be used to mail somebody who was never being sent to.
+     */
+    it('does nothing for an address that is not in the audience', async () => {
+      configurePolicy('strict')
+      await expect(
+        send({
+          audience: 'manual',
+          emails: ['someone@example.com'],
+          selfProofFor: 'attacker@example.com',
+        }),
+      ).rejects.toThrow(/consent record/i)
+      expect(mockState.sent).toHaveLength(0)
+    })
+
+    /**
+     * WALL 2 — it exempts ONE address. A proof does not carry a pasted list
+     * along with it; everybody else in the audience faces the rule as usual.
+     */
+    it('carries nobody else along with it', async () => {
+      configurePolicy('strict')
+      await send({
+        audience: 'manual',
+        emails: ['admin@example.com', 'stranger@example.com'],
+        selfProofFor: 'admin@example.com',
+      })
+      expect(delivered()).toEqual(['admin@example.com'])
+    })
+
+    /**
+     * WALL 3 — a stored refusal is still a refusal. This is the one rule with
+     * no exception, and a self-proof is not the first one: an admin who
+     * declined marketing on their own site un-declines rather than being
+     * silently overridden. The message says which of the two problems it is,
+     * because the fixes differ.
+     */
+    it('still refuses an address that recorded an opt-out', async () => {
+      configurePolicy('strict')
+      await expect(
+        send({
+          audience: 'leads',
+          selfProofFor: 'declined@example.com',
+        }),
+      ).rejects.toThrow(/recorded marketing opt-out/i)
+      expect(mockState.sent).toHaveLength(0)
+    })
+
+    /**
+     * CONTROL — the exemption is doing the work, not the audience shape.
+     * Identical send with the option absent is refused, so a green result
+     * above cannot come from `manual` having quietly become mailable.
+     */
+    it('CONTROL — the same send without the option is refused', async () => {
+      configurePolicy('strict')
+      await expect(
+        send({ audience: 'manual', emails: ['admin@example.com'] }),
+      ).rejects.toThrow(/consent record/i)
+      expect(mockState.sent).toHaveLength(0)
+    })
+  })
+
+  /**
    * The refusal has to be a REFUSAL and not an empty-audience 400: a merchant
    * whose whole audience lacks a basis needs to be told which problem they
    * have, because the two have different fixes.
