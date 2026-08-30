@@ -1479,6 +1479,22 @@ service cloud.firestore {
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
                      'bandwidthCeiling',
+                     // `sendingDomain`/`sendingLocalPart` are this site's
+                     // half of the custom-sending-domain model: together they
+                     // are the `From:` address every recipient of this site's
+                     // marketing mail sees. They belong in the Admin-SDK-only
+                     // tier for a reason neither `cname` nor `enabledPlugins`
+                     // quite covers — a site `admin` need not be an org
+                     // member at all, since a site-scoped COLLABORATOR
+                     // carries a host role and no org standing, so the
+                     // admin-tier carve-out below would not hold them. An
+                     // editor able to write these could move one client's
+                     // mail onto another client's verified domain, or set a
+                     // mailbox of their choosing on a domain the org proved
+                     // and send as anyone at it. /api/email/sending-identity
+                     // owns both: it checks `org.settings`, and it refuses a
+                     // domain the org has not verified.
+                     'sendingDomain', 'sendingLocalPart',
                      'projectId', 'projectNumber']) &&
           // The approved-host lists join the same admin tier (AGL-1152), and
           // for the sharper of the two reasons its siblings are here: they are
