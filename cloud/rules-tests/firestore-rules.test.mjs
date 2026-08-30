@@ -1421,6 +1421,16 @@ describe('hosts', () => {
       // arbitrary styling pushed onto a live site from the narrowest role we
       // sell, arriving disguised as the site's own history.
       'themeHistory',
+      // One document per email SEND. Every field is server-written — the send
+      // route stamps the audience and the consent and suppression
+      // populations, the Resend webhook and the unsubscribe handler increment
+      // `stats` — so an editor who could write one would author the campaign
+      // report and the compliance record of who the send was allowed to
+      // reach. Named here for the `registers` reason above: the loops derive
+      // their set from the rules, so dropping the name from one exclusion
+      // list would shorten the parse and leave the suite green having tested
+      // one collection fewer.
+      'campaigns',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -1809,6 +1819,203 @@ describe('hosts', () => {
   })
 
   /**
+   * `campaigns` — one document per email SEND, and every field on it is
+   * server-written.
+   *
+   * `campaign-send.ts` creates the document on the Admin SDK and stamps the
+   * audience, the send-time consent population and the suppression population
+   * onto it; `email-events.ts` increments the `stats` map from the Resend
+   * webhook as mail is delivered, opened, clicked, bounced or complained
+   * about; the unsubscribe handler in the email plugin's server module
+   * increments it too. No client-SDK writer exists anywhere in `apps` or
+   * `libs` — every reference is a `collection(...)`/`doc(...)` listen.
+   *
+   * The collection was in NONE of the three exclusion lists, so the catch-all
+   * granted an editor create, update and delete on `canWriteHostContent` —
+   * the `screenAnalytics` shape, a subcollection open because nobody typed
+   * the name. What that bought is not a vanity metric: `stats` is the
+   * campaign report the customer reads, and the consent and suppression
+   * populations are the evidence of who a marketing send was allowed to
+   * reach. Both are exactly the documents that must not be author-writable.
+   *
+   * `{document=**}` spans the nested `reports/links` rollup as well, so the
+   * per-link click breakdown was reachable by the same grant and is asserted
+   * separately below — a name-based exclusion that stopped at the top level
+   * would leave the deeper document open and this suite green.
+   */
+  it("an editor cannot forge a campaign's delivery record", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'campaigns', 'send-1'), {
+        subject: 'A real send',
+        stats: { delivered: 10, opened: 2, clicked: 1, bounced: 0 },
+        consentedRecipients: 10,
+        suppressedRecipients: 3,
+      })
+      await setDoc(
+        doc(db, 'hosts', HOST, 'campaigns', 'send-1', 'reports', 'links'),
+        { links: { 'https://example.com': 1 } },
+      )
+    })
+    await mustDeny(
+      'inflating the open and click counts on a real send',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1'), {
+        stats: { delivered: 10, opened: 10, clicked: 10, bounced: 0 },
+      }),
+    )
+    await mustDeny(
+      'rewriting the send-time consent and suppression populations',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1'), {
+        consentedRecipients: 5000,
+        suppressedRecipients: 0,
+      }),
+    )
+    await mustDeny(
+      'forging a send that never happened',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-forged'), {
+        subject: 'Never sent',
+        stats: { delivered: 5000, opened: 4000, clicked: 3000, bounced: 0 },
+      }),
+    )
+    await mustDeny(
+      'destroying the record of a send that did happen',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1')),
+    )
+    // An OWNER too: this is a path question rather than a role one. A site
+    // admin has the same incentive to improve their own report and no more
+    // right to write the counters the webhook owns.
+    await mustDeny(
+      'inflating the counts as a site owner',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'campaigns', 'send-1'), {
+        stats: { delivered: 10, opened: 10, clicked: 10, bounced: 0 },
+      }),
+    )
+
+    // THE NESTED ROLLUP. `{document=**}` spans it, so it was granted by the
+    // same catch-all and is denied by the same exclusion — asserted by write
+    // because "the name is in the list" says nothing about a deeper path.
+    await mustDeny(
+      'rewriting the per-link click rollup',
+      updateDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+        { links: { 'https://example.com': 9999 } },
+      ),
+    )
+    await mustDeny(
+      'forging a click rollup for a campaign with none',
+      setDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-forged',
+          'reports',
+          'links',
+        ),
+        { links: { 'https://example.com': 9999 } },
+      ),
+    )
+    await mustDeny(
+      'deleting the per-link click rollup',
+      deleteDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+      ),
+    )
+
+    // THE READ IS THE PRODUCT and survives, at both depths. The report screen
+    // (`campaign-report-card.tsx`) listens to the campaign document and to
+    // `reports/links` beside it with the client SDK, and `email-detail.tsx`
+    // does the same — a fix that denied these would blank the report screen,
+    // which is worse than the hole it closed.
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'hosts', HOST, 'campaigns', 'send-1')),
+    )
+    await assertSucceeds(
+      getDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+      ),
+    )
+    // A VIEWER too — the narrowest host member the console renders for. Read
+    // is `isHostMember`, and `campaigns` is not in the read exclusion list
+    // that `webhooks`/`orders`/`mediaTombstones` share.
+    await assertSucceeds(
+      getDoc(doc(authed(VIEWER), 'hosts', HOST, 'campaigns', 'send-1')),
+    )
+    await assertSucceeds(
+      getDoc(
+        doc(
+          authed(VIEWER),
+          'hosts',
+          HOST,
+          'campaigns',
+          'send-1',
+          'reports',
+          'links',
+        ),
+      ),
+    )
+  })
+
+  /**
+   * The control that proves the right collection was closed.
+   *
+   * `emailCampaigns` is the campaign CONTAINER — a name, a date window and
+   * the lists it is aimed at — and the campaigns card's create drawer writes
+   * one with a plain client `setDoc`. It is a different collection from
+   * `campaigns` despite the name, holds no counter and no entitlement input,
+   * and must stay editor-writable or campaign creation stops for every
+   * customer. Denying `campaigns` while leaving this open is the entire
+   * distinction the change rests on, so it is asserted rather than assumed.
+   */
+  it('an editor can still create a campaign container', async () => {
+    await mustAllow(
+      'creating a campaign container from the create drawer',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
+        { name: 'Spring launch', listIds: ['list-1'] },
+      ),
+    )
+    await mustAllow(
+      'renaming a campaign container',
+      updateDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
+        { name: 'Spring launch, renamed' },
+      ),
+    )
+    await mustAllow(
+      'deleting a campaign container',
+      deleteDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
+      ),
+    )
+  })
+
+  /**
    * The negative control for the fix itself (AGL-2038), and the reason the
    * rules were NOT flipped to deny-by-default.
    *
@@ -1833,7 +2040,7 @@ describe('hosts', () => {
     // stamping `deletedAt`). The three legs are asserted separately in
     // `an editor cannot create an action client-direct (AGL-2266)`.
     const AUTHORING = [
-      'overlays', 'experiments', 'campaigns', 'emailTemplates',
+      'overlays', 'experiments', 'emailCampaigns', 'emailTemplates',
       'coupons', 'discounts', 'reviews', 'siteMembers',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders', 'leads',
@@ -1847,6 +2054,15 @@ describe('hosts', () => {
       // is the assertion that would catch the next attempt.
       'suppressions',
     ]
+    // `emailCampaigns` stands here and `campaigns` does not, and the pair is
+    // the whole point: `emailCampaigns` is the campaign CONTAINER the
+    // campaigns card's create drawer writes client-side, while `campaigns` is
+    // one document per SEND, carrying the delivery counters and the send-time
+    // consent record, and is denied outright. Swapping the two names breaks
+    // campaign creation for every customer while reopening the counters —
+    // which is why the denial is asserted separately, by write, in
+    // `an editor cannot forge a campaign's delivery record`.
+    //
     // `memberPosts` LEFT this list in AGL-2372: create and update are now
     // denied outright and delete is decided by a dedicated block, so it fails
     // the create leg below by design. All three of its legs are asserted in
