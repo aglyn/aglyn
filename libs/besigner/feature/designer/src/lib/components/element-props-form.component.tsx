@@ -641,6 +641,114 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
 }
 
 /**
+ * The list each entity picker DISPLAYS, keyed by the attribute type a
+ * component schema declares.
+ *
+ * One table rather than two switches, because the demand signal and the
+ * option list have to agree about which list a picker means. When they
+ * disagreed the failure was silent and total: the panel would open a
+ * listener on one collection and read its options out of another, and the
+ * dropdown stayed empty on a site full of data.
+ *
+ * `DATASET_FIELD_SELECT` is deliberately absent. Its options are the model
+ * fields of the dataset an ANCESTOR chose, so it needs the dataset list to
+ * resolve against but is not itself a picker OF datasets — it asks for the
+ * list below and renders its own options.
+ */
+export const ENTITY_PICKER_KINDS: Readonly<
+  Partial<Record<Aglyn.FieldComponentType, Aglyn.EntityPickerKind>>
+> = {
+  [Aglyn.FieldComponentType.PRODUCT_SELECT]: 'products',
+  [Aglyn.FieldComponentType.COLLECTION_SELECT]: 'collections',
+  [Aglyn.FieldComponentType.CATEGORY_SELECT]: 'categories',
+  [Aglyn.FieldComponentType.DATASET_SELECT]: 'datasets',
+  [Aglyn.FieldComponentType.FORM_SELECT]: 'forms',
+}
+
+/** Where an author makes more of each kind, named in the empty picker. */
+const ENTITY_PICKER_ORIGIN: Readonly<
+  Record<Aglyn.EntityPickerKind, { plural: string; page: string }>
+> = {
+  products: { plural: 'products', page: 'the Products page' },
+  collections: { plural: 'collections', page: 'the Collections page' },
+  categories: { plural: 'categories', page: 'the Categories page' },
+  datasets: { plural: 'datasets', page: 'the Data page' },
+  forms: { plural: 'forms', page: 'the Forms page' },
+}
+
+/**
+ * The label on an entity picker's empty first option.
+ *
+ * An empty dropdown and a broken dropdown look identical, and an author who
+ * cannot tell them apart goes looking for a form they already made. So the
+ * four reasons a picker has nothing say four different things, and only the
+ * settled one claims anything about the site.
+ */
+export function entityPickerPlaceholder(
+  kind: Aglyn.EntityPickerKind,
+  state: Aglyn.EntityListState,
+  count: number,
+): string {
+  if (count > 0) return 'None'
+  const { plural, page } = ENTITY_PICKER_ORIGIN[kind]
+  switch (state) {
+    case 'error':
+      return `Could not load ${plural} — reopen this panel to try again`
+    case 'loading':
+      return `Loading ${plural}…`
+    case 'unavailable':
+      return `This editor cannot list ${plural}`
+    default:
+      return `No ${plural} yet — add one on ${page}`
+  }
+}
+
+/**
+ * An entity picker rendered as the SELECT the form renderer knows how to
+ * draw, resolved against whatever the surface's picker context can offer.
+ *
+ * Two things this must not do, both of which it used to.
+ *
+ * Every option carries the entity's ID, never its label. The label is
+ * resolved fresh at edit time and a rename moves it; the id is the whole
+ * reference, and for a form it is the difference between one submission list
+ * and two (`docs/specs/reusable-forms.md` §2c).
+ *
+ * And the field is decided by the attribute's own TYPE, not by whether a
+ * list happens to have arrived. Keying off the list meant a surface with no
+ * picker context dropped the attribute from the panel entirely — no control,
+ * no explanation, indistinguishable from a component that simply has no such
+ * setting. A picker with nothing to offer must still be a picker, and must
+ * say what is wrong.
+ */
+export function buildEntityPickerField<
+  T extends Aglyn.AglynAttributeSchema,
+>(
+  field: T,
+  kind: Aglyn.EntityPickerKind,
+  context: Aglyn.EntityPickerContextValue | undefined,
+) {
+  const entities = context?.[kind] ?? []
+  return {
+    ...field,
+    component: Aglyn.FieldComponentType.SELECT,
+    options: [
+      {
+        value: '',
+        label: entityPickerPlaceholder(
+          kind,
+          Aglyn.entityListState(context, kind),
+          entities.length,
+        ),
+      },
+      ...[...entities]
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .map((entity) => ({ value: entity.id, label: entity.label })),
+    ],
+  }
+}
+
+/**
  * Which entity lists a node's attributes will need (AGL-703).
  *
  * The provider that owns those lists reads them from Firestore, and it used
@@ -655,34 +763,20 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
  * the dataset list to resolve it against.
  *
  * Exported for the test that pins the mapping — a picker silently missing
- * from this switch renders as a permanently empty dropdown, which looks
- * exactly like a site with no products.
+ * from {@link ENTITY_PICKER_KINDS} renders as a permanently empty dropdown,
+ * which looks exactly like a site with no products.
  */
 export function entityKindsForAttributes(
   attributes: readonly Aglyn.AglynAttributeSchema[] | undefined,
 ): Aglyn.EntityPickerKind[] {
   const kinds = new Set<Aglyn.EntityPickerKind>()
   for (const field of attributes ?? []) {
-    switch (field.component) {
-      case Aglyn.FieldComponentType.PRODUCT_SELECT:
-        kinds.add('products')
-        break
-      case Aglyn.FieldComponentType.COLLECTION_SELECT:
-        kinds.add('collections')
-        break
-      case Aglyn.FieldComponentType.CATEGORY_SELECT:
-        kinds.add('categories')
-        break
-      case Aglyn.FieldComponentType.DATASET_SELECT:
-      case Aglyn.FieldComponentType.DATASET_FIELD_SELECT:
-        kinds.add('datasets')
-        break
-      case Aglyn.FieldComponentType.FORM_SELECT:
-        kinds.add('forms')
-        break
-      default:
-        break
+    if (field.component === Aglyn.FieldComponentType.DATASET_FIELD_SELECT) {
+      kinds.add('datasets')
+      continue
     }
+    const kind = ENTITY_PICKER_KINDS[field.component]
+    if (kind) kinds.add(kind)
   }
   return [...kinds]
 }
@@ -820,22 +914,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const hasFormattedText = isFormattedText(node)
 
     const attributes = useMemo(() => {
-      const entityListFor = (component: Aglyn.FieldComponentType) => {
-        switch (component) {
-          case Aglyn.FieldComponentType.PRODUCT_SELECT:
-            return entityOptions.products
-          case Aglyn.FieldComponentType.COLLECTION_SELECT:
-            return entityOptions.collections
-          case Aglyn.FieldComponentType.CATEGORY_SELECT:
-            return entityOptions.categories
-          case Aglyn.FieldComponentType.DATASET_SELECT:
-            return entityOptions.datasets
-          case Aglyn.FieldComponentType.FORM_SELECT:
-            return entityOptions.forms
-          default:
-            return undefined
-        }
-      }
       // Every described attribute gets a help tooltip beside the field
       // (AGL-600) — the definition's own description, no docs link since
       // attributes are component-specific.
@@ -952,18 +1030,13 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ],
           }
         }
-        const entities = entityListFor(field.component as any)
-        if (entities !== undefined) {
-          return {
-            ...field,
-            component: Aglyn.FieldComponentType.SELECT,
-            options: [
-              { value: '', label: 'None' },
-              ...[...entities]
-                .sort((a, b) => a.label.localeCompare(b.label))
-                .map((entity) => ({ value: entity.id, label: entity.label })),
-            ],
-          }
+        // Id-based entity pickers (AGL-343/344), including the Form
+        // element's `formId`. Recognised by the attribute's declared type,
+        // so a surface whose picker context is missing renders a picker
+        // that SAYS so instead of one that is not there.
+        const entityKind = ENTITY_PICKER_KINDS[field.component]
+        if (entityKind) {
+          return buildEntityPickerField(field, entityKind, entityOptions)
         }
         // Formatted text is owned by the canvas (AGL-2486). Shown, with
         // the reason, rather than silently editable into a prop the

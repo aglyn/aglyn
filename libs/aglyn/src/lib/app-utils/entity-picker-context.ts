@@ -42,6 +42,27 @@ export type EntityPickerKind =
   | 'datasets'
   | 'forms'
 
+/**
+ * How much an empty list is worth believing.
+ *
+ * Every one of these renders as a dropdown with no entries, and an author
+ * looking at four identical empty dropdowns cannot tell "this site has no
+ * forms yet" from "the read failed" from "this editor never lists forms at
+ * all". Only the first of those is a fact about their site; the other two
+ * are the picker being broken, and a picker that cannot say which it is
+ * sends the author looking for a form they already made.
+ *
+ * - `unavailable` — no provider is mounted, so nothing on this surface can
+ *   list entities. The tenant, and any editor outside a host.
+ * - `loading` — a read is open or about to be, and no answer has arrived.
+ *   Also the state of a list nothing has asked for yet: demand is declared
+ *   on the same commit that would display it, so "not asked" and "asked,
+ *   unanswered" are the same beat.
+ * - `ready` — the read settled. An empty list here IS the site's answer.
+ * - `error` — the read failed. Empty means nothing.
+ */
+export type EntityListState = 'unavailable' | 'loading' | 'ready' | 'error'
+
 export interface EntityPickerContextValue {
   products?: EntityOption[]
   collections?: EntityOption[]
@@ -75,6 +96,27 @@ export interface EntityPickerContextValue {
    * them, so nothing there has a picker to ask for.
    */
   request?: (kind: EntityPickerKind) => void
+  /**
+   * Per-kind read state, so a picker can say WHY it has nothing to offer.
+   * A kind the provider omits reads as `loading`; see {@link entityListState}.
+   */
+  status?: Partial<Record<EntityPickerKind, EntityListState>>
+}
+
+/**
+ * What the picker for `kind` should believe about its own emptiness.
+ *
+ * `request` is the "a provider is mounted" signal — it is the one member the
+ * contract already says is absent wherever nothing lists entities — so a
+ * surface with no provider resolves to `unavailable` rather than passing an
+ * empty list off as the site's answer.
+ */
+export function entityListState(
+  context: EntityPickerContextValue | undefined,
+  kind: EntityPickerKind,
+): EntityListState {
+  if (!context?.request) return 'unavailable'
+  return context.status?.[kind] ?? 'loading'
 }
 
 export const EntityPickerContext = createContext<EntityPickerContextValue>({})
