@@ -257,6 +257,7 @@ export function ListEditCard(props: ListEditCardProps) {
             scope={scope as readonly [string, string]}
             draft={draft}
             onChange={setDraft}
+            listId={listId}
           />
         ) : null}
         {/*

@@ -32,6 +32,8 @@ import {
   appendUnsubscribeText,
   marketingFrequencyCap,
   marketingFrequencyVerdict,
+  marketingSunsetDays,
+  marketingSunsetVerdict,
   resetMarketingSendGateForTests,
   setMarketingSendGate,
   unsubscribeHeaders,
@@ -469,5 +471,161 @@ describe('sendEmail with a marketing context', () => {
 
     expect(result.sent).toBe(true)
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).headers).toBeUndefined()
+  })
+})
+
+/*==========================================
+ * THE SUNSET — the policy half.
+ *
+ * Every arm is checked in both directions. A refusal whose only test proves
+ * it refuses would pass over a verdict that refuses everybody, which for this
+ * control means a merchant's whole audience silently stops receiving mail.
+ *=========================================*/
+
+describe('marketingSunsetVerdict', () => {
+  const NOW = 1_800_000_000_000
+  const DAY = 86_400_000
+  const OLD = NOW - 720 * DAY
+
+  it('refuses somebody quiet for longer than the window', () => {
+    expect(
+      marketingSunsetVerdict(
+        { firstSentAtMs: OLD, lastEngagedAtMs: NOW - 200 * DAY },
+        NOW,
+        180,
+      ),
+    ).toMatchObject({ allowed: false, days: 180, quietForDays: 200 })
+  })
+
+  it('allows somebody who engaged inside it', () => {
+    expect(
+      marketingSunsetVerdict(
+        { firstSentAtMs: OLD, lastEngagedAtMs: NOW - 10 * DAY },
+        NOW,
+        180,
+      ),
+    ).toMatchObject({ allowed: true })
+  })
+
+  it('holds at the boundary in both directions', () => {
+    const at = (engagedAtMs: number) =>
+      marketingSunsetVerdict({ firstSentAtMs: OLD, lastEngagedAtMs: engagedAtMs }, NOW, 180)
+        .allowed
+    expect(at(NOW - 180 * DAY)).toBe(true)
+    expect(at(NOW - 180 * DAY - 1)).toBe(false)
+  })
+
+  /**
+   * ⚠️ The guard without which the sunset refuses everybody the day it is
+   * switched on: a person cannot have been quiet for longer than we have been
+   * mailing them.
+   */
+  it('allows a relationship younger than the window, however quiet', () => {
+    expect(
+      marketingSunsetVerdict(
+        { firstSentAtMs: NOW - 10 * DAY, lastEngagedAtMs: null },
+        NOW,
+        180,
+      ),
+    ).toMatchObject({ allowed: true })
+  })
+
+  it('allows an address it holds no mailing record for', () => {
+    expect(
+      marketingSunsetVerdict(
+        { firstSentAtMs: null, lastEngagedAtMs: null },
+        NOW,
+        180,
+      ),
+    ).toMatchObject({ allowed: true })
+  })
+
+  it('refuses somebody who has never engaged at all, once old enough', () => {
+    const verdict = marketingSunsetVerdict(
+      { firstSentAtMs: OLD, lastEngagedAtMs: null },
+      NOW,
+      180,
+    )
+    expect(verdict.allowed).toBe(false)
+    // Quiet since the first message, because there is nothing later to
+    // measure from — and 720 is the honest figure rather than the window.
+    expect(verdict.quietForDays).toBe(720)
+  })
+
+  it('allows everybody when the window is zero', () => {
+    expect(
+      marketingSunsetVerdict({ firstSentAtMs: OLD, lastEngagedAtMs: null }, NOW, 0),
+    ).toMatchObject({ allowed: true, days: 0 })
+  })
+})
+
+describe('marketingSunsetDays', () => {
+  const set = (value: string | undefined) => {
+    if (value === undefined) delete process.env['AGLYN_EMAIL_SUNSET_AFTER_DAYS']
+    else process.env['AGLYN_EMAIL_SUNSET_AFTER_DAYS'] = value
+  }
+  let previous: string | undefined
+  beforeEach(() => {
+    previous = process.env['AGLYN_EMAIL_SUNSET_AFTER_DAYS']
+  })
+  afterEach(() => set(previous))
+
+  it('is off unless an operator sets it', () => {
+    set(undefined)
+    expect(marketingSunsetDays()).toBe(0)
+  })
+
+  it('honors a window inside the range', () => {
+    set('180')
+    expect(marketingSunsetDays()).toBe(180)
+  })
+
+  /*
+   * The opposite handling from `marketingFrequencyCap`, which falls back to
+   * its default. A typo there weakens a guard that is already on; a typo here
+   * would switch on a refusal nobody asked for.
+   */
+  it.each(['0', '1', '99999', 'soon', ''])(
+    'reads %p as off rather than as a default',
+    (value) => {
+      set(value)
+      expect(marketingSunsetDays()).toBe(0)
+    },
+  )
+})
+
+describe('a sunset refusal is terminal, not deferrable', () => {
+  const originalEnvironment = { ...process.env }
+  beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    process.env.RESEND_API_KEY = 'key'
+    process.env.USAGE_EMAIL_FROM = 'Aglyn <noreply@aglyn.com>'
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+    process.env = { ...originalEnvironment }
+    resetMarketingSendGateForTests()
+  })
+
+  it('never leaves a sweep re-reading the same doomed row', async () => {
+    setMarketingSendGate(async () => ({
+      allowed: false,
+      refusal: 'unengaged',
+      detail: 'Quiet for 400 days.',
+    }))
+
+    const result = await sendEmail({
+      to: 'a@b.co',
+      subject: 'News',
+      text: 'Hello',
+      context: 'member post',
+      marketing: { hostId: 'host-1', siteBase: 'https://shop.example.com' },
+    })
+
+    expect(result).toMatchObject({ sent: false, reason: 'unengaged' })
+    // A frequency cap clears by the passage of time, so waiting works. A
+    // sunset clears when the PERSON engages, which more mail from us cannot
+    // bring about — so a sweep must retire the row rather than come back.
+    expect(isDeferrableSendResult(result)).toBe(false)
   })
 })

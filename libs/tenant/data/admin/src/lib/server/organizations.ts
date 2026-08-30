@@ -647,6 +647,7 @@ export type OrgDataCollection =
   | 'datasets'
   | 'contacts'
   | 'contactSegments'
+  | 'lists'
   | 'media'
   | 'mediaFolders'
 

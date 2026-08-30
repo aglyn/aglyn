@@ -32,6 +32,7 @@
  */
 
 import {
+  describeDynamicListRule,
   draftToRule,
   ruleToDraft,
   EMPTY_RULE_DRAFT,
@@ -54,9 +55,17 @@ const FULL_RULE: DynamicListRule = {
     lastPurchaseWithinDays: 90,
     noPurchaseForDays: 30,
   },
+  engagement: {
+    openedWithinDays: 30,
+    clickedWithinDays: 60,
+    notOpenedForDays: 90,
+    notClickedForDays: 120,
+  },
+  inListIds: ['list_a'],
+  notInListIds: ['list_b'],
 }
 
-/** The nine fields, named so a dropped one is reported BY NAME. */
+/** Every dimension, named so a dropped one is reported BY NAME. */
 const RULE_FIELDS = [
   'sources',
   'segmentId',
@@ -66,6 +75,9 @@ const RULE_FIELDS = [
   'createdAfterMs',
   'createdBeforeMs',
   'behavior',
+  'engagement',
+  'inListIds',
+  'notInListIds',
 ] as const
 
 const BEHAVIOR_FIELDS = [
@@ -75,8 +87,15 @@ const BEHAVIOR_FIELDS = [
   'noPurchaseForDays',
 ] as const
 
+const ENGAGEMENT_FIELDS = [
+  'openedWithinDays',
+  'clickedWithinDays',
+  'notOpenedForDays',
+  'notClickedForDays',
+] as const
+
 describe('the rule editor reaches every field of the rule', () => {
-  it('THE CONTROL: the fixture really does set all nine', () => {
+  it('THE CONTROL: the fixture really does set every one', () => {
     // Guard the guard. A fixture that had lost a field would make every
     // round-trip assertion below pass by never testing it.
     for (const field of RULE_FIELDS) {
@@ -85,8 +104,12 @@ describe('the rule editor reaches every field of the rule', () => {
     for (const field of BEHAVIOR_FIELDS) {
       expect(FULL_RULE.behavior?.[field]).toBeDefined()
     }
-    expect(RULE_FIELDS).toHaveLength(8)
+    for (const field of ENGAGEMENT_FIELDS) {
+      expect(FULL_RULE.engagement?.[field]).toBeDefined()
+    }
+    expect(RULE_FIELDS).toHaveLength(11)
     expect(BEHAVIOR_FIELDS).toHaveLength(4)
+    expect(ENGAGEMENT_FIELDS).toHaveLength(4)
   })
 
   it('a rule survives being shown and read back', () => {
@@ -104,6 +127,12 @@ describe('the rule editor reaches every field of the rule', () => {
   it.each(BEHAVIOR_FIELDS)('keeps behavior.%s', (field) => {
     expect(draftToRule(ruleToDraft(FULL_RULE)).behavior?.[field]).toBe(
       FULL_RULE.behavior?.[field],
+    )
+  })
+
+  it.each(ENGAGEMENT_FIELDS)('keeps engagement.%s', (field) => {
+    expect(draftToRule(ruleToDraft(FULL_RULE)).engagement?.[field]).toBe(
+      FULL_RULE.engagement?.[field],
     )
   })
 })
@@ -203,5 +232,189 @@ describe('free text becomes a list, and blanks are not entries', () => {
     // `contactMatchesSegment` reads the two differently.
     expect(draftToRule({ ...EMPTY_RULE_DRAFT, tags: ' , , ' }).tags)
       .toBeUndefined()
+  })
+})
+
+/*==========================================
+ * THE COMBINATOR.
+ *
+ * `all`, `any` and `none` are the three shapes this form authors on top of
+ * the rule's two operators. The assertions worth having are the ones about
+ * the SHAPE it produces, because that is what the sweep evaluates — a form
+ * that showed "any" and stored an AND would be wrong in the one place nobody
+ * looks.
+ *=========================================*/
+
+describe('all, any and none', () => {
+  const TWO_FILTERS: DynamicListRuleDraft = {
+    ...EMPTY_RULE_DRAFT,
+    tags: 'vip',
+    ordersCountAtLeast: '3',
+  }
+
+  it('ANDs the filters by default, with no operator written at all', () => {
+    const rule = draftToRule(TWO_FILTERS)
+    expect(rule).toMatchObject({
+      tags: ['vip'],
+      behavior: { ordersCountAtLeast: 3 },
+    })
+    expect(rule.any).toBeUndefined()
+    expect(rule.negate).toBeUndefined()
+  })
+
+  it('gives each filter its own branch in any mode', () => {
+    const rule = draftToRule({ ...TWO_FILTERS, match: 'any' })
+    expect(rule.any).toEqual([
+      { tags: ['vip'] },
+      { behavior: { ordersCountAtLeast: 3 } },
+    ])
+    // And nothing is left at the top to be ANDed with them.
+    expect(rule.tags).toBeUndefined()
+    expect(rule.behavior).toBeUndefined()
+  })
+
+  /*
+   * Per CONTROL rather than per block. A reader who typed into four purchase
+   * boxes and chose "any one of these" means any one of the four, not a
+   * branch that requires all four together.
+   */
+  it('splits the purchase block into a branch per figure', () => {
+    const rule = draftToRule({
+      ...EMPTY_RULE_DRAFT,
+      match: 'any',
+      ordersCountAtLeast: '3',
+      ltvAtLeast: '500',
+    })
+    expect(rule.any).toEqual([
+      { behavior: { ordersCountAtLeast: 3 } },
+      { behavior: { ltvCentsAtLeast: 50_000 } },
+    ])
+  })
+
+  it('merges the leaves back into one block for all and none', () => {
+    // The mirror of the split above: a shallow merge would keep only the last
+    // leaf of `behavior` and silently drop the other three.
+    expect(
+      draftToRule({
+        ...EMPTY_RULE_DRAFT,
+        ordersCountAtLeast: '3',
+        ltvAtLeast: '500',
+        openedWithinDays: '30',
+        notClickedForDays: '90',
+      }),
+    ).toMatchObject({
+      behavior: { ordersCountAtLeast: 3, ltvCentsAtLeast: 50_000 },
+      engagement: { openedWithinDays: 30, notClickedForDays: 90 },
+    })
+  })
+
+  it('inverts the block in none mode', () => {
+    expect(draftToRule({ ...TWO_FILTERS, match: 'none' })).toMatchObject({
+      negate: true,
+      tags: ['vip'],
+    })
+  })
+
+  /*
+   * "Exclude everyone matching nothing" excludes everyone. The flag is
+   * written only when there is something to invert, so an untouched form left
+   * in `none` selects the sources rather than emptying them.
+   */
+  it('writes no negation when there is nothing to invert', () => {
+    expect(
+      draftToRule({ ...EMPTY_RULE_DRAFT, match: 'none' }).negate,
+    ).toBeUndefined()
+  })
+
+  it.each(['all', 'any', 'none'] as const)('round-trips %s mode', (match) => {
+    expect(ruleToDraft(draftToRule({ ...TWO_FILTERS, match })).match).toBe(match)
+  })
+
+  /*
+   * The form's "any" mode puts each control in a branch of its own, so a
+   * reader who fills in every box authors more branches than most rules will
+   * ever have — and dropping a branch NARROWS an OR. The model's cap has to
+   * sit above what the form can reach or the sentences on screen would
+   * describe a wider audience than the rule selects.
+   */
+  it('never authors more branches than the model will keep', () => {
+    const everything: DynamicListRuleDraft = {
+      ...EMPTY_RULE_DRAFT,
+      match: 'any',
+      tags: 'vip',
+      captureSources: ['form'],
+      formNames: 'Contact us',
+      createdAfter: '2026-01-01',
+      createdBefore: '2026-06-30',
+      ordersCountAtLeast: '3',
+      ltvAtLeast: '500',
+      lastPurchaseWithinDays: '90',
+      noPurchaseForDays: '30',
+      openedWithinDays: '30',
+      clickedWithinDays: '60',
+      notOpenedForDays: '90',
+      notClickedForDays: '120',
+      inListIds: ['a'],
+      notInListIds: ['b'],
+    }
+    expect(draftToRule(everything).any).toHaveLength(15)
+  })
+})
+
+describe('the rule reads back as sentences', () => {
+  const clauses = (rule: Parameters<typeof describeDynamicListRule>[0]) =>
+    describeDynamicListRule(rule).join(' ')
+
+  it('says which lean each engagement arm takes', () => {
+    // The reason it is spelled out: `notOpenedForDays` counts somebody with
+    // no record, and `noPurchaseForDays` beside it does not. A reader
+    // checking a paragraph against their intent cannot be expected to
+    // remember which dimension leans which way.
+    expect(
+      clauses({ sources: ['contacts'], engagement: { notOpenedForDays: 90 } }),
+    ).toContain('or never opened anything')
+    expect(
+      clauses({ sources: ['contacts'], behavior: { noPurchaseForDays: 90 } }),
+    ).toContain('Has bought nothing for 90 days')
+  })
+
+  it('names an audience rather than printing its id', () => {
+    expect(
+      describeDynamicListRule(
+        { sources: ['contacts'], notInListIds: ['list_a'] },
+        { lists: { list_a: 'Customers' } },
+      ).join(' '),
+    ).toContain('Not on: Customers')
+  })
+
+  /*
+   * ONE clause for the whole disjunction. "At least one of" printed per
+   * branch would read as a separate requirement per branch, which is the AND
+   * this operator exists to escape.
+   */
+  it('reads the branches as a single disjunction, not one demand each', () => {
+    const sentence = clauses({
+      sources: ['contacts'],
+      any: [{ tags: ['vip'] }, { behavior: { ordersCountAtLeast: 3 } }],
+    })
+    expect(sentence).toContain('And at least one of these:')
+    expect(sentence).toContain('; or ')
+    expect(sentence.match(/at least one of these/g)).toHaveLength(1)
+  })
+
+  /*
+   * And ONE clause for a negated block. "Excludes anyone tagged vip.
+   * Excludes anyone who spent over 500." reads as two independent
+   * exclusions; the rule excludes people who are BOTH.
+   */
+  it('reads a negated block as one exclusion rather than several', () => {
+    const sentence = clauses({
+      sources: ['contacts'],
+      negate: true,
+      tags: ['vip'],
+      behavior: { ordersCountAtLeast: 3 },
+    })
+    expect(sentence).toContain('Excludes anyone matching all of:')
+    expect(sentence.match(/Excludes anyone/g)).toHaveLength(1)
   })
 })

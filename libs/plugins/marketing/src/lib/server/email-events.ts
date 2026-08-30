@@ -34,7 +34,10 @@ import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression
 // Same leaf-import reasoning again: the per-recipient delivery log is the only
 // record staff have of what we sent someone, and a mocked-away writer is a
 // green test over an empty log.
-import { recordEmailDeliveryEvents } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+import {
+  recordEmailDeliveryEvents,
+  recordPersonEngagement,
+} from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
@@ -395,6 +398,32 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
      * defend.
      */
     const firstSeen = outcomes.filter((one) => one.firstOfType).length
+
+    /*==========================================
+     * THE PER-PERSON ENGAGEMENT ROLLUP.
+     *
+     * Opens and clicks were recorded per message and per campaign and rolled
+     * onto NOBODY, so "has this person engaged lately" could only be answered
+     * by walking every message subcollection. Two shipped things needed that
+     * answer and could not have it: an audience rule that says "opened in the
+     * last 30 days", and a sunset that stops mailing an address which has
+     * gone quiet.
+     *
+     * HERE, above the type gate and above the campaign gates, on purpose.
+     * Engagement is a fact about the PERSON, and the message they engaged
+     * with does not have to be a campaign for it to be one — somebody who
+     * clicks a receipt is reading our mail. Placing it below the
+     * `hostId`/`campaignId` gate would record engagement for campaign mail
+     * only and then let a sunset refuse people on the strength of it, which
+     * is a control drawing conclusions from a fraction of the evidence.
+     *
+     * Driven by the same `firstOfType` outcomes `firstSeen` is counted from,
+     * so a replay contributes nothing here for the same reason it contributes
+     * nothing to `stats.uniqueOpens` — and the rollup needs no claim of its
+     * own. Best-effort: a person's stamp is worth less than the campaign
+     * counters below it and much less than a suppression.
+     *=========================================*/
+    await recordPersonEngagement(outcomes).catch(() => 0)
 
     if (
       type !== 'email.opened' &&

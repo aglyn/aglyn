@@ -233,6 +233,19 @@ export type SendEmailFailureReason =
    * not need to do anything about it — its next run asks again.
    */
   | 'frequency-capped'
+  /**
+   * A MARKETING send refused because this site has been mailing this person
+   * for longer than the sunset window with nothing to show for it.
+   *
+   * TERMINAL for a sweep, and it sits with `suppressed` rather than with
+   * `frequency-capped` for a reason worth stating: the frequency window
+   * clears by the passage of time, so waiting works. A sunset clears when the
+   * PERSON engages, which more mail from us cannot cause — so a sweep that
+   * treated it as deferrable would re-read the same doomed row on every beat
+   * forever. Nothing about the recipient has been reduced; the next message
+   * after they open anything goes.
+   */
+  | 'unengaged'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -296,7 +309,9 @@ export function sendFailureReason(
  * rolls, and so does the marketing frequency window. Everything else is
  * either a delivery that happened or a failure a retry repeats — a
  * suppression most of all, since retrying is the exact behavior a suppression
- * exists to stop.
+ * exists to stop, and a sunset for the same reason at one remove: it clears
+ * when the recipient engages, which no amount of further mail from us brings
+ * about.
  *
  * A resumable sweep uses this to decide whether to leave its subject
  * unstamped. Stamping on a deferrable refusal discards a message; NOT
@@ -558,7 +573,9 @@ export async function sendEmail(
         const reason: SendEmailFailureReason =
           verdict.refusal === 'frequency-capped'
             ? 'frequency-capped'
-            : 'suppressed'
+            : verdict.refusal === 'unengaged'
+              ? 'unengaged'
+              : 'suppressed'
         console.warn(`${label} not sent — ${verdict.detail ?? reason}`)
         return { sent: false, reason, detail: verdict.detail }
       }

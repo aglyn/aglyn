@@ -336,6 +336,15 @@ const recordedDeliveryEvents: unknown[][] = []
  * is settable per test, and both readings are exercised below.
  */
 let mockFirstOfType = true
+/**
+ * What the handler handed the PERSON ROLLUP, per call.
+ *
+ * The rollup's own idempotency is proven against a Firestore double in
+ * `tenant-data-admin`; what only this file can prove is that the handler
+ * feeds it the delivery log's own verdict rather than re-deriving one — which
+ * is the entire reason a replay costs nothing.
+ */
+const recordedEngagement: unknown[][] = []
 jest.mock(
   '@aglyn/tenant-data-admin/server/email-delivery-log',
   () => ({
@@ -344,7 +353,14 @@ jest.mock(
       return events.map((event: any) => ({
         firstOfType: mockFirstOfType,
         providerMessageId: String(event?.providerMessageId ?? ''),
+        to: String(event?.to ?? ''),
+        type: String(event?.type ?? ''),
+        at: Number(event?.at ?? 0),
       }))
+    }),
+    recordPersonEngagement: jest.fn(async (outcomes: unknown[]) => {
+      recordedEngagement.push(outcomes)
+      return 0
     }),
   }),
 )
@@ -546,6 +562,7 @@ let errors: unknown[][] = []
 beforeEach(() => {
   docs.clear()
   recordedDeliveryEvents.length = 0
+  recordedEngagement.length = 0
   fixtureMessageCounter = 0
   mockFirstOfType = true
   updateFailure = null
@@ -1729,5 +1746,93 @@ describe('the per-campaign link rollup', () => {
     await deliver(event('email.opened', TAGS))
 
     expect(docs.has(LINKS_PATH)).toBe(false)
+  })
+})
+
+/*==========================================
+ * THE PER-PERSON ENGAGEMENT ROLLUP.
+ *
+ * What only this file can prove is WHERE the handler asks for it and WHAT it
+ * hands over. The rollup's own arithmetic — that it moves forward only, and
+ * that a `firstOfType: false` outcome writes nothing — is asserted against a
+ * Firestore double in `tenant-data-admin`.
+ *=========================================*/
+
+describe('the person rollup', () => {
+  /**
+   * ⚠️ THE PROPERTY THAT MAKES A REPLAY FREE.
+   *
+   * The handler passes the delivery log's OWN verdict through untouched. A
+   * handler that re-derived `firstOfType`, or that passed a hard-coded
+   * `true`, would advance a person's stamp on every redelivered event — and
+   * for a counted rollup it would inflate one.
+   */
+  it('is handed the delivery log’s verdict rather than a re-derived one', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.clicked', TAGS))
+
+    expect(recordedEngagement).toHaveLength(1)
+    expect(recordedEngagement[0]).toEqual([
+      expect.objectContaining({
+        firstOfType: true,
+        to: RECIPIENT,
+        type: 'clicked',
+      }),
+    ])
+  })
+
+  it('passes a repeat event through as not-first, not as first', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    mockFirstOfType = false
+
+    await deliver(event('email.opened', TAGS))
+
+    expect(recordedEngagement[0]).toEqual([
+      expect.objectContaining({ firstOfType: false }),
+    ])
+  })
+
+  /**
+   * ABOVE THE CAMPAIGN GATES.
+   *
+   * Engagement is a fact about the PERSON, and the message they engaged with
+   * does not have to be a campaign for it to be one — somebody who clicks a
+   * receipt is reading our mail. A rollup below the `hostId`/`campaignId`
+   * gate would record engagement for campaign mail only, and then let a
+   * sunset refuse people on the strength of a fraction of the evidence.
+   */
+  it('records an open on mail that carries no campaign tag at all', async () => {
+    const result = await deliver(event('email.opened', {}))
+
+    expect(result.body).toMatchObject({ ignored: true })
+    expect(recordedEngagement[0]).toEqual([
+      expect.objectContaining({ to: RECIPIENT, type: 'opened' }),
+    ])
+  })
+
+  /*
+   * And above the type gate: a `sent` or `delivered` event reaches the rollup
+   * too, which is what lets the rollup rather than the handler decide which
+   * event types count as engagement. One list of engagement types, in the
+   * module that owns the store.
+   */
+  it('is asked about every event type, and decides nothing itself', async () => {
+    await deliver({ type: 'email.sent', data: { email_id: 'e1', to: [RECIPIENT] } })
+
+    expect(recordedEngagement).toHaveLength(1)
+  })
+
+  it('cannot cost the campaign counters anything when it fails', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const rollup = jest.requireMock(
+      '@aglyn/tenant-data-admin/server/email-delivery-log',
+    ).recordPersonEngagement as jest.Mock
+    rollup.mockRejectedValueOnce(new Error('rollup is down'))
+
+    const result = await deliver(event('email.opened', TAGS))
+
+    expect(result.body).toMatchObject({ ok: true })
+    expect((docs.get(CAMPAIGN_PATH) as any).stats.opens).toBe(3)
   })
 })

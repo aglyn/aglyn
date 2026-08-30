@@ -44,6 +44,7 @@ import {
   readEmailDeliveryHistoryForAddresses,
   recordEmailDeliveryEvent,
 } from './email-delivery-log'
+import { FieldValue } from 'firebase-admin/firestore'
 import { emailSuppressionKey } from './email-suppression'
 import { resolveAccountAddresses } from './account-addresses'
 
@@ -87,6 +88,21 @@ function applyWrite(
   for (const [key, value] of Object.entries(update)) {
     if (value && typeof value === 'object' && 'operand' in (value as any)) {
       next[key] = Number(next[key] ?? 0) + Number((value as any).operand)
+      continue
+    }
+    // `FieldValue.delete()` — asked before the timestamp branch below, which
+    // matches every sentinel and would otherwise store a deletion as a
+    // written field. Real Firestore honors it inside `set({merge:true})`, and
+    // this file's tombstone assertion is precisely that the fields an erasure
+    // destroyed do not survive on the tombstone — a double that kept them
+    // would report the erasure as incomplete when it was not.
+    if (
+      value &&
+      typeof value === 'object' &&
+      typeof (value as any).isEqual === 'function' &&
+      FieldValue.delete().isEqual(value as any)
+    ) {
+      delete next[key]
       continue
     }
     if (
