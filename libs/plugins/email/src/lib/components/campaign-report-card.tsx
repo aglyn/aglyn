@@ -36,9 +36,14 @@ import {
   campaignLinkReport,
   campaignReport,
   type CampaignLinkRollup,
-  type CampaignRate,
   type CampaignStats,
 } from '../model/campaign-report'
+/*
+ * The three renderers every email report shares. Imported rather than kept
+ * here, so "a rate prints its denominator" is one implementation and not a
+ * convention each new card has to remember.
+ */
+import { Figure, percent, RateRow, Section } from './report-figures'
 
 /**
  * The help affordance, hoisted so BOTH headers carry it.
@@ -104,11 +109,18 @@ export interface CampaignReportCardProps {
  *
  * ## No per-recipient view here, deliberately
  *
- * The delivery log holds recipient addresses, and every number on this screen
- * is an aggregate that carries none. There is a per-recipient view — the
- * staff delivery log on the user detail page — and it is behind a staff claim
- * that records who looked. Adding a per-recipient list to a surface a site
- * editor can open would be that data with neither.
+ * Every number on this screen is an aggregate that carries no address, and
+ * that is what makes it two single-document reads. A per-recipient list is a
+ * different read and a different question, so it lives where it is asked:
+ * the design report's recipients table, which resolves the campaigns from the
+ * design on a server that has already checked the reader's site role, and
+ * returns only rows tagged with that site.
+ *
+ * The other per-recipient view — the staff delivery log on the user detail
+ * page — spans every site on the install and is behind a staff claim that
+ * records who looked. Neither reaches this card: adding a recipient list here
+ * would put an unbounded read behind a widget whose whole cost model is that
+ * it has none.
  */
 export function CampaignReportCard(props: CampaignReportCardProps) {
   const { hostId, campaignId, basePath } = props
@@ -396,85 +408,5 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
   )
 }
 CampaignReportCard.displayName = 'CampaignReportCard'
-
-/** A titled block. */
-function Section(props: { title: string; children: React.ReactNode }) {
-  return (
-    <Stack spacing={1}>
-      <Typography variant="overline" color="text.secondary">
-        {props.title}
-      </Typography>
-      {props.children}
-    </Stack>
-  )
-}
-
-/**
- * One count, with the population it describes named underneath.
- *
- * `null` renders as an em dash and NOT as zero, and that is the whole reason
- * this takes `number | null` rather than defaulting. "We have no delivery
- * events for this campaign" and "nothing was delivered" lead a merchant to
- * opposite conclusions about their sending domain, and a zero renders the
- * first as the second.
- */
-function Figure(props: {
-  label: string
-  value: number | null
-  note: string
-}) {
-  return (
-    <Stack sx={{ minWidth: 140 }}>
-      <Typography variant="h6">
-        {props.value === null ? '—' : props.value.toLocaleString()}
-      </Typography>
-      <Typography variant="body2">{props.label}</Typography>
-      <Typography variant="caption" color="text.secondary">
-        {props.value === null ? 'not recorded' : props.note}
-      </Typography>
-    </Stack>
-  )
-}
-
-/** A percentage to one decimal place. */
-function percent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
-}
-
-/**
- * One rate, with its denominator spelled out on the same line.
- *
- * The denominator is rendered as `12 of 480 delivered` rather than as a
- * tooltip or a footnote, because a reader comparing two rates has to be able
- * to see they are over different populations without hovering anything. A
- * `null` rate draws the dash and no number at all — there is no branch here
- * that substitutes a different denominator to get something printable.
- */
-function RateRow(props: { label: string; rate: CampaignRate | null }) {
-  const { label, rate } = props
-  return (
-    <Stack
-      direction="row"
-      spacing={2}
-      sx={{ justifyContent: 'space-between', alignItems: 'baseline' }}
-    >
-      <Typography variant="body2">{label}</Typography>
-      {rate ? (
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
-          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-            {percent(rate.value)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {`${rate.numerator.toLocaleString()} of ${rate.denominator.toLocaleString()} ${rate.denominatorLabel}`}
-          </Typography>
-        </Stack>
-      ) : (
-        <Typography variant="caption" color="text.secondary">
-          {'— not enough recorded to compute'}
-        </Typography>
-      )}
-    </Stack>
-  )
-}
 
 export default CampaignReportCard

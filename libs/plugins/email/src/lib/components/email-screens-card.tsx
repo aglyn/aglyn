@@ -17,7 +17,7 @@
 'use client'
 
 import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useConsoleHostRoute,
@@ -26,7 +26,7 @@ import {
   useHostResourceApi,
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Stack, Typography } from '@mui/material'
+import { Button, Chip, Stack, Typography } from '@mui/material'
 import {
   collection,
   doc,
@@ -36,6 +36,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
+import { templateProvenance } from '../model/template-provenance'
 import { createEmailScreen } from '../utils/create-email-screen'
 
 // The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
@@ -52,13 +53,32 @@ const besignerHref = (
   buildRoute(Route.SCREEN_BESIGNER, { orgSlug, host, screenId, versionId })
 
 /**
- * Email screens list (AGL-395): designed emails are besigner documents with
- * kind 'email'. They used to show in the main Screens list; now they have
- * their own list here on the Emails page. Open in the besigner (where only
- * email-safe components are offered), or start a new one.
+ * THE TEMPLATES: reusable besigner documents an email is built from.
+ *
+ * A template is a screen document with `kind: 'email'`, kept out of the main
+ * Screens list and opened in the besigner with only email-safe components on
+ * offer. It is not itself a message — a message is what a campaign sends, and
+ * one template can be behind many of them, which is why the row leads to the
+ * template's own page rather than straight into the editor.
+ *
+ * A template is not necessarily this org's. One installed from a marketplace
+ * listing appears here beside the locally authored ones, carries its
+ * publisher's provenance on the same document, and opens the same detail
+ * page; the chip beside its name is what distinguishes them.
  */
-export function EmailScreensCard(props: { hostId: string }) {
-  const { hostId } = props
+export function EmailScreensCard(props: {
+  hostId: string
+  /**
+   * The emails hub URL, so a row can link to the template's own page.
+   *
+   * Optional because the shell hands `basePath` to the page and not to this
+   * card, and a card rendered without one still lists and still opens the
+   * besigner — it simply offers no detail link rather than building a
+   * half-formed URL.
+   */
+  basePath?: string
+}) {
+  const { hostId, basePath } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
@@ -92,7 +112,7 @@ export function EmailScreensCard(props: { hostId: string }) {
       }
     } catch (error: any) {
       console.error(error)
-      enqueueSnackbar(error?.message ?? 'Creating the email failed', {
+      enqueueSnackbar(error?.message ?? 'Creating the template failed', {
         variant: 'error',
       })
     }
@@ -100,8 +120,10 @@ export function EmailScreensCard(props: { hostId: string }) {
 
   const handleDelete = (screen: any) => async () => {
     const confirmed = await confirm({
-      title: 'Delete this email?',
-      description: `"${screen.displayName ?? 'Untitled email'}" will be removed.`,
+      title: 'Delete this template?',
+      description:
+        `"${screen.displayName ?? 'Untitled template'}" will be removed. ` +
+        'Emails already sent from it keep their reports.',
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
@@ -115,7 +137,7 @@ export function EmailScreensCard(props: { hostId: string }) {
 
   return (
     <CardDisplay
-      header={'Emails'}
+      header={'Templates'}
       help={pluginDocsHelp('designedEmails', { anchor: '#create-a-template' })}
       contentGutterX
       contentGutterY
@@ -123,8 +145,9 @@ export function EmailScreensCard(props: { hostId: string }) {
       <Stack spacing={1}>
         {emailScreens.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'Design reusable emails here, then send them as campaigns. New ' +
-              'emails open in the besigner with email-safe components only.'}
+            {'Design a reusable email here, then send it from a campaign. A ' +
+              'new template opens in the besigner with email-safe components ' +
+              'only.'}
           </Typography>
         ) : (
           emailScreens.map((screen: any) => (
@@ -135,8 +158,30 @@ export function EmailScreensCard(props: { hostId: string }) {
               sx={{ alignItems: 'center' }}
             >
               <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>
-                {screen.displayName ?? 'Untitled email'}
+                {/*
+                 * The name is the way IN, the same shape the screens,
+                 * components, layouts and templates listings use: a row opens
+                 * the resource's own page, and the editor is reached from
+                 * there. Edit stays beside it because a template that is
+                 * being worked on is opened far more often than it is read
+                 * about.
+                 */}
+                {basePath ? (
+                  <AppLink href={`${basePath}/designs/${screen.$id}`}>
+                    {screen.displayName ?? 'Untitled template'}
+                  </AppLink>
+                ) : (
+                  (screen.displayName ?? 'Untitled template')
+                )}
               </Typography>
+              {/*
+                * WHOSE template this is, where the reader is choosing between
+                * them. An installed one is versioned by its publisher and can
+                * be withdrawn, which is not a property a name can carry.
+                */}
+              {templateProvenance(screen).origin === 'installed' ? (
+                <Chip size="small" label="Installed" />
+              ) : null}
               <Button
                 size="small"
                 disabled={!orgSlug || !subdomain}
@@ -165,7 +210,7 @@ export function EmailScreensCard(props: { hostId: string }) {
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => void handleCreate()}
         >
-          {'New email'}
+          {'New template'}
         </Button>
       </Stack>
     </CardDisplay>

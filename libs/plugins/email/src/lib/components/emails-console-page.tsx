@@ -21,7 +21,10 @@ import { HubSections } from '@aglyn/shared-ui-next'
 import type { ReactNode } from 'react'
 import CampaignReportCard from './campaign-report-card'
 import CampaignsCard from './campaigns-card'
+import EmailDetail from './email-detail'
 import EmailScreensCard from './email-screens-card'
+import EmailTemplateDetail from './email-template-detail'
+import EmailsListCard from './emails-list-card'
 import ListsCard from './lists-card'
 import SuppressionsCard from './suppressions-card'
 import type { EmailsConsoleSectionId } from './emails-console-sections'
@@ -31,9 +34,9 @@ import type { EmailsConsoleSectionId } from './emails-console-sections'
  * being read (AGL-2501).
  *
  * A function rather than a map of nodes on purpose: a `Record<id, ReactNode>`
- * would CONSTRUCT all four every render, and each card opens its Firestore
- * listens on mount — which is the entire cost this page exists to stop paying.
- * Only the returned branch is ever built.
+ * would CONSTRUCT every section on every render, and each card opens its
+ * Firestore listens on mount — which is the entire cost this page exists to
+ * stop paying. Only the returned branch is ever built.
  */
 function sectionBody(
   section: EmailsConsoleSectionId,
@@ -69,8 +72,45 @@ function sectionBody(
       ) : (
         <CampaignsCard hostId={hostId} />
       )
+    case 'emails':
+      /*
+       * `/emails/emails/{emailId}` is ONE MESSAGE — the thing that was or
+       * will be sent, as against the campaign that groups messages and the
+       * template they are built from. A route for the same reasons the
+       * campaign report is one: it is linkable, and its preview, link table
+       * and recipient list are reads the list above it must not pay for.
+       */
+      return detail[0] ? (
+        <EmailDetail
+          hostId={hostId}
+          emailId={detail[0]}
+          basePath={basePath}
+        />
+      ) : (
+        <EmailsListCard hostId={hostId} basePath={basePath} />
+      )
     case 'designs':
-      return <EmailScreensCard hostId={hostId} />
+      /*
+       * `/emails/designs/{screenId}` is one TEMPLATE's page. The section id
+       * stays `designs` while the label says Templates — an id appears in
+       * links people keep, so the vocabulary moves and the URL does not
+       * break.
+       *
+       * A route for the same reasons the campaign report is one: it is
+       * linkable, and the listing above it is a cheaper surface a reader who
+       * came for one template should not have to mount. The preview, the
+       * aggregate figures and the recipients table all hang off this branch,
+       * so none of them is constructed while the list is what is being read.
+       */
+      return detail[0] ? (
+        <EmailTemplateDetail
+          hostId={hostId}
+          screenId={detail[0]}
+          basePath={basePath}
+        />
+      ) : (
+        <EmailScreensCard hostId={hostId} basePath={basePath} />
+      )
     case 'audiences':
       return <ListsCard hostId={hostId} />
     case 'suppressions':
@@ -82,10 +122,14 @@ function sectionBody(
 
 /**
  * Emails page (AGL-395): the console surface owned by the email plugin,
- * rendered by the shell's generic plugin route — Campaigns composer/history,
- * the designed-email list (which no longer clutters the main Screens list),
- * audience lists, and since AGL-2410 the suppression list, which had been
- * written by two paths and displayed by none.
+ * rendered by the shell's generic plugin route.
+ *
+ * Five sections, and three of them are three different things a merchant
+ * calls "an email": a CAMPAIGN groups sends, an EMAIL is one message that was
+ * or will be sent, and a TEMPLATE is the reusable besigner document a message
+ * is built from. Keeping them apart is what lets each carry its own report —
+ * a message's own numbers, and a template's summed across every message sent
+ * from it. Audience lists and the suppression list complete the surface.
  *
  * Sections are ROUTES (AGL-2501). `HubTabs lazy` already mounted one panel, so
  * this is not a read saving — `emails-console-read-cost.spec.tsx` was written

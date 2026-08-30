@@ -18,7 +18,11 @@
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
 export type EmailsConsoleSectionId =
-  'campaigns' | 'designs' | 'audiences' | 'suppressions'
+  | 'campaigns'
+  | 'emails'
+  | 'designs'
+  | 'audiences'
+  | 'suppressions'
 
 /**
  * The emails console's sections, in rail order (AGL-2501).
@@ -37,7 +41,17 @@ export type EmailsConsoleSectionId =
  */
 export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'campaigns', label: 'Campaigns' },
-  { id: 'designs', label: 'Designs' },
+  // The individual messages, as against the campaigns that group them: one
+  // row per email that was or will be sent, each with its own report.
+  { id: 'emails', label: 'Emails' },
+  /*
+   * The reusable besigner documents a message is built from.
+   *
+   * The id stays `designs` while the label says Templates, which is this
+   * registry's own rule applied: an id appears in links people keep and a
+   * label does not, so the vocabulary moves and the URL does not break.
+   */
+  { id: 'designs', label: 'Templates' },
   { id: 'audiences', label: 'Audiences' },
   // Beside the audiences rather than inside them (AGL-2410): a suppression is
   // not a list you build, it is the reason a list you built did not all get
