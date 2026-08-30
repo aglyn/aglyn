@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import {
   hostTokenMerge,
   type HostTokenSource,
@@ -77,7 +78,13 @@ export async function renderHostEmailWithTokens(
     // send, a preview with sample data), and this is not the place to overrule
     // it.
     { ...hostTokenMerge(host), ...merge },
-    options,
+    // The HTML policy joins here for the same reason the token map does, and
+    // it is the same reason: `renderEmailHtml` requires one, `scope:shared`
+    // cannot import one, and this lib already sits above both. Supplying it
+    // here rather than at each of the nine senders keeps their signatures
+    // untouched and gives the tenth one the right policy without knowing it
+    // needed to ask.
+    { ...options, sanitize: sanitizeAuthorHtml },
   )
 }
 

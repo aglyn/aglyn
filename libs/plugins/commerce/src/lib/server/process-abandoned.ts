@@ -129,9 +129,11 @@ export async function scanAbandonedCheckouts(
       templateCache.set(hostId, loaded)
     }
     const designed = loaded
-      ? renderLoadedHostEmail(loaded, {
-          'cart.url': String(data.resumeUrl ?? ''),
-        })
+      ? renderLoadedHostEmail(
+          loaded,
+          { 'cart.url': String(data.resumeUrl ?? '') },
+          Aglyn.sanitizeAuthorHtml,
+        )
       : null
     await sendEmail({
       to: String(data.email),

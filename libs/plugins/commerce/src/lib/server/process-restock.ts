@@ -141,10 +141,14 @@ export async function scanRestockAlerts(
       )
     }
     const designed = loaded
-      ? renderLoadedHostEmail(loaded, {
-          'product.name': String(product.name ?? ''),
-          'product.url': productUrl,
-        })
+      ? renderLoadedHostEmail(
+          loaded,
+          {
+            'product.name': String(product.name ?? ''),
+            'product.url': productUrl,
+          },
+          Aglyn.sanitizeAuthorHtml,
+        )
       : null
     await sendEmail({
       to: String(data.email),

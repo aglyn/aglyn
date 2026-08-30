@@ -25,6 +25,7 @@ import {
   createResourceUid,
   decodeStoredNodes,
   resolveBrandingProfile,
+  sanitizeAuthorHtml,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@aglyn/plugins-email/model'
@@ -1106,6 +1107,9 @@ export async function performCampaignSend(
           rootId: EMAIL_NODE_ROOT_ID,
           subject: recipientSubject,
           preheader: template.preheader,
+          // The policy the campaign editor previews these same nodes under —
+          // `sanitizeCustomHtml` in the email plugin is this function.
+          sanitize: sanitizeAuthorHtml,
           // An image the author picked is stored as a `media:` reference and
           // resolves site-RELATIVE; an inbox has no page to resolve it against,
           // so without an origin the renderer drops it (AGL-1224). `siteBase` is

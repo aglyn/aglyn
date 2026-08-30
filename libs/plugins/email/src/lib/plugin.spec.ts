@@ -84,6 +84,7 @@ describe('email plugin', () => {
     for (const componentId of Aglyn.listAcceptingComponentIds(EMAIL_BUNDLE)) {
       const { html } = renderEmailHtml({
         rootId: 'root',
+        sanitize: (value) => value,
         nodes: {
           root: { componentId: 'div', nodes: ['subject'] },
           subject: { componentId, props: {}, nodes: ['sentinel'] },
