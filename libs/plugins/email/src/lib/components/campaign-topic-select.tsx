@@ -41,7 +41,7 @@ export interface CampaignTopicSelectProps {
  *
  * ## Why this is its own component
  *
- * The composer (`campaigns-card.tsx`) is a large component under concurrent
+ * The composer (`campaign-composer.tsx`) is a large component under concurrent
  * edit. Keeping the picker separate means it can be dropped into the
  * composer's field stack as one line and carries its own read of the org
  * catalog, rather than threading a fifth collection listener through a

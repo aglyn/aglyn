@@ -29,7 +29,7 @@
  * has ever gone out carries `cid={sendId}`, those emails sit in inboxes
  * forever, and the `cid` is inside the link's HMAC — so a send id that stops
  * resolving is an opt-out that stops working, which is a compliance failure
- * rather than a broken page. `/emails/campaigns/{sendId}` is likewise
+ * rather than a broken page. `/marketing/campaigns/{sendId}` is likewise
  * linkable by design: a merchant pastes it into a message about last week's
  * send.
  *

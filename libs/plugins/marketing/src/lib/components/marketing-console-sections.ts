@@ -17,7 +17,11 @@
 
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
-export type MarketingConsoleSectionId = 'overview' | 'overlays' | 'experiments'
+export type MarketingConsoleSectionId =
+  | 'overview'
+  | 'campaigns'
+  | 'overlays'
+  | 'experiments'
 
 /**
  * The marketing console's sections, in rail order (AGL-2501).
@@ -36,6 +40,19 @@ export type MarketingConsoleSectionId = 'overview' | 'overlays' | 'experiments'
  */
 export const MARKETING_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'overview', label: 'Overview' },
+  /*
+   * A campaign is a CONTAINER with a window of dates, a set of lists, a topic
+   * and revenue attribution — a marketing object that reaches people by
+   * email, rather than an email object. It sits beside A/B testing because
+   * that is what campaign results are attributed against, and beside the
+   * overlays because both are ways of putting the same offer in front of the
+   * same audience.
+   *
+   * The individual MESSAGES stay on the Emails console, along with the
+   * templates they are built from and the sending identities they leave on.
+   * Each email's page links here for the campaign it belongs to.
+   */
+  { id: 'campaigns', label: 'Campaigns' },
   { id: 'overlays', label: 'Overlays' },
   { id: 'experiments', label: 'A/B testing' },
 ]

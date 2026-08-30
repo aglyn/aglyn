@@ -18,16 +18,19 @@
 /**
  * ONE URL, TWO KINDS OF ID.
  *
- * `/emails/campaigns/{id}` addressed a single SEND for as long as it has
- * existed, and it is linkable by design — the console's own comment says a
- * merchant pastes it into a message about last week's send. Now that a
- * campaign is a container, the same path also addresses a container.
+ * `/marketing/campaigns/{id}` addresses a campaign CONTAINER and also a single
+ * SEND, and it is linkable by design — the console's own comment says a
+ * merchant pastes it into a message about last week's send.
  *
- * The id is therefore answered by READING: a container renders the campaign,
- * and anything else falls through to the send's own report exactly as before.
- * That fallback is the whole migration story — no send document was rewritten
- * and no id reassigned, so every unsubscribe link already in an inbox (each
+ * The id is answered by READING: a container renders the campaign, and
+ * anything else falls through to the send's own report. That fall-through is
+ * what keeps a send id addressing a page — no send document is rewritten and
+ * no id reassigned, so every unsubscribe link already in an inbox (each
  * carrying `cid={sendId}` inside its signature) resolves untouched.
+ *
+ * The MESSAGE and TEMPLATE this page links to keep their own pages on the
+ * Emails console, so those two hrefs are built from the sibling hub rather
+ * than from this surface's `basePath` — the assertions below hold that apart.
  *
  * The other thing this file holds down is the cost the campaign route was
  * split out to avoid: the composer opens listens of its own, and a reader who
@@ -93,7 +96,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
  * The topic catalog ANSWERS NOTHING UNLESS IT IS ASKED, so the gate itself is
  * assertable rather than only the picker's contents.
  */
-jest.mock('./use-org-email-topics', () => ({
+jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
   useOrgEmailTopics: (_hostId: string, options?: { enabled?: boolean }) => {
     const enabled = options?.enabled ?? true
     topicsEnabled.push(enabled)
@@ -178,7 +181,7 @@ jest.mock('next/navigation', () => ({
     push: (href: string) => pushed.push(href),
     replace: jest.fn(),
   }),
-  useParams: () => ({}),
+  useParams: () => ({ orgSlug: 'acme', host: 'store' }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
 }))
@@ -195,7 +198,7 @@ jest.mock('./campaign-report-card', () => ({
   __esModule: true,
   default: (props: any) => <div>{`send report for ${props.campaignId}`}</div>,
 }))
-jest.mock('./campaign-composer', () => ({
+jest.mock('@aglyn/plugins-email/components/campaign-composer', () => ({
   __esModule: true,
   default: (props: any) => (
     <div>{`composer for ${props.emailCampaignId}`}</div>
@@ -265,7 +268,7 @@ const mount = async (campaignId: string) => {
     <CampaignDetailCard
       hostId="host-1"
       campaignId={campaignId}
-      basePath="/acme/hosts/store/emails"
+      basePath="/acme/hosts/store/marketing"
     />,
   )
   await act(async () => {
@@ -332,7 +335,7 @@ describe('an id that names a campaign', () => {
     fireEvent.click(rows[0])
 
     expect(pushed).toContain('/acme/hosts/store/emails/emails/send-2')
-    expect(pushed).not.toContain('/acme/hosts/store/emails/campaigns/send-2')
+    expect(pushed).not.toContain('/acme/hosts/store/marketing/campaigns/send-2')
   })
 
   it('the subject is a real link, and does not double-push', async () => {
@@ -482,7 +485,7 @@ describe('an id that names a campaign', () => {
 describe('an id that names a SEND', () => {
   it('falls through to the send’s own report', async () => {
     /*
-     * The URL guarantee. `/emails/campaigns/{sendId}` is what every report
+     * The URL guarantee. `/marketing/campaigns/{sendId}` is what every report
      * link minted before campaigns became containers points at, and those
      * links live in merchants' own messages.
      */
@@ -731,7 +734,7 @@ describe('deleting a campaign', () => {
   it('returns to the campaigns list once it is gone', async () => {
     await mount('camp-1')
     await pressDelete()
-    expect(pushed).toContain('/acme/hosts/store/emails/campaigns')
+    expect(pushed).toContain('/acme/hosts/store/marketing/campaigns')
   })
 
   it('posts NOTHING when the operator cancels', async () => {
@@ -741,7 +744,7 @@ describe('deleting a campaign', () => {
 
     expect(mockConfirm).toHaveBeenCalled()
     expect(posted).toHaveLength(0)
-    expect(pushed).not.toContain('/acme/hosts/store/emails/campaigns')
+    expect(pushed).not.toContain('/acme/hosts/store/marketing/campaigns')
   })
 
   it('stays put and says nothing was removed when the route refuses', async () => {
@@ -749,7 +752,7 @@ describe('deleting a campaign', () => {
     await mount('camp-1')
     await pressDelete()
 
-    expect(pushed).not.toContain('/acme/hosts/store/emails/campaigns')
+    expect(pushed).not.toContain('/acme/hosts/store/marketing/campaigns')
   })
 })
 

@@ -64,6 +64,7 @@ import {
 import EmailDesignPreview from './email-design-preview'
 import EmailRecipientsCard from './email-recipients-card'
 import { Figure, RateRow, Section } from './report-figures'
+import { useMarketingHubPath } from './use-marketing-hub-path'
 
 /**
  * How many of a template's messages one read covers.
@@ -143,6 +144,8 @@ type TemplateMessage = TemplateCampaign & {
 export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
   const { hostId, screenId, basePath } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
+  // The sibling hub: a campaign's page belongs to the Marketing console.
+  const marketingHub = useMarketingHubPath()
   const firestore = useFirestore()
   const router = useRouter()
 
@@ -275,12 +278,16 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
       key: 'campaign',
       label: 'Open its campaign',
       icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
-      href: message.emailCampaignId
-        ? `${basePath}/campaigns/${message.emailCampaignId}`
-        : undefined,
-      disabled: !message.emailCampaignId,
-      disabledReason:
-        'Sent before campaigns grouped their emails, so it belongs to none',
+      // The campaign's page belongs to the Marketing console, so this one
+      // href is built from the sibling hub rather than this surface's own.
+      href:
+        message.emailCampaignId && marketingHub
+          ? `${marketingHub}/campaigns/${message.emailCampaignId}`
+          : undefined,
+      disabled: !message.emailCampaignId || !marketingHub,
+      disabledReason: message.emailCampaignId
+        ? 'This site’s console URL has not resolved yet'
+        : 'Sent before campaigns grouped their emails, so it belongs to none',
     },
   ]
 

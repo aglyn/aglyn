@@ -23,7 +23,7 @@
  *  1. **A send with no container is still a campaign.** It is adopted as a
  *     campaign of one AT READ TIME, so nothing is rewritten — which is what
  *     keeps every delivered unsubscribe link (`cid={sendId}`, signed) and
- *     every pasted `/emails/campaigns/{sendId}` URL resolving.
+ *     every pasted `/marketing/campaigns/{sendId}` URL resolving.
  *  2. **A partial total says so.** Summing across sends where some recorded a
  *     field and others never did is the one way this aggregation can lie, and
  *     `?? 0` is how it would.
@@ -306,7 +306,7 @@ describe('the campaigns list', () => {
     expect(rows[0].legacy).toBe(true)
     expect(rows[0].name).toBe('Last week’s news')
     // THE URL PROPERTY: the row's id is the SEND's id, so the link this row
-    // renders is the same `/emails/campaigns/{id}` that has always worked.
+    // renders is the same `/marketing/campaigns/{id}` that has always worked.
     expect(rows[0].id).toBe('legacy-send')
     expect(rows[0].rollup.sent.value).toBe(42)
   })

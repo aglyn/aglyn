@@ -18,7 +18,6 @@
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
 export type EmailsConsoleSectionId =
-  | 'campaigns'
   | 'emails'
   | 'templates'
   | 'audiences'
@@ -34,18 +33,24 @@ export type EmailsConsoleSectionId =
  * body on the id the shell resolves back.
  *
  * Ids appear in links people keep — treat them as persisted, and prefer
- * renaming a LABEL over an id. `campaigns`, `audiences` and `suppressions`
- * are also the `?tab=` ids this page deep-linked by before its sections
- * became routes, so a bookmark that named one of those tabs still names the
- * same section.
+ * renaming a LABEL over an id. `audiences` and `suppressions` are also the
+ * `?tab=` ids this page deep-linked by before its sections became routes, so
+ * a bookmark that named one of those tabs still names the same section.
  *
  * No `navTabId` on any of them: every section ships with the surface, so they
  * inherit the Emails nav item's gate.
  */
 export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
-  { id: 'campaigns', label: 'Campaigns' },
-  // The individual messages, as against the campaigns that group them: one
-  // row per email that was or will be sent, each with its own report.
+  /*
+   * The individual messages: one row per email that was or will be sent, each
+   * with its own report.
+   *
+   * A message is what this surface is about. The CAMPAIGN that groups
+   * messages is a marketing object — a window of dates, a set of lists, a
+   * topic and revenue attribution, which happens to reach people by email —
+   * so it is a section of the Marketing console and an email's page links out
+   * to it.
+   */
   { id: 'emails', label: 'Emails' },
   /*
    * The reusable besigner documents a message is built from.

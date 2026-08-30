@@ -85,7 +85,7 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: (href: string) => mockPushed.push(href) }),
   usePathname: () => '/acme/hosts/site/emails/emails/msg_1',
   useSearchParams: () => new URLSearchParams(),
-  useParams: () => ({}),
+  useParams: () => ({ orgSlug: 'acme', host: 'site' }),
 }))
 
 /** Every route the page pushed. */
@@ -228,8 +228,10 @@ describe('a message names where it went', () => {
   it('links the campaign it belongs to', async () => {
     await renderEmail()
     const link = screen.getByText('Open the campaign').closest('a')
+    // The MARKETING hub, not this surface's own: a campaign's page is a
+    // section of the Marketing console, and the message links out to it.
     expect(link?.getAttribute('href')).toBe(
-      '/acme/hosts/site/emails/campaigns/msg_1',
+      '/acme/hosts/site/marketing/campaigns/msg_1',
     )
   })
 

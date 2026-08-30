@@ -61,6 +61,7 @@ import {
   emailSendTimeMs,
 } from '../model/email-record'
 import CampaignComposer from './campaign-composer'
+import { useMarketingHubPath } from './use-marketing-hub-path'
 import EmailDesignPreview from './email-design-preview'
 import EmailEditDrawer from './email-edit-drawer'
 import EmailRecipientsCard from './email-recipients-card'
@@ -124,6 +125,8 @@ export interface EmailDetailProps {
  */
 export function EmailDetail(props: EmailDetailProps) {
   const { hostId, emailId, basePath } = props
+  // The sibling hub: a campaign's page belongs to the Marketing console.
+  const marketingHub = useMarketingHubPath()
   const firestore = useFirestore()
 
   const { data: email, status } = useFirestoreDoc<
@@ -847,9 +850,19 @@ export function EmailDetail(props: EmailDetailProps) {
                 <TableRow>
                   <TableCell>{'Campaign'}</TableCell>
                   <TableCell align="right">
-                    <AppLink href={`${basePath}/campaigns/${campaignId}`}>
-                      {'Open the campaign'}
-                    </AppLink>
+                    {/*
+                      The campaign's page belongs to the Marketing console, so
+                      this href is built from the sibling hub rather than this
+                      surface's own. Plain text until that hub resolves: a
+                      link with no destination is worse than none.
+                     */}
+                    {marketingHub ? (
+                      <AppLink href={`${marketingHub}/campaigns/${campaignId}`}>
+                        {'Open the campaign'}
+                      </AppLink>
+                    ) : (
+                      'Open the campaign'
+                    )}
                   </TableCell>
                 </TableRow>
                 <TableRow>

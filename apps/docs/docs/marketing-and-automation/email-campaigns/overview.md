@@ -27,12 +27,18 @@ your plan.
 
 ## Send a campaign
 
-1. **Create a campaign** on the Emails page — a name, the dates it runs between, and the
-   lists it is aimed at.
+1. **Create a campaign** on **Marketing → Campaigns** — a name, the dates it runs
+   between, and the lists it is aimed at.
 2. Open it and **write an email** inside it. Pick the audience for that email — leads,
    site members, [segments](../../content-and-data/contacts/overview.md#segments), or an
    email list.
 3. Send — subject to your plan's **send cap**.
+
+A campaign lives under **Marketing** because that is what it is: a window of dates, a
+set of lists, a topic and the revenue it earned, which happens to reach people by
+email. The individual **messages** it sent, the **templates** they are built from, the
+**audiences**, the **topics**, the **sending domains** and the **suppression list** are
+all on the **Emails** page, and each message links back to the campaign it belongs to.
 
 ### A campaign holds many emails {#campaigns-group-emails}
 

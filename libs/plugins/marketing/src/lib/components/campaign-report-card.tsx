@@ -38,11 +38,11 @@ import {
   campaignReport,
   type CampaignLinkRollup,
   type CampaignStats,
-} from '../model/campaign-report'
+} from '@aglyn/plugins-email/model/campaign-report'
 import {
   campaignRevenueReport,
   type CampaignRevenueRollup,
-} from '../model/campaign-revenue'
+} from '@aglyn/plugins-email/model/campaign-revenue'
 /*
  * The three renderers every email report shares. Imported rather than kept
  * here, so "a rate prints its denominator" is one implementation and not a
@@ -55,12 +55,13 @@ import {
   percent,
   RateRow,
   Section,
-} from './report-figures'
-import { emailSendTimeMs } from '../model/email-record'
+} from '@aglyn/plugins-email/components/report-figures'
+import { emailSendTimeMs } from '@aglyn/plugins-email/model/email-record'
 import {
   campaignSendDisplay,
   campaignSendProgress,
-} from '../model/campaign-container'
+} from '@aglyn/plugins-email/model/campaign-container'
+import { useEmailsHubPath } from './use-emails-hub-path'
 
 /**
  * The help affordance, hoisted so BOTH headers carry it.
@@ -80,7 +81,7 @@ const reportDocsHelp = pluginDocsHelp('emailCampaigns', {
 export interface CampaignReportCardProps {
   hostId: string
   campaignId: string
-  /** The emails hub URL, for the way back to the campaigns list. */
+  /** The marketing hub URL, for the way back to the campaigns list. */
   basePath: string
 }
 
@@ -145,6 +146,8 @@ export interface CampaignReportCardProps {
  */
 export function CampaignReportCard(props: CampaignReportCardProps) {
   const { hostId, campaignId, basePath } = props
+  // The sibling hub: the message's own page belongs to the Emails console.
+  const emailsHub = useEmailsHubPath()
   const firestore = useFirestore()
 
   const { data: campaign } = useFirestoreDoc<
@@ -262,8 +265,8 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
         {/*==========================================
           * THE EMAIL THESE FIGURES CAME FROM.
           *
-          * This screen is reached at `/emails/campaigns/{sendId}`, which is a
-          * CAMPAIGN url resolving to a send — the fall-through that keeps
+          * This screen is reached at `/marketing/campaigns/{sendId}`, which
+          * is a CAMPAIGN url resolving to a send — the fall-through that keeps
           * every unsubscribe footer and every pasted report link working. So
           * a reader arrives from the campaigns table, where the row carries a
           * "Single send" chip, and lands on a page of delivery and engagement
@@ -288,9 +291,20 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
               useFlexGap
               sx={{ alignItems: 'center', flexWrap: 'wrap' }}
             >
-              <AppLink href={`${basePath}/emails/${campaignId}`}>
-                {subject}
-              </AppLink>
+              {/*
+                The MESSAGE's own page, which the Emails console owns — hence
+                the sibling hub rather than this surface's `basePath`. Plain
+                text until that hub resolves: a link with no destination is
+                worse than none, and the subject is what the reader came for
+                either way.
+               */}
+              {emailsHub ? (
+                <AppLink href={`${emailsHub}/emails/${campaignId}`}>
+                  {subject}
+                </AppLink>
+              ) : (
+                <Typography variant="body2">{subject}</Typography>
+              )}
               {/*
                 What the email is DOING, not the field it stores. One
                 delivering an audience larger than one batch is written back

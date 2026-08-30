@@ -616,7 +616,7 @@ describe('the ordinary campaign still sends', () => {
  * A draft is a state on the send record, not a document elsewhere, and the id
  * is the reason: `performCampaignSend` adopts a `campaignId` it is given, so
  * a draft becomes the sent email AT ITS OWN ID. That is what keeps
- * `/emails/campaigns/{sendId}` resolving from the moment the email is
+ * `/marketing/campaigns/{sendId}` resolving from the moment the email is
  * created, and what keeps the `cid=` inside every delivered unsubscribe HMAC
  * pointing at the record it was minted for.
  *

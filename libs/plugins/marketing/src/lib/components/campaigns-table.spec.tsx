@@ -22,7 +22,7 @@
  * every campaign a merchant has already sent is a SEND document, and those
  * ids are cited by mail that has already been delivered: each unsubscribe
  * link carries `cid={sendId}` inside its own signature, and
- * `/emails/campaigns/{sendId}` is a URL merchants paste into messages.
+ * `/marketing/campaigns/{sendId}` is a URL merchants paste into messages.
  *
  * So the list adopts a container-less send as a campaign of one, at READ
  * time, and the row it draws links to that send's own id. Nothing is
@@ -148,7 +148,7 @@ jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
  * make it while the drawer is shut. `topicsEnabled` records what was asked
  * for, so the gate itself is assertable and not merely the picker's contents.
  */
-jest.mock('./use-org-email-topics', () => ({
+jest.mock('@aglyn/plugins-email/components/use-org-email-topics', () => ({
   useOrgEmailTopics: (_hostId: string, options?: { enabled?: boolean }) => {
     const enabled = options?.enabled ?? true
     topicsEnabled.push(enabled)
@@ -239,7 +239,19 @@ beforeEach(() => {
 })
 
 const mount = async () => {
-  render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/emails" />)
+  render(<HostCampaignsCard hostId="host-1" basePath="/acme/hosts/store/marketing" />)
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
+/**
+ * The same card with NO `basePath`, which is how the inbox console embeds it
+ * on a tab of its own: that page's own `basePath` names the INBOX hub, so
+ * passing it would send every row to a URL beneath the wrong surface.
+ */
+const mountWithoutBasePath = async () => {
+  render(<HostCampaignsCard hostId="host-1" />)
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
@@ -287,6 +299,28 @@ describe('the campaigns table', () => {
     expect(screen.getAllByText('Single send').length).toBe(1)
   })
 
+  /*==========================================
+   * THE HUB THE CARD RESOLVES FOR ITSELF.
+   *
+   * Every reading above hands this card a `basePath`, so all of them pass
+   * whatever the fallback resolves to — and the fallback is the branch the
+   * INBOX takes, where the card is a tab on somebody else's surface and the
+   * caller's own hub URL would be the wrong answer.
+   *
+   * The campaign's pages are on the MARKETING console, so the fallback names
+   * that hub by slug. A card that resolved the Emails hub instead would send
+   * every row on the inbox's campaigns tab to a URL the shell 404s.
+   *=========================================*/
+  it('resolves the MARKETING hub when the caller hands it no base path', async () => {
+    await mountWithoutBasePath()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    const link = rowFor('Spring sale').querySelector('a') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe(
+      '/acme/hosts/store/marketing/campaigns/camp-1',
+    )
+  })
+
   it('opens a legacy send at the URL that has always addressed it', async () => {
     await mount()
     await waitFor(() =>
@@ -295,9 +329,9 @@ describe('the campaigns table', () => {
 
     fireEvent.click(rowFor('Last week’s news'))
 
-    // The id in the path is the SEND's id. Every `/emails/campaigns/{sendId}`
+    // The id in the path is the SEND's id. Every `/marketing/campaigns/{sendId}`
     // a merchant has pasted anywhere goes on resolving.
-    expect(pushed).toContain('/acme/hosts/store/emails/campaigns/legacy-send')
+    expect(pushed).toContain('/acme/hosts/store/marketing/campaigns/legacy-send')
   })
 
   it('the campaign name is a real link, and does not double-push', async () => {
@@ -314,7 +348,7 @@ describe('the campaigns table', () => {
 
     const link = rowFor('Spring sale').querySelector('a') as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe(
-      '/acme/hosts/store/emails/campaigns/camp-1',
+      '/acme/hosts/store/marketing/campaigns/camp-1',
     )
     fireEvent.click(link)
     expect(pushed).toEqual([])
@@ -338,7 +372,7 @@ describe('the campaigns table', () => {
     // A real anchor, so it is middle-clickable like any other link.
     expect(items[0].tagName).toBe('A')
     expect(items[0].getAttribute('href')).toBe(
-      '/acme/hosts/store/emails/campaigns/camp-1',
+      '/acme/hosts/store/marketing/campaigns/camp-1',
     )
     // The destructive one is a handler, never a link.
     expect(items[1].tagName).not.toBe('A')
@@ -678,7 +712,7 @@ describe('creating a campaign', () => {
     // The stream its emails open on, so a sales campaign is not composed as
     // marketing and mailed to people who left sales.
     expect(value.topicId).toBe('sales')
-    expect(pushed[0]).toContain('/emails/campaigns/')
+    expect(pushed[0]).toContain('/marketing/campaigns/')
   })
 
   it('takes a campaign with no dates and no lists', async () => {

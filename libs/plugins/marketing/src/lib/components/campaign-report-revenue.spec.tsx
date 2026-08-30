@@ -31,8 +31,8 @@
 
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type { CampaignStats } from '../model/campaign-report'
-import type { CampaignRevenueRollup } from '../model/campaign-revenue'
+import type { CampaignStats } from '@aglyn/plugins-email/model/campaign-report'
+import type { CampaignRevenueRollup } from '@aglyn/plugins-email/model/campaign-revenue'
 
 /** What each `useFirestoreDoc` call answers, keyed by document path. */
 const mockDocs = new Map<string, unknown>()
@@ -53,8 +53,20 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
-  __esModule: true,
+  ...jest.requireActual('@aglyn/aglyn'),
   pluginDocsHelp: () => undefined,
+}))
+
+/*
+ * The route the sibling-hub link is built from. The message's own page lives
+ * on the Emails console, so this card resolves that hub from the URL the
+ * console is already on rather than from its own `basePath`.
+ */
+jest.mock('next/navigation', () => ({
+  useParams: () => ({ orgSlug: 'acme', host: 'site' }),
+  useRouter: () => ({ push: () => undefined, replace: () => undefined }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const CAMPAIGN_PATH = 'hosts/site1/campaigns/camp_1'
@@ -101,7 +113,7 @@ async function renderReport(options: {
       <CampaignReportCard
         hostId="site1"
         campaignId="camp_1"
-        basePath="/acme/hosts/site/emails"
+        basePath="/acme/hosts/site/marketing"
       />
     ) as ReactNode as never,
   )
