@@ -63,6 +63,7 @@ export * from './lib/server/email-metering'
 // platform send-rate governor on `sendEmail`. Every server surface already
 // imports this barrel, so nothing has to remember to call an installer.
 export * from './lib/server/email-send-rate'
+export * from './lib/server/email-sender-reputation'
 export * from './lib/server/erase'
 export * from './lib/server/dynamic-list-materialize'
 export * from './lib/server/firebase-admin'

@@ -374,6 +374,29 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ).updateExisting,
 }))
 
+/**
+ * The per-tenant reputation counter, doubled at its LEAF so the attribution
+ * is observable.
+ *
+ * The counter's own behavior is proven against a Firestore double in
+ * `tenant-data-admin`; what this file owns is the question that module cannot
+ * answer — which workspace a delivery event belongs to, and whether one that
+ * belongs to nobody is counted against somebody.
+ */
+const reputationFailures: Array<{ orgId: string; kind: string }> = []
+jest.mock('@aglyn/tenant-data-admin/server/email-sender-reputation', () => ({
+  recordEmailReputationFailure: async (orgId: string, kind: string) => {
+    reputationFailures.push({ orgId, kind })
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
+  getOrgForHost: async (hostId: string) => ({
+    orgId: `org-of-${hostId}`,
+    org: {},
+  }),
+}))
+
 import { emailEventsHandler } from './email-events'
 // The REAL cap, not a local copy: a spec that retyped it would go on passing
 // after the value it asserts moved. (`suppressionId` is imported further
@@ -526,6 +549,7 @@ beforeEach(() => {
   fixtureMessageCounter = 0
   mockFirstOfType = true
   updateFailure = null
+  reputationFailures.length = 0
   errors = []
   jest.spyOn(console, 'error').mockImplementation((...args) => {
     errors.push(args)
@@ -886,6 +910,50 @@ describe('a complaint', () => {
     await deliver(failure('email.complained', {}, { hostId: HOST }))
 
     expect(docs.get(SUPPRESSION_PATH)?.reason).toBe('complaint')
+  })
+})
+
+describe('the workspace a failure belongs to', () => {
+  it('counts a complaint against the workspace that sent it', async () => {
+    await deliver(failure('email.complained'))
+    // The rate that decides whether this workspace may keep sending on the
+    // shared domain. Without it one merchant's bad list is invisible until a
+    // mailbox provider acts on the whole domain.
+    expect(reputationFailures).toEqual([
+      { orgId: `org-of-${HOST}`, kind: 'complaint' },
+    ])
+  })
+
+  it('counts a permanent bounce, and not a transient one', async () => {
+    await deliver(
+      failure('email.bounced', {
+        bounce: { type: 'Permanent', subType: 'General', message: 'no such user' },
+      }),
+    )
+    expect(reputationFailures).toEqual([
+      { orgId: `org-of-${HOST}`, kind: 'bounce' },
+    ])
+
+    reputationFailures.length = 0
+    await deliver(
+      failure('email.bounced', {
+        bounce: { type: 'Transient', subType: 'MailboxFull', message: 'full' },
+      }),
+    )
+    // A full mailbox is not a list-quality signal, and it does not suppress
+    // either — counting it would put somebody's holiday auto-reply into a
+    // rate that stops a merchant sending.
+    expect(reputationFailures).toEqual([])
+  })
+
+  it('counts NOTHING against a workspace when the send named none', async () => {
+    // A bounce on a password reset, an invite or a usage summary carries no
+    // `hostId` tag. It still suppresses the address — that is address-level
+    // truth — but it may not enter a rate that only campaigns are judged on,
+    // in either direction: it can neither inflate one nor dilute one.
+    await deliver(failure('email.complained', {}, { context: 'password-reset' }))
+    expect(docs.get(PLATFORM_PATH)?.reason).toBe('complaint')
+    expect(reputationFailures).toEqual([])
   })
 })
 

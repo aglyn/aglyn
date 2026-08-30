@@ -36,6 +36,8 @@ import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression
 // green test over an empty log.
 import { recordEmailDeliveryEvents } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
+import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
 // The link rollup's key derivation and its cap live beside the READER that
 // renders them (`@aglyn/plugins-email/model`) rather than here, so the shape
 // the webhook writes and the shape the report reads cannot drift into two
@@ -178,6 +180,46 @@ async function recordDeliveryFailure(args: {
     return res.status(200).json({ ok: true, suppressed: false })
   }
   const reason = complaint ? 'complaint' : 'bounce'
+
+  /*==========================================
+   * THE SAME EVENT, COUNTED AGAINST THE TENANT.
+   *
+   * The campaign counter the caller writes answers "how did this mailing do".
+   * This one answers the question the shared sending domain actually depends
+   * on: how is THIS WORKSPACE doing, across every campaign it has sent.
+   * Nothing computed a rate at any scope before it, so one merchant's bad
+   * list could push the domain every other merchant's receipts leave on
+   * toward a block, and the first anybody would hear of it is a rejection.
+   *
+   * ## Why HERE, below the permanence filter
+   *
+   * The two decisions in front of it are the same two the suppression needs,
+   * and a rate that included them would be measuring something else. A
+   * TRANSIENT bounce is a full mailbox or a greylisting server — it says
+   * nothing about list quality, it does not suppress, and counting it would
+   * trip a merchant's breaker on their subscribers' holiday auto-replies.
+   *
+   * ## Why only a send that named a site
+   *
+   * `hostId` is the only tenant identity a delivery event carries, and only
+   * `campaign-send` stamps one. A bounce on a password reset or an invite
+   * therefore reaches the suppression lists — address-level truth belongs on
+   * them — and deliberately not this counter: the breaker it feeds may only
+   * ever refuse a CAMPAIGN, so mail it could never act on must neither
+   * inflate the rate nor dilute it.
+   *
+   * Swallowed, and taken before the suppression writes rather than after, so
+   * a counter that fails cannot cost an address its place on either list.
+   *=========================================*/
+  if (hostRef) {
+    await getOrgForHost(hostRef.id)
+      .then((org) =>
+        org?.orgId
+          ? recordEmailReputationFailure(org.orgId, reason)
+          : undefined,
+      )
+      .catch(() => undefined)
+  }
 
   // The platform list FIRST, and unconditionally. Ordered ahead of the
   // per-host write because it is the one that must happen for every failure:
