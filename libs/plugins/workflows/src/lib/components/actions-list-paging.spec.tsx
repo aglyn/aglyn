@@ -254,12 +254,26 @@ describe('the actions list is ceilinged and paged (AGL-2501)', () => {
     ).toHaveLength(mixedWriters.length)
   })
 
-  it('caps the ACTIONS read at the ceiling plus a probe', async () => {
+  it('caps the ACTIONS read at the ceiling plus a probe, and reads NOTHING else', async () => {
     await mount()
-    // The set, not "some read asked for 101". Six sibling pickers cap too,
-    // and an assertion that could be satisfied by one of them would survive
-    // the actions read losing its cap entirely.
+    // The set, not "some read asked for 101" — an assertion satisfied by any
+    // capped read on the card would survive the actions read losing its cap
+    // altogether.
     expect(mockCapsAsked['actions']).toEqual([CEILING + 1])
+    // And the set is a set of ONE. The six pickers the step editor fills are
+    // not read until the editor opens, so a closed card costs one
+    // window rather than seven; the next test is the other half of that.
+    expect(Object.keys(mockCapsAsked).sort()).toEqual(['actions'])
+  })
+
+  it('buys the six option lists on the click that opens the editor, not before', async () => {
+    await mount()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    })
+    // Every picker at the shared editor ceiling plus its probe. Named
+    // individually because they are six independent queries: a check on the
+    // KEYS alone would pass with one of them still asking for five hundred.
     expect(Object.keys(mockCapsAsked).sort()).toEqual([
       'actions',
       'campaigns',
@@ -269,6 +283,16 @@ describe('the actions list is ceilinged and paged (AGL-2501)', () => {
       'webhooks',
       'workflows',
     ])
+    for (const picker of [
+      'campaigns',
+      'datasets',
+      'lists',
+      'overlays',
+      'webhooks',
+      'workflows',
+    ]) {
+      expect(mockCapsAsked[picker]).toEqual([CEILING + 1])
+    }
   })
 
   it('renders ONE page, not the whole window', async () => {

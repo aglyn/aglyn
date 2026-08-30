@@ -96,7 +96,16 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  documentId,
+  getDoc,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import {
   useConsoleHostRoute,
@@ -107,6 +116,16 @@ import {
   useUser,
   useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — the specs that render
+ * this page mock `@aglyn/tenant-feature-instance` wholesale to stage their
+ * Firestore hooks, and a query builder imported through that barrel disappears
+ * under the mock. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import ListingReviews from './listing-reviews.component'
 import ReportTarget from './report-target.component'
 import PluginSiteSet from './plugin-site-set.component'
@@ -114,6 +133,31 @@ import { MenuItem, TextField } from '@mui/material'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
 import { useArtifactUpdate } from '../hooks/use-artifact-update'
 import ArtifactUpdateDialog from './artifact-update-dialog.component'
+
+/**
+ * How many of the site's components the page reads to answer one question.
+ *
+ * A LOOKUP ceiling, not a list: nothing here renders these documents. It only
+ * has to be wide enough that a component install of this listing is inside it.
+ */
+const COMPONENT_LOOKUP_CEILING = 100
+
+/**
+ * How many of the buyer's purchase documents the page reads.
+ *
+ * Wider than the other lookups on purpose — see the query, which explains what
+ * a miss costs on the one panel that offers to take money.
+ */
+const PURCHASE_LOOKUP_CEILING = 200
+
+/**
+ * How many installs OF THIS LISTING the page reads per artifact type.
+ *
+ * Narrow because the query already is: both reads carry the listing id, so
+ * this bounds "how many times one workspace installed one thing" rather than a
+ * collection.
+ */
+const ARTIFACT_INSTALL_CEILING = 20
 
 interface ListingVersionEntry {
   version: string
@@ -547,27 +591,61 @@ export function MarketplaceListingContent({
     [firestore, listing?.profileId],
     { idField: '$id' },
   )
-  const { data: installedDocs } = useFirestoreCollection<any>(
+  /*
+   * ORDERED AND CEILINGED (AGL-2501). The page folds this into ONE answer —
+   * is a component install of THIS listing present — so a bare `limit`, which
+   * Firestore answers in document-id order, would let an arbitrary hundred of
+   * the site's components decide it. A site past such a window reads as
+   * not-installed, and the button below then offers to install it again.
+   */
+  const { data: installedRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'components'),
+        COMPONENT_LOOKUP_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  const { rows: installedDocs, truncated: installedTruncated } = useMemo(
+    () => ceilingedWindow<any>(installedRead, COMPONENT_LOOKUP_CEILING),
+    [installedRead],
   )
   // Held at null until the uid resolves (AGL-1440): `marketplacePurchases`
   // is buyer/seller-gated and a LIST is evaluated against the QUERY, so the
   // `-anonymous-` sentinel was denied wholesale on every mount and retried
   // on the refusal cadence. A signed-out viewer simply has no purchases.
-  const { data: purchaseDocs } = useFirestoreCollection<any>(
+  /*
+   * ORDERED AND CEILINGED, and the ceiling stays wide (AGL-2501).
+   *
+   * `orderBy(documentId())` costs nothing here: an equality `where` plus
+   * `orderBy(__name__)` is served by the automatic single-field index on
+   * `buyerUid`, so no composite index stands between this page and a buyer's
+   * licences. Ordering on `purchasedAt` would need one, and would also DROP
+   * any purchase written without the field.
+   *
+   * The window is wider than the others because of what a miss costs here.
+   * Every other lookup on this page decides a chip; this one decides whether
+   * the Buy button appears, so a purchase that falls outside it does not
+   * merely under-report state — it offers to sell a licence the buyer already
+   * holds. The probe row is what lets the panel say so.
+   */
+  const { data: purchaseRead } = useFirestoreCollection<any>(
     () =>
       user?.uid
         ? query(
             collection(firestore, 'marketplacePurchases'),
             where('buyerUid', '==', user.uid),
-            limit(200),
+            orderBy(documentId()),
+            limit(PURCHASE_LOOKUP_CEILING + 1),
           )
         : null,
     [firestore, user?.uid],
     { idField: '$id' },
+  )
+  const { rows: purchaseDocs, truncated: purchasesTruncated } = useMemo(
+    () => ceilingedWindow<any>(purchaseRead, PURCHASE_LOOKUP_CEILING),
+    [purchaseRead],
   )
   const artifactType = listing ? listingArtifactType(listing) : null
   const isPlugin = artifactType === 'plugin'
@@ -643,6 +721,19 @@ export function MarketplaceListingContent({
     loaded: scopeLoaded,
   } = useScopeTokens(orgId ?? undefined)
   const needsScope = Boolean(orgId) && !viewerOrgWide
+  /*
+   * ORDERED (AGL-2501). These two are already narrowed to ONE listing, so the
+   * twenty is generous rather than tight — but `artifactInstall` below takes
+   * the FIRST live row out of whatever comes back, and an unordered `limit` is
+   * answered in document-id order, which makes "the first" an arbitrary one.
+   * On an org holding more than twenty installs of a single listing the window
+   * could hold only deleted rows while a live one sat outside it, and the page
+   * would offer to install what is already installed.
+   *
+   * `documentId()` is what the existing composite index on
+   * (`source.listingId`, `visibleTo`) already orders by — Firestore appends the
+   * document name to every index — so this needs no new one.
+   */
   const { data: datasetInstalls } = useFirestoreCollection<any>(
     () =>
       orgId && scopeLoaded
@@ -652,7 +743,8 @@ export function MarketplaceListingContent({
             ...(needsScope
               ? [where('visibleTo', 'array-contains-any', scopeTokens)]
               : []),
-            limit(20),
+            orderBy(documentId()),
+            limit(ARTIFACT_INSTALL_CEILING),
           )
         : null,
     [firestore, orgId, scopeLoaded, listingId, needsScope, scopeTokens],
@@ -666,7 +758,8 @@ export function MarketplaceListingContent({
       query(
         collection(firestore, 'hosts', hostId, 'emailTemplates'),
         where('installedFrom.listingId', '==', listingId || '-missing-'),
-        limit(20),
+        orderBy(documentId()),
+        limit(ARTIFACT_INSTALL_CEILING),
       ),
     [firestore, hostId, listingId],
     { idField: '$id' },
@@ -1791,6 +1884,23 @@ export function MarketplaceListingContent({
                             {'You already own this in another workspace. A ' +
                               'license covers one organization, so this one ' +
                               'needs its own.'}
+                          </Alert>
+                        ) : null}
+                        {/* THE LOOKUPS RAN SHORT, said where the money is.
+                            "Not purchased" and "not installed" are both an
+                            ABSENCE from a window, so a window that stopped
+                            early reads exactly like a licence nobody bought.
+                            The buy path is the one place that costs something
+                            to get wrong, so the notice sits above the
+                            button. */}
+                        {purchasesTruncated || installedTruncated ? (
+                          <Alert severity="warning" sx={{ mb: 1 }}>
+                            {(purchasesTruncated
+                              ? `Checked against the first ${PURCHASE_LOOKUP_CEILING} of your purchases, ordered by id; you have more. `
+                              : `Checked against the first ${COMPONENT_LOOKUP_CEILING} components on this site, ordered by id; there are more. `) +
+                              'If you already own or installed this, it may ' +
+                              'not be reflected here — check your receipts ' +
+                              'before buying again.'}
                           </Alert>
                         ) : null}
                         {/* The org-scope panel owns install once anything is

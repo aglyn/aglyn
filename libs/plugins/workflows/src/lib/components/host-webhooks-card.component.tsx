@@ -29,6 +29,7 @@ import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -39,7 +40,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import { collection, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import {
   useFirestore,
@@ -47,6 +48,34 @@ import {
   useFirestoreDoc,
   useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — the specs that render
+ * this card mock `@aglyn/tenant-feature-instance` wholesale to stage their
+ * Firestore hooks, and a query builder imported through that barrel disappears
+ * under the mock. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+
+/**
+ * How many webhook documents the card reads.
+ *
+ * Above `WEBHOOK_MAX_PER_HOST` on purpose. The cap counts LIVE hooks and the
+ * collection keeps soft-deleted ones, so a site that has created and deleted
+ * its five several times holds more documents than it may have hooks.
+ */
+const WEBHOOK_CEILING = 20
+
+/**
+ * How many workflows the inbound-endpoint picker offers.
+ *
+ * Paid for only while the editor is open, which is what makes a ceiling this
+ * size affordable: it is one operator mid-edit rather than every visitor to
+ * the page.
+ */
+const WORKFLOW_OPTION_CEILING = 100
 
 function generateSecret(): string {
   const bytes = new Uint8Array(24)
@@ -82,36 +111,76 @@ export function HostWebhooksCard(props: {
   const createResource = useHostResourceApi()
 
 
-  const { data: webhookDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const { data: workflowDocs } = useFirestoreCollection<any>(
+  const [draft, setDraft] = useState<WebhookDraft | null>(null)
+  /**
+   * The editor has been opened at least once in this session.
+   *
+   * A LATCH rather than `draft` itself, because the workflow picker below keys its
+   * listeners on it. Tracking the dialog would tear that subscription down
+   * on Cancel and pay for them again on the next Edit, so a merchant working
+   * through ten actions would buy the same window ten times — worse than
+   * the mount-time read this replaces. Latched, a reader who never edits pays
+   * nothing and a reader who edits pays once.
+   */
+  const [editorOpened, setEditorOpened] = useState(false)
+  if (draft && !editorOpened) setEditorOpened(true)
+  /*
+   * ORDERED AND CEILINGED (AGL-2501). A bare `limit` is answered in
+   * DOCUMENT-ID order, so an unnamed window is an arbitrary twenty that the
+   * `localeCompare` below would arrange alphabetically. `collectionCeiling`
+   * does not change WHICH twenty; it NAMES the order, and the probe row it
+   * adds is what lets the card say when the ceiling bites.
+   */
+  const { data: webhookRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'webhooks'),
+        WEBHOOK_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { rows: readWebhooks, truncated: webhooksTruncated } =
+    ceilingedWindow<any>(webhookRead, WEBHOOK_CEILING)
+  /*
+   * READ WHEN THE EDITOR OPENS, not when the card mounts. The only thing that
+   * consumes these rows is the inbound-endpoint select inside the dialog — the
+   * table renders a hook's stored `workflowName` — so an unconditional
+   * listener would charge every visitor to this page a hundred workflows to
+   * fill a control most of them never see, and one that only appears for the
+   * inbound half of the form at that.
+   */
+  const { data: workflowRead } = useFirestoreCollection<any>(
+    () =>
+      editorOpened
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'workflows'),
+            WORKFLOW_OPTION_CEILING,
+          )
+        : null,
+    [firestore, hostId, editorOpened],
+    { idField: '$id' },
+  )
+  const { rows: readWorkflows, truncated: workflowOptionsTruncated } =
+    ceilingedWindow<any>(workflowRead, WORKFLOW_OPTION_CEILING)
   const { data: host } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const webhooks = [...(webhookDocs ?? [])]
+  // Sorting the whole ceiling, not a page of it.
+  const webhooks = [...readWebhooks]
     .filter((hook: any) => !hook.deletedAt)
     .sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
-  const workflowNames = (workflowDocs ?? [])
+  const workflowNames = readWorkflows
     .filter((workflow: any) => !workflow.deletedAt && workflow.name)
     .map((workflow: any) => workflow.name as string)
     .sort()
   // `hostPublicOrigin` (AGL-2195) — this base is printed into the webhook
   // sample payload an operator copies into a third-party system.
   const siteBase = hostPublicOrigin(host) ?? ''
-
-  const [draft, setDraft] = useState<WebhookDraft | null>(null)
 
   const handleAdd = useCallback(() => {
     if (!checkEntitlement(org, 'webhooks')) {
@@ -271,6 +340,13 @@ export function HostWebhooksCard(props: {
             </Button>
           </Stack>
         ))}
+        {webhooksTruncated ? (
+          <Alert severity="info">
+            {`Showing the first ${WEBHOOK_CEILING} webhook documents on this ` +
+              'site, ordered by id. There are more, so a hook may be missing ' +
+              'from this list.'}
+          </Alert>
+        ) : null}
         <Button
           size="small"
           color="primary"
@@ -339,6 +415,13 @@ export function HostWebhooksCard(props: {
             <TextField
               select
               label="Workflow to run"
+              helperText={
+                workflowOptionsTruncated
+                  ? `Showing ${WORKFLOW_OPTION_CEILING} workflows, ordered ` +
+                    'by id. This site has more, so one of them is not ' +
+                    'offered here.'
+                  : undefined
+              }
               value={draft?.workflowName ?? ''}
               onChange={(event) =>
                 setDraft((prev) =>

@@ -40,7 +40,13 @@
  * with `limit(500)` to render twenty rows is buying five hundred.
  */
 
-import { render } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { WORKFLOWS_CONSOLE_SECTIONS } from './workflows-console-sections'
 
@@ -341,5 +347,125 @@ describe('workflows console read cost (AGL-2501)', () => {
     expect(seen).not.toContain('actions')
   })
 
+  /*
+   * ## What a section costs when nobody edits anything
+   *
+   * The two assertions below pin the WHOLE listen set, path and ceiling
+   * together, rather than checking that some collection is absent. A set
+   * comparison is what survives the regression this is guarding against: the
+   * step editor's option lists are six collections, and an assertion naming
+   * one of them goes green again the moment somebody re-mounts the other five.
+   * The ceilings are part of the value for the same reason — a listen widened
+   * from 101 to 301 is invisible to a check that only knows the path.
+   */
+  it('the actions section reads its own rows and NOTHING for the pickers', async () => {
+    await renderConsole('actions')
+    summarize('actions section', mockListens)
+    // The run counter is one document; the actions ceiling is a hundred plus
+    // the probe row that makes "there are more" a fact.
+    expect(
+      mockListens.map((listen) => `${listen.path}#${listen.limit}`).sort(),
+    ).toEqual(['hosts/site1/actions#101', 'hosts/site1/counters/actionRuns#1'])
+    expect(documentCeiling(mockListens)).toBe(102)
+  })
 
+  it('the webhooks section does not buy a workflow picker to sit closed', async () => {
+    await renderConsole('webhooks')
+    summarize('webhooks section', mockListens)
+    expect(
+      mockListens.map((listen) => `${listen.path}#${listen.limit}`).sort(),
+    ).toEqual(['hosts/site1#1', 'hosts/site1/webhooks#21'])
+    expect(documentCeiling(mockListens)).toBe(22)
+  })
+
+  it('the workflows section reads workflows, not the step editor’s two lists', async () => {
+    await renderConsole('workflows')
+    summarize('workflows section', mockListens)
+    expect(
+      mockListens.map((listen) => `${listen.path}#${listen.limit}`).sort(),
+    ).toEqual([
+      'hosts/site1/counters/workflowRuns#1',
+      'hosts/site1/workflows#101',
+    ])
+    expect(documentCeiling(mockListens)).toBe(102)
+  })
+
+  /*
+   * ## And what it costs when somebody does
+   *
+   * The click is the other half of the contract. A card that never read the
+   * pickers at all would pass both assertions above, and would also be broken:
+   * the selects would be empty and no step could be pointed anywhere. This is
+   * the reading that says the reads MOVED rather than went away, and it pins
+   * the window each one arrives at.
+   */
+  it('opening the action editor is what buys the six option lists', async () => {
+    await renderConsole('actions')
+    const before = mockListens.map((listen) => `${listen.path}#${listen.limit}`)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    })
+    summarize('actions section, editor open', mockListens)
+
+    const opened = mockListens
+      .map((listen) => `${listen.path}#${listen.limit}`)
+      .filter((listen) => !before.includes(listen))
+      .sort()
+    // A hundred and one apiece: the shared editor ceiling, plus the probe row
+    // that lets the dialog say a picker ran short instead of quietly offering
+    // a partial list of targets.
+    expect(opened).toEqual([
+      'hosts/site1/campaigns#101',
+      'hosts/site1/overlays#101',
+      'hosts/site1/webhooks#101',
+      'hosts/site1/workflows#101',
+    ])
+  })
+
+  it('closing and reopening the editor does not buy the pickers twice', async () => {
+    await renderConsole('actions')
+    const click = async (name: string) => {
+      // The dialog's exit transition keeps the modal mounted for a moment,
+      // and while it is up the card behind it is `aria-hidden` — so the
+      // reopening click has to wait for the button to come back rather than
+      // for a fixed tick.
+      const button = await waitFor(() => screen.getByRole('button', { name }))
+      await act(async () => {
+        fireEvent.click(button)
+      })
+    }
+    await click('Add action')
+    await click('Cancel')
+    await click('Add action')
+    summarize('actions section, editor reopened', mockListens)
+    // `mockListens` records SUBSCRIPTIONS, not renders, so a second entry
+    // here means the listener was torn down on Cancel and re-established on
+    // the next Edit. Keying the pickers on the open dialog would do exactly
+    // that, and a merchant working through ten actions would then buy the
+    // same six windows ten times — worse than the mount-time read this
+    // replaces, and invisible to every assertion above.
+    expect(
+      mockListens.filter((listen) => listen.path === 'hosts/site1/workflows'),
+    ).toHaveLength(1)
+  })
+
+  it('opening the workflow editor is what buys its functions and variables', async () => {
+    await renderConsole('workflows')
+    const before = mockListens.map((listen) => `${listen.path}#${listen.limit}`)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add workflow' }))
+    })
+    summarize('workflows section, editor open', mockListens)
+
+    const opened = mockListens
+      .map((listen) => `${listen.path}#${listen.limit}`)
+      .filter((listen) => !before.includes(listen))
+      .sort()
+    expect(opened).toEqual([
+      'hosts/site1/functions#101',
+      'hosts/site1/variables#101',
+    ])
+  })
 })

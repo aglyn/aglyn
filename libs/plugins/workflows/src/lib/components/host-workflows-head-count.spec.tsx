@@ -235,14 +235,15 @@ describe('the workflows cap is a server aggregate (AGL-1716)', () => {
     // "this site has more workflows than the card read" is a fact rather than
     // a guess from `length === 100` (AGL-2501). The probe is never rendered.
     //
-    // Asserted as the SET of caps rather than as a single call, because this
-    // card also reads `functions` and `variables` at `limit(100)` for its step
-    // editor — so `toHaveBeenCalledWith(100)` was satisfied by queries that
-    // are not the list under test, and would have gone on passing if the list
-    // had stopped capping altogether.
+    // Asserted as the SET of caps rather than as a single call, so a cap
+    // belonging to some other query on this card could never stand in for the
+    // list's own — `toHaveBeenCalledWith(101)` would go on passing after the
+    // list stopped capping altogether. The set holds ONE value because the
+    // step editor's `functions` and `variables` reads wait for the editor to
+    // open; a closed card asks for one window and no more.
     expect(
       [...new Set(limitSpy.mock.calls.map(([value]) => value))].sort(),
-    ).toEqual([100, 101])
+    ).toEqual([101])
     expect(countSpy).toHaveBeenCalledTimes(1)
     expect(countSpy).toHaveBeenCalledWith('workflows')
   })
