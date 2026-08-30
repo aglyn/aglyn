@@ -129,10 +129,26 @@ describe('a message previews its template, and says which template', () => {
     expect(screen.getByText(/template as it stands today/i)).toBeTruthy()
   })
 
-  it('has nothing to draw for a message written as plain text', async () => {
-    await renderEmail({ email: { templateScreenId: undefined } })
+  it('draws the synthesized HTML for a message written as plain text', async () => {
+    // A plain-text message is not previewless: the send path synthesizes an
+    // HTML part for it, and that part is what the inbox received. Reporting
+    // "nothing to draw" would describe the composer rather than the mail.
+    await renderEmail({
+      email: { templateScreenId: undefined, body: 'Hello from the composer.' },
+    })
+    const frame = document.querySelector(
+      'iframe[title="Email preview"]',
+    ) as HTMLIFrameElement | null
+    expect(frame).toBeTruthy()
+    expect(frame?.getAttribute('srcdoc')).toContain('Hello from the composer.')
+  })
+
+  it('has nothing to draw only when there is no body either', async () => {
+    // The control. A frame drawn for an empty body would be an empty frame
+    // presented as the mail, which is worse than saying so.
+    await renderEmail({ email: { templateScreenId: undefined, body: '' } })
     expect(document.querySelector('iframe[title="Email preview"]')).toBeNull()
-    expect(screen.getByText(/no design to draw/i)).toBeTruthy()
+    expect(screen.getByText(/carries no body/i)).toBeTruthy()
   })
 })
 

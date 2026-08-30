@@ -41,7 +41,11 @@ import {
   type CampaignStats,
 } from '../model/campaign-report'
 import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
-import { emailAudienceLabel, emailSendTimeMs, emailStateLabel } from '../model/email-record'
+import {
+  emailAudienceLabel,
+  emailSendTimeMs,
+  emailStateLabel,
+} from '../model/email-record'
 import EmailDesignPreview from './email-design-preview'
 import EmailRecipientsCard from './email-recipients-card'
 import { Figure, percent, RateRow, Section } from './report-figures'
@@ -111,15 +115,7 @@ export function EmailDetail(props: EmailDetailProps) {
    */
   const { data: links } = useFirestoreDoc<CampaignLinkRollup>(
     () =>
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'campaigns',
-        emailId,
-        'reports',
-        'links',
-      ),
+      doc(firestore, 'hosts', hostId, 'campaigns', emailId, 'reports', 'links'),
     [firestore, hostId, emailId],
   )
 
@@ -151,6 +147,12 @@ export function EmailDetail(props: EmailDetailProps) {
   const report = useMemo(() => campaignReport(email?.stats), [email])
   const linkReport = useMemo(() => campaignLinkReport(links), [links])
   const subject = String(email?.subject || 'Untitled email')
+  /*
+   * The composed body, kept on the send document. A message written without
+   * a template still has a rendered HTML part in the inbox, so this is what
+   * the preview draws for one.
+   */
+  const composedBody = String(email?.body ?? '')
   const sendTimeMs = email ? emailSendTimeMs(email) : 0
   const state = String(email?.status ?? '')
 
@@ -233,32 +235,6 @@ export function EmailDetail(props: EmailDetailProps) {
               {caveat.message}
             </Alert>
           ))}
-
-          <Section title="Preview">
-            {templateScreenId ? (
-              <EmailDesignPreview
-                hostId={hostId}
-                nodes={templateVersion?.nodes}
-                loading={template === undefined || templateVersion === undefined}
-                subject={subject}
-                preheader={String(template?.emailPreheader ?? '')}
-                emptyMessage={
-                  'The template this email was built from is empty or has ' +
-                  'been deleted, so there is nothing to draw.'
-                }
-                note={
-                  'The template as it stands today. The mail itself is ' +
-                  'rendered per recipient at send time and not kept, so a ' +
-                  'template edited since this went out previews as it is now.'
-                }
-              />
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                {'This email was written as plain text in the composer rather ' +
-                  'than built from a template, so there is no design to draw.'}
-              </Typography>
-            )}
-          </Section>
 
           <Divider />
 
@@ -504,6 +480,48 @@ export function EmailDetail(props: EmailDetailProps) {
       </CardDisplay>
 
       <EmailRecipientsCard hostId={hostId} emailId={emailId} />
+
+      {/*
+       * Last, and its own card. The numbers are what a reader came for and
+       * the preview is the tallest thing on the page — above them it pushes
+       * every figure below the fold.
+       */}
+      <CardDisplay title="Preview">
+        {templateScreenId ? (
+          <EmailDesignPreview
+            hostId={hostId}
+            nodes={templateVersion?.nodes}
+            loading={template === undefined || templateVersion === undefined}
+            subject={subject}
+            preheader={String(template?.emailPreheader ?? '')}
+            emptyMessage={
+              'The template this email was built from is empty or has ' +
+              'been deleted, so there is nothing to draw.'
+            }
+            note={
+              'The template as it stands today. The mail itself is ' +
+              'rendered per recipient at send time and not kept, so a ' +
+              'template edited since this went out previews as it is now.'
+            }
+          />
+        ) : (
+          <EmailDesignPreview
+            hostId={hostId}
+            nodes={undefined}
+            text={composedBody}
+            loading={email === undefined}
+            subject={subject}
+            emptyMessage={
+              'This email carries no body, so there is nothing to draw.'
+            }
+            note={
+              'Written as plain text in the composer. Merge tokens are ' +
+              'left standing here — the mail itself resolves them per ' +
+              'recipient at send time and is not kept.'
+            }
+          />
+        )}
+      </CardDisplay>
     </Stack>
   )
 }

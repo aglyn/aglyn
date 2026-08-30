@@ -17,7 +17,11 @@
 'use client'
 
 import { decodeStoredNodes } from '@aglyn/aglyn'
-import { EMAIL_NODE_ROOT_ID, renderEmailHtml } from '@aglyn/shared-util-email'
+import {
+  EMAIL_NODE_ROOT_ID,
+  renderEmailHtml,
+  renderTextEmailHtml,
+} from '@aglyn/shared-util-email'
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import { Box, Stack, Typography } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
@@ -26,6 +30,16 @@ export interface EmailDesignPreviewProps {
   hostId: string
   /** The version document's raw `nodes` field, in any of its stored forms. */
   nodes: unknown
+  /**
+   * The plain-text body, for a message composed without a template.
+   *
+   * Such a message is not previewless — the send path synthesizes an HTML
+   * part for it through `renderTextEmailHtml`, and that part is what the
+   * inbox receives. Rendering the same function here shows the mailed copy
+   * rather than reporting that there is nothing to show. Ignored when there
+   * are nodes: a template supersedes it, exactly as it does at send time.
+   */
+  text?: string
   /** The version document has not arrived yet, as against not existing. */
   loading?: boolean
   subject?: string
@@ -71,8 +85,16 @@ export interface EmailDesignPreviewProps {
  * only thing between tenant HTML and a live session.
  */
 export function EmailDesignPreview(props: EmailDesignPreviewProps) {
-  const { hostId, nodes: rawNodes, loading, subject, preheader, emptyMessage, note } =
-    props
+  const {
+    hostId,
+    nodes: rawNodes,
+    text,
+    loading,
+    subject,
+    preheader,
+    emptyMessage,
+    note,
+  } = props
 
   /*
    * The origin the preview's images are fetched from.
@@ -100,7 +122,18 @@ export function EmailDesignPreview(props: EmailDesignPreviewProps) {
     [nodes],
   )
   const rendered = useMemo(() => {
-    if (!Object.keys(nodes).length) return null
+    if (!Object.keys(nodes).length) {
+      /*
+       * A plain-text message renders through the send path's own text
+       * synthesizer, so the frame below draws what was actually mailed.
+       * `renderTextEmailHtml` escapes the body itself, which is why no
+       * sanitizer is threaded here — there is no author markup to strip.
+       */
+      const body = String(text ?? '').trim()
+      if (!body) return null
+      const html = renderTextEmailHtml(body, subject, preheader)
+      return html ? { html, text: body } : null
+    }
     return renderEmailHtml({
       /*
        * The same policy the send path applies, so what is previewed here is
@@ -118,7 +151,7 @@ export function EmailDesignPreview(props: EmailDesignPreviewProps) {
       mediaOrigin: origin,
       mediaHostId: hostId,
     })
-  }, [nodes, subject, preheader, origin, hostId])
+  }, [nodes, text, subject, preheader, origin, hostId])
 
   if (!rendered) {
     return (
