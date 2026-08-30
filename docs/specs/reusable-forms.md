@@ -187,14 +187,20 @@ together because §4 has to pick one:
 | Contacts | `normalizeContactEmail` — `trim().toLowerCase()`, regex-validated, ≤ 320 chars — then `.where('email','==',…).limit(1)`, doc id is an auto-id | `libs/aglyn/src/lib/app-utils/contacts.ts:67-73`; `upsert-contact.ts:90, 114-118` |
 | Site members | `trim().toLowerCase()` then an in-transaction `where('email','==',…)`; doc id is an auto-id | `membership-register.ts:51-53, 88, 122-124` |
 | **Leads** | **none** — `tx.create(leadsRef.doc(), document)` | `host-visitor-records.ts:187` |
-| List members | **two derivations**: `createHash('sha256').update(email)` (64 hex) *versus* `createHmac('sha256','aglyn-list-member').update(email).digest('hex').slice(0,20)` | `libs/plugins/commerce/src/lib/server/newsletter.ts:51`; `libs/tenant/runtime/src/lib/run-event-actions.ts:492-495` |
+| List members | ✅ `personKey` — `sha256(normalizeContactEmail(email))`, full digest, one writer | `libs/aglyn/src/lib/app-utils/person-key.ts`; `libs/tenant/data/admin/src/lib/server/list-members.ts` |
 | The Inbox's own display dedupe | raw `member.email === lead.email` string equality | `inbox-console-page.tsx`, `dedupedLeads` |
 
-The list-member split is `docs/specs/email-overhaul.md`'s **D4** and it is still
-present on `main`. Three independent things make the two ids incompatible — a
-different primitive (keyed HMAC versus bare digest), a different length (20 hex
-versus 64), and no shared helper to reconcile them. **This is the shape §4 must
-not repeat.**
+The list-member split was `docs/specs/email-overhaul.md`'s **D4**. Three
+independent things made the two ids incompatible — a different primitive (keyed
+HMAC versus bare digest), a different length (20 hex versus 64), and no shared
+helper to reconcile them. **This is the shape §4 must not repeat.**
+
+✅ **It is closed, and it is the helper §4 asks for.** `personKey` shipped with
+D4; §4's Phase 3 imports it rather than defining it. It is in
+`libs/aglyn/src/lib/app-utils/person-key.ts`, NOT in `contacts.ts` as §4 below
+says — that module reaches the client barrel and the helper imports
+`node:crypto`. See `docs/specs/email-overhaul.md` §3d for the measurement
+behind that placement.
 
 ### 1f. Defects found while establishing the above
 
@@ -516,8 +522,10 @@ creates a lead, the bookings handler creates a lead — each because the surface
 
 **One derivation, in one exported function, used by every writer.**
 
+✅ **Already built.** D4 shipped it; this phase imports it and adds nothing.
+
 ```
-libs/aglyn/src/lib/app-utils/contacts.ts
+libs/aglyn/src/lib/app-utils/person-key.ts     // via @aglyn/aglyn/server
   export function personKey(email: unknown): string | null
     // sha256(normalizeContactEmail(email)), full digest, or null
 ```
@@ -527,11 +535,16 @@ libs/aglyn/src/lib/app-utils/contacts.ts
   how `emailSuppressionKey` and `suppressionId` came to disagree
   (`docs/specs/email-overhaul.md` D5).
 - It is the **same** derivation `docs/specs/email-overhaul.md` §3d chose for
-  `memberKey`. That spec closes D4 and D5 with it; this one uses it for leads.
-  **Two specs, one function** — if these are built in either order, the second
-  must import the first's helper rather than add a third copy.
+  `memberKey`. That spec closed D4 with it; this one uses it for leads.
+  **Two specs, one function.**
 - It is a **full digest**, never truncated. The 20-hex truncation in
-  `run-event-actions.ts:494` is one of the three reasons D4 exists.
+  `run-event-actions.ts` was one of the three reasons D4 existed.
+- ⚠️ It is **not** in `contacts.ts`, where this spec first placed it. That
+  module is re-exported by the full `@aglyn/aglyn` barrel that client code
+  bundles, and `personKey` imports `node:crypto` — the same constraint that
+  holds `api-adapter`, `api-idempotency` and `plugin-bundle-checks` out of that
+  barrel. Only the file moved; the signature and the derivation are as
+  specified.
 
 **Leads become one document per person per host**, at
 `hosts/{hostId}/leads/{personKey}`, with the capture history as fields rather
@@ -816,19 +829,21 @@ or guess at an ambiguous match. Does not measure conversion.
 
 ### Phase 3 — Leads
 
-`personKey` in `contacts.ts`; `routing.lead` honoured on the form path;
-`addHostLead` rewritten to upsert on `personKey`; the collapse backfill behind a
-dry-run script; the Inbox's display dedupe moved onto `personKey`; the
-`visitor-record-ceiling.ts` docblock rewritten to say what the number now means.
+`routing.lead` honoured on the form path; `addHostLead` rewritten to upsert on
+`personKey`; the collapse backfill behind a dry-run script; the Inbox's display
+dedupe moved onto `personKey`; the `visitor-record-ceiling.ts` docblock
+rewritten to say what the number now means.
 
 **Does not:** change `LEADS_MAX_PER_HOST`, unify leads with contacts or site
 members, introduce a `personId`, or infer consent from anything. Does not touch
 `campaign-send.ts` — D1 belongs to `docs/specs/email-overhaul.md` Phase 1.
 
-⚠️ If `docs/specs/email-overhaul.md` Phase 1 ships first, `personKey` already
-exists as `memberKey`'s derivation and this phase imports it. If this ships
-first, that spec imports this one. **Whichever is second must not add a third
-copy.**
+✅ **Settled.** D4 shipped first, so `personKey` already exists as `memberKey`'s
+derivation and this phase imports it from `@aglyn/aglyn/server`. **It must not
+add a second copy** — `tools/scripts/backfill-list-member-keys.mjs` restates the
+derivation out of necessity (it is a plain module and the helper is TypeScript)
+and guards it by refusing `--apply` when the two disagree. A lead backfill that
+needs the same restatement should carry the same guard.
 
 ### Phase 4 — Per-form performance
 

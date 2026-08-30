@@ -196,11 +196,27 @@ These are not part of the proposal; they are things that are wrong now.
   else. One org's campaign can also consume the whole hourly window, denying
   every other tenant's campaigns (transactional is protected by priority;
   campaigns are not).
-- **D4 — list member ids use two derivations.** `newsletter.ts` uses full
-  `sha256(email)`; `run-event-actions.ts` uses
-  `hmac('aglyn-list-member', email).slice(0, 20)`. The same address enrolled by
-  both paths becomes two members of one list — inflated counts and a double
-  send.
+- **D4 — list member ids use two derivations.** ✅ **CLOSED.** `newsletter.ts`
+  used full `sha256(email)`; `run-event-actions.ts` used
+  `hmac('aglyn-list-member', email).slice(0, 20)`, so the same address enrolled
+  by both paths became two members of one list. Both now go through
+  `enrollListMember` (`libs/tenant/data/admin/src/lib/server/list-members.ts`),
+  which keys on `personKey` and is the only writer of the collection.
+
+  Two corrections to what this entry originally claimed, both established by
+  reading the send path rather than the write path:
+
+  - **It was not a double send.** `performCampaignSend` builds its audience
+    from each member's `email` FIELD and dedupes it through a `Set` of
+    lowercased addresses before sending, so two documents have always produced
+    one message. What the split actually cost was inflated counts, two of the
+    5,000 documents the audience read is capped at, and enrollment metadata
+    (`addedAt`, `source`) split across two rows.
+  - **Casing was never the fork it looked like.** Neither derivation
+    normalized, but both call sites lowercased at their own entry point, so
+    every row already written was keyed from a lowercased address. The
+    normalization now sits inside the key rather than in two callers that
+    happen to agree, which is what makes a third caller safe.
 - **D5 — two suppression key derivations.** `emailSuppressionKey` trims before
   hashing; `suppressionId` and `suppressionKey` (two identical local copies) do
   not. They agree today only because callers trim upstream.
@@ -335,9 +351,33 @@ orgs/{orgId}/lists/{listId}/members/{memberKey}
 ```
 
 `memberKey` is **one** derivation — `emailSuppressionKey`'s trimmed
-`sha256(lower(email))` — which closes D4 and D5 in the same move. Existing
-members under either legacy derivation need a backfill; a merge that keeps the
-earliest `addedAt` is the correct collapse.
+`sha256(lower(email))` — which closes D4 and D5 in the same move.
+
+**Shipped, as `personKey`.** It lives in
+`libs/aglyn/src/lib/app-utils/person-key.ts` and is reached through
+`@aglyn/aglyn/server`. It is the function `docs/specs/reusable-forms.md` §4
+specifies for leads: one derivation, both meanings, as both specs required.
+
+⚠️ It is NOT in `app-utils/contacts.ts` where both specs originally put it, and
+that placement should not be restored. `contacts.ts` is re-exported by
+`app-utils/server` → `app-utils/index` → the full `@aglyn/aglyn` barrel that
+client code bundles, and the helper imports `node:crypto`. Three modules beside
+it (`api-adapter`, `api-idempotency`, `plugin-bundle-checks`) are held out of
+that barrel for exactly this reason — the third was measured at 39 KB gzipped
+off every published customer page. `normalizeContactEmail` has no Node builtin
+and stays in `contacts.ts`, which is what the helper composes.
+
+**Existing members are reconciled by the write path, not by rewriting ids.**
+`enrollListMember` resolves the canonical id and both legacy ids in one
+`getAll` and writes to whichever row already exists, so a person enrolled under
+a legacy id keeps their one document — including the consent-bearing fields on
+it — and no re-subscribe creates a second. `tools/scripts/backfill-list-member-keys.mjs`
+reports the people who hold BOTH rows and, under `--apply`, completes the
+canonical row from the legacy one (earliest `addedAt` wins) and marks the
+legacy row `supersededBy`. **It deletes nothing**, so a split person still
+counts twice on the console's list card until a separate, deliberate pass
+removes superseded rows — a wrong count being the recoverable failure and a
+deleted enrollment not being one.
 
 ### 3e. Evaluation cadence for dynamic lists
 
@@ -647,9 +687,11 @@ variable, and everything in Phase 2 needs the data it starts collecting.
 ### Phase 1 — Make a campaign reach the people it says it will *(correctness)*
 
 D1 ordered and paged audience resolution; D6 campaigns consult the platform
-suppression list; D4 one list-member key derivation plus a collapsing backfill;
-D5 one suppression key derivation; D7 documentation corrected to per-org; a
-composer that distinguishes audience size from send size.
+suppression list; ~~D4~~ **done** — one list-member key derivation, reconciled
+by the write path rather than by a collapsing backfill (§3d says why the
+collapse is not automatic); D5 one suppression key derivation; D7 documentation
+corrected to per-org; a composer that distinguishes audience size from send
+size.
 
 **Does not:** add consent enforcement, domains, dynamic lists, or credits. Does
 not change any limit.
