@@ -138,11 +138,18 @@ const mockOrgId = { orgId: 'org1', ready: true }
  * The org lookup, ALREADY SETTLED.
  *
  * `useOrgDataScope` resolves the owning org with an async `getDoc` and hands
- * back `scope: null` until it lands, and the audiences card holds its query
- * until it does. Left unmocked, that section registered ZERO listens here and
- * the meter reported it as free — which is why this file used to render it and
- * assert `true`. A card whose reads are all behind an unresolved promise is
- * not a cheap card, it is an unmeasured one.
+ * back `scope: null` until it lands, and every org-scoped card holds its query
+ * until it does. Left unmocked, nothing behind that promise ever ran here: the
+ * audiences section registered ZERO listens and the meter reported it as free,
+ * which is why this file used to render it and assert `true`. A card whose
+ * reads are all behind an unresolved promise is not a cheap card, it is an
+ * unmeasured one.
+ *
+ * The printed figures move because of this, and the movement is the meter
+ * catching up rather than the page getting dearer: the campaigns section reads
+ * 6 listens / <=382 documents here where it used to read 4 / <=282. Those two
+ * listens were always issued in a browser; they were invisible to a harness
+ * whose org never resolved.
  */
 const mockScope = { orgId: 'org1', ready: true, scope: ['orgs', 'org1'] }
 const mockHostRoute = { orgSlug: 'acme', subdomain: 'site', base: '/acme/hosts/site' }
