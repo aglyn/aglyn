@@ -34,7 +34,19 @@ import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.ty
  * This module is deliberately pure: no I/O, no SDK, no `'use client'`.
  */
 
-/** The three capacities a plan change can strand. */
+/**
+ * The three capacities a plan change can strand.
+ *
+ * ⛔ **The saved-form catalog is not one of them, and must not be added.**
+ * `formsPerHost` is refused at the CREATE and nowhere else: an org that drops
+ * to a plan including five forms keeps all eighty it built, every one stays
+ * editable, and every one keeps accepting submissions — which are metered
+ * revenue on their own band, so a catalog ceiling that reached them would
+ * refuse money as well as data. There is nothing to release, so there is
+ * nothing to warn about and nothing to refuse a downgrade over. The three
+ * kinds here are the ones where holding past the new plan really does mean
+ * capacity the org is no longer entitled to.
+ */
 export type OverLimitKind = 'sites' | 'seats' | 'datasets'
 
 /** Order is the order both readers present: sites, seats, datasets. */

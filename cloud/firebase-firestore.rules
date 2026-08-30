@@ -1817,8 +1817,9 @@ service cloud.firestore {
       // separately and this change does not widen them.
       //
       // Creates are staff-only so they route through /api/hosts/resources,
-      // where the `reusableComponents` entitlement and `FORMS_MAX_PER_HOST`
-      // are enforced against a server-read count inside a transaction. A
+      // where the `reusableComponents` entitlement and the plan's
+      // `formsPerHost` allowance are enforced against a server-read count
+      // inside a transaction. A
       // client-direct create is an unbounded host subcollection mintable from
       // the browser.
       //

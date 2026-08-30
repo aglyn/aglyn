@@ -238,6 +238,21 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'Workflow runs / mo', value: talk((p) => num(E(p).workflowRunsPerMonth)) },
       { label: 'Actions builder', value: (p) => bool(F(p).actions) },
       { label: 'Appointment bookings', value: (p) => bool(F(p).bookings) },
+      /*
+       * Two form rows, adjacent on purpose, because they answer the two
+       * questions a buyer actually asks and they are not the same question:
+       * how many intake forms may I BUILD, and how many replies may they
+       * RECEIVE. Split apart they read as one number stated twice.
+       *
+       * The count is a catalog size. A form left unbound to a saved
+       * definition still collects, so the row below never gates the row
+       * above — submissions are metered revenue, and a count ceiling that
+       * turned into a submissions gate would refuse money as well as data.
+       */
+      {
+        label: 'Saved forms per site',
+        value: talk((p) => num(E(p).formsPerHost)),
+      },
       {
         label: 'Form submissions / mo',
         value: talk((p) => num(E(p).formSubmissionsPerMonth)),
@@ -851,6 +866,8 @@ if (!frameTable) {
  * repeats forever. An entry here that stops diverging fails too.
  */
 const EXPECTED_MISSING: Record<string, string> = {
+  'Saved forms per site':
+    'the form catalog became a plan dimension after the frame was drawn; the frame publishes only the submissions band beside it, so there is no cell to reconcile until `/pricing` and the Figma table gain the row',
   'Single sign-on (SAML/OIDC)':
     'added beyond the frame when AGL-1210 shipped self-serve SSO; `ssoEnabled` is real and Enterprise-only, and the page said so before the design did',
 }

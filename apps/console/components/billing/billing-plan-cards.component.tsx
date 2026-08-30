@@ -1422,6 +1422,18 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   <Typography variant="body2">
                     {`${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`}
                   </Typography>
+                  {/* The two form dimensions on one line, because separated
+                      they read as one number stated twice. The catalog size
+                      is what an author spends by BUILDING a form; the
+                      submissions band is what visitors spend by ANSWERING
+                      one, and a site out of catalog keeps collecting on
+                      every form it already has. */}
+                  <Typography variant="body2">
+                    {entitlements.formsPerHost > 0
+                      ? `${quotaLabel(entitlements.formsPerHost)} saved forms/site · ` +
+                        `${quotaCount(entitlements.formSubmissionsPerMonth)} submissions/mo`
+                      : `${quotaCount(entitlements.formSubmissionsPerMonth)} form submissions/mo`}
+                  </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
                       `${quotaLabel(entitlements.functionsPerHost)} functions · ` +

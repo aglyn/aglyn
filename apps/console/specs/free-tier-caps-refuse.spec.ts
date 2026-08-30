@@ -172,6 +172,15 @@ const DIMENSIONS: Record<string, Dimension> = {
   screensPerHost: quotaRow('screensPerHost', 5, RESOURCES_ROUTE, 4),
   sharedLayoutsPerHost: quotaRow('sharedLayoutsPerHost', 1, RESOURCES_ROUTE, 0),
   templatesPerHost: quotaRow('templatesPerHost', 10, RESOURCES_ROUTE, 9),
+  /**
+   * The saved-form CATALOG, which Free has none of — `reusableComponents` is
+   * Starter-and-above, so the entity is refused as a feature before the count
+   * is reached, and the count agrees at 0. Distinct from
+   * `formSubmissionsPerMonth` below, which is what a Free site's forms may
+   * RECEIVE: the two are separate dimensions and Free is generous on one and
+   * empty on the other.
+   */
+  formsPerHost: quotaRow('formsPerHost', 0, RESOURCES_ROUTE),
   variablesPerHost: quotaRow('variablesPerHost', 3, RESOURCES_ROUTE, 2),
   functionsPerHost: quotaRow('functionsPerHost', 1, RESOURCES_ROUTE, 0),
   workflowsPerHost: quotaRow('workflowsPerHost', 0, RESOURCES_ROUTE),

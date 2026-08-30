@@ -24,7 +24,6 @@ import {
   checkQuota,
   createResourceUid,
   ENTRIES_MAX_PER_COLLECTION,
-  FORMS_MAX_PER_HOST,
   nameSearchKey,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   type OrgEntitlements,
@@ -355,17 +354,16 @@ const RESOURCES: Record<string, {
    * so renaming one split its submission history, and two pages sharing a
    * label had always been one list.
    *
-   * Gated on `reusableComponents` rather than a `formsPerHost` plan
-   * dimension. The reuse half of a reusable form is that entitlement's engine
-   * already: a bound `Form` subtree is promoted and placed like any other
-   * definition, and the `formId` travels inside it. Selling the entity
-   * separately would price the half that was already sold.
+   * TWO gates, asking different questions. `reusableComponents` asks whether
+   * the plan has the reuse engine a bound form rides at all — a promoted
+   * `Form` subtree is placed like any other definition and the `formId`
+   * travels inside it. `formsPerHost` asks how many distinct intake forms one
+   * site may hold, which is a capacity and is priced as one.
    *
-   * `FORMS_MAX_PER_HOST` is a flat platform cap in the `WEBHOOK_MAX_PER_HOST`
-   * family — no `OrgEntitlements` key, the same number on every plan, nothing
-   * on the price list to explain. The account owner approved that instrument
-   * for the member/lead ceilings on the stated ground that an abuse control
-   * is not something we sell.
+   * The catalog is the only thing this counts. A `Form` node drawn on a page
+   * and left unbound has no document here, so a site whose allowance is spent
+   * — or zero — still collects submissions; those are rationed by
+   * `formSubmissionsPerMonth`, on their own axis, at their own numbers.
    *
    * ⚠️ No `softDeletes`. That branch reads EVERY document to count live ones,
    * and a form is deleted outright — its submissions are not, and they keep
@@ -375,7 +373,7 @@ const RESOURCES: Record<string, {
   form: {
     collection: 'forms',
     entitlement: 'reusableComponents',
-    maxPerHost: FORMS_MAX_PER_HOST,
+    quotaKey: 'formsPerHost',
     label: 'forms',
     activity: { type: 'content', noun: 'form' },
     // `rootId` and `nodes` are the DESIGN, seeded at create the way a

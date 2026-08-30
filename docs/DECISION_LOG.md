@@ -129,6 +129,98 @@ and Create button) carried the entire console list-pagination arc, and
 `AGL-2306` (a rejected plugin version stays advertised) was cited by the
 citation guard itself. Both now have real issues — AGL-2501 and AGL-2500.
 
+## 2026-08-30 — The saved-form catalog becomes a plan allowance; Advanced and above are uncapped
+
+- **Decided by:** the account owner — forms belong on the pricing tables, the marketing site, the billing dashboard and the add-ons surface, with Enterprise unlimited and "50 is tiny for Agency and Enterprise".
+- **Scope:** packaging
+- **Evidence:** `OrgEntitlements.formsPerHost`, new; `PLAN_ENTITLEMENTS[*].formsPerHost` = 0 / 50 / 200 / 500 / 1,000 / Unlimited / Unlimited / Unlimited; enforced at `apps/console/app/api/hosts/resources/route.ts` (`quotaKey`, inside the create transaction); `libs/aglyn/src/lib/app-utils/forms.ts` (`FORMS_MAX_PER_HOST` is now a listing bound, not a ceiling); published by `tools/marketing/pricing-copy/tables.json` and `apps/console/components/billing/*`; competitor table in Drive → Pricing & Packaging → 05-Pricing-Decision-Log.
+
+**No charged price moves.** This adds an allowance and raises a ceiling; every
+price stays where the Sept-1 lock put it.
+
+`FORMS_MAX_PER_HOST = 50` was one flat number for all eight plans, on no price
+list and in no document. It is now `formsPerHost`, a per-site catalog size the
+plan decides.
+
+### The two form dimensions, and why the count is not the lever
+
+`formSubmissionsPerMonth` already exists, is already tiered
+(20 / 200 / 1k / 10k / 50k / 100k / Unlimited / Unlimited), and is already
+metered at cost × 1.30. **It is untouched.** What moves is the other axis: how
+many saved form DEFINITIONS one site may hold.
+
+Verified against live vendor pricing pages on 2026-08-30:
+
+| Vendor | What they gate | Numbers |
+|---|---|---|
+| Squarespace | nothing — no form count, no submission cap; only form *analytics* is tiered | — |
+| Webflow | submissions on the FREE tier only; paid plans advertise "unlimited form submissions"; features (file upload) are the paid lever | 50 on Starter, unlimited above |
+| HubSpot | neither — forms are free and unlimited; the meter is marketing contacts | 1k / 2k / 10k contacts |
+| Typeform | responses per month; "Number of forms — Unlimited" on every tier, stated verbatim | 100 / 1k / 10k responses |
+| Mailchimp | neither — "as many forms as needed per audience"; contacts and sends are billed | — |
+| Wix | **form count**, tightly | 4 / 10 / 25 / 75 |
+| Jotform | form count AND submissions — a form-first product where the form is the billable unit | 5 / 25 / 50 / 100 forms |
+
+Five of seven cap form count at nothing at all. Webflow, historically the
+poster child for per-plan submission caps, has abandoned that lever above its
+free tier. Only Wix meters form count among website builders, and its numbers
+are tight enough to be a known friction point.
+
+**So the count is set as an abuse ceiling that a real customer never meets, not
+as a lever.** It is generous against both vendors that do meter it, and it
+disappears entirely from Advanced up.
+
+| Plan | Saved forms / site | Nearest metering comparator |
+|---|---|---|
+| Free | — | HubSpot/Typeform/Mailchimp give free forms; see the open question below |
+| Starter $25 | 50 | Wix Core 10 @ $29 · Jotform Bronze 25 @ $39 |
+| Pro $56 | 200 | Wix Business Elite 75 @ $159 · Jotform Gold 100 @ $129 |
+| Business $139 | 500 | past every published competitor number |
+| Scale $249 | 1,000 | — |
+| Advanced $399 | Unlimited | matches the tier's "headroom on every limit" posture |
+| Agency $799 | Unlimited | — |
+| Enterprise | Unlimited | contract-bound |
+
+**Nobody loses capacity.** Starter is set at exactly the flat 50 every plan had,
+so the change only ever grants.
+
+### Where it is enforced, and where it deliberately is not
+
+The allowance refuses the CREATE of the next form, inside the transaction that
+counts, and nothing else. A site whose allowance is spent — including one that
+spent it by downgrading — keeps every form it built, editable and readable, and
+every one of them keeps collecting. Submissions are metered revenue on their own
+band, so a catalog ceiling that reached them would refuse the customer's leads
+and the platform's billing in the same request.
+
+⛔ **The catalog is not an `over-limit.ts` capacity and must not become one.**
+Sites, manager seats and datasets are there because holding past a downgrade
+means holding capacity the org is no longer entitled to, and the remedy is to
+release some. Forms have no such remedy: they grandfather, in full, forever.
+
+### What this deliberately did NOT do
+
+- **No submissions change.** The bands and the metered rate are a charged price
+  and are frozen. The comparison did not suggest moving them.
+- **No forms add-on.** Extra forms are not sold, so no new price exists.
+- **`reusableComponents` still gates access.** Free resolves to 0 because that
+  entitlement is Starter-and-above and refuses the create before the count is
+  reached. The number publishes what Free actually gets rather than a promise
+  the route declines.
+
+### Open question for the account owner
+
+**Should Free get a small saved-form catalog?** Every free tier in the
+comparison set offers forms — HubSpot and Mailchimp make free forms the
+acquisition lever that fills the metered resource they actually bill. Free sites
+here already accept 20 submissions a month from an unbound form on a page, so the
+capability is half-present; what they cannot do is SAVE one as a reusable
+definition. Granting it means moving the form entity off `reusableComponents`,
+which is a packaging change on a published feature-matrix row and needs a
+decision, not an implementation.
+
+---
+
 ## 2026-08-30 — Advanced and Agency email allowances come down to what the platform can deliver
 
 - **Decided by:** the account owner — Agency sold 1,000,000 campaign emails a month against a 360,000 deliverable ceiling, and the repair is to lower the allowance rather than buy capacity that abuse controls have not yet earned.
