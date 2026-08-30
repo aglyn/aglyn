@@ -96,6 +96,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
     .listFilterConstraints,
   useFirestore: () => FIRESTORE,
+  /*
+   * The product editor asks for its pickers through the shared builders. Both
+   * carry the collection reference through unchanged, so a gated read still
+   * resolves to `null` when the dialog is closed.
+   */
+  collectionCeiling: (ref: unknown) => ref,
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
   useFirestoreCollection: (build: () => any) => {
     const built = build()
     if (!built) return { data: [], status: 'success', fromCache: false }
