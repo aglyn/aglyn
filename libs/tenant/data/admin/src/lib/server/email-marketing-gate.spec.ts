@@ -326,3 +326,241 @@ describe('readMarketingFrequency', () => {
     ).resolves.toEqual([])
   })
 })
+
+/*==========================================
+ * ENGAGEMENT-BASED SUNSETTING.
+ *
+ * Three properties, and every one of them is asserted in BOTH directions,
+ * because a sunset is a refusal and the failure that would go unnoticed is
+ * the one where it refuses everybody:
+ *
+ *  1. It refuses a person who has gone quiet for longer than the window.
+ *  2. It refuses NOBODY else — not a new subscriber, not somebody we have no
+ *     record of, not somebody who engaged inside the window, and not a
+ *     campaign.
+ *  3. It removes nothing. No suppression, no membership change, and not even
+ *     a mark on the frequency window, because a message that never left must
+ *     not count against what this person has received.
+ *=========================================*/
+
+const DAY = 86_400_000
+const SUNSET_DAYS = 180
+
+/** Turns the sunset on for one test body, and off again afterwards. */
+async function withSunset(days: number | string, body: () => Promise<void>) {
+  const previous = process.env['AGLYN_EMAIL_SUNSET_AFTER_DAYS']
+  process.env['AGLYN_EMAIL_SUNSET_AFTER_DAYS'] = String(days)
+  try {
+    await body()
+  } finally {
+    if (previous === undefined) {
+      delete process.env['AGLYN_EMAIL_SUNSET_AFTER_DAYS']
+    } else {
+      process.env['AGLYN_EMAIL_SUNSET_AFTER_DAYS'] = previous
+    }
+  }
+}
+
+/**
+ * A store where this site has mailed the address for two years.
+ *
+ * `engagedAtMs` null is "never opened anything", which is the population the
+ * sunset is aimed at.
+ */
+const agedStore = (engagedAtMs: number | null, firstSentAtMs = NOW - 720 * DAY) =>
+  fakeFirestore({
+    [FREQUENCY_PATH]: {
+      [KEY]: { email: ADDRESS, sentAtMs: [], firstSentAtMs },
+    },
+    emailDeliveries: engagedAtMs
+      ? { [KEY]: { lastEngagedAtMs: engagedAtMs, lastOpenedAtMs: engagedAtMs } }
+      : {},
+  })
+
+describe('the sunset refuses a send and reduces nobody', () => {
+  it('is OFF unless an operator configures a window', async () => {
+    const firestore = agedStore(null)
+
+    // The same address, the same silence, and no refusal — because no vendor
+    // researched automates this, and a platform that silently stopped mailing
+    // a merchant's quiet subscribers would be doing something none of their
+    // previous tools did.
+    await expect(ask(firestore)).resolves.toMatchObject({ allowed: true })
+  })
+
+  it('refuses somebody quiet for longer than the window', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      const firestore = agedStore(null)
+      const verdict = await ask(firestore)
+
+      expect(verdict).toMatchObject({ allowed: false, refusal: 'unengaged' })
+      // It still hands back a way out. A refusal is not a reason to withhold
+      // the unsubscribe link from the log line that reports it.
+      expect(verdict.unsubscribeUrl).toContain('/api/email/unsubscribe')
+    })
+  })
+
+  it('allows somebody who engaged inside the window, in the same store', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      await expect(ask(agedStore(NOW - 10 * DAY))).resolves.toMatchObject({
+        allowed: true,
+      })
+    })
+  })
+
+  it('holds at the boundary in both directions', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      await expect(
+        ask(agedStore(NOW - SUNSET_DAYS * DAY)),
+      ).resolves.toMatchObject({ allowed: true })
+      await expect(
+        ask(agedStore(NOW - SUNSET_DAYS * DAY - 1)),
+      ).resolves.toMatchObject({ allowed: false, refusal: 'unengaged' })
+    })
+  })
+
+  /**
+   * ⚠️ A NEW SUBSCRIBER HAS NO ENGAGEMENT YET.
+   *
+   * The window is measured from when this site STARTED mailing them, so
+   * somebody it has not been mailing for longer than the window is never
+   * refused however little they have engaged. Without this the sunset would
+   * refuse everybody the day it was switched on.
+   */
+  it('never refuses somebody this site has not been mailing that long', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      await expect(
+        ask(agedStore(null, NOW - 10 * DAY)),
+      ).resolves.toMatchObject({ allowed: true })
+    })
+  })
+
+  it('never refuses somebody it holds no mailing record for', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      // Missing evidence is not evidence of absence, and the reading that
+      // mails somebody once more is the recoverable one.
+      await expect(ask(fakeFirestore())).resolves.toMatchObject({
+        allowed: true,
+      })
+    })
+  })
+
+  /*
+   * A campaign is a reviewed act with its recipient count on screen before
+   * anybody presses Send. It yields to the sunset exactly as it yields to the
+   * frequency ceiling — through the same flag — so that number stays true.
+   */
+  it('does not refuse a campaign', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      await expect(
+        ask(agedStore(null), { capped: false }),
+      ).resolves.toMatchObject({ allowed: true })
+    })
+  })
+
+  it('reads an out-of-range window as OFF rather than as a default', async () => {
+    // The opposite handling from the frequency cap, and deliberately: a typo
+    // there weakens a guard that is already on, and a typo here would switch
+    // on a refusal nobody asked for.
+    await withSunset(2, async () => {
+      await expect(ask(agedStore(null))).resolves.toMatchObject({
+        allowed: true,
+      })
+    })
+    await withSunset('not-a-number', async () => {
+      await expect(ask(agedStore(null))).resolves.toMatchObject({
+        allowed: true,
+      })
+    })
+  })
+
+  /**
+   * ⛔ THE RULE THE WHOLE FEATURE SITS UNDER.
+   *
+   * A ceiling never removes a person or their data. A sunset refuses the
+   * SEND: nothing is suppressed, nothing is unsubscribed, no membership
+   * changes, and the frequency window is not even appended to — a message
+   * that never left must not count against what this person has received.
+   */
+  it('writes no suppression and does not count the message it refused', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      const firestore = agedStore(null)
+      await ask(firestore)
+
+      expect(Object.keys(firestore.docs('emailSuppressions'))).toHaveLength(0)
+      expect(
+        Object.keys(firestore.docs(`hosts/${HOST}/suppressions`)),
+      ).toHaveLength(0)
+      expect(firestore.docs(FREQUENCY_PATH)[KEY].sentAtMs).toEqual([])
+      // The address is exactly where it was, first-send stamp included.
+      expect(firestore.docs(FREQUENCY_PATH)[KEY].firstSentAtMs).toBe(
+        NOW - 720 * DAY,
+      )
+    })
+  })
+
+  /**
+   * REVERSIBLE WITH NOBODY DOING ANYTHING.
+   *
+   * The only state is two timestamps. A person who opens anything moves the
+   * second one, and the very next send finds them inside the window. Nothing
+   * has to be undone, because nothing was done.
+   */
+  it('becomes mailable again the moment the person engages', async () => {
+    await withSunset(SUNSET_DAYS, async () => {
+      const firestore = agedStore(null)
+      await expect(ask(firestore)).resolves.toMatchObject({
+        allowed: false,
+        refusal: 'unengaged',
+      })
+
+      // The delivery webhook's rollup, doing exactly what it does on an open.
+      await firestore
+        .collection('emailDeliveries')
+        .doc(KEY)
+        .set({ lastEngagedAtMs: NOW - DAY, lastOpenedAtMs: NOW - DAY }, { merge: true })
+
+      await expect(ask(firestore)).resolves.toMatchObject({ allowed: true })
+    })
+  })
+})
+
+describe('the first-send stamp the sunset measures from', () => {
+  it('is written by the gate on a send it allows', async () => {
+    const firestore = fakeFirestore()
+    await ask(firestore)
+
+    expect(firestore.docs(FREQUENCY_PATH)[KEY].firstSentAtMs).toBe(NOW)
+  })
+
+  /**
+   * ⚠️ WRITE-ONCE, and the sunset is unreachable without it. Re-stamping on
+   * every send would keep the relationship permanently younger than any
+   * window, so nobody would ever be old enough to be quiet.
+   */
+  it('is never re-stamped by a later send', async () => {
+    const firestore = fakeFirestore({
+      [FREQUENCY_PATH]: {
+        [KEY]: { email: ADDRESS, sentAtMs: [], firstSentAtMs: NOW - 500 * DAY },
+      },
+    })
+    await ask(firestore)
+
+    expect(firestore.docs(FREQUENCY_PATH)[KEY].firstSentAtMs).toBe(
+      NOW - 500 * DAY,
+    )
+  })
+
+  it('is written by the campaign path’s batch recorder too', async () => {
+    const firestore = fakeFirestore()
+    await recordMarketingSends(HOST, [ADDRESS], { nowMs: NOW, firestore })
+
+    expect(firestore.docs(FREQUENCY_PATH)[KEY].firstSentAtMs).toBe(NOW)
+
+    await recordMarketingSends(HOST, [ADDRESS], {
+      nowMs: NOW + DAY,
+      firestore,
+    })
+    expect(firestore.docs(FREQUENCY_PATH)[KEY].firstSentAtMs).toBe(NOW)
+  })
+})

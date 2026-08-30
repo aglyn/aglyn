@@ -126,6 +126,14 @@ export type MarketingSendRefusal =
   | 'suppressed'
   /** This person has already received their ceiling from this site. */
   | 'frequency-capped'
+  /**
+   * This site has been mailing this person for longer than the sunset window
+   * and nothing in that window says they are still listening.
+   *
+   * NOT retryable by a sweep — the condition does not clear on a schedule,
+   * it clears when the person engages. See {@link marketingSunsetVerdict}.
+   */
+  | 'unengaged'
 
 export interface MarketingSendGateVerdict {
   allowed: boolean
@@ -247,6 +255,135 @@ export function marketingFrequencyVerdict(
     used: inWindow.length,
     cap,
     inWindow,
+  }
+}
+
+/*==========================================
+ * ENGAGEMENT-BASED SUNSETTING.
+ *
+ * Stop mailing an address that has gone quiet. The whole design fits in one
+ * sentence and three refusals it must never become.
+ *
+ * ## ⛔ It refuses a SEND. It never reduces a person.
+ *
+ * `over-limit.ts` states the rule for capacity and this is the same
+ * instrument pointed at attention rather than at count. A sunset does NOT
+ * unsubscribe anybody, does NOT remove them from a list, does NOT delete a
+ * contact and does NOT write a suppression. Every one of those would be a
+ * ceiling performing a deletion, and every one of them is irreversible in a
+ * way the condition that triggered it is not.
+ *
+ * ## It is reversible without anybody doing anything
+ *
+ * The only state is two timestamps: when this site first mailed this person,
+ * and when this person last engaged with our mail. A person who opens or
+ * clicks anything moves the second one, and the very next send finds them
+ * inside the window and mailable. Nothing has to be undone, because nothing
+ * was done.
+ *
+ * ## The three ways it could refuse somebody it should not, and the guards
+ *
+ *  1. **A brand-new subscriber has no engagement yet.** So the window is
+ *     measured from when we STARTED mailing them, and somebody we have not
+ *     been mailing for longer than the window is never refused, however
+ *     little they have engaged.
+ *  2. **We might have no record at all.** An unknown `firstSentAtMs` refuses
+ *     nobody. Missing evidence is not evidence of absence, and the reading
+ *     that mails somebody once more is the recoverable one.
+ *  3. **A campaign is a reviewed act with its recipient count on screen.**
+ *     Sunsetting yields to it exactly as the frequency ceiling does, through
+ *     the same `capped` flag, so the number a merchant read before pressing
+ *     Send stays true. It governs the automated paths, which fire with no
+ *     human present.
+ *
+ * ## Opens are a weak signal and this leans on the broader one anyway
+ *
+ * The industry lesson is to sunset on clicks, because Apple's Mail Privacy
+ * Protection prefetches images and inflates opens. That argument is about
+ * choosing an audience. This is a refusal, and for a refusal the weaker,
+ * more generous signal is the correct one: counting an open as engagement
+ * refuses FEWER people. The audience rules
+ * (`DynamicListEngagement`) keep opens and clicks apart so a merchant
+ * segmenting on engagement can lean on clicks; this deliberately does not.
+ *=========================================*/
+
+/** Floor and ceiling on a configured sunset window — a typo guard. */
+export const MARKETING_SUNSET_MIN_DAYS = 30
+export const MARKETING_SUNSET_MAX_DAYS = 3_650
+
+/**
+ * The window, in days, or 0 for OFF.
+ *
+ * **Off unless an operator turns it on**, and that default is the honest one:
+ * no compared vendor automates this, so a platform that silently stopped
+ * mailing a merchant's quiet subscribers would be doing something none of
+ * their previous tools did and none of their recipients asked for. The value
+ * is a number of days rather than a boolean because the only interesting
+ * question about a sunset is where it starts.
+ *
+ * Read per call rather than captured at module load, matching the frequency
+ * cap beside it: these run in serverless handlers where the module may be
+ * evaluated during a build.
+ *
+ * An unparseable or out-of-range value reads as OFF rather than falling back
+ * to a default. This is the opposite of {@link marketingFrequencyCap}'s
+ * handling and deliberately so — a typo there weakens a guard that is on by
+ * default, and a typo here would ENABLE a refusal nobody asked for.
+ */
+export function marketingSunsetDays(): number {
+  const raw = Number(process.env.AGLYN_EMAIL_SUNSET_AFTER_DAYS)
+  if (!Number.isFinite(raw)) return 0
+  const whole = Math.floor(raw)
+  if (whole < MARKETING_SUNSET_MIN_DAYS || whole > MARKETING_SUNSET_MAX_DAYS) {
+    return 0
+  }
+  return whole
+}
+
+/** What the sunset needs to know about one person. */
+export interface MarketingSunsetFacts {
+  /**
+   * When this site first sent this person marketing mail, or null when we
+   * have no record. Null never refuses.
+   */
+  firstSentAtMs: number | null
+  /** When they last opened or clicked any of our mail, or null for never. */
+  lastEngagedAtMs: number | null
+}
+
+/**
+ * Whether this person has gone quiet for longer than the window.
+ *
+ * Pure, so the decision is testable without a Firestore harness — the same
+ * split {@link marketingFrequencyVerdict} makes.
+ *
+ * @param days 0 disables the sunset entirely and this always allows.
+ */
+export function marketingSunsetVerdict(
+  facts: MarketingSunsetFacts,
+  nowMs: number,
+  days: number = marketingSunsetDays(),
+): { allowed: boolean; days: number; quietForDays: number | null } {
+  if (!days || days <= 0) {
+    return { allowed: true, days: 0, quietForDays: null }
+  }
+  const floor = nowMs - days * 86_400_000
+  const first = Number(facts.firstSentAtMs ?? 0)
+  // Guard 1 and 2 together: no record, or a relationship younger than the
+  // window, allows. A person cannot have been quiet for longer than we have
+  // been mailing them.
+  if (!Number.isFinite(first) || first <= 0 || first >= floor) {
+    return { allowed: true, days, quietForDays: null }
+  }
+  const engaged = Number(facts.lastEngagedAtMs ?? 0)
+  if (Number.isFinite(engaged) && engaged > 0 && engaged >= floor) {
+    return { allowed: true, days, quietForDays: null }
+  }
+  const since = Number.isFinite(engaged) && engaged > 0 ? engaged : first
+  return {
+    allowed: false,
+    days,
+    quietForDays: Math.floor((nowMs - since) / 86_400_000),
   }
 }
 

@@ -22,14 +22,16 @@
  * holds the injection seam; this answers the question, because answering it
  * needs Firestore and that library may not hold the Admin SDK.
  *
- * Three things, in the order they cost:
+ * Four things, in the order they cost:
  *
  *  1. **Both suppression lists**, through the one shared helper. A person who
  *     unsubscribed from this site, hard-bounced anywhere in the product, or
  *     pressed "report spam" is not mailed. Asked first because it is the only
- *     one of the three whose answer is permanent.
- *  2. **A frequency ceiling**, per recipient per site, over a rolling day.
- *  3. **The signed unsubscribe URL**, so the message carries a way out.
+ *     one whose answer is permanent.
+ *  2. **An engagement sunset**, when an operator has configured a window —
+ *     off by default, and it costs a read only when it is on.
+ *  3. **A frequency ceiling**, per recipient per site, over a rolling day.
+ *  4. **The signed unsubscribe URL**, so the message carries a way out.
  *
  * ## The counter is a WINDOW, not a total
  *
@@ -66,11 +68,14 @@
 import {
   getMarketingSendGate,
   marketingFrequencyVerdict,
+  marketingSunsetDays,
+  marketingSunsetVerdict,
   setMarketingSendGate,
   type MarketingSendGateRequest,
   type MarketingSendGateVerdict,
 } from '@aglyn/shared-util-email'
 import firebaseAdmin from './firebase-admin'
+import { readPersonEngagement } from './email-delivery-log'
 import { emailSuppressionKey, filterSendableForHost } from './email-suppression'
 import { buildUnsubscribeUrl } from './email-unsubscribe-link'
 
@@ -93,6 +98,32 @@ export interface EmailFrequencyRecord {
   email: string
   /** Marketing send instants, trimmed to the window on every touch. */
   sentAtMs: number[]
+  /**
+   * When this site FIRST sent this person marketing mail.
+   *
+   * Written once and never again, and it rides here rather than in a store of
+   * its own because this document is already written on every marketing send:
+   * carrying the field costs nothing, and a second per-recipient document
+   * would be a write per send per person for one number.
+   *
+   * The sunset is what reads it — see `marketingSunsetVerdict`. A person we
+   * have not been mailing for longer than the sunset window cannot have been
+   * quiet for longer than the sunset window, so this is the field that keeps
+   * a new subscriber from being refused for having nothing on record yet.
+   *
+   * Null for every row written before this field existed, which reads as "no
+   * record" and therefore refuses nobody. That is the conservative direction
+   * for a field introduced after the data, and it self-heals: the row gains
+   * the stamp on this site's next marketing send to that person, and the
+   * clock starts from then rather than from a past nobody recorded.
+   */
+  firstSentAtMs?: number
+}
+
+/** The stored window and the first-send stamp, read together. */
+interface FrequencyState {
+  sentAtMs: number[]
+  firstSentAtMs: number | null
 }
 
 function frequencyDoc(
@@ -122,15 +153,41 @@ export async function readMarketingFrequency(
   email: string,
   firestore?: any,
 ): Promise<number[]> {
+  return (await readFrequencyState(hostId, email, firestore)).sentAtMs
+}
+
+/**
+ * The whole row: the window AND the first-send stamp, in one read.
+ *
+ * One read rather than two because the gate needs both on the same send, and
+ * the sunset must not add a second round trip to a path that is already one
+ * awaited HTTP POST per recipient.
+ *
+ * FAILS OPEN on both halves, for the same reason and in the same direction:
+ * an empty window means "there is room", and a null stamp means "no record",
+ * which refuses nobody.
+ */
+async function readFrequencyState(
+  hostId: string,
+  email: string,
+  firestore?: any,
+): Promise<FrequencyState> {
   const key = emailSuppressionKey(email)
-  if (!key) return []
+  if (!key) return { sentAtMs: [], firstSentAtMs: null }
   try {
     const snapshot = await frequencyDoc(hostId, key, firestore).get()
-    const stored = snapshot.exists ? snapshot.get('sentAtMs') : null
-    return Array.isArray(stored) ? stored.map((at: unknown) => Number(at)) : []
+    if (!snapshot.exists) return { sentAtMs: [], firstSentAtMs: null }
+    const stored = snapshot.get('sentAtMs')
+    const first = Number(snapshot.get('firstSentAtMs') ?? 0)
+    return {
+      sentAtMs: Array.isArray(stored)
+        ? stored.map((at: unknown) => Number(at))
+        : [],
+      firstSentAtMs: Number.isFinite(first) && first > 0 ? first : null,
+    }
   } catch (error) {
     console.error('[email-marketing] frequency read failed; allowing', error)
-    return []
+    return { sentAtMs: [], firstSentAtMs: null }
   }
 }
 
@@ -164,17 +221,33 @@ export async function recordMarketingSends(
     const db = options?.firestore ?? defaultFirestore()
     for (const [key, email] of keyed) {
       const ref = frequencyDoc(hostId, key, db)
-      const existing = await ref
+      const existing: FrequencyState = await ref
         .get()
         .then((snapshot: any) =>
-          snapshot.exists ? snapshot.get('sentAtMs') : null,
+          snapshot.exists
+            ? {
+                sentAtMs: snapshot.get('sentAtMs') ?? [],
+                firstSentAtMs: Number(snapshot.get('firstSentAtMs') ?? 0) || null,
+              }
+            : { sentAtMs: [], firstSentAtMs: null },
         )
-        .catch(() => null)
+        .catch(() => ({ sentAtMs: [], firstSentAtMs: null }))
       const window = marketingFrequencyVerdict(
-        [...(Array.isArray(existing) ? existing.map(Number) : []), nowMs],
+        [...(Array.isArray(existing.sentAtMs) ? existing.sentAtMs.map(Number) : []), nowMs],
         nowMs,
       )
-      await ref.set({ email, sentAtMs: window.inWindow }, { merge: true })
+      await ref.set(
+        {
+          email,
+          sentAtMs: window.inWindow,
+          // Write-once. Overwriting it would restart the sunset clock on
+          // every send, which would make the sunset unreachable — a person
+          // whose relationship is always "as old as the last message" is
+          // never older than the window.
+          ...(existing.firstSentAtMs ? {} : { firstSentAtMs: nowMs }),
+        },
+        { merge: true },
+      )
       recorded += 1
     }
   } catch (error) {
@@ -220,12 +293,64 @@ export async function marketingSendVerdict(
     email,
   })
 
-  const window = await readMarketingFrequency(
+  const state = await readFrequencyState(
     request.hostId,
     email,
     options?.firestore,
   )
-  const verdict = marketingFrequencyVerdict(window, nowMs)
+
+  /*
+   * THE SUNSET, ahead of the frequency ceiling.
+   *
+   * Ordered first among the two because its refusal is TERMINAL and the
+   * ceiling's is not: a sweep defers a `frequency-capped` message and retries
+   * it, so reporting the retryable refusal for a person the sunset would
+   * refuse anyway means the same doomed row comes back on every beat. The
+   * suppression above stays first because its answer is permanent.
+   *
+   * `request.capped` governs it, the same flag the ceiling reads, so a
+   * campaign — a reviewed act with its recipient count on screen — is exempt
+   * for the reason recorded on `MarketingSendContext.capped`. That leaves the
+   * sunset governing the automated paths, which fire with no human present.
+   *
+   * The engagement read is spent only when a window is configured. Off is the
+   * default, and off costs nothing.
+   */
+  const sunsetDays = marketingSunsetDays()
+  if (request.capped && sunsetDays > 0) {
+    const engagement = await readPersonEngagement(email, options?.firestore)
+    const sunset = marketingSunsetVerdict(
+      {
+        firstSentAtMs: state.firstSentAtMs,
+        lastEngagedAtMs: engagement.lastEngagedAtMs,
+      },
+      nowMs,
+      sunsetDays,
+    )
+    if (!sunset.allowed) {
+      /*
+       * ⛔ A REFUSAL AND NOTHING ELSE.
+       *
+       * No suppression is written, no membership is touched, no contact is
+       * changed, and the frequency window below is not appended to — a
+       * message that never left must not count against what this person has
+       * received. The person is exactly where they were, and the next send
+       * after they open anything goes.
+       */
+      return {
+        allowed: false,
+        refusal: 'unengaged',
+        detail:
+          `This address has not opened or clicked anything for ` +
+          `${sunset.quietForDays} days, and this site has been mailing it ` +
+          `for longer than the ${sunset.days}-day engagement window. It ` +
+          `becomes mailable again as soon as they engage.`,
+        unsubscribeUrl,
+      }
+    }
+  }
+
+  const verdict = marketingFrequencyVerdict(state.sentAtMs, nowMs)
   if (request.capped && !verdict.allowed) {
     return {
       allowed: false,
@@ -251,7 +376,17 @@ export async function marketingSendVerdict(
   const key = emailSuppressionKey(email)
   if (key) {
     await frequencyDoc(request.hostId, key, options?.firestore)
-      .set({ email, sentAtMs: appended.inWindow }, { merge: true })
+      .set(
+        {
+          email,
+          sentAtMs: appended.inWindow,
+          // Write-once — see EmailFrequencyRecord.firstSentAtMs. Re-stamping
+          // it on every send would keep the relationship permanently younger
+          // than any sunset window, so the sunset could never fire.
+          ...(state.firstSentAtMs ? {} : { firstSentAtMs: nowMs }),
+        },
+        { merge: true },
+      )
       // Never blocks the send. A counter write that failed is a ceiling
       // measured one message low, and refusing delivery over it would let a
       // Firestore hiccup become an outage on a merchant's mail.

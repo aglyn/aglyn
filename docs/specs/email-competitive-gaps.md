@@ -5,8 +5,11 @@ have since been built. The register itself proposes work and does not do it;
 each ✅ below names the commit subject that closed the row, so a reader planning
 from this document does not re-propose something shipped.
 
-**Closed since this was written:** [P1](#p1), [G9](#g9), [G10](#g10)/[P6](#p6),
-and the D5 and D7 rows of [G11](#g11). Everything else stands.
+**Closed since this was written:** [G2](#g2), [G3](#g3), [G4](#g4), [G7](#g7),
+[G9](#g9), [G10](#g10)/[P6](#p6), [P1](#p1), [P5](#p5), the D5 and D7 rows of
+[G11](#g11), and — through [G7](#g7) — the engagement-window and
+AND/OR/negation rows of [§1a](#1a-audience-and-segmentation). Everything else
+stands.
 Written 2026-08-30 against `main` at `39f979587`. Competitor facts were gathered live
 from vendor documentation on 2026-08-30; every claim carries the source it came from,
 and the appendix lists what could not be verified.
@@ -29,7 +32,7 @@ claims are now false. Anyone planning from it will plan the wrong thing.
 
 | `email-overhaul.md` says | Actually, today |
 | --- | --- |
-| §1c "**Dynamic lists.** Nothing re-evaluates membership from a rule." | **Built and shipped.** `libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts` defines a nine-field rule; `libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts` (441 lines) materializes it on a `*/15` sweep with a scan budget and a resume cursor; the Firestore index is deployed. The console exposes **all nine**, on the audience's own edit page. |
+| §1c "**Dynamic lists.** Nothing re-evaluates membership from a rule." | **Built and shipped.** `libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts` defines the rule — silos, tags, capture sources, form names, a created-at window, four purchase figures, four engagement windows, membership of another audience, and OR branches with negation over all of it; `libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts` materializes it on a `*/15` sweep with a scan budget and a resume cursor. The console exposes **every dimension**, on the audience's own edit page. |
 | §1c/§1d "`marketingConsent` … is read by **no send path**" | **Built and shipped.** `campaign-send.ts` collects a basis per person while sweeping each silo and joins it through `splitByMarketingConsent`. A basis additionally records **whose act it was** (`assertedBy: 'person' \| 'operator'`), and the composer reports the split before you send. |
 | §1c "Custom sending domains **do not exist in any form.** Not a stub, not a disabled button" | **Server-side complete.** `sending-domains.ts` (417 lines) holds the record, the DNS instructions, the DMARC read and a `requested → records-issued → verified/failed` state machine with an `inconclusive` arm; the send path answers **409** for an unverified identity. Two things are missing: the provider credential that issues the DKIM key, and any console UI at all. |
 | §1b "Campaign statistics … Every campaign's stats read zero" | The webhook edge block was fixed on 2026-08-29 and opens/clicks now increment behind a replay guard. **But see [G2](#g2)** — `delivered`, `bounced`, `complained` and `unsubscribed` are still never aggregated onto a campaign, so the statistics that exist are the two least useful ones. |
@@ -82,10 +85,10 @@ Aglyn state is one of:
 | Capability | MC | HS | PD | KL | BV | CIO | Aglyn |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Filter a list by contact tag or capture source | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(C)** `contactSegments` holds tags + sources; the UI writes **one** source and cannot edit a saved segment |
-| Filter by an **event in a time window** ("opened in the last 30 days") | ➖ fixed picklist: 7d / 1mo / 3mo / last 5 campaigns | ✅ | ✅ | ✅ arbitrary | ✅ arbitrary | ✅ arbitrary | **(A)** no engagement data is rolled onto any person record |
+| Filter by an **event in a time window** ("opened in the last 30 days") | ➖ fixed picklist: 7d / 1mo / 3mo / last 5 campaigns | ✅ | ✅ | ✅ arbitrary | ✅ arbitrary | ✅ arbitrary | **(✔)** arbitrary windows on four arms — opened/clicked within N days, and nothing opened/clicked for N days — authored in the console and evaluated by the sweep |
 | Filter by **purchase behavior** (orders ≥ N, LTV ≥ $X, lapsed N days) | ✅ | ✅ | ➖ | ✅ core primitive | ✅ *Professional* | ➖ undocumented | **(B)** all four filters built and materialized; **zero** console surface |
 | **Aggregate event math** (`count`/`sum` over a window) | ➖ | ➖ | ➖ | ✅ published `count`/`sum` schema | ➖ | ❓ undocumented | **(C)** `ordersCountAtLeast` / `ltvCentsAtLeast` only; no general math |
-| Nested AND/OR groups, negation, "not in list X" | ✅ *Standard+* | ✅ up to 250 filters | ✅ | ✅ groups AND'd, conditions OR'd | ❌ flat 100-condition chain | ✅ | **(A)** `DynamicListRule` ANDs everything |
+| Nested AND/OR groups, negation, "not in list X" | ✅ *Standard+* | ✅ up to 250 filters | ✅ | ✅ groups AND'd, conditions OR'd | ❌ flat 100-condition chain | ✅ | **(✔)** OR branches with per-branch negation, ANDed with a negatable top block; `inListIds`/`notInListIds` resolve by keyed lookup. ⛔ `sources` stays outside both operators — it is the sweep's scan plan |
 | Membership updates **continuously** | ❌ re-evaluated at send time | ✅ active lists | ✅ dynamic lists | ✅ | ✅ | ✅ real-time | **(C)** materialized on a `*/15` sweep; freshness is shown in the UI |
 | Predictive scoring (CLV, churn, likelihood to buy) | ✅ *Standard+* | ✅ | ✅ scoring + grading | ✅ | ✅ *Professional* | ➖ | **(D)** see [§5.6](#5-what-not-to-build) |
 | Audience drawn from **bookings** | ❌ | ➖ | ❌ | ❌ | ❌ | ➖ | **(A)** bookings write contacts, but no booking rule field exists |
@@ -167,7 +170,7 @@ Aglyn state is one of:
 | Suppression is an **evidence record**, not a delete | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔)** `releasedAt` field; the record is the proof it was honored |
 | Add a suppression by hand | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(✔)** a drawer on the Suppressions card, recorded as its own reason with a note; the platform list has a staff reader and an audited release |
 | Tenant sends from **their own** verified domain | ✅ | ✅ | ✅ | ✅ | ✅ automatic DNS write | ✅ | **(C)** server complete, **no UI**, and the DKIM key cannot be issued yet |
-| Engagement-based sunsetting | ➖ playbook | ➖ | ➖ | ➖ playbook, manual bulk action | ➖ primitives | ➖ playbook | **(A)** — and note **no vendor automates this either** |
+| Engagement-based sunsetting | ➖ playbook | ➖ | ➖ | ➖ playbook, manual bulk action | ➖ primitives | ➖ playbook | **(✔)** at the `sendEmail` marketing gate, as a third refusal beside suppression and the frequency ceiling — **off unless an operator sets a window**, and it removes nobody. See [P5](#p5) |
 | Import an existing list | ✅ | ✅ | ✅ | ✅ | ✅ with an opt-in attestation | ✅ | **(A)** export only — see [G5](#g5) |
 
 ### 1g. Platform shape
@@ -379,25 +382,51 @@ mechanism — though `campaign-process-scheduled.ts` already demonstrates the pa
 **What it blocks.** An entire product category. Note the shape of the fix, though: the
 gap is **the wait step**, not a visual canvas. See [§5.2](#5-what-not-to-build).
 
-### G7 — Engagement is recorded per message and never rolled up {#g7}
+### G7 — ~~Engagement is recorded per message and never rolled up~~ ✅ SHIPPED {#g7}
 
-**What it is.** `emailDeliveries/{sha256(address)}/messages/{id}` stores `openCount`,
-`clickedLinks` and `lastEventAtMs` per recipient per message. Nothing aggregates that
-onto a person, so "opened something in the last 30 days" is unanswerable without walking
+> **Closed.** `emailDeliveries/{personKey}` — the parent of the messages, and
+> already the erasure tombstone's home — now carries `lastOpenedAtMs`,
+> `lastClickedAtMs` and `lastEngagedAtMs`, written by the same webhook that
+> writes the delivery row.
+>
+> **What it costs per webhook event:** for an `email.opened` or
+> `email.clicked` that is the FIRST of its type for its message, one document
+> read and one document write. For everything else — a repeat open, a provider
+> retry, a dashboard replay, and every `sent`/`delivered`/`bounced`/
+> `complained`/`delayed` event — nothing at all. The bound comes free from the
+> `firstOfType` verdict the delivery log's transaction already computes, which
+> is also what makes a replay contribute zero without a claim document of its
+> own. The read buys strict monotonicity: the stamps only move forward, so an
+> out-of-order event cannot make an active subscriber look cold to the control
+> that refuses to mail cold people.
+>
+> Deliberately ADDRESS-global rather than per site. The store keys on an
+> address and the erasure path treats it as one; a per-site map would need a
+> cap, and capping a map needs a read of it on every write. The cost of that
+> choice is stated in the module: a person who engages with one site's mail
+> reads as engaged when a second site asks, which is the lenient direction for
+> a control whose only power is to refuse a send.
+>
+> The erasure path clears the three stamps when it tombstones an address — a
+> summary that outlived its source would be an erasure that removed the
+> evidence and kept the conclusion.
+
+**What it was.** `emailDeliveries/{sha256(address)}/messages/{id}` stored `openCount`,
+`clickedLinks` and `lastEventAtMs` per recipient per message. Nothing aggregated that
+onto a person, so "opened something in the last 30 days" was unanswerable without walking
 every message subcollection — the expensive-read shape this codebase refuses.
 
 **Who has it.** All six, with arbitrary windows in four of them.
 
-**Our state.** **(A)** for the roll-up; the underlying events exist.
+**Size.** **M**, as estimated.
 
-**Size.** **M.** One `lastEngagedAtMs` (and ideally `lastClickedAtMs`) maintained on the
-person record by the same webhook that already writes the delivery row.
-
-**What it blocks.** Two things at once, which is why it is worth its rank: a table-stakes
-segment type, **and** engagement-based sunsetting ([§4 P5](#p5)). Build the roll-up once.
-Note the industry lesson: sunset on **clicks and site activity, not opens** — Apple's
-Mail Privacy Protection inflated network-wide open rates by roughly 15%, and Klaviyo's own
-guidance says to treat clicks as the primary engagement metric.
+**What it unblocked.** Two things at once, which is why it was worth its rank: the
+table-stakes segment type in [§1a](#1a-audience-and-segmentation), **and**
+engagement-based sunsetting ([§4 P5](#p5)). Note the industry lesson, which the rule
+language honors and the sunset deliberately does not: segment on **clicks, not opens** —
+Apple's Mail Privacy Protection inflated network-wide open rates by roughly 15%. The
+sunset counts an open as engagement anyway, because for a REFUSAL the weaker and more
+generous signal is the correct one: it refuses fewer people.
 
 ### G8 — No revenue attribution, in a product that owns the checkout {#g8}
 
@@ -508,7 +537,7 @@ charged to every other tenant.
 ### 3a. Table stakes — required, and worth nothing on their own
 
 [G1](#g1), [G2](#g2), [G3](#g3), [G5](#g5), [G6](#g6), [G7](#g7), [G9](#g9) and
-[G10](#g10) all exist in all six compared products. Shipping every one of them makes
+[G10](#g10) all existed in all six compared products. Shipping every one of them makes
 Aglyn a credible ESP and **makes nobody choose Aglyn**. They are the entry fee, and the
 register ranks them highly for exactly that reason: an entry fee is what you pay first.
 
@@ -844,7 +873,49 @@ M3AAWG's Vetting BCP supplies the mechanical checks, and they are cheap to autom
   outright; M3AAWG calls appending *"a direct violation of core M3AAWG values"*; and every
   one of the ten vendors surveyed prohibits purchased lists in its acceptable-use policy.
 
-### P5 — No engagement-based sunsetting {#p5}
+### P5 — ~~No engagement-based sunsetting~~ ✅ SHIPPED {#p5}
+
+> ✅ **Closed**, and closed the way this entry argued for: as a platform
+> control wearing a deliverability feature's clothes, at the one seam every
+> marketing message already passes through.
+>
+> `AGLYN_EMAIL_SUNSET_AFTER_DAYS` — a whole number of days, 30–3650 —
+> makes `marketingSendVerdict` refuse a message to an address this site has
+> been mailing for longer than the window with neither an open nor a click
+> inside it. **Off unless an operator sets it**, and a blank, unparsable or
+> out-of-range value reads as off rather than falling back to a default: the
+> opposite of the frequency cap beside it, because a typo there weakens a
+> guard that is already on and a typo here would switch on a refusal nobody
+> asked for.
+>
+> ⛔ **It refuses a SEND and reduces nobody.** No unsubscribe, no suppression,
+> no membership change, no contact write — and the frequency window is not
+> even appended to, because a message that never left must not count against
+> what the person has received. It is reversible with nobody doing anything:
+> the only state is two timestamps, and a person who opens or clicks anything
+> moves the second one, so the very next send finds them inside the window.
+>
+> Three guards keep it from refusing people it should not, and all three are
+> asserted in both directions. The window is measured from `firstSentAtMs` —
+> a write-once stamp riding on the frequency document the gate already writes
+> on every send, so it costs no extra write — which is what stops a brand-new
+> subscriber being refused for having nothing on record yet. An unknown
+> `firstSentAtMs` refuses nobody. And a CAMPAIGN is exempt through the same
+> `capped` flag the frequency ceiling reads, because a campaign is a reviewed
+> act with its recipient count on screen, and a cap that silently removed
+> people from it would make that number a lie.
+>
+> The refusal is `unengaged`, and it is **terminal rather than deferrable**:
+> a frequency window clears by the passage of time, so waiting works, but a
+> sunset clears when the PERSON engages, which no amount of further mail from
+> us brings about. A sweep that deferred it would re-read the same doomed row
+> on every beat forever.
+>
+> ⚠️ **Two things it deliberately did NOT do**, recorded in
+> [§6.5](#65-the-sunset-defaults-and-the-campaign-exemption) as the owner's:
+> whether the window ships on by default, and whether the campaign composer's
+> pre-send split should name the cold addresses so a campaign could be
+> governed by it honestly.
 
 Unblocked by the same roll-up as [G7](#g7). Three points of calibration, the first two of
 which lower this relative to where instinct would put it:
@@ -1008,9 +1079,11 @@ a product an Aglyn customer is cross-shopping.
 
 ### 5.3 A third filter language
 
-`contactSegments` (tags + sources) and `DynamicListRule` (nine fields) are already two
-overlapping rule shapes. The right move is to converge them — the rule already accepts a
-`segmentId` to reuse a saved segment, which is the seam — not to add a third.
+`contactSegments` (tags + sources) and `DynamicListRule` are already two overlapping rule
+shapes, and the gap between them has widened rather than closed — the rule now carries
+engagement windows, audience membership and an OR/negation layer that a segment has no
+way to express. The right move is still to converge them, through the `segmentId` the
+rule already accepts to reuse a saved segment, and not to add a third.
 
 ### 5.4 Dedicated IPs
 
@@ -1120,6 +1193,31 @@ The regeneration command is printed by the guard itself.
 ⚠️ Note the direction: this is an **overstatement in our favor to fix**, not an
 understatement. A customer who buys Agency today on the published table has been told they
 get 1,000,000 campaign emails a month, and the code will refuse them at 250,000.
+
+### 6.5 The sunset's default, and its campaign exemption {#65-the-sunset-defaults-and-the-campaign-exemption}
+
+[P5](#p5) ships **off**, as `AGLYN_EMAIL_SUNSET_AFTER_DAYS` with no value. Two decisions
+sit on top of that and both belong to the owner rather than to the code:
+
+- **Whether it should be on by default, and at what window.** HubSpot's graymail
+  exclusion is on by default and the sender cannot forget it, which is the shape
+  [P5](#p5) argues is worth copying — and it is also a platform silently declining to
+  send mail a merchant believes is going out. Every other vendor surveyed leaves it to
+  the sender. Turning it on is one environment variable; the argument for doing so is a
+  deliverability one and the argument against is a trust one, and neither is an
+  engineering question. Note that it is not a plan feature either way: like the frequency
+  ceiling, it protects a shared sending domain, so it is the same number for everybody or
+  it is nothing.
+- **Whether a campaign should be governed by it.** It is exempt today, through the same
+  flag the frequency ceiling uses and for the same stated reason: the composer prints a
+  recipient count before the merchant presses Send, and a control that silently removed
+  people from that number would make it a lie. The honest way to close that is not to
+  drop the exemption — it is to add a **cold** bucket to the composer's pre-send split,
+  beside consented / by-operator / grandfathered / withheld / suppressed, so the count is
+  true and the merchant chooses. That is composer work, and the composer is a different
+  surface with its own owner.
+
+Neither is recommended here, and neither changes a charged price or a plan allowance.
 
 ### 6.4 The Starter asymmetry in [P1](#p1) may be a packaging decision as well as a bug
 
