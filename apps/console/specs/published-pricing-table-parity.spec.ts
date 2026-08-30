@@ -367,15 +367,29 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Email sends / mo — — · 500 · 5k · 50k · 100k · 250k · 1M', () => {
+    /**
+     * RE-TRANSCRIBED 2026-08-30, against the published page after the
+     * allowance change — the only row on this table whose fetch date is not
+     * 2026-08-19.
+     *
+     * This is the sanctioned case the header describes, not the frozen-price
+     * case it warns about. No CHARGED price moved: Advanced stays $399 and
+     * Agency stays $799. Two included allowances came DOWN, by an owner
+     * decision recorded in the Drive Pricing Decision Log and mirrored to
+     * `docs/DECISION_LOG.md`, because Agency sold 1,000,000 sends a month
+     * against a platform that can deliver 360,000. The published page and the
+     * Figma frames were updated in the same pass, which is what makes editing
+     * this fixture legitimate rather than a way of silencing a red.
+     */
+    it('Email sends / mo — — · 500 · 5k · 50k · 100k · 125k · 250k', () => {
       expect(quotaColumn('emailSendsPerMonth')).toEqual([
         NONE,
         500,
         5000,
         50000,
         100000,
+        125000,
         250000,
-        1000000,
       ] satisfies Row)
     })
 

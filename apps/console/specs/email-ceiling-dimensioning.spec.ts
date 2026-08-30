@@ -222,8 +222,20 @@ describe('R3 — which plans the platform can actually deliver', () => {
    * Both halves matter. Asserting only the overselling set would let a plan
    * silently drop out of it; asserting only the fitting set would let a new
    * plan quietly join the overselling one.
+   *
+   * ⚑ `agency` LEFT THIS SET on 2026-08-30. It sold 1,000,000 sends a month
+   * against a 360,000 deliverable ceiling — 2,000 hours of sending inside a
+   * 720-hour month — and the owner lowered the allowance rather than buy
+   * platform capacity the abuse controls have not yet earned (Advanced
+   * 250,000 → 125,000, Agency 1,000,000 → 250,000; Drive Pricing Decision Log,
+   * mirrored in `docs/DECISION_LOG.md`).
+   *
+   * `enterprise` remains, and is the only member. It is not a defect: the
+   * plan is `UNLIMITED` by contract, so it is unbounded by construction rather
+   * than oversold by arithmetic, and the case below pins exactly that
+   * distinction. A SECOND member appearing here is a regression.
    */
-  const EXPECTED_OVERSELLING = ['agency', 'enterprise']
+  const EXPECTED_OVERSELLING = ['enterprise']
 
   it('pins the overselling set exactly', () => {
     expect(PLAN_KEYS.filter(oversells).sort()).toEqual(EXPECTED_OVERSELLING)
@@ -231,21 +243,35 @@ describe('R3 — which plans the platform can actually deliver', () => {
 
   it('pins the deliverable set exactly', () => {
     expect(PLAN_KEYS.filter((plan) => !oversells(plan)).sort()).toEqual(
-      ['advanced', 'business', 'free', 'pro', 'scale', 'starter'],
+      ['advanced', 'agency', 'business', 'free', 'pro', 'scale', 'starter'],
     )
   })
 
-  it('states the size of the agency gap in the numbers, not a boolean', () => {
+  it('states the size of the agency headroom in numbers, not a boolean', () => {
     const model = modelFor('agency')
-    expect(model.planMonthly).toBe(1_000_000)
+    expect(model.planMonthly).toBe(250_000)
     expect(model.deliverableMonthly).toBe(360_000)
-    // 1,000,000 at 500/hour needs 2,000 hours of a 720-hour month.
-    expect(model.hoursToSpendPlan).toBe(2_000)
-    const violation = model.violations.find(
-      (candidate) => candidate.relation === 'plan-exceeds-deliverable-month',
-    )
-    expect(violation!.detail).toContain('1,000,000')
-    expect(violation!.detail).toContain('360,000')
+    // 250,000 at 500/hour needs 500 hours of a 720-hour month — it fits, with
+    // room for bursts, retries and domain warm-up. The number is asserted
+    // rather than a boolean because "fits" and "fits by 30 minutes" are
+    // different products, and only one of them survives a bad week.
+    expect(model.hoursToSpendPlan).toBe(500)
+    expect(
+      model.violations.some(
+        (candidate) => candidate.relation === 'plan-exceeds-deliverable-month',
+      ),
+    ).toBe(false)
+  })
+
+  /**
+   * The repair is a LOWERED ALLOWANCE, not a raised ceiling. If someone later
+   * closes a gap by moving the platform rate instead, that is a deliverability
+   * and spend decision and it must not arrive as a silent side effect of a
+   * test going green.
+   */
+  it('the platform hour is unchanged by the repair', () => {
+    expect(PLATFORM_PER_HOUR).toBe(2_000)
+    expect(DELIVERABLE).toBe(360_000)
   })
 
   it('treats the unlimited plan as unbounded rather than as zero', () => {
@@ -276,11 +302,26 @@ describe('R3 — which plans the platform can actually deliver', () => {
         (limit) => Number.isFinite(limit),
       ),
     )
-    const required = Math.ceil(
-      largestFinite / (EMAIL_ORG_HOURLY_SHARE * EMAIL_CEILING_MONTH_HOURS),
-    )
-    expect(largestFinite).toBe(1_000_000)
-    expect(required).toBe(5_556)
+    /*
+     * ⚠️ THE ORG SHARE IS FLOORED, so the naive
+     * `largestFinite / (share × hours)` understates the answer — it assumes a
+     * fractional org-hour that `orgHourlyCampaignCeiling` throws away. It
+     * happened to pass at the old numbers because 5,556 × 0.25 is exactly
+     * 1,389, and would have failed silently at almost any other allowance.
+     *
+     * Solve it the way the code computes it: the org hour needed first, then
+     * the platform hour that yields it after the floor.
+     */
+    const orgHourNeeded = Math.ceil(largestFinite / EMAIL_CEILING_MONTH_HOURS)
+    const required = Math.ceil(orgHourNeeded / EMAIL_ORG_HOURLY_SHARE)
+    // Now that the top allowance is 250,000 the required rate is BELOW the
+    // shipped 2,000/hour, so the arithmetic reads as headroom rather than as
+    // a shortfall. Kept as a live calculation rather than deleted: it is the
+    // thing that goes red first if an allowance is ever raised past what the
+    // platform can carry, and it names the rate that would be needed.
+    expect(largestFinite).toBe(250_000)
+    expect(required).toBe(1_392)
+    expect(required).toBeLessThanOrEqual(PLATFORM_PER_HOUR)
     expect(
       deliverableMonthlyCeiling(required),
     ).toBeGreaterThanOrEqual(largestFinite)
