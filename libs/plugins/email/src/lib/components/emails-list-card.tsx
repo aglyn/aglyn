@@ -29,6 +29,7 @@ import RowActionsMenu, {
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -36,10 +37,8 @@ import {
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
-  Box,
   Button,
   Chip,
-  Divider,
   Stack,
   Table,
   TableBody,
@@ -53,25 +52,13 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
-import CampaignComposer from './campaign-composer'
+import { useCampaignSendApi } from './use-campaign-send-api'
 
 /** How many messages one read of this list covers. */
 const EMAIL_CEILING = 30
 
 /** How many campaigns the create drawer offers to file a new email under. */
 const CONTAINER_CEILING = 50
-
-/**
- * What the create drawer is composing, or `null` when it is not open.
- *
- * `emailCampaignId` empty is a SINGLE SEND, not a missing value — see the
- * comment on the drawer below for why that is a real answer rather than a
- * deferred one.
- */
-interface Composing {
-  displayName: string
-  emailCampaignId: string
-}
 
 const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#opens--clicks',
@@ -191,7 +178,9 @@ export function EmailsListCard(props: EmailsListCardProps) {
   }
 
   const [createOpen, setCreateOpen] = useState(false)
-  const [composing, setComposing] = useState<Composing | null>(null)
+  const [creating, setCreating] = useState(false)
+  const campaignSendApi = useCampaignSendApi(hostId)
+  const { enqueueSnackbar } = useSnackbar()
 
   /*
    * The campaigns a new email may be filed under, read only while the drawer
@@ -224,13 +213,52 @@ export function EmailsListCard(props: EmailsListCardProps) {
     [campaignDocs],
   )
 
-  const handleCreate = useCallback((values: Record<string, any>) => {
-    setComposing({
-      displayName: String(values.displayName ?? '').trim(),
-      emailCampaignId: String(values.emailCampaignId ?? ''),
-    })
-    setCreateOpen(false)
-  }, [])
+  /*==========================================
+   * CREATE, THEN GO TO THE EMAIL'S OWN PAGE.
+   *
+   * The drawer collects only what it takes to MINT the record — the friendly
+   * name, and the campaign it belongs to. Everything else about the email is
+   * written on the email's own page, which is where a record is edited
+   * throughout this console: a list page carries no form.
+   *
+   * The record is real from this moment: `/emails/campaigns/{id}` resolves,
+   * the row appears in the table below as a Draft, and the id it is created
+   * under is the id it keeps when it is eventually sent. It costs nothing to
+   * exist — the route reserves no allowance and moves no meter for a draft,
+   * and the scheduled processor only ever picks up `scheduled`.
+   *=========================================*/
+  const handleCreate = useCallback(
+    async (values: Record<string, any>) => {
+      if (creating) return
+      setCreating(true)
+      try {
+        const { response, payload } = await campaignSendApi({
+          action: 'draft',
+          displayName: String(values.displayName ?? '').trim(),
+          ...(values.emailCampaignId
+            ? { emailCampaignId: String(values.emailCampaignId) }
+            : {}),
+        })
+        if (!response.ok || !payload?.campaignId) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'This email could not be created',
+            { variant: 'warning', allowDuplicate: true },
+          )
+        }
+        setCreateOpen(false)
+        router.push(`${basePath}/emails/${payload.campaignId}`)
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('This email could not be created', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setCreating(false)
+      }
+    },
+    [basePath, campaignSendApi, creating, enqueueSnackbar, router],
+  )
 
   return (
     <CardDisplay
@@ -354,29 +382,6 @@ export function EmailsListCard(props: EmailsListCardProps) {
               'scheduled more than that, and the rest are not in this list.'}
           </Alert>
         ) : null}
-
-        {/*
-          THE COMPOSER, ON DEMAND, EXACTLY AS THE CAMPAIGN PAGE MOUNTS IT.
-
-          The create FORM is the drawer, per the console's rule; this is the
-          working surface the form hands off to, and it opens listens of its
-          own — the site's email designs, the org's lists and segments, the
-          running experiments. A reader who came to look at the table must not
-          pay for a composer they did not open, which is the same reason the
-          campaign detail page keeps it behind a flag rather than mounting it
-          with the page.
-        */}
-        {composing ? (
-          <Box>
-            <Divider sx={{ mb: 2 }} />
-            <CampaignComposer
-              hostId={hostId}
-              displayName={composing.displayName}
-              emailCampaignId={composing.emailCampaignId || undefined}
-              onSent={() => setComposing(null)}
-            />
-          </Box>
-        ) : null}
       </Stack>
       {/*
         AN EMAIL WRITTEN HERE BELONGS TO A CAMPAIGN, OR TO NO CAMPAIGN.
@@ -398,7 +403,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         title="New email"
-        submitLabel="Start writing"
+        submitLabel={creating ? 'Creating…' : 'Start writing'}
         includeDescription={false}
         onSubmit={handleCreate}
         extraFields={[

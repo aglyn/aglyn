@@ -408,3 +408,42 @@ describe('a template installed from a marketplace listing', () => {
     expect(screen.queryByText(/Installed from a marketplace listing/)).toBeNull()
   })
 })
+
+describe('the template preview sits at the bottom of the page', () => {
+  /*==========================================
+   * THE SAME ORDER THE EMAIL'S OWN PAGE USES.
+   *
+   * The figures are what a reader opens either page for, and the frame is the
+   * tallest thing on both — at the top it pushes every number below the fold.
+   * Held on both pages so the two cannot drift into disagreeing about what
+   * they are for.
+   *=========================================*/
+  it('renders the preview frame AFTER the delivery figures', async () => {
+    await renderDetail()
+    const preview = document.querySelector('iframe[title="Email preview"]')
+    const delivery = screen.getByText('Delivery')
+    expect(preview).toBeTruthy()
+    // DOM order, not mere presence: both are on the page whichever way round
+    // they sit, so presence alone would pass with nothing moved.
+    expect(
+      delivery.compareDocumentPosition(preview as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('renders it AFTER the recipients card', async () => {
+    await renderDetail()
+    const preview = document.querySelector('iframe[title="Email preview"]')
+    const recipients = screen.getByText('Recipients')
+    expect(
+      recipients.compareDocumentPosition(preview as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('gives the preview card a heading rather than a hover tooltip', async () => {
+    await renderDetail()
+    expect(screen.getByText('Preview')).toBeTruthy()
+    expect(document.querySelector('[title="Preview"]')).toBeNull()
+  })
+})

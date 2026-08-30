@@ -59,16 +59,38 @@ export function emailSendTimeMs(
  * The KEYS are persisted values written by the send path and read by the
  * scheduled-campaign processor — nothing here may change them, including
  * `canceled`, which is already the American spelling and is a stored enum in
- * either case. Only the right-hand side is display text, and an unrecognised
+ * either case. Only the right-hand side is display text, and an unrecognized
  * state falls through as itself rather than being flattened into one of
  * these: a state this list cannot name is worth seeing.
+ *
+ * `draft` is an email that has been created and not sent. `sending` is the
+ * claim the scheduled processor and the send-now route both take before they
+ * mail, and it is named here because a merchant who reloads mid-send would
+ * otherwise be shown the raw token.
  */
 export function emailStateLabel(status: unknown): string {
   const value = String(status ?? '')
   if (value === 'sent') return 'Sent'
   if (value === 'scheduled') return 'Scheduled'
   if (value === 'canceled') return 'Canceled'
+  if (value === 'draft') return 'Draft'
+  if (value === 'sending') return 'Sending'
   return value || 'Unknown'
+}
+
+/**
+ * Whether an email has yet been mailed to anybody.
+ *
+ * The surfaces that report on a send need this because an unsent email has no
+ * `stats` at all, and a report that divides into an absent denominator
+ * presents "not sent yet" as a delivery rate of 0% — the same class of fault
+ * as a rate rendered over a denominator it does not name.
+ */
+export function emailIsUnsent(
+  record: Record<string, any> | null | undefined,
+): boolean {
+  const value = String(record?.['status'] ?? '')
+  return value === 'draft' || value === 'scheduled' || value === 'sending'
 }
 
 /**

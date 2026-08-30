@@ -251,3 +251,65 @@ describe('which lists ONE send addressed', () => {
     ).toEqual([])
   })
 })
+
+describe('an unsent email is not rolled up as a send', () => {
+  /*==========================================
+   * THE COLLECTION NOW HOLDS EMAILS THAT HAVE MAILED NOBODY.
+   *
+   * An email exists from the moment it is created, so `draft`, `scheduled`
+   * and the `sending` claim all sit in the same collection as delivered mail.
+   * Every figure here is about mail that went out, and counting an unsent
+   * record in any of them is the "reached nobody" reading of "not sent yet".
+   *=========================================*/
+  const sentSend = {
+    status: 'sent',
+    stats: { recipients: 100, sent: 100, delivered: 90, uniqueOpens: 45 },
+  }
+
+  it('does not count a draft among the sends', () => {
+    const rollup = campaignRollup([sentSend, { status: 'draft' }] as never)
+    expect(rollup.sends).toBe(1)
+    expect(rollup.drafts).toBe(1)
+  })
+
+  it('does not count a draft as scheduled either', () => {
+    // A draft is not on the clock. Folding it into `scheduled` would promise
+    // a send time nothing is going to act on.
+    const rollup = campaignRollup([{ status: 'draft' }] as never)
+    expect(rollup.scheduled).toBe(0)
+    expect(rollup.drafts).toBe(1)
+  })
+
+  it('does not count the mid-send claim among the sends', () => {
+    const rollup = campaignRollup([sentSend, { status: 'sending' }] as never)
+    expect(rollup.sends).toBe(1)
+  })
+
+  it('keeps an unsent email OUT of every aggregate denominator', () => {
+    /*
+     * Each aggregate carries `sends` as the M in its own "recorded by N of M"
+     * label. An unsent record in there enlarges the M and publishes a
+     * coverage figure claiming the campaign is missing data it was never
+     * going to have.
+     */
+    const rollup = campaignRollup([
+      sentSend,
+      { status: 'draft' },
+      { status: 'scheduled', sendAtMs: 1 },
+    ] as never)
+
+    expect(rollup.delivered.sends).toBe(1)
+    expect(rollup.delivered.recorded).toBe(1)
+    expect(rollup.delivered.value).toBe(90)
+  })
+
+  it('still rolls up a campaign made only of sent emails', () => {
+    // The control. A filter that excluded everything would pass every
+    // assertion above having deleted the rollup.
+    const rollup = campaignRollup([sentSend, sentSend] as never)
+    expect(rollup.sends).toBe(2)
+    expect(rollup.drafts).toBe(0)
+    expect(rollup.delivered.value).toBe(180)
+    expect(rollup.delivered.sends).toBe(2)
+  })
+})

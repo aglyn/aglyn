@@ -59,6 +59,7 @@ import {
   type CampaignRate,
   type CampaignStats,
 } from './campaign-report'
+import { emailIsUnsent } from './email-record'
 
 /**
  * The field on a SEND naming the campaign it belongs to.
@@ -164,6 +165,13 @@ export interface CampaignRollup {
   sends: number
   /** Sends still waiting for their send time. */
   scheduled: number
+  /**
+   * Emails that have been created and not yet written or sent.
+   *
+   * Counted apart from `sends` and from `scheduled`, because a draft is
+   * neither: it has mailed nobody, and it is not on the clock to.
+   */
+  drafts: number
   addressed: CampaignAggregate
   sent: CampaignAggregate
   delivered: CampaignAggregate
@@ -220,26 +228,40 @@ export function campaignSendAtMs(send: CampaignSend): number | null {
  * denominator.
  */
 export function campaignRollup(sends: CampaignSend[]): CampaignRollup {
-  const delivered = sends.filter(
-    (send) => (send.status ?? 'sent') !== 'scheduled',
-  )
+  /*==========================================
+   * ONLY MAIL THAT HAS GONE OUT IS A SEND.
+   *
+   * An email exists from the moment it is created, so this collection now
+   * holds records in three states that have mailed nobody — `draft`,
+   * `scheduled` and the `sending` claim — and every figure below is about
+   * mail that was delivered.
+   *
+   * Two separate faults if they are left in. The COUNT would report a
+   * campaign as having sent three emails when it has sent two and is still
+   * writing the third. And every aggregate carries `sends` as the denominator
+   * of its own "recorded by N of M" label, so an unsent record would enlarge
+   * the M — publishing a coverage figure that says the campaign is missing
+   * data it was never going to have.
+   *=========================================*/
+  const gone = sends.filter((send) => !emailIsUnsent(send))
   const measurable = sends.filter(
     (send) => send.stats?.delivered !== undefined,
   )
   const deliveredTotal = aggregate(measurable, (stats) => stats.delivered)
   return {
-    sends: delivered.filter((send) => send.status !== 'canceled').length,
+    sends: gone.filter((send) => send.status !== 'canceled').length,
     scheduled: sends.filter((send) => send.status === 'scheduled').length,
-    addressed: aggregate(sends, (stats) => stats.recipients),
-    sent: aggregate(sends, (stats) => stats.sent),
-    delivered: aggregate(sends, (stats) => stats.delivered),
-    opens: aggregate(sends, (stats) => stats.opens),
-    uniqueOpens: aggregate(sends, (stats) => stats.uniqueOpens),
-    clicks: aggregate(sends, (stats) => stats.clicks),
-    uniqueClicks: aggregate(sends, (stats) => stats.uniqueClicks),
-    bounced: aggregate(sends, (stats) => stats.bounced),
-    complained: aggregate(sends, (stats) => stats.complained),
-    unsubscribes: aggregate(sends, (stats) => stats.unsubscribes),
+    drafts: sends.filter((send) => send.status === 'draft').length,
+    addressed: aggregate(gone, (stats) => stats.recipients),
+    sent: aggregate(gone, (stats) => stats.sent),
+    delivered: aggregate(gone, (stats) => stats.delivered),
+    opens: aggregate(gone, (stats) => stats.opens),
+    uniqueOpens: aggregate(gone, (stats) => stats.uniqueOpens),
+    clicks: aggregate(gone, (stats) => stats.clicks),
+    uniqueClicks: aggregate(gone, (stats) => stats.uniqueClicks),
+    bounced: aggregate(gone, (stats) => stats.bounced),
+    complained: aggregate(gone, (stats) => stats.complained),
+    unsubscribes: aggregate(gone, (stats) => stats.unsubscribes),
     openRate: campaignRate(
       aggregate(measurable, (stats) => stats.uniqueOpens).value ?? undefined,
       deliveredTotal.value ?? undefined,

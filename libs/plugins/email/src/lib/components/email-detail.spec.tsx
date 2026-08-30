@@ -71,6 +71,25 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
 }))
 
+/**
+ * The composer, recorded rather than mounted.
+ *
+ * The email's page mounts it for a draft or a scheduled email, and the real
+ * one opens four listens of its own against hooks no tree here provides. What
+ * belongs in this file is WHETHER the page offers a composer for a given
+ * state, not what the composer does once it has one.
+ */
+jest.mock('./campaign-composer', () => ({
+  __esModule: true,
+  default: (props: any) => {
+    composerProps = props
+    return <div>{'composer mounted'}</div>
+  },
+}))
+
+/** The props the composer was mounted with, or null while it is not. */
+let composerProps: Record<string, any> | null = null
+
 const EMAIL_PATH = 'hosts/site1/campaigns/msg_1'
 const LINKS_PATH = 'hosts/site1/campaigns/msg_1/reports/links'
 const TEMPLATE_PATH = 'hosts/site1/screens/scr_1'
@@ -102,6 +121,7 @@ async function renderEmail(options?: {
   links?: unknown
 }): Promise<void> {
   mockDocs.clear()
+  composerProps = null
   if (options?.email !== null) {
     mockDocs.set(EMAIL_PATH, {
       subject: 'Spring sale',
@@ -323,5 +343,305 @@ describe('an email that has been sent can reach more people', () => {
   it('says nothing about sends for an email that has only had one', async () => {
     await renderEmail()
     expect(screen.queryByText(/most recently/)).toBeNull()
+  })
+})
+
+/*==========================================
+ * WHAT EACH STATE OFFERS.
+ *
+ * The page is the one place an email is edited, sent, scheduled or withdrawn,
+ * so the set of controls it offers IS the model. Every assertion below is
+ * about which acts are possible on an email in a given state — and, as often,
+ * which are not: sending now and scheduling are meaningless on mail that is
+ * already in inboxes, and offering them would let a merchant discover that
+ * from a refusal rather than from the page.
+ *=========================================*/
+
+/** The kebab menu the header's secondary actions live in. */
+const openOverflow = () => {
+  fireEvent.click(screen.getByRole('button', { name: /More actions/i }))
+}
+
+/** The labels currently in that menu. */
+const overflowLabels = (): (string | null)[] =>
+  screen.getAllByRole('menuitem').map((item) => item.textContent)
+
+describe('sending an email that has not gone out', () => {
+  it('offers Send now on a scheduled email', async () => {
+    await renderEmail({
+      email: { status: 'scheduled', sentAt: undefined, sendAtMs: 1 },
+    })
+    expect(screen.getByText('Send now')).toBeTruthy()
+  })
+
+  it('offers Send now on a draft', async () => {
+    await renderEmail({
+      email: { status: 'draft', sentAt: undefined, stats: undefined },
+    })
+    expect(screen.getByText('Send now')).toBeTruthy()
+  })
+
+  it('does NOT offer Send now on a SENT email', async () => {
+    /*
+     * The whole point of the split. A sent email's mail is already delivered,
+     * so "send now" would mean mailing the entire audience a second copy —
+     * which is what "Send to more recipients" does safely, minus everyone
+     * already reached.
+     */
+    await renderEmail()
+    expect(screen.queryByText('Send now')).toBeNull()
+    expect(screen.getByText('Send to more recipients')).toBeTruthy()
+  })
+
+  it('does NOT offer Send now on a canceled email', async () => {
+    // Withdrawn on purpose. Sending it is the resurrect path this model does
+    // not have.
+    await renderEmail({ email: { status: 'canceled' } })
+    expect(screen.queryByText('Send now')).toBeNull()
+  })
+
+  it('counts before it asks, and never sends on the count', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ sendable: 40 }),
+    }))
+    ;(globalThis as any).fetch = fetchMock
+    await renderEmail({
+      email: { status: 'scheduled', sentAt: undefined, sendAtMs: 1 },
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Send now'))
+    })
+
+    // ONE request, and it is the dry run. The confirmation rejects in this
+    // harness, so a second would be a send nobody agreed to.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as any)[1].body))
+    expect(body).toMatchObject({
+      action: 'sendNow',
+      campaignId: 'msg_1',
+      dryRun: true,
+    })
+  })
+
+  it('never puts the copy in the send-now request', async () => {
+    /*
+     * `sendNow` addresses an existing send id, and the route reads the whole
+     * message off the record for that reason — a request that could also
+     * carry a subject would be a way to put arbitrary copy on somebody else's
+     * send id and mail it under that id's unsubscribe scope.
+     */
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ sendable: 40 }),
+    }))
+    ;(globalThis as any).fetch = fetchMock
+    await renderEmail({
+      email: { status: 'scheduled', sentAt: undefined, sendAtMs: 1 },
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Send now'))
+    })
+
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as any)[1].body))
+    expect(body.subject).toBeUndefined()
+    expect(body.body).toBeUndefined()
+    expect(body.audience).toBeUndefined()
+  })
+})
+
+describe('scheduling and withdrawing', () => {
+  it('offers Reschedule and Cancel send on a scheduled email', async () => {
+    await renderEmail({
+      email: { status: 'scheduled', sentAt: undefined, sendAtMs: 1 },
+    })
+    openOverflow()
+    expect(overflowLabels()).toContain('Reschedule')
+    expect(overflowLabels()).toContain('Cancel send')
+  })
+
+  it('offers Schedule but NOT Cancel on a draft', async () => {
+    // Nothing is on the clock yet, so there is no send to withdraw.
+    await renderEmail({
+      email: { status: 'draft', sentAt: undefined, stats: undefined },
+    })
+    openOverflow()
+    expect(overflowLabels()).toContain('Schedule')
+    expect(overflowLabels()).not.toContain('Cancel send')
+  })
+
+  it('offers NEITHER on a sent email', async () => {
+    /*
+     * Both describe mail that has not gone out. A schedule on delivered mail
+     * would put the processor back on a record whose unsubscribe links are
+     * already in inboxes.
+     */
+    await renderEmail()
+    openOverflow()
+    expect(overflowLabels()).not.toContain('Reschedule')
+    expect(overflowLabels()).not.toContain('Schedule')
+    expect(overflowLabels()).not.toContain('Cancel send')
+  })
+
+  it('offers neither on a canceled email', async () => {
+    await renderEmail({ email: { status: 'canceled' } })
+    openOverflow()
+    expect(overflowLabels()).not.toContain('Reschedule')
+    expect(overflowLabels()).not.toContain('Cancel send')
+  })
+})
+
+describe('editing what a sent email says was delivered', () => {
+  it('offers Edit details in every state', async () => {
+    await renderEmail()
+    openOverflow()
+    expect(overflowLabels()).toContain('Edit details')
+  })
+
+  it('sends ONLY the display name when the name is saved', async () => {
+    /*==========================================
+     * THE ASSERTION THE WHOLE EDIT RESTS ON.
+     *
+     * A sent email's subject, body, audience and topic describe mail that is
+     * already in inboxes. The edit must be incapable of restating any of
+     * them, so what is checked is the REQUEST: `update` carries a name and
+     * nothing else, whatever is on screen.
+     *=========================================*/
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ campaignId: 'msg_1' }),
+    }))
+    ;(globalThis as any).fetch = fetchMock
+    await renderEmail({ email: { displayName: 'Spring promo' } })
+
+    openOverflow()
+    await act(async () => {
+      fireEvent.click(screen.getByText('Edit details'))
+    })
+    const input = document.querySelector(
+      'input[value="Spring promo"]',
+    ) as HTMLInputElement
+    expect(input).toBeTruthy()
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'The discount one' } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Save'))
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as any)[1].body))
+    expect(body).toMatchObject({
+      action: 'update',
+      campaignId: 'msg_1',
+      displayName: 'The discount one',
+    })
+    expect(body.subject).toBeUndefined()
+    expect(body.body).toBeUndefined()
+    expect(body.audience).toBeUndefined()
+    expect(body.topicId).toBeUndefined()
+    expect(body.templateScreenId).toBeUndefined()
+  })
+
+  it('never offers the composer on a sent email', async () => {
+    /*
+     * The copy of a delivered message is not editable from anywhere, and the
+     * composer is the only thing on this page that could change it.
+     */
+    await renderEmail()
+    expect(composerProps).toBeNull()
+  })
+
+  it('never offers the composer on a canceled email', async () => {
+    await renderEmail({ email: { status: 'canceled' } })
+    expect(composerProps).toBeNull()
+  })
+
+  it('DOES offer the composer on a draft, seeded from the record', async () => {
+    await renderEmail({
+      email: {
+        status: 'draft',
+        sentAt: undefined,
+        stats: undefined,
+        subject: 'Half written',
+        body: 'So far',
+      },
+    })
+    expect(composerProps).not.toBeNull()
+    // The record's own id, so Save and Send land on THIS email rather than
+    // minting a second one.
+    expect(composerProps?.campaignId).toBe('msg_1')
+    expect(composerProps?.initial?.subject).toBe('Half written')
+  })
+})
+
+describe('an unsent email is not a send that reached nobody', () => {
+  it('withholds the figures on a draft', async () => {
+    /*
+     * A draft carries no `stats` at all, so drawing the report would publish
+     * a column of zeros and a delivery rate of 0% — the reading "this reached
+     * nobody", which is a claim about a send that happened.
+     */
+    await renderEmail({
+      email: { status: 'draft', sentAt: undefined, stats: undefined },
+    })
+    expect(screen.getByText(/has not been sent/i)).toBeTruthy()
+    expect(screen.queryByText('Delivery rate')).toBeNull()
+    expect(screen.queryByText('Readers who opened')).toBeNull()
+  })
+
+  it('withholds them on a scheduled email too', async () => {
+    await renderEmail({
+      email: {
+        status: 'scheduled',
+        sentAt: undefined,
+        sendAtMs: 1,
+        stats: undefined,
+      },
+    })
+    expect(screen.queryByText('Delivery rate')).toBeNull()
+  })
+
+  it('DOES draw them for a sent email', async () => {
+    // The control. A page that withheld the report from everything would pass
+    // both assertions above having deleted the report.
+    await renderEmail()
+    expect(screen.getByText('Delivery rate')).toBeTruthy()
+    expect(screen.getByText('Readers who opened')).toBeTruthy()
+  })
+})
+
+describe('the preview sits below the recipients', () => {
+  it('renders the preview frame AFTER the recipients card', async () => {
+    /*
+     * The figures are what a reader opens this page for and the frame is the
+     * tallest thing on it, so above them it pushes every number below the
+     * fold. Asserted by DOM ORDER rather than by both being present, which is
+     * true whichever way round they are.
+     */
+    await renderEmail()
+    const preview = document.querySelector('iframe[title="Email preview"]')
+    const recipients = screen.getByText('Recipients')
+    expect(preview).toBeTruthy()
+    expect(
+      recipients.compareDocumentPosition(preview as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('gives the preview card a heading rather than a hover tooltip', async () => {
+    /*
+     * `CardDisplay` has no `title` prop, so one spread through to the MUI
+     * Card root and landed on the DOM as a `title` attribute — the card drew
+     * with no heading at all, and a 640px frame flush against its edge.
+     */
+    await renderEmail()
+    expect(screen.getByText('Preview')).toBeTruthy()
+    expect(document.querySelector('[title="Preview"]')).toBeNull()
   })
 })

@@ -32,9 +32,11 @@
  *     predating campaigns is, `campaignListRows` adopts each as a campaign of
  *     one at read time, and the campaigns table already marks those "Single
  *     send". Nothing is minted and nobody has to create a campaign first.
- *  3. Neither the campaigns read nor the composer's own listens happen until
- *     somebody asks for them. This list is read by people who came to look at
- *     a table.
+ *  3. The campaigns read does not happen until somebody asks for it. This
+ *     list is read by people who came to look at a table.
+ *  4. Create MINTS the record and goes to its own page. The composer belongs
+ *     on the email's page, not under this table — a list page carries no
+ *     form, wherever on it the form sits.
  */
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -50,11 +52,27 @@ let served: Record<string, any[]> = {}
 let drawerFields: any[] = []
 /** What the create form submits when its button is pressed. */
 let formValues: Record<string, any> = {}
-/** The props the composer was mounted with, or null while it is not. */
-let composerProps: Record<string, any> | null = null
+/** Every request the card POSTed to the campaign API, in order. */
+let posted: Record<string, any>[] = []
+/** What that API answers with. */
+let apiResult: { response: { ok: boolean }; payload: Record<string, any> }
+/** Where the card navigated, or null while it has not. */
+let pushed: string | null = null
+
+jest.mock('@aglyn/shared-ui-snackstack', () => ({
+  __esModule: true,
+  // The card reports a failed create through a snackbar. The console mounts
+  // this provider at its root and no test tree has it, so without the mock
+  // the hook answers null and the card cannot render at all.
+  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
+  // Nobody signed in. The card's create action posts through
+  // `useCampaignSendApi`, which reads the user to mint a token; no test here
+  // creates, so the hook only has to exist.
+  useUser: () => ({ data: null }),
   useFirestoreCollection: (build: () => any) => {
     const built = build()
     // A null builder opens NO listener. Recording only the built ones is what
@@ -82,7 +100,12 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({
+    push: (href: string) => {
+      pushed = href
+    },
+    replace: jest.fn(),
+  }),
   useParams: () => ({}),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
@@ -114,17 +137,16 @@ jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
 }))
 
 /**
- * The composer, recorded rather than mounted.
+ * The campaign API, recorded rather than called.
  *
- * It opens four listens of its own, so mounting the real one here would make
- * every assertion about this card's read cost meaningless — and what is under
- * test is which campaign the card hands it, not what it does with one.
+ * Create is now one POST — `action: 'draft'` — and what belongs here is the
+ * request the card builds and what it does with the id that comes back.
  */
-jest.mock('./campaign-composer', () => ({
+jest.mock('./use-campaign-send-api', () => ({
   __esModule: true,
-  default: (props: any) => {
-    composerProps = props
-    return <div>{'composer mounted'}</div>
+  useCampaignSendApi: () => (payload: Record<string, unknown>) => {
+    posted.push(payload)
+    return Promise.resolve(apiResult)
   },
 }))
 
@@ -139,7 +161,9 @@ const SEND = {
 async function mount(options?: { sends?: any[] }): Promise<void> {
   listened = []
   drawerFields = []
-  composerProps = null
+  posted = []
+  pushed = null
+  apiResult = { response: { ok: true }, payload: { campaignId: 'msg_new' } }
   formValues = { displayName: 'Spring promo', emailCampaignId: '' }
   served = {
     campaigns: options?.sends ?? [SEND],
@@ -229,7 +253,7 @@ describe('an email written here belongs to a campaign, or to none', () => {
     ])
   })
 
-  it('hands the composer NO campaign for a single send', async () => {
+  it('creates with NO campaign for a single send', async () => {
     /*
      * The property the whole design rests on. An empty container is what
      * every send predating campaigns carries, and the campaigns table adopts
@@ -240,17 +264,75 @@ describe('an email written here belongs to a campaign, or to none', () => {
     await openDrawer()
     await submitDrawer()
 
-    expect(composerProps?.emailCampaignId).toBeUndefined()
-    expect(composerProps?.displayName).toBe('Spring promo')
+    expect(posted).toHaveLength(1)
+    expect(posted[0]['emailCampaignId']).toBeUndefined()
+    expect(posted[0]['displayName']).toBe('Spring promo')
   })
 
-  it('hands the composer the campaign when one was picked', async () => {
+  it('creates under the campaign when one was picked', async () => {
     await mount()
     formValues = { displayName: 'Third mailing', emailCampaignId: 'camp_1' }
     await openDrawer()
     await submitDrawer()
 
-    expect(composerProps?.emailCampaignId).toBe('camp_1')
+    expect(posted[0]['emailCampaignId']).toBe('camp_1')
+  })
+})
+
+describe('the list page never carries the composer', () => {
+  /*==========================================
+   * CREATE MINTS A RECORD AND GOES TO ITS PAGE.
+   *
+   * An email is written on the email's own page, the way every other record
+   * in this console is edited. A composer mounted below this table is the
+   * same anti-pattern as an inline create form, merely further down the page,
+   * so the assertions here name the composer's own controls and require that
+   * none of them is on this screen.
+   *=========================================*/
+  it('asks for a DRAFT rather than sending anything', async () => {
+    await mount()
+    await openDrawer()
+    await submitDrawer()
+
+    // The action is the assertion. Anything that mails is a send this list
+    // has no business taking on a merchant's behalf.
+    expect(posted[0]['action']).toBe('draft')
+  })
+
+  it('routes to the new email’s own page', async () => {
+    await mount()
+    await openDrawer()
+    await submitDrawer()
+
+    // The same shape the table's own rows link to: the hub path, then the
+    // `emails` section, then the id.
+    expect(pushed).toBe('/acme/hosts/site/emails/emails/msg_new')
+  })
+
+  it('mounts NO composer on the list, before or after creating', async () => {
+    await mount()
+    await openDrawer()
+    await submitDrawer()
+
+    // The composer's own controls. A list page carrying any of them is the
+    // shape this test exists to keep off the page.
+    expect(screen.queryByText('Send campaign')).toBeNull()
+    expect(screen.queryByText('Save draft')).toBeNull()
+    expect(screen.queryByText('Send test to me')).toBeNull()
+  })
+
+  it('stays put and says so when the create fails', async () => {
+    /*
+     * Navigating to an email that was never created would land on a "could
+     * not be loaded" page, which reads as a broken console rather than as a
+     * failed create.
+     */
+    await mount()
+    apiResult = { response: { ok: false }, payload: { error: 'Nope' } }
+    await openDrawer()
+    await submitDrawer()
+
+    expect(pushed).toBeNull()
   })
 })
 
@@ -269,23 +351,22 @@ describe('the list costs what it always did until somebody asks to write', () =>
     expect(listened).toContain('hosts/site1/emailCampaigns')
   })
 
-  it('does NOT mount the composer until the drawer submits', async () => {
+  it('posts nothing until the drawer submits', async () => {
     await mount()
-    expect(composerProps).toBeNull()
+    expect(posted).toHaveLength(0)
 
     await openDrawer()
-    expect(composerProps).toBeNull()
+    expect(posted).toHaveLength(0)
 
     await submitDrawer()
-    expect(composerProps).not.toBeNull()
+    expect(posted).toHaveLength(1)
   })
 
-  it('closes the drawer once composing has started', async () => {
+  it('closes the drawer once the email exists', async () => {
     await mount()
     await openDrawer()
     await submitDrawer()
 
     expect(screen.queryByText('Submit email')).toBeNull()
-    expect(screen.getByText('composer mounted')).toBeTruthy()
   })
 })
