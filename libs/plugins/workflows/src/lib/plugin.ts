@@ -49,6 +49,7 @@ export function registerWorkflowsConsole(): void {
       {
         slot: 'hostActivity',
         widgetId: 'workflows-host-activity',
+        title: 'Recent Activity',
         Component: HostActivityCard,
       },
     ],

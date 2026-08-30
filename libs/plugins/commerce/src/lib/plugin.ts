@@ -160,6 +160,7 @@ export function registerCommerceConsole(): void {
       {
         slot: 'commerceGlance',
         widgetId: 'commerce-glance',
+        title: 'Commerce',
         Component: CommerceGlanceCard,
       },
     ],
@@ -214,6 +215,7 @@ export function registerCommerceConsole(): void {
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         widgetId: 'accounts-newest-site-users',
+        title: 'Newest site users',
         Component: NewestSiteUsersCard,
       },
     ],

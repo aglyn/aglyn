@@ -382,7 +382,27 @@ export type ConsoleWidgetSlot =
  */
 export interface ConsoleWidget {
   slot: string
+  /**
+   * Stable identity for this widget, unique within the plugin.
+   *
+   * A PERSISTED IDENTIFIER wherever the shell lets someone arrange the
+   * surface it lands on — the console stores dashboard cards a reader has
+   * switched off by this string, and reads it back sessions later. Giving a
+   * retired id to a different card therefore shows that reader an
+   * arrangement they never chose. Retire an id by leaving it reserved and
+   * minting a new one, never by reusing it.
+   */
   widgetId: string
+  /**
+   * What to call this widget where it is LISTED rather than rendered — the
+   * console's dashboard customize dialog is the one such place today.
+   *
+   * Match the card's own heading: the two names sit a click apart, and a
+   * switch labeled differently from the card it controls reads as a switch
+   * for something else. Omitting it falls back to the extension's
+   * `displayName`, which is right for a plugin contributing one card and
+   * ambiguous for one contributing several.
+   */
   title?: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>

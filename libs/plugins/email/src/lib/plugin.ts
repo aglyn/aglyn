@@ -73,6 +73,7 @@ export function registerEmailConsole(): void {
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         widgetId: 'email-campaign-glance',
+        title: 'Last campaign',
         Component: CampaignGlanceCard,
       },
     ],
