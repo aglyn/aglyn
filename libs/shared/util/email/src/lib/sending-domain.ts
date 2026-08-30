@@ -481,6 +481,116 @@ export function dmarcRecommendation(domain: string): SendingDnsRecord {
 }
 
 /*==========================================
+  Did the customer publish the records?
+==========================================*/
+
+/** What a set of lookups saw. Assembled by the durable half, compared here. */
+export interface SendingDnsObservation {
+  /** TXT at `send.<domain>`. */
+  spfTxt: readonly string[]
+  /** TXT at `<selector>._domainkey.<domain>`. */
+  dkimTxt: readonly string[]
+  /** MX at `send.<domain>`. */
+  mx: readonly { exchange: string; priority: number }[]
+  /**
+   * False when ANY of the three lookups failed to get an answer.
+   *
+   * One unreachable lookup poisons the whole observation rather than being
+   * treated as an empty one: a partial read cannot distinguish a customer who
+   * published two of three records from a resolver that answered twice.
+   */
+  conclusive: boolean
+}
+
+export type SendingVerificationStatus =
+  | 'verified'
+  /** We got answers, and at least one required record is not there. */
+  | 'failed'
+  /** Nobody answered. Not evidence in either direction. */
+  | 'inconclusive'
+
+export interface SendingVerification {
+  status: SendingVerificationStatus
+  /** Keys of the required records not seen. Empty when verified. */
+  missing: string[]
+}
+
+/**
+ * Compare the records we asked for against the records that are live.
+ *
+ * Pure, and separated from the lookups for the reason `sso-drift-logic.ts` is
+ * separated from `sso-provisioning.ts`: the decision a customer's verification
+ * rests on should be reachable from a test without standing up DNS, so the
+ * route's spec can fake the I/O and run the REAL comparison.
+ *
+ * `inconclusive` is the load-bearing arm. A resolver outage must not be read
+ * as every customer deleting their records at the same instant, so it produces
+ * neither `verified` nor `failed` and the caller leaves the stored status
+ * alone. This is the same three-state discipline the SSO drift sweep uses, for
+ * the same reason.
+ *
+ * The SPF comparison is a `startsWith` on `v=spf1` plus a search for the
+ * include, not an exact match: a zone may legitimately carry a longer policy
+ * with extra mechanisms, and demanding our exact string would fail a
+ * configuration that works. The DKIM comparison IS exact on the key, because
+ * a key that is nearly right is a key that does not sign.
+ */
+export function assessSendingRecords(
+  record: Parameters<typeof sendingDnsRecords>[0],
+  observation: SendingDnsObservation,
+): SendingVerification {
+  const required = sendingDomainRequiredRecords(record)
+
+  /*
+   * A domain with no issued DKIM key can never verify, whatever else is live.
+   *
+   * Checked on the DKIM record specifically rather than on the requirement set
+   * being empty: SPF and the return path both have values before a key is
+   * issued, so a domain with no signing key at all would otherwise satisfy
+   * every requirement in the set and reach the sending state. DKIM is the
+   * record that must align for DMARC — a domain that cannot sign is exactly
+   * the domain this feature must not let send.
+   */
+  const hasDkim = required.some((entry) => entry.purpose === 'dkim')
+  if (!required.length || !hasDkim) {
+    return { status: 'failed', missing: ['dkim-key-not-issued'] }
+  }
+  if (!observation?.conclusive) return { status: 'inconclusive', missing: [] }
+
+  const include = `include:${sendingSpfInclude()}`
+  const missing: string[] = []
+
+  for (const entry of required) {
+    const key = sendingRecordKey(entry)
+    if (entry.purpose === 'spf') {
+      const found = (observation.spfTxt ?? []).some(
+        (txt) =>
+          /^v\s*=\s*spf1\b/i.test(String(txt ?? '').trim()) &&
+          String(txt).toLowerCase().includes(include),
+      )
+      if (!found) missing.push(key)
+    } else if (entry.purpose === 'dkim') {
+      const expected = entry.value.replace(/^p=/, '')
+      const found = (observation.dkimTxt ?? []).some((txt) =>
+        String(txt ?? '')
+          .replace(/\s+/g, '')
+          .includes(expected.replace(/\s+/g, '')),
+      )
+      if (!found) missing.push(key)
+    } else if (entry.purpose === 'return-path') {
+      const found = (observation.mx ?? []).some(
+        (mx) => String(mx?.exchange ?? '').toLowerCase() === entry.value.toLowerCase(),
+      )
+      if (!found) missing.push(key)
+    }
+  }
+
+  return missing.length
+    ? { status: 'failed', missing }
+    : { status: 'verified', missing: [] }
+}
+
+/*==========================================
   Which identity does a send leave on?
 ==========================================*/
 

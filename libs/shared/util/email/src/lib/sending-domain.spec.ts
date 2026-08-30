@@ -31,6 +31,7 @@ import {
   formatSendingRecord,
   normalizeLocalPart,
   normalizeSendingDomain,
+  assessSendingRecords,
   resolveSendingIdentity,
   sendingDnsRecords,
   sendingDomainRequiredRecords,
@@ -356,5 +357,133 @@ describe('validateSendingDomain', () => {
     for (const bad of ['a@b', 'hello world', 'x\nBcc: y', '', '.lead', 'trail.']) {
       expect(normalizeLocalPart(bad)).toBe('')
     }
+  })
+})
+
+/*==========================================
+  Verification
+==========================================*/
+
+describe('assessSendingRecords', () => {
+  const live = {
+    spfTxt: ['v=spf1 include:amazonses.com ~all'],
+    dkimTxt: [`p=${DKIM_KEY}`],
+    mx: [{ exchange: 'feedback-smtp.us-east-1.amazonses.com', priority: 10 }],
+    conclusive: true,
+  }
+
+  it('verifies when every required record is live', () => {
+    expect(assessSendingRecords(record(), live)).toEqual({
+      status: 'verified',
+      missing: [],
+    })
+  })
+
+  it('names each missing record rather than reporting a bare failure', () => {
+    const verdict = assessSendingRecords(record(), {
+      ...live,
+      dkimTxt: [],
+      mx: [],
+    })
+
+    expect(verdict.status).toBe('failed')
+    expect(verdict.missing).toEqual([
+      'TXT:aglyn-org123._domainkey.acme.com',
+      'MX:send.acme.com',
+    ])
+  })
+
+  /**
+   * The arm that stops a resolver outage from being read as every customer
+   * deleting their DNS at the same instant. It must produce neither verdict,
+   * so the caller has nothing to write and leaves the stored status alone.
+   */
+  it('is inconclusive when any lookup failed to get an answer', () => {
+    const verdict = assessSendingRecords(record(), {
+      spfTxt: [],
+      dkimTxt: [],
+      mx: [],
+      conclusive: false,
+    })
+
+    expect(verdict.status).toBe('inconclusive')
+    expect(verdict.status).not.toBe('failed')
+    expect(verdict.missing).toEqual([])
+  })
+
+  it('accepts a longer SPF policy that still authorizes us', () => {
+    // A zone may legitimately carry extra mechanisms. Demanding our exact
+    // string would fail a configuration that works.
+    const verdict = assessSendingRecords(record(), {
+      ...live,
+      spfTxt: ['v=spf1 include:_spf.google.com include:amazonses.com -all'],
+    })
+
+    expect(verdict.status).toBe('verified')
+  })
+
+  it('refuses an SPF record that does not authorize us', () => {
+    const verdict = assessSendingRecords(record(), {
+      ...live,
+      spfTxt: ['v=spf1 include:_spf.google.com -all'],
+    })
+
+    expect(verdict.missing).toEqual(['TXT:send.acme.com'])
+  })
+
+  it('ignores a non-SPF TXT record at the send host', () => {
+    const verdict = assessSendingRecords(record(), {
+      ...live,
+      spfTxt: ['amazonses.com is great', 'v=spf1 include:amazonses.com ~all'],
+    })
+
+    expect(verdict.status).toBe('verified')
+    // And a record that merely mentions the include is not an SPF policy.
+    expect(
+      assessSendingRecords(record(), {
+        ...live,
+        spfTxt: ['include:amazonses.com'],
+      }).status,
+    ).toBe('failed')
+  })
+
+  it('matches a DKIM key split across TXT chunks or wrapped', () => {
+    // DNS splits strings over 255 bytes, and registrars wrap long values. A
+    // comparison that did not strip whitespace would never match a real key.
+    const verdict = assessSendingRecords(record(), {
+      ...live,
+      dkimTxt: [`p=${DKIM_KEY.slice(0, 20)} ${DKIM_KEY.slice(20)}`],
+    })
+
+    expect(verdict.status).toBe('verified')
+  })
+
+  it('refuses a DKIM key that is nearly right', () => {
+    // A key that is almost correct is a key that does not sign.
+    const verdict = assessSendingRecords(record(), {
+      ...live,
+      dkimTxt: [`p=${DKIM_KEY.slice(0, -4)}XXXX`],
+    })
+
+    expect(verdict.status).toBe('failed')
+  })
+
+  it('refuses a return path pointed somewhere else', () => {
+    const verdict = assessSendingRecords(record(), {
+      ...live,
+      mx: [{ exchange: 'mail.acme.com', priority: 10 }],
+    })
+
+    expect(verdict.missing).toEqual(['MX:send.acme.com'])
+  })
+
+  it('never verifies a domain whose DKIM key was never issued', () => {
+    // Nothing was asked for, so nothing can have been found. An empty
+    // requirement set that returned `verified` would let a record reach the
+    // sending state without any proof at all.
+    const verdict = assessSendingRecords(record({ dkimPublicKey: null }), live)
+
+    expect(verdict.status).not.toBe('verified')
+    expect(verdict.missing).toEqual(['dkim-key-not-issued'])
   })
 })

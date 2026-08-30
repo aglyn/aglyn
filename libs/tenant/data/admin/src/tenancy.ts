@@ -28,6 +28,8 @@ export * from './lib/server/connect-payout-failure'
 export * from './lib/server/stripe-account-mode'
 export * from './lib/server/auth-handoff'
 export * from './lib/server/console-domains'
+export * from './lib/server/dns-probe'
+export * from './lib/server/sending-domains'
 // The hosting seam itself, so a door can ask whether this deployment is able
 // to register a name at all before it promises the caller one.
 // `workspace-domains` re-exports the pieces its own callers share with it; the
