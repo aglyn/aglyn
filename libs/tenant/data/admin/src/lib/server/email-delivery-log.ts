@@ -149,6 +149,12 @@ export interface EmailDeliveryEventOutcome {
   firstOfType: boolean
   /** The message this event was recorded against. */
   providerMessageId: string
+  /** The recipient, lowercased — the person the event is about. */
+  to: string
+  /** Which event this was. */
+  type: EmailDeliveryEventType
+  /** When it happened, epoch ms. */
+  at: number
 }
 
 /**
@@ -250,7 +256,13 @@ export async function recordEmailDeliveryEvent(
 
       transaction.set(ref, update, { merge: true })
     })
-    return { firstOfType, providerMessageId: event.providerMessageId }
+    return {
+      firstOfType,
+      providerMessageId: event.providerMessageId,
+      to: event.to,
+      type: event.type,
+      at: event.at,
+    }
   } catch (error) {
     console.error(
       '[email-delivery-log] write failed',
@@ -355,6 +367,255 @@ export async function recordEmailDeliveryEvents(
     events.map((event) => recordEmailDeliveryEvent(event, firestore)),
   )
   return results.filter((one): one is EmailDeliveryEventOutcome => one !== null)
+}
+
+/*==========================================
+ * THE PER-PERSON ENGAGEMENT ROLLUP.
+ *
+ * The message rows above answer "what did we send this person". They cannot
+ * answer "has this person engaged with anything lately" without reading every
+ * row in their `messages` subcollection, which is the expensive-read shape
+ * this codebase refuses — and that single absence is what made an audience
+ * rule like "opened in the last 30 days" unanswerable and engagement-based
+ * sunsetting unbuildable.
+ *
+ * So the rollup lands on the PARENT of the messages, `emailDeliveries/{key}`,
+ * which already exists as the erasure tombstone's home. One document per
+ * person, read by key, no query and therefore no index.
+ *
+ * ## Address-global, not per site
+ *
+ * The store keys on an address, the erasure path treats it as an address, and
+ * the deliverability problem the rollup exists to serve is domain-wide: every
+ * tenant's mail leaves on one domain under one DKIM `d=`, so the engagement
+ * that moves the platform's spam rate is engagement with ANY of it. A
+ * per-site map would also have to be capped, and capping a map needs a read
+ * of it on every write.
+ *
+ * The cost of that choice is stated rather than hidden: a person who engages
+ * with one site's mail reads as engaged when a second site asks. That is the
+ * lenient direction for a control whose only power is to REFUSE a send.
+ *
+ * ## What one webhook event costs
+ *
+ * A rollup that wrote on every event would be a write per event per person,
+ * which is a bill — a single reader opening a newsletter six times, plus
+ * mailbox-provider prefetches, is one fact and six writes. So the rollup
+ * moves only on an event that is the FIRST of its type for its message, which
+ * {@link recordEmailDeliveryEvent}'s transaction already decided at no extra
+ * cost. `delivered`, `bounced`, `complained`, `sent` and `delayed` move
+ * nothing here at all.
+ *
+ * That bound is also what makes it replay-proof for free, by the same
+ * reasoning the campaign counters rest on: a redelivered or replayed event
+ * finds its type already recorded, reports `firstOfType: false`, and
+ * contributes nothing.
+ *
+ * ⚠️ The bound has one consequence worth naming. A reader who opens only mail
+ * they have already opened does not advance their own stamp, so a person can
+ * read a year-old message and still measure as cold. Every message we send
+ * them afterwards is a fresh first-open, so the stamp advances the moment
+ * they engage with anything new — which is the population any sunset rule is
+ * actually about.
+ *=========================================*/
+
+/** The event types that count as a person engaging. */
+const ENGAGEMENT_TYPES: readonly EmailDeliveryEventType[] = ['opened', 'clicked']
+
+/** What one person's mail says about whether they are still listening. */
+export interface EmailPersonEngagement {
+  /** The later of {@link lastOpenedAtMs} and {@link lastClickedAtMs}. */
+  lastEngagedAtMs: number | null
+  lastOpenedAtMs: number | null
+  /**
+   * Clicks are the metric to lean on. Apple's Mail Privacy Protection
+   * prefetches images, so an open is partly a statement about the recipient's
+   * mail client; a click is a statement about the recipient.
+   */
+  lastClickedAtMs: number | null
+}
+
+/** The empty answer, so a caller never has to invent one. */
+export const NO_PERSON_ENGAGEMENT: EmailPersonEngagement = {
+  lastEngagedAtMs: null,
+  lastOpenedAtMs: null,
+  lastClickedAtMs: null,
+}
+
+/** Reads the three stamps off a parent document's data. */
+function engagementFrom(data: Record<string, unknown> | null | undefined) {
+  const number = (value: unknown): number | null => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }
+  const opened = number(data?.['lastOpenedAtMs'])
+  const clicked = number(data?.['lastClickedAtMs'])
+  const engaged = number(data?.['lastEngagedAtMs'])
+  return {
+    lastEngagedAtMs:
+      engaged ?? (opened || clicked ? Math.max(opened ?? 0, clicked ?? 0) : null),
+    lastOpenedAtMs: opened,
+    lastClickedAtMs: clicked,
+  }
+}
+
+/**
+ * Advances the engagement stamps for the people these outcomes are about.
+ *
+ * A transaction, and it buys exactly one property: the stamps only ever move
+ * FORWARD. Provider events are not ordered, and a replay of an event whose
+ * first delivery never landed can carry an instant from months ago — a blind
+ * merge-set would let that overwrite a fresh stamp and quietly make an active
+ * subscriber look cold to a control whose whole job is refusing to mail cold
+ * people. Reading before writing is a cheaper unit than the write beside it,
+ * and it happens at most once per message per event type.
+ *
+ * Never throws, for the same reason nothing else in this file does: a rollup
+ * that failed loses a stamp, and a rollup that threw would lose the webhook's
+ * acknowledgement and teach the provider to retry the whole event.
+ *
+ * @returns how many person documents were written.
+ */
+export async function recordPersonEngagement(
+  outcomes: readonly EmailDeliveryEventOutcome[],
+  firestore?: any,
+): Promise<number> {
+  /** Person key → the newest instant seen per engagement type in this batch. */
+  const byPerson = new Map<
+    string,
+    { openedAtMs: number; clickedAtMs: number }
+  >()
+  for (const outcome of outcomes) {
+    if (!outcome.firstOfType) continue
+    if (!ENGAGEMENT_TYPES.includes(outcome.type)) continue
+    const key = emailSuppressionKey(outcome.to)
+    const at = Number(outcome.at)
+    if (!key || !Number.isFinite(at) || at <= 0) continue
+    const held = byPerson.get(key) ?? { openedAtMs: 0, clickedAtMs: 0 }
+    if (outcome.type === 'opened') {
+      held.openedAtMs = Math.max(held.openedAtMs, at)
+    } else {
+      held.clickedAtMs = Math.max(held.clickedAtMs, at)
+    }
+    byPerson.set(key, held)
+  }
+  if (!byPerson.size) return 0
+
+  const db = firestore ?? defaultFirestore()
+  let written = 0
+  for (const [key, seen] of byPerson) {
+    try {
+      const ref = db.collection(EMAIL_DELIVERIES_COLLECTION).doc(key)
+      await db.runTransaction(async (transaction: any) => {
+        const snapshot = await transaction.get(ref)
+        const stored = engagementFrom(
+          (snapshot.exists ? snapshot.data() : null) ?? {},
+        )
+        const opened = Math.max(stored.lastOpenedAtMs ?? 0, seen.openedAtMs)
+        const clicked = Math.max(stored.lastClickedAtMs ?? 0, seen.clickedAtMs)
+        const engaged = Math.max(stored.lastEngagedAtMs ?? 0, opened, clicked)
+        // Nothing moved forward, so nothing is written. An out-of-order event
+        // is the ordinary case this skips, and skipping it costs a write
+        // rather than losing a fact.
+        if (
+          opened === (stored.lastOpenedAtMs ?? 0) &&
+          clicked === (stored.lastClickedAtMs ?? 0) &&
+          engaged === (stored.lastEngagedAtMs ?? 0)
+        ) {
+          return
+        }
+        /*
+         * A merge-set that CREATES. Unlike the campaign counters, there is no
+         * document here to resurrect: `emailDeliveries/{key}` is a container
+         * this store owns, its only other content is the erasure tombstone,
+         * and a person's first recorded open is exactly when it should come
+         * into existence.
+         */
+        transaction.set(
+          ref,
+          {
+            ...(opened ? { lastOpenedAtMs: opened } : {}),
+            ...(clicked ? { lastClickedAtMs: clicked } : {}),
+            lastEngagedAtMs: engaged,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+        written += 1
+      })
+    } catch (error) {
+      console.error('[email-delivery-log] engagement rollup failed', key, error)
+    }
+  }
+  return written
+}
+
+/**
+ * One person's engagement, by address. Never throws.
+ *
+ * Returns {@link NO_PERSON_ENGAGEMENT} for an address we hold nothing about,
+ * AND for a read that failed. The two are deliberately the same answer here:
+ * every caller uses this to decide whether to REFUSE something, and both
+ * readings must resolve to "we have no evidence this person is cold", which
+ * is the only safe direction for a control that stops mail.
+ */
+export async function readPersonEngagement(
+  email: string | null | undefined,
+  firestore?: any,
+): Promise<EmailPersonEngagement> {
+  const key = emailSuppressionKey(email)
+  if (!key) return NO_PERSON_ENGAGEMENT
+  try {
+    const db = firestore ?? defaultFirestore()
+    const snapshot = await db
+      .collection(EMAIL_DELIVERIES_COLLECTION)
+      .doc(key)
+      .get()
+    // No `exists` branch: a missing document has no data, and `engagementFrom`
+    // already answers an absent field with null. A second gate saying the same
+    // thing would be a line no test can distinguish from its own removal.
+    return engagementFrom(snapshot.data() ?? {})
+  } catch (error) {
+    console.error('[email-delivery-log] engagement read failed', error)
+    return NO_PERSON_ENGAGEMENT
+  }
+}
+
+/**
+ * Engagement for many people at once, keyed by their person key.
+ *
+ * A `getAll` rather than a query: these are keyed document reads, so this
+ * needs no index, cannot be truncated by a `limit`, and cannot drop somebody
+ * for missing a field the way an `orderBy` would. The audience materializer
+ * calls it a page at a time and counts every read against its scan budget.
+ *
+ * A key with no document is present in the result with
+ * {@link NO_PERSON_ENGAGEMENT}, so a caller never has to tell "absent" from
+ * "not read" — and a failure returns every requested key that way for the
+ * same reason {@link readPersonEngagement} does.
+ */
+export async function readPersonEngagementByKeys(
+  keys: readonly string[],
+  firestore?: any,
+): Promise<Map<string, EmailPersonEngagement>> {
+  const wanted = [...new Set(keys.filter(Boolean))]
+  const found = new Map<string, EmailPersonEngagement>()
+  for (const key of wanted) found.set(key, NO_PERSON_ENGAGEMENT)
+  if (!wanted.length) return found
+  try {
+    const db = firestore ?? defaultFirestore()
+    const collection = db.collection(EMAIL_DELIVERIES_COLLECTION)
+    const snapshots = await db.getAll(
+      ...wanted.map((key: string) => collection.doc(key)),
+    )
+    for (const snapshot of snapshots) {
+      if (!snapshot?.exists) continue
+      found.set(snapshot.id, engagementFrom(snapshot.data() ?? {}))
+    }
+  } catch (error) {
+    console.error('[email-delivery-log] engagement batch read failed', error)
+  }
+  return found
 }
 
 /** What one {@link importEmailDeliveryHistory} run did. */
@@ -886,6 +1147,16 @@ export async function eraseEmailDeliveriesForAddresses(
           {
             erasedAtMs: Date.now(),
             erasedCount: FieldValue.increment(count),
+            /*
+             * The engagement rollup goes with the messages it was summarised
+             * from. "This person read our mail on the 3rd" is the same
+             * personal fact as the row it was derived from, and a summary
+             * that outlived its source would leave an erasure that removed
+             * the evidence and kept the conclusion.
+             */
+            lastEngagedAtMs: FieldValue.delete(),
+            lastOpenedAtMs: FieldValue.delete(),
+            lastClickedAtMs: FieldValue.delete(),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
