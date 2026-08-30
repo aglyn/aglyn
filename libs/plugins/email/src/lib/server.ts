@@ -167,6 +167,7 @@ function readParams(req: Parameters<PluginApiHandler>[0]): {
   hostId: string
   email: string
   signature: string
+  campaignId: string
 } {
   const body = (req.body ?? {}) as Record<string, unknown>
   const pick = (name: string): string =>
@@ -175,7 +176,75 @@ function readParams(req: Parameters<PluginApiHandler>[0]): {
     hostId: pick('hostId').trim(),
     email: pick('email').trim().toLowerCase(),
     signature: pick('sig').trim(),
+    // `cid` names the campaign whose copy of this link was clicked. Absent on
+    // every link minted before it existed, which is the whole design
+    // constraint below.
+    campaignId: pick('cid').trim(),
   }
+}
+
+/**
+ * Whether a signature is this link's.
+ *
+ * ## Two signed forms, and why that is not a weakening
+ *
+ * A link minted before campaign attribution existed signs `hostId:email`. A
+ * link minted since signs `hostId:email:campaignId`. Both are in inboxes
+ * right now and both have to keep working — an email is not recallable, and
+ * an unsubscribe link that has stopped honouring itself is the one failure in
+ * this area nobody gets to shrug at.
+ *
+ * Which form is checked is decided by the LINK, not by the signature: a link
+ * carrying no `cid` is checked against the two-part form and a link carrying
+ * one against the three-part form. There is no fallback between them, and
+ * that is what stops this being a downgrade — an attacker cannot take a
+ * three-part link, drop the `cid` and have it verify, because the two-part
+ * check over the same `hostId:email` produces a different digest. Nor can
+ * they bolt a `cid` onto a two-part link: the three-part check then fails.
+ *
+ * `timingSafeEqual` needs equal lengths, so the length is compared first —
+ * it is not a secret, both digests are fixed-width hex, and the call throws
+ * on a mismatch rather than returning false.
+ */
+function signatureMatches(args: {
+  hostId: string
+  email: string
+  campaignId: string
+  signature: string
+  secret: string
+}): boolean {
+  const { hostId, email, campaignId, signature, secret } = args
+  const subject = campaignId
+    ? `${hostId}:${email}:${campaignId}`
+    : `${hostId}:${email}`
+  const expected = createHmac('sha256', secret).update(subject).digest('hex')
+  return (
+    expected.length === signature.length &&
+    timingSafeEqual(
+      new Uint8Array(Buffer.from(expected)),
+      new Uint8Array(Buffer.from(signature)),
+    )
+  )
+}
+
+/**
+ * A campaign id that is safe to use as a Firestore path component.
+ *
+ * `cid` arrives on a URL, so "non-empty" was never the question — a value of
+ * `a/b/c` addresses `campaigns/a/b/c`, a path the merchant can neither see
+ * nor delete. The signature already proves the value is ours, so this is the
+ * second lock rather than the only one; it is here because a path component
+ * built from request text gets validated at the place it becomes a path.
+ */
+function isCampaignPathId(value: string): boolean {
+  return (
+    !!value &&
+    value.length <= 1500 &&
+    !value.includes('/') &&
+    value !== '.' &&
+    value !== '..' &&
+    !/^__.*__$/.test(value)
+  )
 }
 
 const unsubscribeHandler: PluginApiHandler = async (req, res) => {
@@ -185,27 +254,25 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
     return res.status(405).send('Method not allowed')
   }
 
-  const { hostId, email, signature } = readParams(req)
+  const { hostId, email, signature, campaignId } = readParams(req)
   const secret =
     process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
   if (!hostId || !email || !signature || !secret) {
     return res.status(400).send('Invalid unsubscribe link')
   }
-  const expected = createHmac('sha256', secret)
-    .update(`${hostId}:${email}`)
-    .digest('hex')
-  const valid =
-    expected.length === signature.length &&
-    timingSafeEqual(
-      new Uint8Array(Buffer.from(expected)),
-      new Uint8Array(Buffer.from(signature)),
-    )
-  if (!valid) return res.status(403).send('Invalid unsubscribe link')
+  if (!signatureMatches({ hostId, email, campaignId, signature, secret })) {
+    return res.status(403).send('Invalid unsubscribe link')
+  }
 
+  // `cid` rides through to the POST form and the resubscribe link, because
+  // the signature covers it: dropping it from the form action would produce a
+  // URL whose two-part check fails against a three-part signature, i.e. a
+  // confirmation button that refuses itself.
   const query =
     `hostId=${encodeURIComponent(hostId)}` +
     `&email=${encodeURIComponent(email)}` +
-    `&sig=${encodeURIComponent(signature)}`
+    `&sig=${encodeURIComponent(signature)}` +
+    (campaignId ? `&cid=${encodeURIComponent(campaignId)}` : '')
 
   if (method !== 'POST') {
     // SAFE. A prescanner lands here and nothing is written.
@@ -251,21 +318,74 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
      * restamp the date the person actually unsubscribed, and neither must a
      * second click on the same link.
      */
+    /*
+     * WHETHER THIS CLICK CREATED THE SUPPRESSION, decided inside the
+     * transaction and used outside it.
+     *
+     * It is the idempotency the campaign counter needs, and it comes for free
+     * because the transaction already reads the document to decide whether to
+     * stamp `createdAt`. A second click on the same link — and there will be
+     * second clicks, from a person pressing the button twice and from a
+     * client re-POSTing a one-click header — finds the entry present and
+     * contributes nothing, so `stats.unsubscribes` counts PEOPLE who left
+     * rather than button presses.
+     *
+     * Assigned rather than or-ed inside the body because a Firestore
+     * transaction may retry, and the reading that counts is the one whose
+     * write committed.
+     */
+    let created = false
     await firestore.runTransaction(async (transaction) => {
       const existing = await transaction.get(ref)
+      created = !existing.exists
       transaction.set(
         ref,
         {
           email,
           reason: 'unsubscribe',
           suppressedAt: FieldValue.serverTimestamp(),
+          // WHICH mailing they left over. Written on the suppression itself
+          // as well as counted on the campaign, so the Suppressions list can
+          // answer "why did this person go" for one address without the
+          // aggregate — and stamped only when this click created the entry,
+          // so a re-click cannot re-attribute an old unsubscribe to whatever
+          // link the person happened to press second.
           ...(existing.exists
             ? {}
-            : { createdAt: FieldValue.serverTimestamp() }),
+            : {
+                createdAt: FieldValue.serverTimestamp(),
+                ...(campaignId ? { campaignId } : {}),
+              }),
         },
         { merge: true },
       )
     })
+
+    /*
+     * The campaign's own unsubscribe count.
+     *
+     * AFTER the suppression and with its failure swallowed, for the reason
+     * the delivery webhook orders its writes the same way: the suppression is
+     * the write that must happen, and a statistic must never be able to cost
+     * one. A lost increment understates an unsubscribe rate; a lost
+     * suppression mails somebody who asked us not to.
+     *
+     * A merge-set would CREATE the campaign — a document holding one `stats`
+     * map and nothing else — for an unsubscribe arriving after the merchant
+     * deleted it, which is the fault the delivery webhook records against
+     * this exact shape. `update()` refuses a missing document, which is the
+     * behaviour wanted: the count for a campaign nobody can open has no
+     * reader.
+     */
+    if (created && isCampaignPathId(campaignId)) {
+      await firestore
+        .collection('hosts')
+        .doc(hostId)
+        .collection('campaigns')
+        .doc(campaignId)
+        .update({ 'stats.unsubscribes': FieldValue.increment(1) })
+        .catch(() => undefined)
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.setHeader('X-Robots-Tag', 'noindex, nofollow')
     res.setHeader('Cache-Control', 'no-store')
@@ -312,27 +432,25 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
     return res.status(405).send('Method not allowed')
   }
 
-  const { hostId, email, signature } = readParams(req)
+  const { hostId, email, signature, campaignId } = readParams(req)
   const secret =
     process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
   if (!hostId || !email || !signature || !secret) {
     return res.status(400).send('Invalid link')
   }
-  const expected = createHmac('sha256', secret)
-    .update(`${hostId}:${email}`)
-    .digest('hex')
-  const valid =
-    expected.length === signature.length &&
-    timingSafeEqual(
-      new Uint8Array(Buffer.from(expected)),
-      new Uint8Array(Buffer.from(signature)),
-    )
-  if (!valid) return res.status(403).send('Invalid link')
+  // The SAME verifier the unsubscribe uses, because this link is minted by
+  // handing the unsubscribe's own signed query to a second route. Two
+  // implementations of one signature scheme is how the resubscribe link comes
+  // to reject a signature the unsubscribe link just accepted.
+  if (!signatureMatches({ hostId, email, campaignId, signature, secret })) {
+    return res.status(403).send('Invalid link')
+  }
 
   const query =
     `hostId=${encodeURIComponent(hostId)}` +
     `&email=${encodeURIComponent(email)}` +
-    `&sig=${encodeURIComponent(signature)}`
+    `&sig=${encodeURIComponent(signature)}` +
+    (campaignId ? `&cid=${encodeURIComponent(campaignId)}` : '')
 
   if (method !== 'POST') {
     // SAFE, same reasoning as the unsubscribe GET: a prescanner must not be

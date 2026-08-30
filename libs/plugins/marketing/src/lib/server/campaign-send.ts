@@ -165,10 +165,28 @@ export function unsubscribeSignature(
   hostId: string,
   email: string,
   secret: string,
+  /**
+   * The campaign the link is riding in, when there is one.
+   *
+   * ADDITIVE, and it has to be: every email already sitting in an inbox
+   * carries a two-part signature over `hostId:email`, and those links must go
+   * on working forever — an unsubscribe link that stops honouring itself is
+   * the one bug in this area with a legal edge on it. So the campaign is
+   * appended to the signed string only when it is present, and the verifier
+   * chooses which form to check by whether the link carries a `cid`. A link
+   * with no `cid` is checked exactly as before.
+   *
+   * SIGNED rather than passed alongside. An unsigned `cid` would be an
+   * attribution anybody holding one valid link could point at any campaign
+   * they liked, which is a small forgery but a completely gratuitous one —
+   * the campaign is already known at the moment the link is minted.
+   */
+  campaignId?: string,
 ): string {
-  return createHmac('sha256', secret)
-    .update(`${hostId}:${email.toLowerCase()}`)
-    .digest('hex')
+  const subject = campaignId
+    ? `${hostId}:${email.toLowerCase()}:${campaignId}`
+    : `${hostId}:${email.toLowerCase()}`
+  return createHmac('sha256', secret).update(subject).digest('hex')
 }
 
 /** Send failures carry the HTTP status the API route should answer. */
@@ -1042,10 +1060,20 @@ export async function performCampaignSend(
   let deferred = 0
   try {
     for (const email of sendable) {
-      const signature = unsubscribeSignature(hostId, email, unsubscribeSecret)
+      // `cid` is what lets an unsubscribe be attributed to the campaign that
+      // caused it. Without it the suppression list records that somebody left
+      // and nothing about which mailing they left over, which is the one
+      // question an unsubscribe rate exists to answer.
+      const signature = unsubscribeSignature(
+        hostId,
+        email,
+        unsubscribeSecret,
+        campaignId,
+      )
       const unsubscribeUrl =
         `${siteBase}/api/email/unsubscribe?hostId=${encodeURIComponent(hostId)}` +
-        `&email=${encodeURIComponent(email)}&sig=${signature}`
+        `&email=${encodeURIComponent(email)}&sig=${signature}` +
+        `&cid=${encodeURIComponent(campaignId)}`
       // Variant assignment keys on the recipient address (AGL-255) so a
       // re-send reaches the same variant.
       const variant = experiment
@@ -1252,6 +1280,44 @@ export async function performCampaignSend(
         // row is the only place a merchant can find out.
         ...(deferred ? { deferred } : {}),
         ...(Object.keys(variantSends).length ? { variantSends } : {}),
+        /*==========================================
+         * THE POPULATIONS THIS SEND ALREADY MEASURED.
+         *
+         * Every one of these was computed above, returned from the DRY RUN
+         * so the composer could show it before the send, and then discarded
+         * the moment the send was real — so the campaign report could only
+         * ever say how many were mailed, never how many were not and why.
+         *
+         * They are RECORDED here rather than recomputed at read time, and the
+         * difference is not an optimisation. Consent records change, addresses
+         * get suppressed, and a list grows: recomputing "how many were
+         * withheld" next month answers a question about the list as it is
+         * now, under a heading that says it describes a send that happened in
+         * March. The recorded number is the only one that is true of the
+         * campaign.
+         *
+         * Measured over two different wholes, which is why they are stored
+         * separately rather than netted: the consent split runs over the whole
+         * resolved audience, and `suppressed` over the capped recipient list,
+         * because that is where each check actually runs.
+         *=========================================*/
+        consented: consentSplit.consented,
+        consentedByOperator: consentSplit.consentedByOperator,
+        grandfathered: consentSplit.grandfathered,
+        consentWithheld: consentSplit.withheld,
+        suppressed: recipients.length - sendable.length,
+        /*
+         * That this send's links were trackable at all.
+         *
+         * Click tracking rewrites links in the HTML part, so a send that
+         * carried none reports zero clicks whatever recipients did — a
+         * structural zero that is indistinguishable on screen from a campaign
+         * nobody clicked. `sendEmail` now synthesises an HTML part for a
+         * text-only send, so every send from here on carries one; recording
+         * the fact is what lets the report withhold a click RATE for the
+         * campaigns that predate it instead of publishing a meaningless one.
+         */
+        clickTracked: true,
       },
       status: 'sent',
       sentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),

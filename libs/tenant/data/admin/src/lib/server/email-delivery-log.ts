@@ -126,6 +126,32 @@ export interface EmailDeliveryRecord {
 }
 
 /**
+ * What one {@link recordEmailDeliveryEvent} call did.
+ *
+ * `firstOfType` exists so a CAMPAIGN counter can be incremented once per
+ * recipient without buying a read of its own. This transaction already holds
+ * the message's prior state, and "has this message ever been opened before"
+ * is the fact a distinct-openers count needs — deriving it here costs
+ * nothing, and deriving it anywhere else costs a document read per event.
+ *
+ * It is also what makes those counters idempotent, on the same reasoning the
+ * webhook's replay guard rests on: a redelivered or replayed event finds the
+ * state already recorded and reports `false`, so the counter cannot be
+ * incremented twice for one message's first open.
+ */
+export interface EmailDeliveryEventOutcome {
+  /**
+   * No event of this TYPE had been recorded against this message before.
+   *
+   * Read off `timestamps`, which is written for every event type, rather than
+   * off `openCount`/`clickCount`, which exist for two of them.
+   */
+  firstOfType: boolean
+  /** The message this event was recorded against. */
+  providerMessageId: string
+}
+
+/**
  * Records one normalized event against its message.
  *
  * A transaction rather than a merge-set, for one property that matters to the
@@ -137,16 +163,18 @@ export interface EmailDeliveryRecord {
  * would simply not appear, which is the failure mode a delivery log can least
  * afford.
  *
- * @returns whether a row was written. `false` is the ordinary answer for an
- *          address that is not an address; it is never an error.
+ * @returns the outcome, or `null` when nothing was written. `null` is the
+ *          ordinary answer for an address that is not an address; it is never
+ *          an error.
  */
 export async function recordEmailDeliveryEvent(
   event: EmailDeliveryEvent,
   firestore?: any,
-): Promise<boolean> {
+): Promise<EmailDeliveryEventOutcome | null> {
   const key = emailSuppressionKey(event.to)
-  if (!key || !event.providerMessageId) return false
+  if (!key || !event.providerMessageId) return null
 
+  let firstOfType = false
   try {
     const db = firestore ?? defaultFirestore()
     const ref = db
@@ -158,6 +186,17 @@ export async function recordEmailDeliveryEvent(
     await db.runTransaction(async (transaction: any) => {
       const snapshot = await transaction.get(ref)
       const existing = (snapshot.exists ? snapshot.data() : null) ?? {}
+
+      /*
+       * Set INSIDE the transaction body, which may run more than once: a
+       * Firestore transaction retries on contention, and a value computed
+       * before the retry would describe the state that lost the race. This
+       * assignment (not `||=`) makes the last attempt — the one whose write
+       * committed — the one whose reading is reported.
+       */
+      firstOfType = !(
+        existing.timestamps && existing.timestamps[event.type] !== undefined
+      )
 
       const update: Record<string, unknown> = {
         messageId: event.providerMessageId,
@@ -211,14 +250,14 @@ export async function recordEmailDeliveryEvent(
 
       transaction.set(ref, update, { merge: true })
     })
-    return true
+    return { firstOfType, providerMessageId: event.providerMessageId }
   } catch (error) {
     console.error(
       '[email-delivery-log] write failed',
       event.providerMessageId,
       error,
     )
-    return false
+    return null
   }
 }
 
@@ -301,15 +340,21 @@ export async function recordEmailDeliverySnapshot(
   }
 }
 
-/** Records a batch, independently — one bad event must not lose the others. */
+/**
+ * Records a batch, independently — one bad event must not lose the others.
+ *
+ * @returns one outcome per event that was WRITTEN; events that wrote nothing
+ *          are absent, so the length is still the count the old return value
+ *          reported.
+ */
 export async function recordEmailDeliveryEvents(
   events: EmailDeliveryEvent[],
   firestore?: any,
-): Promise<number> {
+): Promise<EmailDeliveryEventOutcome[]> {
   const results = await Promise.all(
     events.map((event) => recordEmailDeliveryEvent(event, firestore)),
   )
-  return results.filter(Boolean).length
+  return results.filter((one): one is EmailDeliveryEventOutcome => one !== null)
 }
 
 /** What one {@link importEmailDeliveryHistory} run did. */

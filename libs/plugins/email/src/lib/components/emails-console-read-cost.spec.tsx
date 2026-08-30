@@ -303,8 +303,15 @@ function shellSections() {
   }))
 }
 
-async function renderConsole(section: string) {
-  mockSection = section
+/**
+ * @param section the section id the URL names.
+ * @param detail  segments BENEATH the section — `['camp_1']` for
+ *                `/emails/campaigns/camp_1`. A section owns its own subtree,
+ *                so what those cost is a question this meter has to be able
+ *                to ask.
+ */
+async function renderConsole(section: string, detail: string[] = []) {
+  mockSection = [section, ...detail].filter(Boolean).join('/')
   mockListens.length = 0
   const { EmailsConsolePage } = await import('./emails-console-page')
   return render(
@@ -316,7 +323,7 @@ async function renderConsole(section: string) {
       basePath={BASE_PATH}
       sections={shellSections()}
       section={section || undefined}
-      segments={section ? [section] : []}
+      segments={section ? [section, ...detail] : []}
     /> as ReactNode as never,
   )
 }
@@ -367,6 +374,59 @@ describe('emails console read cost (AGL-2501)', () => {
     // Campaigns is the expensive one and it is not open.
     expect(seen).not.toContain('campaigns')
     expect(seen).not.toContain('experiments')
+  })
+
+  /*==========================================
+   * THE PER-CAMPAIGN REPORT.
+   *
+   * The reason this belongs on the meter rather than in a rendering test: the
+   * obvious implementation of a campaign report aggregates the per-recipient
+   * delivery log, which is ONE DOCUMENT PER RECIPIENT, re-read on every
+   * mount. A 50,000-recipient send would then cost 50,000 reads to render
+   * seven numbers, and nothing about the screen would look different.
+   *
+   * So the counters are written at delivery time and the report is two
+   * single-document reads — the campaign and its link rollup — whatever the
+   * audience was. These assertions are what stop that quietly becoming a
+   * query again.
+   *=========================================*/
+  it('the campaign report reads two documents, and no collection', async () => {
+    await renderConsole('campaigns', ['camp_1'])
+    summarize('campaign report', mockListens)
+
+    // Every listen is a single document. A collection query would carry a
+    // limit above 1 (or none at all, which the meter scores at ~100).
+    expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(2)
+    expect(mockListens.map((listen) => listen.path)).toEqual([
+      'hosts/site1/campaigns/camp_1',
+      'hosts/site1/campaigns/camp_1/reports/links',
+    ])
+  })
+
+  it('the report does not mount the composer or the history', async () => {
+    await renderConsole('campaigns', ['camp_1'])
+
+    // The campaigns SECTION reads a 30-campaign ceiling plus segments, lists,
+    // screens and experiments. A reader who came for one campaign's numbers
+    // must not pay for any of it — and `emailDeliveries` must never appear at
+    // all, at any limit.
+    const paths = mockListens.map((listen) => listen.path)
+    expect(paths).not.toContain('hosts/site1/campaigns')
+    expect(paths.some((path) => path.includes('emailDeliveries'))).toBe(false)
+    expect(paths.some((path) => path.endsWith('/screens'))).toBe(false)
+    expect(paths.some((path) => path.endsWith('/experiments'))).toBe(false)
+  })
+
+  /*
+   * ANTI-VACUITY for the pair above. Both are of the form "X was not read",
+   * and a page that rendered nothing satisfies them. This is the reading that
+   * proves the section without a campaign id still costs what it always did.
+   */
+  it('CONTROL: the campaigns section itself still reads its collection', async () => {
+    await renderConsole('campaigns')
+    expect(listenedCollections()).toContain('campaigns')
+    expect(documentCeiling(mockListens)).toBeGreaterThan(2)
   })
 
   it('reports the designs section too', async () => {
