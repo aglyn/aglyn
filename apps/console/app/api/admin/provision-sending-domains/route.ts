@@ -47,7 +47,10 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { listPendingSendingDomains } from '@aglyn/tenant-data-admin'
+import {
+  claimUnprovisionedHosts,
+  listPendingSendingDomains,
+} from '@aglyn/tenant-data-admin'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -108,6 +111,19 @@ async function handler(request: Request): Promise<Response> {
       })
     }
 
+    /*
+     * Claim first, then provision.
+     *
+     * `claimHostForOrg` claims at creation, so this ordinarily finds nothing.
+     * It runs anyway because that covers only sites created after it shipped,
+     * and a site with no claim refuses every send — a worse failure than the
+     * shared domain it replaced, and one nobody sees until a merchant asks why
+     * their receipts stopped.
+     *
+     * Before rather than after, so a site claimed on this run is provisioned
+     * on this run instead of waiting for the next one.
+     */
+    const claims = await claimUnprovisionedHosts(BATCH)
     const summary = await provisionPendingSendingDomains(BATCH)
 
     /*
@@ -124,7 +140,7 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    return Response.json({ ...summary, capacity })
+    return Response.json({ ...summary, claimed: claims.claimed, capacity })
   } catch (error) {
     // Never a provider body: an error the vendor wrote can carry the request
     // it is complaining about, and the request carries the credential.

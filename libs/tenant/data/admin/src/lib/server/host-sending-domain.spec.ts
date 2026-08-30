@@ -143,6 +143,7 @@ jest.mock('./organizations', () => ({
 }))
 
 import {
+  claimUnprovisionedHosts,
   ensureHostSendingDomain,
   listPendingSendingDomains,
   readHostSendingTeardown,
@@ -348,6 +349,95 @@ describe('a half-provisioned domain is recoverable', () => {
       createdAtMs: 1,
     })
     expect(await listPendingSendingDomains(10)).toEqual([])
+  })
+})
+
+describe('a site with no claim is picked up by the sweep', () => {
+  /**
+   * Creation claims, so in steady state there is nothing here. It runs anyway
+   * because creation covers only sites made after it shipped, and a site with
+   * no claim REFUSES every send — a worse failure than the shared domain it
+   * replaced, and one nobody sees until a merchant asks why their receipts
+   * stopped.
+   */
+  it('claims for a site that predates provisioning', async () => {
+    store.set(`hosts/${HOST}`, { subdomain: 'northwind-coffee', orgId: ORG })
+
+    const result = await claimUnprovisionedHosts(25)
+
+    expect(result.claimed).toBe(1)
+    expect(store.get(`hosts/${HOST}`).sendingDomain).toBe(
+      `northwind-coffee.${MAIL_APEX}`,
+    )
+  })
+
+  /** Idempotent: a second run must not re-claim or re-name anything. */
+  it('leaves an already-claimed site alone', async () => {
+    store.set(`hosts/${HOST}`, { subdomain: 'northwind-coffee', orgId: ORG })
+    await claimUnprovisionedHosts(25)
+    const before = { ...store.get(`hosts/${HOST}`) }
+
+    const second = await claimUnprovisionedHosts(25)
+
+    expect(second.claimed).toBe(0)
+    expect(store.get(`hosts/${HOST}`)).toEqual(before)
+  })
+
+  /**
+   * A host with no org cannot be claimed — the record lives in an org
+   * subcollection. Skipped rather than guessed at, and it must not stop the
+   * sweep reaching the sites that CAN be claimed.
+   */
+  it('skips a host with no org and still claims the rest', async () => {
+    store.set(`hosts/${OTHER_HOST}`, { subdomain: 'orphan' })
+    store.set(`hosts/${HOST}`, { subdomain: 'northwind-coffee', orgId: ORG })
+
+    const result = await claimUnprovisionedHosts(25)
+
+    expect(result.claimed).toBe(1)
+    expect(store.get(`hosts/${OTHER_HOST}`).sendingDomain).toBeUndefined()
+  })
+
+  /**
+   * Both skips above are READ-SAVING, and that is why they are asserted on
+   * reads rather than only on outcomes.
+   *
+   * `ensureHostSendingDomain` is idempotent, so calling it for an
+   * already-claimed or org-less host produces the same result — it just re-
+   * reads the host document to find that out. On a sweep that runs every few
+   * minutes across every site on the platform, a read per host per run is the
+   * standing cost of a guard nobody notices is missing, which is exactly the
+   * shape a scan-on-mount takes.
+   *
+   * So: ONE read of the hosts collection for the listing, and none after it,
+   * when every host in the page is one the sweep should skip.
+   */
+  it('re-reads nothing for the hosts it skips', async () => {
+    // One already claimed, and one with no name to build a label from. Both
+    // are skips, and each is skipped by a different guard.
+    store.set(`hosts/${HOST}`, {
+      subdomain: 'northwind-coffee',
+      orgId: ORG,
+      sendingLabel: 'northwind-coffee',
+    })
+    store.set(`hosts/${OTHER_HOST}`, { orgId: ORG })
+
+    const reads: string[] = []
+    const original = db.collection
+    db.collection = ((name: string) => {
+      reads.push(name)
+      return original(name)
+    }) as typeof db.collection
+
+    try {
+      const result = await claimUnprovisionedHosts(25)
+      expect(result.claimed).toBe(0)
+    } finally {
+      db.collection = original
+    }
+
+    // The listing, and nothing else.
+    expect(reads).toEqual(['hosts'])
   })
 })
 

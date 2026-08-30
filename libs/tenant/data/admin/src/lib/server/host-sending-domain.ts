@@ -448,3 +448,62 @@ export async function listPendingSendingDomains(
 export function sendingDomainLabel(domain: string): string {
   return platformSendingLabel(domain, platformSendingApex())
 }
+
+/**
+ * Claim a sending domain for any site that has none.
+ *
+ * `claimHostForOrg` does this at creation, so in steady state this finds
+ * nothing. It exists because that covers only sites created AFTER it shipped,
+ * and a site with no claim refuses every send — which is a worse failure than
+ * the shared domain it replaced, and one nobody would see until a merchant
+ * asked why their receipts stopped.
+ *
+ * A self-healing sweep rather than a one-shot backfill script, for the reason
+ * the re-check sweep is one: a script has to be remembered, run once, and run
+ * against the right project, and the failure mode of forgetting is silent. A
+ * sweep that finds nothing costs one bounded query and cannot be forgotten.
+ *
+ * ## The filter is in memory, and deliberately
+ *
+ * "Has no `sendingLabel`" is not a Firestore query. `orderBy('sendingLabel')`
+ * would DROP exactly the documents being looked for — a field-absent document
+ * does not appear in an ordered result — so the query that looks like the
+ * right one returns the empty set forever. This reads a bounded page of hosts
+ * and filters here, matching the SSO re-verify sweep: no index to be missing,
+ * and no ordering to silently exclude the target.
+ */
+export async function claimUnprovisionedHosts(
+  limit = 25,
+): Promise<{ scanned: number; claimed: number }> {
+  const snapshot = await firestore()
+    .collection('hosts')
+    .limit(Math.max(1, limit))
+    .get()
+
+  let claimed = 0
+  for (const doc of snapshot.docs) {
+    if (String(doc.get('sendingLabel') ?? '').trim()) continue
+    const orgId = String(doc.get('orgId') ?? '').trim()
+    const subdomain = String(doc.get('subdomain') ?? '').trim()
+    /*
+     * A host with no subdomain has no name to build a label from, and the
+     * check is here rather than left to the callee because the callee would
+     * RE-READ the host document before reaching the same conclusion. On a
+     * sweep across every site that is a read per unusable host per run.
+     *
+     * There is deliberately no `!orgId` check beside it: that one the callee
+     * makes before any read at all, so duplicating it would cost nothing and
+     * save nothing — a guard that cannot change an outcome or a cost reads as
+     * though it protects something.
+     */
+    if (!subdomain) continue
+    const result = await ensureHostSendingDomain({
+      hostId: doc.id,
+      orgId,
+      subdomain,
+    }).catch(() => null)
+    if (result?.created) claimed += 1
+  }
+
+  return { scanned: snapshot.docs.length, claimed }
+}
