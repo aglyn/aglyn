@@ -67,7 +67,7 @@ Three findings dominate everything else in this document:
    came from a reader rather than from the running system.
 2. **Consent is captured and never read.** `marketingConsent` is written by six
    call sites and consulted by **zero senders**. `campaign-send.ts` filters an
-   audience against the suppression list and nothing else. The shipped
+   audience against the suppression lists and nothing else. The shipped
    consent/opt-in arc built the input and never wired the output.
 3. **Custom sending domains do not exist in any form.** Not a stub, not a
    disabled button — zero product code mentions SPF, DKIM or DMARC. Everything
@@ -178,12 +178,34 @@ lists — lists are created by an inline untyped `setDoc` in a React component
 
 These are not part of the proposal; they are things that are wrong now.
 
-- **D1 — `limit()` with no `orderBy` on every audience read.** `campaign-send.ts`
-  reads `leads` and `siteMembers` at `limit(1000)`, and `contacts` and list
-  members at `limit(5000)`, with no ordering. Firestore returns document-ID
-  order, so a site with 3,000 leads mails an **arbitrary and unstable subset**.
-  Adding an `orderBy` is not a free fix — it silently drops documents missing
-  the field, so every writer has to be checked first.
+- **D1 — `limit()` with no `orderBy` on every audience read.** ✅ **CLOSED.**
+  `campaign-send.ts` read `leads` and `siteMembers` at `limit(1000)`, and
+  `contacts` and list members at `limit(5000)`, with no ordering. Firestore
+  returns document-ID order, so a site with 3,000 leads mailed an **arbitrary
+  and unstable subset**.
+
+  All four now go through one `sweepAudience`, which pages with a cursor in
+  `__name__` order under a single 5,000-document read budget — the largest
+  window the file already spent, so no audience got more expensive and `leads`
+  and `siteMembers` stopped being told their audience was 1,000.
+
+  Two things the fix had to get right:
+
+  - **The ordering is the document NAME, not a date**, because `orderBy(field)`
+    drops every document lacking that field and no field is universal here.
+    The provable case is list members: `enrollListMember` stamps `addedAt` only
+    when it CREATES the row, and the newsletter handler that wrote the
+    collection before it stored `{ email, name, source }` and no date at all —
+    so `orderBy('addedAt')` would have dropped every newsletter subscriber from
+    every list campaign.
+  - **Nothing is short silently.** The result carries `audienceSize` beside
+    `recipients`, plus `audienceTruncated` when even the audience is a floor.
+    The composer reads `Recipients 500 of 3,200 in this audience`, the confirm
+    dialog names the shortfall before the button, and the History row records
+    `stats.audienceSize`. The 500-recipient cap itself is unchanged (D2) — what
+    changed is that it now takes the first 500 of a stable order, so two sends
+    of an unchanged audience reach the same people and which people is
+    answerable.
 - **D2 — `MAX_RECIPIENTS_PER_SEND = 500` versus what the plans sell.** Agency
   includes 1,000,000 campaign emails a month. At 500 per send that is 2,000
   separate manual sends. The documented behavior ("a larger audience is counted
@@ -220,11 +242,23 @@ These are not part of the proposal; they are things that are wrong now.
 - **D5 — two suppression key derivations.** `emailSuppressionKey` trims before
   hashing; `suppressionId` and `suppressionKey` (two identical local copies) do
   not. They agree today only because callers trim upstream.
-- **D6 — campaigns do not consult the platform suppression list.**
-  `performCampaignSend` reads `hosts/{hostId}/suppressions` only. An address
-  learned to be dead on another site, or on transactional mail carrying no
-  `hostId` tag, is still mailed by this site's campaign. This is precisely the
+- **D6 — campaigns do not consult the platform suppression list.** ✅
+  **CLOSED.** `performCampaignSend` read `hosts/{hostId}/suppressions` only, so
+  an address learned to be dead on another site, or on transactional mail
+  carrying no `hostId` tag, was still mailed by this site's campaign — the
   cross-tenant leak the platform list was built to close.
+
+  Both lists now go through `filterSendableForHost`
+  (`libs/tenant/data/admin/src/lib/server/email-suppression.ts`), which
+  composes the existing `filterSuppressedEmails` for the platform half rather
+  than growing a second copy of its normalization and its fail-closed posture,
+  then reads the per-site half in one keyed `getAll`. Both halves fail closed.
+
+  The per-site read changed shape as well as gaining a sibling: it was a
+  `limit(5000)` scan of the whole collection, so a site with more suppressions
+  than the window failed OPEN on the remainder — the people most certain not to
+  want the mail were the ones a truncated read dropped. It is now a lookup of
+  exactly the addresses being mailed.
 - **D7 — stale customer documentation.** `apps/docs/.../email-campaigns/overview.md`
   says the send cap is "counted **per site**". The code moved it to per-org.
 
@@ -307,9 +341,13 @@ A **dynamic** list stores a rule and **materializes into the same `members`
 subcollection**. It does not resolve at send time. Three reasons, and they are
 the load-bearing design decision in this section:
 
-1. **The send path must not run an unbounded scan.** Today it does, and D1 is
-   the result. Materialized membership is paged deterministically by document
-   id with a stable order.
+1. **The send path must not run an unbounded scan.** D1's fix made the existing
+   audiences paged and deterministic by document id under a fixed read budget,
+   which is the floor rather than the destination: a dynamic list resolved at
+   send time would put a rule evaluation inside that budget, and the budget is
+   what stops the composer's preview from costing more the bigger the customer
+   gets. Materialized membership keeps the resolution a paged read of a
+   collection.
 2. **The composer needs a cheap count.** A merchant deciding whether to send
    needs `memberCount`, not a 5,000-document scan per keystroke. This codebase
    has a standing rule against unrequested expensive reads.
@@ -584,9 +622,13 @@ the Drive-resident Pricing Decision Log — guarded by `check:pricing-drift`,
 They must be made consistent (D3). Proposed:
 
 - **Per-send cap** — replace the flat 500 with batching, so a send is a job that
-  drains across windows rather than a truncation. Until then, the composer must
-  say "your audience is 3,000; this send will reach 500" rather than reporting
-  500 as the audience.
+  drains across windows rather than a truncation. The interim half is **done**
+  with D1: the composer says `Recipients 500 of 3,200 in this audience` rather
+  than reporting 500 as the audience, the confirm dialog names the shortfall,
+  and the History row records it. What is left is the batching itself — a
+  merchant with 3,200 people still has no way to reach the other 2,700 except
+  by removing the first 500 from the audience, because the cap takes the first
+  N of a fixed order and a second send addresses the same people.
 - **Per-org share of the hourly window** — a new control. No single org may
   consume more than a configured fraction (start at 25%) of the platform hour
   for campaigns. Transactional mail is exempt, as everywhere else. This closes
@@ -620,7 +662,7 @@ sails through every guard and renders a cap of zero on the most expensive plan.
 ### 6b. Anti-spam
 
 - **Turn the feedback loop on.** This is the whole ballgame; see §7 Phase 0.
-- **Consult both suppression lists on every campaign** (D6).
+- ~~Consult both suppression lists on every campaign~~ **done** (D6).
 - **Consent join at send time** (§3f), once policy has moved.
 - **No import path exists yet.** When one is added, it must require a declared
   source per address and must not accept a bare CSV as consent. A bulk import of
@@ -686,12 +728,15 @@ variable, and everything in Phase 2 needs the data it starts collecting.
 
 ### Phase 1 — Make a campaign reach the people it says it will *(correctness)*
 
-D1 ordered and paged audience resolution; D6 campaigns consult the platform
-suppression list; ~~D4~~ **done** — one list-member key derivation, reconciled
-by the write path rather than by a collapsing backfill (§3d says why the
-collapse is not automatic); D5 one suppression key derivation; D7 documentation
-corrected to per-org; a composer that distinguishes audience size from send
-size.
+~~D1~~ **done** — ordered and paged audience resolution, on the document name
+because no date is universal; ~~D6~~ **done** — campaigns consult both
+suppression lists through one shared helper; ~~D4~~ **done** — one list-member
+key derivation, reconciled by the write path rather than by a collapsing
+backfill (§3d says why the collapse is not automatic); ~~a composer that
+distinguishes audience size from send size~~ **done** — it landed with D1,
+because a window that stops truncating silently is a window that has to say
+what it left out. Still open: D5 one suppression key derivation; D7
+documentation corrected to per-org.
 
 **Does not:** add consent enforcement, domains, dynamic lists, or credits. Does
 not change any limit.

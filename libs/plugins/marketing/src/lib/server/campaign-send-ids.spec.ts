@@ -118,20 +118,35 @@ function collectionRef(path: string): any {
       }
       return docRef(full)
     },
-    limit: () => ({
-      get: async () => ({
-        docs: [...store.keys()]
-          .filter(
-            (key) =>
-              key.startsWith(`${path}/`) &&
-              !key.slice(path.length + 1).includes('/'),
-          )
-          .map(snapshotOf),
-      }),
-    }),
+    ...queryRef(path),
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },
+  }
+}
+
+/** The ids directly under `path`, in the `__name__` order the sweep asks for. */
+function childIds(path: string): string[] {
+  return [...store.keys()]
+    .filter(
+      (key) =>
+        key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'),
+    )
+    .map((key) => key.slice(path.length + 1))
+    .sort()
+}
+
+/** `orderBy` / `startAfter` / `limit`, and `limit` honors its argument. */
+function queryRef(path: string, after?: string): any {
+  return {
+    orderBy: () => queryRef(path, after),
+    startAfter: (cursor: any) => queryRef(path, cursor?.id ?? String(cursor)),
+    limit: (max: number) => ({
+      get: async () => {
+        const ids = childIds(path).filter((id) => !after || id > after)
+        return { docs: ids.slice(0, max).map((id) => snapshotOf(`${path}/${id}`)) }
+      },
+    }),
   }
 }
 
@@ -152,8 +167,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
       },
+      FieldPath: { documentId: () => '__name__' },
     },
   },
+  // Nobody in this file is suppressed; document ids are what is under test.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   // Starter, so the monthly campaign cap does not refuse before the write.
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
   orgDataCollectionForHost: jest.fn(),

@@ -21,6 +21,7 @@ import {
   CampaignSendDeferredError,
   CampaignSendError,
   performCampaignSend,
+  type CampaignSendResult,
 } from './campaign-send'
 
 /**
@@ -66,7 +67,7 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
       .limit(10)
       .get()
 
-    const results: Array<Record<string, unknown>> = []
+    const results: Array<Record<string, unknown> | CampaignSendResult> = []
     for (const campaignDoc of due.docs) {
       const hostRef = campaignDoc.ref.parent.parent
       if (!hostRef) continue

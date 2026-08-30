@@ -65,22 +65,27 @@ with a pipe for recipients without a stored name: `Hi {{firstName|there}}!`.
 As soon as you pick an audience the composer counts it, and shows the count under the
 audience picker:
 
-> Recipients 1,240 · 12 unsubscribed
+> Recipients 1,240 · 12 unsubscribed or suppressed
 
 The number is not an estimate. It is produced by running the real send path with nothing
-written — the same audience resolution, the same de-duplication, the same suppression list,
-and the same monthly cap — and stopping immediately before the first write. Nothing is
-created, no counter moves, and no campaign appears in your history.
+written — the same audience resolution, the same de-duplication, the same suppression
+lists, and the same monthly cap — and stopping immediately before the first write. Nothing
+is created, no counter moves, and no campaign appears in your history.
 
 That means the count already reflects things you would otherwise only discover afterwards:
 
 - **Duplicates are removed.** One person on two lists is one recipient.
-- **Unsubscribes are removed**, and reported separately as `· 12 unsubscribed`, so a
-  smaller-than-expected number has a visible reason.
-- **A single send is capped at 500 recipients.** A larger audience is counted at the cap.
+- **Unsubscribed and undeliverable addresses are removed**, and reported separately as
+  `· 12 unsubscribed or suppressed`, so a smaller-than-expected number has a visible
+  reason.
+- **A single send is capped at 500 recipients**, and when your audience is larger the
+  readout says so: `Recipients 500 of 3,200 in this audience`. The send takes the first
+  500, in a fixed order, so sending the same campaign again reaches the same people.
+- **A very large audience is reported as a floor**, with a `+`: `500 of 5,000+ in this
+  audience` means there are at least 5,000 and the count stopped there.
 - **A refusal appears here rather than at send time.** An empty audience, an audience where
-  everyone has unsubscribed, or a month already at your plan's send cap all say so while
-  you are still writing.
+  everyone is unsubscribed or suppressed, or a month already at your plan's send cap all
+  say so while you are still writing.
 
 While it works it reads `Counting recipients…`. It re-counts whenever you change the
 audience.
