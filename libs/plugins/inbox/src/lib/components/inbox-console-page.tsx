@@ -20,6 +20,7 @@ import {
   type ConsolePluginPageProps,
   formSpamCaughtNotice,
   formSubmissionsPausedNotice,
+  normalizeContactEmail,
   pluginDocsHelp,
   submissionMonthKey,
   visitorRecordRefusedCounterId,
@@ -281,14 +282,30 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
    * global offsets is what keeps a page exactly `pageSize` rows across the
    * seam between them.
    */
-  const dedupedLeads = useMemo(
-    () =>
-      leads.filter(
-        (lead: any) =>
-          !siteMembers.some((member: any) => member.email === lead.email),
-      ),
-    [leads, siteMembers],
-  )
+  /*
+   * One person renders once, whichever tab they came in through.
+   *
+   * Raw `===` made `Bob@x.com` and `bob@x.com` two different people, so
+   * somebody could appear as a Member on one row and a Lead on another. The
+   * comparison is now the same NORMALIZATION a lead document is keyed by —
+   * `personKey` is `sha256(normalizeContactEmail(email))`, and hashing an
+   * already-normalized address cannot merge or split anything the normalizer
+   * did not, so the two agree by construction.
+   *
+   * `personKey` itself cannot run here: it needs `node:crypto` and this is a
+   * client component. That is why the shared half is the normalizer rather
+   * than the digest.
+   */
+  const dedupedLeads = useMemo(() => {
+    const memberKeys = new Set(
+      siteMembers
+        .map((member: any) => normalizeContactEmail(member.email))
+        .filter(Boolean),
+    )
+    return leads.filter(
+      (lead: any) => !memberKeys.has(normalizeContactEmail(lead.email)),
+    )
+  }, [leads, siteMembers])
   const [contactPage, setContactPage] = useState(0)
   const [contactPageSize, setContactPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const contactCount = siteMembers.length + dedupedLeads.length

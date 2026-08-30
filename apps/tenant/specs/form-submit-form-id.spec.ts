@@ -42,6 +42,8 @@ let mockAdds: Array<{ path: string; data: Record<string, any> }> = []
 /** Every `update` the route issued, by document path. */
 let mockUpdates: Array<{ path: string; patch: Record<string, any> }> = []
 let mockContactUpserts: Record<string, any>[] = []
+/** Every `addHostLead` call the route made. */
+let mockLeads: Record<string, any>[] = []
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -115,6 +117,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   upsertHostContact: async (options: Record<string, any>) => {
     mockContactUpserts.push(options)
   },
+  // Recorded rather than executed. `host-lead-dedupe.spec.ts` owns what the
+  // writer does with a capture; what matters HERE is whether this route hands
+  // one over at all, which it never did.
+  addHostLead: async (options: Record<string, any>) => {
+    mockLeads.push(options)
+  },
   visitorWriteRefusal: async () => null,
 }))
 
@@ -153,6 +161,7 @@ beforeEach(() => {
   mockAdds = []
   mockUpdates = []
   mockContactUpserts = []
+  mockLeads = []
 })
 
 describe('a submission is stamped with the form it was sent to', () => {
@@ -302,5 +311,72 @@ describe('consent comes from the field the form declares', () => {
       fields: { email: 'visitor@example.com', marketingConsent: 'true' },
     })
     expect(mockContactUpserts[0]?.['marketingConsent']).toBe(true)
+  })
+})
+
+describe('a lead-capture form finally captures a lead', () => {
+  it('creates a lead when the form declares one', async () => {
+    // The endpoint has called itself a "lead-capture submissions endpoint"
+    // since AGL-76 and had never created a lead: `addHostLead`'s callers were
+    // the sign-up handler and the two bookings paths, and this route was not
+    // among them.
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+      displayName: 'Contact',
+      routing: { lead: true },
+    }
+    await submit({ formId: 'form-1' })
+    expect(mockLeads).toHaveLength(1)
+    expect(mockLeads[0]?.['lead']).toMatchObject({
+      email: 'visitor@example.com',
+      source: 'form:form-1',
+    })
+  })
+
+  it('does NOT create one when the form does not declare it', async () => {
+    // An author's declaration, not a heuristic on the payload. A form is
+    // submitted to ask a question or claim a refund, and every one of those
+    // becoming a lead is the inference this refuses.
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = { displayName: 'Contact' }
+    await submit({ formId: 'form-1' })
+    expect(mockLeads).toEqual([])
+  })
+
+  it('creates none for an unbound form, whatever it collected', async () => {
+    await submit()
+    expect(mockLeads).toEqual([])
+  })
+
+  it('creates none when the submission carries no address', async () => {
+    // A lead with no address is unusable. Nothing to key it on, nothing to
+    // do with it.
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+      displayName: 'Survey',
+      routing: { lead: true },
+    }
+    await submit({ formId: 'form-1', fields: { q1: 'blue' } })
+    expect(mockLeads).toEqual([])
+  })
+
+  it('carries a declared opt-in onto the lead', async () => {
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+      displayName: 'Contact',
+      consentFieldName: 'keepMePosted',
+      routing: { lead: true },
+    }
+    await submit({
+      formId: 'form-1',
+      fields: { email: 'visitor@example.com', keepMePosted: 'on' },
+    })
+    expect(mockLeads[0]?.['lead']?.['marketingConsent']).toBe(true)
+  })
+
+  it('⛔ never treats the submission itself as an opt-in', async () => {
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+      displayName: 'Contact',
+      consentFieldName: 'keepMePosted',
+      routing: { lead: true },
+    }
+    await submit({ formId: 'form-1' })
+    expect(mockLeads[0]?.['lead']).not.toHaveProperty('marketingConsent')
   })
 })

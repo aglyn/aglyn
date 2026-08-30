@@ -28,6 +28,7 @@
 import {
   checkVisitorRecordCeiling,
   LEADS_MAX_PER_HOST,
+  personKey,
   submissionMonthKey,
   visitorRecordRefusedCounterId,
   type VisitorRecordKind,
@@ -111,7 +112,7 @@ export interface HostLeadInput {
   email: string
   /** The name the person typed, when they typed one (AGL-2303). */
   name?: string
-  /** `signup`, `booking`, … — the surface that produced it. */
+  /** `signup`, `booking`, `form:{formId}` — the surface that produced it. */
   source: string
   /**
    * Explicit marketing opt-in, with a consent timestamp — the same shape
@@ -125,8 +126,27 @@ export interface HostLeadInput {
 }
 
 /**
- * Append one lead to `hosts/{hostId}/leads`, bounded by
+ * Record one lead at `hosts/{hostId}/leads/{personKey}`, bounded by
  * `LEADS_MAX_PER_HOST` (AGL-1529).
+ *
+ * ## One person is one document
+ *
+ * `docs/specs/reusable-forms.md` §4b. This used to be `tx.create(ref.doc())`
+ * — an auto-id per capture event — so one returning customer who signed up
+ * and booked twice was three "leads". The Members & leads tab presented a
+ * list of events as a list of people, and the only thing holding two rows for
+ * one person together was string equality on the address at render time.
+ *
+ * The events are not lost, they are just no longer the record: `sources`
+ * carries every surface that produced a capture, `submissionCount` counts
+ * them, and `firstSeenAtMs`/`lastSeenAtMs` bracket them. The submissions, the
+ * bookings and the member document are still there and still one row each.
+ *
+ * The id is {@link personKey} — `sha256(normalizeContactEmail(email))`, the
+ * SAME derivation a list membership's `memberKey` uses, imported rather than
+ * restated. Two specs named this function and the rule both stated is that
+ * whichever ships second imports the first's helper: a second copy is how
+ * `emailSuppressionKey` and `suppressionId` came to disagree.
  *
  * ## Why every lead writer goes through here
  *
@@ -175,21 +195,75 @@ export async function addHostLead(options: {
   try {
     const leadsRef = hostRef.collection('leads')
     const firestore = hostRef.firestore
-    const document = {
-      email: lead.email,
+    /*
+     * `null` for anything that is not a usable address — a lead captured
+     * against a malformed one keeps an auto-id and stays its own row. Keying
+     * several unusable addresses under one guessed id would merge two
+     * different people, which is worse than two rows for one.
+     */
+    const key = personKey(lead.email)
+    const leadRef = key ? leadsRef.doc(key) : leadsRef.doc()
+    const now = Date.now()
+    const seen = {
+      // `arrayUnion`, so a person who books twice has `['booking']` and one
+      // who signed up and then submitted a form has both. Bounded by the
+      // number of surfaces, not by the number of captures.
+      sources: FieldValue.arrayUnion(lead.source),
+      lastSeenAtMs: now,
+      submissionCount: FieldValue.increment(1),
       ...(lead.name ? { name: lead.name } : {}),
-      source: lead.source,
-      ...(lead.marketingConsent
-        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
-        : {}),
-      createdAt: FieldValue.serverTimestamp(),
     }
     const refused = await firestore.runTransaction(async (tx) => {
-      // ALL READS BEFORE THE WRITE, which Firestore requires — and which is
-      // why the document is assembled above rather than in here.
-      const used = (await tx.get(leadsRef.count())).data().count
-      if (checkVisitorRecordCeiling(used, maxPerHost).exceeded) return true
-      tx.create(leadsRef.doc(), document)
+      // ALL READS BEFORE THE WRITE, which Firestore requires.
+      const existing = await tx.get(leadRef)
+      /*
+       * ⛔ THE CEILING GATES A NEW PERSON, NEVER AN EXISTING ONE.
+       *
+       * A returning visitor's capture is an UPDATE — it does not grow the
+       * collection, so refusing it buys no capacity and costs the customer
+       * the source and the timestamp they would have learned. That is the
+       * enforcement-at-use shape the capacity rule exists to forbid: a limit
+       * must refuse the addition, never a person already recorded or the
+       * data attached to them.
+       *
+       * It also means the count is only paid on a genuinely new person,
+       * which is the case that can move it.
+       */
+      if (!existing.exists) {
+        const used = (await tx.get(leadsRef.count())).data().count
+        if (checkVisitorRecordCeiling(used, maxPerHost).exceeded) return true
+      }
+      /*
+       * Consent is carried forward and never cleared.
+       *
+       * `marketingConsent` is written only when this capture carried an
+       * explicit opt-in, so a later booking by someone who did not tick the
+       * box leaves an earlier `true` standing — absent-or-true, the shape
+       * every other writer uses. The TIMESTAMP is stamped once: the earliest
+       * consent is the one that happened, and re-stamping it on every later
+       * capture would rewrite when this person opted in.
+       */
+      const alreadyConsented = existing.get('marketingConsent') === true
+      tx.set(
+        leadRef,
+        {
+          email: lead.email,
+          ...seen,
+          ...(existing.exists
+            ? {}
+            : {
+                firstSeenAtMs: now,
+                createdAt: FieldValue.serverTimestamp(),
+              }),
+          ...(lead.marketingConsent
+            ? {
+                marketingConsent: true,
+                ...(alreadyConsented ? {} : { marketingConsentAtMs: now }),
+              }
+            : {}),
+        },
+        { merge: true },
+      )
       return false
     })
     if (refused) {

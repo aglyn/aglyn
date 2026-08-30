@@ -198,6 +198,15 @@ jest.mock('firebase/firestore', () => ({
 
 jest.mock('@aglyn/aglyn', () => ({
   formSpamCaughtNotice: () => null,
+  // The REAL derivation, not a stub. The contacts dedupe below is asserted
+  // against it, and a stub that returned the address unchanged would let a
+  // casing-only duplicate render twice while the test stayed green.
+  normalizeContactEmail: (input: unknown) => {
+    const email = String(input ?? '').trim().toLowerCase()
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 320
+      ? email
+      : null
+  },
   formSubmissionsPausedNotice: () => null,
   pluginDocsHelp: () => undefined,
   submissionMonthKey: () => '2026-08',

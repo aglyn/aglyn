@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
+  addHostLead,
   consumeRateLimit,
   dataStorageRefusal,
   firebaseAdmin,
@@ -491,6 +492,44 @@ export async function POST(request: Request): Promise<Response> {
         },
         ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
       })
+      /*
+       * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`
+       * §4a).
+       *
+       * The endpoint's own docblock has called itself a "lead-capture
+       * submissions endpoint" since AGL-76 and it had never created a lead:
+       * `addHostLead`'s three callers were the sign-up handler and the two
+       * bookings paths, and this route was not among them.
+       *
+       * `routing.lead` is an author's declaration, not a heuristic on the
+       * payload. That follows the existing split — the newsletter block
+       * enrolls, the sign-up handler creates a lead, the bookings handler
+       * creates a lead — each because the SURFACE is a lead surface, not
+       * because a rule inspected what the visitor typed.
+       *
+       * Through `addHostLead` rather than beside it: the ceiling cannot see a
+       * direct `collection('leads')` write, and the dedupe that stops one
+       * person becoming two records lives in there too.
+       *
+       * `void`, like the contact upsert above. A refused or failed lead must
+       * never fail the submission that produced it.
+       */
+      if (form?.get('routing')?.lead === true) {
+        void addHostLead({
+          hostRef,
+          hostId,
+          lead: {
+            email: contactEmail,
+            ...(sanitizedFields['name']
+              ? { name: sanitizedFields['name'] }
+              : {}),
+            // Names the form, so a lead's provenance survives the form being
+            // renamed — the same reason the submission carries the id.
+            source: `form:${form.id}`,
+            ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
+          },
+        })
+      }
     }
     // Dataset binding (AGL-141/556): append a record into the bound
     // dataset — by id first (rename-safe), by human name for legacy nodes.
