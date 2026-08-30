@@ -102,6 +102,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       firestore: { FieldValue: { serverTimestamp: () => 'NOW' } },
     },
     upsertHostContact: () => undefined,
+    // The attribution seam the handler resolves once per sign-up. Recorded as
+    // nothing — `campaign-conversion-attribution.spec.ts` owns the write — and
+    // defined here at all because a mocked module answers `undefined` for a
+    // name it does not list, which would make the handler throw rather than
+    // fail an assertion.
+    resolveCampaignTouch: async () => null,
     addHostLead: async (options: { lead: Record<string, unknown> }) => {
       mockState.leads.push(options.lead)
       return true

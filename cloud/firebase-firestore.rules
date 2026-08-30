@@ -2315,7 +2315,8 @@ service cloud.firestore {
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
-              'emailAttributions', 'flowEnrollments']));
+              'emailAttributions', 'campaignAttributions',
+              'flowEnrollments']));
         // `campaigns` joins all THREE lists. Each document is one email SEND,
         // and every field on it is written server-side: `campaign-send.ts`
         // stamps the audience, the consent and suppression populations and the
@@ -2344,6 +2345,27 @@ service cloud.firestore {
         // nothing to reverse — revenue that can only ever go up. READ is
         // untouched; the record carries a campaign, an amount and a currency,
         // and no address.
+        //
+        // `campaignAttributions` joins all THREE lists. One document per
+        // CONVERSION — a form submission, a lead, a contact or a booking —
+        // recording which campaign the visitor came from, through which
+        // channel, and under which model and window. It is written only by
+        // `campaign-conversion-attribution.ts` on the Admin SDK, and every
+        // operation is load-bearing for the same reasons `emailAttributions`
+        // states one paragraph up: the CREATE is what makes crediting a
+        // conversion idempotent, so a client that could `set` one would
+        // credit a campaign twice for one submission, and one that could
+        // DELETE one would remove the record an erasure is supposed to be the
+        // only thing that removes.
+        //
+        // It also carries `personKey` — the address hash the erasure sweep
+        // joins on — which is the same third-party PII footing `topicOptOuts`
+        // sits on. An editor who could write one would be forging a claim
+        // about where somebody else came from.
+        //
+        // READ is untouched: the site's own conversion reporting is a console
+        // surface reading this collection with the client SDK, and the record
+        // carries a campaign, a kind and a hash, never an address.
         //
         // NOT `emailCampaigns`, which is the campaign CONTAINER — a name, a
         // date window and the lists it is aimed at — created client-side from
@@ -2507,7 +2529,8 @@ service cloud.firestore {
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
-              'emailAttributions', 'flowEnrollments']));
+              'emailAttributions', 'campaignAttributions',
+              'flowEnrollments']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -2554,7 +2577,8 @@ service cloud.firestore {
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
-              'emailAttributions', 'flowEnrollments']));
+              'emailAttributions', 'campaignAttributions',
+              'flowEnrollments']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

@@ -86,6 +86,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       firestore: { FieldValue: { serverTimestamp: () => 'NOW' } },
     },
     upsertHostContact: () => undefined,
+    // The attribution seam the handler resolves once per sign-up. Recorded as
+    // nothing — `campaign-conversion-attribution.spec.ts` owns the write — and
+    // defined here at all because a mocked module answers `undefined` for a
+    // name it does not list, which would make the handler throw rather than
+    // fail an assertion.
+    resolveCampaignTouch: async () => null,
     recordVisitorRecordCeilingTrip: async () => undefined,
     // Recorded, not discarded. A double whose writer returns success and
     // forgets the payload cannot fail on a wrong payload — which is how a

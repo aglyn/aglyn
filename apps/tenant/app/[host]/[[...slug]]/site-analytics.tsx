@@ -23,6 +23,7 @@ import {
   installCampaignForwarding,
   setCampaignForwardingConsent,
 } from '@aglyn/aglyn/app-utils/campaign-forwarding'
+import { setCampaignTouchConsent } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import {
   INTERNAL_TRAFFIC_FORCED_SNIPPET,
@@ -351,14 +352,30 @@ export default function SiteAnalytics({
   // `null` is passed deliberately while `consent.ready` is false: unresolved
   // is not denied, and `analyticsAllowed` above flattens the two into one
   // `false` because that is all the tag needs to know. This does need to know.
-  setCampaignForwardingConsent(
-    consentRequired
-      ? consent.ready
-        ? isAnalyticsAllowed(host, consent.stored)
-        : null
-      : true,
-  )
+  const analyticsStorageAllowed = consentRequired
+    ? consent.ready
+      ? isAnalyticsAllowed(host, consent.stored)
+      : null
+    : true
+  setCampaignForwardingConsent(analyticsStorageAllowed)
   installCampaignForwarding({ consoleOrigin: CONSOLE_ORIGIN })
+
+  // Carry the campaign to the moment the visitor identifies themselves. The
+  // UTM labels on the beacon above are a page-view label and go no further,
+  // so on their own they cannot say which campaign produced a form, a lead, a
+  // contact or a booking. `campaign-touch.ts` remembers the arrival for the
+  // attribution window and the conversion doors attach it.
+  //
+  // The SAME resolved boolean the tag and the console hop are gated on, handed
+  // down rather than recomputed: remembering a touch across the walk from the
+  // landing page to the form is `analytics_storage`, and there is one gate for
+  // it on this page. `null` while unresolved is passed through deliberately —
+  // unresolved is not denied, and the module does nothing in that window.
+  //
+  // A visitor who converts on the page they landed on needs none of this: the
+  // labels are still on the address bar and the door reads them there, with
+  // nothing written to the device and nothing to consent to.
+  setCampaignTouchConsent(analyticsStorageAllowed)
 
   return (
     <>

@@ -19,12 +19,14 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
   addHostLead,
+  attributeCampaignConversion,
   consumeRateLimit,
   dataStorageRefusal,
   firebaseAdmin,
   getOrgForHost,
   notifyHostManagers,
   orgDataCollectionForHost,
+  resolveCampaignTouch,
   upsertHostContact,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
@@ -444,6 +446,11 @@ export async function POST(request: Request): Promise<Response> {
           sanitizedFields,
         )
       : readDeclaredMarketingConsent(payload, fields)
+    // One instant for the whole submission. The attribution window is
+    // measured against it in three places below, and three calls to
+    // `Date.now()` would let a slow write decide whether a touch was inside
+    // the window for the contact and outside it for the lead.
+    const submittedAtMs = Date.now()
     const submissionRef = await hostRef.collection('formSubmissions').add({
       // Stamped only for a form that exists on THIS site. An unverified id
       // never reaches the row, so the per-form list cannot be written into
@@ -480,6 +487,40 @@ export async function POST(request: Request): Promise<Response> {
     // Contacts ingestion (AGL-197): forms don't guarantee an email field —
     // best-effort extraction; never blocks the submission.
     const contactEmail = extractEmailFromFields(sanitizedFields)
+    /*
+     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
+     *
+     * One visitor action lands in three collections here — the submission,
+     * the contact and (when the form declares itself a lead surface) the
+     * lead — and all three are the same person arriving from the same
+     * campaign. Resolving here and handing the result down is what keeps the
+     * email-channel lookup at ONE keyed document read per submission instead
+     * of three, and it is also what guarantees the three records cannot
+     * disagree about which campaign to credit.
+     *
+     * `campaignTouch` is a string the visitor's browser supplied, so it is
+     * re-parsed through the same allowlist a URL goes through and
+     * window-checked before it can name anything. A submission carrying none
+     * — direct traffic, or a visitor whose consent posture never let a touch
+     * be remembered — resolves to null and writes no attribution at all.
+     */
+    const campaignTouch = await resolveCampaignTouch({
+      hostId,
+      wire: payload['campaignTouch'],
+      email: contactEmail,
+      atMs: submittedAtMs,
+    })
+    // The submission itself is an outcome whether or not it named anybody:
+    // an anonymous enquiry from a campaign link is a conversion that campaign
+    // caused, and refusing to count it because no email field was filled in
+    // would under-report exactly the forms that ask for the least.
+    void attributeCampaignConversion({
+      hostId,
+      kind: 'form',
+      refId: submissionRef.id,
+      touch: campaignTouch,
+      convertedAtMs: submittedAtMs,
+    })
     if (contactEmail) {
       void upsertHostContact({
         hostId,
@@ -491,6 +532,7 @@ export async function POST(request: Request): Promise<Response> {
           summary: `Submitted "${resolvedFormName.slice(0, 60)}"`,
         },
         ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
+        ...(campaignTouch ? { campaignTouch } : {}),
       })
       /*
        * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`
@@ -528,6 +570,7 @@ export async function POST(request: Request): Promise<Response> {
             source: `form:${form.id}`,
             ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
           },
+          ...(campaignTouch ? { touch: campaignTouch } : {}),
         })
       }
     }

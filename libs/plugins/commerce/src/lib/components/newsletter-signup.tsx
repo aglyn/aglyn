@@ -16,6 +16,7 @@
  */
 
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailOutline } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
@@ -70,6 +71,8 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
             hostId,
             email,
             ...(listId ? { listId } : {}),
+            // The campaign this visitor came from, when they came from one.
+            ...campaignTouchField(),
           }),
         })
         // GA4 lead conversion (AGL-1561) — AGL-301's subscribe element is a

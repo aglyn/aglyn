@@ -53,6 +53,13 @@ jest.mock('./notifications', () => ({
   notifyHostManagers: async () => undefined,
 }))
 
+const attributeCampaignConversion = jest.fn(async () => null)
+jest.mock('./campaign-conversion-attribution', () => ({
+  __esModule: true,
+  attributeCampaignConversion: (...args: unknown[]) =>
+    (attributeCampaignConversion as any)(...args),
+}))
+
 /**
  * Applies a `set(..., { merge: true })` the way Firestore does, including the
  * two sentinels this writer depends on. A fake that ignored `arrayUnion` and
@@ -137,6 +144,7 @@ beforeEach(() => {
   leads = {}
   counterWrites = []
   autoIdCounter = 0
+  attributeCampaignConversion.mockClear()
 })
 
 describe('one person submitting twice is one lead', () => {
@@ -269,5 +277,76 @@ describe('the ceiling gates a new person, never an existing one', () => {
     counterWrites = []
     await capture({ source: 'booking' }, 1)
     expect(counterWrites).toEqual([])
+  })
+})
+
+/**
+ * The same one-person rule, applied to the campaign that produced them.
+ *
+ * A lead's attribution follows its CREATION for exactly the reason the
+ * document does: the events stopped being the record. Crediting a returning
+ * visitor's capture would let whichever campaign ran most recently re-earn a
+ * lead list built over a year, and the number would climb every week without
+ * a single new person arriving.
+ */
+describe('a lead is credited to the campaign that created it, once', () => {
+  const TOUCH = {
+    channel: 'web' as const,
+    campaign: 'sept-launch',
+    touchedAtMs: 1_700_000_000_000,
+  }
+
+  /** The touch is an option on the WRITER, not a field on the lead. */
+  const captureFrom = (
+    touch: typeof TOUCH | null,
+    lead: Record<string, any> = {},
+    ceiling?: number,
+  ) =>
+    addHostLead({
+      hostRef,
+      hostId: HOST_ID,
+      lead: { email: 'visitor@example.com', source: 'signup', ...lead } as any,
+      ...(touch ? { touch } : {}),
+      ...(ceiling === undefined ? {} : { ceiling }),
+    })
+
+  it('credits the campaign on the capture that CREATES the lead', async () => {
+    await captureFrom(TOUCH)
+
+    expect(attributeCampaignConversion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: HOST_ID,
+        kind: 'lead',
+        refId: personKey('visitor@example.com'),
+        touch: TOUCH,
+      }),
+    )
+  })
+
+  it('credits NOTHING on a later capture of the same person', async () => {
+    await captureFrom(TOUCH)
+    attributeCampaignConversion.mockClear()
+
+    await captureFrom(TOUCH, { source: 'booking' })
+
+    expect(Object.keys(leads)).toHaveLength(1)
+    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+  })
+
+  it('credits nothing when the door resolved no campaign', async () => {
+    await captureFrom(null)
+
+    expect(Object.keys(leads)).toHaveLength(1)
+    expect(attributeCampaignConversion).not.toHaveBeenCalled()
+  })
+
+  it('credits nothing for a lead the ceiling REFUSED', async () => {
+    // The lead does not exist, so there is nothing for a campaign to be
+    // credited with. A refusal that still credited would report leads the
+    // customer can find nowhere.
+    await captureFrom(TOUCH, {}, 0)
+
+    expect(Object.keys(leads)).toHaveLength(0)
+    expect(attributeCampaignConversion).not.toHaveBeenCalled()
   })
 })

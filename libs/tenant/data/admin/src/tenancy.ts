@@ -68,6 +68,7 @@ export * from './lib/server/email-metering'
 // Side-effecting on purpose (AGL-2409): evaluating this module INSTALLS the
 // platform send-rate governor on `sendEmail`. Every server surface already
 // imports this barrel, so nothing has to remember to call an installer.
+export * from './lib/server/campaign-conversion-attribution'
 export * from './lib/server/email-send-rate'
 export * from './lib/server/email-sender-reputation'
 export * from './lib/server/erase'

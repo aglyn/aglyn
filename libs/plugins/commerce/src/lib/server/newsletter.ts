@@ -30,6 +30,7 @@ import {
   meterHostEmail,
   orgDataCollectionForHost,
   recordPendingTopicConfirmation,
+  resolveCampaignTouch,
   resolveOrgIdForHost,
   siteRequiresDoubleOptIn,
   upsertHostContact,
@@ -302,6 +303,15 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
     return res.status(429).json({ error: 'Too many attempts' })
   }
   try {
+    // A newsletter signup is an identify moment: the visitor was anonymous
+    // while they browsed and this request is the first thing that names them.
+    // Both channels are asked once, here, and the later touch is credited.
+    const campaignTouch = await resolveCampaignTouch({
+      hostId,
+      wire: body.campaignTouch,
+      email,
+      atMs: now,
+    })
     await upsertHostContact({
       hostId,
       email,
@@ -311,6 +321,7 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
         refId: `newsletter-${now}`,
         summary: 'Subscribed to the newsletter',
       },
+      ...(campaignTouch ? { campaignTouch } : {}),
     })
     /*
      * The confirmation, when this site asks for one.
