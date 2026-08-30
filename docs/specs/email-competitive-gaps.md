@@ -239,7 +239,18 @@ emails and 100,000 included contacts; delivering one newsletter to the audience 
 the product cannot physically deliver through its own UI.** This is the gap most likely
 to produce a refund request.
 
-### G2 — A campaign never records whether it was delivered {#g2}
+### G2 — ~~A campaign never records whether it was delivered~~ ✅ SHIPPED {#g2}
+
+> **Closed.** The webhook records `delivered`, `bounced`, `complained` and
+> `unsubscribes` onto the campaign behind the replay guard, and the report
+> divides by them with every denominator named on screen.
+>
+> ⚠️ **Invisible until production is promoted.** Resend's webhook is configured
+> against `aglyn.com`, so the handler that actually runs is PRODUCTION's — and
+> production does not yet carry this code. Until the promotion, every campaign
+> report reads `Delivered — not recorded`, which is the report behaving
+> correctly rather than a defect in it.
+
 
 **What it is.** `performCampaignSend` writes `stats: { recipients, sent, audienceSize,
 deferred, variantSends }`, and the webhook increments `stats.opens` and `stats.clicks`.
@@ -263,7 +274,14 @@ Mail Privacy Protection has made least trustworthy — while omitting every metr
 would tell a merchant, or us, that a list is bad. It also blocks [§4 P2](#p2): a
 per-tenant complaint rate has to be summed from somewhere.
 
-### G3 — Nobody can see the email before it goes to the whole list {#g3}
+### G3 — ~~Nobody can see the email before it goes to the whole list~~ ✅ SHIPPED {#g3}
+
+> **Closed.** The composer renders the email through the send path's own
+> renderer (`renderPreview`), and the email and template detail pages draw the
+> same HTML into a frame with an empty `sandbox` attribute. A plain-text
+> message previews the HTML part the send path synthesizes for it, so a
+> message with no template is not previewless.
+
 
 **What it is.** The composer's "preview" is a dry run of the *send path* that returns
 recipient counts. It renders nothing. A merchant composing in the besigner can open the

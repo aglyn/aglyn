@@ -1,9 +1,18 @@
 # Email overhaul — competitive position, audience model, sending domains, metering, abuse
 
-Status: **specification only. No code changed.** Written 2026-08-29 against `main` at
-`9315267be`, from the repository and from the operator's report of production
-environment state. Nothing here has been decided by the account owner; §8 is the
-list of things that need him.
+Status: **substantially BUILT, and this document has not kept up.** Written
+against `main` at `9315267be` as a specification, from the repository and from
+the operator's report of production environment state.
+
+⚠️ **Do not plan from this file.** Most of what it proposes has since shipped —
+the audience model, campaign reporting with named denominators, consent at the
+send path, topics and a hosted preference center, the sending-domain provider,
+metering and the marketing-mail controls. The live account of what exists and
+what does not is `email-competitive-gaps.md`, which carries per-row shipped
+markers. This file is kept for the reasoning behind the decisions, not as a
+statement of the current state.
+
+§8 remains the list of things that need the account owner.
 
 > ⚠️ **House convention note.** Existing design specs live in `docs/design/` and
 > are named `agl-####-slug.md`. This file is at `docs/specs/email-overhaul.md`
