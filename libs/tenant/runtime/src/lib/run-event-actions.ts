@@ -42,6 +42,7 @@ import {
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   dataStorageRefusal,
+  enrollListMember,
   firebaseAdmin,
   getOrgForHost,
   meterHostEmail,
@@ -489,18 +490,14 @@ async function executeAction(
           stepErrors.push(`unknown list "${step.listName || step.listId}"`)
           continue
         }
-        const memberId = createHmac('sha256', 'aglyn-list-member')
-          .update(email)
-          .digest('hex')
-          .slice(0, 20)
-        await listDoc.ref.collection('members').doc(memberId).set(
-          {
-            email,
-            addedAt: FieldValue.serverTimestamp(),
-            source: `action:${actionId}`,
-          },
-          { merge: true },
-        )
+        // `enrollListMember` owns the document id: the commerce newsletter
+        // handler enrolls into the same collection, and an id derived here
+        // would be a second answer to which document describes which person.
+        await enrollListMember({
+          listRef: listDoc.ref,
+          email,
+          source: `action:${actionId}`,
+        })
       } else if (step.type === 'assignCampaign') {
         const email = String((payload as any).email ?? '')
           .trim()

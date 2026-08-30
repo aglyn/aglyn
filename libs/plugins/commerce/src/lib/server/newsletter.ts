@@ -16,17 +16,22 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { orgDataCollectionForHost, upsertHostContact } from '@aglyn/tenant-data-admin'
+import {
+  enrollListMember,
+  orgDataCollectionForHost,
+  upsertHostContact,
+} from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
-import { createHash } from 'crypto'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
- * Enrolls one address into an org list's members (AGL-2499), keyed by the
- * email's hash so a repeat submission from the same visitor merges instead
- * of piling up duplicate rows — the same idempotency shape
- * `campaign-send.ts`'s `suppressionId` uses for suppressions.
+ * Enrolls one address into an org list's members (AGL-2499).
+ *
+ * The document id comes from `enrollListMember`, which is the only writer of
+ * that collection — the workflow `enrollList` step reaches it too, and when
+ * the two derived their own ids the same person subscribing by both routes
+ * became two members of one list.
  *
  * Best-effort and silent on any problem: list enrollment rides along with
  * the newsletter signup, which must still succeed (and still upsert the
@@ -48,18 +53,12 @@ async function enrollInList(options: {
     // A stale/mistyped id must not silently CREATE a list — campaign-send's
     // `list` audience would then read a list nobody set up.
     if (!listSnapshot.exists) return
-    const memberId = createHash('sha256').update(options.email).digest('hex')
-    await listRef
-      .collection('members')
-      .doc(memberId)
-      .set(
-        {
-          email: options.email,
-          ...(options.name ? { name: options.name } : {}),
-          source: 'newsletter',
-        },
-        { merge: true },
-      )
+    await enrollListMember({
+      listRef,
+      email: options.email,
+      ...(options.name ? { name: options.name } : {}),
+      source: 'newsletter',
+    })
   } catch (error) {
     console.error('list enrollment failed', error)
   }
