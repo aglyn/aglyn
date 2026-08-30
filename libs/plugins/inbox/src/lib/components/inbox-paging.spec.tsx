@@ -508,3 +508,68 @@ describe('the submissions tab can narrow to one form', () => {
     expect(unfiltered.length).toBe(submissionDocs.length)
   })
 })
+
+describe('the form filter never presents a cut list as the whole list', () => {
+  /*
+   * `FORMS_MAX_PER_HOST` is a read window, not a cap on the collection: a
+   * staff-set per-org `formsPerHost` override can put more forms on a site
+   * than the window shows. The invariant is therefore not about the number —
+   * any number can be exceeded — but about what a reader is told: a list cut
+   * at the window must say it was cut, because "not in this filter" and "no
+   * such form" are otherwise the same answer on screen.
+   *
+   * `FORMS_MAX_PER_HOST` is mocked to 50 above, so the fixture can straddle
+   * it cheaply.
+   */
+  const WINDOW = 50
+  const formsFixture = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      $id: `form-${String(index).padStart(3, '0')}`,
+      displayName: `Form ${String(index).padStart(3, '0')}`,
+    }))
+  const original = byCollection.forms
+
+  afterEach(() => {
+    byCollection.forms = original
+  })
+
+  const optionLabels = async () => {
+    const combobox = document.querySelector(
+      '[role="combobox"]',
+    ) as HTMLElement | null
+    expect(combobox).toBeTruthy()
+    fireEvent.mouseDown(combobox as HTMLElement)
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('All forms'),
+    )
+    return Array.from(document.querySelectorAll('[role="option"]'))
+      .map((node) => node.textContent?.trim() ?? '')
+      .filter((label) => label !== 'All forms')
+  }
+
+  it('says so when the catalog is larger than the window', async () => {
+    byCollection.forms = formsFixture(WINDOW + 12)
+    await mountPage()
+    expect(await optionLabels()).toHaveLength(WINDOW)
+    // The disclosure, in the reader's own words rather than a class name.
+    expect(document.body.textContent).toContain(`Showing the first ${WINDOW}`)
+  })
+
+  it('THE CONTROL: says nothing when the whole catalog fits', async () => {
+    // Without this row the assertion above is satisfied by a page that cries
+    // truncation permanently, which is its own way of being wrong.
+    byCollection.forms = formsFixture(WINDOW)
+    await mountPage()
+    expect(await optionLabels()).toHaveLength(WINDOW)
+    expect(document.body.textContent).not.toContain('Showing the first')
+  })
+
+  it('reads one PAST the window, which is how truncation is knowable', async () => {
+    // A query bounded at exactly the window cannot distinguish "the catalog
+    // is 50" from "the catalog is 5,000". The probe is the mechanism the
+    // disclosure above depends on, so it is pinned on the QUERY.
+    byCollection.forms = formsFixture(WINDOW + 12)
+    await mountPage()
+    expect(mockCeilingsAsked).toContain(WINDOW + 1)
+  })
+})

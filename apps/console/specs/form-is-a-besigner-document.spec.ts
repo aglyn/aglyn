@@ -237,7 +237,7 @@ describe('the rules let a form version be written at all', () => {
 
   it('still denies a client-direct create of the form itself', () => {
     // Creation routes through /api/hosts/resources so the entitlement and
-    // FORMS_MAX_PER_HOST are enforced server-side.
+    // the `formsPerHost` ceiling are enforced server-side.
     expect(formsBlock()).toContain('allow create: if isStaff();')
   })
 })

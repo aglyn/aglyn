@@ -38,10 +38,9 @@ import type { AglynNodeSchema, NodeId } from '../foundation/definitions/componen
  *
  * ⛔ **NOT the allowance.** How many forms a site may hold is
  * `PLAN_ENTITLEMENTS[plan].formsPerHost`, enforced at creation through
- * `checkQuota` in `/api/hosts/resources`, and it varies by plan — from none
- * on Free to uncapped on Enterprise. A surface that shows a customer their
- * ceiling MUST read that entitlement. Reading this number instead publishes
- * one plan's terms to every plan.
+ * `checkQuota` in `/api/hosts/resources`. A surface that shows a customer
+ * their ceiling MUST read that entitlement — this number is larger, so
+ * reading it instead overstates the cap on every plan.
  *
  * What this bounds is a READ. `hosts/{hostId}/forms` is small enough to list
  * in one page, and the listing surfaces (the submissions filter, the entity
@@ -49,10 +48,11 @@ import type { AglynNodeSchema, NodeId } from '../foundation/definitions/componen
  * drop forms the customer made and can see elsewhere, which is the invisible
  * half of a wrong limit and the expensive one to discover.
  *
- * So it sits at or above every FINITE per-plan allowance, and
- * `forms.spec.ts` pins that relationship rather than trusting the two numbers
- * to be moved together. A contract-provisioned Enterprise catalog can exceed
- * it; a surface that must list one needs real pagination, not a larger
+ * So it sits at or above every per-plan allowance, with headroom for the
+ * catalogs that legitimately exceed one: a per-org contract override, and any
+ * site that built past a ceiling before it was lowered. `forms.spec.ts` pins
+ * that relationship rather than trusting the two numbers to be moved
+ * together. A catalog past even this needs real pagination, not a larger
  * constant.
  */
 export const FORMS_MAX_PER_HOST = 1000

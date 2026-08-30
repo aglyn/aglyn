@@ -1422,17 +1422,16 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   <Typography variant="body2">
                     {`${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`}
                   </Typography>
-                  {/* The two form dimensions on one line, because separated
-                      they read as one number stated twice. The catalog size
-                      is what an author spends by BUILDING a form; the
-                      submissions band is what visitors spend by ANSWERING
-                      one, and a site out of catalog keeps collecting on
-                      every form it already has. */}
+                  {/* Submissions only. These cards exist to be compared, and
+                      the saved-form ceiling is the same number on every plan
+                      that has forms at all — printed here it would read as a
+                      difference and send a buyer looking for one. What a
+                      plan actually buys on this axis is the submissions
+                      band, which is tiered and metered. The ceiling is shown
+                      where it means something: beside the site's own count,
+                      on the usage meters. */}
                   <Typography variant="body2">
-                    {entitlements.formsPerHost > 0
-                      ? `${quotaLabel(entitlements.formsPerHost)} saved forms/site · ` +
-                        `${quotaCount(entitlements.formSubmissionsPerMonth)} submissions/mo`
-                      : `${quotaCount(entitlements.formSubmissionsPerMonth)} form submissions/mo`}
+                    {`${quotaCount(entitlements.formSubmissionsPerMonth)} form submissions/mo`}
                   </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +

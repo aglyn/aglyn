@@ -129,11 +129,16 @@ and Create button) carried the entire console list-pagination arc, and
 `AGL-2306` (a rejected plugin version stays advertised) was cited by the
 citation guard itself. Both now have real issues — AGL-2501 and AGL-2500.
 
-## 2026-08-30 — The saved-form catalog becomes a plan allowance; Advanced and above are uncapped
+## 2026-08-30 — The saved-form catalog: a per-plan ladder was built, then withdrawn for one flat ceiling
 
-- **Decided by:** the account owner — forms belong on the pricing tables, the marketing site, the billing dashboard and the add-ons surface, with Enterprise unlimited and "50 is tiny for Agency and Enterprise".
+⚠️ **Read the amendment at the end of this entry before acting on anything in
+the middle of it.** The ladder described below was built, published, and then
+withdrawn the same day on the evidence it had itself gathered. The competitor
+table is the reason the ladder is gone and is the durable part of this entry.
+
+- **Decided by:** the account owner. First that the catalog should be a per-plan allowance published on every pricing surface, with the top tiers uncapped; then, on reading the vendor comparison this work produced, that the axis should not be priced per tier at all.
 - **Scope:** packaging
-- **Evidence:** `OrgEntitlements.formsPerHost`, new; `PLAN_ENTITLEMENTS[*].formsPerHost` = 0 / 50 / 200 / 500 / 1,000 / Unlimited / Unlimited / Unlimited; enforced at `apps/console/app/api/hosts/resources/route.ts` (`quotaKey`, inside the create transaction); `libs/aglyn/src/lib/app-utils/forms.ts` (`FORMS_MAX_PER_HOST` is now a listing bound, not a ceiling); published by `tools/marketing/pricing-copy/tables.json` and `apps/console/components/billing/*`; competitor table in Drive → Pricing & Packaging → 05-Pricing-Decision-Log.
+- **Evidence:** `OrgEntitlements.formsPerHost` exists and is enforced, but does not vary by plan: `FORMS_PER_HOST_CEILING = 500` on every plan carrying `reusableComponents`, and `0` on Free. Enforced at `apps/console/app/api/hosts/resources/route.ts` (`quotaKey`, inside the create transaction). Published on the billing usage meters and the staff entitlement editor; **not** on the pricing tables and **not** on the plan cards. `FORMS_MAX_PER_HOST` in `libs/aglyn/src/lib/app-utils/forms.ts` is a listing window, never a ceiling.
 
 **No charged price moves.** This adds an allowance and raises a ceiling; every
 price stays where the Sept-1 lock put it.
@@ -170,7 +175,11 @@ are tight enough to be a known friction point.
 as a lever.** It is generous against both vendors that do meter it, and it
 disappears entirely from Advanced up.
 
-| Plan | Saved forms / site | Nearest metering comparator |
+⚠️ **The table below is the WITHDRAWN proposal**, kept because the comparator
+column is the working that led to dropping it. The shipped number is one flat
+500 on every plan in it.
+
+| Plan | Saved forms / site (withdrawn) | Nearest metering comparator |
 |---|---|---|
 | Free | — | HubSpot/Typeform/Mailchimp give free forms; see the open question below |
 | Starter $25 | 50 | Wix Core 10 @ $29 · Jotform Bronze 25 @ $39 |
@@ -218,6 +227,96 @@ capability is half-present; what they cannot do is SAVE one as a reusable
 definition. Granting it means moving the form entity off `reusableComponents`,
 which is a packaging change on a published feature-matrix row and needs a
 decision, not an implementation.
+
+### Amended the same day — the ladder is withdrawn
+
+**What happened, plainly.** The ladder above was designed, implemented and
+published across the entitlements table, the plan cards, the usage meters, the
+staff editor and the generated pricing tables. Building it required surveying
+what the field actually charges for, and that survey is the competitor table
+above: of seven vendors, five cap saved-form COUNT at nothing whatsoever,
+Webflow abandoned the lever above its free tier, and the only two that meter it
+are Wix and Jotform — the latter a form-first product where a form IS the
+billable unit. The work's own conclusion was that the count is an abuse ceiling
+rather than a marketing lever. The account owner read that and decided not to
+price it per tier.
+
+So the ladder is gone and the mechanism stays.
+
+**The shape: one flat ceiling, not "unlimited".** `formsPerHost` resolves to
+`FORMS_PER_HOST_CEILING = 500` on every plan that can build a form at all, and
+to `0` on Free. It rides an entitlement key rather than a bare platform
+constant for two concrete reasons: `checkQuota` is where a refusal can happen
+inside the transaction that counts, and a per-org `entitlements.formsPerHost`
+override is how one contract gets a larger catalog without moving the number
+everyone else is measured against.
+
+Unlimited-on-every-paid-plan was the alternative and was rejected. Unbounded
+creation of form definitions is a storage and write vector that no price tier
+makes safe, and removing the ceiling from the entitlement would have pushed it
+back onto `FORMS_MAX_PER_HOST` — the page size of two listing reads. That
+coupling is precisely the defect described below: one number serving as both a
+customer-facing ceiling and a query bound means any future change to the page
+size silently changes what customers may hold.
+
+500 is generous by construction: five times Jotform's largest published tier
+(100) and more than six times Wix's (75), and past any catalog a real site
+builds. It is deliberately BELOW the 1,000-row listing window, so the window
+always has headroom over the ceiling.
+
+**Removed from the pricing surfaces.**
+
+- The `Saved forms per site` row is gone from `tools/marketing/build-pricing-tables.mts` and from the generated `tools/marketing/pricing-copy/tables.json`. A limit identical on all eight plans differentiates nothing, and eight matching cells invite a reader to hunt for a difference that is not there.
+- The `EXPECTED_MISSING` declaration that had been added for that row is gone with it. That map is checked in BOTH directions — an entry that stops diverging fails — so leaving it would have broken `check:pricing-tables`.
+- The plan-card line no longer prints the catalog size. It prints the submissions band alone, which is genuinely tiered, genuinely metered and genuinely charged. The ceiling is still shown where it means something: on the per-site usage meters, beside that site's own count.
+
+`check:pricing-tables` and `check:feature-matrix` are both clean.
+
+**Kept, deliberately.**
+
+- The enforcement path: `quotaKey: 'formsPerHost'` through `checkQuota`, inside the counting transaction.
+- The rule that a ceiling refuses only the CREATION of the next form. Forms already built are never deleted, hidden or disabled, and a site above its ceiling keeps collecting submissions on every form it has. This is the standing capacity rule — a limit binds ALLOCATION, never ACCESS — and it is about future paying customers, not about legacy data.
+- The decision NOT to add forms to `over-limit.ts`, for its stated reason: there is nothing to release. A flat ceiling strengthens this — the number is now identical on both sides of any downgrade, so a plan change cannot strand a catalog at all.
+- `formSubmissionsPerMonth`, untouched. Tiered, metered, and part of a charged price.
+
+**No charged price moves.**
+
+### A defect the flattening exposed: a read bound worn as a cap
+
+`FORMS_MAX_PER_HOST` was a hard `limit()` on two reads whose comments both
+described it as a flat platform cap — the besigner entity picker and the inbox
+submissions filter. While three plans resolved to unlimited, that was simply
+false: a site could create more forms than either list could show, and both
+would present the short list as the whole list with nothing on screen saying
+otherwise. This is the defect class this codebase keeps meeting — **a read that
+cannot see something reports the same thing as the thing not existing.**
+
+Raising the constant does not fix it; it picks a larger number to be wrong at.
+The flat ceiling removes the everyday case (500 held, 1,000 readable), but a
+per-org override can still exceed the window, so the invariant is written
+against the disclosure rather than the number:
+
+- The inbox filter reads one document PAST the window, which is the only way truncation is knowable, shows at most a window's worth, and says "Showing the first 1,000 forms" when it cut the list. `inbox-paging.spec.tsx` pins both directions — it must say so when cut, and must NOT say so when the whole catalog fits.
+- The entity-picker provider's comment no longer claims a flat cap. The picker fed from it still owes the same disclosure; that surface is another owner's.
+- `forms.spec.ts` now requires the window to sit STRICTLY above the largest allowance, so the two numbers cannot silently collapse into one.
+
+### Open question for the account owner — still open, and now sharper
+
+**Should Free get a small saved-form catalog?** With the ladder gone, "forms are
+the same on every plan" and "Free gets none" sit oddly together. Free resolves
+to `0` not by a packaging choice but because the form entity rides
+`reusableComponents`, which starts at Starter.
+
+The comparison set argues one way. HubSpot and Mailchimp both make free forms
+the acquisition lever that fills the metered resource they actually bill —
+contacts and sends — and forms are exactly that shape here, since what this
+platform meters is submissions. A Free site already accepts 20 submissions a
+month from an unbound `Form` node on a page, so the capability is half-present
+already; what a Free site cannot do is SAVE one as a reusable definition.
+
+**This is the owner's call and was not decided here.** Granting it means moving
+the form entity off `reusableComponents`, which is a packaging change on a
+published feature-matrix row.
 
 ---
 

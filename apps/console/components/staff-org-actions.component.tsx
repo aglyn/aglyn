@@ -111,7 +111,7 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   maxMembersPerHost: 'Max member seats',
   bandwidthGb: 'Bandwidth GB',
   formSubmissionsPerMonth: 'Form subs / mo',
-  // The catalog, not the traffic — the neighbouring key is the traffic.
+  // The catalog, not the traffic — the neighboring key is the traffic.
   formsPerHost: 'Saved forms / site',
   variablesPerHost: 'Variables',
   functionsPerHost: 'Functions',

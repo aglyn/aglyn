@@ -36,8 +36,8 @@ export type HostResourceKind =
   | 'location'
   | 'product'
   | 'reusableComponent'
-  // A form, which rides the `reusableComponents` entitlement and a flat
-  // `FORMS_MAX_PER_HOST`. The route entry existed before any typed caller
+  // A form, which rides the `reusableComponents` entitlement and the
+  // `formsPerHost` ceiling. The route entry existed before any typed caller
   // did, so creating one from the console was unreachable through this hook.
   | 'form'
   | 'register'

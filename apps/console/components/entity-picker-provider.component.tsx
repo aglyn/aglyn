@@ -123,10 +123,16 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
   // scoped, unlike datasets, because a form renders on one site's pages and
   // its submissions already live under that host.
   //
-  // Bounded by `FORMS_MAX_PER_HOST`, so the whole collection is one small
-  // page. Ordered by `__name__` rather than `displayName`: `orderBy` on a
-  // data field DROPS every document missing it, and a form saved without a
-  // name would then be missing from its own picker.
+  // `FORMS_MAX_PER_HOST` is a read WINDOW, not a cap on the collection: how
+  // many forms a site may hold is `formsPerHost`, enforced at the create,
+  // and a staff-set per-org override can raise a catalog past this window.
+  // A picker fed from here therefore owes the same disclosure the inbox
+  // filter carries — a list cut at the window must say it was cut, because
+  // "not in the picker" and "does not exist" are otherwise the same answer.
+  //
+  // Ordered by `__name__` rather than `displayName`: `orderBy` on a data
+  // field DROPS every document missing it, and a form saved without a name
+  // would then be missing from its own picker.
   const { data: formDocs } = useFirestoreCollection<any>(
     () =>
       requested.has('forms')

@@ -697,7 +697,7 @@ Forms split cleanly across that line, and the split is the whole answer:
 
 | Thing | Class | Enforcement |
 | --- | --- | --- |
-| **A form** | an authored artifact, like a screen, a layout or a dataset | **at the reduction.** `formsPerHost` joins the create-time gate at `/api/hosts/resources` AND `overLimitRows`, so a downgrade that would strand forms is refused at the moment of choosing, and no form is ever deleted, hidden or disabled. |
+| **A form** | an authored artifact, like a screen, a layout or a dataset | **at the create, and nowhere else.** `formsPerHost` is the create-time gate at `/api/hosts/resources` and is deliberately NOT an `overLimitRows` capacity — see the Decision Log. The ceiling does not vary by plan, so a downgrade cannot strand a catalog and there is nothing to release; no form is ever deleted, hidden or disabled. |
 | **A submission** | a person's data arriving | **never refused for capacity on a paid plan.** Already correct: `checkFormSubmissionQuota` returns `allowed: true` on every metered plan and bills the excess. |
 | **A lead** | a person | **never refused, never ejected, never merged away.** §4's collapse is a dedupe of records, not a reduction of people. |
 | **Traffic that is not a customer's** | abuse | the ceiling, unchanged. `checkFormSubmissionAbuseCeiling` is containment and its docblock is explicit that conflating it with the plan gate is how *"the plan gate ended up as the anti-abuse control it was never designed to be."* |
@@ -894,12 +894,17 @@ sentinel makes the view a cheap equality but means touching every historical
 submission, on the one collection that is unbounded and billed.
 
 **Q3 — `formsPerHost` as a plan dimension, or the `reusableComponents` boolean
-plus a flat ceiling?**
-The dimension is a cleaner story on the price list and a genuine upsell. It is
-also a six-place packaging move under a price lock, and it introduces a number
-that a downgrade can strand — which is more capacity gate to get right. The
-boolean-plus-ceiling costs nothing, ships now, and gives away forms to every
-paying plan equally.
+plus a flat ceiling? — ANSWERED: the flat ceiling.**
+The per-plan ladder was built and then withdrawn on the evidence it gathered:
+the website-building field does not meter form COUNT, so the dimension sells
+nothing. What shipped is this document's own recommendation in all but
+plumbing — `reusableComponents` gates access, and the count is one flat
+`FORMS_PER_HOST_CEILING` on every plan that passes that gate. It rides the
+`formsPerHost` entitlement key rather than a bare constant so the refusal can
+happen inside the counting transaction and so a contract can override one org.
+Because the number is identical on both sides of a plan change, the
+downgrade-strands-a-catalog hazard raised above does not arise. See the
+Decision Log's 2026-08-30 forms entry.
 
 **Q4 — Does the backfill delete the superseded lead rows, or keep them?**
 Deleting gives one document per person and a lead count that means something.

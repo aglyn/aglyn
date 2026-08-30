@@ -433,20 +433,6 @@
             }
           },
           {
-            "label": "Saved forms per site",
-            "duplicateOf": null,
-            "values": {
-              "free": "—",
-              "starter": "50",
-              "pro": "200",
-              "business": "500",
-              "scale": "1,000",
-              "advanced": "Unlimited",
-              "agency": "Unlimited",
-              "enterprise": "Talk to us"
-            }
-          },
-          {
             "label": "Form submissions / mo",
             "duplicateOf": null,
             "values": {

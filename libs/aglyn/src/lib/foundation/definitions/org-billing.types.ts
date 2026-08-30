@@ -355,8 +355,11 @@ export interface OrgEntitlements {
    *
    * Not the same dimension as `formSubmissionsPerMonth`, and the two are
    * routinely confused: this is how many distinct intake forms an author may
-   * build, that is how many replies the site may accept. A plan can be
-   * generous on one and tight on the other.
+   * build, that is how many replies the site may accept. Only the second is
+   * tiered. This one resolves to the same `FORMS_PER_HOST_CEILING` on every
+   * plan that has the form entity at all — it bounds a collection rather than
+   * selling a tier — and exists as an entitlement so that `checkQuota` can
+   * refuse a create, and so a contract can override one org's number.
    *
    * Counts the CATALOG, never the traffic. A `Form` node drawn on a page and
    * left unbound submits without a definition and spends nothing here, which

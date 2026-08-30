@@ -352,4 +352,24 @@ describe('the listing bound is not the allowance', () => {
       finiteAllowances.filter(([, allowance]) => allowance !== FORMS_MAX_PER_HOST),
     ).not.toEqual([])
   })
+
+  it('stays STRICTLY above the largest allowance, leaving headroom', () => {
+    /*
+     * Not merely "at or above". Two things need the gap.
+     *
+     * A catalog can legitimately sit above the ceiling — a per-org override
+     * raised then withdrawn, or the ceiling lowered under forms already
+     * built — and those forms are never deleted, so a window equal to the
+     * ceiling would truncate a list the moment that happens.
+     *
+     * And the two numbers must stay TELLABLE APART. Collapse them and a
+     * surface reading the window where it means the ceiling becomes
+     * accidentally right, so the day they diverge again it silently
+     * misreports — which is how `forms/page.tsx` came to publish this
+     * constant as a customer's cap.
+     */
+    const largest = Math.max(...finiteAllowances.map(([, value]) => value))
+    expect(largest).toBeGreaterThan(0)
+    expect(FORMS_MAX_PER_HOST).toBeGreaterThan(largest)
+  })
 })
