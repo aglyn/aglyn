@@ -97,6 +97,18 @@ interface RedirectDraft {
  * destinations, self-redirect refusal, duplicate-source check). Paid
  * (`redirects` flag + `redirectsPerHost` quota); rules take effect on the
  * site within ~30 seconds (AGL-155 ISR window).
+ *
+ * The plan gate is the SHELL's, and it runs before this component exists
+ * (AGL-2484): the console resolves `redirects` from the org billing doc and
+ * renders its own refusal notice in place of the surface, so this card is
+ * only ever mounted for an entitled org and states no plan terms of its own.
+ * Redirects registers no `upgradeNotice` override because it is a genuine
+ * upgrade — free denies it, Starter and above grant it — which makes the
+ * shell's plan-derived sentence the accurate one already.
+ *
+ * `entitled` is still read below, where it is not redundant: it holds back
+ * the thirty analytics day-doc reads behind the hit counts, and refuses the
+ * add path ahead of the server that enforces it.
  */
 export function RedirectsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, entitled, org } = props
@@ -579,182 +591,175 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       contentGutterX
       contentGutterY
     >
-      {!entitled ? (
-        <Alert severity="info">
-          {'URL redirects are included from the Starter plan — point old ' +
-            'addresses at new pages or outside URLs. See Billing to upgrade.'}
-        </Alert>
-      ) : (
-        <Stack spacing={1}>
-          <Typography variant="body2" color="text.secondary">
-            {'Exact-path rules; 302 while testing, promote to 301 when ' +
-              'sure (browsers cache 301 aggressively). Changes go live ' +
-              'within ~30 seconds.'}
+      <Stack spacing={1}>
+        <Typography variant="body2" color="text.secondary">
+          {'Exact-path rules; 302 while testing, promote to 301 when ' +
+            'sure (browsers cache 301 aggressively). Changes go live ' +
+            'within ~30 seconds.'}
+        </Typography>
+        {hits && totalHits > 0 ? (
+          <Typography variant="caption" color="text.secondary">
+            {`${totalHits} redirect hit${totalHits === 1 ? '' : 's'} in ` +
+              'the last 30 days (sampled — one per cache window with ' +
+              'traffic).'}
           </Typography>
-          {hits && totalHits > 0 ? (
+        ) : null}
+        {visibleRedirects.map((redirect: any) => (
+          <Stack
+            key={redirect.$id}
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center' }}
+          >
+            <Switch
+              size="small"
+              checked={redirect.enabled !== false}
+              onChange={handleToggle(redirect)}
+            />
+            <Chip size="small" label={redirect.statusCode ?? 302} />
+            {(redirect.kind ?? 'exact') !== 'exact' ? (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={redirect.kind}
+              />
+            ) : null}
+            {/* An external rule with no publisher stamp is not being served
+                (AGL-1881) — `matchRedirect` skips it. Say so on the row
+                rather than letting it read as live: a rule that silently
+                stops firing is the failure mode a fail-closed gate owes an
+                explanation for, and pressing Edit → Save is the whole fix.
+                Shown for external destinations only, since that is the only
+                case the gate applies to. */}
+            {isExternalRedirectDestination(redirect.destination) &&
+            !redirect.externalDestinationApprovedBy ? (
+              <Chip
+                size="small"
+                color="warning"
+                variant="outlined"
+                label="not serving"
+                title={
+                  'This rule sends visitors to another site. Open it and ' +
+                  'save to confirm the destination — until then it is ' +
+                  'skipped.'
+                }
+              />
+            ) : null}
+            <Stack sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" noWrap>
+                {`${redirect.source} → ${redirect.destination}`}
+              </Typography>
+              {hits || redirect.lastHitAt ? (
+                <Typography variant="caption" color="text.secondary">
+                  {[
+                    hits
+                      ? `${hits[idKey(redirect.$id)] ?? 0} hits (30d, sampled)`
+                      : null,
+                    redirect.lastHitAt
+                      ? `last ${redirect.lastHitAt
+                          .toDate()
+                          .toLocaleString()}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Typography>
+              ) : null}
+            </Stack>
+            <Button
+              size="small"
+              onClick={() =>
+                setDraft({
+                  id: redirect.$id,
+                  source: redirect.source ?? '',
+                  destination: redirect.destination ?? '',
+                  statusCode: redirect.statusCode ?? 302,
+                  kind: redirect.kind ?? 'exact',
+                  priority: redirect.priority ?? REDIRECT_DEFAULT_PRIORITY,
+                  // Read exactly as the switch beside it does (AGL-1372):
+                  // an edit must not be a way to turn a rule back on.
+                  enabled: redirect.enabled !== false,
+                })
+              }
+            >
+              {'Edit'}
+            </Button>
+            <Button
+              size="small"
+              color="error"
+              onClick={handleDelete(redirect)}
+            >
+              {'Delete'}
+            </Button>
+          </Stack>
+        ))}
+        {redirects.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleRedirects.length}
+            // The rules this page HOLDS, after the soft-deleted ones are
+            // dropped. Not the quota figure below it: that is a server
+            // count over every document, soft-deleted rows included,
+            // because a deleted rule still occupies a slot.
+            count={redirects.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {redirectsTruncated ? (
+          <Alert severity="info">
+            {`Showing ${REDIRECT_CEILING} rules, ordered by id. This site ` +
+              'has more — the duplicate check and the tester below only ' +
+              'cover the ones listed here.'}
+          </Alert>
+        ) : null}
+        <Button
+          size="small"
+          color="primary"
+          sx={{ alignSelf: 'flex-start' }}
+          onClick={handleAdd}
+        >
+          {'Add redirect'}
+        </Button>
+        {/* The cap, standing rather than only on refusal (AGL-2113).
+            `enforcedCount` is what the enforcing route counts and what
+            `handleAdd` checks against, so the readout, the gate and the
+            server cannot disagree. It is deliberately NOT the number of rows
+            on screen: a soft-deleted rule still occupies a slot, so showing
+            the visible count here would promise room the server refuses. */}
+        <QuotaReadoutComponent
+          ready={org != null && enforcedCount != null}
+          used={enforcedCount ?? 0}
+          limit={
+            checkQuota(org, 'redirectsPerHost', enforcedCount ?? 0).limit
+          }
+          noun="redirect"
+        />
+        {/* Inline tester (AGL-375): same matcher as enforcement. */}
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <TextField
+            size="small"
+            label="Test a path"
+            placeholder="/old-page"
+            value={testPath}
+            onChange={(event) => setTestPath(event.target.value)}
+            sx={{ maxWidth: 260 }}
+          />
+          {testPath.trim() ? (
             <Typography variant="caption" color="text.secondary">
-              {`${totalHits} redirect hit${totalHits === 1 ? '' : 's'} in ` +
-                'the last 30 days (sampled — one per cache window with ' +
-                'traffic).'}
+              {(() => {
+                const normalized =
+                  normalizeRedirectSource(testPath) ?? testPath.trim()
+                const result = matchRedirect(redirects as any, normalized)
+                return result
+                  ? `→ ${result.destination} (${result.statusCode})`
+                  : 'No rule matches'
+              })()}
             </Typography>
           ) : null}
-          {visibleRedirects.map((redirect: any) => (
-            <Stack
-              key={redirect.$id}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
-              <Switch
-                size="small"
-                checked={redirect.enabled !== false}
-                onChange={handleToggle(redirect)}
-              />
-              <Chip size="small" label={redirect.statusCode ?? 302} />
-              {(redirect.kind ?? 'exact') !== 'exact' ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={redirect.kind}
-                />
-              ) : null}
-              {/* An external rule with no publisher stamp is not being served
-                  (AGL-1881) — `matchRedirect` skips it. Say so on the row
-                  rather than letting it read as live: a rule that silently
-                  stops firing is the failure mode a fail-closed gate owes an
-                  explanation for, and pressing Edit → Save is the whole fix.
-                  Shown for external destinations only, since that is the only
-                  case the gate applies to. */}
-              {isExternalRedirectDestination(redirect.destination) &&
-              !redirect.externalDestinationApprovedBy ? (
-                <Chip
-                  size="small"
-                  color="warning"
-                  variant="outlined"
-                  label="not serving"
-                  title={
-                    'This rule sends visitors to another site. Open it and ' +
-                    'save to confirm the destination — until then it is ' +
-                    'skipped.'
-                  }
-                />
-              ) : null}
-              <Stack sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" noWrap>
-                  {`${redirect.source} → ${redirect.destination}`}
-                </Typography>
-                {hits || redirect.lastHitAt ? (
-                  <Typography variant="caption" color="text.secondary">
-                    {[
-                      hits
-                        ? `${hits[idKey(redirect.$id)] ?? 0} hits (30d, sampled)`
-                        : null,
-                      redirect.lastHitAt
-                        ? `last ${redirect.lastHitAt
-                            .toDate()
-                            .toLocaleString()}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Typography>
-                ) : null}
-              </Stack>
-              <Button
-                size="small"
-                onClick={() =>
-                  setDraft({
-                    id: redirect.$id,
-                    source: redirect.source ?? '',
-                    destination: redirect.destination ?? '',
-                    statusCode: redirect.statusCode ?? 302,
-                    kind: redirect.kind ?? 'exact',
-                    priority: redirect.priority ?? REDIRECT_DEFAULT_PRIORITY,
-                    // Read exactly as the switch beside it does (AGL-1372):
-                    // an edit must not be a way to turn a rule back on.
-                    enabled: redirect.enabled !== false,
-                  })
-                }
-              >
-                {'Edit'}
-              </Button>
-              <Button
-                size="small"
-                color="error"
-                onClick={handleDelete(redirect)}
-              >
-                {'Delete'}
-              </Button>
-            </Stack>
-          ))}
-          {redirects.length === 0 ? null : (
-            <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={visibleRedirects.length}
-              // The rules this page HOLDS, after the soft-deleted ones are
-              // dropped. Not the quota figure below it: that is a server
-              // count over every document, soft-deleted rows included,
-              // because a deleted rule still occupies a slot.
-              count={redirects.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-            />
-          )}
-          {redirectsTruncated ? (
-            <Alert severity="info">
-              {`Showing ${REDIRECT_CEILING} rules, ordered by id. This site ` +
-                'has more — the duplicate check and the tester below only ' +
-                'cover the ones listed here.'}
-            </Alert>
-          ) : null}
-          <Button
-            size="small"
-            color="primary"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={handleAdd}
-          >
-            {'Add redirect'}
-          </Button>
-          {/* The cap, standing rather than only on refusal (AGL-2113).
-              `enforcedCount` is what the enforcing route counts and what
-              `handleAdd` checks against, so the readout, the gate and the
-              server cannot disagree. It is deliberately NOT the number of rows
-              on screen: a soft-deleted rule still occupies a slot, so showing
-              the visible count here would promise room the server refuses. */}
-          <QuotaReadoutComponent
-            ready={org != null && enforcedCount != null}
-            used={enforcedCount ?? 0}
-            limit={
-              checkQuota(org, 'redirectsPerHost', enforcedCount ?? 0).limit
-            }
-            noun="redirect"
-          />
-          {/* Inline tester (AGL-375): same matcher as enforcement. */}
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TextField
-              size="small"
-              label="Test a path"
-              placeholder="/old-page"
-              value={testPath}
-              onChange={(event) => setTestPath(event.target.value)}
-              sx={{ maxWidth: 260 }}
-            />
-            {testPath.trim() ? (
-              <Typography variant="caption" color="text.secondary">
-                {(() => {
-                  const normalized =
-                    normalizeRedirectSource(testPath) ?? testPath.trim()
-                  const result = matchRedirect(redirects as any, normalized)
-                  return result
-                    ? `→ ${result.destination} (${result.statusCode})`
-                    : 'No rule matches'
-                })()}
-              </Typography>
-            ) : null}
-          </Stack>
         </Stack>
-      )}
+      </Stack>
 
       <Dialog
         open={Boolean(draft)}
