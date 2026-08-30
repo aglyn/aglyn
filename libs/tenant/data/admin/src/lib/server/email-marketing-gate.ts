@@ -318,9 +318,8 @@ export async function readMarketingFrequency(
  *
  * **One read, four facts, and that is a requirement rather than a tidiness.**
  * Three separate refusals in {@link marketingSendVerdict} read this document,
- * and each of them was added at a different time; a second `get` for the
- * newest of them would be a second awaited round trip on a path that is
- * already one awaited HTTP POST per recipient. Which is also why the
+ * and a `get` per refusal would be three awaited round trips on a path that
+ * is already one awaited HTTP POST per recipient. Which is also why the
  * recipient's cadence is stored HERE rather than beside the topic opt-outs:
  * honoring a preference this gate has to consult on every marketing message
  * has to cost nothing, and riding on a document already being read is the

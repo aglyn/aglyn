@@ -789,8 +789,8 @@ describe('filterCadenceSendable', () => {
  * THE COMBINATION.
  *
  * The recipient's cadence and the engagement sunset read the same counter
- * document, and neither could be written against the other. What holds only
- * when the two are asked together is asserted here, each of it in both
+ * document, and the properties above hold of each one on its own. What holds
+ * only when the two are asked TOGETHER is asserted here, each of it in both
  * directions:
  *
  *  1. The ORDER. Suppression, then the recipient's own request, then the
