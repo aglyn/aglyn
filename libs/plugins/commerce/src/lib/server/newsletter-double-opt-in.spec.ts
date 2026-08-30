@@ -39,6 +39,7 @@
  */
 
 const sent: Array<Record<string, unknown>> = []
+const metered: string[] = []
 const upserted: Array<Record<string, unknown>> = []
 const enrolled: Array<Record<string, unknown>> = []
 let pendingCalls: Array<{ hostId: string; email: string; topicId: string }> = []
@@ -56,6 +57,9 @@ jest.mock('@aglyn/shared-util-email', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  meterHostEmail: async (hostId: string) => {
+    metered.push(hostId)
+  },
   upsertHostContact: async (options: Record<string, unknown>) => {
     upserted.push(options)
   },
@@ -119,6 +123,18 @@ import { newsletterHandler } from './newsletter'
 const HOST = 'host-1'
 const ADDRESS = 'dana@example.com'
 
+/**
+ * Every signup arrives from a DIFFERENT address.
+ *
+ * The handler's flood damper is a module-level map keyed by client IP and
+ * bounded at ten a minute, and it does not reset between tests because
+ * nothing in the module offers to. Sharing one bucket across a suite this
+ * size makes the eleventh test a 429 and every one after it — which reads as
+ * "the feature broke" and is the damper working. Varying the address is what
+ * keeps this file about the confirmation rather than about the limiter.
+ */
+let signUpSeq = 0
+
 async function signUp(body: Record<string, unknown> = {}) {
   const out: { code: number; body: any } = { code: 0, body: undefined }
   const res: any = {
@@ -136,7 +152,7 @@ async function signUp(body: Record<string, unknown> = {}) {
       method: 'POST',
       body: { hostId: HOST, email: ADDRESS, ...body },
       headers: {},
-      socket: {},
+      socket: { remoteAddress: `10.0.0.${(signUpSeq += 1)}` },
     } as any,
     res,
   )
@@ -145,6 +161,7 @@ async function signUp(body: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   sent.length = 0
+  metered.length = 0
   upserted.length = 0
   enrolled.length = 0
   pendingCalls = []
@@ -205,6 +222,22 @@ describe('when the site asks for one', () => {
     await signUp()
     expect(sent[0]['marketing']).toBeUndefined()
     expect(sent[0]['to']).toBe(ADDRESS)
+  })
+
+  /**
+   * A message this site sent costs what a message costs, so the meter has to
+   * see it — `email-send-metering-coverage.spec.ts` is the guard that makes
+   * an unmetered sender visible, and this is what it is guarding.
+   */
+  it('counts the confirmation against the site', async () => {
+    await signUp()
+    expect(metered).toEqual([HOST])
+  })
+
+  it('meters nothing when nothing was sent', async () => {
+    pendingResult = 'already-subscribed'
+    await signUp()
+    expect(metered).toEqual([])
   })
 
   it('sends nothing to somebody who left this stream', async () => {

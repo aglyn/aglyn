@@ -27,6 +27,7 @@ import {
 import {
   enrollListMember,
   firebaseAdmin,
+  meterHostEmail,
   orgDataCollectionForHost,
   recordPendingTopicConfirmation,
   resolveOrgIdForHost,
@@ -161,7 +162,7 @@ async function requestConfirmation(options: {
       return true
     }
     const stream = topic?.name ?? 'our newsletter'
-    await sendEmail({
+    const result = await sendEmail({
       to: options.email,
       subject: `Confirm your subscription`,
       text:
@@ -170,6 +171,17 @@ async function requestConfirmation(options: {
         'not sign up, ignore this message — nothing will be sent.',
       context: 'newsletter confirmation',
     })
+    /*
+     * Counted against the site, as TRANSACTIONAL.
+     *
+     * It is a message this site sent, so it costs what a message costs and
+     * the meter has to see it. `'transactional'` is the honest class: the
+     * person just typed their address into a form and is waiting for the
+     * answer, which is why the message carries no marketing context and no
+     * unsubscribe header either. Only a delivery is counted, so a send that
+     * never left is not billed as one.
+     */
+    if (result.sent) await meterHostEmail(options.hostId)
   } catch (error) {
     console.error('confirmation send failed', error)
   }
