@@ -436,8 +436,27 @@ otherwise an unanswerable support question.
 ### 3f. Consent is a join condition, not a list property
 
 **An address is mailable for marketing only when a consent record for it exists.**
-It is checked at send time, in `performCampaignSend`, after suppression and
-before the cap — and it applies to every audience kind, including `manual`.
+It is checked at send time, in `performCampaignSend`, and it applies to every
+audience kind, including `manual`.
+
+⚠️ **Corrected 2026-08-29.** This section said "after suppression and before the
+cap". That was never the code's order and is not the order now. The real
+sequence is **sweep the audience → dedupe → cap → suppression**: the 500-recipient
+cap is applied at `recipients = resolved.slice(0, MAX_RECIPIENTS_PER_SEND)` and
+suppression runs after it, in `filterSendableForHost`.
+
+That ordering has a consequence worth stating rather than inheriting: because
+the cap runs first, a send whose first 500 include 100 suppressed addresses
+reaches 400 people while unsuppressed recipients sit below the cap. It is
+deliberate — suppression is a keyed lookup per address, so moving it ahead of
+the cap costs the whole audience in reads on every debounced preview — but it
+is a real shortfall, and any consent check placed "before the cap" would be
+filtering an audience the cap has not yet reduced.
+
+**Put the consent join where the audience is swept, not where suppression
+runs.** Consent is a property of the person, knowable while paging; suppression
+is a per-address lookup deliberately deferred. Conflating them is what this
+paragraph got wrong.
 
 Ordering matters: check consent *before* the meter claim, so a filtered-out
 recipient is never charged against the org's allowance.
