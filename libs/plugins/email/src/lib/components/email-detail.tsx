@@ -17,7 +17,8 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -33,7 +34,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   campaignLinkReport,
   campaignReport,
@@ -49,6 +50,7 @@ import {
 import EmailDesignPreview from './email-design-preview'
 import EmailRecipientsCard from './email-recipients-card'
 import { Figure, percent, RateRow, Section } from './report-figures'
+import { useCampaignSendApi } from './use-campaign-send-api'
 
 const emailDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#the-campaign-report',
@@ -155,6 +157,18 @@ export function EmailDetail(props: EmailDetailProps) {
   const composedBody = String(email?.body ?? '')
   const sendTimeMs = email ? emailSendTimeMs(email) : 0
   const state = String(email?.status ?? '')
+  /** The merchant's own name for this email, where one was given. */
+  const displayName = String(email?.displayName ?? '')
+  /**
+   * How many times this email has been sent, and when the last one was.
+   *
+   * A message written before an email could be sent twice carries neither, and
+   * one send is what an absent count means — not zero.
+   */
+  const sendCount = Number(email?.sendCount ?? 1) || 1
+  const lastSentMs = email?.lastSentAt
+    ? emailSendTimeMs({ sentAt: email.lastSentAt })
+    : 0
 
   /*
    * The campaign this message belongs to.
@@ -172,6 +186,88 @@ export function EmailDetail(props: EmailDetailProps) {
    */
   const campaignId = String(email?.[CAMPAIGN_SEND_CONTAINER_FIELD] ?? emailId)
 
+  /*==========================================
+   * SENDING THIS EMAIL TO MORE PEOPLE.
+   *
+   * The whole control is a confirmation and one POST. Every decision it looks
+   * like it is making — who is left, who is suppressed, whether there is
+   * allowance and hourly room — is made by the send path, which is also the
+   * path the original send took; asking any of it here would be a second set
+   * of rules to disagree with the first.
+   *
+   * Two requests rather than one, and the first is a READ. `dryRun` runs the
+   * whole resolution and writes nothing, so the confirmation can say how many
+   * people this would reach before the merchant agrees to it. A send is the
+   * one action on this page that cannot be taken back, and "Send to more
+   * recipients?" with no number in it is a button nobody can answer honestly.
+   *=========================================*/
+  const campaignSendApi = useCampaignSendApi(hostId)
+  const { confirm } = useConfirmationContext()
+  const { enqueueSnackbar } = useSnackbar()
+  const [sendingMore, setSendingMore] = useState(false)
+
+  const handleSendToMore = useCallback(async () => {
+    if (sendingMore) return
+    setSendingMore(true)
+    try {
+      const counted = await campaignSendApi({
+        action: 'followUp',
+        campaignId: emailId,
+        dryRun: true,
+      })
+      if (!counted.response.ok) {
+        return void enqueueSnackbar(
+          counted.payload?.error ?? 'This email cannot be sent again',
+          { variant: 'warning', allowDuplicate: true },
+        )
+      }
+      const reaching = Number(counted.payload?.sendable ?? 0)
+      const already = Number(counted.payload?.alreadyReached ?? 0)
+      if (!reaching) {
+        return void enqueueSnackbar(
+          'Everyone in this audience already has this email',
+          { variant: 'info', persist: false },
+        )
+      }
+      const agreed = await confirm({
+        title: 'Send this email to more people?',
+        description:
+          `This sends the same email to ${reaching.toLocaleString()} more ` +
+          `${reaching === 1 ? 'person' : 'people'} in the same audience. ` +
+          `The ${already.toLocaleString()} who already received it are not ` +
+          'sent it again, and its report adds the new figures to the ones ' +
+          'it already holds.',
+        confirmationText: 'Send',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!agreed) return
+      const result = await campaignSendApi({
+        action: 'followUp',
+        campaignId: emailId,
+      })
+      if (!result.response.ok) {
+        return void enqueueSnackbar(result.payload?.error ?? 'Send failed', {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
+      }
+      enqueueSnackbar(
+        `Sent to ${Number(result.payload?.sent ?? 0).toLocaleString()} more ` +
+          'recipients',
+        { variant: 'success', persist: false },
+      )
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Send failed', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setSendingMore(false)
+    }
+  }, [campaignSendApi, confirm, emailId, enqueueSnackbar, sendingMore])
+
   const headerActions = (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
       <Button
@@ -183,6 +279,22 @@ export function EmailDetail(props: EmailDetailProps) {
       >
         {'All emails'}
       </Button>
+      {/*
+        Offered only on an email that HAS been sent. A scheduled one has not
+        gone out and a canceled one was withdrawn, so for both of them "send
+        to more people" names an act with no meaning — and the route refuses
+        it, which is a worse way to learn that than not being offered it.
+      */}
+      {state === 'sent' ? (
+        <Button
+          size="small"
+          color="primary"
+          disabled={sendingMore}
+          onClick={() => void handleSendToMore()}
+        >
+          {sendingMore ? 'Checking…' : 'Send to more recipients'}
+        </Button>
+      ) : null}
       {templateScreenId ? (
         <Button
           component={AppLink as any}
@@ -257,6 +369,29 @@ export function EmailDetail(props: EmailDetailProps) {
                       : 'not recorded'}
                   </TableCell>
                 </TableRow>
+                {/*
+                  An email that has been sent more than once, said out loud.
+                  Every figure below covers all of them, and a reader who took
+                  the single `Sent` date above for the whole story would read
+                  the delivery numbers as one mailing's.
+                */}
+                {sendCount > 1 ? (
+                  <TableRow>
+                    <TableCell>{'Sends'}</TableCell>
+                    <TableCell align="right">
+                      {`${sendCount.toLocaleString()}, most recently ` +
+                        (lastSentMs
+                          ? new Date(lastSentMs).toLocaleString()
+                          : 'not recorded')}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {displayName ? (
+                  <TableRow>
+                    <TableCell>{'Name'}</TableCell>
+                    <TableCell align="right">{displayName}</TableCell>
+                  </TableRow>
+                ) : null}
                 <TableRow>
                   <TableCell>{'Campaign'}</TableCell>
                   <TableCell align="right">

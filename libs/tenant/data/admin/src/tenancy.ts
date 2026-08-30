@@ -45,6 +45,7 @@ export * from './lib/server/consume-once'
 export * from './lib/server/csp-aggregate'
 export * from './lib/server/data-storage-gate'
 export * from './lib/server/contact-suppression'
+export * from './lib/server/email-campaign-reach'
 export * from './lib/server/email-suppression'
 export * from './lib/server/email-unsubscribe-link'
 // Side-effecting on purpose, for the reason `email-send-rate` below is:

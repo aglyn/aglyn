@@ -229,18 +229,29 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
       String(list.name ?? list.$id),
     ]),
   )
-  /*
-   * One email's report.
+  /*==========================================
+   * ONE EMAIL'S PAGE — the same one every other route to that record opens.
    *
-   * `campaigns/{sendId}` and not `emails/{sendId}`: this URL was the report
-   * for a single send before a campaign became a container, links to it are
-   * sitting in messages merchants sent each other, and the campaign detail
-   * route answers an id it does not recognize as a container with that send's
-   * own report. Changing the destination here would be changing which page a
-   * link that already exists resolves to.
-   */
-  const sendHref = (send: CampaignSend) =>
-    `${basePath}/campaigns/${send.$id}`
+   * `emails/{sendId}`, which is where the Emails tab and the template's
+   * messages table already send a reader. This table used to send them to
+   * `campaigns/{sendId}` instead, so the same record had two pages depending
+   * on which list you clicked it in, and the campaign one is the poorer of
+   * the two: it is the aggregate report, without the message preview, the
+   * list it went to, or the per-recipient tables.
+   *
+   * ## What this does NOT change
+   *
+   * `campaigns/{sendId}` goes on resolving exactly as it does today. That is
+   * not a convenience — every unsubscribe footer already delivered carries
+   * `cid={sendId}`, those messages sit in inboxes forever, and merchants have
+   * pasted the URL into their own mail. This is a change to which link the
+   * console GENERATES, and nothing about which URLs answer.
+   *
+   * Nor is it a redirect. A redirect would be a second thing to be wrong
+   * about an id that is inside an HMAC; a page that keeps working is the
+   * shape with nothing to get wrong, and it costs nothing to leave standing.
+   *=========================================*/
+  const sendHref = (send: CampaignSend) => `${basePath}/emails/${send.$id}`
 
   /**
    * What one of this campaign's emails can be opened into.

@@ -238,14 +238,23 @@ describe('an id that names a campaign', () => {
     expect(screen.getAllByText('not recorded').length).toBeGreaterThan(0)
   })
 
-  it('links each email to its own report', async () => {
+  it('opens each email on the SAME page every other route to it opens', async () => {
+    /*
+     * One record, one destination. This table used to send a reader to
+     * `campaigns/{sendId}` — the aggregate report — while the Emails tab and
+     * the template's messages table sent them to `emails/{sendId}`, the page
+     * with the message preview, the list it went to and the per-recipient
+     * tables. The same row clicked in two places opened two different pages,
+     * and the poorer of them was the one reached from the campaign.
+     */
     await mount('camp-1')
 
     // Newest first, so `send-2` is the first row.
     const rows = document.querySelectorAll('tbody tr')
     fireEvent.click(rows[0])
 
-    expect(pushed).toContain('/acme/hosts/store/emails/campaigns/send-2')
+    expect(pushed).toContain('/acme/hosts/store/emails/emails/send-2')
+    expect(pushed).not.toContain('/acme/hosts/store/emails/campaigns/send-2')
   })
 
   it('the subject is a real link, and does not double-push', async () => {
@@ -259,7 +268,7 @@ describe('an id that names a campaign', () => {
       .querySelectorAll('tbody tr')[1]
       .querySelector('a') as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe(
-      '/acme/hosts/store/emails/campaigns/send-1',
+      '/acme/hosts/store/emails/emails/send-1',
     )
     fireEvent.click(link)
     expect(pushed).toEqual([])
@@ -417,5 +426,32 @@ describe('an id that names a SEND', () => {
 
     expect(screen.queryByText('send report for camp-1')).toBeNull()
     expect(document.body.textContent).toBe('')
+  })
+
+  it('goes on resolving even though nothing in the console links here any more', async () => {
+    /*
+     * THE URL GUARANTEE, held on its own rather than as a side effect of the
+     * test above.
+     *
+     * Every in-app route to one email now opens `emails/{sendId}` — the
+     * campaign's own table converged on it with the Emails tab and the
+     * template page. That is a change to the links the console GENERATES, and
+     * this asserts it changed nothing about which URLs ANSWER.
+     *
+     * It has to keep answering forever. `cid={sendId}` is inside the HMAC of
+     * every unsubscribe footer already delivered, those messages sit in
+     * inboxes indefinitely, and a merchant may have pasted this URL into
+     * their own mail about last week's send. There is deliberately no
+     * redirect: a redirect is a second thing to be wrong about an id that is
+     * inside a signature, and a page that keeps working has nothing to get
+     * wrong.
+     */
+    docStatus = 'success'
+    containers = {}
+    await mount('legacy-send')
+
+    expect(screen.getByText('send report for legacy-send')).toBeTruthy()
+    // And nothing was pushed: the URL RESOLVES, it does not bounce.
+    expect(pushed).toEqual([])
   })
 })
