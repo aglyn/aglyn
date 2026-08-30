@@ -48,6 +48,12 @@ export * from './marketing-consent'
 // record. Two enrollment surfaces import it — the Inbox assignment route and
 // the Emails console's audience card — and neither could import the other.
 export * from './list-assignment-policy'
+// Reading the FILE a merchant arrives with (`docs/specs/email-competitive-gaps.md`
+// G5/P4), directly after the policy it hands its addresses to: parsing and
+// mechanical screening only, so that an import asks the enrollment question
+// through the same module the one-address add path asks it through rather
+// than answering it a second way.
+export * from './list-import'
 // The dynamic-list rule (§3b/§3c), beside it for the same reasons: pure, and
 // it composes `contacts` for the segment vocabulary rather than restating it.
 export * from './dynamic-list-rule'
