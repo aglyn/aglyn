@@ -781,6 +781,75 @@ one send: mail a campaign to a seed address and read the `DKIM-Signature` `h=` t
 this before building anything else in this section; it is an hour, and it either confirms
 compliance or invalidates a claim we are making to customers and to Google.
 
+#### What was settled from inside the repo, and what was not
+
+**Settled — our half is correct, and eight spec files already assert it.** The pair is
+`List-Unsubscribe: <url>` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
+set in two places that emit byte-identical values: `unsubscribeHeaders()` in
+`marketing-send.ts`, which the `sendEmail` chokepoint applies whenever a caller
+declares `marketing`, and an explicit `headers:` block in `campaign-send.ts`. The
+chokepoint merges caller-first, so a campaign ships its own pair and the four paths
+that gained the headers get the chokepoint's — the same two names and the same two
+values, differing only in the URL.
+
+**That last fact is what makes the check cost one send rather than five.** What
+reaches Resend is identical across all five paths, so whatever Resend does with the
+headers, it does to all of them.
+
+**Not settled, and not settleable here.** Resend performs the DKIM signing and
+exposes the signed header set nowhere:
+
+- `GET /emails/{id}` returns `object`, `id`, `message_id`, `to`, `from`,
+  `created_at`, `subject`, `html`, `text`, `bcc`, `cc`, `reply_to`, `last_event`,
+  `scheduled_at`, `tags`. No raw source, no `DKIM-Signature`, no header set.
+- The `email.sent` webhook payload carries `type`, `created_at`, `broadcast_id`,
+  `email_id`, `message_id`, `from`, `to`, `subject`, `template_id`, `tags`. The only
+  header it exposes is `Message-ID`.
+- Resend's own page for adding these headers on the `/emails` endpoint says nothing
+  about DKIM signing, the `h=` tag, or signature coverage. It says only to add
+  `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` yourself.
+  Their **Broadcasts** product — which we do not use — claims to *"handle all your
+  unsubscribe flows for you automatically"*, but even there the docs do not say
+  whether the headers land inside `h=`. Treat "Broadcasts are compliant" as
+  unverified; it is not a path we are on either way.
+
+**So it genuinely requires sending one real message to a mailbox whose raw source a
+human can read.** Nothing in this section fabricates that check, and no agent should
+send live mail to perform it.
+
+#### The procedure, exactly
+
+1. Sign in to the console as an account whose **email address is a mailbox you can
+   read raw source in** — a Google Workspace address works, because Gmail's *Show
+   original* prints the full header block. The test send delivers to the requesting
+   user's own account address and nowhere else, so the account you use IS the seed.
+2. Open any campaign in the Emails composer and press **Send test**. This runs
+   `performCampaignSend` with `action: 'test'` and `emails: [<your address>]` — the
+   real send path, the real headers, no campaign record written and no reach recorded.
+3. In Gmail, open the message → ⋮ → **Show original** (other clients: *View source*
+   / *View message source*).
+4. Find the `DKIM-Signature:` header and read its **`h=`** tag. It is a
+   colon-separated list of header names.
+5. **The check:** does that list contain BOTH `list-unsubscribe` and
+   `list-unsubscribe-post`? Case is insignificant.
+   - **Both present** → RFC 8058 is satisfied and our one-click claim is true. Record
+     the date and the `h=` tag verbatim in the appendix.
+   - **Either missing** → the headers are advertised but not covered, a receiver
+     *"SHOULD NOT offer a one-click unsubscribe"*, and the ✅ in
+     [§1f](#1f-consent-compliance-and-deliverability) is a claim we are making to
+     customers and to Google that the message does not support. That is a vendor
+     issue, not a code one: the fix is a Resend support request, and the fallback is
+     the visible in-body link — which every marketing send already carries on both
+     parts and which is what CAN-SPAM actually asks for.
+6. While the raw source is open, note the `d=` tag too. On the shared platform domain
+   it should be ours; on a tenant's verified custom domain it should be theirs, which
+   is a second thing one send can settle for free.
+
+**Do not shortcut this with a Resend test address.** `delivered@resend.dev`,
+`bounced@resend.dev`, `complained@resend.dev` and `suppressed@resend.dev` are
+simulators: they raise the corresponding delivery events and reach no readable inbox,
+so there is no source to open. They also count against the sending quota.
+
 ### P4 — Import does not exist yet, which is the best possible moment to design it {#p4}
 
 [G5](#g5) is the product gap; this is its condition.
@@ -915,7 +984,41 @@ why everyone does it anyway: *"this proof has so far been recognised by the cour
 exclusively via a DOI."* **Do not write "German law requires double opt-in" anywhere.**
 Write that the law requires provable consent and DOI is the accepted proof.
 
-### P9 — Nothing re-checks a verified sending domain {#p9}
+### P9 — Nothing re-checks a verified sending domain {#p9} — ✅ CLOSED
+
+> ✅ **Closed**, on the existing job beat and with the drift discipline this
+> row named. `sending-domain-recheck.ts` sweeps verified domains whose last
+> check has gone stale, re-reads their DNS through the same
+> `probeSendingRecords` the console's Verify button uses — extracted so the
+> sweep cannot form a second opinion about whether the records are published —
+> and feeds the verdict to `assessDomainDrift`.
+>
+> **Two things stop it from becoming the worse bug.** An `inconclusive` probe
+> maps to `unreachable`, which holds: it neither counts the failure nor clears
+> a run already gathered, so a resolver outage cannot un-verify every customer
+> at once and cannot launder away evidence either. And a CONCLUSIVE miss is
+> still only counted — three of them, and at least three days since the first,
+> before the status moves. An admin pressing Verify is watching the result and
+> still acts on one answer; an unattended sweep is not, so it needs more.
+>
+> Where it diverges from the SSO sweep is deliberate: `assessDomainDrift`'s
+> strongest verdict is `report`, because revoking an SSO domain locks people
+> out of their own account. Here the same verdict un-verifies, because an
+> un-verified sending domain makes the site's sends REFUSE — recoverable by
+> republishing the record — and never moves the tenant's mail back onto the
+> shared platform domain.
+>
+> It rides `registerPluginJob` under the `core` namespace rather than taking a
+> schedule of its own: a second scheduled route means a runner entry, an
+> inventory row and a monitor that can be moved apart from each other. `core`
+> also passes the release filter untouched, which matters — a workspace with
+> the email plugin switched off still has hosts pointed at these records, and
+> a domain's trust must not outlive its DNS because of a plugin flag.
+>
+> Needs the `(status, lastCheckedAtMs)` collection-group index, added to
+> `cloud/firebase-firestore.indexes.json` and **not yet deployed**.
+>
+> The description below is the state it was written in.
 
 Already documented in `docs/design/email-sending-domains.md`. A customer who removes their
 DKIM record months later keeps sending. `verifySendingDomain` is idempotent, never throws,
@@ -923,7 +1026,28 @@ and already holds the `inconclusive` arm that stops a resolver outage from un-ve
 every customer at once; what is missing is the sweep and the drift discipline
 `sso-drift-logic.ts` already implements.
 
-### P10 — The `from` override is still reachable {#p10}
+### P10 — The `from` override is still reachable {#p10} — ✅ CLOSED
+
+> ✅ **Closed by deleting the option**, and the audit this row priced at 39
+> senders is what made that free: a walk over all 111 `sendEmail(` call sites
+> in those 39 files found **not one** that passes `from`, and not one that
+> spreads an unknown object into the options. The only `from:` keys in the
+> repo are the spec for the option itself and `sendEmail`'s own internal call
+> to the Resend helper.
+>
+> So it was reachable in the type and in the resolution, and reached by
+> nobody. `SendEmailOptions.from` is gone and `sendEmail` reads no `from` off
+> `options`, which leaves exactly two sources for the address — the
+> deployment's `USAGE_EMAIL_FROM` and a `SendingIdentityVerdict` the server
+> resolved from a document. Neither is reachable from a request body.
+>
+> **Deleting the field is not the whole close, and the runtime half is the
+> half that matters.** A marketplace plugin bundle reaches `sendEmail` as
+> JavaScript and is typechecked against nothing, so the resolution ignoring a
+> `from` that arrives anyway is what holds for those callers. Three tests
+> drive it through a cast for exactly that reason.
+>
+> The description below is the state it was written in.
 
 `SendEmailOptions.from` bypasses the configured sender. A resolved identity now outranks
 it, so a campaign cannot be moved off a verified domain, but a caller passing `from` with
@@ -1168,6 +1292,13 @@ it changes what a plan delivers. Recorded, not recommended.
 - **Aglyn's own RFC 8058 `h=` coverage** — [P3](#p3) is a verification item, not a
   finding. Nothing in this document asserts that our one-click unsubscribe does or does
   not work; it asserts that we have not checked, and that the check costs one send.
+  **Re-checked 2026-08-30 and still open, now with the reason it cannot close from
+  here.** Resend's `GET /emails/{id}` and its `email.sent` webhook both return
+  metadata only — `Message-ID` is the sole header either exposes — and Resend's own
+  page for adding these headers on `/emails` says nothing about DKIM signing or the
+  `h=` tag. Our half is settled and pinned: the pair is emitted from two places that
+  produce byte-identical names and values, so one send settles it for all five sending
+  paths. [P3](#p3) carries the exact steps.
 
 > ⚠️ **One safety note.** Every `docs.aws.amazon.com/ses/*` page fetched during this
 > research carried an appended block instructing the reader to run an
