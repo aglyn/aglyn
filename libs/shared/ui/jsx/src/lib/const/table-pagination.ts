@@ -37,6 +37,20 @@
  * every plugin had to re-invent. A pure module is exempt from the barrel's
  * weight rule, so this costs published tenant pages nothing.
  */
+/**
+ * Row height for every console list, in pixels.
+ *
+ * One number rather than a per-list choice: MUI X's `DataGrid` and a plain MUI
+ * `size="small"` table default to different heights, so a console that let
+ * each list pick showed two table designs. `ListRowActions` centres its
+ * cluster against this height.
+ *
+ * Here rather than beside the component for the reason the docblock above
+ * gives: a pure module costs a published page nothing, while importing the
+ * table itself to read a number drags the whole grid in behind it.
+ */
+export const TABLE_ROW_HEIGHT = 48
+
 export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 /**

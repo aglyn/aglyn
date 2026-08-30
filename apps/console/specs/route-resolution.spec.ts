@@ -74,13 +74,19 @@ function pageExists(template: string): boolean {
     }
     // Last resort: a dynamic segment. Plugin-owned pages (Products, Inbox,
     // Bookings, …) have no page file of their own — they are all served by
-    // `[pluginSlug]`, so matching a dynamic directory is a real resolution,
+    // `[...pluginSlug]`, so matching a dynamic directory is a real resolution,
     // not a loophole. Tried last so a literal page always wins.
+    //
+    // A CATCH-ALL (`[...name]`) takes the whole remainder, which is what Next
+    // does with one and what a plugin surface owning its own subtree relies
+    // on: `/forms/[formId]` is one route file, not a directory per level.
+    // Consuming a single segment here read every such route as missing.
     for (const entry of readdirSync(dir)) {
       if (!entry.startsWith('[') || !entry.endsWith(']')) continue
       const nested = join(dir, entry)
       if (!statSync(nested).isDirectory()) continue
-      if (walk(nested, tail)) return true
+      const catchAll = entry.startsWith('[...') || entry.startsWith('[[...')
+      if (walk(nested, catchAll ? [] : tail)) return true
     }
     return false
   }

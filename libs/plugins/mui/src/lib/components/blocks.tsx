@@ -19,7 +19,6 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiBullhorn,
   mdiCurrencyUsd,
-  mdiEmailOutline,
   mdiFacebook,
   mdiFormatQuoteClose,
   mdiGestureTapButton,
@@ -373,17 +372,6 @@ const featureColumn = (title: string, body: string) => ({
     paddingLeft: 2,
   },
   nodes: [text('h5', title), text('body1', body)],
-})
-
-const formField = (
-  fieldName: string,
-  label: string,
-  extra?: object,
-) => ({
-  $id: null,
-  componentId: 'formField',
-  pluginId: BUNDLE_ID,
-  props: { fieldName, label, required: true, ...extra },
 })
 
 export const blockPresets: Aglyn.PresetSchema[] = [
@@ -776,46 +764,9 @@ export const blockPresets: Aglyn.PresetSchema[] = [
       ],
     },
   },
-  {
-    $id: generatePresetId('form', 'contact-section'),
-    type: Aglyn.NodeType.PRESET,
-    displayName: 'Contact Section',
-    pluginId: BUNDLE_ID,
-    description: 'Heading with a name/email/message form',
-    category: Aglyn.ComponentCategory.BLOCKS,
-    icon: { path: mdiEmailOutline.path, sx: { color: '#0288d1' } },
-    data: {
-      $id: null,
-      componentId: 'muiStack',
-      pluginId: BUNDLE_ID,
-      props: { spacing: 2 },
-      sx: {
-        paddingLeft: 4,
-        paddingRight: 4,
-        paddingTop: 6,
-        paddingBottom: 6,
-        maxWidth: 560,
-      },
-      nodes: [
-        text('h4', 'Get in touch'),
-        {
-          $id: null,
-          componentId: 'form',
-          pluginId: BUNDLE_ID,
-          props: {
-            formName: 'Contact',
-            submitLabel: 'Send message',
-            successMessage: 'Thanks — we will get back to you soon.',
-          },
-          nodes: [
-            formField('name', 'Name'),
-            formField('email', 'Email', { fieldType: 'email' }),
-            formField('message', 'Message', { fieldType: 'textarea' }),
-          ],
-        },
-      ],
-    },
-  },
+  // Contact Section moved to @aglyn/plugins-forms (AGL-395): a preset that
+  // places `form` nodes has to stamp them with the bundle that registers
+  // them, and this one is the only block preset that does.
   {
     $id: generatePresetId('section', 'footer'),
     type: Aglyn.NodeType.PRESET,

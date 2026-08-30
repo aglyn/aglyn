@@ -222,6 +222,26 @@ export interface ConsolePluginPageProps {
      */
     ready: boolean
   }
+  /**
+   * What the viewer's role on THIS SITE lets them do, for a surface that
+   * publishes.
+   *
+   * The `author` host role edits content and may not make it live; that is
+   * enforced in the Firestore rules and by the promotion routes, and the
+   * console's job is to say no with a reason rather than let a click come
+   * back as a bare `permission-denied`. Resolving it needs the org member
+   * document and the host-access predicate over it, which the shell already
+   * reaches for — a plugin cannot, for the same reason it cannot read a
+   * release flag.
+   *
+   * `loaded` separates "no" from "not yet", so a surface disables with a
+   * reason rather than hiding a control that is about to be allowed. Read it
+   * the safe way round: `canPublish` is false until the read lands.
+   */
+  hostRole?: {
+    canPublish: boolean
+    loaded: boolean
+  }
 }
 
 export type ConsolePluginPage = ComponentType<ConsolePluginPageProps>
@@ -294,6 +314,28 @@ export interface ConsoleNavItem {
    * 404 rather than this page rendered again.
    */
   sections?: readonly ConsoleNavSection[]
+  /**
+   * Whether this nav item claims every path beneath its own href, with no
+   * declared section naming them.
+   *
+   * The case is a surface whose deeper URLs are ENTITIES rather than
+   * sections: `/forms` is a list, `/forms/{formId}` is one of its rows, and
+   * the set of ids is a property of the workspace's data, so no static
+   * `sections` list could enumerate them. Without this a nav item matches its
+   * own href and nothing else, and every row's page is a 404.
+   *
+   * The trade is deliberate and is why it must be asked for. A surface that
+   * owns its subtree can no longer distinguish a typo'd path from an entity
+   * id — `/forms/bogus` reaches the page rather than the shell's 404 — so it
+   * takes on the duty of saying "no such thing" itself, which a list-detail
+   * surface has to be able to do anyway for an id that was deleted while a
+   * link to it was still in someone's inbox.
+   *
+   * Sections win where both are declared: an id the `sections` list names is
+   * resolved as a section, and this only widens what happens when none
+   * matches.
+   */
+  ownsSubtree?: boolean
   /**
    * Dashboard header for the plugin page (title + icon), and the docs topic
    * its help `?` explains.
@@ -554,28 +596,33 @@ export interface ResolvedConsolePluginPage {
 }
 
 /**
- * One nav item against one href: exact, or a declared section beneath it.
+ * One nav item against one href: exact, a declared section beneath it, or —
+ * for a nav item that asks — anything beneath it.
  *
- * A nav item with NO sections matches its own href and nothing else. That is
- * what keeps every plugin written before AGL-2501 behaving as it did: without
- * it, prefix matching would quietly hand `/products/anything` to the Products
- * page, which is the "it opened the wrong page" report rather than a 404.
+ * A nav item that declares neither `sections` nor `ownsSubtree` matches its
+ * own href and nothing else. That is what keeps every plugin written before
+ * AGL-2501 behaving as it did: without it, prefix matching would quietly hand
+ * `/products/anything` to the Products page, which is the "it opened the wrong
+ * page" report rather than a 404.
  */
 function matchNavItem(
   navItem: ConsoleNavItem,
   href: string,
 ): { section?: ConsoleNavSection; segments: readonly string[] } | undefined {
   if (navItem.href === href) return { segments: [] }
-  if (!navItem.sections?.length) return undefined
+  if (!navItem.sections?.length && !navItem.ownsSubtree) return undefined
   // On a separator boundary, so `/products` cannot claim `/products-archive`.
   if (!href.startsWith(`${navItem.href}/`)) return undefined
   const segments = href.slice(navItem.href.length + 1).split('/').filter(Boolean)
-  const section = navItem.sections.find((item) => item.id === segments[0])
-  // An id the nav item never declared is NOT this page. Returning the nav item
-  // anyway would render the surface's default section under a URL naming a
+  const section = navItem.sections?.find((item) => item.id === segments[0])
+  if (section) return { section, segments }
+  // An id the nav item never declared is NOT this page — unless the surface
+  // claimed the subtree, in which case the deeper segments are its own
+  // entity ids and it answers for them. Returning the nav item otherwise
+  // would render the surface's default section under a URL naming a
   // different one, which reads to the person who typed it as the wrong page
   // opening rather than as a typo.
-  return section ? { section, segments } : undefined
+  return navItem.ownsSubtree ? { segments } : undefined
 }
 
 /**

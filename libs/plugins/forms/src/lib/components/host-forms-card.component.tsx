@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { mdiEyeOutline, mdiVectorSquare } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -25,42 +26,35 @@ import ListTable, {
   ListRowActions,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { Button, Stack } from '@mui/material'
+import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import { Alert, Button, Stack } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
+import { collection } from 'firebase/firestore'
+import {
+  useConsoleHostRoute,
+  useFirestore,
+  useHostResourceApi,
+  useLiveArtifactCount,
+  usePagedCollection,
+} from '@aglyn/tenant-feature-instance'
+import { collectionPage } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
-import DocumentPresenceChips from '../document-presence-chips.component'
-import { useHostSubdomain } from '../host-id-provider'
-import { buildRoute, Route } from '../../constants/route-links'
-import { TABLE_ROW_HEIGHT } from '../../constants/shared'
-import usePresenceSummary from '../../hooks/use-presence-summary'
-import { useOrgSlug } from '../../hooks/use-org-scope'
-import useLiveArtifactCount from '../../hooks/use-live-artifact-count'
-import { hostArtifactQuery } from '../../utils/host-artifact-queries'
-
-/** The count and cap a forms readout renders. */
-export interface FormQuotaReadout {
-  ready: boolean
-  used: number
-  limit: number
-}
+import { useCallback, useState } from 'react'
+import { BUNDLE_ID } from '../constants/bundle-common'
 
 export interface HostFormsCardProps {
   hostId: string
   /**
-   * Publishes the form count and cap so the PAGE can render the readout beside
-   * its create button — the same wire the components and templates cards use,
-   * and for the same reason: the card owns the listener the count comes from,
-   * so a page that counted separately would be a second source for one fact.
+   * The Forms surface's own absolute console path, from the shell.
+   *
+   * A row's link is this plus the form's id, resolved synchronously. The
+   * alternative is `useConsoleHostRoute`, which answers `null` for a paint
+   * while it reads two documents — and a table whose every row links to
+   * `/null/...` on first render is worse than one that pays nothing.
    */
-  onQuota?: (readout: FormQuotaReadout) => void
-  /**
-   * The empty state's way OUT. The card owns the list and therefore the empty
-   * state, but the PAGE owns the create drawer, so the button comes down
-   * rather than being rebuilt here.
-   */
-  onCreate?: () => void
+  basePath?: string
 }
 
 /**
@@ -75,13 +69,12 @@ export interface HostFormsCardProps {
  *
  * ## Why the empty state is a table and not a sentence
  *
- * It was a paragraph and a button. That reads as a smaller feature than it is:
- * a form is a thing with a slug, a submission count and a version history, and
- * none of that is visible until the reader has already committed to making
- * one. Rendering the columns with the empty overlay inside them teaches the
- * shape of the artifact BEFORE the first one exists — which is what the
- * components list has always done, and the only reason it was not done here is
- * that this list started as a stub.
+ * A paragraph and a button reads as a smaller feature than this is: a form is
+ * a thing with a slug, a submission count and a version history, and none of
+ * that would be visible until the reader had already committed to making one.
+ * Rendering the columns with the empty overlay inside them teaches the shape
+ * of the artifact BEFORE the first one exists, which is what the components
+ * list has always done.
  *
  * ## The two numeric columns, and the one that is honestly blank
  *
@@ -94,16 +87,39 @@ export interface HostFormsCardProps {
  * counting them back onto the form.
  */
 export function HostFormsCard(props: HostFormsCardProps) {
-  const { hostId, onQuota, onCreate } = props
+  const { hostId, basePath } = props
   const router = useRouter()
-  const orgSlug = useOrgSlug()
-  const host = useHostSubdomain()
+  const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
+
+  /**
+   * One form's page, beneath this surface's own path.
+   *
+   * `basePath` is the shell's answer and needs no read; the route table is the
+   * fallback for a caller that has none, and it is the one that can be `null`
+   * for a paint.
+   */
+  const formHref = useCallback(
+    (formId: string) =>
+      basePath
+        ? `${basePath}/${formId}`
+        : buildRoute(Route.FORM_DETAILS, {
+            orgSlug: orgSlug ?? '',
+            host: host ?? '',
+            formId,
+          }),
+    [basePath, orgSlug, host],
+  )
+
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
 
   /**
    * The list PAGES, over an ordered walk.
    *
-   * `hostArtifactQuery` holds the ordering decision and the reason it is the
+   * `collectionPage` holds the ordering decision and the reason it is the
    * document id rather than `displayName` — briefly, `orderBy` matches only
    * documents that HAVE the field, and the resources route stores an
    * allow-list it never checks for presence, so ordering on a name would hide
@@ -121,7 +137,11 @@ export function HostFormsCard(props: HostFormsCardProps) {
     pageSize,
     setPageSize,
   } = usePagedCollection<any>(
-    (pageLimit) => hostArtifactQuery(firestore, hostId, 'forms', pageLimit),
+    (pageLimit) =>
+      collectionPage(
+        collection(firestore, 'hosts', hostId, 'forms'),
+        pageLimit,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -143,22 +163,60 @@ export function HostFormsCard(props: HostFormsCardProps) {
   // Pending or refused, the page window stands in: a LOWER bound, never a
   // confident zero.
   const formsUsed = liveFormCount ?? forms.length
-  useEffect(() => {
-    onQuota?.({
-      ready: status !== 'loading',
-      used: formsUsed,
-      limit: Aglyn.FORMS_MAX_PER_HOST,
-    })
-  }, [onQuota, status, formsUsed])
 
   /**
-   * Who is already in each form, beside its name.
+   * Name first, then create (AGL-700).
    *
-   * ONE request for the whole list, and rolled up across VERSIONS because a
-   * row names a document and not a version — the chip's own copy carries that
-   * caveat.
+   * A form is created with BOTH halves seeded. `fields` is the declaration the
+   * submission path reads and starts empty; the canvas is the design, seeded
+   * with a root and a form node already bound to this id — so the besigner
+   * opens on something that satisfies `checkFormContract` rather than on a
+   * blank page whose first publish is a list of violations.
    */
-  const { peopleIn } = usePresenceSummary(hostId)
+  const handleCreate = useCallback(
+    async (values: Record<string, any>) => {
+      if (creating) return
+      setCreating(true)
+      setCreateError(null)
+      try {
+        const formId = Aglyn.createResourceUid()
+        await createHostResource({
+          hostId,
+          resource: 'form',
+          id: formId,
+          data: {
+            displayName: values['displayName'],
+            slug: Aglyn.normalizeFormSlug(values['displayName']) || formId,
+            fields: [],
+            rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+            nodes: {
+              [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+                $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+                componentId: 'div',
+                nodes: ['formRoot'],
+              },
+              formRoot: {
+                $id: 'formRoot',
+                componentId: 'form',
+                pluginId: BUNDLE_ID,
+                parentId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+                props: { formId, formName: values['displayName'] },
+                nodes: [],
+              },
+            },
+          },
+        })
+        setCreateOpen(false)
+        router.push(formHref(formId))
+      } catch (error) {
+        console.error(error)
+        setCreateError('Could not create that form')
+      } finally {
+        setCreating(false)
+      }
+    },
+    [creating, createHostResource, hostId, router, formHref],
+  )
 
   const columns: GridColDef[] = [
     {
@@ -167,18 +225,9 @@ export function HostFormsCard(props: HostFormsCardProps) {
       minWidth: 220,
       type: 'string',
       renderCell: ({ id, value }: any) => (
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
-          <AppLink
-            href={buildRoute(Route.FORM_DETAILS, {
-              orgSlug,
-              host,
-              formId: id as string,
-            })}
-          >
-            {value || (id as string)}
-          </AppLink>
-          <DocumentPresenceChips people={peopleIn('form', id as string)} />
-        </Stack>
+        <AppLink href={formHref(id as string)}>
+          {value || (id as string)}
+        </AppLink>
       ),
     },
     {
@@ -261,7 +310,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
             // A form with no version has never been opened in the besigner, so
             // there is no snapshot to render. Disabled and saying so, rather
             // than a link to an empty preview.
-            ...(versionId
+            ...(versionId && orgSlug && host
               ? {
                   to: buildRoute(Route.FORM_PREVIEW, {
                     orgSlug,
@@ -271,8 +320,9 @@ export function HostFormsCard(props: HostFormsCardProps) {
                   }),
                 }
               : {
-                  unavailableReason:
-                    'Nothing to preview yet — open it in the besigner once.',
+                  unavailableReason: versionId
+                    ? 'Resolving this site’s address…'
+                    : 'Nothing to preview yet — open it in the besigner once.',
                 }),
           }}
           items={[
@@ -280,11 +330,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
               key: 'details',
               label: 'View details',
               icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
-              href: buildRoute(Route.FORM_DETAILS, {
-                orgSlug,
-                host,
-                formId: form.$id,
-              }),
+              href: formHref(form.$id),
             },
             {
               key: 'besigner',
@@ -298,18 +344,15 @@ export function HostFormsCard(props: HostFormsCardProps) {
                * there rather than minting a second way is what keeps the two
                * from drifting.
                */
-              href: versionId
-                ? buildRoute(Route.FORM_BESIGNER, {
-                    orgSlug,
-                    host,
-                    formId: form.$id,
-                    versionId,
-                  })
-                : buildRoute(Route.FORM_DETAILS, {
-                    orgSlug,
-                    host,
-                    formId: form.$id,
-                  }),
+              href:
+                versionId && orgSlug && host
+                  ? buildRoute(Route.FORM_BESIGNER, {
+                      orgSlug,
+                      host,
+                      formId: form.$id,
+                      versionId,
+                    })
+                  : formHref(form.$id),
             },
           ]}
         />
@@ -317,28 +360,60 @@ export function HostFormsCard(props: HostFormsCardProps) {
     }),
   ]
 
-  // No card header: the page header already says "Forms", and the other
-  // artifact lists do not repeat theirs either.
+  /*
+   * The readout leads the create button, as it does on every other artifact
+   * list. Both sit on the CARD rather than in the page header: the shell owns
+   * the header of every plugin surface, and the count comes from the listener
+   * this card already holds — a page that counted separately would be a second
+   * source for one fact.
+   */
   return (
-    <CardDisplay>
+    <CardDisplay
+      header="Forms"
+      help={pluginDocsHelp('forms', {
+        anchor: '#build-a-form',
+        excerpt:
+          'A form collects submissions into the Inbox, and its design is ' +
+          'drawn in the besigner like any other artifact.',
+      })}
+      HeaderProps={{
+        action: (
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <QuotaReadoutComponent
+              ready={status !== 'loading'}
+              used={formsUsed}
+              limit={Aglyn.FORMS_MAX_PER_HOST}
+              noun="form"
+            />
+            <Button
+              size="small"
+              variant="contained"
+              disabled={creating}
+              onClick={() => {
+                setCreateError(null)
+                setCreateOpen(true)
+              }}
+            >
+              {creating ? 'Creating…' : 'Create Form'}
+            </Button>
+          </Stack>
+        ),
+      }}
+    >
       <ListTable
         rowHeight={TABLE_ROW_HEIGHT}
         columns={columns}
         noRowsLabel="No forms yet"
         noRowsDescription="A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact."
         noRowsAction={
-          onCreate ? (
-            <Button variant="contained" onClick={onCreate}>
-              {'Create your first form'}
-            </Button>
-          ) : null
+          <Button variant="contained" onClick={() => setCreateOpen(true)}>
+            {'Create your first form'}
+          </Button>
         }
         rows={forms}
         // The whole row opens the detail page; the action cluster stops
         // propagation so a menu click never navigates underneath it.
-        onOpen={(id) =>
-          router.push(buildRoute(Route.FORM_DETAILS, { orgSlug, host, formId: id }))
-        }
+        onOpen={(id) => router.push(formHref(String(id)))}
         // An empty table while the read is in flight reads as "you have none"
         // rather than "these are on their way".
         loading={status === 'loading'}
@@ -352,6 +427,28 @@ export function HostFormsCard(props: HostFormsCardProps) {
         hasMore={hasMore}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
+      />
+      {/*
+        The console's own create drawer, from the shared library rather than a
+        second one that looks like it. The empty state and the header open the
+        SAME one, so the state that says "creating…" is one state.
+       */}
+      <CreateArtifactDrawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Create new form"
+        // A form document stores no description: `/api/hosts/resources` filters
+        // `data` through a per-kind allow-list, so one typed here is dropped
+        // without a word.
+        includeDescription={false}
+        onSubmit={handleCreate}
+        errorSlot={
+          createError ? (
+            <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
+              {createError}
+            </Alert>
+          ) : null
+        }
       />
     </CardDisplay>
   )

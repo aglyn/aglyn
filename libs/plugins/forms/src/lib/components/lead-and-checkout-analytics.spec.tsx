@@ -36,7 +36,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import Form, { FormField, formNavigation } from './form'
-import Product from './product'
+import Product from '@aglyn/plugins-mui/components/product'
 
 const gtag = jest.fn()
 let fetchMock: jest.Mock

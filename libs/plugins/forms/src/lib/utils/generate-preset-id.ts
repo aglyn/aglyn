@@ -15,13 +15,20 @@
  * limitations under the License.
  */
 
+import type { ComponentId } from '@aglyn/aglyn'
+import { BUNDLE_ID } from '../constants/bundle-common'
+
 /**
- * The bundle id, persisted as `pluginId` on every node this bundle places.
- *
- * Rendering resolves by `componentId` alone, so a node naming another bundle
- * still draws — but `requiredSitePlugins` reads `pluginId` to decide which
- * chunks must register before first paint, so one that names the wrong bundle
- * draws LATE. `tools/scripts/backfill-node-plugin-ids.mjs` is what keeps saved
- * nodes agreeing with this string.
+ * Preset ids ARE namespaced by bundle, unlike component ids: the registry
+ * keys presets in one flat record across every registered bundle, so two
+ * bundles offering a "contact form" starter would collapse into one entry
+ * without the prefix.
  */
-export const BUNDLE_ID = 'events-calendar'
+export const generatePresetId = (
+  componentId: ComponentId,
+  ...other: string[]
+): ComponentId => {
+  return `${BUNDLE_ID}:${[componentId, ...other].join('.')}`
+}
+
+export default generatePresetId

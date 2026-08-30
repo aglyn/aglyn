@@ -82,7 +82,7 @@ import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useCurrentOrg from '../hooks/use-current-org'
-import useLiveArtifactCount from '../hooks/use-live-artifact-count'
+import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
 import { hostArtifactQuery } from '../utils/host-artifact-queries'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,

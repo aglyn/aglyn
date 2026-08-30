@@ -317,6 +317,99 @@ describe('resolveConsolePluginPage sections', () => {
   })
 
   /**
+   * A surface whose deeper URLs are ENTITIES rather than sections.
+   *
+   * `/forms` is a list and `/forms/{formId}` is one of its rows, and the set of
+   * ids is a property of the workspace's data — so there is no `sections` list
+   * that could name them, and without `ownsSubtree` every row's page is a 404.
+   * What the flag buys is exactly one thing: the segments reach the page. It
+   * does not widen anything else, and it is opt-in so that no surface acquires
+   * a catch-all by accident.
+   */
+  describe('a nav item that owns its subtree', () => {
+    const Forms = (): null => null
+
+    function registerOwnsSubtree() {
+      registerConsoleExtension({
+        pluginId: 'forms',
+        displayName: 'Forms',
+        navItems: [
+          {
+            label: 'Forms',
+            href: '/forms',
+            Component: Forms,
+            ownsSubtree: true,
+          },
+        ],
+      })
+    }
+
+    it('hands an entity id down as a segment', () => {
+      registerOwnsSubtree()
+      const resolved = resolveConsolePluginPage('/forms/form-abc')
+      expect(resolved?.navItem.Component).toBe(Forms)
+      expect(resolved?.section).toBeUndefined()
+      expect(resolved?.segments).toEqual(['form-abc'])
+    })
+
+    it("still resolves the surface's own href with no segments", () => {
+      registerOwnsSubtree()
+      const resolved = resolveConsolePluginPage('/forms')
+      expect(resolved?.navItem.Component).toBe(Forms)
+      expect(resolved?.segments).toEqual([])
+    })
+
+    it('claims only a SEPARATOR boundary, never a sibling path', () => {
+      // The property `/products` has against `/products-archive`, kept: a flag
+      // that widened matching to any prefix would let this surface swallow a
+      // differently-named one registered by another plugin.
+      registerOwnsSubtree()
+      expect(resolveConsolePluginPage('/forms-archive')).toBeUndefined()
+      expect(resolveConsolePluginPage('/formsy/thing')).toBeUndefined()
+    })
+
+    it('THE CONTROL: the same nav item WITHOUT the flag refuses the id', () => {
+      // Otherwise every assertion above is satisfied by a resolver that
+      // prefix-matches unconditionally, which is the behaviour AGL-2501
+      // deliberately did not have.
+      registerConsoleExtension({
+        pluginId: 'forms',
+        displayName: 'Forms',
+        navItems: [{ label: 'Forms', href: '/forms', Component: Forms }],
+      })
+      expect(resolveConsolePluginPage('/forms')?.navItem.Component).toBe(Forms)
+      expect(resolveConsolePluginPage('/forms/form-abc')).toBeUndefined()
+    })
+
+    it('lets a DECLARED section still win over the subtree claim', () => {
+      // Both may be declared, and then the section is the more specific
+      // answer — a surface that owns its subtree must not lose its rail.
+      registerConsoleExtension({
+        pluginId: 'forms',
+        displayName: 'Forms',
+        navItems: [
+          {
+            label: 'Forms',
+            href: '/forms',
+            Component: Forms,
+            ownsSubtree: true,
+            sections: [{ id: 'settings', label: 'Settings' }],
+          },
+        ],
+      })
+      expect(resolveConsolePluginPage('/forms/settings')?.section?.id).toBe(
+        'settings',
+      )
+      expect(
+        resolveConsolePluginPage('/forms/form-abc')?.section,
+      ).toBeUndefined()
+      expect(resolveConsolePluginPage('/forms/form-abc')?.segments).toEqual([
+        'form-abc',
+      ])
+    })
+  })
+
+  /**
    * Which registration owns a path when two could (AGL-2501).
    *
    * The registry is a session-wide union across plugins from different

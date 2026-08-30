@@ -11,10 +11,6 @@ import {
   drawerToggleSchema as drawerToggle,
 } from './components/drawer'
 import {
-  formFieldSchema as formField,
-  formSchema as form,
-} from './components/form'
-import {
   megaMenuSchema as megaMenu,
   navMenuSchema as navMenu,
 } from './components/nav-menu'
@@ -37,8 +33,6 @@ import { MUI_BUNDLE, registerMuiPlugin } from './plugin'
 // These ids are persisted in screen documents and must never change
 // without a document migration.
 const PERSISTED_COMPONENT_IDS = [
-  'form',
-  'formField',
   'functionWidget',
   'image',
   'layoutSlot',
@@ -90,7 +84,6 @@ const PERSISTED_COMPONENT_IDS = [
  */
 const MUI_DECLARED_CONTAINERS: readonly string[] = [
   'collectionEntries',
-  'form',
   'muiAccordion',
   'muiAccordionDetails',
   'muiAppBar',
@@ -233,8 +226,6 @@ describe('plugins-mui', () => {
       button,
       drawer,
       drawerToggle,
-      form,
-      formField,
       megaMenu,
       navMenu,
       functionWidget,

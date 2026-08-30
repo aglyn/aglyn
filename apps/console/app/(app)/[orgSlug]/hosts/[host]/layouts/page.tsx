@@ -90,7 +90,7 @@ import {
   TABLE_ROW_HEIGHT,
 } from '../../../../../../constants/shared'
 import { hostArtifactQuery } from '../../../../../../utils/host-artifact-queries'
-import useLiveArtifactCount from '../../../../../../hooks/use-live-artifact-count'
+import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {

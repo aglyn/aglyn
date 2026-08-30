@@ -170,7 +170,9 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
     flipOff('Toggle Redirects')
     await waitFor(() => expect(savedSet()).not.toBeNull())
     expect(continueButton()).toBeUndefined()
-    expect(savedSet()).toEqual(['mui', 'commerce'])
+    // `forms` rides every save the way `mui` does: both are always-on, so
+    // `resolveEnabledPlugins` unions them in before the toggle subtracts.
+    expect(savedSet()).toEqual(['mui', 'forms', 'commerce'])
   })
 
   describe('Cancel', () => {
@@ -214,7 +216,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       // `set-enabled-plugins` REPLACES the array, so one request carries the
       // whole cascade — there is no window in which Commerce is off while
       // User Accounts still believes it can use it.
-      expect(savedSet()).toEqual(['mui'])
+      expect(savedSet()).toEqual(['mui', 'forms'])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
         ([url]) => url === '/api/orgs/settings',
       )

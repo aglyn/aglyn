@@ -1174,7 +1174,7 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'The same version history, the same block.',
   ],
   [
-    'apps/console/app/(app)/[orgSlug]/hosts/[host]/forms/[formId]/page.tsx',
+    'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
     'The same version history, the same block — a form versions exactly as a ' +
       'component does and reads its versions the same unordered way.',
   ],
