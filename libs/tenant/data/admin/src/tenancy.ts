@@ -55,6 +55,7 @@ export * from './lib/server/email-metering'
 // imports this barrel, so nothing has to remember to call an installer.
 export * from './lib/server/email-send-rate'
 export * from './lib/server/erase'
+export * from './lib/server/dynamic-list-materialize'
 export * from './lib/server/firebase-admin'
 export * from './lib/server/free-workspace-cap'
 export * from './lib/server/ga4-measurement-protocol'

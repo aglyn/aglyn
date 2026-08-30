@@ -43,6 +43,8 @@ async function enrollInList(options: {
   listId: string
   email: string
   name?: string
+  /** The opt-in the signup itself carries — see the call site. */
+  marketingConsent?: boolean
 }): Promise<void> {
   if (!isDocumentId(options.listId)) return
   try {
@@ -58,6 +60,7 @@ async function enrollInList(options: {
       email: options.email,
       ...(options.name ? { name: options.name } : {}),
       source: 'newsletter',
+      ...(options.marketingConsent ? { marketingConsent: true } : {}),
     })
   } catch (error) {
     console.error('list enrollment failed', error)
@@ -117,7 +120,17 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
       },
     })
     if (listId) {
-      await enrollInList({ hostId, listId, email })
+      /*
+       * The same basis the contact upsert records, on the membership too.
+       *
+       * A list membership had no consent field at all, so `audience: 'list'`
+       * gave the send-time join nothing to read even for the one audience
+       * whose members literally asked for a newsletter
+       * (`docs/specs/email-overhaul.md` §1d). This is a DECLARED opt-in and
+       * not an inference from an act: the request this handler serves is
+       * "subscribe me", which is the checkbox.
+       */
+      await enrollInList({ hostId, listId, email, marketingConsent: true })
     }
     return res.status(200).json({ ok: true })
   } catch (error) {

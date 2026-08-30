@@ -288,3 +288,50 @@ describe('an unusable address', () => {
     expect(memberIds()).toHaveLength(0)
   })
 })
+
+/**
+ * The consent field a list membership never had.
+ *
+ * `orgs/{orgId}/lists/{id}/members` carried `email`, `name`, `source` and
+ * `addedAt` and nothing else, so `audience: 'list'` gave the send-time
+ * consent join nothing to read — even for the one audience whose members
+ * literally asked for a newsletter
+ * (`docs/specs/email-overhaul.md` §1d/§3f).
+ *
+ * The two routes into this collection are not the same event, and that is the
+ * whole distinction being asserted. Somebody posting the newsletter form is
+ * saying "subscribe me": the request IS the checkbox. An automation enrolling
+ * somebody because a workflow fired is a decision the SITE made about a person
+ * who was doing something else, and a basis stamped from it would be
+ * manufactured.
+ */
+describe('the consent a list membership records', () => {
+  const memberDoc = () => store[`${MEMBERS_PATH}/${Object.keys(store)
+    .filter((key) => key.startsWith(`${MEMBERS_PATH}/`))
+    .map((key) => key.slice(MEMBERS_PATH.length + 1))[0]}`]
+
+  it('records a basis for a newsletter subscribe', async () => {
+    await subscribeByNewsletterForm('bob@example.com')
+    expect(memberDoc()).toMatchObject({ marketingConsent: true })
+    expect(typeof memberDoc()?.['marketingConsentAtMs']).toBe('number')
+  })
+
+  it('⛔ records NO basis for an automation enrollment', async () => {
+    await subscribeByAutomation('bob@example.com')
+    expect(memberDoc()).toBeDefined()
+    expect('marketingConsent' in (memberDoc() ?? {})).toBe(false)
+  })
+
+  /**
+   * And an enrollment that carries no checkbox never ERASES one. A merge that
+   * stamped `false` on the omitted case would revoke a basis the person gave
+   * earlier, and a withdrawal is a different event from a re-enrollment that
+   * happened not to carry a box. Withdrawal has its own path — the
+   * unsubscribe link and the suppression list.
+   */
+  it('does not erase an existing basis when a later route carries none', async () => {
+    await subscribeByNewsletterForm('bob@example.com')
+    await subscribeByAutomation('bob@example.com')
+    expect(memberDoc()).toMatchObject({ marketingConsent: true })
+  })
+})

@@ -178,6 +178,56 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
 }
 
 /**
+ * The opt-in a form CARRIES, or `false`.
+ *
+ * `upsertHostContact` has accepted `marketingConsent` since AGL-301 and would
+ * stamp `marketingConsentAtMs` from it, and this route passed it zero times —
+ * so a subscribe checkbox a merchant put on their form was collected, stored
+ * as a submission field, and then dropped on the way to the contact. That is
+ * the missing INPUT for the send-time consent join
+ * (`docs/specs/email-overhaul.md` §1d): the join can only ever be as good as
+ * what the capture surfaces record.
+ *
+ * ⛔ THE FACT OF SUBMISSION IS NOT AN OPT-IN. Only a field whose VALUE is an
+ * affirmative checkbox state counts, and only under a name that means
+ * marketing consent. A form is submitted to ask a question, book a table or
+ * claim a refund, and treating any of those as a subscription is exactly the
+ * inference the consent arc refused to make.
+ *
+ * The name list is closed rather than a substring match on "consent": a
+ * merchant's field called `consentToTreatment` on a clinic intake form is a
+ * different instrument entirely, and matching it would manufacture a
+ * marketing basis out of a medical one.
+ */
+const MARKETING_CONSENT_FIELD_NAMES = new Set([
+  'marketingconsent',
+  'marketingoptin',
+  'emailoptin',
+  'newsletteroptin',
+  'subscribe',
+  'subscribetonewsletter',
+])
+
+/** Checkbox values a browser form actually posts for a ticked box. */
+const AFFIRMATIVE = new Set(['true', 'on', 'yes', '1', 'checked'])
+
+function readDeclaredMarketingConsent(
+  payload: Record<string, any>,
+  fields: Record<string, unknown>,
+): boolean {
+  // A first-class body field, for a caller that models the checkbox
+  // explicitly rather than as one more form field.
+  if (payload['marketingConsent'] === true) return true
+  for (const [key, value] of Object.entries(fields)) {
+    const name = String(key).toLowerCase().replace(/[^a-z]/g, '')
+    if (!MARKETING_CONSENT_FIELD_NAMES.has(name)) continue
+    if (value === true) return true
+    if (AFFIRMATIVE.has(String(value ?? '').trim().toLowerCase())) return true
+  }
+  return false
+}
+
+/**
  * Lead-capture submissions endpoint (AGL-76): validates the target host,
  * drops honeypot hits silently, applies the plan's monthly submission quota
  * via a per-month counter — a hard wall on free, a meter on plans that carry
@@ -329,6 +379,7 @@ export async function POST(request: Request): Promise<Response> {
     for (const [key, value] of Object.entries(fields)) {
       sanitizedFields[String(key).slice(0, 64)] = String(value).slice(0, 2000)
     }
+    const declaredMarketingConsent = readDeclaredMarketingConsent(payload, fields)
     const submissionRef = await hostRef.collection('formSubmissions').add({
       formName: String(formName ?? 'Form').slice(0, 100),
       path: String(path ?? '').slice(0, 500),
@@ -371,6 +422,7 @@ export async function POST(request: Request): Promise<Response> {
           refId: submissionRef.id,
           summary: `Submitted "${String(formName ?? 'Form').slice(0, 60)}"`,
         },
+        ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
       })
     }
     // Dataset binding (AGL-141/556): append a record into the bound

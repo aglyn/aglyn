@@ -75,6 +75,9 @@ is created, no counter moves, and no campaign appears in your history.
 That means the count already reflects things you would otherwise only discover afterwards:
 
 - **Duplicates are removed.** One person on two lists is one recipient.
+- **People with no marketing consent on record are removed**, before anything else — see
+  [Who a campaign is allowed to reach](#who-a-campaign-is-allowed-to-reach). The second
+  caption line breaks the audience down by basis.
 - **Unsubscribed and undeliverable addresses are removed**, and reported separately as
   `· 12 unsubscribed or suppressed`, so a smaller-than-expected number has a visible
   reason.
@@ -83,15 +86,44 @@ That means the count already reflects things you would otherwise only discover a
   500, in a fixed order, so sending the same campaign again reaches the same people.
 - **A very large audience is reported as a floor**, with a `+`: `500 of 5,000+ in this
   audience` means there are at least 5,000 and the count stopped there.
-- **A refusal appears here rather than at send time.** An empty audience, an audience where
-  everyone is unsubscribed or suppressed, or a month already at your plan's send cap all
-  say so while you are still writing.
+- **A refusal appears here rather than at send time.** An empty audience, an audience
+  nobody in which has a consent record, an audience where everyone is unsubscribed or
+  suppressed, or a month already at your plan's send cap all say so while you are still
+  writing.
 
 While it works it reads `Counting recipients…`. It re-counts whenever you change the
 audience.
 
 Counting an audience needs the same permission as sending to it — the size of someone
 else's site's audience is not public information.
+
+### Who a campaign is allowed to reach
+
+A marketing campaign goes only to people whose consent you have a record of, or who were
+already in your audience before consent was required. The composer's second caption line
+tells you which is which:
+
+```
+1,240 with a recorded consent basis · 310 grandfathered (captured before consent was
+required) · 44 withheld — no consent on record
+```
+
+- **Recorded consent basis** — this person ticked an opt-in box on a form, a sign-up, or a
+  newsletter subscription, and the date they did it is stored on their record.
+- **Grandfathered** — this person was captured before the opt-in checkbox existed, so
+  there is no record either way. They still receive campaigns. Nothing you already had was
+  taken away.
+- **Withheld** — this person is not mailed. Either they explicitly declined, or they were
+  captured after consent became required and no opt-in was recorded for them.
+
+Consent is never assumed from an action. Submitting a form, placing an order, booking, or
+creating an account are not opt-ins on their own — a person is only counted as consenting
+when they ticked a box that says so. To grow the consented number, add a marketing opt-in
+checkbox to your forms and sign-up: a form field named `marketingConsent`, `emailOptIn`,
+`newsletterOptIn` or `subscribe` is recorded as consent when it is ticked.
+
+Withheld recipients cost you nothing — they are removed before your monthly send
+allowance is claimed.
 
 ### Schedule a send
 
@@ -115,9 +147,41 @@ The statuses a scheduled campaign moves through are **Scheduled** → sending �
 
 ## Email lists
 
-**Lists** are static audiences shared across your organization's sites. Create them on
-the Marketing page, then grow them with the **"Enroll in a list"** automation step (e.g.
-on form completion) or popup email capture. Target any list from the campaign composer.
+**Lists** are audiences shared across your organization's sites. Create them on the
+Marketing page and target any of them from the campaign composer. A list is one of two
+kinds, chosen when you create it.
+
+### Manual lists
+
+A manual list holds the people you put in it. Grow it with the **"Enroll in a list"**
+automation step (e.g. on form completion) or popup email capture. Members stay until
+they are removed.
+
+### Lists built from a rule
+
+A **dynamic** list holds everyone matching a rule, re-checked about every fifteen
+minutes. Pick **From a rule** when you create the list, then say who it draws from:
+
+- **People from** — contacts, leads, site members, form submissions, or any combination.
+- **Tagged** — one or more contact tags, comma separated. Contacts only.
+- **Submitted form** — one or more form names, comma separated. Form submissions only.
+- **Created after** — only people whose record was created on or after that date.
+
+So "everyone who submitted our Contact us form", "contacts tagged `vip`", and "site
+members who joined since March" are each one rule.
+
+The list row shows when the rule last ran. If it says **not yet evaluated**, the next
+sweep has not reached it — a list created a moment ago is normal; hours is not.
+
+Three things worth knowing:
+
+- **People leave when they stop matching**, but only the ones the rule enrolled. Anyone
+  you added by hand stays until you remove them.
+- **A rule is never trimmed to fit a limit.** If it matches more people than a single
+  send allows, every one of them is still on the list and it is the *send* that is
+  refused, telling you the number it found.
+- **Matching a rule is not consent.** A dynamic list decides who is in the audience;
+  [the consent rules](#who-a-campaign-is-allowed-to-reach) still decide who is mailed.
 
 ## Experiments
 

@@ -374,6 +374,12 @@ export function HostCampaignsCard(props: { hostId: string }) {
         audienceSize: number
         /** `audienceSize` is a floor — the resolution hit its read ceiling. */
         audienceTruncated: boolean
+        /** Of `audienceSize`, how many carry a recorded consent basis. */
+        consented: number
+        /** Of `audienceSize`, how many are reachable only by grandfathering. */
+        grandfathered: number
+        /** Of `audienceSize`, how many the consent rule refuses. */
+        consentWithheld: number
       }
     | { error: string }
     | null
@@ -413,6 +419,9 @@ export function HostCampaignsCard(props: { hostId: string }) {
           suppressed: Number(payload?.suppressed ?? 0),
           audienceSize: Number(payload?.audienceSize ?? 0),
           audienceTruncated: Boolean(payload?.audienceTruncated),
+          consented: Number(payload?.consented ?? 0),
+          grandfathered: Number(payload?.grandfathered ?? 0),
+          consentWithheld: Number(payload?.consentWithheld ?? 0),
         })
       } catch {
         if (active) setPreview(null)
@@ -644,6 +653,37 @@ export function HostCampaignsCard(props: { hostId: string }) {
                   ? ` · ${preview.suppressed.toLocaleString()} unsubscribed or suppressed`
                   : '')}
         </Typography>
+        {/*
+          THE SAME READOUT, BROKEN DOWN BY BASIS
+          (`docs/specs/email-overhaul.md` §3f).
+
+          The line above says how many of this audience one send reaches. This
+          one says what that audience is MADE OF, and the numbers are over the
+          same `audienceSize` so the two read as one statement rather than two
+          competing counts.
+
+          The breakdown matters because "in this audience" covers two
+          populations that are not the same thing: people who ticked a box,
+          and people reachable only because enforcement is not retroactive.
+          The second group is exactly who disappears if this org ever turns
+          the retroactive mode on, so a merchant is owed it BEFORE they write
+          the email rather than after an audience collapses.
+
+          Its own line, not more clauses on the first: that one answers "how
+          many", this one answers "on what basis", and running them together
+          is how a caption stops being read.
+         */}
+        {preview !== null && !('error' in preview) && (
+          <Typography variant="caption" color="text.secondary">
+            {`In this audience: ${preview.consented.toLocaleString()} with a recorded consent basis`}
+            {preview.grandfathered
+              ? ` · ${preview.grandfathered.toLocaleString()} grandfathered (captured before consent was required)`
+              : ''}
+            {preview.consentWithheld
+              ? ` · ${preview.consentWithheld.toLocaleString()} withheld — no consent on record, never mailed`
+              : ''}
+          </Typography>
+        )}
         {/*
           The monthly campaign cap, standing rather than only on refusal.
           `campaignSendsUsed` is the same counter+month `campaign-send.ts`
