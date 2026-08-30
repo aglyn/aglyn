@@ -378,6 +378,12 @@ const RESOURCES: Record<string, {
     maxPerHost: FORMS_MAX_PER_HOST,
     label: 'forms',
     activity: { type: 'content', noun: 'form' },
+    // `rootId` and `nodes` are the DESIGN, seeded at create the way a
+    // reusable component's are, so a form opens in the besigner with a canvas
+    // instead of needing one grafted on later. `fields` is what the form
+    // DECLARES and stays separate: the design is what an author draws, the
+    // declaration is what the submission path reads, and publishing is the
+    // moment `checkFormContract` requires the two to agree.
     fields: [
       'displayName',
       'slug',
@@ -385,6 +391,8 @@ const RESOURCES: Record<string, {
       'consentFieldName',
       'routing',
       'legacyMatch',
+      'rootId',
+      'nodes',
     ],
   },
   // POS registers (AGL-472): the `posRegisters` cap becomes enforceable

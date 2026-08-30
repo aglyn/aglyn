@@ -24,12 +24,17 @@ import {
   isImpersonationSession,
   lockdownJsonResponse,
   logHostActivity,
+  type HostActivityTarget,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 
 /**
- * The three parents that carry besigner version history, and the only three
- * whose `versions` subcollection the rules deny client `create` on (AGL-1369).
+ * The parents that carry besigner version history, and the only ones whose
+ * `versions` subcollection the rules deny client `create` on (AGL-1369).
+ *
+ * `forms` belongs here for the same reason `components` does: a form is
+ * designed, so it versions, and its dedicated rules block denies the client
+ * create that would otherwise mint a version straight from the browser.
  *
  * `emailTemplates` deliberately absent: its versions hang off the host
  * catch-all, not these dedicated blocks, and the `versioning` entitlement does
@@ -39,6 +44,23 @@ const PARENTS: Record<string, string> = {
   screen: 'screens',
   layout: 'layouts',
   component: 'components',
+  form: 'forms',
+}
+
+/**
+ * What an activity row calls each kind.
+ *
+ * `HostActivityTarget['type']` has no `form` member and does not gain one
+ * here: the type is a PERSISTED value read by `activity-presenter.ts`, and a
+ * member no presenter branches on would render as an unlinked row. A form
+ * files under `content`, which is the classification `/api/hosts/resources`
+ * already gives it.
+ */
+const ACTIVITY_TYPE_OF: Record<string, HostActivityTarget['type']> = {
+  screen: 'screen',
+  layout: 'layout',
+  component: 'component',
+  form: 'content',
 }
 
 /**
@@ -69,6 +91,7 @@ const VERSION_KEYS = new Set([
   'screenId',
   'layoutId',
   'componentId',
+  'formId',
   'displayName',
   'nodes',
   'rootId',
@@ -285,7 +308,7 @@ async function handler(request: Request): Promise<Response> {
         { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
         `Created a version of the ${kind}`,
         {
-          type: kind as 'screen' | 'layout' | 'component',
+          type: ACTIVITY_TYPE_OF[kind] ?? 'content',
           id: parentId,
           versionId: id,
           ...(typeof label === 'string' && label ? { name: label } : {}),

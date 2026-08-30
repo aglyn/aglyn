@@ -109,7 +109,7 @@ export interface FormLegacyMatch {
 }
 
 /** The stored form document, minus the timestamps Firestore stamps. */
-export interface FormDocument {
+export interface FormDocument<N = AglynNodeSchema> {
   displayName: string
   slug: string
   fields: FormFieldDecl[]
@@ -119,6 +119,46 @@ export interface FormDocument {
   legacyMatch?: FormLegacyMatch
   stats?: FormStats
   archivedAt?: unknown
+  /*
+   * ── THE DESIGN ───────────────────────────────────────────────────────────
+   *
+   * A form is authored in the besigner, so it carries a node tree and version
+   * history exactly as `AglynHostComponent` does, and for the same reason it
+   * is stored the same way: `rootId` and `nodes` here are the PUBLISHED
+   * snapshot, while the working draft lives compressed in
+   * `hosts/{hostId}/forms/{formId}/versions/{versionId}`.
+   *
+   * The asymmetry is deliberate and copied rather than reinvented. Every
+   * placed form has to resolve on the hot path of a published page render, so
+   * the published tree stays on the parent document where one collection
+   * query reaches all of them; moving it into the version docs would turn
+   * that query into N+1 (AGL-679).
+   */
+  rootId?: NodeId
+  nodes?: Record<NodeId, N>
+  /**
+   * Which version is published.
+   *
+   * The same pointer `AglynHostComponent.versionId` is, including the rule
+   * that only a publisher may move it — the rules block denies an author the
+   * `versionId` key for components and this document is governed the same way.
+   */
+  versionId?: string
+}
+
+/**
+ * One entry in a form's `versions` subcollection.
+ *
+ * The draft the besigner writes on every save. `nodes` arrives compressed
+ * through the client converter, exactly as a component version's does, so
+ * this declares the decompressed shape the hook hands back.
+ */
+export interface FormVersion<N = AglynNodeSchema> {
+  formId: string
+  hostId?: string
+  displayName?: string
+  rootId?: NodeId
+  nodes?: Record<NodeId, N>
 }
 
 /**

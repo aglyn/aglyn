@@ -18,8 +18,18 @@
 import { useCallback } from 'react'
 import { useUser } from './firebase/firebase-services'
 
-/** Parents that carry besigner version history (AGL-1369). */
-export type HostVersionParentKind = 'screen' | 'layout' | 'component'
+/**
+ * Parents that carry besigner version history (AGL-1369).
+ *
+ * `form` is here because a form is designed, not merely declared: it opens in
+ * the besigner, saves a draft per version, and publishes a snapshot onto its
+ * parent document, which is the component lifecycle exactly.
+ */
+export type HostVersionParentKind =
+  | 'screen'
+  | 'layout'
+  | 'component'
+  | 'form'
 
 /**
  * Options for {@link useHostVersionApi}. Either `data` (a version written from

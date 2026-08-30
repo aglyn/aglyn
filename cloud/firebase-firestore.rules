@@ -1827,6 +1827,15 @@ service cloud.firestore {
       // other direction, because every placed instance stops being bound the
       // moment the definition goes. Submissions already written keep their
       // `formId` and stay readable — nothing a visitor sent is deleted here.
+      //
+      // A form is DESIGNED as well as declared, so it carries versions like a
+      // screen, a layout and a component do. Without the two nested blocks
+      // below, `forms/{formId}/versions/{versionId}` matches only the host
+      // catch-all — which names `forms` in all three of its exclusion lists,
+      // so every client write to a form version is denied and the besigner
+      // cannot save. The blocks are the component ones one screen up, and
+      // deliberately identical: an authoring surface that diverged in what it
+      // may write would be a second rule to keep in sync.
       match /forms/{formId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
@@ -1836,6 +1845,26 @@ service cloud.firestore {
               .affectedKeys().hasAny(['stats']));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+
+        // Clearing a draft is what publishing it does, and it is not a
+        // publish act — so delete rides the write role here, while the
+        // `versions` documents below keep theirs. A path must end in
+        // `/draft/{id}` to match.
+        match /versions/{versionId}/draft/{draftId} {
+          allow read: if isStaff() || isHostMember(hostId);
+          allow create, update, delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+        }
+
+        match /{sub}/{document=**} {
+          allow read: if isStaff() || isHostMember(hostId);
+          allow create: if isStaff();
+          allow update: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+          allow delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+              (canPublishHostContent(hostId) || sub != 'versions'));
+        }
       }
       // Secret-/PII-bearing subcollections are carved out of the viewer-
       // readable catch-all below (AGL-502): `webhooks` docs hold an HMAC
