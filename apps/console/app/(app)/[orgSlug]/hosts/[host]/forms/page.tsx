@@ -22,7 +22,6 @@ import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
   Stack,
@@ -65,7 +64,6 @@ const HostForms: NextPageWithLayout<Record<string, never>> = () => {
   const host = useHostSubdomain()
   const firestore = useFirestore()
   const router = useRouter()
-  const { enqueueSnackbar } = useSnackbar()
   const createHostResource = useHostResourceApi()
 
   const [createOpen, setCreateOpen] = useState(false)
