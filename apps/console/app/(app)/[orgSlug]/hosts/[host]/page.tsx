@@ -28,17 +28,32 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import HostAnalyticsCard from '../../../../../components/analytics/host-analytics-card.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
+import DashboardCustomizeButton from '../../../../../components/dashboard-customize-button.component'
+import DashboardWidgetPrefsProvider, {
+  useDashboardWidgetPrefs,
+} from '../../../../../components/dashboard-widget-prefs.context'
 import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import {
+  HOST_ANALYTICS_WIDGET_ID,
+  isDashboardWidgetHidden,
+} from '../../../../../utils/dashboard-widgets'
 
-const Index: NextPageWithLayout<Record<string, never>> = (props) => {
+/**
+ * The dashboard body, inside the arrangement provider so the header's
+ * customize button and every widget slot read one preference from one read.
+ */
+function HostDashboard() {
   const params = useParams<{ hostId: string }>()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const hostId = useHostId()
+  const { prefs, ready: prefsReady } = useDashboardWidgetPrefs()
+  const showAnalytics =
+    prefsReady && !isDashboardWidgetHidden(prefs, HOST_ANALYTICS_WIDGET_ID)
 
   return (
     <DashboardLayout
@@ -58,18 +73,21 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
        * foreign custom domain no other hint can exist (AGL-1842).
        */
       headerRight={
-        host ? (
-          <AppLink
-            componentVariant="button"
-            variant="contained"
-            color="primary"
-            href={`https://${host}.${TENANT_APEX}/?aglyn-edit`}
-            target="_blank"
-            rel="nofollow"
-          >
-            {'Visit site'}
-          </AppLink>
-        ) : undefined
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <DashboardCustomizeButton />
+          {host ? (
+            <AppLink
+              componentVariant="button"
+              variant="contained"
+              color="primary"
+              href={`https://${host}.${TENANT_APEX}/?aglyn-edit`}
+              target="_blank"
+              rel="nofollow"
+            >
+              {'Visit site'}
+            </AppLink>
+          ) : null}
+        </Stack>
       }
       breadcrumbItems={[
         {
@@ -90,11 +108,19 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
             ragged block, ninety bars shared one column's width, and the
             breakdowns stacked into a scroll. It is also the card everything
             below is read against.
+
+            Held until the arrangement arrives, and then drawn only if this
+            reader kept it. No plugin owns site analytics and no entitlement
+            gates it, so the card is not in the widget registry — but hiding
+            is a preference rather than an entitlement, and it reads the same
+            stored ids the slots do.
            */}
-          <HostAnalyticsCard
-            hostId={hostId}
-            viewAllHref={buildRoute(Route.HOST_ANALYTICS, { orgSlug,  host })}
-          />
+          {showAnalytics ? (
+            <HostAnalyticsCard
+              hostId={hostId}
+              viewAllHref={buildRoute(Route.HOST_ANALYTICS, { orgSlug,  host })}
+            />
+          ) : null}
           {/*
             The capability row: one card per thing this site actually does,
             each registered by the plugin that owns it rather than imported
@@ -145,6 +171,13 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
     </DashboardLayout>
   )
 }
+HostDashboard.displayName = 'HostDashboard'
+
+const Index: NextPageWithLayout<Record<string, never>> = () => (
+  <DashboardWidgetPrefsProvider>
+    <HostDashboard />
+  </DashboardWidgetPrefsProvider>
+)
 Index.displayName = 'Page:Index'
 
 export default Index
