@@ -45,7 +45,8 @@ import {
  * convention each new card has to remember.
  */
 import { Figure, percent, RateRow, Section } from './report-figures'
-import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
+import { emailSendTimeMs } from '../model/email-record'
+import { campaignSendDisplay } from '../model/campaign-container'
 
 /**
  * The help affordance, hoisted so BOTH headers carry it.
@@ -234,7 +235,17 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
               <AppLink href={`${basePath}/emails/${campaignId}`}>
                 {subject}
               </AppLink>
-              <Chip size="small" label={emailStateLabel(campaign.status)} />
+              {/*
+                What the email is DOING, not the field it stores. One
+                delivering an audience larger than one batch is written back
+                as `scheduled` between runs, so a chip rendering the status
+                said "Scheduled" at the head of a report of five hundred
+                deliveries.
+               */}
+              <Chip
+                size="small"
+                label={campaignSendDisplay(campaign as never).label}
+              />
               <Chip
                 size="small"
                 variant="outlined"

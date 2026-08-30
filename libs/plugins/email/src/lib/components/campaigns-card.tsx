@@ -26,8 +26,13 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
-import { mdiEyeOutline } from '@aglyn/shared-data-mdi'
-import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { mdiDeleteOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
+import {
+  AppLink,
+  CardDisplay,
+  MdiIcon,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import {
   ListRowActions,
   ListTable,
@@ -54,6 +59,7 @@ import {
 } from '../model'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { activeEmailTopics } from '@aglyn/aglyn'
+import { useCampaignManageApi } from './use-campaign-send-api'
 import { useOrgEmailTopics } from './use-org-email-topics'
 
 /**
@@ -124,6 +130,8 @@ export function HostCampaignsCard(props: {
       : null)
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  const { confirm } = useConfirmationContext()
+  const manageApi = useCampaignManageApi(hostId)
   const { scope: dataScope } = useOrgDataScope({ hostId })
 
   /*
@@ -180,9 +188,18 @@ export function HostCampaignsCard(props: {
     [firestore, dataScope],
     { idField: '$id' },
   )
-  // The org's topic catalog, so a campaign can be created under the stream it
-  // belongs to rather than defaulting its emails to `marketing`.
-  const { topics } = useOrgEmailTopics(hostId)
+  const [createOpen, setCreateOpen] = useState(false)
+  /*
+   * The org's topic catalog, read only while the CREATE DRAWER is open.
+   *
+   * It fills one picker in that drawer and is drawn nowhere in the table, so
+   * a reader who came to look at their campaigns must not pay for it — the
+   * same rule the emails list already applies to the campaigns it offers its
+   * own drawer, and the one the audiences section applies to a list's
+   * members. It is the largest read on this section at 200 documents, and it
+   * is the only one nothing on screen needs.
+   */
+  const { topics } = useOrgEmailTopics(hostId, { enabled: createOpen })
   const topicOptions = useMemo(
     () =>
       activeEmailTopics(topics).map((topic) => ({
@@ -220,9 +237,10 @@ export function HostCampaignsCard(props: {
     ).map((row) => ({ ...row, $id: row.id }))
   }, [readCampaigns, readSends])
 
-  const [createOpen, setCreateOpen] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  /** The campaign a delete is in flight for, so its row menu can say so. */
+  const [deletingId, setDeletingId] = useState('')
 
   const openCampaign = useCallback(
     (id: string) => {
@@ -286,6 +304,88 @@ export function HostCampaignsCard(props: {
   const campaignHref = useCallback(
     (id: string) => (hubPath ? `${hubPath}/campaigns/${id}` : null),
     [hubPath],
+  )
+
+  /*==========================================
+   * DELETING A CAMPAIGN FROM ITS ROW.
+   *
+   * The container goes and its emails stay — the route detaches them first,
+   * so each one keeps its id, its report and its unsubscribe links, and
+   * reappears in this very table as a "Single send". That is not a
+   * convenience: a send id is inside the HMAC of every unsubscribe footer
+   * already delivered, so a delete that took the sends with it would break
+   * opt-outs that must go on working.
+   *
+   * The confirmation names the count and says what the delete does NOT do.
+   * Deleting a campaign cancels nothing — a scheduled email inside it still
+   * goes out — and a merchant who reads the button as "stop this campaign"
+   * has to be told before they press it.
+   *
+   * EDITING is deliberately not offered here. A record is edited on its own
+   * page in this console; the campaign's page carries the edit drawer, and
+   * this row's first entry is the way to it.
+   *=========================================*/
+  const handleDelete = useCallback(
+    async (row: CampaignListRow) => {
+      if (deletingId) return
+      const emails = row.sends.length
+      /*
+       * Emails with mail still to go: waiting for their time, AND part way
+       * through an audience larger than one batch. Counting only `scheduled`
+       * would miss the case that needs the warning most — an email delivering
+       * right now is stored as `scheduled` too, and `rollup.scheduled` is the
+       * narrower reading that leaves it out.
+       */
+      const unfinished = row.rollup.scheduled + row.rollup.sending
+      const agreed = await confirm({
+        title: `Delete ${row.name}?`,
+        description:
+          (emails
+            ? `The ${emails.toLocaleString()} ` +
+              `${emails === 1 ? 'email' : 'emails'} in it are kept — each ` +
+              'keeps its own report and its unsubscribe links, and they stay ' +
+              'in this list as single sends. '
+            : 'It holds no emails. ') +
+          (unfinished
+            ? `${unfinished.toLocaleString()} of them ${
+                unfinished === 1 ? 'is' : 'are'
+              } still going out or still due, and deleting the campaign does ` +
+              'not stop that — the sender picks each one up from its own ' +
+              'record. Stop a send from its own page. '
+            : '') +
+          'Only the campaign itself goes.',
+        confirmationText: 'Delete campaign',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!agreed) return
+      setDeletingId(row.id)
+      try {
+        const { response, payload } = await manageApi({
+          action: 'deleteCampaign',
+          campaignId: row.id,
+        })
+        if (!response.ok) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'The campaign could not be deleted',
+            { variant: 'warning', allowDuplicate: true },
+          )
+        }
+        enqueueSnackbar('Campaign deleted', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('The campaign could not be deleted', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setDeletingId('')
+      }
+    },
+    [confirm, deletingId, enqueueSnackbar, manageApi],
   )
 
   const columns = useMemo(
@@ -397,16 +497,41 @@ export function HostCampaignsCard(props: {
       {
         field: 'emails',
         headerName: 'Emails',
-        width: 96,
+        width: 128,
         align: 'right',
         headerAlign: 'right',
-        renderCell: ({ row }: any) => (
-          <Typography variant="body2">
-            {row.rollup.scheduled
-              ? `${row.rollup.sends} · ${row.rollup.scheduled} scheduled`
-              : String(row.rollup.sends)}
-          </Typography>
-        ),
+        /*
+          THE COUNT, AND WHAT IS STILL HAPPENING TO IT.
+
+          `sending` is called out apart from `scheduled` because the two are
+          opposite readings of the same stored status: an email delivering an
+          audience larger than one batch sits as `scheduled` between runs, and
+          rolling it in with the ones that have mailed nobody reports a
+          campaign that is half delivered as a campaign that has not started.
+
+          The note sits UNDER the figure rather than beside it — the column
+          would otherwise have to be wide enough for the longest sentence, and
+          the figure is what the column is read for.
+         */
+        renderCell: ({ row }: any) => {
+          const { sends, sending, scheduled } = row.rollup
+          const note = [
+            sending ? `${sending} sending` : '',
+            scheduled ? `${scheduled} scheduled` : '',
+          ]
+            .filter(Boolean)
+            .join(', ')
+          return (
+            <Stack sx={{ alignItems: 'flex-end', minWidth: 0, width: 1 }}>
+              <Typography variant="body2">{String(sends)}</Typography>
+              {note ? (
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {note}
+                </Typography>
+              ) : null}
+            </Stack>
+          )
+        },
       },
       {
         field: 'sent',
@@ -445,12 +570,16 @@ export function HostCampaignsCard(props: {
         standing in — the hand-rolled tables on this surface reach the same
         `RowActionsMenu` from the other direction.
 
-        Opening the campaign is the only action a campaign row has today:
-        there is no campaign edit page and no delete path, so the menu is one
-        entry rather than several invented ones. It is restated here even
-        though the row click does the same thing, for the reason the screens
-        table restates its own: the menu is where a row's actions are NAMED,
-        and an action absent from it reads as an action the row does not have.
+        Opening the campaign is restated here even though the row click does
+        the same thing, for the reason the screens table restates its own: the
+        menu is where a row's actions are NAMED, and an action absent from it
+        reads as an action the row does not have.
+
+        A "Single send" row is a SEND with no container — the table adopts it
+        so a merchant's history is not missing — and there is no container
+        under it to delete. Its entry is shown disabled with that reason
+        rather than hidden, because a control that vanishes and one that does
+        not apply look identical from the outside.
        */
       listActionsColumn(
         (row: any) => (
@@ -467,13 +596,25 @@ export function HostCampaignsCard(props: {
                   ? undefined
                   : 'This site’s console URL has not resolved yet',
               },
+              {
+                key: 'delete',
+                label: 'Delete campaign',
+                icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+                destructive: true,
+                disabled: row.legacy || Boolean(deletingId),
+                disabledReason: row.legacy
+                  ? 'This is a single send, not a campaign. Open it to ' +
+                    'manage the email itself.'
+                  : 'A campaign is being deleted',
+                onClick: () => void handleDelete(row as CampaignListRow),
+              },
             ]}
           />
         ),
         { width: 72 },
       ),
     ],
-    [listNames, campaignHref],
+    [listNames, campaignHref, deletingId, handleDelete],
   )
 
   return (

@@ -101,25 +101,40 @@ const TOPIC_READ_CEILING = 200
  * `orderBy` DROPS documents that lack the field rather than mis-sorting them,
  * so that claim is about the writers and not a preference.
  */
-export function useOrgEmailTopics(hostId: string): {
+export function useOrgEmailTopics(
+  hostId: string,
+  options?: {
+    /**
+     * Whether to read at all. Default true.
+     *
+     * For a caller whose only use of the catalog is a picker inside a control
+     * somebody has to open — a create drawer, an edit drawer — where reading
+     * on mount charges every reader of the list for a field none of them
+     * asked for. A `false` here opens no listener, exactly as a null query
+     * does, and the catalog reads as empty until it flips.
+     */
+    enabled?: boolean
+  },
+): {
   topics: EmailTopic[]
   /** `['orgs', orgId]`, or null until the org lookup settles. */
   scope: readonly [string, string] | null
 } {
   const firestore = useFirestore()
+  const enabled = options?.enabled ?? true
   // The org lookup is async (AGL-1061): null until it settles, and null
   // forever for a host with no owning org.
   const { scope } = useOrgDataScope({ hostId })
   const { data: stored } = useFirestoreCollection<Record<string, unknown>>(
     () =>
-      scope
+      scope && enabled
         ? query(
             collection(firestore, scope[0], scope[1], EMAIL_TOPICS_COLLECTION),
             orderBy('name'),
             limit(TOPIC_READ_CEILING),
           )
         : null,
-    [firestore, scope],
+    [firestore, scope, enabled],
     { idField: '$id' },
   )
   const topics = useMemo(

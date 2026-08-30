@@ -16,8 +16,18 @@
  */
 'use client'
 
-import { mdiEyeOutline, mdiPaletteOutline } from '@aglyn/shared-data-mdi'
-import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  mdiDeleteOutline,
+  mdiEyeOutline,
+  mdiPaletteOutline,
+  mdiPencilOutline,
+} from '@aglyn/shared-data-mdi'
+import {
+  AppLink,
+  CardDisplay,
+  MdiIcon,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import { Figure, RateRow, Section } from './report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu, {
@@ -42,15 +52,19 @@ import {
 } from '@mui/material'
 import {
   collection,
+  deleteField,
   doc,
   documentId,
   limit,
   orderBy,
   query,
+  updateDoc,
   where,
 } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { activeEmailTopics } from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -59,14 +73,20 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import {
   campaignRollup,
-  campaignSendAtMs,
+  campaignSendDisplay,
   campaignWindowState,
+  emailListTimeMs,
   type CampaignAggregate,
   type CampaignSend,
   type EmailCampaign,
 } from '../model'
 import CampaignComposer from './campaign-composer'
+import CampaignEditDrawer, {
+  type CampaignEditValues,
+} from './campaign-edit-drawer'
 import CampaignReportCard from './campaign-report-card'
+import { useCampaignManageApi } from './use-campaign-send-api'
+import { useOrgEmailTopics } from './use-org-email-topics'
 
 /** How many of a campaign's emails the detail page enumerates. */
 const CAMPAIGN_EMAIL_CEILING = 50
@@ -130,7 +150,14 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   const firestore = useFirestore()
   const router = useRouter()
   const { scope: dataScope } = useOrgDataScope({ hostId })
+  const { confirm } = useConfirmationContext()
+  const { enqueueSnackbar } = useSnackbar()
+  const manageApi = useCampaignManageApi(hostId)
   const [composing, setComposing] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const { data: campaign, status } = useFirestoreDoc<EmailCampaign>(
     () => doc(firestore, 'hosts', hostId, 'emailCampaigns', campaignId),
@@ -184,14 +211,40 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     { idField: '$id' },
   )
 
+  /*
+   * The org's topic catalog, read only while the EDIT DRAWER is open.
+   *
+   * It fills one picker in that drawer and is drawn nowhere else on this
+   * page, so reading it on mount would charge every reader who came for the
+   * campaign's numbers for a field they are not looking at. The composer
+   * carries its own read of the same catalog, behind its own button, for the
+   * same reason.
+   */
+  const { topics } = useOrgEmailTopics(hostId, { enabled: editing })
+  const topicOptions = useMemo(
+    () =>
+      activeEmailTopics(topics).map((topic) => ({
+        value: topic.id,
+        label: topic.name,
+      })),
+    [topics],
+  )
+
   const { rows: readSends, truncated: sendsTruncated } = ceilingedWindow<any>(
     sendDocs,
     CAMPAIGN_EMAIL_CEILING,
   )
+  /*
+   * Newest first on the time each email SITS at — its send time where it has
+   * one, its creation where it does not. A draft has neither `sentAt` nor
+   * `sendAtMs`, so ordering on the send time alone gave every draft the key 0
+   * and filed the email a merchant is in the middle of writing below mail
+   * sent years ago.
+   */
   const sends = useMemo(
     () =>
       [...(readSends as CampaignSend[])].sort(
-        (a, b) => (campaignSendAtMs(b) ?? 0) - (campaignSendAtMs(a) ?? 0),
+        (a, b) => emailListTimeMs(b) - emailListTimeMs(a),
       ),
     [readSends],
   )
@@ -203,6 +256,140 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     () => sends.slice(page * pageSize, page * pageSize + pageSize),
     [sends, page, pageSize],
   )
+
+  /*==========================================
+   * SAVING THE CONTAINER, WITH THE CLIENT SDK.
+   *
+   * The same door the create drawer already uses. `emailCampaigns` is
+   * deliberately outside the security rules' server-only exclusion list — a
+   * container holds no counter, no consent record and no entitlement input,
+   * so an editor who writes one cannot buy themselves a send — and giving the
+   * edit a route of its own would be a second writer to keep in step with the
+   * create.
+   *
+   * `updateDoc` rather than a merge-set, because this is an edit of a
+   * document that exists: a set would CREATE a campaign at this id for
+   * somebody who deleted it in another tab, which is the shape the delivery
+   * webhook is careful about on the send collection for the same reason.
+   *
+   * A cleared date is written as `null` — the absence the model already
+   * spells — and a cleared topic REMOVES the field, because the model has no
+   * null topic and `campaignTopicId` is handed to the composer as one.
+   *=========================================*/
+  const handleSave = useCallback(
+    async (values: CampaignEditValues) => {
+      if (saving) return
+      setSaving(true)
+      setSaveError(null)
+      try {
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'emailCampaigns', campaignId),
+          {
+            name: values.name,
+            startAtMs: values.startAtMs,
+            endAtMs: values.endAtMs,
+            listIds: values.listIds,
+            topicId: values.topicId ? values.topicId : deleteField(),
+          },
+        )
+        setEditing(false)
+        enqueueSnackbar('Campaign updated', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error) {
+        console.error(error)
+        setSaveError('The campaign could not be saved')
+      } finally {
+        setSaving(false)
+      }
+    },
+    [campaignId, enqueueSnackbar, firestore, hostId, saving],
+  )
+
+  /*==========================================
+   * DELETING THE CONTAINER, WHICH IS NOT DELETING ITS MAIL.
+   *
+   * The route detaches every email first and then removes the campaign, so
+   * what a merchant is agreeing to is the grouping going away — the emails
+   * stay, keep their ids, keep their reports, and read afterwards as single
+   * sends. Their unsubscribe links carry those ids inside an HMAC and go on
+   * working, which is why the container can never take them with it.
+   *
+   * The confirmation says the count and says what a delete does NOT do. A
+   * scheduled email inside the campaign still goes out at its time — stopping
+   * somebody's mail is `cancel`, on that email's own page — and a merchant
+   * who reads "delete campaign" as "stop the campaign" has to be told
+   * otherwise before they press it, not after.
+   *=========================================*/
+  const handleDelete = useCallback(async () => {
+    if (deleting) return
+    /*
+     * Emails with mail still to go: the ones waiting for their time AND the
+     * ones part way through an audience larger than one batch. Both are what
+     * a merchant needs warning about, and counting only `scheduled` would
+     * miss the case that needs it most — a campaign that is delivering right
+     * now is stored as `scheduled` too, but `rollup.scheduled` is the
+     * narrower reading that excludes it.
+     */
+    const unfinished = rollup.scheduled + rollup.sending
+    const agreed = await confirm({
+      title: 'Delete this campaign?',
+      description:
+        (sends.length
+          ? `The ${sends.length.toLocaleString()} ` +
+            `${sends.length === 1 ? 'email' : 'emails'} in it are kept — ` +
+            'each keeps its own report and its unsubscribe links, and they ' +
+            'appear in the campaigns list as single sends. '
+          : 'It holds no emails. ') +
+        (unfinished
+          ? `${unfinished.toLocaleString()} of them ${
+              unfinished === 1 ? 'is' : 'are'
+            } still going out or still due, and deleting the campaign does ` +
+            'not stop that — the sender picks each one up from its own ' +
+            'record. Stop a send from its own page. '
+          : '') +
+        'Only the campaign itself goes.',
+      confirmationText: 'Delete campaign',
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (!agreed) return
+    setDeleting(true)
+    try {
+      const { response, payload } = await manageApi({
+        action: 'deleteCampaign',
+        campaignId,
+      })
+      if (!response.ok) {
+        return void enqueueSnackbar(
+          payload?.error ?? 'The campaign could not be deleted',
+          { variant: 'warning', allowDuplicate: true },
+        )
+      }
+      enqueueSnackbar('Campaign deleted', { variant: 'success', persist: false })
+      router.push(`${basePath}/campaigns`)
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('The campaign could not be deleted', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }, [
+    basePath,
+    campaignId,
+    confirm,
+    deleting,
+    enqueueSnackbar,
+    manageApi,
+    rollup.scheduled,
+    rollup.sending,
+    router,
+    sends.length,
+  ])
 
   // Still settling. Falling through to the send report here would flash "this
   // campaign could not be loaded" on every open of a campaign that exists.
@@ -301,16 +488,51 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
       }
       help={detailDocsHelp}
       HeaderProps={{
+        /*
+          NAVIGATION, THEN THE OVERFLOW.
+
+          Editing and deleting a campaign live here rather than on the
+          campaigns table, because a record is edited on its own page in this
+          console. `RowActionsMenu` is named for table rows and its rendering
+          is not — a kebab and a menu whose items carry `destructive` and
+          `disabled` — so reusing it is what keeps this overflow behaving like
+          every other one on the surface, including the email page's.
+         */
         action: (
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={`${basePath}/campaigns`}
-            size="small"
-            color="primary"
-          >
-            {'All campaigns'}
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Button
+              component={AppLink as any}
+              {...({ componentVariant: 'naked', nativeButton: false } as any)}
+              href={`${basePath}/campaigns`}
+              size="small"
+              color="primary"
+            >
+              {'All campaigns'}
+            </Button>
+            <RowActionsMenu
+              label={campaign.name || 'Campaign'}
+              items={[
+                {
+                  key: 'edit',
+                  label: 'Edit campaign',
+                  icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+                  onClick: () => {
+                    setSaveError(null)
+                    setEditing(true)
+                  },
+                },
+                {
+                  key: 'delete',
+                  label: 'Delete campaign',
+                  icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+                  destructive: true,
+                  disabled: deleting,
+                  disabledReason: 'This campaign is being deleted',
+                  onClick: () => void handleDelete(),
+                },
+              ]}
+            />
+          </Stack>
         ),
       }}
       contentGutterX
@@ -423,24 +645,36 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                         {send.subject || send.$id}
                       </AppLink>
                     </TableCell>
+                    {/*
+                      WHAT THE EMAIL IS DOING, not the field it stores.
+
+                      This branched on the status, which reads "Scheduled"
+                      about an email that has delivered five hundred messages
+                      and is between batches — the stored state the processor
+                      claims to resume it. The derivation reads the counters
+                      beside the status; the due date is appended only where
+                      there is genuinely nothing delivered yet, which is the
+                      one case a time answers.
+                     */}
                     <TableCell>
-                      {send.status === 'scheduled' ? (
-                        <Chip
-                          size="small"
-                          color="info"
-                          label={`Scheduled · ${
-                            send.sendAtMs
-                              ? new Date(send.sendAtMs).toLocaleString()
-                              : ''
-                          }`}
-                        />
-                      ) : send.status === 'canceled' ? (
-                        <Chip size="small" label="Canceled" />
-                      ) : send.status === 'failed' ? (
-                        <Chip size="small" color="error" label="Failed" />
-                      ) : (
-                        <Chip size="small" label="Sent" />
-                      )}
+                      <Chip
+                        size="small"
+                        color={
+                          campaignSendDisplay(send).state === 'sending'
+                            ? 'info'
+                            : campaignSendDisplay(send).state === 'stopped'
+                              ? 'warning'
+                              : undefined
+                        }
+                        label={
+                          campaignSendDisplay(send).state === 'pending' &&
+                          send.sendAtMs
+                            ? `${campaignSendDisplay(send).label} · ${new Date(
+                                send.sendAtMs,
+                              ).toLocaleString()}`
+                            : campaignSendDisplay(send).label
+                        }
+                      />
                     </TableCell>
                     {/*
                       Sent over addressed, on one line: the two figures only
@@ -520,6 +754,26 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           </Box>
         ) : null}
       </Stack>
+      {/*
+        THE EDIT DRAWER, on the campaign's own page.
+
+        Its list picker reads the same `listDocs` the chips above already
+        cost, so opening it adds one read — the topic catalog — and only
+        while it is open.
+       */}
+      <CampaignEditDrawer
+        open={editing}
+        onClose={() => setEditing(false)}
+        campaign={campaign}
+        lists={(listDocs ?? []).map((list: any) => ({
+          value: String(list.$id),
+          label: String(list.name ?? list.$id),
+        }))}
+        topics={topicOptions}
+        busy={saving}
+        error={saveError}
+        onSubmit={(values) => void handleSave(values)}
+      />
     </CardDisplay>
   )
 }

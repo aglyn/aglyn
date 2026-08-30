@@ -19,10 +19,16 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   mdiBullhornOutline,
+  mdiDeleteOutline,
   mdiEyeOutline,
   mdiPaletteOutline,
 } from '@aglyn/shared-data-mdi'
-import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  MdiIcon,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
@@ -50,15 +56,57 @@ import {
 import { collection } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
-import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
-import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
-import { useCampaignSendApi } from './use-campaign-send-api'
+import {
+  campaignSendDisplay,
+  CAMPAIGN_SEND_CONTAINER_FIELD,
+  type CampaignSendDisplayState,
+} from '../model/campaign-container'
+import { emailListTimeMs, emailSendTimeMs } from '../model/email-record'
+import {
+  useCampaignManageApi,
+  useCampaignSendApi,
+} from './use-campaign-send-api'
 
 /** How many messages one read of this list covers. */
 const EMAIL_CEILING = 30
 
 /** How many campaigns the create drawer offers to file a new email under. */
 const CONTAINER_CEILING = 50
+
+/**
+ * Why discard is refused, keyed by the state that refuses it.
+ *
+ * The KEYS are persisted status values written by the send path. Each line
+ * says what to do instead, because "you cannot" on its own leaves a merchant
+ * with an email they wanted rid of and no next step — and for a scheduled one
+ * the next step is a different act with a different consequence, so naming it
+ * is the difference between withdrawing mail and losing the record of it.
+ *
+ * A state absent from here falls through to the generic refusal rather than
+ * being flattened into one of these: a state this list cannot name is worth
+ * seeing.
+ */
+const DISCARD_REFUSAL: Record<string, string> = {
+  sent: 'This email has been sent. Its report and its unsubscribe links have to go on resolving.',
+  scheduled: 'Cancel the send first — cancelling takes it off the clock and keeps the email.',
+  sending: 'This email is being sent right now.',
+  canceled: 'A canceled email is kept as the record that it was withdrawn.',
+}
+
+/**
+ * The chip color for one display state.
+ *
+ * `sending` is the one worth a color: an email part way through an audience
+ * larger than one batch is doing something right now, and a merchant scanning
+ * the list for what needs attention should find it without reading. The rest
+ * are neutral, because a finished send and a draft are not events.
+ */
+const STATE_COLOR: Partial<
+  Record<CampaignSendDisplayState, 'info' | 'warning'>
+> = {
+  sending: 'info',
+  stopped: 'warning',
+}
 
 const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#opens--clicks',
@@ -83,14 +131,18 @@ export interface EmailsListCardProps {
  *
  * ## Ordered in the browser, deliberately
  *
- * There is no date field on every message. A sent one carries `sentAt` and a
+ * No SEND date is on every message: a sent one carries `sentAt` and a
  * scheduled one carries `sendAtMs`, written by two different branches of the
- * send path, and there is no `createdAt` at all — so `orderBy` on either
- * would not mis-sort this list, it would DROP half of it. `collectionCeiling`
- * reads a bounded window in document-id order and probes one past the
- * ceiling, so the rows are sorted here and the reader is told when there are
- * more. Ordering this list in Firestore needs one field every writer stamps,
- * which is a change to the send path and a backfill.
+ * send path, and a draft carries neither — so `orderBy` on either would not
+ * mis-sort this list, it would DROP half of it. `collectionCeiling` reads a
+ * bounded window in document-id order and probes one past the ceiling, so the
+ * rows are sorted here and the reader is told when there are more.
+ *
+ * Every writer now stamps a `createdAtMs`, which is the field this list could
+ * eventually be ordered on in Firestore — but not yet, and for the same
+ * reason: messages written before that stamp existed do not carry it, and
+ * `orderBy` would drop every one of them. Server ordering waits on
+ * `tools/scripts/backfill-email-created-at.mjs` having run.
  *
  * The page is therefore a SLICE of a window this card already holds, not a
  * query: paging an id-ordered walk and re-sorting each page by date would run
@@ -114,10 +166,21 @@ export function EmailsListCard(props: EmailsListCardProps) {
     emailDocs,
     EMAIL_CEILING,
   )
+  /*
+   * Newest first on the time each message SITS at — its send time where it
+   * has one, its creation where it does not.
+   *
+   * A draft has neither `sentAt` nor `sendAtMs`, so sorting on the send time
+   * alone gave every draft the key 0 and filed the email a merchant is in the
+   * middle of writing at the very bottom of the list, behind whatever paging
+   * it has. `emailListTimeMs` is the same ordering with that one gap closed;
+   * a SENT message still orders by when it went out, never by when it was
+   * drafted.
+   */
   const emails = useMemo(
     () =>
       [...readEmails].sort(
-        (a: any, b: any) => emailSendTimeMs(b) - emailSendTimeMs(a),
+        (a: any, b: any) => emailListTimeMs(b) - emailListTimeMs(a),
       ),
     [readEmails],
   )
@@ -131,6 +194,74 @@ export function EmailsListCard(props: EmailsListCardProps) {
 
   const emailHref = (email: any) => `${basePath}/emails/${email.$id}`
 
+  const { confirm } = useConfirmationContext()
+  const { enqueueSnackbar } = useSnackbar()
+  const manageApi = useCampaignManageApi(hostId)
+  /** The email a discard is in flight for, so its row menu can say so. */
+  const [discardingId, setDiscardingId] = useState('')
+
+  /*==========================================
+   * THROWING AWAY A DRAFT.
+   *
+   * The one removal this surface has, and it is deliberately the narrowest
+   * one: an email that was never sent, whose record nobody outside the
+   * console has ever seen. Everything else on this list is evidence — a sent
+   * message's report is what a merchant answers a complaint with, and its id
+   * is inside the HMAC of every unsubscribe footer it delivered — and a
+   * scheduled one is withdrawn with Cancel, which keeps the record and takes
+   * it off the clock.
+   *
+   * The menu already refuses anything but a draft, and so does the route.
+   * That is not belt and braces: the state on screen is a snapshot that can
+   * be seconds old, and the record can be claimed by `sendNow` in between.
+   * The route's refusal is the one that decides, inside the transaction that
+   * does the delete.
+   *=========================================*/
+  const handleDiscard = useCallback(
+    async (email: any) => {
+      if (discardingId) return
+      const id = String(email?.$id ?? '')
+      const name = String(email?.subject || email?.displayName || 'this draft')
+      const agreed = await confirm({
+        title: 'Discard this draft?',
+        description:
+          `${name} has not been sent to anybody, and discarding it removes ` +
+          'it for good — the subject, the message and everything else ' +
+          'written on it. There is no undo.',
+        confirmationText: 'Discard',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!agreed) return
+      setDiscardingId(id)
+      try {
+        const { response, payload } = await manageApi({
+          action: 'discardEmail',
+          campaignId: id,
+        })
+        if (!response.ok) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'This draft could not be discarded',
+            { variant: 'warning', allowDuplicate: true },
+          )
+        }
+        enqueueSnackbar('Draft discarded', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('This draft could not be discarded', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setDiscardingId('')
+      }
+    },
+    [confirm, discardingId, enqueueSnackbar, manageApi],
+  )
+
   /**
    * What a message can be opened INTO, from the list.
    *
@@ -142,10 +273,17 @@ export function EmailsListCard(props: EmailsListCardProps) {
    * shown DISABLED with the reason rather than hidden. A control that
    * disappears and a control that does not apply look identical, and only one
    * of them tells the reader which case they are in.
+   *
+   * DISCARD is the fourth entry and is offered on the same terms: a draft can
+   * be thrown away, and nothing else can. It stays visible on a sent or
+   * scheduled message carrying the reason it is refused, because that is the
+   * honest answer to “how do I get rid of this” — and the route refuses it
+   * too, so the menu is describing a rule rather than being one.
    */
   const rowActions = (email: any): RowActionsMenuItem[] => {
     const containerId = String(email?.[CAMPAIGN_SEND_CONTAINER_FIELD] ?? '')
     const templateScreenId = String(email?.templateScreenId ?? '')
+    const state = String(email?.status ?? '')
     return [
       {
         key: 'details',
@@ -174,13 +312,21 @@ export function EmailsListCard(props: EmailsListCardProps) {
         disabled: !templateScreenId,
         disabledReason: 'This message was not built from a template',
       },
+      {
+        key: 'discard',
+        label: 'Discard draft',
+        icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+        destructive: true,
+        disabled: state !== 'draft' || Boolean(discardingId),
+        disabledReason: DISCARD_REFUSAL[state] ?? 'Only a draft can be discarded',
+        onClick: () => void handleDiscard(email),
+      },
     ]
   }
 
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const campaignSendApi = useCampaignSendApi(hostId)
-  const { enqueueSnackbar } = useSnackbar()
 
   /*
    * The campaigns a new email may be filed under, read only while the drawer
@@ -307,6 +453,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
               <TableBody>
                 {visible.map((email: any) => {
                   const at = emailSendTimeMs(email)
+                  const display = campaignSendDisplay(email)
                   return (
                     <TableRow
                       key={email.$id}
@@ -328,10 +475,21 @@ export function EmailsListCard(props: EmailsListCardProps) {
                           {email.subject || 'Untitled email'}
                         </AppLink>
                       </TableCell>
+                      {/*
+                        WHAT THIS EMAIL IS DOING, not what field it stores.
+
+                        An email delivering an audience larger than one batch
+                        is written back as `scheduled` between runs, so a chip
+                        rendering the status said "Scheduled" about a send
+                        that had already reached five hundred people. The
+                        derivation reads the counters beside the status and
+                        says which of the two it is.
+                       */}
                       <TableCell>
                         <Chip
                           size="small"
-                          label={emailStateLabel(email.status)}
+                          color={STATE_COLOR[display.state]}
+                          label={display.label}
                         />
                       </TableCell>
                       <TableCell>

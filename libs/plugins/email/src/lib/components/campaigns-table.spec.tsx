@@ -139,15 +139,57 @@ jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
   },
 }))
 
+/*
+ * The topic catalog, which ANSWERS NOTHING UNLESS IT IS ASKED.
+ *
+ * The real hook opens no listener when `enabled` is false, so a double that
+ * served the catalog either way would let the picker fill from a read the
+ * card never made — and the whole point of the gate is that the card does not
+ * make it while the drawer is shut. `topicsEnabled` records what was asked
+ * for, so the gate itself is assertable and not merely the picker's contents.
+ */
 jest.mock('./use-org-email-topics', () => ({
-  useOrgEmailTopics: () => ({
-    topics: [
-      { id: 'marketing', name: 'Promotions and offers' },
-      { id: 'sales', name: 'Sales outreach' },
-      { id: 'retired', name: 'Old stream', archived: true },
-    ],
-  }),
+  useOrgEmailTopics: (_hostId: string, options?: { enabled?: boolean }) => {
+    const enabled = options?.enabled ?? true
+    topicsEnabled.push(enabled)
+    return {
+      topics: enabled
+        ? [
+            { id: 'marketing', name: 'Promotions and offers' },
+            { id: 'sales', name: 'Sales outreach' },
+            { id: 'retired', name: 'Old stream', archived: true },
+          ]
+        : [],
+    }
+  },
 }))
+
+/** Every `enabled` the card asked the topic hook for, in order. */
+let topicsEnabled: boolean[] = []
+
+/** Whether the operator agrees to a destructive act. */
+let confirmAccepts = true
+const mockConfirm = jest.fn((_options?: Record<string, unknown>) =>
+  confirmAccepts ? Promise.resolve(undefined) : Promise.reject(new Error('no')),
+)
+
+/*
+ * The barrel, kept REAL except for the confirmation.
+ *
+ * `CardDisplay` and the grid come from here and a stub would leave every
+ * assertion below testing the stub. `useConfirmationContext` cannot stay real:
+ * its default context value answers `undefined` rather than a promise, and the
+ * delete handler awaits one.
+ */
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  ...jest.requireActual('@aglyn/shared-ui-jsx'),
+  useConfirmationContext: () => ({ confirm: mockConfirm }),
+}))
+
+/** Every POST the card made: [url, parsed body]. */
+let posted: Array<[string, Record<string, any>]> = []
+/** What the next POST answers with. */
+let postAnswer = { ok: true, body: {} as Record<string, unknown> }
 
 import HostCampaignsCard from './campaigns-card'
 
@@ -169,6 +211,15 @@ beforeEach(() => {
   pushed = []
   drawerFields = []
   formValues = {}
+  topicsEnabled = []
+  confirmAccepts = true
+  posted = []
+  postAnswer = { ok: true, body: {} }
+  mockConfirm.mockClear()
+  global.fetch = (async (url: string, init: any) => {
+    posted.push([String(url), JSON.parse(String(init?.body ?? '{}'))])
+    return { ok: postAnswer.ok, json: async () => postAnswer.body }
+  }) as unknown as typeof fetch
   served = {
     emailCampaigns: [
       {
@@ -274,16 +325,23 @@ describe('the campaigns table', () => {
     await waitFor(() => expect(cells()).toContain('Spring sale'))
 
     openMenuFor('Spring sale')
-    // Exactly one, because opening it is the only thing a campaign row can do
-    // today: there is no campaign edit page and no delete path, so anything
-    // else here would be an action the product does not have.
+    /*
+     * Opening and deleting. EDITING is deliberately absent from a table row:
+     * a record is edited on its own page in this console, and the first entry
+     * here is the way to that page.
+     */
     const items = screen.getAllByRole('menuitem')
-    expect(items.map((item) => item.textContent)).toEqual(['Open campaign'])
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Open campaign',
+      'Delete campaign',
+    ])
     // A real anchor, so it is middle-clickable like any other link.
     expect(items[0].tagName).toBe('A')
     expect(items[0].getAttribute('href')).toBe(
       '/acme/hosts/store/emails/campaigns/camp-1',
     )
+    // The destructive one is a handler, never a link.
+    expect(items[1].tagName).not.toBe('A')
   })
 
   it('opening the menu does not open the campaign', async () => {
@@ -343,6 +401,219 @@ describe('the campaigns table', () => {
     await mount()
 
     expect(screen.getByText(/This site has more/)).toBeTruthy()
+  })
+})
+
+/*==========================================
+ * DELETING A CAMPAIGN FROM ITS ROW.
+ *
+ * The container goes and its emails stay — the route detaches them first, so
+ * each keeps its id, its report and its unsubscribe links and reappears in
+ * this very table as a "Single send". What belongs HERE is the half the card
+ * owns: that it asks first, says what is kept, posts the right thing, and is
+ * refused on a row that is not a container at all. What survives a delete is
+ * `campaign-manage.spec.ts`, against the route that does it.
+ *=========================================*/
+describe('deleting a campaign', () => {
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  const deleteItem = () =>
+    screen
+      .getAllByRole('menuitem')
+      .find((item) => item.textContent === 'Delete campaign') as HTMLElement
+
+  it('asks first, and names what is KEPT', async () => {
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    fireEvent.click(deleteItem())
+    await settle()
+
+    const options = mockConfirm.mock.calls[0][0] as Record<string, any>
+    expect(String(options.title)).toContain('Spring sale')
+    // The emails are kept, and the confirmation says so — a merchant reading
+    // "delete campaign" has to be told the mail survives before they agree.
+    expect(String(options.description)).toMatch(/kept/i)
+    expect(String(options.description)).toMatch(/single sends/i)
+  })
+
+  it('says that a scheduled email still goes out', async () => {
+    /*
+     * Deleting a campaign groups nothing; it does not cancel anything. A
+     * merchant who reads the button as "stop this campaign" has to be told
+     * otherwise BEFORE they press it, not after their mail arrives.
+     */
+    served.campaigns = [
+      {
+        $id: 'due-friday',
+        subject: 'Due Friday',
+        status: 'scheduled',
+        sendAtMs: Date.UTC(2026, 5, 5),
+        emailCampaignId: 'camp-1',
+      },
+    ]
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    fireEvent.click(deleteItem())
+    await settle()
+
+    expect(String(mockConfirm.mock.calls[0][0]?.description)).toMatch(
+      /still going out or still due/i,
+    )
+  })
+
+  it('posts to the manage route once agreed', async () => {
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    fireEvent.click(deleteItem())
+    await settle()
+
+    expect(posted).toHaveLength(1)
+    expect(posted[0][0]).toBe('/api/campaigns/manage')
+    expect(posted[0][1]).toMatchObject({
+      hostId: 'host-1',
+      action: 'deleteCampaign',
+      campaignId: 'camp-1',
+    })
+  })
+
+  it('posts NOTHING when the operator cancels', async () => {
+    confirmAccepts = false
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    fireEvent.click(deleteItem())
+    await settle()
+
+    expect(mockConfirm).toHaveBeenCalled()
+    expect(posted).toHaveLength(0)
+  })
+
+  it('does NOT delete the container through a client write', async () => {
+    // `hosts/{id}/campaigns` is server-only in the rules — the container can
+    // only go once its sends are detached, and no client may detach them.
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    fireEvent.click(deleteItem())
+    await settle()
+
+    expect(writes).toHaveLength(0)
+  })
+
+  it('is refused on a SINGLE SEND row, which has no container', async () => {
+    await mount()
+    await waitFor(() =>
+      expect(screen.getByText('Last week’s news')).toBeTruthy(),
+    )
+
+    openMenuFor('Last week’s news')
+    const item = deleteItem()
+    expect(item.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(item)
+    await settle()
+    expect(mockConfirm).not.toHaveBeenCalled()
+    expect(posted).toHaveLength(0)
+  })
+})
+
+/*==========================================
+ * THE TOPIC CATALOG IS THE SECTION'S BIGGEST READ, AND NOTHING DRAWS IT.
+ *
+ * 200 documents — more than the rest of this section put together — filling
+ * one picker inside a drawer nobody has opened. `emails-console-read-cost`
+ * holds the resulting number; this is the reading that says the catalog is
+ * still THERE once somebody asks for it, which a gate that simply never read
+ * would also satisfy.
+ *=========================================*/
+describe('what the table reads before anybody asks to create', () => {
+  it('does not read the topic catalog on mount', async () => {
+    await mount()
+    expect(topicsEnabled.length).toBeGreaterThan(0)
+    expect(topicsEnabled.some((enabled) => enabled)).toBe(false)
+  })
+
+  it('reads it as soon as the create drawer opens', async () => {
+    await mount()
+    fireEvent.click(screen.getByText('Create campaign'))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(topicsEnabled.some((enabled) => enabled)).toBe(true)
+  })
+})
+
+/*==========================================
+ * THE EMAILS COLUMN COUNTS WHAT HAS GONE OUT.
+ *
+ * A campaign holding an email part way through an audience larger than one
+ * batch stores it as `scheduled`, so the column reported the campaign as
+ * having sent nothing while its recipients were receiving it.
+ *=========================================*/
+describe('a campaign whose email is still going out', () => {
+  const emailsCell = () =>
+    String(
+      document.querySelector('[role="gridcell"][data-field="emails"]')
+        ?.textContent ?? '',
+    )
+
+  beforeEach(() => {
+    served.campaigns = [
+      {
+        $id: 'big-send',
+        subject: 'Big one',
+        status: 'scheduled',
+        emailCampaignId: 'camp-1',
+        stats: { sent: 500, delivered: 480, audienceSize: 3000 },
+        resume: { remaining: 2500, batch: 1, nextAtMs: Date.now() + 60_000 },
+      },
+    ]
+  })
+
+  it('counts it as a send, and says it is still sending', async () => {
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    expect(emailsCell()).toContain('1')
+    expect(emailsCell()).toContain('sending')
+    expect(emailsCell()).not.toContain('scheduled')
+  })
+
+  it('puts what it has delivered into the campaign totals', async () => {
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    // Dropped from every figure while it was read as unsent.
+    expect(cells()).toContain('500')
+  })
+
+  it('still says "scheduled" for one that has delivered nothing', async () => {
+    // THE CONTROL: the narrower reading must keep the case it has always had.
+    served.campaigns = [
+      {
+        $id: 'later',
+        subject: 'Due Friday',
+        status: 'scheduled',
+        emailCampaignId: 'camp-1',
+        sendAtMs: Date.now() + 86_400_000,
+      },
+    ]
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    expect(emailsCell()).toContain('scheduled')
+    expect(emailsCell()).not.toContain('sending')
   })
 })
 
