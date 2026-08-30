@@ -1115,6 +1115,14 @@ const NOT_A_LIST: Array<[string, string]> = [
       'it on every write, so the array cannot hold a fifty-first row and the ' +
       'second page is empty for every contact that will ever exist.',
   ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/forms/page.tsx',
+    'The site’s form CATALOG, bounded at write time by `FORMS_MAX_PER_HOST` ' +
+      '— a flat platform ceiling of 50, enforced server-side in a transaction ' +
+      'at `/api/hosts/resources`, not a plan dimension anything can raise. ' +
+      'The read’s `limit(100)` is already twice the largest population that ' +
+      'can exist, so a footer would page a window nothing can overflow.',
+  ],
 ]
 
 /**
@@ -1153,6 +1161,11 @@ const OWES_A_FOOTER: Array<[string, string]> = [
   [
     'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/[layoutId]/page.tsx',
     'The same version history, the same block.',
+  ],
+  [
+    'apps/console/app/(app)/[orgSlug]/hosts/[host]/forms/[formId]/page.tsx',
+    'The same version history, the same block — a form versions exactly as a ' +
+      'component does and reads its versions the same unordered way.',
   ],
   [
     'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
@@ -1324,17 +1337,19 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    // 14 since the email templates list became a table on the surface's own
-    // row grammar: it reads a ceiling that names its order, probes one past
-    // it, and pages the window it holds on the shared footer.
-    expect(OWES_A_FOOTER).toHaveLength(14)
-    // 33 since the Emails surface grew a page per message, per template and
-    // per topic. Every table on those pages is bounded by something other
-    // than the audience — a fixed taxonomy, a rollup capped at WRITE time, a
-    // ceilinged window that says so, or a merchant's own vocabulary — which
-    // is the property this list exists to record. Raised here deliberately
-    // rather than by a walk that quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(33)
+    // 15 since a form became a designable document: its detail page carries
+    // the same version history the component and layout ones do, read the
+    // same unordered way, and is blocked on the same `createdAt` audit.
+    expect(OWES_A_FOOTER).toHaveLength(15)
+    // 34 since the forms catalog joined them: `FORMS_MAX_PER_HOST` is a flat
+    // platform ceiling of 50 enforced server-side, so the read's `limit(100)`
+    // already exceeds the largest population that can exist. Every table on
+    // this list is bounded by something other than the audience — a fixed
+    // taxonomy, a rollup capped at WRITE time, a ceilinged window that says
+    // so, or a merchant's own vocabulary — which is the property this list
+    // exists to record. Raised here deliberately rather than by a walk that
+    // quietly stopped reaching a file.
+    expect(NOT_A_LIST).toHaveLength(34)
   })
 })
 
