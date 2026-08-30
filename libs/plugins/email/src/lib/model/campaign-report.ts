@@ -306,7 +306,22 @@ export function campaignReport(stats: CampaignStats | undefined): CampaignReport
   const clickTrackable = source.clickTracked === true
 
   const rates: CampaignReport['rates'] = {
-    delivery: campaignRate(delivered ?? undefined, sent, 'sent'),
+    /*
+     * `null` when `delivered` is UNRECORDED, and this is the one rate where
+     * the numerator can be unknown rather than zero.
+     *
+     * Everywhere else an absent numerator is a genuine nought — a campaign
+     * with delivery events and no opens really does have a 0% open rate, and
+     * that is worth showing. Here the numerator IS the unrecorded quantity,
+     * so `campaignRate(undefined, 1000, 'sent')` would divide a missing
+     * measurement by a real one and publish "0.0% delivery rate — 0 of 1,000
+     * sent" for a campaign whose delivery events were merely never recorded.
+     * That is the flattering-substitution failure this module exists to
+     * refuse, running in the other direction: not a rate that reads too high,
+     * but a campaign that reads as a total delivery failure.
+     */
+    delivery:
+      delivered === null ? null : campaignRate(delivered, sent, 'sent'),
     open: campaignRate(uniqueOpens ?? undefined, delivered ?? undefined, 'delivered'),
     click: clickTrackable
       ? campaignRate(uniqueClicks ?? undefined, delivered ?? undefined, 'delivered')

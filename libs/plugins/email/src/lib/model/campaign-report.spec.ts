@@ -199,6 +199,16 @@ describe('campaignReport — a denominator that was never recorded', () => {
    * and it would be the FLATTERING wrong number on any campaign whose
    * delivery events are merely late.
    */
+  /*
+   * The delivery rate is the one whose NUMERATOR is the unrecorded quantity,
+   * so it is the one place an absent numerator must not read as a nought. A
+   * `0.0% delivery rate — 0 of 1,000 sent` says the campaign reached nobody,
+   * which is a far more alarming claim than the one the data supports.
+   */
+  it('withholds the delivery rate rather than reporting 0%', () => {
+    expect(campaignReport(legacy).rates.delivery).toBeNull()
+  })
+
   it('withholds every rate over delivered rather than falling back to sent', () => {
     const { rates } = campaignReport(legacy)
     expect(rates.open).toBeNull()
