@@ -1698,13 +1698,22 @@ describe('the campaign touch', () => {
   it('takes the provider’s instant for the click, not the moment we heard', async () => {
     docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
 
-    await deliver(clickOn('https://shop.example/sale'))
+    // A payload that is DATED, and dated in the past. Without one the
+    // provider's instant and ours are the same millisecond and the assertion
+    // below cannot tell them apart — which is how a webhook that credits a
+    // click at the time it was PROCESSED passes a test about the time it
+    // HAPPENED. For a click near the edge of the attribution window that is
+    // the difference between inside it and outside it.
+    const clickedAtMs = Date.parse('2026-08-01T12:00:00.000Z')
+    await deliver({
+      ...clickOn('https://shop.example/sale'),
+      created_at: '2026-08-01T12:00:00.000Z',
+    })
 
-    // A delayed webhook must credit the click at the time it happened: for a
-    // click near the edge of the window that is the difference between inside
-    // and outside it. The outcome carries the normalized provider time.
     const outcomes = recordedDeliveryEvents.at(-1) as any[]
-    expect((recordedTouches[0] as any).atMs).toBe(outcomes[0].at)
+    expect(outcomes[0].at).toBe(clickedAtMs)
+    expect((recordedTouches[0] as any).atMs).toBe(clickedAtMs)
+    expect((recordedTouches[0] as any).atMs).toBeLessThan(Date.now())
   })
 
   it('records nothing for a click that names no campaign', async () => {

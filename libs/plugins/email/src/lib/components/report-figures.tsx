@@ -140,9 +140,13 @@ RateRow.displayName = 'RateRow'
  * here rather than papered over because the day it can arise, this is the
  * line that has to change.
  *
- * An unrecognised code falls back to the digits with the code beside them,
- * because `Intl.NumberFormat` THROWS on one, and a report card that throws in
- * render takes every figure on the page down with it.
+ * A code `Intl` cannot parse falls back to the digits with the code beside
+ * them. `Intl.NumberFormat` throws a `RangeError` on a MALFORMED code — one
+ * that is not three letters — and a report card that throws in render takes
+ * every figure on the page down with it, including the ones that were fine.
+ * A well-formed code it does not recognise does not throw: it prints the code
+ * as its own symbol, which is the right answer for a currency nobody has a
+ * glyph for.
  */
 export function money(cents: number, currency: string): string {
   const amount = cents / 100

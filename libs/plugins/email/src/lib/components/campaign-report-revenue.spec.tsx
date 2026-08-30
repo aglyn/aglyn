@@ -253,6 +253,10 @@ describe('the revenue section names its denominator on screen', () => {
       screen.getByText(/No revenue has been attributed to this campaign/),
     ).toBeTruthy()
     expect(screen.queryByText('$0.00')).toBeNull()
+    // And the rule is still stated, from the default window rather than from
+    // a stored one — a campaign with nothing to show is exactly where a
+    // merchant asks what would have had to happen for a figure to appear.
+    expect(screen.getByText(/within 7 days/)).toBeTruthy()
   })
 
   it('says a campaign with a rollup and no orders earned nothing', async () => {
