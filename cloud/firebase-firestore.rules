@@ -2231,7 +2231,33 @@ service cloud.firestore {
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency']));
+              'topicOptOuts', 'emailFrequency', 'campaigns']));
+        // `campaigns` joins all THREE lists. Each document is one email SEND,
+        // and every field on it is written server-side: `campaign-send.ts`
+        // stamps the audience, the consent and suppression populations and the
+        // delivery counters on the Admin SDK, and the Resend webhook
+        // (`email-events.ts`) and the unsubscribe handler increment the `stats`
+        // map from there. An editor who could write one would be authoring the
+        // campaign report itself — delivered, open, click, bounce, complaint
+        // and unsubscribe counts — and the send-time record of who the send
+        // was allowed to reach, which is the compliance evidence for that send
+        // rather than a vanity metric.
+        //
+        // `{document=**}` spans the nested `reports/links` click rollup, so
+        // the exclusion covers the per-link breakdown the report screen
+        // renders beside those counters. It is written by the same webhook.
+        //
+        // NOT `emailCampaigns`, which is the campaign CONTAINER — a name, a
+        // date window and the lists it is aimed at — created client-side from
+        // the campaigns card's create drawer. It holds no counter and no
+        // entitlement input, since the monthly send cap is claimed against the
+        // ORG counter by the send route, so a container an editor writes
+        // cannot buy them a send. Denying it would break that drawer.
+        //
+        // READ is untouched, and the console depends on it: the campaign
+        // report, the emails list and the marketing summary card all read this
+        // collection with the client SDK.
+        //
         // `emailFrequency` joins all THREE lists. It is the per-recipient
         // marketing send window the `sendEmail` marketing gate reads and
         // writes on the Admin SDK — the instants one site mailed one person,
@@ -2360,7 +2386,7 @@ service cloud.firestore {
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency']));
+              'topicOptOuts', 'emailFrequency', 'campaigns']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -2406,7 +2432,7 @@ service cloud.firestore {
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency']));
+              'topicOptOuts', 'emailFrequency', 'campaigns']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

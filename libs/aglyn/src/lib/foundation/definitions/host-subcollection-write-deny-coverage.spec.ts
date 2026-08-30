@@ -414,16 +414,15 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   services: 'Bookable services, authored in the bookings console page.',
   bookings: 'Booking records, rescheduled and cancelled in the same page.',
   events: 'Calendar events, authored in the events console page.',
-  campaigns:
-    'One email SEND each — subject, body, audience and counters. Written by ' +
-    'the send route on the Admin SDK; the console reads them and the ' +
-    'campaigns list groups them.',
   emailCampaigns:
     'The campaign CONTAINER — a name, a date window and the lists it is ' +
     'aimed at. Created and edited client-side from the campaigns card’s ' +
     'create drawer. It holds no counter and no entitlement input: the ' +
     'monthly send cap is claimed against the ORG counter by the send route, ' +
-    'so a container an editor writes cannot buy them a send.',
+    'so a container an editor writes cannot buy them a send. Distinct from ' +
+    '`campaigns`, the one-document-per-SEND sibling that carries the ' +
+    'delivery counters and the send-time consent record: that one is denied ' +
+    'outright by the rules, and conflating the two breaks this drawer.',
   emailTemplates: 'Transactional email templates, edited in the console.',
   leads: 'Captured leads, triaged and deleted in the inbox console page.',
   formSubmissions:
