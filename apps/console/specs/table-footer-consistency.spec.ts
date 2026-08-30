@@ -1208,11 +1208,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'grid has rather than a footer.',
   ],
   [
-    'libs/plugins/email/src/lib/components/email-screens-card.tsx',
-    'Every email template on the site, read as an unordered `limit(200)` ' +
-      'over `screens`. The email plugin’s page shell is mid-conversion.',
-  ],
-  [
     'libs/plugins/marketplace/src/lib/components/host-plugins-card.component.tsx',
     'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
       'Bounded by the marketplace rather than by the account, but the ' +
@@ -1329,7 +1324,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(15)
+    // 14 since the email templates list became a table on the surface's own
+    // row grammar: it reads a ceiling that names its order, probes one past
+    // it, and pages the window it holds on the shared footer.
+    expect(OWES_A_FOOTER).toHaveLength(14)
     // 33 since the Emails surface grew a page per message, per template and
     // per topic. Every table on those pages is bounded by something other
     // than the audience — a fixed taxonomy, a rollup capped at WRITE time, a

@@ -151,8 +151,15 @@ const confirm = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
+/*
+ * The barrel, stubbed for what the PANEL takes from it. `RowActionsMenu` is
+ * imported from its own module path and is therefore the real shared
+ * component, which is the point — a stubbed menu would leave the assertions
+ * about where the removal lives testing the stub.
+ */
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm }),
 }))
 
@@ -179,6 +186,25 @@ const columnIndex = (header: string) =>
     .indexOf(header)
 const addressesShown = () =>
   bodyRows().map((row) => row.querySelector('td')?.textContent?.trim() ?? '')
+
+/**
+ * Take the first listed subscriber off the list, through the affordance the
+ * row actually has.
+ *
+ * Removing lives in the row's overflow menu rather than as a red `Remove`
+ * button in the row — it is a destructive act that sat one mis-click from the
+ * cells beside it — so reaching it is the menu, then the item.
+ */
+const pressRemove = () => {
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: `More actions for ${addressesShown()[0]}`,
+    }),
+  )
+  fireEvent.click(
+    screen.getByRole('menuitem', { name: 'Remove from this list' }),
+  )
+}
 
 describe('the membership table walks the collection', () => {
   it('THE CONTROL: the two orderings disagree at the page size', () => {
@@ -287,7 +313,7 @@ describe('removing somebody is not suppressing them', () => {
   it('says so in the confirmation, before anything is deleted', async () => {
     confirm.mockReset().mockRejectedValue(undefined)
     await mountPanel()
-    fireEvent.click(screen.getAllByText('Remove')[0])
+    pressRemove()
     await waitFor(() => expect(confirm).toHaveBeenCalled())
     const description = String(confirm.mock.calls[0][0].description)
     expect(description).toContain('NOT an unsubscribe')
@@ -303,7 +329,7 @@ describe('removing somebody is not suppressing them', () => {
     deleteDoc.mockClear()
     confirm.mockReset().mockResolvedValue(undefined)
     await mountPanel()
-    fireEvent.click(screen.getAllByText('Remove')[0])
+    pressRemove()
     await waitFor(() => expect(deleteDoc).toHaveBeenCalled())
   })
 })

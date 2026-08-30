@@ -53,8 +53,10 @@
  */
 
 import type { DynamicListRule } from '@aglyn/aglyn'
-import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
+import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -726,14 +728,31 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
                         label={consent.label}
                       />
                     </TableCell>
-                    <TableCell align="right">
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={() => void handleRemove(member)}
-                      >
-                        {'Remove'}
-                      </Button>
+                    {/*
+                      A SUBSCRIBER HAS NO PAGE of their own here, so the row
+                      opens nothing — but taking somebody off an audience is
+                      the one act performed on one, and it belongs in the
+                      trailing cluster with every other table's actions rather
+                      than as a red text button sitting in the row.
+                     */}
+                    <TableCell align="right" sx={{ width: 56 }}>
+                      <RowActionsMenu
+                        label={String(member.email ?? member.$id)}
+                        items={[
+                          {
+                            key: 'remove',
+                            label: 'Remove from this list',
+                            icon: (
+                              <MdiIcon
+                                path={mdiAccountRemoveOutline.path}
+                                size={0.8}
+                              />
+                            ),
+                            destructive: true,
+                            onClick: () => void handleRemove(member),
+                          },
+                        ]}
+                      />
                     </TableCell>
                   </TableRow>
                 )

@@ -26,8 +26,13 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { mdiEyeOutline } from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
@@ -278,6 +283,11 @@ export function HostCampaignsCard(props: {
     [creating, firestore, hostId, user, enqueueSnackbar, openCampaign],
   )
 
+  const campaignHref = useCallback(
+    (id: string) => (hubPath ? `${hubPath}/campaigns/${id}` : null),
+    [hubPath],
+  )
+
   const columns = useMemo(
     () => [
       {
@@ -291,9 +301,29 @@ export function HostCampaignsCard(props: {
             spacing={1}
             sx={{ alignItems: 'center', minWidth: 0 }}
           >
-            <Typography variant="body2" noWrap>
-              {row.name}
-            </Typography>
+            {/*
+              The name is a real anchor as well as the row being clickable, so
+              a campaign can be middle-clicked into a tab or copied out of the
+              context menu — affordances a row handler cannot offer. The grid's
+              own row click fires too, so the link stops the event rather than
+              pushing the same route twice.
+             */}
+            {campaignHref(row.id) ? (
+              <AppLink
+                href={campaignHref(row.id) as string}
+                onClick={(event: { stopPropagation: () => void }) =>
+                  event.stopPropagation()
+                }
+              >
+                <Typography variant="body2" noWrap>
+                  {row.name}
+                </Typography>
+              </AppLink>
+            ) : (
+              <Typography variant="body2" noWrap>
+                {row.name}
+              </Typography>
+            )}
             {row.legacy ? (
               <Chip
                 size="small"
@@ -348,12 +378,20 @@ export function HostCampaignsCard(props: {
           </Typography>
         ),
       },
+      /*
+        THE FOUR COUNTS, RIGHT-ALIGNED HEAD AND BODY.
+        A figure is read by its last digit, so a column of them lines up on
+        the right or it does not line up at all. `headerAlign` has to be said
+        as well as `align`: a grid column defaults its header to the column
+        type's alignment rather than to the cell's, which is how these came to
+        sit with left headers over figures nobody could compare down the page.
+       */
       {
         field: 'emails',
         headerName: 'Emails',
+        width: 110,
         align: 'right',
         headerAlign: 'right',
-        width: 110,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">
             {row.rollup.scheduled
@@ -365,9 +403,9 @@ export function HostCampaignsCard(props: {
       {
         field: 'sent',
         headerName: 'Sent',
+        width: 100,
         align: 'right',
         headerAlign: 'right',
-        width: 100,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">{figure(row.rollup.sent)}</Typography>
         ),
@@ -375,9 +413,9 @@ export function HostCampaignsCard(props: {
       {
         field: 'opens',
         headerName: 'Opens',
+        width: 100,
         align: 'right',
         headerAlign: 'right',
-        width: 100,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">{figure(row.rollup.opens)}</Typography>
         ),
@@ -385,15 +423,49 @@ export function HostCampaignsCard(props: {
       {
         field: 'clicks',
         headerName: 'Clicks',
+        width: 100,
         align: 'right',
         headerAlign: 'right',
-        width: 100,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">{figure(row.rollup.clicks)}</Typography>
         ),
       },
+      /*
+        THE TRAILING CLUSTER, through the grid's own actions column.
+        `listActionsColumn` is what every other grid list in the console
+        renders, so the reader cannot tell which family of table they are
+        standing in — the hand-rolled tables on this surface reach the same
+        `RowActionsMenu` from the other direction.
+
+        Opening the campaign is the only action a campaign row has today:
+        there is no campaign edit page and no delete path, so the menu is one
+        entry rather than several invented ones. It is restated here even
+        though the row click does the same thing, for the reason the screens
+        table restates its own: the menu is where a row's actions are NAMED,
+        and an action absent from it reads as an action the row does not have.
+       */
+      listActionsColumn(
+        (row: any) => (
+          <ListRowActions
+            label={String(row.name ?? row.id)}
+            items={[
+              {
+                key: 'details',
+                label: 'Open campaign',
+                icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+                href: campaignHref(row.id) ?? undefined,
+                disabled: !campaignHref(row.id),
+                disabledReason: campaignHref(row.id)
+                  ? undefined
+                  : 'This site’s console URL has not resolved yet',
+              },
+            ]}
+          />
+        ),
+        { width: 72 },
+      ),
     ],
-    [listNames],
+    [listNames, campaignHref],
   )
 
   return (

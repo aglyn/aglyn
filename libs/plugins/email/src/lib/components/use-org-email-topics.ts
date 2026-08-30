@@ -22,13 +22,54 @@ import {
   normalizeEmailTopic,
   type EmailTopic,
 } from '@aglyn/aglyn'
-import { collection, limit, orderBy, query } from 'firebase/firestore'
+import type { Firestore } from 'firebase/firestore'
+import { collection, doc, limit, orderBy, query, setDoc } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
+
+/**
+ * Write one topic's document — the ONE writer of the topic catalog.
+ *
+ * Two surfaces change a topic: its own page, which edits the name and the
+ * description, and the list card's row menu, which retires and restores. They
+ * write the same document and have to agree about its shape, so the write
+ * lives here rather than once in each.
+ *
+ * ## Why it is a complete statement and not a patch
+ *
+ * `archived` is written on every save rather than only when it changes. A
+ * merge that omitted it would leave a restored topic carrying `archived: true`
+ * from an earlier save — which reads on screen as restored and behaves as
+ * retired, because the composer's picker and the recipient's preference page
+ * both read the stored flag.
+ *
+ * ## Why a built-in saves the same way
+ *
+ * `DEFAULT_EMAIL_TOPICS` is the FLOOR of the catalog, not its initial
+ * contents: the four built-ins have no stored document until somebody changes
+ * one. `setDoc` at the built-in's own id is what creates the override, so the
+ * same call serves a custom topic and a built-in being retired for the first
+ * time.
+ */
+export async function writeEmailTopic(
+  firestore: Firestore,
+  scope: readonly [string, string],
+  topic: { id: string; name: string; description: string; archived: boolean },
+): Promise<void> {
+  await setDoc(
+    doc(firestore, scope[0], scope[1], EMAIL_TOPICS_COLLECTION, topic.id),
+    {
+      name: topic.name,
+      description: topic.description,
+      archived: topic.archived,
+    },
+    { merge: true },
+  )
+}
 
 /**
  * How many stored topics one read fetches.

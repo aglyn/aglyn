@@ -34,7 +34,7 @@
  * the sandbox entirely. So the assertion reads the attribute's VALUE.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { CampaignStats } from '../model/campaign-report'
 
@@ -75,6 +75,14 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
 }))
 
+/** Every route the page pushed, so a row click is a claim this file checks. */
+const pushed: string[] = []
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: (href: string) => pushed.push(href) }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 const SCREEN_PATH = 'hosts/site1/screens/scr_1'
 const VERSION_PATH = 'hosts/site1/screens/scr_1/versions/ver_1'
 const CAMPAIGNS_PATH = 'hosts/site1/campaigns'
@@ -110,6 +118,18 @@ const MEASURED: CampaignStats = {
 
 /** From before the delivery webhook: real opens, no delivery denominator. */
 const UNMEASURED: CampaignStats = { recipients: 200, sent: 200, opens: 30 }
+
+/**
+ * The MESSAGES table, found by its own first column.
+ *
+ * The page draws two: the audiences breakdown comes first, and an index into
+ * `document.querySelectorAll('table')` would silently move to it the next time
+ * a section is added above.
+ */
+const messagesTable = (): HTMLTableElement =>
+  Array.from(document.querySelectorAll('table')).find((table) =>
+    table.querySelector('thead')?.textContent?.startsWith('Subject'),
+  ) as HTMLTableElement
 
 async function renderDetail(options?: {
   screen?: Record<string, unknown>
@@ -259,6 +279,111 @@ describe('the template report names its denominators on screen', () => {
     await renderDetail()
     const link = screen.getByText('Spring sale').closest('a')
     expect(link?.getAttribute('href')).toBe('/acme/hosts/site/emails/emails/msg_1')
+  })
+
+  it('the message ROW opens it too, and the link does not double-push', async () => {
+    pushed.length = 0
+    await renderDetail()
+
+    fireEvent.click(messagesTable().querySelectorAll('tbody tr')[0])
+    expect(pushed).toContain('/acme/hosts/site/emails/emails/msg_1')
+
+    // The row's own handler would fire again and push the same route twice —
+    // one history entry per back press.
+    pushed.length = 0
+    fireEvent.click(screen.getByText('Spring sale').closest('a') as Element)
+    expect(pushed).toEqual([])
+  })
+
+  it('the message’s other destinations are in the overflow menu', async () => {
+    pushed.length = 0
+    await renderDetail({
+      messages: [
+        {
+          $id: 'msg_1',
+          subject: 'Spring sale',
+          status: 'sent',
+          emailCampaignId: 'camp_7',
+          sentAt: { toMillis: () => 1_700_000_000_000 },
+          stats: MEASURED,
+        },
+      ],
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    // Opening the menu must not open the message underneath it.
+    expect(pushed).toEqual([])
+    const campaign = screen.getByRole('menuitem', {
+      name: 'Open its campaign',
+    })
+    expect(campaign.tagName).toBe('A')
+    expect(campaign.getAttribute('href')).toBe(
+      '/acme/hosts/site/emails/campaigns/camp_7',
+    )
+  })
+
+  it('clicking the actions column does not open the message', async () => {
+    /*
+     * The menu BUTTON guards itself, so an assertion that only opened the menu
+     * would pass with or without the cell's own guard — and the cell is bigger
+     * than the button. A press landing on the padding around it is a press
+     * inside a row whose handler opens the message.
+     */
+    pushed.length = 0
+    await renderDetail()
+
+    const cells = messagesTable()
+      .querySelectorAll('tbody tr')[0]
+      .querySelectorAll('td')
+    fireEvent.click(cells[cells.length - 1])
+    expect(pushed).toEqual([])
+  })
+
+  it('a message that belongs to NO campaign says so rather than guessing', async () => {
+    // Every message written before campaigns grouped their emails names no
+    // container. Defaulting to the message's own id would give the row a menu
+    // item that navigates to the page the reader is already on.
+    await renderDetail({
+      messages: [
+        {
+          $id: 'msg_1',
+          subject: 'Spring sale',
+          status: 'sent',
+          sentAt: { toMillis: () => 1_700_000_000_000 },
+          stats: MEASURED,
+        },
+      ],
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    const campaign = screen.getByRole('menuitem', {
+      name: 'Open its campaign',
+    })
+    expect(campaign.getAttribute('aria-disabled')).toBe('true')
+    expect(campaign.tagName).not.toBe('A')
+  })
+
+  it('the numeric columns are right-aligned in the head AND the body', async () => {
+    // A header aligned one way over cells aligned another is exactly the
+    // defect this surface's tables were reported for.
+    await renderDetail()
+    const messages = messagesTable()
+    const headers = Array.from(messages.querySelectorAll('thead th'))
+    const cells = Array.from(
+      messages.querySelectorAll('tbody tr')[0].querySelectorAll('td'),
+    )
+    for (const index of [3, 4, 5]) {
+      expect(headers[index].className).toMatch(/alignRight/)
+      expect(cells[index].className).toMatch(/alignRight/)
+    }
+    // THE CONTROL: the text columns are not right-aligned, so the assertion
+    // above is about alignment rather than about every cell in the table.
+    expect(headers[0].className).not.toMatch(/alignRight/)
+    expect(cells[0].className).not.toMatch(/alignRight/)
   })
 })
 

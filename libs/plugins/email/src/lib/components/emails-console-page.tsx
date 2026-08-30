@@ -164,7 +164,7 @@ function sectionBody(
           basePath={basePath}
         />
       ) : (
-        <EmailTopicsCard hostId={hostId} />
+        <EmailTopicsCard hostId={hostId} basePath={basePath} />
       )
     case 'suppressions':
       return <SuppressionsCard hostId={hostId} />

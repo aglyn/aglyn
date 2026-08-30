@@ -16,9 +16,13 @@
  */
 'use client'
 
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiEyeOutline, mdiPaletteOutline } from '@aglyn/shared-data-mdi'
+import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Figure, RateRow, Section } from './report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -29,6 +33,11 @@ import {
   Chip,
   Divider,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   Typography,
 } from '@mui/material'
 import {
@@ -220,6 +229,49 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
       String(list.name ?? list.$id),
     ]),
   )
+  /*
+   * One email's report.
+   *
+   * `campaigns/{sendId}` and not `emails/{sendId}`: this URL was the report
+   * for a single send before a campaign became a container, links to it are
+   * sitting in messages merchants sent each other, and the campaign detail
+   * route answers an id it does not recognize as a container with that send's
+   * own report. Changing the destination here would be changing which page a
+   * link that already exists resolves to.
+   */
+  const sendHref = (send: CampaignSend) =>
+    `${basePath}/campaigns/${send.$id}`
+
+  /**
+   * What one of this campaign's emails can be opened into.
+   *
+   * The same two the Emails tab offers, less the campaign — this page IS the
+   * campaign. A message composed inline was built from no template, so that
+   * entry is shown DISABLED with the reason rather than hidden: an absent
+   * control and an inapplicable one look identical, and only one is honest.
+   */
+  const sendActions = (send: CampaignSend): RowActionsMenuItem[] => {
+    const templateScreenId = String((send as any).templateScreenId ?? '')
+    return [
+      {
+        key: 'details',
+        label: 'Open report',
+        icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+        href: sendHref(send),
+      },
+      {
+        key: 'template',
+        label: 'Open its template',
+        icon: <MdiIcon path={mdiPaletteOutline.path} size={0.8} />,
+        href: templateScreenId
+          ? `${basePath}/templates/${templateScreenId}`
+          : undefined,
+        disabled: !templateScreenId,
+        disabledReason: 'This message was not built from a template',
+      },
+    ]
+  }
+
   const windowState = campaignWindowState(campaign, Date.now())
   const start = campaign.startAtMs
     ? new Date(campaign.startAtMs).toLocaleDateString()
@@ -318,60 +370,97 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         </Stack>
         {sends.length ? (
           <Stack spacing={0.5}>
-            {visibleSends.map((send) => (
-              <Stack
-                key={send.$id}
-                direction="row"
-                spacing={1}
-                sx={{ justifyContent: 'space-between', alignItems: 'center' }}
-              >
-                <Typography variant="body2" noWrap sx={{ maxWidth: '50%' }}>
-                  {send.subject || send.$id}
-                </Typography>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  {send.status === 'scheduled' ? (
-                    <Chip
-                      size="small"
-                      color="info"
-                      label={`Scheduled · ${
-                        send.sendAtMs
-                          ? new Date(send.sendAtMs).toLocaleString()
-                          : ''
-                      }`}
-                    />
-                  ) : send.status === 'canceled' ? (
-                    <Chip size="small" label="Canceled" />
-                  ) : send.status === 'failed' ? (
-                    <Chip size="small" color="error" label="Failed" />
-                  ) : (
-                    <Typography variant="caption" color="text.secondary">
+            {/*
+              A TABLE, on the surface's own row grammar: the row opens the
+              email's report, its subject is also a real link so it can be
+              middle-clicked and copied, and the trailing cluster holds the
+              actions. It used to be a row of `Stack`s with a `Report` text
+              button on the end, which meant the campaign's emails and the
+              Emails tab's — the same documents — read as two different kinds
+              of thing.
+             */}
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{'Subject'}</TableCell>
+                  <TableCell>{'State'}</TableCell>
+                  <TableCell align="right">{'Sent'}</TableCell>
+                  <TableCell align="right">{'Opens'}</TableCell>
+                  <TableCell align="right">{'Clicks'}</TableCell>
+                  <TableCell align="right" />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {visibleSends.map((send) => (
+                  <TableRow
+                    key={send.$id}
+                    hover
+                    onClick={() => router.push(sendHref(send))}
+                    sx={{ cursor: 'pointer' }}
+                  >
+                    <TableCell>
+                      {/*
+                        The row's own handler would fire too and push the same
+                        route twice — one history entry per back press.
+                       */}
+                      <AppLink
+                        href={sendHref(send)}
+                        onClick={(event: { stopPropagation: () => void }) =>
+                          event.stopPropagation()
+                        }
+                      >
+                        {send.subject || send.$id}
+                      </AppLink>
+                    </TableCell>
+                    <TableCell>
+                      {send.status === 'scheduled' ? (
+                        <Chip
+                          size="small"
+                          color="info"
+                          label={`Scheduled · ${
+                            send.sendAtMs
+                              ? new Date(send.sendAtMs).toLocaleString()
+                              : ''
+                          }`}
+                        />
+                      ) : send.status === 'canceled' ? (
+                        <Chip size="small" label="Canceled" />
+                      ) : send.status === 'failed' ? (
+                        <Chip size="small" color="error" label="Failed" />
+                      ) : (
+                        <Chip size="small" label="Sent" />
+                      )}
+                    </TableCell>
+                    {/*
+                      Sent over addressed, on one line: the two figures only
+                      mean anything beside each other, and the gap between
+                      them is the suppression list doing its work.
+                     */}
+                    <TableCell align="right">
                       {`${send.stats?.sent ?? 0}/${
                         send.stats?.recipients ?? 0
-                      } sent` +
-                        (send.stats?.opens
-                          ? ` · ${send.stats.opens} opens`
-                          : '') +
-                        (send.stats?.clicks
-                          ? ` · ${send.stats.clicks} clicks`
-                          : '')}
-                    </Typography>
-                  )}
-                  <Button
-                    size="small"
-                    color="primary"
-                    onClick={() =>
-                      void router.push(`${basePath}/campaigns/${send.$id}`)
-                    }
-                  >
-                    {'Report'}
-                  </Button>
-                </Stack>
-              </Stack>
-            ))}
+                      }`}
+                    </TableCell>
+                    <TableCell align="right">
+                      {Number(send.stats?.opens ?? 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell align="right">
+                      {Number(send.stats?.clicks ?? 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{ width: 56 }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <RowActionsMenu
+                        label={String(send.subject || send.$id)}
+                        items={sendActions(send)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
             <ListPagination
               page={page}
               pageSize={pageSize}
