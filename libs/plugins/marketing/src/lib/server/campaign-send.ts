@@ -57,6 +57,17 @@ import {
   resolveHostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+/*
+ * The LEAF module, not the barrel, for the reason `document-id` is imported
+ * the same way: a barrel import resolves to whatever a spec's `jest.mock` of
+ * `@aglyn/tenant-data-admin` happens to contain, and nearly every spec that
+ * reaches this file mocks it.
+ */
+import {
+  buildUnsubscribeUrl,
+  unsubscribeSignature as sharedUnsubscribeSignature,
+} from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
+import { recordMarketingSends } from '@aglyn/tenant-data-admin/server/email-marketing-gate'
 import { createHash, createHmac } from 'crypto'
 import {
   EMAIL_MAX_RECIPIENTS_PER_SEND,
@@ -172,50 +183,19 @@ export function unsubscribeSignature(
   hostId: string,
   email: string,
   secret: string,
-  /**
-   * The campaign the link is riding in, when there is one.
-   *
-   * ADDITIVE, and it has to be: every email already sitting in an inbox
-   * carries a two-part signature over `hostId:email`, and those links must go
-   * on working forever — an unsubscribe link that stops honouring itself is
-   * the one bug in this area with a legal edge on it. So the campaign is
-   * appended to the signed string only when it is present, and the verifier
-   * chooses which form to check by whether the link carries a `cid`. A link
-   * with no `cid` is checked exactly as before.
-   *
-   * SIGNED rather than passed alongside. An unsigned `cid` would be an
-   * attribution anybody holding one valid link could point at any campaign
-   * they liked, which is a small forgery but a completely gratuitous one —
-   * the campaign is already known at the moment the link is minted.
-   */
   campaignId?: string,
-  /**
-   * The TOPIC the message belonged to, appended on the same rule and for a
-   * sharper version of the same reason.
-   *
-   * The topic decides which stream the preference page offers to stop and
-   * which one a one-click unsubscribe is attributed to. An unsigned `tid`
-   * would be editable in the URL by anybody holding a link — including the
-   * recipient — so a person could arrive at the preference page having
-   * silently renamed the message they are unsubscribing from, and the
-   * suppression record would carry the topic they chose rather than the one
-   * that was sent. The topic is known at the moment the link is minted, so
-   * there is nothing to trade for leaving it unsigned.
-   *
-   * The verifier's rules for reading these three forms unambiguously — and
-   * why a colon in either id is refused — are in the email plugin's
-   * `unsubscribe-link.ts`.
-   */
   topicId?: string,
 ): string {
-  const address = email.toLowerCase()
-  const subject =
-    topicId && campaignId
-      ? `${hostId}:${address}:${campaignId}:${topicId}`
-      : campaignId
-        ? `${hostId}:${address}:${campaignId}`
-        : `${hostId}:${address}`
-  return createHmac('sha256', secret).update(subject).digest('hex')
+  /*
+   * Delegated to the module that owns the signed subject.
+   *
+   * The campaign sender mints links, the unsubscribe handler verifies them,
+   * and the marketing gate mints them for every other audience path — three
+   * parties to one HMAC subject, which stays correct only while there is one
+   * implementation of it. The name stays exported because it is this
+   * module's published surface.
+   */
+  return sharedUnsubscribeSignature(hostId, email, secret, campaignId, topicId)
 }
 
 /** Send failures carry the HTTP status the API route should answer. */
@@ -1200,6 +1180,18 @@ export async function performCampaignSend(
   const reservation: CampaignSendReservation = claim.reservation
 
   const variantSends: Record<string, number> = {}
+  /**
+   * Who this campaign actually reached, for the marketing frequency window.
+   *
+   * A campaign is exempt from the frequency REFUSAL — it is a merchant's
+   * reviewed, one-shot act with a recipient count on screen before they press
+   * Send, and a cap that silently removed people from it would make that
+   * number a lie — but it is most of the mail a person receives from a site,
+   * so a ceiling that did not count it would describe nothing. Collected here
+   * and written once below rather than per recipient, because this loop is
+   * already one awaited HTTP POST per person.
+   */
+  const reached: string[] = []
   let sent = 0
   /** Recipients the hourly governor refused mid-batch, if any. */
   let deferred = 0
@@ -1209,18 +1201,14 @@ export async function performCampaignSend(
       // caused it. Without it the suppression list records that somebody left
       // and nothing about which mailing they left over, which is the one
       // question an unsubscribe rate exists to answer.
-      const signature = unsubscribeSignature(
+      const link = {
+        siteBase,
         hostId,
         email,
-        unsubscribeSecret,
         campaignId,
         topicId,
-      )
-      const signedQuery =
-        `hostId=${encodeURIComponent(hostId)}` +
-        `&email=${encodeURIComponent(email)}&sig=${signature}` +
-        `&cid=${encodeURIComponent(campaignId)}` +
-        `&tid=${encodeURIComponent(topicId)}`
+        secret: unsubscribeSecret,
+      }
       /*
        * TWO URLS OVER ONE SIGNATURE, and which one goes where is the whole
        * RFC 8058 story.
@@ -1239,8 +1227,11 @@ export async function performCampaignSend(
        * where you go to unsubscribe — with "Unsubscribe from everything" on
        * it, one button away.
        */
-      const oneClickUrl = `${siteBase}/api/email/unsubscribe?${signedQuery}`
-      const unsubscribeUrl = `${siteBase}/api/email/preferences?${signedQuery}`
+      const oneClickUrl = buildUnsubscribeUrl({ ...link, surface: 'one-click' })
+      const unsubscribeUrl = buildUnsubscribeUrl({
+        ...link,
+        surface: 'preferences',
+      })
       // Variant assignment keys on the recipient address (AGL-255) so a
       // re-send reaches the same variant.
       const variant = experiment
@@ -1319,6 +1310,7 @@ export async function performCampaignSend(
       })
       if (result.sent) {
         sent += 1
+        reached.push(email)
         if (variant) {
           variantSends[variant.id] = (variantSends[variant.id] ?? 0) + 1
         }
@@ -1360,6 +1352,11 @@ export async function performCampaignSend(
   // cost meter exactly once. This sender used to increment that counter
   // itself, which is how a counter named for all email came to hold campaign
   // sends alone.
+  // The frequency window, for the messages that left. After the reservation
+  // reconcile and never in front of it: this is a deliverability counter and
+  // the reconcile is a merchant's allowance, so the allowance is settled
+  // first. `recordMarketingSends` never throws.
+  await recordMarketingSends(hostId, reached)
   await meterHostEmail(hostId, sent, 'campaign')
 
   // Sends are the email variant's exposures (AGL-255).

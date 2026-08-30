@@ -22,7 +22,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
-import { type PluginApiHandler, resolveBrandingProfile } from '@aglyn/aglyn/server'
+import {
+  hostPublicOrigin,
+  type PluginApiHandler,
+  resolveBrandingProfile,
+} from '@aglyn/aglyn/server'
 
 // Which member subscribers are live enough to email (AGL-316). The list itself
 // now lives in the model as `isTenantSubscriptionLive` (AGL-1849) — it was a
@@ -80,8 +84,17 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
 
     let emailed = 0
     if (emailSubscribers && isEmailConfigured()) {
+      /*
+       * ORDERED (D1). This was `limit(500)` with no `orderBy`, and Firestore
+       * answers an unordered limit in DOCUMENT-ID order — so a site past the
+       * ceiling mailed whichever five hundred subscriptions happened to hash
+       * low, and the same five hundred every time. `__name__` is the order it
+       * was already getting; stating it makes the window a decision rather
+       * than an accident, and makes it the same window on every publish.
+       */
       const subscriptions = await hostRef
         .collection('subscriptions')
+        .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
         .limit(500)
         .get()
       const recipients = [
@@ -104,15 +117,38 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
       const branding = resolveBrandingProfile(
         (await getOrgForHost(hostId).catch(() => null))?.org as never,
       )
+      // The site's own origin, for the unsubscribe link the gate mints. Read
+      // from the host document already in hand rather than assembled from an
+      // apex: a post is mailed and read later, and a wrong origin sends a
+      // subscriber's opt-out to a domain the merchant does not control.
+      const siteBase =
+        hostPublicOrigin({
+          cname: hostSnapshot.get('cname'),
+          subdomain: hostSnapshot.get('subdomain'),
+        }) ?? ''
       for (const to of recipients) {
-        await sendEmail({
+        /*
+         * MARKETING. A member post is a merchant mailing their audience, so
+         * it carries the unsubscribe header pair and a visible link, it is
+         * checked against both suppression lists, and it counts against how
+         * much mail one person receives from this site.
+         *
+         * Priority stays transactional — this handler answers a click and has
+         * nowhere to put a message the hourly governor deferred, and the rule
+         * on `'bulk'` is that only a resumable sweep may use it.
+         */
+        const result = await sendEmail({
           to,
           subject: title,
           text: postBody || title,
           fromName: branding.fromName,
           context: 'member post',
+          marketing: { hostId, siteBase },
         })
-        emailed += 1
+        // The cost meter counts messages that LEFT. A suppressed or capped
+        // recipient produced no message and therefore no cost, and counting
+        // one would bill a merchant for the control working.
+        if (result.sent) emailed += 1
       }
       // Cost meter (AGL-1438), once for the batch rather than per recipient —
       // same number, one write. Transactional: a member post is content the

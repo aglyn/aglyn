@@ -25,6 +25,7 @@ export * from './lib/tenant-email-catalog'
 export * from './lib/host-email-render'
 export * from './lib/email-render'
 export * from './lib/text-email-html'
+export * from './lib/marketing-send'
 export * from './lib/email-delivery-events'
 // Exported so the console drift guard can pin it against @aglyn/aglyn.
 export * from './lib/email-media-src'

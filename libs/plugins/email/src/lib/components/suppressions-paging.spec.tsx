@@ -156,6 +156,11 @@ const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
+  // The card holds a signed-in user for the Add drawer's route call. Nothing
+  // in this file uses it; a double is still required, because `useUser()`
+  // returning undefined throws on destructure and would take every paging
+  // case with it — a harness failure wearing a product failure's clothes.
+  useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'tok' } }),
   /*
    * The real hook's arithmetic over a query that is actually EVALUATED.
    * `usePagedCollection` widens the query to cover page 0..n plus a probe row
@@ -227,6 +232,17 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks()
+  /*
+   * The Remove flow asks the server whether the address is ALSO suppressed
+   * platform-wide. `{ platform: [] }` is the ordinary answer — not blocked —
+   * so every case below reads the dialog it was written for. Without a
+   * double, jsdom attempts a real request to a relative URL and the run never
+   * settles, which is a harness failure that looks like a hang.
+   */
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ platform: [] }),
+  }) as unknown as typeof fetch
   mockLimitsAsked = []
 })
 

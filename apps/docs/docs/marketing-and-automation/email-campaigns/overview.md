@@ -408,6 +408,45 @@ when the address was suppressed by a bounce or a spam complaint. Those protect
 your sending reputation rather than expressing a preference, so no link can
 clear them.
 
+### Which mail this applies to {#marketing-mail}
+
+The unsubscribe link, the suppression list and the daily limit below apply to
+every message your site sends its own audience, not only to campaigns:
+
+| Message | Sent when |
+| --- | --- |
+| A campaign | You press Send, or a scheduled send comes due |
+| A **members post** | You publish one with "Email subscribers" ticked |
+| An **abandoned-cart reminder** | A shopper leaves a cart behind |
+| A **back-in-stock alert** | A product a shopper asked about returns |
+| A **workflow email** | An automation's *Send email* step runs |
+
+Transactional mail is deliberately **not** in this list and never carries an
+unsubscribe link: order confirmations, booking reminders, password resets and
+teammate invites answer something the person just did, and somebody who
+unsubscribed from your newsletter still gets their receipt.
+
+Somebody who unsubscribes, hard-bounces or reports a message as spam is
+skipped by **all five** of the message types above, from that point on.
+
+### The daily limit {#frequency-cap}
+
+One person receives at most **five marketing messages from one site per
+24 hours**. It is the same number on every plan, because it protects the
+sending domain your mail shares with every other Aglyn site rather than
+anything you buy.
+
+In practice it cannot reach a normal week: a campaign plus a cart reminder
+plus a restock alert plus a members post is four. What it stops is a loop — a
+workflow that fires on every form submission, or a members post published
+repeatedly.
+
+When the limit is reached, the **message is skipped and the person is left
+exactly where they were**. Nobody is unsubscribed, nothing is removed from an
+audience, and no contact is deleted. A reminder or alert that was skipped is
+retried on the next sweep once the window rolls; a campaign is never refused
+by this limit, though it does count toward it.
+
 ### Suppressions
 
 **Emails ▸ Suppressions** lists every address your campaigns skip, with the
@@ -418,6 +457,7 @@ reason and the date:
 | **Unsubscribed** | They clicked the unsubscribe link. |
 | **Bounced** | The mailbox does not exist. Recorded only for a *permanent* bounce — a full mailbox or a temporary server problem never suppresses anybody. |
 | **Marked as spam** | They reported a message. |
+| **Added by hand** | You added the address yourself — see below. |
 
 This is where the gap between a campaign's recipient count and what it
 actually sent comes from, and a rising **Bounced** count is the earliest sign
@@ -426,6 +466,40 @@ a list is going stale.
 An unsubscribe now records **which campaign** the link was in, so the campaign
 report can show an unsubscribe rate for that send. Links in mail sent before
 this keep working exactly as they did; they simply carry no campaign.
+
+#### Add an address yourself {#add-a-suppression}
+
+**Add**, at the top of the card, opens a drawer where you can type or paste
+addresses — one per line or separated by commas, up to 50 at a time — with an
+optional note recording how the request reached you.
+
+Use it when somebody asks you to stop emailing them by reply, by phone, or in
+person. US law requires an opt-out received *by any means* to be honored, and
+the person who asks in words rather than by clicking has asked just as clearly.
+
+Two things it does not do, both on purpose:
+
+- **It does not remove anybody.** The person stays on every audience and keeps
+  every record you hold about them. Only this site's marketing email stops.
+- **It does not stop transactional mail.** Order confirmations, booking
+  reminders and password resets still reach them, because those answer
+  something the person just did.
+
+An address that is already on the list is left exactly as it is, with the
+reason and date it already had — so adding one by hand can never overwrite the
+record of a bounce or a spam report.
+
+#### An address Aglyn is blocking too {#platform-suppressions}
+
+Some addresses are suppressed **platform-wide** as well as on your list —
+because they bounced permanently, or reported a message as spam, on a send
+from anywhere in Aglyn including mail we send you ourselves.
+
+When you remove such an address, the confirmation says so: removing your entry
+will not start mail reaching them, because the platform entry is still there
+and only Aglyn can lift it. Contact support and we will look at it. This is
+the usual explanation for an address that keeps being skipped after you have
+already taken it off your own list.
 
 **Remove** puts an address back on your list — use it when somebody asks to
 be re-added, or when a suppression was recorded by mistake. Removing a

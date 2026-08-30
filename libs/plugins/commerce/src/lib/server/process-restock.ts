@@ -24,6 +24,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import {
+  isDeferrableSendResult,
   isEmailConfigured,
   loadHostEmail,
   renderLoadedHostEmail,
@@ -71,6 +72,8 @@ export async function scanRestockAlerts(
   // White-label brand per host (White-Label Phase 3): resolved once per host
   // from the owning org doc through the one shared resolver.
   const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
+  /** Each site's public origin, for the unsubscribe link on the alert. */
+  const siteBaseByHost = new Map<string, string>()
   let skippedLocked = 0
   for (const docSnapshot of alerts.docs) {
     const hostRef = docSnapshot.ref.parent.parent
@@ -139,6 +142,18 @@ export async function scanRestockAlerts(
           (await getOrgForHost(hostRef.id).catch(() => null))?.org as never,
         ),
       )
+      // The site's own origin, for the unsubscribe link. Resolved once per
+      // host beside the branding, because this sweep is a `collectionGroup`
+      // over every site's alerts and a read per alert would be a read per
+      // shopper.
+      const hostSnapshot = await hostRef.get().catch(() => null)
+      siteBaseByHost.set(
+        hostRef.id,
+        Aglyn.hostPublicOrigin({
+          cname: hostSnapshot?.get('cname'),
+          subdomain: hostSnapshot?.get('subdomain'),
+        }) ?? '',
+      )
     }
     const designed = loaded
       ? renderLoadedHostEmail(loaded, {
@@ -146,7 +161,17 @@ export async function scanRestockAlerts(
           'product.url': productUrl,
         })
       : null
-    await sendEmail({
+    /*
+     * MARKETING, and `'bulk'` priority, which this sweep is entitled to
+     * because it is resumable: an alert left unstamped is re-scanned by the
+     * `notifiedAtMs == null` query on the next beat, so a refusal means "not
+     * this hour" rather than a shopper who asked to be told and never was.
+     *
+     * The gate adds the unsubscribe header pair and a visible link, checks
+     * both suppression lists, and counts this against how much mail the
+     * shopper has had from this site today.
+     */
+    const result = await sendEmail({
       to: String(data.email),
       subject: designed?.subject ?? `Back in stock: ${product.name}`,
       text:
@@ -156,14 +181,28 @@ export async function scanRestockAlerts(
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostRef.id)?.fromName,
       context: 'restock alert',
+      priority: 'bulk',
+      marketing: { hostId: hostRef.id, siteBase: siteBaseByHost.get(hostRef.id) ?? '' },
     })
+    /*
+     * SKIPPED, NOT DROPPED — the lockdown rule above, applied to the two
+     * refusals a later beat can pass.
+     *
+     * `notifiedAtMs` is what retires an alert from this sweep. Stamping it
+     * after the hourly ceiling or the frequency cap refused would drop a
+     * request from a shopper who asked to be told; NOT stamping it after a
+     * suppression or a rejection would re-read the same doomed row forever,
+     * inside a window of two hundred, starving every alert behind it.
+     */
+    if (isDeferrableSendResult(result)) continue
     // Cost meter (AGL-1438). One alert per shopper who asked to be told,
-    // like the abandoned-checkout reminder beside it.
-    await meterHostEmail(hostRef.id)
+    // like the abandoned-checkout reminder beside it, and on the DELIVERED
+    // message only — a suppressed recipient produced no message and no cost.
+    if (result.sent) await meterHostEmail(hostRef.id)
     await docSnapshot.ref
       .set({ notifiedAtMs: Date.now() }, { merge: true })
       .catch(() => undefined)
-    sent += 1
+    if (result.sent) sent += 1
   }
   return { scanned: alerts.size, sent, skippedLocked }
 }

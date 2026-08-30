@@ -107,6 +107,11 @@ jest.mock('@aglyn/shared-util-email', () => ({
   // returns nothing turns every email step into a FAILED run and would
   // have made this file assert the opposite of what it means to.
   sendEmail: async () => ({ sent: true }),
+  // The REAL accessor. `strictNullChecks` is off, so the step branch reads
+  // the refusal through this rather than off the union; a double returning
+  // nothing would name every outcome "email delivery failed".
+  sendFailureReason: jest.requireActual('@aglyn/shared-util-email/send-email')
+    .sendFailureReason,
 }))
 
 import { runEventActions } from './run-event-actions'

@@ -34,6 +34,13 @@ import {
   sendingIdentityRefusal,
   type SendingIdentityVerdict,
 } from './sending-domain'
+import {
+  appendUnsubscribeHtml,
+  appendUnsubscribeText,
+  getMarketingSendGate,
+  unsubscribeHeaders,
+  type MarketingSendContext,
+} from './marketing-send'
 
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -113,6 +120,21 @@ export interface SendEmailOptions {
    * that into a message nobody ever gets.
    */
   priority?: EmailSendPriority
+  /**
+   * Declares this message as MARKETING mail for one site's audience — see
+   * `marketing-send.ts` for what that means and why it is one seam.
+   *
+   * Set it and the message gains, in one place, the three things marketing
+   * mail owes: the RFC 8058 unsubscribe header pair plus a visible opt-out
+   * link, a check against both suppression lists, and a ceiling on how much
+   * one person receives from one site.
+   *
+   * ONE RECIPIENT. An unsubscribe link is an HMAC over the address it belongs
+   * to, and a suppression verdict is about one person — so a marketing send
+   * addressed to a list would carry the wrong link for everybody after the
+   * first, and would ask the gate about one of them. Callers fan out.
+   */
+  marketing?: MarketingSendContext
 }
 
 /**
@@ -153,9 +175,10 @@ export function contextTag(context: string | undefined): EmailTag[] {
  * `rate-limited` mean nothing was attempted; `rejected` and `network` mean
  * Resend was called and failed.
  *
- * `rate-limited` (AGL-2409) is the ONLY one of these that a caller may
- * reasonably retry unchanged, and the only one that can ever be produced for
- * a campaign or a bulk sweep and never for a transactional message.
+ * `rate-limited` (AGL-2409) and `frequency-capped` are the two a caller may
+ * reasonably retry unchanged — see {@link isDeferrableSendResult}, which is
+ * where that distinction is made once rather than at each sweep. Neither can
+ * be produced for a transactional message that declares no marketing context.
  */
 export type SendEmailFailureReason =
   | 'unconfigured'
@@ -178,6 +201,24 @@ export type SendEmailFailureReason =
    * `409`, so a person finds out.
    */
   | 'unverified-domain'
+  /**
+   * A MARKETING send whose recipient is on a suppression list — they
+   * unsubscribed from this site, hard-bounced, or pressed "report spam".
+   *
+   * Terminal, and the only outcome here a caller must not retry: retrying is
+   * the behavior the suppression exists to stop. Distinct from `rejected`
+   * because nothing was attempted and nothing failed — this is the control
+   * working.
+   */
+  | 'suppressed'
+  /**
+   * A MARKETING send refused because this person has already received their
+   * ceiling from this site inside the window.
+   *
+   * Retryable, unlike `suppressed`: the window rolls. A resumable sweep does
+   * not need to do anything about it — its next run asks again.
+   */
+  | 'frequency-capped'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -214,6 +255,51 @@ export function rateLimitedRetryAtMs(
   if (!failure || failure.reason !== 'rate-limited') return null
   const retryAtMs = Number(failure.retryAtMs)
   return Number.isFinite(retryAtMs) ? retryAtMs : 0
+}
+
+/**
+ * Why a send did not happen, or `null` when it did.
+ *
+ * The same accessor `rateLimitedRetryAtMs` is, generalized: `strictNullChecks`
+ * is OFF repo-wide, so TypeScript will not narrow the union on `result.sent`
+ * and reading `result.reason` at a call site does not compile.
+ */
+export function sendFailureReason(
+  result: SendEmailResult | null | undefined,
+): SendEmailFailureReason | null {
+  const failure = result as {
+    sent?: boolean
+    reason?: SendEmailFailureReason
+  } | null
+  if (!failure || failure.sent) return null
+  return failure.reason ?? null
+}
+
+/**
+ * Whether this outcome is worth coming back for.
+ *
+ * TRUE only for the two refusals a later attempt can pass: the platform hour
+ * rolls, and so does the marketing frequency window. Everything else is
+ * either a delivery that happened or a failure a retry repeats — a
+ * suppression most of all, since retrying is the exact behavior a suppression
+ * exists to stop.
+ *
+ * A resumable sweep uses this to decide whether to leave its subject
+ * unstamped. Stamping on a deferrable refusal discards a message; NOT
+ * stamping on a terminal one re-reads the same doomed row on every beat until
+ * it crowds out the work that could succeed. Both are silent, so the
+ * distinction lives here instead of at each sweep.
+ *
+ * A FUNCTION rather than `result.reason === …` at each call site, because
+ * `strictNullChecks` is OFF repo-wide and TypeScript will not narrow a
+ * boolean-literal discriminant without it — the same reason
+ * {@link rateLimitedRetryAtMs} beside it is one.
+ */
+export function isDeferrableSendResult(
+  result: SendEmailResult | null | undefined,
+): boolean {
+  const reason = sendFailureReason(result)
+  return reason === 'rate-limited' || reason === 'frequency-capped'
 }
 
 export interface EmailConfig {
@@ -377,7 +463,7 @@ export async function sendEmail(
   const resolvedFrom = options.sendingIdentity?.from ?? null
   const from = resolvedFrom
     ? applyFromName(resolvedFrom, options.fromName)
-    : options.from ?? applyFromName(configuredFrom, options.fromName)
+    : (options.from ?? applyFromName(configuredFrom, options.fromName))
 
   if (!apiKey || !from) {
     console.warn(
@@ -391,6 +477,86 @@ export async function sendEmail(
   if (!to.length) {
     console.warn(`${label} skipped — no valid recipient address`)
     return { sent: false, reason: 'no-recipient' }
+  }
+
+  /*
+   * THE MARKETING GATE.
+   *
+   * Everything a marketing message owes, asked once, here — because the four
+   * merchant-triggered bulk paths that owed it discharged none of it, and
+   * asking four call sites to remember is the shape that produces the fifth
+   * that does not.
+   *
+   * Ahead of the send-rate governor deliberately. A refusal here is a message
+   * that must never leave, so spending platform hourly budget deciding that
+   * would be budget the rest of the hour's mail no longer has.
+   *
+   * Nothing installed is UNGATED. Same posture as the governor: the durable
+   * half lives in another library, and a deployment that never installs it
+   * must still send.
+   */
+  let unsubscribeUrl = options.marketing?.unsubscribeUrl ?? ''
+  if (options.marketing) {
+    if (to.length !== 1) {
+      // Not a delivery outcome — a caller error, and one that would put the
+      // first recipient's signed unsubscribe link in everybody else's copy.
+      console.error(
+        `${label} refused — a marketing send addresses exactly one ` +
+          `recipient, and this one names ${to.length}`,
+      )
+      return {
+        sent: false,
+        reason: 'no-recipient',
+        detail: 'A marketing send addresses exactly one recipient.',
+      }
+    }
+    const gate = getMarketingSendGate()
+    if (gate) {
+      let verdict: Awaited<ReturnType<typeof gate>> | null
+      try {
+        verdict = await gate({
+          hostId: options.marketing.hostId,
+          siteBase: options.marketing.siteBase,
+          email: to[0],
+          context: options.context,
+          capped: options.marketing.capped !== false,
+        })
+      } catch (error) {
+        /*
+         * FAILS OPEN, and the asymmetry with `filterSendableForHost` is
+         * deliberate rather than an oversight. That helper fails CLOSED
+         * because a suppression list it could not read is not a list that
+         * said an address is safe to mail — and it keeps doing so, inside
+         * the gate. What is being caught here is the gate itself being
+         * unreachable or throwing, which is an outage on the control; an
+         * outage on a control that becomes an outage on the product is the
+         * worse of the two bugs, and it is the posture `sendEmail` takes
+         * everywhere else.
+         */
+        console.error(`${label} marketing gate failed — allowing`, error)
+        verdict = null
+      }
+      if (verdict && !verdict.allowed) {
+        const reason: SendEmailFailureReason =
+          verdict.refusal === 'frequency-capped'
+            ? 'frequency-capped'
+            : 'suppressed'
+        console.warn(`${label} not sent — ${verdict.detail ?? reason}`)
+        return { sent: false, reason, detail: verdict.detail }
+      }
+      unsubscribeUrl = unsubscribeUrl || verdict?.unsubscribeUrl || ''
+    }
+    if (!unsubscribeUrl) {
+      // A marketing message with no way out is the defect this gate exists to
+      // close, so it is said out loud rather than shipped quietly. Not a
+      // refusal: the cause is a missing `EMAIL_UNSUBSCRIBE_SECRET` or a host
+      // with no public origin — an operator's configuration, not the
+      // recipient's problem — and refusing here would turn it into silence.
+      console.warn(
+        `${label} carries no unsubscribe link — set ` +
+          'EMAIL_UNSUBSCRIBE_SECRET and publish the site on a domain',
+      )
+    }
   }
 
   /*
@@ -422,7 +588,11 @@ export async function sendEmail(
   if (governor) {
     let verdict: Awaited<ReturnType<typeof governor>> | null
     try {
-      verdict = await governor({ priority, count: to.length, context: options.context })
+      verdict = await governor({
+        priority,
+        count: to.length,
+        context: options.context,
+      })
     } catch (error) {
       console.error(`${label} send-rate governor failed — allowing`, error)
       verdict = null
@@ -445,6 +615,29 @@ export async function sendEmail(
     }
   }
 
+  /*
+   * THE VISIBLE OPT-OUT, on both parts.
+   *
+   * The header pair below is for the mailbox provider; this is for the person
+   * — CAN-SPAM asks for a mechanism the recipient can see and use, and most
+   * clients render no control for the header at all. Both helpers are
+   * idempotent by URL, so a sender that placed its own link (a designed
+   * template rendering `{{unsubscribeUrl}}`, the campaign body's footer)
+   * keeps its own placement and does not get a second one.
+   *
+   * `text` first and `html` from the result, so the synthesized HTML part
+   * that stands in for a text-only message carries the link as an anchor
+   * rather than as characters.
+   */
+  const text = unsubscribeUrl
+    ? appendUnsubscribeText(options.text ?? '', unsubscribeUrl)
+    : options.text
+  const html = unsubscribeUrl
+    ? options.html
+      ? appendUnsubscribeHtml(options.html, unsubscribeUrl)
+      : renderTextEmailHtml(text ?? '', options.subject)
+    : options.html
+
   try {
     const response = await postResendEmail(
       apiKey,
@@ -452,7 +645,7 @@ export async function sendEmail(
         from,
         to,
         subject: options.subject,
-        ...(options.text ? { text: options.text } : {}),
+        ...(text ? { text } : {}),
         // The HTML part, from the caller when it has one and otherwise
         // synthesized from `text`. A message with no HTML part carries no
         // anchors, so its links are not links in the inbox AND Resend has
@@ -460,10 +653,19 @@ export async function sendEmail(
         // The caller always wins: this can only fill a gap, never override a
         // designed template.
         ...(() => {
-          const html = options.html || renderTextEmailHtml(options.text ?? '', options.subject)
-          return html ? { html } : {}
+          const body = html || renderTextEmailHtml(text ?? '', options.subject)
+          return body ? { html: body } : {}
         })(),
-        ...(options.headers ? { headers: options.headers } : {}),
+        // The caller's headers plus the RFC 8058 pair for a marketing send.
+        // Caller-first, so the campaign sender's own pair is the one that
+        // ships and a merchant-authored header is never silently replaced.
+        ...(() => {
+          const headers = {
+            ...unsubscribeHeaders(unsubscribeUrl),
+            ...(options.headers ?? {}),
+          }
+          return Object.keys(headers).length ? { headers } : {}
+        })(),
         // The caller's tags plus the `context` tag (AGL-2407). Caller-first
         // so a sender that stamps its own `context` keeps it: a tag list with
         // two entries of one name is not a shape worth discovering in

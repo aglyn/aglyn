@@ -22,6 +22,7 @@ import {
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
 import {
+  isDeferrableSendResult,
   isEmailConfigured,
   loadHostEmail,
   renderLoadedHostEmail,
@@ -84,6 +85,8 @@ export async function scanAbandonedCheckouts(
   // alongside the entitlement, from the same org doc, through the one shared
   // resolver — so the recovery email's sender reads as the store's brand.
   const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
+  /** Each site's public origin, for the unsubscribe link on the reminder. */
+  const siteBaseByHost = new Map<string, string>()
   // Resolve each host's designed template once per run (AGL-770).
   const templateCache = new Map<string, LoadedHostEmail | null>()
   let skippedLocked = 0
@@ -121,6 +124,22 @@ export async function scanAbandonedCheckouts(
         Aglyn.checkEntitlement(org?.org as any, 'abandonedCart'),
       )
       brandingByHost.set(hostId, Aglyn.resolveBrandingProfile(org?.org as any))
+      // The site's own origin, for the unsubscribe link. Resolved once per
+      // host for the same reason the branding beside it is: this sweep is a
+      // `collectionGroup` over every site's checkouts, and a read per
+      // reminder would be a read per shopper.
+      const hostSnapshot = await firestore
+        .collection('hosts')
+        .doc(hostId)
+        .get()
+        .catch(() => null)
+      siteBaseByHost.set(
+        hostId,
+        Aglyn.hostPublicOrigin({
+          cname: hostSnapshot?.get('cname'),
+          subdomain: hostSnapshot?.get('subdomain'),
+        }) ?? '',
+      )
     }
     if (!entitledHosts.get(hostId)) continue
     let loaded = templateCache.get(hostId)
@@ -133,7 +152,17 @@ export async function scanAbandonedCheckouts(
           'cart.url': String(data.resumeUrl ?? ''),
         })
       : null
-    await sendEmail({
+    /*
+     * MARKETING, and `'bulk'` priority, which this sweep is entitled to
+     * precisely because it is resumable: a checkout left unstamped below is
+     * re-scanned on the next beat, so a refusal means "not this hour" rather
+     * than a reminder nobody ever gets.
+     *
+     * The gate adds the unsubscribe header pair and a visible link, checks
+     * both suppression lists, and counts this against how much mail the
+     * shopper has had from this site today.
+     */
+    const result = await sendEmail({
       to: String(data.email),
       subject: designed?.subject ?? 'You left something in your cart',
       text:
@@ -144,15 +173,31 @@ export async function scanAbandonedCheckouts(
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostId)?.fromName,
       context: 'abandoned cart',
+      priority: 'bulk',
+      marketing: { hostId, siteBase: siteBaseByHost.get(hostId) ?? '' },
     })
+    /*
+     * SKIPPED, NOT DROPPED — the lockdown rule above, applied to the two
+     * refusals a later beat can pass.
+     *
+     * `remindedAtMs` is what retires a checkout from this sweep. Stamping it
+     * after the hourly ceiling or the frequency cap refused would turn a
+     * deferral into a reminder nobody ever gets; NOT stamping it after a
+     * suppression or a rejection would re-read the same doomed row on every
+     * beat until it crowded out the checkouts that could still be reminded.
+     * `isDeferrableSendResult` is the one place that distinction is made.
+     */
+    if (isDeferrableSendResult(result)) continue
     // Cost meter (AGL-1438). One reminder per abandoned checkout, triggered
     // by that shopper's own action rather than composed as a broadcast, so
-    // it counts toward cost without entering the campaign cap.
-    await meterHostEmail(hostId)
+    // it counts toward cost without entering the campaign cap. On the
+    // DELIVERED message only: a suppressed recipient produced no message, so
+    // there is no cost to record.
+    if (result.sent) await meterHostEmail(hostId)
     await docSnapshot.ref
       .set({ remindedAtMs: now }, { merge: true })
       .catch(() => undefined)
-    sent += 1
+    if (result.sent) sent += 1
   }
   return { scanned: openCheckouts.size, sent, skippedLocked }
 }

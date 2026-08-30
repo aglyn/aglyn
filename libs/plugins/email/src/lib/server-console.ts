@@ -63,6 +63,7 @@
  * to enroll exactly the people the single-address path refuses.
  */
 
+import { registerEmailSuppressionsApi } from './server-suppressions'
 import {
   ASSIGNMENT_REFUSAL_MESSAGES,
   assignmentBasis,
@@ -818,4 +819,9 @@ export function registerEmailConsoleApi(): void {
     emailListMembersPreviewHandler,
   )
   registerPluginApiRoute('email/list-members-add', emailListMembersAddHandler)
+  // Suppressions live in their own module: they are a per-SITE list gated on
+  // the site role, where list membership is an ORG audience gated on org-wide
+  // access, and one file holding both gates is one file for the wrong one to
+  // be copied out of.
+  registerEmailSuppressionsApi()
 }

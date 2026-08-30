@@ -222,6 +222,16 @@ const fakeFirestore = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  /*
+   * The REAL key derivation and the REAL signature verifier. Both are pure
+   * `crypto`, and both are the thing under test here: a double would let this
+   * suite pass over a handler that files a suppression under an id no send
+   * path looks up, or that accepts a signature the minter never produced.
+   */
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/email-suppression'),
+  ...jest.requireActual(
+    '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
+  ),
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
 }))
 
