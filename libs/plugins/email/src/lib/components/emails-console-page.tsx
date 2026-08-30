@@ -19,6 +19,7 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import type { ReactNode } from 'react'
+import CampaignReportCard from './campaign-report-card'
 import CampaignsCard from './campaigns-card'
 import EmailScreensCard from './email-screens-card'
 import ListsCard from './lists-card'
@@ -37,10 +38,37 @@ import type { EmailsConsoleSectionId } from './emails-console-sections'
 function sectionBody(
   section: EmailsConsoleSectionId,
   hostId: string,
+  /**
+   * The section's OWN segments — `segments[1]` onward, already sliced by the
+   * caller. A section that owns deeper routes reads them here; one that does
+   * not simply ignores them.
+   */
+  detail: readonly string[],
+  basePath: string,
 ): ReactNode {
   switch (section) {
     case 'campaigns':
-      return <CampaignsCard hostId={hostId} />
+      /*
+       * `/emails/campaigns/{campaignId}` is the report for one campaign,
+       * and it is a ROUTE rather than an expanded row for two reasons: it is
+       * linkable, which is what a merchant wants to paste into a message
+       * about last week's send; and the composer plus the thirty-campaign
+       * history are the surface's expensive listens, so a reader who came for
+       * one campaign's numbers must not pay for them.
+       *
+       * No registry entry is needed — the shell hands a section every segment
+       * beneath it, so a section owns its own subtree. The gate is the
+       * section's, which is the same gate the composer is behind.
+       */
+      return detail[0] ? (
+        <CampaignReportCard
+          hostId={hostId}
+          campaignId={detail[0]}
+          basePath={basePath}
+        />
+      ) : (
+        <CampaignsCard hostId={hostId} />
+      )
     case 'designs':
       return <EmailScreensCard hostId={hostId} />
     case 'audiences':
@@ -68,7 +96,7 @@ function sectionBody(
  * somebody has to remember on the next surface.
  */
 export function EmailsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, section, sections, basePath } = props
+  const { hostId, section, sections, basePath, segments } = props
 
   /*
    * Nothing, deliberately, while the redirect is in flight. Rendering the
@@ -79,7 +107,14 @@ export function EmailsConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <HubSections sections={sections}>
-      {sectionBody(section as EmailsConsoleSectionId, hostId)}
+      {sectionBody(
+        section as EmailsConsoleSectionId,
+        hostId,
+        // `segments[0]` IS the section — the shell resolved it into `section`
+        // already — so what a section owns is everything after it.
+        (segments ?? []).slice(1),
+        basePath,
+      )}
     </HubSections>
   )
 }

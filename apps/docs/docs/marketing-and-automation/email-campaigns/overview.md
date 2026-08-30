@@ -212,6 +212,46 @@ With the Resend webhook configured, campaign history shows **opens and clicks** 
 campaign, and clicks on A/B sends count as that variant's **conversions** — so the
 experiment results table fills in by itself.
 
+### The campaign report
+
+**Report**, beside any campaign that has been sent, opens the full picture for
+that one send: delivery, engagement, rates, the audience it was taken from,
+and which links were clicked.
+
+Every rate names the population it is taken over, right next to the number,
+because the same label means different things in different tools:
+
+| Rate | Taken over |
+| --- | --- |
+| **Delivery rate** | Sent — what the provider accepted |
+| **Open rate** | Delivered, and counting *readers*, not opens |
+| **Click rate** | Delivered |
+| **Click-to-open rate** | The readers who opened — a different question from the click rate, and usually three or four times larger |
+| **Bounce rate** | Sent |
+| **Complaint rate** | Delivered |
+| **Unsubscribe rate** | Delivered |
+
+Two things the report will refuse to show you, and says so on screen:
+
+- **A rate with no denominator.** Delivery events are recorded by the webhook,
+  so a campaign sent before it was connected has no delivered count. The
+  report leaves those rates blank rather than dividing by *sent*, which would
+  read higher than the same campaign measured anywhere else.
+- **A click rate for a send whose links were not trackable.** Click tracking
+  rewrites links in the HTML part of a message, so a send that carried none
+  reports zero clicks whatever recipients did. The click count is still shown;
+  no rate is computed from it.
+
+**Opens** and **readers who opened** are both shown and are different numbers:
+one person opening an email four times is four opens and one reader. Rates use
+the reader count.
+
+### Which links were clicked
+
+The report breaks clicks down by destination. Links are counted by address and
+path — the query string is dropped — so two links to the same page that differ
+only in their tracking parameters count as one row.
+
 ## Compliance
 
 - Every send includes an **unsubscribe** link, and the header mailbox
@@ -236,6 +276,10 @@ reason and the date:
 This is where the gap between a campaign's recipient count and what it
 actually sent comes from, and a rising **Bounced** count is the earliest sign
 a list is going stale.
+
+An unsubscribe now records **which campaign** the link was in, so the campaign
+report can show an unsubscribe rate for that send. Links in mail sent before
+this keep working exactly as they did; they simply carry no campaign.
 
 **Remove** puts an address back on your list — use it when somebody asks to
 be re-added, or when a suppression was recorded by mistake. Removing a

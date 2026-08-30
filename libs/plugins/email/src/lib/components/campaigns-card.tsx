@@ -859,21 +859,55 @@ export function HostCampaignsCard(props: { hostId: string }) {
                       label={`Failed${campaign.error ? ` · ${campaign.error}` : ''}`}
                     />
                   ) : (
-                    <Typography variant="caption" color="text.secondary">
-                      {`${campaign.stats?.sent ?? 0}/${
-                        campaign.stats?.recipients ?? 0
-                      } sent` +
-                        // Opens/clicks arrive via the Resend webhook
-                        // (AGL-268).
-                        (campaign.stats?.opens
-                          ? ` · ${campaign.stats.opens} opens`
-                          : '') +
-                        (campaign.stats?.clicks
-                          ? ` · ${campaign.stats.clicks} clicks`
-                          : '') +
-                        ` · ${campaign.audience}` +
-                        (campaign.experimentId ? ' · A/B' : '')}
-                    </Typography>
+                    <>
+                      <Typography variant="caption" color="text.secondary">
+                        {`${campaign.stats?.sent ?? 0}/${
+                          campaign.stats?.recipients ?? 0
+                        } sent` +
+                          // Opens/clicks arrive via the Resend webhook
+                          // (AGL-268). Still EVENT counts, and still
+                          // unqualified here on purpose: this row is a list
+                          // entry, and the rates — with their denominators —
+                          // live on the report the link opens.
+                          (campaign.stats?.opens
+                            ? ` · ${campaign.stats.opens} opens`
+                            : '') +
+                          (campaign.stats?.clicks
+                            ? ` · ${campaign.stats.clicks} clicks`
+                            : '') +
+                          ` · ${campaign.audience}` +
+                          (campaign.experimentId ? ' · A/B' : '')}
+                      </Typography>
+                      {/*
+                       * The way into the campaign's own report. Only on a
+                       * campaign that has actually gone out: a scheduled or
+                       * canceled one has no delivery events, no populations
+                       * and nothing to report, and a link to an empty screen
+                       * reads as a broken one.
+                       *
+                       * Rendered only once the host route resolves, because
+                       * the href is built from the org slug and the
+                       * subdomain — a link built before they arrive points at
+                       * `/null/hosts/null`.
+                       */}
+                      {orgSlug && subdomain ? (
+                        <Button
+                          size="small"
+                          color="primary"
+                          onClick={() =>
+                            void router.push(
+                              `${buildRoute(Route.HOST_PLUGIN, {
+                                orgSlug,
+                                host: subdomain,
+                                pluginSlug: 'emails',
+                              })}/campaigns/${campaign.$id}`,
+                            )
+                          }
+                        >
+                          {'Report'}
+                        </Button>
+                      ) : null}
+                    </>
                   )}
                 </Stack>
               </Stack>
