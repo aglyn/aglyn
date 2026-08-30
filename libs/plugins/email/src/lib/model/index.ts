@@ -36,3 +36,10 @@ export {
   type EmailRenderProduct,
   type RenderedEmail,
 } from '@aglyn/shared-util-email'
+
+/**
+ * Campaign reporting: the rate math, the populations the send recorded, and
+ * the link rollup — pure, so every denominator is named once and provable
+ * rather than chosen in JSX.
+ */
+export * from './campaign-report'
