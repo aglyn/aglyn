@@ -278,6 +278,12 @@ function seed() {
   store.set(`hosts/${HOST}/leads/lead-1`, {
     email: 'dana@example.com',
     name: 'Dana Reed',
+    // A recorded opt-in, in the shape every capture path writes it. The send
+    // withholds a recipient with no basis and refuses an audience where
+    // nobody has one, so a lead this suite expects to reach has to declare it
+    // — a send id can only be asserted on a send that happened.
+    marketingConsent: true,
+    marketingConsentAtMs: Date.UTC(2026, 7, 1),
   })
 }
 

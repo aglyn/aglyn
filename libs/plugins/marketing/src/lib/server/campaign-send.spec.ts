@@ -332,10 +332,16 @@ function mockFirestore(): any {
 function seed(nodes: unknown) {
   mockState.store = {
     'hosts/host-1': { subdomain: 'acme', memberRoles: {} },
-    // A `leads` audience so the merge tags have a real name to resolve.
+    // A `leads` audience so the merge tags have a real name to resolve, and a
+    // recorded opt-in so the consent join lets it through. The join runs ahead
+    // of the cap, the suppression filter and the meter and refuses an audience
+    // in which nobody carries a basis, so a lead seeded for any other purpose
+    // still has to declare one to reach the code under test.
     'hosts/host-1/leads/lead-1': {
       email: 'dana@example.com',
       name: 'Dana Reed',
+      marketingConsent: true,
+      marketingConsentAtMs: Date.UTC(2026, 7, 1),
     },
     'hosts/host-1/screens/screen-1': {
       kind: 'email',
@@ -639,6 +645,11 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     mockState.store['hosts/host-2/leads/lead-1'] = {
       email: 'lead@example.com',
       visibleTo: ['host-2'],
+      // Consented, so the send is refused by the org's exhausted allowance
+      // and not by the consent join sitting in front of it. Both refusals are
+      // a 400, so without a basis here this would pass on the wrong message.
+      marketingConsent: true,
+      marketingConsentAtMs: Date.UTC(2026, 7, 1),
     }
 
     await expect(

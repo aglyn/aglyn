@@ -195,6 +195,23 @@ const suppressionKey = (email: string) =>
   createHash('sha256').update(email.trim().toLowerCase()).digest('hex')
 
 /**
+ * A recorded opt-in, in the shape every capture path writes it.
+ *
+ * The consent join runs at the sweep, ahead of the cap and both suppression
+ * lists, and withholds a recipient with no recorded basis. This suite is about
+ * which documents the sweep REACHES and which of them suppression removes, so
+ * every lead in it declares a basis: without one they would drop out one step
+ * earlier and each assertion would be passing on the wrong rule.
+ *
+ * Carries no `createdAt` or `addedAt` deliberately. Those are the fields the
+ * ordering trap below is about, and consent is recorded independently of them.
+ */
+const CONSENT_GRANTED = {
+  marketingConsent: true,
+  marketingConsentAtMs: Date.UTC(2026, 7, 1),
+}
+
+/**
  * `count` leads with ZERO-PADDED ids, so document-name order and the order a
  * human reads them in are the same thing and the expectation below can be
  * written out rather than derived from the double.
@@ -210,7 +227,11 @@ const seedLeads = (
         const id = String(index).padStart(5, '0')
         return [
           `hosts/${HOST}/leads/lead-${id}`,
-          { email: `lead${id}@example.com`, name: `Lead ${index}` },
+          {
+            email: `lead${id}@example.com`,
+            name: `Lead ${index}`,
+            ...CONSENT_GRANTED,
+          },
         ]
       }),
     ),
@@ -338,14 +359,17 @@ describe('an audience that fits', () => {
     expect(result.sent).toBe(3)
   })
 
-  it('keeps a document carrying nothing but an address', async () => {
+  it('keeps a document carrying no date of any kind', async () => {
     // The ordering trap, as a live case. `orderBy(field)` DROPS every document
     // missing that field, and there is no date every writer of these
     // collections sets — the newsletter handler wrote list members as
     // `{ email, name, source }` and no date at all. Ordering on the document
     // NAME is what keeps this person in the audience.
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: { email: 'bare@example.com' },
+      [`hosts/${HOST}/leads/lead-00000`]: {
+        email: 'bare@example.com',
+        ...CONSENT_GRANTED,
+      },
     })
     const result = await send()
 
@@ -361,8 +385,16 @@ describe('both suppression lists', () => {
     // only its own site's list mails them anyway, from the one shared sending
     // domain every tenant's mail leaves by.
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: { email: 'keep@example.com' },
-      [`hosts/${HOST}/leads/lead-00001`]: { email: 'bounced@example.com' },
+      [`hosts/${HOST}/leads/lead-00000`]: {
+        email: 'keep@example.com',
+        ...CONSENT_GRANTED,
+      },
+      // Consented, so the SUPPRESSION list is the only thing that can hold
+      // this address back and the assertion measures what it claims to.
+      [`hosts/${HOST}/leads/lead-00001`]: {
+        email: 'bounced@example.com',
+        ...CONSENT_GRANTED,
+      },
       [`emailSuppressions/${suppressionKey('bounced@example.com')}`]: {
         email: 'bounced@example.com',
         reason: 'bounce',
@@ -381,8 +413,14 @@ describe('both suppression lists', () => {
     // The half that already worked, kept as a control: a change that consulted
     // only the platform list would pass the case above and break this one.
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: { email: 'keep@example.com' },
-      [`hosts/${HOST}/leads/lead-00001`]: { email: 'gone@example.com' },
+      [`hosts/${HOST}/leads/lead-00000`]: {
+        email: 'keep@example.com',
+        ...CONSENT_GRANTED,
+      },
+      [`hosts/${HOST}/leads/lead-00001`]: {
+        email: 'gone@example.com',
+        ...CONSENT_GRANTED,
+      },
       [`hosts/${HOST}/suppressions/${suppressionKey('gone@example.com')}`]: {
         email: 'gone@example.com',
         reason: 'unsubscribe',
@@ -395,9 +433,20 @@ describe('both suppression lists', () => {
 
   it('counts both kinds in the preview, so the number matches the send', async () => {
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: { email: 'keep@example.com' },
-      [`hosts/${HOST}/leads/lead-00001`]: { email: 'bounced@example.com' },
-      [`hosts/${HOST}/leads/lead-00002`]: { email: 'gone@example.com' },
+      [`hosts/${HOST}/leads/lead-00000`]: {
+        email: 'keep@example.com',
+        ...CONSENT_GRANTED,
+      },
+      // Both consented: `suppressed` counts what the suppression lists removed,
+      // and a recipient the consent join had already withheld never reaches it.
+      [`hosts/${HOST}/leads/lead-00001`]: {
+        email: 'bounced@example.com',
+        ...CONSENT_GRANTED,
+      },
+      [`hosts/${HOST}/leads/lead-00002`]: {
+        email: 'gone@example.com',
+        ...CONSENT_GRANTED,
+      },
       [`emailSuppressions/${suppressionKey('bounced@example.com')}`]: {
         email: 'bounced@example.com',
       },
@@ -432,11 +481,13 @@ describe('an org list audience', () => {
       'orgs/org-1/lists/list-1/members/aaa': {
         email: 'newsletter@example.com',
         source: 'newsletter',
+        ...CONSENT_GRANTED,
       },
       'orgs/org-1/lists/list-1/members/bbb': {
         email: 'workflow@example.com',
         source: 'enrollList',
         addedAt: 'server-timestamp',
+        ...CONSENT_GRANTED,
       },
     })
     const result = await send({ audience: 'list', listId: 'list-1' })

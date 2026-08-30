@@ -191,6 +191,19 @@ function mockFirestore(): any {
   return { collection: (name: string) => collectionRef(name) }
 }
 
+/**
+ * A recorded opt-in, in the shape every capture path writes it.
+ *
+ * A preview reports `recipients`, `sendable` and `suppressed` over the
+ * audience the send would actually mail, and the consent join runs before all
+ * three. A lead with no basis is withheld and never reaches those counts, so
+ * every fixture whose contribution to a count is being asserted declares one.
+ */
+const CONSENT_GRANTED = {
+  marketingConsent: true,
+  marketingConsentAtMs: Date.UTC(2026, 7, 1),
+}
+
 /** A site with `count` leads, plus whatever else the case needs. */
 const seed = (count: number, extra: Record<string, Record<string, unknown>> = {}) => {
   mockState.store = {
@@ -198,7 +211,11 @@ const seed = (count: number, extra: Record<string, Record<string, unknown>> = {}
     ...Object.fromEntries(
       Array.from({ length: count }, (_item, index) => [
         `hosts/host-1/leads/lead-${index}`,
-        { email: `lead${index}@example.com`, name: `Lead ${index}` },
+        {
+          email: `lead${index}@example.com`,
+          name: `Lead ${index}`,
+          ...CONSENT_GRANTED,
+        },
       ]),
     ),
     ...extra,
@@ -273,8 +290,11 @@ describe('a campaign recipient preview', () => {
 
   it('de-duplicates the way the send does', async () => {
     seed(0, {
-      'hosts/host-1/leads/a': { email: 'dana@example.com' },
-      'hosts/host-1/leads/b': { email: 'DANA@example.com' },
+      'hosts/host-1/leads/a': { email: 'dana@example.com', ...CONSENT_GRANTED },
+      'hosts/host-1/leads/b': { email: 'DANA@example.com', ...CONSENT_GRANTED },
+      // No basis on the junk address, and it needs none: the address pattern
+      // rejects it while the audience is being normalized, which is upstream
+      // of the consent join.
       'hosts/host-1/leads/c': { email: 'not-an-email' },
     })
     const result = await preview()

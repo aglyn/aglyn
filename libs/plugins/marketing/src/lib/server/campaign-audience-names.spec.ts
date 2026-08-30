@@ -214,6 +214,20 @@ afterAll(() => {
   else process.env['EMAIL_UNSUBSCRIBE_SECRET'] = previousSecret
 })
 
+/**
+ * A recorded opt-in, in the shape every capture path writes it.
+ *
+ * This suite is about which FIELD a merge tag reads a person's name from, and
+ * it can only assert that against a message that was actually sent. The
+ * consent join withholds a recipient with no recorded basis and refuses an
+ * audience where nobody has one, so each fixture below carries a basis in
+ * addition to whatever name field the case is really about.
+ */
+const CONSENT_GRANTED = {
+  marketingConsent: true,
+  marketingConsentAtMs: Date.UTC(2026, 7, 1),
+}
+
 beforeEach(() => {
   mockState.store = { 'hosts/host-1': { subdomain: 'acme', memberRoles: {} } }
   mockState.sent = []
@@ -221,12 +235,14 @@ beforeEach(() => {
 
 describe('the members audience personalizes off the field members actually have', () => {
   it('resolves {{name}} from `displayName`', async () => {
-    // EXACTLY what `membership-register` writes: `email`, `displayName`,
-    // `passwordScrypt`, `createdAt`. No `name` — because production has none.
+    // EXACTLY what `membership-register` writes for a member who ticked the
+    // opt-in box: `email`, `displayName`, `passwordScrypt`, `createdAt` and
+    // the consent pair. No `name` — because production has none.
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
       displayName: 'Dana Reed',
       passwordScrypt: 'scrypt$x',
+      ...CONSENT_GRANTED,
     }
 
     await send('members')
@@ -241,10 +257,12 @@ describe('the members audience personalizes off the field members actually have'
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
       displayName: 'Dana Reed',
+      ...CONSENT_GRANTED,
     }
     mockState.store['hosts/host-1/siteMembers/m-2'] = {
       email: 'sam@example.com',
       displayName: 'Sam Okafor',
+      ...CONSENT_GRANTED,
     }
 
     await send('members')
@@ -268,6 +286,7 @@ describe('the members audience personalizes off the field members actually have'
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
       name: 'Dana Reed',
+      ...CONSENT_GRANTED,
     }
     await send('members')
     expect(mockState.sent[0].subject).toBe('Hello Dana, a note for Dana Reed')
@@ -278,6 +297,7 @@ describe('the members audience personalizes off the field members actually have'
     // recipient, not an error.
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
+      ...CONSENT_GRANTED,
     }
     await send('members')
     expect(mockState.sent).toHaveLength(1)
@@ -293,6 +313,7 @@ describe('the leads audience personalizes off `name`', () => {
       email: 'dana@example.com',
       name: 'Dana Reed',
       source: 'signup',
+      ...CONSENT_GRANTED,
     }
     await send('leads')
     expect(mockState.sent[0].subject).toBe('Hello Dana, a note for Dana Reed')
@@ -302,6 +323,7 @@ describe('the leads audience personalizes off `name`', () => {
     mockState.store['hosts/host-1/leads/l-1'] = {
       email: 'dana@example.com',
       source: 'signup',
+      ...CONSENT_GRANTED,
     }
     await send('leads')
     expect(mockState.sent).toHaveLength(1)
