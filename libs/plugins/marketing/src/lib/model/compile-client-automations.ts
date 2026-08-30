@@ -20,6 +20,7 @@
 // which the plugin's SERVER graph re-exports, and the full barrel pulls client
 // React contexts (createContext) that break the RSC server build (AGL-830).
 import {
+  hostActionStepsForClient,
   isClientActionStep,
   isClientStepEntitled,
   isSiteEventType,
@@ -67,7 +68,10 @@ export function compileClientAutomations(
 ): ClientAutomation[] {
   const automations: ClientAutomation[] = []
   for (const { id, action } of actions) {
-    if ((action as { deletedAt?: unknown }).deletedAt || action.enabled === false) {
+    if (
+      (action as { deletedAt?: unknown }).deletedAt ||
+      action.enabled === false
+    ) {
       continue
     }
     const event = String(action.trigger?.event ?? '')
@@ -80,10 +84,21 @@ export function compileClientAutomations(
     ) {
       continue
     }
+    /*
+     * TRUNCATED AT THE FIRST WAIT, before anything else is decided.
+     *
+     * The browser runs its slice of the list the moment the trigger fires, so
+     * a client step sitting after a `wait` would execute at once — the popup
+     * an author scheduled for three days later would appear immediately, the
+     * delay would look correct on the server, and the two halves of one
+     * authored flow would disagree about when they happened. Everything past
+     * the first wait belongs to a run the job beat has not started yet.
+     */
+    const reachableSteps = hostActionStepsForClient(action.steps)
     // Step-level entitlement tiering (AGL-577): basic presentational steps
     // load on every plan; advanced client steps need `actions` and runJs
     // needs `webhooks` — see isClientStepEntitled.
-    const clientSteps = (action.steps ?? []).filter((step) =>
+    const clientSteps = reachableSteps.filter((step) =>
       isClientStepEntitled(step, {
         actionsEntitled: options.actionsEntitled,
         allowJs: options.allowJs,
@@ -99,12 +114,18 @@ export function compileClientAutomations(
     automations.push({
       id,
       event,
-      ...(action.trigger?.selector ? { selector: action.trigger.selector } : {}),
+      ...(action.trigger?.selector
+        ? { selector: action.trigger.selector }
+        : {}),
       ...(Number(action.trigger?.threshold) > 0
         ? { threshold: Number(action.trigger.threshold) }
         : {}),
-      ...(action.trigger?.oncePerVisitor === true ? { oncePerVisitor: true } : {}),
-      ...(action.trigger?.oncePerSession === true ? { oncePerSession: true } : {}),
+      ...(action.trigger?.oncePerVisitor === true
+        ? { oncePerVisitor: true }
+        : {}),
+      ...(action.trigger?.oncePerSession === true
+        ? { oncePerSession: true }
+        : {}),
       ...(Number(action.trigger?.cooldownMinutes) >= 1
         ? { cooldownMinutes: Number(action.trigger?.cooldownMinutes) }
         : {}),

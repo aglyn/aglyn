@@ -48,6 +48,7 @@ export * from './lib/server/contact-suppression'
 export * from './lib/server/email-campaign-reach'
 export * from './lib/server/email-suppression'
 export * from './lib/server/email-unsubscribe-link'
+export * from './lib/server/email-flow-gate'
 // Side-effecting on purpose, for the reason `email-send-rate` below is:
 // evaluating this module INSTALLS the marketing gate on `sendEmail`, so the
 // unsubscribe header, the suppression check and the frequency ceiling reach

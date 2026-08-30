@@ -112,6 +112,30 @@ interface ActionDraft extends HostAction {
   conditionCombinator: TriggerCombinator
 }
 
+/**
+ * The durations a wait may be set to, from the picker.
+ *
+ * A select rather than a number field, because minutes are the wrong unit for
+ * the thing being chosen: a welcome series is authored in days and nobody
+ * wants to compute that three days is 4,320. Every value is inside the
+ * validated band, so the picker cannot produce a step the validator refuses —
+ * which is the property a free-text duration field would not have.
+ */
+const FLOW_WAIT_PRESETS: ReadonlyArray<{ minutes: number; label: string }> = [
+  { minutes: 5, label: '5 minutes' },
+  { minutes: 30, label: '30 minutes' },
+  { minutes: 60, label: '1 hour' },
+  { minutes: 60 * 4, label: '4 hours' },
+  { minutes: 60 * 24, label: '1 day' },
+  { minutes: 60 * 24 * 2, label: '2 days' },
+  { minutes: 60 * 24 * 3, label: '3 days' },
+  { minutes: 60 * 24 * 7, label: '1 week' },
+  { minutes: 60 * 24 * 14, label: '2 weeks' },
+  { minutes: 60 * 24 * 30, label: '30 days' },
+  { minutes: 60 * 24 * 60, label: '60 days' },
+  { minutes: 60 * 24 * 90, label: '90 days' },
+]
+
 function defaultStep(type: HostActionStepType): HostActionStep {
   switch (type) {
     case 'runWorkflow':
@@ -161,6 +185,16 @@ function defaultStep(type: HostActionStepType): HostActionStep {
       return { type, datasetId: '' }
     case 'assignCampaign':
       return { type, campaignId: '' }
+    // A day, because a new wait is almost always part of a series measured in
+    // days and a default of one minute reads as a placeholder rather than a
+    // choice. Both are inside the validated band, so neither can be saved
+    // wrong; this is only which one the author starts from.
+    case 'wait':
+      return { type, delayMinutes: 60 * 24 }
+    case 'waitForEvent':
+      return { type, eventName: '', timeoutMinutes: 60 * 24 * 3 }
+    case 'exitFlow':
+      return { type }
     default:
       return { type: 'datasetAppend', datasetName: '' }
   }
@@ -1163,88 +1197,128 @@ export function HostActionsCard(props: {
             {'Steps (run in order)'}
           </Typography>
           {(draft?.steps ?? []).map((step, index) => (
-            <Stack
-              key={index}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                {`${index + 1}`}
-              </Typography>
-              <TextField
-                select
-                label="Do"
-                value={step.type}
-                onChange={(event) =>
-                  patch((previous) => ({
-                    ...previous,
-                    steps: previous.steps.map((s, index2) =>
-                      index2 === index
-                        ? defaultStep(event.target.value as HostActionStepType)
-                        : s,
-                    ),
-                  }))
-                }
-                size="small"
-                sx={{ minWidth: 170 }}
-              >
-                {Object.entries(HOST_ACTION_STEP_LABELS).map(
-                  ([value, label]) => (
-                    <MenuItem key={value} value={value}>
-                      {label}
-                    </MenuItem>
-                  ),
-                )}
-              </TextField>
-              {step.type === 'runWorkflow' ? (
+            <Stack key={index} spacing={0.5}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary">
+                  {`${index + 1}`}
+                </Typography>
                 <TextField
                   select
-                  label="Workflow"
-                  value={
-                    (step as any).workflowId ??
-                    workflowOptions.find(
-                      (option) => option.name === step.workflowName,
-                    )?.id ??
-                    ''
-                  }
+                  label="Do"
+                  value={step.type}
                   onChange={(event) =>
                     patch((previous) => ({
                       ...previous,
                       steps: previous.steps.map((s, index2) =>
                         index2 === index
-                          ? {
-                              ...s,
-                              workflowId: event.target.value,
-                              workflowName:
-                                workflowOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? (s as any).workflowName,
-                            }
+                          ? defaultStep(
+                              event.target.value as HostActionStepType,
+                            )
                           : s,
                       ),
                     }))
                   }
                   size="small"
-                  sx={{ flex: 1 }}
+                  sx={{ minWidth: 170 }}
                 >
-                  {workflowOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
+                  {Object.entries(HOST_ACTION_STEP_LABELS).map(
+                    ([value, label]) => (
+                      <MenuItem key={value} value={value}>
+                        {label}
+                      </MenuItem>
+                    ),
+                  )}
                 </TextField>
-              ) : step.type === 'siteAlert' ? (
-                <>
+                {step.type === 'runWorkflow' ? (
                   <TextField
-                    label="Message"
-                    value={step.message}
+                    select
+                    label="Workflow"
+                    value={
+                      (step as any).workflowId ??
+                      workflowOptions.find(
+                        (option) => option.name === step.workflowName,
+                      )?.id ??
+                      ''
+                    }
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, message: event.target.value }
+                            ? {
+                                ...s,
+                                workflowId: event.target.value,
+                                workflowName:
+                                  workflowOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? (s as any).workflowName,
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {workflowOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'siteAlert' ? (
+                  <>
+                    <TextField
+                      label="Message"
+                      value={step.message}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, message: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                    />
+                    <TextField
+                      select
+                      label="Style"
+                      value={step.severity ?? 'info'}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, severity: event.target.value as any }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 110 }}
+                    >
+                      {['info', 'success', 'warning', 'error'].map((value) => (
+                        <MenuItem key={value} value={value}>
+                          {value}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </>
+                ) : step.type === 'customEvent' ? (
+                  <TextField
+                    label="Event name"
+                    value={step.eventName}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, eventName: event.target.value }
                             : s,
                         ),
                       }))
@@ -1252,174 +1326,118 @@ export function HostActionsCard(props: {
                     size="small"
                     sx={{ flex: 1 }}
                   />
+                ) : step.type === 'webhookPost' ? (
                   <TextField
                     select
-                    label="Style"
-                    value={step.severity ?? 'info'}
+                    label="Webhook"
+                    value={
+                      (step as any).webhookId ??
+                      webhookOptions.find(
+                        (option) => option.name === step.webhookName,
+                      )?.id ??
+                      ''
+                    }
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, severity: event.target.value as any }
+                            ? {
+                                ...s,
+                                webhookId: event.target.value,
+                                webhookName:
+                                  webhookOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? (s as any).webhookName,
+                              }
                             : s,
                         ),
                       }))
                     }
                     size="small"
-                    sx={{ width: 110 }}
+                    sx={{ flex: 1 }}
                   >
-                    {['info', 'success', 'warning', 'error'].map((value) => (
-                      <MenuItem key={value} value={value}>
-                        {value}
+                    {webhookOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
                       </MenuItem>
                     ))}
                   </TextField>
-                </>
-              ) : step.type === 'customEvent' ? (
-                <TextField
-                  label="Event name"
-                  value={step.eventName}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, eventName: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'webhookPost' ? (
-                <TextField
-                  select
-                  label="Webhook"
-                  value={
-                    (step as any).webhookId ??
-                    webhookOptions.find(
-                      (option) => option.name === step.webhookName,
-                    )?.id ??
-                    ''
-                  }
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              webhookId: event.target.value,
-                              webhookName:
-                                webhookOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? (s as any).webhookName,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {webhookOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'datasetAppend' ||
-                step.type === 'updateDataset' ? (
-                <TextField
-                  select
-                  label="Dataset"
-                  value={
-                    (step as any).datasetId ??
-                    datasetOptions.find(
-                      (option) => option.name === step.datasetName,
-                    )?.id ??
-                    ''
-                  }
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              datasetId: event.target.value,
-                              datasetName:
-                                datasetOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? (s as any).datasetName,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {datasetOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'showOverlay' ? (
-                <TextField
-                  select
-                  label="Overlay"
-                  value={(step as any).overlayId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              overlayId: event.target.value,
-                              overlayName:
-                                overlayOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? '',
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {overlayOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'stickyNav' ? (
-                <TextField
-                  label="Selector (default: header/nav)"
-                  value={(step as any).selector ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, selector: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'addClass' || step.type === 'removeClass' ? (
-                <>
+                ) : step.type === 'datasetAppend' ||
+                  step.type === 'updateDataset' ? (
                   <TextField
-                    label="CSS selector"
+                    select
+                    label="Dataset"
+                    value={
+                      (step as any).datasetId ??
+                      datasetOptions.find(
+                        (option) => option.name === step.datasetName,
+                      )?.id ??
+                      ''
+                    }
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                datasetId: event.target.value,
+                                datasetName:
+                                  datasetOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? (s as any).datasetName,
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {datasetOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'showOverlay' ? (
+                  <TextField
+                    select
+                    label="Overlay"
+                    value={(step as any).overlayId ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                overlayId: event.target.value,
+                                overlayName:
+                                  overlayOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? '',
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {overlayOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'stickyNav' ? (
+                  <TextField
+                    label="Selector (default: header/nav)"
                     value={(step as any).selector ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
@@ -1434,295 +1452,508 @@ export function HostActionsCard(props: {
                     size="small"
                     sx={{ flex: 1 }}
                   />
+                ) : step.type === 'addClass' || step.type === 'removeClass' ? (
+                  <>
+                    <TextField
+                      label="CSS selector"
+                      value={(step as any).selector ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, selector: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                    />
+                    <TextField
+                      label="Class name"
+                      value={(step as any).className ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, className: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 150 }}
+                    />
+                  </>
+                ) : step.type === 'showElement' ||
+                  step.type === 'hideElement' ||
+                  step.type === 'toggleElement' ? (
+                  // Element choreography (AGL-562). The besigner's builder
+                  // offers an element picker; here the CSS selector is the
+                  // escape hatch (node targets use [data-aglyn="leaf:…"]).
                   <TextField
-                    label="Class name"
-                    value={(step as any).className ?? ''}
+                    label="CSS selector"
+                    placeholder='[data-aglyn="leaf:…"] or .my-class'
+                    value={(step as any).selector ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, className: event.target.value }
+                            ? { ...s, selector: event.target.value }
                             : s,
                         ),
                       }))
                     }
                     size="small"
-                    sx={{ width: 150 }}
+                    sx={{ flex: 1 }}
                   />
-                </>
-              ) : step.type === 'showElement' ||
-                step.type === 'hideElement' ||
-                step.type === 'toggleElement' ? (
-                // Element choreography (AGL-562). The besigner's builder
-                // offers an element picker; here the CSS selector is the
-                // escape hatch (node targets use [data-aglyn="leaf:…"]).
-                <TextField
-                  label="CSS selector"
-                  placeholder='[data-aglyn="leaf:…"] or .my-class'
-                  value={(step as any).selector ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, selector: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'openDrawer' ||
-                step.type === 'closeDrawer' ||
-                step.type === 'toggleDrawer' ? (
-                <TextField
-                  label="Drawer node id (optional)"
-                  placeholder="Empty = the page's first drawer"
-                  value={(step as any).drawerNodeId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              drawerNodeId: event.target.value || undefined,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'openMenu' ||
-                step.type === 'closeMenu' ||
-                step.type === 'toggleMenu' ? (
-                // Menu commands (AGL-568). The besigner's builder offers
-                // a menu picker; here the raw node id is the escape
-                // hatch, like the drawer field above.
-                <TextField
-                  label="Menu node id (optional)"
-                  placeholder="Empty = the page's first menu"
-                  value={(step as any).menuNodeId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              menuNodeId: event.target.value || undefined,
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'showHtml' || step.type === 'runJs' ? (
-                <TextField
-                  label={step.type === 'showHtml' ? 'HTML' : 'JavaScript'}
-                  value={
-                    step.type === 'showHtml'
-                      ? ((step as any).html ?? '')
-                      : ((step as any).code ?? '')
-                  }
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? step.type === 'showHtml'
-                            ? { ...s, html: event.target.value }
-                            : { ...s, code: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  multiline
-                  maxRows={4}
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'redirect' ? (
-                <TextField
-                  label="Destination URL"
-                  value={(step as any).url ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, url: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'trackGaEvent' ? (
-                <TextField
-                  label="Analytics event name"
-                  value={(step as any).eventName ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, eventName: event.target.value }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'sendEmail' ? (
-                <>
+                ) : step.type === 'openDrawer' ||
+                  step.type === 'closeDrawer' ||
+                  step.type === 'toggleDrawer' ? (
                   <TextField
-                    label="Subject"
-                    value={(step as any).subject ?? ''}
+                    label="Drawer node id (optional)"
+                    placeholder="Empty = the page's first drawer"
+                    value={(step as any).drawerNodeId ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, subject: event.target.value }
+                            ? {
+                                ...s,
+                                drawerNodeId: event.target.value || undefined,
+                              }
                             : s,
                         ),
                       }))
                     }
                     size="small"
-                    sx={{ width: 180 }}
+                    sx={{ flex: 1 }}
                   />
+                ) : step.type === 'openMenu' ||
+                  step.type === 'closeMenu' ||
+                  step.type === 'toggleMenu' ? (
+                  // Menu commands (AGL-568). The besigner's builder offers
+                  // a menu picker; here the raw node id is the escape
+                  // hatch, like the drawer field above.
                   <TextField
-                    label="Body"
-                    value={(step as any).body ?? ''}
+                    label="Menu node id (optional)"
+                    placeholder="Empty = the page's first menu"
+                    value={(step as any).menuNodeId ?? ''}
                     onChange={(event) =>
                       patch((previous) => ({
                         ...previous,
                         steps: previous.steps.map((s, index2) =>
                           index2 === index
-                            ? { ...s, body: event.target.value }
+                            ? {
+                                ...s,
+                                menuNodeId: event.target.value || undefined,
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'showHtml' || step.type === 'runJs' ? (
+                  <TextField
+                    label={step.type === 'showHtml' ? 'HTML' : 'JavaScript'}
+                    value={
+                      step.type === 'showHtml'
+                        ? ((step as any).html ?? '')
+                        : ((step as any).code ?? '')
+                    }
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? step.type === 'showHtml'
+                              ? { ...s, html: event.target.value }
+                              : { ...s, code: event.target.value }
                             : s,
                         ),
                       }))
                     }
                     size="small"
                     multiline
-                    maxRows={3}
+                    maxRows={4}
                     sx={{ flex: 1 }}
                   />
-                </>
-              ) : step.type === 'notifyAdmins' ? (
-                <TextField
-                  label="Notification title"
-                  value={(step as any).title ?? ''}
-                  onChange={(event) =>
+                ) : step.type === 'redirect' ? (
+                  <TextField
+                    label="Destination URL"
+                    value={(step as any).url ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, url: event.target.value }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'trackGaEvent' ? (
+                  <TextField
+                    label="Analytics event name"
+                    value={(step as any).eventName ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, eventName: event.target.value }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'sendEmail' ? (
+                  <>
+                    <TextField
+                      label="Subject"
+                      value={(step as any).subject ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, subject: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 180 }}
+                    />
+                    <TextField
+                      label="Body"
+                      value={(step as any).body ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, body: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      multiline
+                      maxRows={3}
+                      sx={{ flex: 1 }}
+                    />
+                  </>
+                ) : step.type === 'notifyAdmins' ? (
+                  <TextField
+                    label="Notification title"
+                    value={(step as any).title ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? { ...s, title: event.target.value }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : step.type === 'enrollList' ? (
+                  <TextField
+                    select
+                    label="List"
+                    value={(step as any).listId ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                listId: event.target.value,
+                                listName:
+                                  listOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? '',
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {listOptions.length === 0 ? (
+                      <MenuItem value="" disabled>
+                        {'No lists yet — create one under Campaigns'}
+                      </MenuItem>
+                    ) : null}
+                    {listOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'assignCampaign' ? (
+                  <TextField
+                    select
+                    label="Campaign"
+                    value={(step as any).campaignId ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index
+                            ? {
+                                ...s,
+                                campaignId: event.target.value,
+                                campaignName:
+                                  campaignOptions.find(
+                                    (option) =>
+                                      option.id === event.target.value,
+                                  )?.name ?? '',
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    {campaignOptions.length === 0 ? (
+                      <MenuItem value="" disabled>
+                        {'No campaigns yet'}
+                      </MenuItem>
+                    ) : null}
+                    {campaignOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : step.type === 'wait' || step.type === 'waitForEvent' ? (
+                  <>
+                    {step.type === 'waitForEvent' ? (
+                      <TextField
+                        select
+                        label="Until"
+                        value={(step as any).eventName ?? ''}
+                        onChange={(event) =>
+                          patch((previous) => ({
+                            ...previous,
+                            steps: previous.steps.map((s, index2) =>
+                              index2 === index
+                                ? { ...s, eventName: event.target.value }
+                                : s,
+                            ),
+                          }))
+                        }
+                        size="small"
+                        sx={{ minWidth: 170 }}
+                      >
+                        {HOST_EVENT_TYPES.map((option) => (
+                          <MenuItem key={option} value={option}>
+                            {option}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    ) : null}
+                    <TextField
+                      select
+                      label={
+                        step.type === 'waitForEvent'
+                          ? 'Give up after'
+                          : 'Wait for'
+                      }
+                      value={String(
+                        step.type === 'waitForEvent'
+                          ? ((step as any).timeoutMinutes ?? '')
+                          : ((step as any).delayMinutes ?? ''),
+                      )}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? s.type === 'waitForEvent'
+                                ? {
+                                    ...s,
+                                    timeoutMinutes: Number(event.target.value),
+                                  }
+                                : {
+                                    ...s,
+                                    delayMinutes: Number(event.target.value),
+                                  }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ minWidth: 150 }}
+                    >
+                      {FLOW_WAIT_PRESETS.map((option) => (
+                        <MenuItem key={option.minutes} value={option.minutes}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <Typography variant="caption" color="text.secondary">
+                      {step.type === 'waitForEvent'
+                        ? 'Continues as soon as this happens, or when the time is up.'
+                        : 'The rest of this automation runs later, on its own.'}
+                    </Typography>
+                  </>
+                ) : step.type === 'exitFlow' ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {
+                      'Nothing after this step runs. Add a condition to make it a branch.'
+                    }
+                  </Typography>
+                ) : null}
+                <IconButton
+                  size="small"
+                  aria-label="remove step"
+                  onClick={() =>
                     patch((previous) => ({
                       ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? { ...s, title: event.target.value }
-                          : s,
+                      steps: previous.steps.filter(
+                        (_, index2) => index2 !== index,
                       ),
                     }))
                   }
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-              ) : step.type === 'enrollList' ? (
-                <TextField
-                  select
-                  label="List"
-                  value={(step as any).listId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              listId: event.target.value,
-                              listName:
-                                listOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? '',
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
                 >
-                  {listOptions.length === 0 ? (
-                    <MenuItem value="" disabled>
-                      {'No lists yet — create one under Campaigns'}
-                    </MenuItem>
-                  ) : null}
-                  {listOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : step.type === 'assignCampaign' ? (
-                <TextField
-                  select
-                  label="Campaign"
-                  value={(step as any).campaignId ?? ''}
-                  onChange={(event) =>
-                    patch((previous) => ({
-                      ...previous,
-                      steps: previous.steps.map((s, index2) =>
-                        index2 === index
-                          ? {
-                              ...s,
-                              campaignId: event.target.value,
-                              campaignName:
-                                campaignOptions.find(
-                                  (option) => option.id === event.target.value,
-                                )?.name ?? '',
-                            }
-                          : s,
-                      ),
-                    }))
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {campaignOptions.length === 0 ? (
-                    <MenuItem value="" disabled>
-                      {'No campaigns yet'}
-                    </MenuItem>
-                  ) : null}
-                  {campaignOptions.map((option) => (
-                    <MenuItem key={option.id} value={option.id}>
-                      {option.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              ) : null}
-              <IconButton
-                size="small"
-                aria-label="remove step"
-                onClick={() =>
-                  patch((previous) => ({
-                    ...previous,
-                    steps: previous.steps.filter(
-                      (_, index2) => index2 !== index,
-                    ),
-                  }))
-                }
+                  {'×'}
+                </IconButton>
+              </Stack>
+              {/*
+               * BRANCHING, as a second row under the step it belongs to.
+               *
+               * One clause rather than the trigger's chain of five. The
+               * trigger decides whether a run happens at all and earns a
+               * condition builder; a step's guard answers "does THIS one run",
+               * which in every sequence anybody writes is a single fact — did
+               * they order, did they open, is the field still empty. A second
+               * five-row builder per step would make a ten-step flow a page of
+               * condition editors, and the model already accepts more if the
+               * evidence ever says otherwise.
+               */}
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', pl: 3 }}
               >
-                {'×'}
-              </IconButton>
+                <TextField
+                  select
+                  label="Only if"
+                  value={(step.when?.conditions?.[0]?.op as string) ?? ''}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      steps: previous.steps.map((s, index2) =>
+                        index2 === index
+                          ? {
+                              ...s,
+                              when: event.target.value
+                                ? {
+                                    conditions: [
+                                      {
+                                        op: event.target
+                                          .value as TriggerConditionOp,
+                                        field:
+                                          s.when?.conditions?.[0]?.field ?? '',
+                                        value:
+                                          s.when?.conditions?.[0]?.value ?? '',
+                                      },
+                                    ],
+                                  }
+                                : null,
+                            }
+                          : s,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ minWidth: 170 }}
+                >
+                  <MenuItem value="">{'Always run'}</MenuItem>
+                  <MenuItem value="notEmpty">{'Field is not empty'}</MenuItem>
+                  <MenuItem value="equals">{'Field equals'}</MenuItem>
+                  <MenuItem value="contains">{'Field contains'}</MenuItem>
+                </TextField>
+                {step.when?.conditions?.[0]?.op ? (
+                  <TextField
+                    label="Field"
+                    placeholder="orderId"
+                    value={step.when.conditions[0].field ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index && s.when?.conditions?.[0]
+                            ? {
+                                ...s,
+                                when: {
+                                  conditions: [
+                                    {
+                                      ...s.when.conditions[0],
+                                      field: event.target.value,
+                                    },
+                                  ],
+                                },
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : null}
+                {step.when?.conditions?.[0]?.op === 'equals' ||
+                step.when?.conditions?.[0]?.op === 'contains' ? (
+                  <TextField
+                    label="Value"
+                    value={step.when.conditions[0].value ?? ''}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        steps: previous.steps.map((s, index2) =>
+                          index2 === index && s.when?.conditions?.[0]
+                            ? {
+                                ...s,
+                                when: {
+                                  conditions: [
+                                    {
+                                      ...s.when.conditions[0],
+                                      value: event.target.value,
+                                    },
+                                  ],
+                                },
+                              }
+                            : s,
+                        ),
+                      }))
+                    }
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                ) : null}
+              </Stack>
             </Stack>
           ))}
           <Button
