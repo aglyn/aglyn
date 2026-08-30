@@ -87,7 +87,7 @@
  */
 
 import { createHash } from 'crypto'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
@@ -387,16 +387,60 @@ export async function filterSendableForHost(
  */
 export async function listEmailSuppressions(options?: {
   limit?: number
+  /**
+   * Where the NEXT page starts: the `suppressedAt` of the last row already
+   * shown, as `seconds.nanoseconds`.
+   *
+   * The full timestamp rather than milliseconds, because `startAfter` skips
+   * exactly the value it is given: a millisecond-truncated cursor sits BEFORE
+   * the record it names, so that record would arrive again at the top of the
+   * following page. Repeating a row is a smaller fault than skipping one and
+   * neither is necessary.
+   */
+  startAfter?: string | null
   firestore?: any
 }): Promise<Array<EmailSuppressionRecord & { $id: string }>> {
   const db = options?.firestore ?? defaultFirestore()
-  const snapshot = await db
+  let query = db
     .collection(EMAIL_SUPPRESSIONS_COLLECTION)
     .orderBy('suppressedAt', 'desc')
+  const cursor = suppressionCursorTimestamp(options?.startAfter)
+  if (cursor) query = query.startAfter(cursor)
+  const snapshot = await query
     .limit(Math.min(Math.max(options?.limit ?? 100, 1), 500))
     .get()
   return snapshot.docs.map((doc: any) => ({
     $id: doc.id,
     ...(doc.data() as EmailSuppressionRecord),
   }))
+}
+
+/**
+ * The cursor a page hands back, from the last row on it.
+ *
+ * Null when the row carries no `suppressedAt` — every entry written since
+ * AGL-1918 does, and `orderBy` has already excluded any that does not, so
+ * this is the type narrowing rather than a case that occurs.
+ */
+export function suppressionCursorFrom(
+  record: Record<string, any> | null | undefined,
+): string | null {
+  const at = record?.['suppressedAt'] as
+    | { seconds?: number; _seconds?: number; nanoseconds?: number; _nanoseconds?: number }
+    | undefined
+  const seconds = at?.seconds ?? at?._seconds
+  if (typeof seconds !== 'number') return null
+  const nanoseconds = at?.nanoseconds ?? at?._nanoseconds ?? 0
+  return `${seconds}.${nanoseconds}`
+}
+
+/** The inverse, for the query. Invalid input yields no cursor, never a guess. */
+export function suppressionCursorTimestamp(
+  cursor: string | null | undefined,
+): Timestamp | null {
+  const [rawSeconds, rawNanos] = String(cursor ?? '').split('.')
+  const seconds = Number(rawSeconds)
+  const nanoseconds = Number(rawNanos ?? 0)
+  if (!Number.isFinite(seconds) || !seconds) return null
+  return new Timestamp(seconds, Number.isFinite(nanoseconds) ? nanoseconds : 0)
 }

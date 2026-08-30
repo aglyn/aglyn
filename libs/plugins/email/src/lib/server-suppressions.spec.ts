@@ -109,6 +109,7 @@ import {
   MANUAL_SUPPRESSION_REASON,
   SUPPRESSION_ADD_BATCH_MAX,
   emailSuppressionAddHandler,
+  emailSuppressionStatusHandler,
   readSuppressionAddresses,
   registerEmailSuppressionsApi,
 } from './server-suppressions'
@@ -122,6 +123,40 @@ interface Reply {
   status: number
   body: any
 }
+
+async function callHandler(
+  handler: typeof emailSuppressionAddHandler,
+  body: Record<string, unknown>,
+  options: { method?: string; token?: string | null } = {},
+): Promise<Reply> {
+  const reply: Reply = { status: 200, body: null }
+  const res: any = {
+    status: (code: number) => {
+      reply.status = code
+      return res
+    },
+    json: (value: unknown) => {
+      reply.body = value
+      return res
+    },
+  }
+  const token = options.token === undefined ? 'id-token' : options.token
+  await handler(
+    {
+      method: options.method ?? 'POST',
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+      query: {},
+      body,
+    } as any,
+    res,
+  )
+  return reply
+}
+
+const status = (
+  body: Record<string, unknown>,
+  options?: { method?: string; token?: string | null },
+) => callHandler(emailSuppressionStatusHandler, body, options)
 
 async function call(
   body: Record<string, unknown>,
@@ -324,8 +359,73 @@ describe('email/suppression-add', () => {
     expect((await call({ hostId: HOST, emails: '   ' })).status).toBe(400)
   })
 
-  it('registers the route under the email prefix', () => {
+  it('registers both routes under the email prefix', () => {
     registerEmailSuppressionsApi()
-    expect(registered).toEqual(['email/suppression-add'])
+    expect(registered).toEqual([
+      'email/suppression-add',
+      'email/suppression-status',
+    ])
+  })
+})
+
+/**
+ * THE PLATFORM HALF, told to the merchant.
+ *
+ * The two lists are consulted together at send time and were visible
+ * separately, so a merchant who removed their own entry could still find the
+ * address was never mailed with nothing anywhere saying why. The platform
+ * entry is invisible to them and cannot be lifted by them, so it has to be
+ * said before the click rather than discovered from a recipient count that
+ * stays short.
+ */
+describe('email/suppression-status', () => {
+  const PLATFORM = `emailSuppressions/${KEY}`
+
+  it('says an address is blocked when the platform list holds it', async () => {
+    docs.set(PLATFORM, { email: ADDRESS, reason: 'bounce', releasedAt: null })
+    const reply = await status({ hostId: HOST, emails: ADDRESS })
+    expect(reply.status).toBe(200)
+    expect(reply.body.platform).toEqual([ADDRESS])
+  })
+
+  it('says an address is NOT blocked when it is not', async () => {
+    // The other direction, in the same harness: a reader that answered
+    // "blocked" for everything would warn on every removal and be useless.
+    const reply = await status({ hostId: HOST, emails: ADDRESS })
+    expect(reply.body.platform).toEqual([])
+  })
+
+  it('treats a RELEASED platform record as not blocking', async () => {
+    docs.set(PLATFORM, {
+      email: ADDRESS,
+      reason: 'bounce',
+      releasedAt: 'yes',
+    })
+    expect((await status({ hostId: HOST, emails: ADDRESS })).body.platform)
+      .toEqual([])
+  })
+
+  it('answers per address, not for the whole request', async () => {
+    docs.set(PLATFORM, { email: ADDRESS, reason: 'bounce', releasedAt: null })
+    const reply = await status({
+      hostId: HOST,
+      emails: `${ADDRESS}\nsam@example.com`,
+    })
+    expect(reply.body.platform).toEqual([ADDRESS])
+  })
+
+  it('refuses a viewer', async () => {
+    decoded = { uid: 'uid-viewer' }
+    expect((await status({ hostId: HOST, emails: ADDRESS })).status).toBe(403)
+  })
+
+  it('refuses an unauthenticated request', async () => {
+    expect(
+      (await status({ hostId: HOST, emails: ADDRESS }, { token: null })).status,
+    ).toBe(401)
+  })
+
+  it('refuses a GET', async () => {
+    expect((await status({ hostId: HOST }, { method: 'GET' })).status).toBe(405)
   })
 })

@@ -401,6 +401,18 @@ An address that is already on the list is left exactly as it is, with the
 reason and date it already had — so adding one by hand can never overwrite the
 record of a bounce or a spam report.
 
+#### An address Aglyn is blocking too {#platform-suppressions}
+
+Some addresses are suppressed **platform-wide** as well as on your list —
+because they bounced permanently, or reported a message as spam, on a send
+from anywhere in Aglyn including mail we send you ourselves.
+
+When you remove such an address, the confirmation says so: removing your entry
+will not start mail reaching them, because the platform entry is still there
+and only Aglyn can lift it. Contact support and we will look at it. This is
+the usual explanation for an address that keeps being skipped after you have
+already taken it off your own list.
+
 **Remove** puts an address back on your list — use it when somebody asks to
 be re-added, or when a suppression was recorded by mistake. Removing a
 *bounced* address means your next campaign will try a mailbox that has

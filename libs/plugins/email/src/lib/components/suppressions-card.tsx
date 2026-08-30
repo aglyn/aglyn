@@ -180,6 +180,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const [adding, setAdding] = useState(false)
+
   const [addInput, setAddInput] = useState('')
   const [addNote, setAddNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -366,14 +367,76 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     }
   }, [addInput, addNote, busy, user, hostId, enqueueSnackbar])
 
+  /**
+   * Whether one address is ALSO on the platform-wide list.
+   *
+   * The two lists are consulted together at send time and were visible
+   * separately, so a merchant who removed their own entry could still find
+   * the address was never mailed, with nothing anywhere saying why. The
+   * platform entry is invisible to them and cannot be lifted by them, which
+   * is precisely why it has to be said before the click rather than
+   * discovered from a recipient count that stays short.
+   */
+  const isBlockedPlatformWide = useCallback(
+    async (email: string): Promise<boolean> => {
+      try {
+        const idToken = await (user as { getIdToken?: () => Promise<string> })
+          ?.getIdToken?.()
+        const response = await fetch('/api/email/suppression-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ hostId, emails: email }),
+        })
+        if (!response.ok) return false
+        const payload = await response.json().catch(() => ({}))
+        return ((payload?.platform ?? []) as string[]).length > 0
+      } catch (error) {
+        console.error(error)
+        return false
+      }
+    },
+    [user, hostId],
+  )
+
   const handleRemove = async (row: SuppressionRow) => {
     const reason = describeReason(row.reason).label.toLowerCase()
+    // The platform entry is invisible to a merchant and cannot be lifted by
+    // one, so removing the site's row here changes nothing about whether the
+    // address is mailed. Saying so BEFORE the click is the whole point: the
+    // alternative is a merchant who removes the row, sends again, and sees a
+    // recipient count that is still short with nothing explaining it.
+    /*
+     * ASKED, NOT MOUNTED.
+     *
+     * One keyed read for the one address the merchant is acting on, at the
+     * moment they act. Fetching this for every visible row on mount would be
+     * a request per page render for an answer that is only ever needed on a
+     * click, and this card is one tab of a page a merchant opens to read.
+     *
+     * A failed check answers "not blocked", which is the ordinary case: the
+     * dialog then reads exactly as it did before, and the removal still
+     * works. Refusing to open the dialog because a supplementary lookup
+     * failed would make an outage on an explanation into an outage on the
+     * control it explains.
+     */
+    const alsoPlatform = row.email
+      ? await isBlockedPlatformWide(row.email)
+      : false
     const accepted = await confirm({
-      title: 'Put this address back on your list?',
-      description:
-        `${row.email ?? 'This address'} is suppressed because it ` +
-        `${reason === 'bounced' ? 'bounced permanently' : reason === 'marked as spam' ? 'was marked as spam' : 'unsubscribed'}. ` +
-        'Removing the entry means your next campaign will email it again.',
+      title: alsoPlatform
+        ? 'This address will still be skipped'
+        : 'Put this address back on your list?',
+      description: alsoPlatform
+        ? `${row.email ?? 'This address'} bounced permanently or reported ` +
+          'spam somewhere else in Aglyn, so it is on the platform-wide list ' +
+          'as well as yours. Removing your entry will not start mail ' +
+          'reaching it — contact support to have the platform entry lifted.'
+        : `${row.email ?? 'This address'} is suppressed because it ` +
+          `${reason === 'bounced' ? 'bounced permanently' : reason === 'marked as spam' ? 'was marked as spam' : reason === 'added by hand' ? 'was added by hand' : 'unsubscribed'}. ` +
+          'Removing the entry means your next campaign will email it again.',
       confirmationText: 'Remove',
       confirmationButtonProps: { color: 'error' },
     })

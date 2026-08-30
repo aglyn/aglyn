@@ -232,6 +232,17 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks()
+  /*
+   * The Remove flow asks the server whether the address is ALSO suppressed
+   * platform-wide. `{ platform: [] }` is the ordinary answer — not blocked —
+   * so every case below reads the dialog it was written for. Without a
+   * double, jsdom attempts a real request to a relative URL and the run never
+   * settles, which is a harness failure that looks like a hang.
+   */
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ platform: [] }),
+  }) as unknown as typeof fetch
   mockLimitsAsked = []
 })
 

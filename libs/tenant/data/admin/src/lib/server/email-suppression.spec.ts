@@ -21,8 +21,11 @@ import {
   filterSendableForHost,
   filterSuppressedEmails,
   isEmailSuppressed,
+  listEmailSuppressions,
   releaseEmail,
   suppressEmail,
+  suppressionCursorFrom,
+  suppressionCursorTimestamp,
 } from './email-suppression'
 import { fakeFirestore } from './test-firestore'
 
@@ -209,6 +212,103 @@ describe('filterSuppressedEmails', () => {
  * problem — every tenant's campaigns leave by one sending domain under
  * `p=reject`.
  */
+describe('listEmailSuppressions', () => {
+  /**
+   * A query double that RECORDS what it was built with.
+   *
+   * `fakeFirestore` answers `orderBy`/`limit` by returning itself and knows
+   * nothing about `startAfter`, so a walk that dropped its cursor would read
+   * page one forever and every assertion over the returned rows would still
+   * pass. What has to be observed is the QUERY, not the answer.
+   */
+  const recordingFirestore = () => {
+    const built: Record<string, unknown> = {}
+    const query: any = {
+      orderBy: (field: string, direction: string) => {
+        built.orderBy = `${field} ${direction}`
+        return query
+      },
+      startAfter: (value: unknown) => {
+        built.startAfter = value
+        return query
+      },
+      limit: (value: number) => {
+        built.limit = value
+        return query
+      },
+      get: async () => ({ docs: [] }),
+    }
+    return { built, firestore: { collection: () => query } as any }
+  }
+
+  it('starts the page AFTER the cursor it was given', async () => {
+    const { built, firestore } = recordingFirestore()
+    await listEmailSuppressions({
+      limit: 10,
+      startAfter: '1700000000.123456789',
+      firestore,
+    })
+
+    expect(built.orderBy).toBe('suppressedAt desc')
+    expect(built.limit).toBe(10)
+    const cursor = built.startAfter as { seconds: number; nanoseconds: number }
+    expect(cursor?.seconds).toBe(1_700_000_000)
+    expect(cursor?.nanoseconds).toBe(123_456_789)
+  })
+
+  it('reads from the top when there is no cursor', async () => {
+    // The other direction: a walk that always started after something would
+    // hide the newest entries, which is the half of the list this screen
+    // exists for.
+    const { built, firestore } = recordingFirestore()
+    await listEmailSuppressions({ limit: 10, firestore })
+    expect(built.startAfter).toBeUndefined()
+  })
+
+  it('does not start after a cursor it cannot parse', async () => {
+    const { built, firestore } = recordingFirestore()
+    await listEmailSuppressions({ startAfter: 'nonsense', firestore })
+    expect(built.startAfter).toBeUndefined()
+  })
+})
+
+describe('the suppression cursor', () => {
+  it('round-trips a timestamp exactly, nanoseconds included', () => {
+    // MILLISECONDS WOULD NOT. `startAfter` skips exactly the value it is
+    // given, so a truncated cursor sits BEFORE the record it names and that
+    // record arrives again at the top of the following page.
+    const cursor = suppressionCursorFrom({
+      suppressedAt: { seconds: 1_700_000_000, nanoseconds: 123_456_789 },
+    })
+    expect(cursor).toBe('1700000000.123456789')
+    const restored = suppressionCursorTimestamp(cursor)
+    expect(restored?.seconds).toBe(1_700_000_000)
+    expect(restored?.nanoseconds).toBe(123_456_789)
+  })
+
+  it('reads the Admin SDK’s underscored shape too', () => {
+    // A `Timestamp` off the wire exposes `_seconds`/`_nanoseconds`; a plain
+    // object seeded in a test exposes the bare names. A cursor that only knew
+    // one of them would answer null in production and pass here.
+    expect(
+      suppressionCursorFrom({
+        suppressedAt: { _seconds: 42, _nanoseconds: 7 },
+      }),
+    ).toBe('42.7')
+  })
+
+  it('answers null rather than guessing a position', () => {
+    // A cursor invented from nothing would silently start the next page in
+    // the wrong place, which on this list drops entries nobody can find.
+    expect(suppressionCursorFrom({})).toBeNull()
+    expect(suppressionCursorFrom(null)).toBeNull()
+    expect(suppressionCursorFrom({ suppressedAt: 'yesterday' })).toBeNull()
+    expect(suppressionCursorTimestamp('')).toBeNull()
+    expect(suppressionCursorTimestamp('nonsense')).toBeNull()
+    expect(suppressionCursorTimestamp(null)).toBeNull()
+  })
+})
+
 describe('filterSendableForHost', () => {
   const HOST = 'host-1'
   const hostList = `hosts/${HOST}/suppressions`

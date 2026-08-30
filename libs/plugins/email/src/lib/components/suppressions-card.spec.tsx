@@ -149,6 +149,17 @@ const DAY = 1_800_000_000
 
 beforeEach(() => {
   jest.clearAllMocks()
+  /*
+   * The Remove flow asks the server whether the address is ALSO suppressed
+   * platform-wide. `{ platform: [] }` is the ordinary answer — not blocked —
+   * so every case below reads the dialog it was written for. Without a
+   * double, jsdom attempts a real request to a relative URL and the run never
+   * settles, which is a harness failure that looks like a hang.
+   */
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ platform: [] }),
+  }) as unknown as typeof fetch
   confirmation.accepted = true
   confirmation.seen = []
   suppressionDocs = [
@@ -270,6 +281,74 @@ describe('SuppressionsCard (AGL-2410)', () => {
     // which suppression is being overridden.
     expect(options.description).toMatch(/bounced permanently/i)
     expect(options.description).toMatch(/email it again/i)
+  })
+
+  it('warns that a PLATFORM-suppressed address will still be skipped', async () => {
+    // The platform list is invisible to a merchant and cannot be lifted by
+    // one, so removing the site's row changes nothing about whether the
+    // address is mailed. The alternative to saying it here is a merchant who
+    // removes the row, sends again, and sees a recipient count that is still
+    // short with nothing explaining it.
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ platform: ['dana@example.com'] }),
+    })
+    render(<SuppressionsCard hostId="host-1" />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    const [options] = confirmation.seen
+    expect(options.title).toMatch(/still be skipped/i)
+    expect(options.description).toMatch(/platform-wide list/i)
+    expect(options.description).toMatch(/contact support/i)
+    // …and the removal still works: it is their row, and the dialog explains
+    // rather than refuses.
+    await waitFor(() => expect(deleteDoc).toHaveBeenCalled())
+  })
+
+  it('reads the ORDINARY dialog when the address is only on this site’s list', async () => {
+    // The other direction. A warning shown on every removal would be noise,
+    // and a card that always warned would pass a test that only checked the
+    // warning case.
+    render(<SuppressionsCard hostId="host-1" />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    expect(confirmation.seen[0].title).toMatch(/back on your list/i)
+    expect(confirmation.seen[0].description).not.toMatch(/platform-wide/i)
+  })
+
+  it('does not INVENT a platform block when the check is refused', async () => {
+    // A check that answered "blocked" on a non-200 would warn on every
+    // removal the moment the route was unreachable, and tell the merchant
+    // their removal will not work when it will.
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Not a site admin or editor' }),
+    })
+    render(<SuppressionsCard hostId="host-1" />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    expect(confirmation.seen[0].title).toMatch(/back on your list/i)
+    expect(confirmation.seen[0].description).not.toMatch(/platform-wide/i)
+  })
+
+  it('still offers the removal when the platform check FAILS', async () => {
+    // An outage on a supplementary explanation must not become an outage on
+    // the control it explains.
+    ;(global.fetch as jest.Mock).mockRejectedValue(new Error('offline'))
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    render(<SuppressionsCard hostId="host-1" />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+
+    await waitFor(() => expect(confirmation.seen).toHaveLength(1))
+    expect(confirmation.seen[0].title).toMatch(/back on your list/i)
+    await waitFor(() => expect(deleteDoc).toHaveBeenCalled())
   })
 
   it('deletes NOTHING when the operator cancels', async () => {

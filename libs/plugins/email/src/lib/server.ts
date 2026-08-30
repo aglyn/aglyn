@@ -528,6 +528,7 @@ export function registerEmailApi(): void {
  */
 export {
   emailSuppressionAddHandler,
+  emailSuppressionStatusHandler,
   MANUAL_SUPPRESSION_REASON,
   SUPPRESSION_ADD_BATCH_MAX,
   readSuppressionAddresses,

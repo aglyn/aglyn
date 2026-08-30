@@ -63,6 +63,7 @@ import {
 import {
   emailSuppressionKey,
   firebaseAdmin,
+  isEmailSuppressed,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -227,6 +228,80 @@ export const emailSuppressionAddHandler: PluginApiHandler = async (req, res) => 
 }
 
 /**
+ * Which of a site's own suppressed addresses are ALSO suppressed
+ * platform-wide.
+ *
+ * ## The hole this closes
+ *
+ * The two lists are consulted together at send time and were visible
+ * separately: a merchant saw their own list and nothing else. So a merchant
+ * who removed their site's entry — because the person asked to be re-added,
+ * or because a link prescanner unsubscribed them — could still find that the
+ * address was never mailed, with no screen anywhere saying why. The platform
+ * entry is invisible to them and un-liftable by them, and the only signal was
+ * a recipient count that stayed short.
+ *
+ * ## What it does and does not disclose
+ *
+ * It answers ONLY for addresses the caller supplies, and the caller is a site
+ * admin or editor asking about their own suppression list — a list they can
+ * already read row by row. It is not a search: an address the merchant does
+ * not already hold produces `false`, which is what an address nobody has
+ * suppressed produces too, so nothing here turns into a lookup service for
+ * whether a stranger has ever bounced.
+ */
+export const emailSuppressionStatusHandler: PluginApiHandler = async (
+  req,
+  res,
+) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  const body =
+    typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
+  const hostId = String(body.hostId ?? '')
+  if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
+
+  const authorization = String(req.headers.authorization ?? '')
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    const firestore = firebaseAdmin.app().firestore()
+    const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
+    if (!hostSnapshot.exists) {
+      return res.status(404).json({ error: 'Unknown site' })
+    }
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not a site admin or editor' })
+    }
+
+    const addresses = readSuppressionAddresses(body.emails ?? body.email)
+    if (!addresses.length) return res.status(200).json({ platform: [] })
+    /*
+     * `isEmailSuppressed` per address, which fails CLOSED — an unreadable
+     * list answers "suppressed". That posture is right at send time and it is
+     * right here too: this screen exists to explain mail that is not
+     * arriving, so the reassuring answer is the one that must not be guessed.
+     */
+    const platform: string[] = []
+    for (const address of addresses) {
+      if (await isEmailSuppressed(address, firestore)) {
+        platform.push(String(address).trim().toLowerCase())
+      }
+    }
+    return res.status(200).json({ platform })
+  } catch (error) {
+    console.error('[email] suppression status failed', error)
+    return res.status(500).json({ error: 'The list could not be checked.' })
+  }
+}
+
+/**
  * Registration.
  *
  * Not on the machine-path exemption list in `plugin-api-rate-limit.ts`: this
@@ -235,4 +310,8 @@ export const emailSuppressionAddHandler: PluginApiHandler = async (req, res) => 
  */
 export function registerEmailSuppressionsApi(): void {
   registerPluginApiRoute('email/suppression-add', emailSuppressionAddHandler)
+  registerPluginApiRoute(
+    'email/suppression-status',
+    emailSuppressionStatusHandler,
+  )
 }
