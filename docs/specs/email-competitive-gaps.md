@@ -1,6 +1,12 @@
 # Email — competitive analysis and gap register
 
-Status: **research and a register. No product code was changed by this document.**
+Status: **research and a register**, with a **closed** marker on the rows that
+have since been built. The register itself proposes work and does not do it;
+each ✅ below names the commit subject that closed the row, so a reader planning
+from this document does not re-propose something shipped.
+
+**Closed since this was written:** [P1](#p1), [G9](#g9), [G10](#g10)/[P6](#p6),
+and the D5 and D7 rows of [G11](#g11). Everything else stands.
 Written 2026-08-30 against `main` at `39f979587`. Competitor facts were gathered live
 from vendor documentation on 2026-08-30; every claim carries the source it came from,
 and the appendix lists what could not be verified.
@@ -109,7 +115,7 @@ Aglyn state is one of:
 | Recurring or RSS-driven campaigns | ✅ | ✅ | ✅ | ➖ | ➖ | ✅ | **(A)** scheduling is one-shot |
 | Send in the **recipient's** timezone | ✅ Timewarp *Standard+* | ✅ *Pro+*, not with A/B | ❌ none | ➖ | ❌ | ✅ time windows | **(A)** |
 | Send-time optimization | ✅ *Standard+*, not in automations | ✅ per-contact *Enterprise* | ✅ Einstein, enhanced builder only | ✅ needs ≥12,000 recipients | ✅ *Standard+*, works in automations | ➖ | **(A)** |
-| **Frequency capping** (max N per contact per period) | ❌ not documented | ✅ *Enterprise only*, rolling, skips | ❌ **none** — a filterable field, not a governor | ✅ Smart Sending, 16h email default | ✅ global across campaigns + automations | ✅ composable shared + per-channel, 48h retry | **(A)** — see [G10](#g10) and [§4 P6](#p6) |
+| **Frequency capping** (max N per contact per period) | ❌ not documented | ✅ *Enterprise only*, rolling, skips | ❌ **none** — a filterable field, not a governor | ✅ Smart Sending, 16h email default | ✅ global across campaigns + automations | ✅ composable shared + per-channel, 48h retry | **(✔)** rolling 24h per person per site, on every plan; a refused message is deferred and retried, not dropped — see [G10](#g10) |
 | Quiet hours / business-hours-only sending | ❌ | ✅ workflow time windows | ✅ per program | ✅ SMS flows only | ❌ | ✅ delivery windows | **(A)** |
 | Throttled / batched delivery | ✅ *Standard+* | ✅ | ➖ | ➖ | ❌ | ✅ per-channel rate limits | **(A)** |
 | Rate-limit deferral that auto-retries | ➖ | ➖ | ➖ | ➖ | ➖ | ✅ | **(✔)** `CampaignSendDeferredError` returns the campaign to `scheduled`; nothing is counted |
@@ -147,7 +153,7 @@ Aglyn state is one of:
 
 | Capability | MC | HS | PD | KL | BV | CIO | Aglyn |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RFC 8058 one-click unsubscribe | ✅ | ✅ | ✅ | ✅ | ✅ campaigns + transactional | ✅ | **(C)** sent on campaigns **only**, and possibly inert — see [§4 P1](#p1) and [G3](#g3) |
+| RFC 8058 one-click unsubscribe | ✅ | ✅ | ✅ | ✅ | ✅ campaigns + transactional | ✅ | **(✔)** on every marketing send, added at the one chokepoint with a visible link on both parts. Whether it is inert is still unchecked — see [§4 P3](#p3) |
 | Safe `GET` / mutating `POST` unsubscribe split | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔★)** a prescanner cannot silently unsubscribe anyone |
 | A recorded consent basis consulted at send | ➖ | ✅ | ✅ | ➖ | ➖ | ➖ | **(✔)** `splitByMarketingConsent` on the send path |
 | Consent **provenance** — person vs operator assertion | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **(✔★)** `assertedBy: 'person' \| 'operator'` travels with the basis |
@@ -157,7 +163,7 @@ Aglyn state is one of:
 | **Frequency opt-down** ("send me less", chosen by the recipient) | ➖ | ❌ emulated with granular types | ➖ | ➖ | ➖ | ➖ | **(A)** — genuinely thin across the field; see [G10](#g10) |
 | Resubscribe that refuses to reverse a bounce or complaint | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔★)** correctly modeled as sender protection, not a user preference |
 | Suppression is an **evidence record**, not a delete | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | **(✔)** `releasedAt` field; the record is the proof it was honored |
-| Add a suppression by hand | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(A)** the card views and removes; it cannot add |
+| Add a suppression by hand | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(✔)** a drawer on the Suppressions card, recorded as its own reason with a note; the platform list has a staff reader and an audited release |
 | Tenant sends from **their own** verified domain | ✅ | ✅ | ✅ | ✅ | ✅ automatic DNS write | ✅ | **(C)** server complete, **no UI**, and the DKIM key cannot be issued yet |
 | Engagement-based sunsetting | ➖ playbook | ➖ | ➖ | ➖ playbook, manual bulk action | ➖ primitives | ➖ playbook | **(A)** — and note **no vendor automates this either** |
 | Import an existing list | ✅ | ✅ | ✅ | ✅ | ✅ with an opt-in attestation | ✅ | **(A)** export only — see [G5](#g5) |
@@ -376,7 +382,19 @@ does not own the order.** Aglyn does. We can join a campaign to an order exactly
 database, with no attribution window and no tracking script. That is a claim none of them
 can make, and it is the natural companion to [G4](#g4).
 
-### G9 — Suppression management is half a feature {#g9}
+### G9 — Suppression management is half a feature {#g9} — ✅ CLOSED
+
+> ✅ **Closed.** All three holes. *"a merchant can put an address on the
+> suppression list by hand"* added the Add control — a drawer, through a route
+> because the document id is `sha256` of the normalized address and a browser
+> computing it would be a second derivation — recording `reason: 'manual'` as
+> its own value rather than claiming somebody clicked a link. *"the platform
+> suppression list has a reader, a release and an explanation"* gave
+> `listEmailSuppressions` and `releaseEmail` their first callers: a staff card
+> with cursor paging and an audited, reason-required release; and the
+> merchant's Remove confirmation now says, before the click, when the address
+> is also blocked platform-wide. The description below is the state it was
+> written in.
 
 **What it is.** Three related holes. The suppressions card **views and removes but cannot
 add**, so a merchant asked to stop mailing someone cannot comply from the console. The
@@ -397,7 +415,19 @@ functions are written and unwired.
 compliance exposure: CAN-SPAM requires honoring an opt-out received by any means within
 10 business days, and a merchant forwarding "please stop emailing me" has no button.
 
-### G10 — A contact can receive five different emails with no ceiling {#g10}
+### G10 — A contact can receive five different emails with no ceiling {#g10} — ➖ HALF CLOSED
+
+> ➖ **The cap half is closed; the preference-center half is not.** *"bulk mail
+> carries an unsubscribe, a suppression check and a ceiling"* added a rolling
+> ceiling of five marketing messages per person per site per day, enforced at
+> the SEND — nobody is unsubscribed, no audience is trimmed, no contact is
+> removed. It is the same number on every plan, because it protects a shared
+> sending domain rather than anything a customer buys. A campaign counts toward
+> it and is exempt from its refusal: a cap that silently removed people from a
+> reviewed one-shot send would make the recipient count on screen a lie.
+>
+> **The preference center is still (A)**, and this register's own judgement —
+> that it is the better investment of the two — stands unchanged.
 
 **What it is.** No frequency capping of any kind. A single person can receive a campaign,
 an abandoned-cart reminder, a restock alert, a member post and an automation email in one
@@ -431,8 +461,8 @@ charged to every other tenant.
 | No from-name / reply-to / preheader field | **(A)** | S | `fromName` resolves from branding, so there is no way to send as anything else |
 | Segments cannot be edited, and take one source | **(C)** | S | Save-new and delete only; the chip reads `sources[0]` |
 | Contact-property write from an automation | **(A)** | M | `updateDataset` exists; tagging a contact from a workflow does not |
-| Two suppression key derivations (**D5**) | **(C)** | S | `server.ts:81` does not lowercase; `campaign-send.ts:160` does. Latent — they agree only because callers normalize upstream |
-| Docs say the send cap is per site (**D7**) | — | S | Live customer-facing inaccuracy; the cap is per org |
+| ~~Two suppression key derivations (**D5**)~~ | ✅ | — | Closed. `server.ts` now keys through `emailSuppressionKey`, and the unsubscribe signer and verifier are one module rather than two implementations of the same HMAC subject — the marketing gate would have been a third |
+| ~~Docs say the send cap is per site (**D7**)~~ | ✅ | — | Closed by `f6480558f`, before this register's work began. The page reads "per workspace" |
 | Docs describe adding list members by hand | — | S | There is no such control |
 | Self-host cannot use SMTP | **(C)** | M | Sending is hardcoded to `RESEND_SEND_ENDPOINT`; an operator must have a Resend account, which contradicts "every dependency configurable" |
 
@@ -611,7 +641,32 @@ list-quality enforcement is deliberately **post-hoc**, via the probation ladder 
 than a gate. That is a defensible design and a cheaper first step than [P4](#p4)'s
 full vetting flow.
 
-### P1 — Four bulk paths send with no unsubscribe header, no suppression check, and no cap {#p1}
+### P1 — Four bulk paths send with no unsubscribe header, no suppression check, and no cap {#p1} — ✅ CLOSED
+
+> ✅ **Closed**, exactly where this section said to close it: at the
+> `sendEmail` chokepoint. A caller declares `marketing: { hostId, siteBase }`
+> and the message gains the RFC 8058 header pair, a visible opt-out link on
+> both parts, a check against both suppression lists, and the [G10](#g10)
+> ceiling — one seam rather than four call sites remembering. The durable half
+> is injected from `@aglyn/tenant-data-admin` the way the send-rate governor
+> already is; nothing installed is ungated, not refused.
+>
+> All four paths declare it. The two cron sweeps additionally take `'bulk'`
+> priority, so the hourly governor can defer them, and they now stamp their
+> subject only when the message was not deferred — a refusal the window can
+> clear is retried, while a suppression retires the row instead of being
+> re-read on every beat. `member-post.ts`'s `limit(500)` with no `orderBy` is
+> fixed in the same commit.
+>
+> A build-time sweep (`marketing-mail-carries-its-controls.spec.ts`) enumerates
+> the audience senders from the source and fails on a fifth that does not
+> declare itself, so this cannot quietly reopen.
+>
+> **Two things it deliberately did NOT do**, both recorded in
+> [§6.4](#6-decisions-that-belong-to-the-owner) as the owner's: these paths
+> still do not count against `emailSendsPerMonth`, and `member-post.ts` and
+> the workflow email step stay transactional priority — neither is resumable,
+> and only a resumable sweep may take a refusal the recipient survives.
 
 **This is the top finding of the whole exercise.**
 
@@ -781,7 +836,13 @@ Sunset on **clicks and site activity, not opens** — Apple's Mail Privacy Prote
 inflated network-wide open rates by roughly 15%, and Klaviyo's own guidance is to treat
 clicks as the primary engagement metric.
 
-### P6 — No frequency capping {#p6}
+### P6 — No frequency capping {#p6} — ✅ CLOSED
+
+> ✅ **Closed** with [G10](#g10)'s cap half. Customer.io's shape rather than
+> Klaviyo's: a refused message is deferred and retried by the sweep that owns
+> it, not dropped silently, and `isDeferrableSendResult` is the one place that
+> distinction is made. The four uncontrolled paths named in [P1](#p1) are now
+> the ones the ceiling governs.
 
 The customer-facing half is [G10](#g10). The platform half is that complaint rate is the
 metric a cap protects, and with four uncontrolled paths ([P1](#p1)) there is currently no
