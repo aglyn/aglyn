@@ -28,12 +28,43 @@ alive.** That distinction changes what to do first.
 
 Three findings dominate everything else in this document:
 
-1. **The feedback loop has never run.** `RESEND_WEBHOOK_SECRET` is unset, so
-   `POST /api/email/events` answers `501`. That endpoint is the *only* writer of
-   bounce and complaint suppressions. Every hard bounce and every spam complaint
-   the platform has ever received has been discarded, and those addresses remain
-   fully mailable — on one shared domain, under `p=reject`, days before public
-   signups open.
+1. **The feedback loop was UNREACHABLE, for a different reason than first
+   reported.** `POST /api/email/events` is the *only* writer of bounce and
+   complaint suppressions, so if it never runs, every hard bounce and spam
+   complaint is discarded and those addresses stay fully mailable — on one
+   shared domain, under `p=reject`.
+
+   ⚠️ **Correction, 2026-08-29.** The original claim here — that
+   `RESEND_WEBHOOK_SECRET` is unset — was WRONG, and it was wrong because of
+   how the value was read, not what it is. The variable is Vercel type
+   **`sensitive`**, which is write-only: `vercel env pull` returns it as an
+   empty string whatever its real value. It was read as "present but empty"
+   and reported as unset. `RESEND_API_KEY` beside it is type `encrypted`,
+   which does pull back, which is exactly why one looked set and the other
+   did not.
+
+   The endpoint's own behaviour settles it: it answers **401 `Bad signature`**
+   to an unsigned POST, and the handler returns `501` before signature
+   verification when the secret is falsy. So the secret IS set.
+
+   What was genuinely broken was the edge: the path returned **429 Vercel
+   Security Checkpoint** to everything, because `/api/email/events` was absent
+   from the firewall's machine-traffic bypass while `/api/billing/webhook`
+   (Stripe) had been in it all along. Resend's deliveries were challenged and
+   dropped before reaching the function. Fixed 2026-08-29; bot protection
+   itself is unchanged and still `challenge`.
+
+   ⚠️ Still unverified: whether a webhook exists **in Resend** pointing at that
+   URL, and whether it is enabled. The production `RESEND_API_KEY` is a
+   send-only restricted key and cannot list webhooks, so this can only be
+   confirmed in the Resend dashboard. Given the edge rejected deliveries until
+   now, suppressions may be empty in practice even though the wiring is right.
+
+   **The general lesson, which is the reason this correction is written out in
+   full: a read that cannot see a value reports the same thing as a value that
+   is absent.** `vercel env ls` truncating (117 shown of 152) is the same trap;
+   so is `git grep` honouring `.gitignore`. Distrust any "it is not set" that
+   came from a reader rather than from the running system.
 2. **Consent is captured and never read.** `marketingConsent` is written by six
    call sites and consulted by **zero senders**. `campaign-send.ts` filters an
    audience against the suppression list and nothing else. The shipped
@@ -73,7 +104,7 @@ decision the owner has to make. The third is the real build.
 
 | What | Why it is dark | Consequence |
 | --- | --- | --- |
-| **`POST /api/email/events`** (the Resend webhook) | `RESEND_WEBHOOK_SECRET` unset on the **console** Vercel project → `501` at `libs/plugins/marketing/src/lib/server/email-events.ts:224` | **No opens, no clicks, no bounce suppressions, no complaint suppressions, no delivery-log rows.** The handler itself is correct and Svix-verified; nothing has ever called it successfully. |
+| **`POST /api/email/events`** (the Resend webhook) | ⚠️ **Corrected 2026-08-29.** `RESEND_WEBHOOK_SECRET` IS set — it is a `sensitive`-typed variable, which pulls back empty and was misread as unset. The real block was the edge: the path answered `429` (Vercel bot protection) because it was missing from the machine-traffic bypass. Fixed. | Whether any delivery has ever succeeded is still unknown: the send-only production key cannot list Resend webhooks, so the webhook's existence needs checking in the dashboard. |
 | Bounce/complaint suppression | Written *only* by that webhook | Every hard bounce and every "report spam" the platform has received is lost. Those addresses are still mailed. |
 | Campaign statistics | `delivered`/`opened`/`clicked` counters incremented only by that webhook | Every campaign's stats read zero. A merchant sees a feature that appears to do nothing. |
 | **All outbound mail, until 2026-08-28** | `USAGE_EMAIL_FROM` empty in production (operator-reported; verifiable at `GET /api/admin/email-health`) | `sendEmail` returned `{sent:false, reason:'unconfigured'}` and warned to the log. Because mail is best-effort everywhere, **nothing errored and no user-facing surface said anything was wrong.** |
@@ -600,7 +631,9 @@ requirement is not to regress it.
 
 ### Phase 0 — Turn on what is already built *(configuration only, ~1 day)*
 
-Set `RESEND_WEBHOOK_SECRET` on the **console** Vercel project and redeploy. Set
+Confirm a webhook exists in Resend pointing at `/api/email/events` and is
+enabled — `RESEND_WEBHOOK_SECRET` is already set, and the firewall bypass that
+was blocking delivery is in place as of 2026-08-29. Set
 `RESEND_READ_API_KEY`. Confirm `USAGE_EMAIL_FROM` via `GET /api/admin/email-health`.
 Confirm open tracking is enabled on the Resend domain.
 
