@@ -20,6 +20,7 @@ import {
   type ConsolePluginPageProps,
   formSpamCaughtNotice,
   formSubmissionsPausedNotice,
+  FORMS_MAX_PER_HOST,
   normalizeContactEmail,
   pluginDocsHelp,
   submissionMonthKey,
@@ -55,8 +56,10 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  MenuItem,
   Stack,
   Table,
+  TextField,
   TableBody,
   TableCell,
   TableHead,
@@ -72,6 +75,7 @@ import {
   orderBy,
   query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import {
   relativeTime,
@@ -105,6 +109,49 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   const { confirm } = useConfirmationContext()
 
   /*
+   * The site's forms, for the Submissions filter.
+   *
+   * Bounded and cheap: `FORMS_MAX_PER_HOST` is a flat platform cap, so this
+   * collection cannot grow past it and the read is one small page rather
+   * than the unbounded-collection scan the submissions list itself is
+   * carefully not doing.
+   *
+   * Ordered by `__name__`. `displayName` would be the nicer order and is the
+   * wrong instrument: `orderBy` on a data field DROPS every document missing
+   * it, invisibly, so a form saved without a name would vanish from its own
+   * filter. The list is sorted for display below, where a missing name is
+   * merely ugly.
+   */
+  const { data: formDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'forms'),
+        orderBy('__name__'),
+        limit(FORMS_MAX_PER_HOST),
+      ),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  const forms = useMemo(
+    () =>
+      [...(formDocs ?? [])].sort((left: any, right: any) =>
+        String(left.displayName ?? left.$id).localeCompare(
+          String(right.displayName ?? right.$id),
+        ),
+      ),
+    [formDocs],
+  )
+  /*
+   * `null` is "All forms"; a form id narrows to one form's submissions.
+   *
+   * A PRIMITIVE, deliberately: `usePagedCollection` reopens its listener when
+   * a dep changes, and an object identity would tear down and reopen on every
+   * render. It also resets the reader to page 1, which is what switching
+   * subjects should do.
+   */
+  const [formFilter, setFormFilter] = useState<string | null>(null)
+
+  /*
    * The inbox WALKS its submissions instead of sampling them (AGL-2501,
    * AGL-2292).
    *
@@ -133,10 +180,15 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
     (pageLimit) =>
       query(
         collection(firestore, 'hosts', hostId, 'formSubmissions'),
+        // Served by the `formId ASC, createdAt DESC` composite index in
+        // `cloud/firebase-firestore.indexes.json`, which must be deployed
+        // before this ships — without it Firestore refuses the query rather
+        // than answering it slowly.
+        ...(formFilter ? [where('formId', '==', formFilter)] : []),
         orderBy('createdAt', 'desc'),
         limit(pageLimit),
       ),
-    [firestore, hostId],
+    [firestore, hostId, formFilter],
     { idField: '$id' },
   )
 
@@ -465,10 +517,38 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                     contentGutterY
                     contentBordered="all"
                   >
+          {/*
+            * The Inbox stays the site-wide answer to "who is waiting for a
+            * reply" — that question does not decompose by form. This narrows
+            * it on request; it does not turn the page into a per-form view.
+            *
+            * Rendered only when the site HAS forms, so a site that has not
+            * adopted any sees the page exactly as it was.
+            */}
+          {forms.length > 0 ? (
+            <TextField
+              select
+              size="small"
+              label={'Form'}
+              value={formFilter ?? ''}
+              onChange={(event) => setFormFilter(event.target.value || null)}
+              sx={{ mb: 2, minWidth: 240 }}
+            >
+              <MenuItem value="">{'All forms'}</MenuItem>
+              {forms.map((form: any) => (
+                <MenuItem key={form.$id} value={form.$id}>
+                  {form.displayName || form.$id}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
           {submissions.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              {'No form submissions yet. Add a Contact Form element to a ' +
-                'screen — visitor messages arrive here.'}
+              {formFilter
+                ? 'No submissions for this form yet. Submissions sent before ' +
+                  'the form was created stay under All forms.'
+                : 'No form submissions yet. Add a Contact Form element to a ' +
+                  'screen — visitor messages arrive here.'}
             </Typography>
           ) : (
             <>
