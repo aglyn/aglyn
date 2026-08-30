@@ -220,6 +220,25 @@ function makeDocRef(path: string): any {
       }
       docs.set(path, next)
     },
+    /*
+     * `create` REJECTS when the document already exists, which is the whole
+     * reason the replay guard can be atomic — it is the claim primitive, not
+     * a convenience for `set`. A double that let a second create succeed
+     * would report a guard that dedupes nothing as working.
+     */
+    create: async (value: Record<string, unknown>) => {
+      if (docs.has(path)) {
+        const error: Error & { code?: number } = new Error(
+          `ALREADY_EXISTS: Document already exists: ${path}`,
+        )
+        error.code = 6
+        throw error
+      }
+      docs.set(path, { ...value })
+    },
+    delete: async () => {
+      docs.delete(path)
+    },
     collection: (name: string) => makeCollectionRef(`${path}/${name}`),
   }
 }
@@ -373,9 +392,24 @@ function makeResponse() {
 }
 
 /** Delivers a genuinely Svix-signed event, as Resend does. */
-async function deliver(event: Record<string, unknown>) {
+/*
+ * Every delivery gets its OWN message id, because every delivery in
+ * production does. Re-using one id across calls made this suite assert that
+ * the same event counts twice, which is the behaviour the replay guard
+ * exists to prevent — so a shared id here would have read as the guard
+ * being broken.
+ *
+ * `replayOf` is how a test asks for the other case on purpose: the SAME id
+ * delivered again, which is what a provider retry and a dashboard replay
+ * both look like on the wire.
+ */
+let deliveryCounter = 0
+async function deliver(
+  event: Record<string, unknown>,
+  options: { replayOf?: string } = {},
+) {
   const rawBody = JSON.stringify(event)
-  const id = 'msg_1'
+  const id = options.replayOf ?? `msg_${(deliveryCounter += 1)}`
   const timestamp = '1799000000'
   const signature = createHmac(
     'sha256',
@@ -400,8 +434,22 @@ async function deliver(event: Record<string, unknown>) {
     } as any,
     res,
   )
-  return result
+  return Object.assign(result, { messageId: id })
 }
+
+/**
+ * Every path the handler wrote, EXCEPT the replay guard's own claim.
+ *
+ * The claim is bookkeeping rather than an outcome — it records that an event
+ * was counted, and it is written on every counted event by construction. A
+ * whole-store equality that included it would assert the guard's mechanics in
+ * cases that are about something else entirely, so it is excluded once here
+ * rather than tolerated case by case. The exclusion is exact: anything
+ * outside `apiIdempotency/` still has to be accounted for, so a stray write
+ * is still a failure.
+ */
+const writtenPaths = () =>
+  [...docs.keys()].filter((key) => !key.startsWith('apiIdempotency/'))
 
 /** An `email.opened`/`email.clicked` payload with the tags Aglyn stamps. */
 const event = (
@@ -514,7 +562,7 @@ describe('a tag that names a path rather than an id', () => {
       event('email.opened', { hostId: 'a/b/c', campaignId: CAMPAIGN }),
     )
 
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
     expect(result.body).toEqual({ ignored: true })
   })
 
@@ -523,7 +571,7 @@ describe('a tag that names a path rather than an id', () => {
       event('email.opened', { hostId: HOST, campaignId: 'a/b/c' }),
     )
 
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
     expect(result.body).toEqual({ ignored: true })
   })
 
@@ -557,7 +605,7 @@ describe('a tag that names a path rather than an id', () => {
       event('email.opened', { hostId: HOST, campaignId }),
     )
 
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
     expect(result.body).toEqual({ ignored: true })
   })
 })
@@ -633,7 +681,7 @@ describe('experiment conversion', () => {
 
     await deliver(event('email.clicked', { ...TAGS, experimentId: EXPERIMENT }))
 
-    expect([...docs.keys()].filter((key) => key.includes('/stats/'))).toEqual(
+    expect(writtenPaths().filter((key) => key.includes('/stats/'))).toEqual(
       [],
     )
   })
@@ -643,7 +691,7 @@ describe('experiment conversion', () => {
 
     await deliver(event('email.clicked', { ...TAGS, experimentId: 'a/b/c' }))
 
-    expect([...docs.keys()]).toEqual([CAMPAIGN_PATH])
+    expect(writtenPaths()).toEqual([CAMPAIGN_PATH])
   })
 
   it('does not convert on an open', async () => {
@@ -697,7 +745,7 @@ describe('the pre-existing gates', () => {
     const result = await deliver(event('email.opened', { hostId: HOST }))
 
     expect(result.body).toEqual({ ignored: true })
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
   })
 })
 
@@ -835,7 +883,7 @@ describe('a delivery failure with no site to attribute it to', () => {
       releasedAt: null,
     })
     // And no per-host document was invented for a site that was never named.
-    expect([...docs.keys()]).toEqual([PLATFORM_PATH])
+    expect(writtenPaths()).toEqual([PLATFORM_PATH])
   })
 
   it('files a platform complaint too', async () => {
@@ -854,7 +902,7 @@ describe('a delivery failure with no site to attribute it to', () => {
     )
 
     expect(result.body).toEqual({ ok: true, suppressed: false })
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
   })
 
   it('ignores an event with no recipient', async () => {
@@ -867,7 +915,7 @@ describe('a delivery failure with no site to attribute it to', () => {
     })
 
     expect(result.body).toEqual({ ignored: true })
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
   })
 
   it('writes NO platform record for a hostId that names a path', async () => {
@@ -882,7 +930,7 @@ describe('a delivery failure with no site to attribute it to', () => {
       ),
     )
 
-    expect([...docs.keys()]).toEqual([PLATFORM_PATH])
+    expect(writtenPaths()).toEqual([PLATFORM_PATH])
     expect(docs.get(PLATFORM_PATH)?.['hostId']).toBeNull()
   })
 })
@@ -935,6 +983,144 @@ describe('the open and click path is unchanged', () => {
 
     expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
     expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+  })
+})
+
+/*==========================================
+ * THE REPLAY GUARD.
+ *
+ * Delivery is at least once and the counters are `increment(1)`, so the same
+ * event arriving twice used to mean two opens. A provider retry, a retry
+ * after a non-2xx, and a human pressing Replay in the dashboard all put the
+ * SAME message id back on the wire — which is what these deliver.
+ *=========================================*/
+describe('the same delivery event arriving twice', () => {
+  it('counts it once, however many times it is replayed', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    const first = await deliver(event('email.opened', TAGS))
+    await deliver(event('email.opened', TAGS), { replayOf: first.messageId })
+    await deliver(event('email.opened', TAGS), { replayOf: first.messageId })
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
+  })
+
+  it('says so rather than reporting a count it did not make', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    const first = await deliver(event('email.opened', TAGS))
+    const again = await deliver(event('email.opened', TAGS), {
+      replayOf: first.messageId,
+    })
+
+    // 200, because a replay is not an error and must not provoke a retry.
+    expect(again.status).toBe(200)
+    expect(again.body).toMatchObject({ counted: false })
+  })
+
+  /**
+   * ANTI-VACUITY. Without this, a guard that refused EVERY event would pass
+   * both cases above — two distinct events are exactly what must still count
+   * twice, and they are the common case.
+   */
+  it('CONTROL — two DIFFERENT events still count twice', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+    await deliver(event('email.opened', TAGS))
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 4, clicks: 5 })
+  })
+
+  /**
+   * THE CLAIM IS THE MESSAGE ID, and nothing else about the payload.
+   *
+   * So a redelivery whose body has been changed — a different event type in
+   * this case — is still refused, because the id says it is the same
+   * delivery. That is the right direction for a counter: the provider mints
+   * one id per event, two types can never legitimately share one, and if they
+   * ever did, believing the id over the body under-counts rather than
+   * inflates.
+   *
+   * Stated as a test because it is genuinely surprising if you assume the
+   * digest covers the payload, and someone widening the guard later needs to
+   * know the payload was never in it.
+   */
+  it('refuses a redelivery on the message id alone, not the payload', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    const first = await deliver(event('email.opened', TAGS))
+    await deliver(event('email.clicked', TAGS), { replayOf: first.messageId })
+
+    // The click did NOT count: same id, therefore the same delivery.
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
+  })
+
+  /**
+   * THE RELEASE PATH. A counter write that fails must hand the key back, or
+   * the event becomes permanently uncountable: the handler answers 200
+   * whatever happens, so the provider never retries, and a settled claim
+   * would then refuse the manual replay that is the only way left to recover
+   * it. Failing and then refusing the retry is worse than either alone.
+   */
+  it('lets a replay count an event whose first attempt failed', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const outage: Error & { code?: number } = new Error('INTERNAL')
+    outage.code = 13
+    updateFailure = outage
+
+    const first = await deliver(event('email.opened', TAGS))
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 2, clicks: 5 })
+
+    updateFailure = undefined
+    await deliver(event('email.opened', TAGS), { replayOf: first.messageId })
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
+  })
+
+  /**
+   * The experiment conversion is the SECOND `increment(1)` behind the same
+   * claim, and it would double just as quietly.
+   */
+  it('does not double an experiment conversion on a replay', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    docs.set(EXPERIMENT_PATH, experimentDoc('variant-a'))
+
+    const first = await deliver(
+      event('email.clicked', { ...TAGS, experimentId: EXPERIMENT }),
+    )
+    await deliver(event('email.clicked', { ...TAGS, experimentId: EXPERIMENT }), {
+      replayOf: first.messageId,
+    })
+
+    expect(docs.get(`${EXPERIMENT_PATH}/stats/variant-a`)).toEqual({
+      conversions: 1,
+      updatedAt: SERVER_TIME,
+    })
+  })
+
+  /**
+   * The delivery log is deliberately OUTSIDE the guard: it keys by the
+   * provider's message id and merges, so replaying refreshes a row rather
+   * than adding one — and a row whose first write failed should get another
+   * chance. A guard that covered it would make that unrecoverable.
+   */
+  it('still runs the delivery log on a replay', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const payload = {
+      type: 'email.opened',
+      data: { email_id: 'msg_log', to: [RECIPIENT], tags: TAGS },
+    }
+
+    const first = await deliver(payload)
+    await deliver(payload, { replayOf: first.messageId })
+
+    // TWICE for the log — it keys by the provider's message id and merges, so
+    // the second pass refreshes the row rather than adding one, and a row
+    // whose first write failed gets another chance.
+    expect(recordedDeliveryEvents.flat()).toHaveLength(2)
+    // ONCE for the counter, in the same pair of deliveries.
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
   })
 })
 

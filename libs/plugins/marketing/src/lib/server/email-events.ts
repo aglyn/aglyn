@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import { claimAttempt, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { normalizeResendDeliveryEvents } from '@aglyn/shared-util-email'
 // AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
 // copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
@@ -308,6 +308,50 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     if (!hostRef || !isDocumentId(campaignId)) {
       return res.status(200).json({ ignored: true })
     }
+
+    /*==========================================
+     * THE REPLAY GUARD, around the counters and nothing else.
+     *
+     * Delivery is AT LEAST ONCE and the two writes below are
+     * `FieldValue.increment(1)`, which is the combination that inflates a
+     * statistic. Three things deliver the same event twice: a provider retry
+     * after our function wrote and then timed out before answering, a
+     * retry after any non-2xx, and a human pressing **Replay** in the
+     * provider's dashboard — which is not a hypothetical, since replay is how
+     * events that failed while the signing secret was unset get recovered.
+     * Every one of those turns one open into two.
+     *
+     * The claim is keyed on the Svix message id, which is stable across all
+     * three: a retry and a replay of one event carry the id the first
+     * delivery carried. `kind` and `scopeId` go into the digest with it, so
+     * one site's event cannot collide with another's.
+     *
+     * ## Why it wraps the counters rather than the whole handler
+     *
+     * Everything above this point is already idempotent and worth re-running.
+     * The per-recipient delivery log keys by the provider's message id and
+     * merges, so a replay refreshes a row rather than adding one — and a row
+     * that failed to write the first time SHOULD get another chance.
+     * Suppression is a set: suppressing an address twice is suppressing it
+     * once. Only the increments cannot survive being repeated, so only they
+     * are behind the claim.
+     *
+     * ⚠️ `claimAttempt` treats an EMPTY key as "no claim" and returns a
+     * no-op, which would silently reopen this hole. It cannot happen here —
+     * the signature check above refuses a request with no `svix-id` before
+     * reaching this line — and there is a test that fails if that stops
+     * being true.
+     *=========================================*/
+    const counted = await claimAttempt(firestore, {
+      kind: 'resend-email-event',
+      scopeId: hostId,
+      orgId: '',
+      key: svixId,
+      busyMessage: 'This delivery event is already being counted.',
+    })
+    if ('replay' in counted) {
+      return res.status(200).json({ ok: true, counted: false })
+    }
     // Plain refusal (AGL-1768). A merge-set against a missing path CREATES it,
     // so an open re-created a campaign the merchant had deleted — a document
     // holding a `stats` map and nothing else: no subject, no body, no
@@ -322,10 +366,11 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     // DOTTED FIELD PATH, not a nested map. `update({ stats: { opens: … } })`
     // REPLACES the whole `stats` map, so every open would clobber `clicks`;
     // only `set({ merge: true })` merges maps at depth.
-    await updateExisting(hostRef.collection('campaigns').doc(campaignId), {
-      [type === 'email.opened' ? 'stats.opens' : 'stats.clicks']:
-        FieldValue.increment(1),
-    })
+    try {
+      await updateExisting(hostRef.collection('campaigns').doc(campaignId), {
+        [type === 'email.opened' ? 'stats.opens' : 'stats.clicks']:
+          FieldValue.increment(1),
+      })
 
     // Experiment conversion (AGL-268): clicks are the signal.
     const experimentId = tags['experimentId']
@@ -363,9 +408,30 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
               },
               { merge: true },
             )
+          }
         }
       }
+    } catch (error) {
+      /*
+       * Give the key back, so the count this attempt did not make is still
+       * makeable. Without it a failure here is permanent in a way the failure
+       * itself is not: the outer handler answers 200 whatever happens (see
+       * below), so the provider never retries, and a settled claim would then
+       * refuse the manual replay that is the only remaining way to recover
+       * the event.
+       *
+       * Releasing cannot itself be fatal — the original error is what is
+       * worth reporting, and losing it to a secondary failure while cleaning
+       * up would hide the real cause.
+       */
+      await counted.claim.release().catch(() => undefined)
+      throw error
     }
+    /*
+     * Settled only after both writes landed, which is what makes the claim
+     * mean "this event has been counted" rather than "this event was seen".
+     */
+    await counted.claim.record(200, { ok: true, counted: true })
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error(error)
