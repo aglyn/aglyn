@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
 import {
@@ -85,6 +86,18 @@ export async function scanAbandonedCheckouts(
   // alongside the entitlement, from the same org doc, through the one shared
   // resolver — so the recovery email's sender reads as the store's brand.
   const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
+  /*
+   * One identity resolution per SITE, not per message.
+   *
+   * The same reason the branding map above exists: this sweep runs across
+   * every site, and an uncached resolution here would be two Firestore reads
+   * per recipient rather than per host. Scoped to the run, so a domain
+   * un-verified by the re-check sweep is picked up on the next one.
+   */
+  const identityByHost = new Map<
+    string,
+    Awaited<ReturnType<typeof hostSendingIdentity>>
+  >()
   /** Each site's public origin, for the unsubscribe link on the reminder. */
   const siteBaseByHost = new Map<string, string>()
   // Resolve each host's designed template once per run (AGL-770).
@@ -174,6 +187,8 @@ export async function scanAbandonedCheckouts(
           'Your items are held but not reserved, so they may sell out.',
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostId)?.fromName,
+      sendingIdentity: await hostSendingIdentity(hostId, identityByHost),
+      audience: 'tenant',
       context: 'abandoned cart',
       priority: 'bulk',
       marketing: { hostId, siteBase: siteBaseByHost.get(hostId) ?? '' },

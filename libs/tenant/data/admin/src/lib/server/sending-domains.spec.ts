@@ -190,15 +190,28 @@ describe('an unverified record refuses', () => {
     expect(verdict.from).toBeNull()
   })
 
-  it('sends on the platform identity only when the site selects nothing', async () => {
+  /**
+   * The rule this feature is FOR, stated where its opposite used to be.
+   *
+   * A site that has selected nothing does not borrow the platform's address.
+   * `aglyn.com` carries Aglyn's own billing and account mail, and a tenant's
+   * list quality must never be charged against it — which is what the previous
+   * behavior did, for every site, including their transactional mail.
+   *
+   * `platformFrom` is supplied and CORRECT here on purpose: the assertion is
+   * not that the address was unavailable, it is that a perfectly usable
+   * platform address is not reachable from this audience at all.
+   */
+  it('refuses rather than borrowing the platform address when the site selects nothing', async () => {
     const verdict = await resolveHostSendingIdentity({
       orgId: ORG,
       selectedDomain: null,
       platformFrom: PLATFORM,
     })
 
-    expect(verdict.source).toBe('platform')
-    expect(verdict.from).toBe(PLATFORM)
+    expect(verdict.source).toBeNull()
+    expect(verdict.from).toBeNull()
+    expect(verdict.refusal.code).toBe('tenant-identity-unprovisioned')
   })
 
   it('sends on the custom identity once the domain verifies', async () => {

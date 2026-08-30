@@ -430,51 +430,26 @@ export interface CampaignSendOptions {
    * clicking a link in their own inbox.
    */
   proofPersona?: { email: string; name?: string }
-  /**
-   * WHICH OF THE SITE'S IDENTITIES THIS SEND LEAVES ON.
+  /*
+   * THERE IS NO `sendingIdentity` OPTION.
    *
-   * Two values and no more: empty for the site's standing selection, and
-   * {@link PLATFORM_SENDING_IDENTITY} for the shared Aglyn domain. It is a
-   * CHOICE BETWEEN the identities this site already has, and never a name a
-   * request supplies.
+   * There was one, with exactly two values: empty for the site's standing
+   * selection, and `platform` for the shared Aglyn domain. The second value
+   * is gone, and with it the whole option, because a campaign is a site
+   * talking to its own audience and `aglyn.com` is where Aglyn's billing and
+   * account mail leaves from. A merchant choosing to put their campaign there
+   * is choosing to charge their list's complaint rate against every other
+   * customer's password reset — which is not a decision that is theirs to
+   * make, however deliberately they make it.
    *
-   * ## Why it is not a domain name
-   *
-   * Because a domain name in a request is the spoofing path, and it stays
-   * closed. `campaignSendHandler` builds its options from the body, so any
-   * field read off `options` is a field an authenticated site editor chooses.
-   * A domain here would let an editor of one site in an agency org send as a
-   * DIFFERENT client's verified domain — the org proved that name, so a
-   * resolver checking only "is this verified for the org" would say yes.
-   *
-   * Which identity a site may use is the per-host half of the model, stored
-   * at `hosts/{hostId}.sendingDomain` and written by an org admin. This
-   * option picks between that and the shared domain; it cannot reach past it.
-   *
-   * ## Why `platform` is a choice rather than a fallback
-   *
-   * An unverified selection still REFUSES — there is no arm anywhere that
-   * reaches a platform address from a domain whose DNS is unfinished. This is
-   * the opposite direction: a merchant with a working custom identity saying
-   * "send this one from the shared domain", which is a decision they are
-   * entitled to make and which is recorded on the send.
+   * Deleting it rather than validating it against a plan is what makes that a
+   * property instead of a rule. The address a campaign leaves on is now
+   * resolved from the host document alone, in one place, and there is no
+   * field a request can carry that changes it.
    */
-  sendingIdentity?: string
   /** Recorded as `sentBy`; the scheduler passes the scheduling user. */
   senderUid: string
 }
-
-/**
- * The value of {@link CampaignSendOptions.sendingIdentity} that names the
- * shared Aglyn domain.
- *
- * A reserved word rather than an empty string, because empty already means
- * something different and load-bearing: "the composer expressed no opinion,
- * use the site's standing selection". A merchant choosing the shared domain
- * for one send has expressed an opinion, and a site whose default is its own
- * verified domain must not have that choice read as silence.
- */
-export const PLATFORM_SENDING_IDENTITY = 'platform'
 
 /**
  * Loads a designed email template's nodes + referenced products for the
@@ -1559,20 +1534,16 @@ export async function performCampaignSend(
    * whose DNS is unfinished has to be told, by name, at the composer.
    */
   /*
-   * The site's standing selection, or nothing at all when this send chose the
-   * shared domain.
+   * The site's standing selection, and nothing else.
    *
-   * The ONLY thing an option can do here is drop the selection. It cannot
-   * introduce one, which is what keeps a request from naming a domain to send
-   * as — the address is assembled from the host document in both arms, and
-   * resolved through the same function on the same terms either way.
+   * No option reaches this. The address is assembled from the host document,
+   * so a request cannot name a domain to send as — which is the spoofing path
+   * — and cannot drop the selection to reach the shared platform domain
+   * either, which is the reputation path. Both used to be one field.
    */
   const sendingIdentity = await resolveHostSendingIdentity({
     orgId,
-    selectedDomain:
-      String(options.sendingIdentity ?? '').trim() === PLATFORM_SENDING_IDENTITY
-        ? ''
-        : hostSnapshot.get('sendingDomain'),
+    selectedDomain: hostSnapshot.get('sendingDomain'),
     selectedLocalPart: hostSnapshot.get('sendingLocalPart'),
   })
   const identityRefusal = sendingIdentityRefusal(sendingIdentity)
@@ -1977,6 +1948,10 @@ export async function performCampaignSend(
         // send path re-checks it, so a refusal holds even here where the
         // route has already passed one.
         sendingIdentity,
+        // A campaign is a site talking to its own audience, so the shared
+        // platform address is not reachable from it even if the resolution
+        // above somehow yielded nothing.
+        audience: 'tenant',
         // Event attribution (AGL-268): the opens/clicks webhook maps
         // deliveries back to the campaign (and experiment) via tags.
         tags: [
@@ -2249,12 +2224,6 @@ export async function performCampaignSend(
       // is read months later, by which time the org's branding default may be
       // a different name than the one this campaign went out under.
       ...(options.fromName ? { fromName: options.fromName } : {}),
-      // Which identity it left on, for the same reason the display name is
-      // recorded: the site's standing selection can move, and a report read
-      // months later has to say what THIS send went out as.
-      ...(options.sendingIdentity
-        ? { sendingIdentity: options.sendingIdentity }
-        : {}),
       ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       ...(options.preheader ? { preheader: options.preheader } : {}),
       ...(options.displayName ? { displayName: options.displayName } : {}),
@@ -2825,12 +2794,6 @@ function storedSendOptionsFrom(
     ...optional('listId'),
     ...optional('topicId'),
     ...optional('fromName'),
-    // A scheduled or resumed send leaves on the identity it was composed
-    // under. Without this it would silently revert to the site's standing
-    // selection between the compose and the send, which is the same class of
-    // defect as reverting the from name — except that it changes the domain
-    // in front of the recipient rather than the words.
-    ...optional('sendingIdentity'),
     ...optional('replyTo'),
     ...optional('preheader'),
     ...optional('displayName'),
@@ -2924,18 +2887,13 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    */
   const displayName = headerSafe(req.body?.displayName, 60)
   /*
-   * WHICH OF THE SITE'S IDENTITIES THIS SEND LEAVES ON.
+   * `req.body.sendingIdentity` is READ BY NOTHING.
    *
-   * Reduced to the one reserved word or to nothing AT THE EDGE, so nothing
-   * downstream ever holds a domain name that came out of a request. A body
-   * naming `acme.com` here is not an error and is not honored — it is not a
-   * value this field has, and it resolves to the site's standing selection
-   * exactly as an absent field does.
+   * A body naming `acme.com`, or `platform`, is not an error and is not
+   * honored: the address is resolved from the host document, so there is no
+   * value this field could carry that would reach it. Left undocumented it
+   * would look like an oversight; said here, it is the closure.
    */
-  const sendingIdentity =
-    String(req.body?.sendingIdentity ?? '').trim() === PLATFORM_SENDING_IDENTITY
-      ? PLATFORM_SENDING_IDENTITY
-      : ''
   // The campaign this send joins. Validated as a document id here because it
   // is stored and later queried as one.
   const emailCampaignId = String(req.body?.emailCampaignId ?? '')
@@ -3061,7 +3019,8 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
        * The three choices are independent and only one of them decides who
        * receives mail. `personaEmail` changes what the merge tags RESOLVE to
        * and reaches nobody; `to` is the only address anything is delivered
-       * to; `sendingIdentity` is which of the site's identities it leaves on.
+       * to. Which identity it leaves on is not among them: that is resolved
+       * from the host document, and no request field reaches it.
        */
       const ownEmail = String(decoded.email ?? '')
         .trim()
@@ -3128,7 +3087,6 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         fromName,
         replyTo,
         preheader,
-        ...(sendingIdentity ? { sendingIdentity } : {}),
         ...(persona ? { proofPersona: persona } : {}),
         recordCampaign: false,
         senderUid: decoded.uid,
@@ -3222,7 +3180,6 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
          * does and throws the same 409, so picking a domain whose DNS is
          * unfinished says so the moment it is picked.
          */
-        ...(sendingIdentity ? { sendingIdentity } : {}),
         senderUid: decoded.uid,
         dryRun: true,
       })
@@ -3384,7 +3341,6 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           // scheduled processor mails the message that was composed rather
           // than one that reverts to the org's branding defaults.
           ...(fromName ? { fromName } : {}),
-          ...(sendingIdentity ? { sendingIdentity } : {}),
           ...(replyTo ? { replyTo } : {}),
           ...(preheader ? { preheader } : {}),
           ...(displayName ? { displayName } : {}),
@@ -3614,7 +3570,6 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
       fromName,
-      ...(sendingIdentity ? { sendingIdentity } : {}),
       replyTo,
       preheader,
       displayName,

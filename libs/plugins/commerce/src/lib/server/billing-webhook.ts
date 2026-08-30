@@ -30,6 +30,7 @@ import {
   recordConnectPayoutFailure,
   syncConnectAccountStatus,
   updateExisting,
+  hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import {
@@ -3101,6 +3102,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               text: designed?.text || fallbackText,
               ...(designed?.html ? { html: designed.html } : {}),
               fromName: (await brandFor(hostId)).fromName,
+              sendingIdentity: await hostSendingIdentity(String(hostId)),
+              audience: 'tenant',
               context: 'reservation confirmation',
             })
             // Cost meter (AGL-1438). Transactional: the guest has paid, and a
@@ -3440,6 +3443,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             fromName: (await brandFor(hostId)).fromName,
+            sendingIdentity: await hostSendingIdentity(String(hostId)),
+            audience: 'tenant',
             context: 'cart receipt',
           })
           // Cost meter (AGL-1438). Transactional: a dropped receipt looks to
@@ -3730,6 +3735,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 text: designed?.text || fallbackText,
                 ...(designed?.html ? { html: designed.html } : {}),
                 fromName: (await brandFor(hostId)).fromName,
+                sendingIdentity: await hostSendingIdentity(String(hostId)),
+                audience: 'tenant',
                 context: 'gift card',
               })
               // Cost meter (AGL-1438). Transactional: this email IS the
@@ -4380,6 +4387,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   `Ship to: ${payload.shippingName ?? payload.customerEmail ?? 'see order'}\n\n` +
                   `Add tracking: ${payload.updateUrl}&trackingNumber=TRACKING&carrier=CARRIER`,
                 fromName: (await brandFor(hostId)).fromName,
+                sendingIdentity: await hostSendingIdentity(String(hostId)),
+                audience: 'tenant',
                 context: 'dropship supplier notice',
               })
               // Cost meter (AGL-1438). Transactional: without it the order is
@@ -4496,6 +4505,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               text: designed?.text || fallbackText,
               ...(designed?.html ? { html: designed.html } : {}),
               fromName: (await brandFor(hostId)).fromName,
+              sendingIdentity: await hostSendingIdentity(String(hostId)),
+              audience: 'tenant',
               context: 'receipt',
             })
             // Cost meter (AGL-1438). Transactional, as the cart receipt above.
@@ -4547,6 +4558,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 text: designed?.text || fallbackText,
                 ...(designed?.html ? { html: designed.html } : {}),
                 fromName: (await brandFor(hostId)).fromName,
+                sendingIdentity: await hostSendingIdentity(String(hostId)),
+                audience: 'tenant',
                 context: 'seller order notice',
               })
               // Cost meter (AGL-1438). Transactional: the seller learns about

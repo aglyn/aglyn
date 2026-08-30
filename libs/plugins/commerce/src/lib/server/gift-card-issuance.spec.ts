@@ -134,6 +134,25 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   )
   return {
     updateExisting,
+    /*
+     * The site's own sending identity, which every tenant send now resolves.
+     *
+     * A VERIFIED one, because this spec is about the mail its subject sends
+     * rather than about the identity boundary — a refusing stub would turn it
+     * into an assertion that no mail was sent. The boundary is proved in
+     * `platform-sending-domain.spec.ts`, `host-sending-domain.spec.ts` and
+     * `email-audience-coverage.spec.ts`.
+     *
+     * The domain is the SITE's, never `aglyn.com`, so an assertion on a From:
+     * address here cannot pass against a platform fallback.
+     */
+    hostSendingIdentity: async () => ({
+      from: 'hello@site.mail.aglyn.app',
+      source: 'custom',
+      domain: 'site.mail.aglyn.app',
+      summary: 'Sending as hello@site.mail.aglyn.app.',
+      refusal: null,
+    }),
     firebaseAdmin: {
       app: () => ({ firestore: () => fakeFirestore }),
       firestore: {

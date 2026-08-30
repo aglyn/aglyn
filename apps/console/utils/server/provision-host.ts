@@ -20,7 +20,11 @@ import {
   createResourceUid,
   suggestSubdomains,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin, registerOrgHost } from '@aglyn/tenant-data-admin'
+import {
+  ensureHostSendingDomain,
+  firebaseAdmin,
+  registerOrgHost,
+} from '@aglyn/tenant-data-admin'
 
 /**
  * The two steps that actually provision a site, shared by the console's
@@ -221,5 +225,28 @@ export async function claimHostForOrg(
   }
   // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
   await registerOrgHost(orgId, hostId, subdomain)
+
+  /*
+   * CLAIM THE SITE'S SENDING DOMAIN.
+   *
+   * Here rather than at first send, even though the claim itself is cheap
+   * enough to make anywhere. Creation is the moment the site's name is
+   * decided, and pinning the mail label from the name it was CREATED under is
+   * what makes a later rename free of consequences — the label is a snapshot
+   * of the slug at one instant, and the earliest instant is the least
+   * surprising one.
+   *
+   * It claims a name and nothing more. The provider call and the DNS write
+   * belong to the console sweep, which runs on its own schedule, so a site's
+   * creation never waits on a vendor and never fails because one is down.
+   *
+   * Best-effort, and deliberately AFTER the host is registered. A site that
+   * exists but cannot yet send is a site the sweep completes within the hour;
+   * a create that failed because a mail claim did not is a site the customer
+   * does not have. The sweep re-derives the claim from the host document, so
+   * nothing is lost by this returning nothing.
+   */
+  await ensureHostSendingDomain({ hostId, orgId, subdomain }).catch(() => null)
+
   return { allowed: true, hostId }
 }

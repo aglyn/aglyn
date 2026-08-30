@@ -229,6 +229,21 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   return {
     __esModule: true,
     ...apiHttp,
+    /*
+     * The site's sending-domain CLAIM, made at creation so the mail label is
+     * pinned from the name the site was created under.
+     *
+     * Stubbed to a no-op: this spec is about the API's create contract, and
+     * the claim is deliberately best-effort and after the transaction — a
+     * create must not fail because a mail claim did. What the claim does is
+     * proved in `host-sending-domain.spec.ts`.
+     */
+    ensureHostSendingDomain: async () => ({
+      domain: null,
+      label: null,
+      created: false,
+      error: null,
+    }),
     verifyApiKey: async () => ({ orgId: 'org-1', keyId: 'key-1', scopes: mockScopes }),
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,

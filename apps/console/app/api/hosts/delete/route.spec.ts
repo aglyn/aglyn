@@ -55,6 +55,17 @@ const mockAuditAdd = jest.fn(async (..._args: unknown[]) => undefined)
 const mockHostData = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The site's sending domain, read before the erase and released after it.
+   *
+   * Stubbed to "nothing provisioned" here: these specs are about the delete's
+   * authorization and ordering, and a site with no sending domain is the
+   * state that exercises the skip path. The teardown itself — that it names
+   * the Resend domain, the DKIM selector and the zone records before anything
+   * is dropped — is proved in `host-sending-domain.spec.ts`.
+   */
+  readHostSendingTeardown: async () => null,
+  releaseHostSendingDomain: async () => undefined,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
