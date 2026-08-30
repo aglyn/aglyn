@@ -101,6 +101,40 @@
 export const EMAIL_MAX_RECIPIENTS_PER_SEND = 500
 
 /**
+ * People one email may resolve, and therefore ever reach.
+ *
+ * The read budget for resolving one audience, and the ceiling on how many
+ * addresses one email's reach record may hold — the two have to be the same
+ * number, because an email cannot reach more people than its audience can
+ * resolve. Stated here with the other ceilings for the reason the per-send
+ * cap is: held privately in the sender it was a number nothing could be
+ * checked against.
+ *
+ * Reaching it truncates nothing silently. The resolution reports it, the
+ * recorded `audienceSize` becomes a floor rather than a total, and every
+ * surface derived from it says so.
+ */
+export const EMAIL_MAX_AUDIENCE_PER_SEND = 5000
+
+/**
+ * Batches one email may run before it stops on its own.
+ *
+ * An audience larger than {@link EMAIL_MAX_RECIPIENTS_PER_SEND} is delivered
+ * across several invocations, each one picking up where the last stopped. The
+ * frontier advances by the per-send cap every time, so
+ * `ceil(audience / perSend)` batches finish any audience the sender can
+ * resolve — and the slack above it absorbs the batches a transient provider
+ * failure or an hourly deferral costs.
+ *
+ * It is a TERMINATION guard rather than a capacity limit. Nothing about a
+ * healthy campaign should approach it; what it stops is a send that makes no
+ * progress rescheduling itself forever, which is the one failure a
+ * self-resuming job can have that nobody notices.
+ */
+export const EMAIL_MAX_SEND_BATCHES =
+  Math.ceil(EMAIL_MAX_AUDIENCE_PER_SEND / EMAIL_MAX_RECIPIENTS_PER_SEND) * 2
+
+/**
  * The fraction of the platform hour one org's campaigns may occupy.
  *
  * 25% is the starting value: it leaves room for four concurrent large senders
@@ -260,6 +294,101 @@ export function deliverableMonthlyCeiling(
     orgHourlyCampaignCeiling(platformPerHour, share) *
     positiveInt(monthHours, EMAIL_CEILING_MONTH_HOURS)
   )
+}
+
+/**
+ * The most one org's campaigns could get out in a day, at its hourly share.
+ *
+ * The ceiling a new-sender ramp step has to fit inside: a step promising more
+ * than this would promise a new tenant more than an established one may send.
+ */
+export function orgDailyCampaignCeiling(
+  platformPerHour: number,
+  share: number = EMAIL_ORG_HOURLY_SHARE,
+): number {
+  return orgHourlyCampaignCeiling(platformPerHour, share) * EMAIL_CEILING_HOURS_PER_DAY
+}
+
+/** Why a partly-delivered email will not run another batch. */
+export type CampaignBatchStop =
+  /** Nothing is left to address. */
+  | 'complete'
+  /** {@link EMAIL_MAX_SEND_BATCHES} reached. */
+  | 'batch-limit'
+  /** The batch settled nobody, so another one would settle nobody either. */
+  | 'no-progress'
+
+/** What happens to an email after one batch of it has been delivered. */
+export interface CampaignBatchPlan {
+  /** People this email has resolved and not yet addressed. */
+  remaining: number
+  /** Batches this email has now run, including the one just finished. */
+  batch: number
+  /** True when another batch will run. */
+  resuming: boolean
+  /**
+   * Why no further batch will run. Null while {@link resuming} is true —
+   * a reason for a state that has not happened is a reason a surface would
+   * show.
+   */
+  stop: CampaignBatchStop | null
+}
+
+export interface CampaignBatchPlanInput {
+  /** People this batch could have addressed, before the per-send cap. */
+  mailable: number
+  /** People it did address — `min(mailable, perSend)`. */
+  addressed: number
+  /**
+   * Of those it addressed, how many are left for a later batch to try again:
+   * the tail an hourly deferral cut off, and nothing else. A recipient the
+   * send SETTLED — delivered, suppressed or off-topic — is not retryable and
+   * is not counted here.
+   */
+  retryable: number
+  /**
+   * People this batch settled: delivered plus permanently excluded. Zero is
+   * what {@link CampaignBatchStop} `no-progress` is, and it is the reason
+   * this is an input rather than a derivation — a batch that addressed 500
+   * people and settled none of them will address the same 500 next time.
+   */
+  settled: number
+  /** Batches run before this one. */
+  batchesSoFar: number
+  /** Injectable for tests; defaults to the shipped guard. */
+  maxBatches?: number
+}
+
+/**
+ * Whether a partly-delivered email runs again, and how much is left.
+ *
+ * Pure, so the termination rule can be read and tested without a send. The
+ * one property it exists to hold is that a campaign always terminates:
+ * `resuming` is false whenever there is nothing left, whenever the batch
+ * guard is reached, and whenever a batch settled nobody — the last of which
+ * is the only way a self-rescheduling job can loop.
+ */
+export function campaignBatchPlan(
+  input: CampaignBatchPlanInput,
+): CampaignBatchPlan {
+  const mailable = positiveInt(input.mailable, 0)
+  const addressed = Math.min(mailable, positiveInt(input.addressed, 0))
+  const retryable = Math.min(addressed, positiveInt(input.retryable, 0))
+  const settled = positiveInt(input.settled, 0)
+  const batch = positiveInt(input.batchesSoFar, 0) + 1
+  const maxBatches = positiveInt(input.maxBatches, EMAIL_MAX_SEND_BATCHES)
+  const remaining = Math.max(0, mailable - addressed) + retryable
+
+  if (remaining <= 0) {
+    return { remaining: 0, batch, resuming: false, stop: 'complete' }
+  }
+  if (batch >= maxBatches) {
+    return { remaining, batch, resuming: false, stop: 'batch-limit' }
+  }
+  if (settled <= 0) {
+    return { remaining, batch, resuming: false, stop: 'no-progress' }
+  }
+  return { remaining, batch, resuming: true, stop: null }
 }
 
 export interface DescribeEmailCeilingsInput {
