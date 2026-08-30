@@ -126,7 +126,18 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
  * its own.
  */
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({
+    children,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <div>
+      {HeaderProps?.action}
+      {children}
+    </div>
+  ),
   useConfirmationContext: () => ({ confirm: mockConfirm }),
   AppLink: ({ href, children, onClick }: any) => (
     <a href={href} onClick={onClick}>

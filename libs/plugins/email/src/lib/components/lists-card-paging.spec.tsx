@@ -168,7 +168,18 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({
+    children,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <div>
+      {HeaderProps?.action}
+      {children}
+    </div>
+  ),
   useConfirmationContext: () => ({ confirm: mockConfirm }),
   /*
    * Stubbed for the CARD's own use. The overflow menu is deliberately NOT

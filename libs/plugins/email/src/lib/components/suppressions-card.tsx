@@ -471,7 +471,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
         action: (
           <Button
             size="small"
-            variant="outlined"
+            variant="contained"
             onClick={() => setAdding(true)}
           >
             {'Add'}

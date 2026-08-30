@@ -293,6 +293,18 @@ export function OrgListsCard(props: OrgListsCardProps) {
       contentGutterX
       contentGutterY
       contentBordered="all"
+      HeaderProps={{
+        action: (
+          <Button
+            size="small"
+            variant="contained"
+            disabled={!scope || creating}
+            onClick={() => setCreateOpen(true)}
+          >
+            {creating ? 'Creating…' : 'Create audience'}
+          </Button>
+        ),
+      }}
     >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
@@ -301,17 +313,6 @@ export function OrgListsCard(props: OrgListsCardProps) {
             'matching a rule, re-checked about every fifteen minutes. Target ' +
             'either from the campaign composer.'}
         </Typography>
-        <Stack direction="row" spacing={1}>
-          <Button
-            size="small"
-            variant="contained"
-            color="primary"
-            disabled={!scope || creating}
-            onClick={() => setCreateOpen(true)}
-          >
-            {creating ? 'Creating…' : 'Create audience'}
-          </Button>
-        </Stack>
         {/*
           A list document stores a name and nothing else descriptive, so the
           shared Description box is refused: a field the writer discards on
