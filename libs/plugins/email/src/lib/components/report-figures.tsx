@@ -20,105 +20,28 @@
  * THE THREE WAYS AN EMAIL NUMBER IS ALLOWED TO REACH A SCREEN.
  *
  * Every email reporting surface renders the same three things — a titled
- * block, a count, and a rate — and each carries a rule that is easy to state
- * and easy to lose:
+ * block, a count, and a rate — under the rules stated in full on
+ * `measured-figures.component`: a `null` count draws a dash and never a zero,
+ * a rate prints its denominator beside its percentage, and a rate that cannot
+ * be divided draws a dash and no number.
  *
- *  - **A count that is `null` draws a dash, never a zero.** "We have no
- *    delivery events" and "nothing was delivered" lead a merchant to opposite
- *    conclusions about their sending domain, and a zero renders the first as
- *    the second.
- *  - **A rate prints its denominator on the same line as its percentage.**
- *    An open rate over `sent` and one over `delivered` are different numbers
- *    sharing a label; a reader comparing two rates must be able to see they
- *    are over different populations without hovering anything.
- *  - **A rate that cannot be divided draws a dash and no number.** There is
- *    no branch here that substitutes a denominator to get something
- *    printable.
+ * The renderers themselves live in `@aglyn/shared-ui-jsx` because email is
+ * not the only surface that quotes a rate — a form's lead rate faces the same
+ * ambiguity between "of everyone who submitted" and "of everyone who gave an
+ * address" — and a second copy is a second chance to render a percentage
+ * without its denominator. This module stays the name every email card
+ * imports, so the four of them are unaffected by where the implementation
+ * sits.
  *
- * They live in one module because a second copy is a second chance to render
- * a percentage without its denominator — and the copy would be written by
- * whoever adds the next card, in a file nobody tests for it.
+ * `CampaignRate` is structurally a `MeasuredRate` and is passed to `RateRow`
+ * unchanged; the campaign model keeps its own name for the type because the
+ * denominators it can produce are an email fact, not a shared one.
  */
 
-import { Stack, Typography } from '@mui/material'
-import type { ReactNode } from 'react'
-import type { CampaignRate } from '../model/campaign-report'
-
-/** A titled block. */
-export function Section(props: { title: string; children: ReactNode }) {
-  return (
-    <Stack spacing={1}>
-      <Typography variant="overline" color="text.secondary">
-        {props.title}
-      </Typography>
-      {props.children}
-    </Stack>
-  )
-}
-Section.displayName = 'Section'
-
-/**
- * One count, with the population it describes named underneath.
- *
- * `null` renders as an em dash and NOT as zero, which is the whole reason
- * this takes `number | null` rather than defaulting.
- */
-export function Figure(props: {
-  label: string
-  value: number | null
-  note: string
-}) {
-  return (
-    <Stack sx={{ minWidth: 140 }}>
-      <Typography variant="h6">
-        {props.value === null ? '—' : props.value.toLocaleString()}
-      </Typography>
-      <Typography variant="body2">{props.label}</Typography>
-      <Typography variant="caption" color="text.secondary">
-        {props.value === null ? 'not recorded' : props.note}
-      </Typography>
-    </Stack>
-  )
-}
-Figure.displayName = 'Figure'
-
-/** A percentage to one decimal place. */
-export function percent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
-}
-
-/**
- * One rate, with its denominator spelled out on the same line.
- *
- * The denominator is rendered as `12 of 480 delivered` rather than as a
- * tooltip or a footnote, because a reader comparing two rates has to be able
- * to see they are over different populations without hovering anything. A
- * `null` rate draws the dash and no number at all.
- */
-export function RateRow(props: { label: string; rate: CampaignRate | null }) {
-  const { label, rate } = props
-  return (
-    <Stack
-      direction="row"
-      spacing={2}
-      sx={{ justifyContent: 'space-between', alignItems: 'baseline' }}
-    >
-      <Typography variant="body2">{label}</Typography>
-      {rate ? (
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
-          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-            {percent(rate.value)}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {`${rate.numerator.toLocaleString()} of ${rate.denominator.toLocaleString()} ${rate.denominatorLabel}`}
-          </Typography>
-        </Stack>
-      ) : (
-        <Typography variant="caption" color="text.secondary">
-          {'— not enough recorded to compute'}
-        </Typography>
-      )}
-    </Stack>
-  )
-}
-RateRow.displayName = 'RateRow'
+export {
+  Figure,
+  percent,
+  RateRow,
+  Section,
+  type MeasuredRate,
+} from '@aglyn/shared-ui-jsx/components/measured-figures.component'
