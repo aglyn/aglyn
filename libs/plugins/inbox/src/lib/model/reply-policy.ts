@@ -41,18 +41,21 @@
  * what lives here is the ordering it must follow.
  */
 
+import type { AddressRefusal } from '@aglyn/aglyn/server'
 import { submissionSender } from './submission-presenter'
 
-/** Why an address cannot be replied to. Each maps to one refusal message. */
-export type ReplyRefusal =
-  /** The form carried no field this resolver recognizes as an email. */
-  | 'no-address'
-  /** The value in the email field is not a routable address. */
-  | 'unroutable-address'
-  /** The address is on the platform-wide bounce/complaint list. */
-  | 'suppressed-platform'
-  /** The address unsubscribed from, or bounced on, this site. */
-  | 'suppressed-host'
+/**
+ * Why an address cannot be replied to. Each maps to one refusal message.
+ *
+ * The framework's `AddressRefusal` under a reply-shaped name, not a second
+ * union that happens to match. These four are facts about the ADDRESS — no
+ * email field, an unroutable value, and the two suppression lists — so the
+ * enrollment policy refuses on exactly the same set, and two declarations
+ * would drift the moment either side gained a fifth. A `type` import: erased
+ * at compile time, so the client component that reads this file takes on
+ * nothing from `@aglyn/aglyn/server`.
+ */
+export type ReplyRefusal = AddressRefusal
 
 /** The longest reply the composer accepts, matching the campaign composer. */
 export const REPLY_BODY_MAX = 20000
