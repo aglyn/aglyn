@@ -30,6 +30,8 @@ import EmailsListCard from './emails-list-card'
 import ListDetailCard from './list-detail-card'
 import ListEditCard from './list-edit-card'
 import ListsCard from './lists-card'
+import SendingDomainDetail from './sending-domain-detail'
+import SendingDomainsCard from './sending-domains-card'
 import SuppressionsCard from './suppressions-card'
 import type { EmailsConsoleSectionId } from './emails-console-sections'
 
@@ -165,6 +167,26 @@ function sectionBody(
         />
       ) : (
         <EmailTopicsCard hostId={hostId} basePath={basePath} />
+      )
+    case 'sending':
+      /*
+       * `/emails/sending/{domain}` is one domain's page, and it is a route
+       * for the reason every other detail here is: the DNS records, the DMARC
+       * read and the verification button are what somebody came for, and a
+       * link to them is what they paste to whoever actually edits the zone.
+       *
+       * The domain is the document id, so it is also the segment. It is
+       * decoded because a URL carries it encoded and the record is keyed on
+       * the bare name.
+       */
+      return detail[0] ? (
+        <SendingDomainDetail
+          hostId={hostId}
+          domain={decodeURIComponent(detail[0])}
+          basePath={basePath}
+        />
+      ) : (
+        <SendingDomainsCard hostId={hostId} basePath={basePath} />
       )
     case 'suppressions':
       return <SuppressionsCard hostId={hostId} />

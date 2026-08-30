@@ -23,6 +23,7 @@ export type EmailsConsoleSectionId =
   | 'templates'
   | 'audiences'
   | 'topics'
+  | 'sending'
   | 'suppressions'
 
 /**
@@ -61,6 +62,16 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
   // may not, and a topic is the stream a recipient can leave without becoming
   // either.
   { id: 'topics', label: 'Topics' },
+  /*
+   * WHO THE MAIL COMES FROM, as against who it goes to.
+   *
+   * After the three audience sections and before Suppressions, which is where
+   * the question sits: everything above decides who is reached, and this one
+   * decides what they see in the `From:` line. It is also the section a
+   * merchant is sent to from the composer when a send is refused for an
+   * unverified identity, so it has to be a route of its own.
+   */
+  { id: 'sending', label: 'Sending' },
   // Beside the audiences rather than inside them (AGL-2410): a suppression is
   // not a list you build, it is the reason a list you built did not all get
   // mailed.

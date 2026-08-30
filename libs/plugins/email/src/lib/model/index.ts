@@ -73,3 +73,9 @@ export * from './campaign-email-render'
  * rolls its sends into one set of figures.
  */
 export * from './campaign-container'
+
+/**
+ * How each sending-domain state reads, said once for the list and the
+ * domain's own page — including why `inconclusive` is neither of them.
+ */
+export * from './sending-domain-status'
