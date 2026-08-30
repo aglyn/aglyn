@@ -23,7 +23,9 @@
 
 import {
   emailAudienceLabel,
+  emailCreatedAtMs,
   emailIsUnsent,
+  emailListTimeMs,
   emailSendTimeMs,
   emailStateLabel,
 } from './email-record'
@@ -51,6 +53,77 @@ describe('when a message went out', () => {
     // A cached document mid-write carries a sentinel with neither field.
     expect(emailSendTimeMs({ sentAt: {} })).toBe(0)
     expect(emailSendTimeMs(undefined)).toBe(0)
+  })
+})
+
+/*==========================================
+ * WHERE A MESSAGE SITS IN A LIST OF MESSAGES.
+ *
+ * A draft has neither `sentAt` nor `sendAtMs`, so a list ordered on the send
+ * time gives every draft the key 0 and files the email a merchant is in the
+ * middle of writing below mail sent years ago — behind whatever paging the
+ * list has. This is the ordering with that one gap closed, and the assertions
+ * are as much about what does NOT change.
+ *=========================================*/
+describe('the creation stamp', () => {
+  it('reads the stamp every writer now leaves', () => {
+    expect(emailCreatedAtMs({ createdAtMs: 1_700_000_000_000 })).toBe(
+      1_700_000_000_000,
+    )
+  })
+
+  it('answers null — not zero — for a message written before it', () => {
+    // Zero is a real instant at the far end of the sort; "we do not know" is
+    // not 1970, and the fallback below depends on telling them apart.
+    expect(emailCreatedAtMs({ subject: 'Old' })).toBeNull()
+    expect(emailCreatedAtMs({ createdAtMs: 0 })).toBeNull()
+    expect(emailCreatedAtMs({ createdAtMs: 'yesterday' })).toBeNull()
+    expect(emailCreatedAtMs(undefined)).toBeNull()
+  })
+})
+
+describe('where a message sits in a list', () => {
+  const SENT = { sentAt: { seconds: 1_600 }, createdAtMs: 900_000 }
+  const DRAFT = { status: 'draft', createdAtMs: 1_500_000 }
+
+  it('orders a draft by when it was created', () => {
+    expect(emailListTimeMs(DRAFT)).toBe(1_500_000)
+  })
+
+  it('orders a SENT message by when it went out, never by its draft date', () => {
+    // A message drafted in March and sent in June belongs in June: the list
+    // is a record of what happened.
+    expect(emailListTimeMs(SENT)).toBe(1_600_000)
+  })
+
+  it('puts a draft created after the last send ABOVE it', () => {
+    const newest = [SENT, DRAFT].sort(
+      (a, b) => emailListTimeMs(b) - emailListTimeMs(a),
+    )[0]
+    expect(newest).toBe(SENT)
+
+    const later = { status: 'draft', createdAtMs: 1_900_000 }
+    expect(
+      [SENT, later].sort((a, b) => emailListTimeMs(b) - emailListTimeMs(a))[0],
+    ).toBe(later)
+  })
+
+  it('leaves a scheduled message ordered on its send time', () => {
+    // Its due date, not the moment somebody scheduled it — the same fallback
+    // must not disturb an ordering that already worked.
+    expect(
+      emailListTimeMs({
+        status: 'scheduled',
+        sendAtMs: 2_000_000,
+        createdAtMs: 5,
+      }),
+    ).toBe(2_000_000)
+  })
+
+  it('answers zero for a message with no time of any kind', () => {
+    // A draft written before the stamp existed: it sorts last, exactly as it
+    // did before, rather than being dated from nothing.
+    expect(emailListTimeMs({ status: 'draft' })).toBe(0)
   })
 })
 

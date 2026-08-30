@@ -1554,6 +1554,17 @@ export async function performCampaignSend(
   const branding = resolveBrandingProfile(orgForHost?.org as never)
 
   const campaignId = options.campaignId || createResourceUid()
+  /*
+   * Whether this send MINTS the record or writes onto one that already
+   * exists.
+   *
+   * A caller naming a `campaignId` is addressing a record somebody else
+   * created — a draft being sent now, a sent email taking a follow-up — and
+   * that record already carries its own creation stamp. Re-stamping it would
+   * move an email's creation date forward every time it was sent again, and
+   * the emails list orders drafts on exactly that field.
+   */
+  const mintsRecord = !options.campaignId
 
   // Designed email template (AGL-349): loaded once; rendered per
   // recipient with their merge values.
@@ -2101,6 +2112,12 @@ export async function performCampaignSend(
       subject,
       body,
       audience,
+      /*
+       * The one date every message carries — see `email-record.ts`. Written
+       * only where this send mints the document, because a record addressed
+       * by id was created by whoever minted it and keeps that date.
+       */
+      ...(mintsRecord ? { createdAtMs: Date.now() } : {}),
       /*
        * WHICH audience, not only which KIND.
        *
@@ -2787,6 +2804,14 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           subject,
           body,
           audience,
+          /*
+           * The one date every message carries — see `email-record.ts`.
+           * Stamped only where this write CREATES the record: a draft saved
+           * over and over is the same email, and re-stamping it would walk
+           * its creation date forward on every keystroke's save. The
+           * existence read above is the one this branch already does.
+           */
+          ...(targetSnapshot.exists ? {} : { createdAtMs: Date.now() }),
           ...(req.body?.segmentId
             ? { segmentId: String(req.body.segmentId) }
             : {}),
@@ -2906,6 +2931,35 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
               ? 'This email has already been sent. Use "Send to more ' +
                 'recipients" to reach the people it has not.'
               : 'Only a draft or a scheduled email can be sent now',
+        })
+      }
+      /*==========================================
+       * A CAMPAIGN BETWEEN BATCHES IS `scheduled`, AND MUST NOT RESTART.
+       *
+       * An audience larger than one send goes out over several runs, and
+       * between them the email is stored as `scheduled` — the state the
+       * processor claims to continue it. So the check above admits it, and
+       * this branch would then call `performCampaignSend` with no
+       * `continuation`: the whole audience resolved again, nobody subtracted,
+       * and a second copy delivered to everybody the earlier batches already
+       * reached, under the same `cid` whose unsubscribe links are in their
+       * inboxes.
+       *
+       * Refused rather than quietly turned into a continuation. The rest of
+       * this campaign is already due — the processor picks it up on its next
+       * beat — so there is nothing for a merchant to ask for here, and
+       * "Send now" on a send already in flight is a request made under a
+       * misunderstanding the answer should correct.
+       *=========================================*/
+      const resumeRemaining = Math.floor(
+        Number(sendNowSnapshot.get('resume')?.remaining ?? 0),
+      )
+      if (Number.isFinite(resumeRemaining) && resumeRemaining > 0) {
+        return res.status(409).json({
+          error:
+            'This email is already being sent, and the rest of it goes out ' +
+            'on its own. Sending it now would mail a second copy to ' +
+            'everyone it has already reached.',
         })
       }
       /*

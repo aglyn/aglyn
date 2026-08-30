@@ -45,13 +45,40 @@ export interface CampaignSendApiResult {
  * on the one thing that really identifies the request.
  */
 export function useCampaignSendApi(hostId: string) {
+  return useCampaignApi(hostId, '/api/campaigns/send')
+}
+
+/**
+ * ONE AUTHORIZED POST TO THE CAMPAIGN MANAGEMENT API.
+ *
+ * A second endpoint rather than a second action on the send route, because
+ * nothing it does sends: it removes a campaign container, or discards a draft
+ * that was never mailed. The route is what decides whether either is allowed
+ * — a draft's state and a container's emails are read there — so this is the
+ * same one-POST caller pointed at a different path.
+ */
+export function useCampaignManageApi(hostId: string) {
+  return useCampaignApi(hostId, '/api/campaigns/manage')
+}
+
+/**
+ * The POST both callers above make: the site id, the caller's ID token, and
+ * whatever the action carries.
+ *
+ * The user is read through a ref for the reason given above, and the path is
+ * a plain argument so the two hooks are one implementation. A hook taking the
+ * URL from a component would be a way for a caller to post the console's
+ * credentials somewhere the console does not own, which is why neither
+ * exported hook accepts one.
+ */
+function useCampaignApi(hostId: string, path: string) {
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
   return useCallback(
     async (payload: Record<string, unknown>): Promise<CampaignSendApiResult> => {
       const idToken = await (userRef.current as any)?.getIdToken?.()
-      const response = await fetch('/api/campaigns/send', {
+      const response = await fetch(path, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -62,6 +89,6 @@ export function useCampaignSendApi(hostId: string) {
       const json = await response.json().catch(() => ({}))
       return { response, payload: json as Record<string, any> }
     },
-    [hostId],
+    [hostId, path],
   )
 }

@@ -844,6 +844,50 @@ describe('send-now is refused on everything that has gone out', () => {
     expect(sent).toHaveLength(0)
   })
 
+  /*==========================================
+   * A CAMPAIGN BETWEEN BATCHES IS `scheduled`, AND MUST NOT RESTART.
+   *
+   * An audience larger than one send goes out over several runs, and between
+   * them the email is written back as `scheduled` — the state the processor
+   * claims to continue it. That is exactly the state `sendNow` admits, and
+   * this branch does not pass `continuation`: the whole audience would be
+   * resolved again with nobody subtracted, and everyone the earlier batches
+   * reached would receive a second copy under the same `cid` whose
+   * unsubscribe links are already in their inboxes.
+   *=========================================*/
+  it('refuses an email that is part way through its audience', async () => {
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    // What a batch writes back when it leaves people unaddressed.
+    store.set(`hosts/${HOST}/campaigns/msg-1`, {
+      ...(store.get(`hosts/${HOST}/campaigns/msg-1`) ?? {}),
+      stats: { sent: 500, audienceSize: 3000 },
+      resume: { remaining: 2500, batch: 1, nextAtMs: Date.now() + 60_000 },
+    })
+
+    const result = await post({
+      hostId: HOST,
+      action: 'sendNow',
+      campaignId: 'msg-1',
+    })
+
+    expect(result.status).toBe(409)
+    expect(String(result.body.error)).toMatch(/second copy/i)
+    expect(sent).toHaveLength(0)
+    // And it is left claimable by the processor rather than parked in the
+    // `sending` state this branch takes before it mails.
+    expect(store.get(`hosts/${HOST}/campaigns/msg-1`)?.['status']).toBe(
+      'scheduled',
+    )
+  })
+
   it('sends a SCHEDULED email ahead of its time', async () => {
     // The control for the two refusals above. A branch that refused
     // everything would pass both having deleted the feature.
@@ -866,6 +910,124 @@ describe('send-now is refused on everything that has gone out', () => {
     expect(result.status).toBe(200)
     expect(sent).toHaveLength(1)
     expect(store.get(`hosts/${HOST}/campaigns/msg-1`)?.['status']).toBe('sent')
+  })
+})
+
+/*==========================================
+ * EVERY WRITER STAMPS A CREATION DATE, AND ONLY WHEN IT CREATES.
+ *
+ * It is the one date on every email, which neither `sentAt` nor `sendAtMs`
+ * is: each is written by one branch of the send path and neither is on both
+ * kinds, and a DRAFT carries neither. Without it the emails list gives every
+ * draft the sort key 0 and files the email a merchant is in the middle of
+ * writing below mail sent years ago.
+ *
+ * The second half matters as much as the first. Every branch here addresses
+ * an existing document by id, so a stamp written unconditionally would walk
+ * an email's creation date forward on every draft save and every re-send —
+ * and the list orders on exactly that field.
+ *=========================================*/
+describe('when an email says it was created', () => {
+  const created = (id: string) =>
+    store.get(`hosts/${HOST}/campaigns/${id}`)?.['createdAtMs']
+
+  /*
+   * THE CLOCK MOVES BETWEEN CALLS, and it has to be made to.
+   *
+   * Every write here happens inside one test, in the same millisecond, so a
+   * stamp written on every save is byte-identical to one written only on the
+   * create — and the assertion that the date does not move would pass for
+   * code that moves it. A clock that advances a minute per reading is what
+   * makes "unchanged" mean something.
+   */
+  let clock = 0
+  let realNow: typeof Date.now
+  beforeEach(() => {
+    clock = Date.UTC(2026, 7, 1)
+    realNow = Date.now
+    Date.now = () => {
+      clock += 60_000
+      return clock
+    }
+  })
+  afterEach(() => {
+    Date.now = realNow
+  })
+
+  it('stamps a draft when it is minted', async () => {
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      displayName: 'Half-written',
+      audience: 'leads',
+    })
+    expect(created('draft-1')).toBeGreaterThan(Date.UTC(2026, 7, 1))
+  })
+
+  it('does NOT move it when the same draft is saved again', async () => {
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      displayName: 'Half-written',
+      audience: 'leads',
+    })
+    const first = created('draft-1')
+
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-1',
+      subject: 'Getting there',
+      body: 'Some copy',
+      audience: 'leads',
+    })
+
+    // THE CONTROL for the clock itself: it really has advanced, so the
+    // assertion below is about the write and not about a frozen timer.
+    expect(Date.now()).toBeGreaterThan(Number(first))
+    expect(created('draft-1')).toBe(first)
+  })
+
+  it('does not move it when a draft is scheduled, then sent', async () => {
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'msg-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    const first = created('msg-1')
+
+    await post({
+      hostId: HOST,
+      action: 'schedule',
+      campaignId: 'msg-1',
+      sendAtMs: Date.now() + 60_000,
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    expect(created('msg-1')).toBe(first)
+
+    await post({ hostId: HOST, action: 'sendNow', campaignId: 'msg-1' })
+    expect(created('msg-1')).toBe(first)
+  })
+
+  it('stamps an email sent immediately, which was never a draft', async () => {
+    const result = await post({
+      hostId: HOST,
+      action: 'send',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    expect(result.status).toBe(200)
+    expect(created(String(result.body.campaignId))).toBeGreaterThan(
+      Date.UTC(2026, 7, 1),
+    )
   })
 })
 
