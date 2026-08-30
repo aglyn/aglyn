@@ -89,8 +89,10 @@
       "id": "inbox",
       "package": "@aglyn/plugins-inbox",
       "register": {
-        "console": "registerInboxConsole"
-      }
+        "console": "registerInboxConsole",
+        "consoleApi": "registerInboxConsoleApi"
+      },
+      "apiPrefixes": ["inbox"]
     },
     {
       "id": "logic",

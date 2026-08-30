@@ -274,6 +274,37 @@ it's the record that didn't happen. In that case **no dataset chip appears at al
 rather than a chip pointing at a row that doesn't exist. A submission with only **Saved
 to Inbox** on a form you bound to a dataset is the signal to go and check the dataset.
 
+#### Replying to a submission {#replying-to-a-submission}
+
+Open a submission and, under the fields, there is a **Reply** composer. Write a message,
+press **Send reply**, and it goes by email to the address on the submission. The
+original message is quoted underneath yours, so the person can see which of their
+messages you are answering.
+
+Read this part before you use it, because it decides where the conversation continues:
+
+- **Answers arrive in your email, not in the Inbox.** The reply is sent with your
+  console account's address as its **Reply-To**, so when the recipient answers, their
+  answer lands in your own mailbox. Nothing on this platform receives mail, so the
+  Inbox will not show it. The Inbox is a record of what your site collected and what you
+  sent back — it is not a mailbox.
+- **The reply is sent from the platform's address**, with your site's sending name in
+  front of it. Sending from your own domain is not available yet. The Reply-To above is
+  what makes the round trip work in the meantime.
+- **Replies sent** lists what you have already sent on this submission, so you can see
+  whether someone else on your team has answered.
+
+A reply is **transactional** mail: someone wrote to you and you are writing back. It is
+not marketing, it does not need a marketing opt-in, and it does not add anyone to a
+list. It still respects the addresses that can no longer be mailed — if the address has
+bounced, reported a message as spam, or unsubscribed from your site, the composer
+refuses and tells you which. Replies count toward your email costs but never toward the
+campaign allowance your plan limits, so answering customers cannot use up the quota that
+sends your newsletter.
+
+A submission whose form had no email field cannot be replied to, and says so instead of
+offering a Send that would fail.
+
 <!-- screenshot: forms/inbox-submission-reader.png per SCREENSHOT_PLAN.md -->
 
 ## Related
