@@ -17,19 +17,16 @@
 'use client'
 
 import {
-  buildRoute,
   createResourceUid,
   MEDIA_ALT_MAX_LENGTH,
   pluginDocsHelp,
-  Route,
 } from '@aglyn/aglyn'
-import { type ConsolePluginPageProps, PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
-import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { type ConsolePluginPageProps } from '@aglyn/aglyn'
+import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   ceilingedWindow,
-  useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
   writeGuardedBySeed,
@@ -178,16 +175,16 @@ function toLocalInput(ms: number | null | undefined): string {
  * surface, now owned by the plugin so the console shell renders it through
  * the ConsoleExtension registry rather than a hardcoded page. Events carry
  * schedule/location/organizer/cover and a draft/published status; visitors
- * see published events through the Event List canvas element. The shell
- * resolves the `eventCalendar` entitlement and passes it as `entitled`.
+ * see published events through the Event List canvas element.
+ *
+ * Reaching this component means the org holds `eventCalendar`. The shell
+ * resolves that entitlement and renders its own refusal instead of mounting
+ * anything an extension registered (AGL-2484), so there is no unentitled
+ * state to render here; the sentence a refused org reads is registered as
+ * this plugin's `upgradeNotice` in `plugin.ts`.
  */
 export function EventsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, entitled } = props
-  // Console routes are `/[orgSlug]/…` (AGL-621); this component only has a
-  // host doc id, so the org slug has to be resolved before any console link
-  // can be built. `/org/billing` — what this used to hardcode — has not been
-  // a route since that migration (AGL-685).
-  const { orgSlug } = useConsoleHostRoute(hostId)
+  const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -351,126 +348,101 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
       contentGutterX
       contentGutterY
     >
-      {!entitled ? (
-        <Alert
-          severity="info"
-          action={
-            // Self-serve enable (AGL-530): the Billing add-ons card sells it.
-            // Rendered only once the org slug resolves — a link to a route
-            // that does not exist is worse than no link at all.
-            orgSlug ? (
-              <AppLink
-                componentVariant="button"
+      <Stack spacing={1}>
+        {events.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Create events here, then drop an Event List element on any ' +
+              'screen — published events render with SEO Event markup.'}
+          </Typography>
+        ) : (
+          visibleEvents.map((event) => (
+            <Stack
+              key={event.$id}
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center' }}
+            >
+              <Chip
                 size="small"
-                color="inherit"
-                href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`}
+                label={event.status ?? 'draft'}
+                color={event.status === 'published' ? 'success' : 'default'}
+              />
+              <Stack sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" noWrap>
+                  {event.title}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {new Date(event.startsAtMs ?? 0).toLocaleString()}
+                  {event.location ? ` · ${event.location}` : ''}
+                </Typography>
+              </Stack>
+              <Button
+                size="small"
+                onClick={() =>
+                  setDraft({
+                    id: event.$id,
+                    title: event.title ?? '',
+                    startsAt: toLocalInput(event.startsAtMs),
+                    endsAt: toLocalInput(event.endsAtMs),
+                    location: event.location ?? '',
+                    organizer: event.organizer ?? '',
+                    description: event.description ?? '',
+                    coverImage: event.coverImage ?? '',
+                    coverImageAlt: event.coverImageAlt ?? '',
+                    status: event.status ?? 'draft',
+                  })
+                }
               >
-                {'Enable in Billing'}
-              </AppLink>
-            ) : undefined
+                {'Edit'}
+              </Button>
+              <Button size="small" color="error" onClick={handleDelete(event)}>
+                {'Delete'}
+              </Button>
+            </Stack>
+          ))
+        )}
+        {events.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleEvents.length}
+            // The events this page HOLDS, after the soft-deleted ones are
+            // dropped — a slice of rows already read, so the total is exact
+            // for the window. The alert below says when the window is short
+            // of the site.
+            count={events.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {eventsTruncated ? (
+          <Alert severity="info">
+            {`Showing the newest ${EVENT_CEILING} events. This site has ` +
+              'more, and the older ones are not reachable from here.'}
+          </Alert>
+        ) : null}
+        <Button
+          size="small"
+          color="primary"
+          sx={{ alignSelf: 'flex-start' }}
+          onClick={() =>
+            setDraft({
+              id: null,
+              title: '',
+              startsAt: '',
+              endsAt: '',
+              location: '',
+              organizer: '',
+              description: '',
+              coverImage: '',
+              coverImageAlt: '',
+              status: 'draft',
+            })
           }
         >
-          {'The Event Calendar is a paid add-on ($9/mo for your whole ' +
-            `workspace, supported directly by ${PLATFORM_BRAND_NAME}). ` +
-            'Enable it from Billing → Add-ons.'}
-        </Alert>
-      ) : (
-        <Stack spacing={1}>
-          {events.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'Create events here, then drop an Event List element on any ' +
-                'screen — published events render with SEO Event markup.'}
-            </Typography>
-          ) : (
-            visibleEvents.map((event) => (
-              <Stack
-                key={event.$id}
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center' }}
-              >
-                <Chip
-                  size="small"
-                  label={event.status ?? 'draft'}
-                  color={event.status === 'published' ? 'success' : 'default'}
-                />
-                <Stack sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" noWrap>
-                    {event.title}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {new Date(event.startsAtMs ?? 0).toLocaleString()}
-                    {event.location ? ` · ${event.location}` : ''}
-                  </Typography>
-                </Stack>
-                <Button
-                  size="small"
-                  onClick={() =>
-                    setDraft({
-                      id: event.$id,
-                      title: event.title ?? '',
-                      startsAt: toLocalInput(event.startsAtMs),
-                      endsAt: toLocalInput(event.endsAtMs),
-                      location: event.location ?? '',
-                      organizer: event.organizer ?? '',
-                      description: event.description ?? '',
-                      coverImage: event.coverImage ?? '',
-                      coverImageAlt: event.coverImageAlt ?? '',
-                      status: event.status ?? 'draft',
-                    })
-                  }
-                >
-                  {'Edit'}
-                </Button>
-                <Button size="small" color="error" onClick={handleDelete(event)}>
-                  {'Delete'}
-                </Button>
-              </Stack>
-            ))
-          )}
-          {events.length === 0 ? null : (
-            <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={visibleEvents.length}
-              // The events this page HOLDS, after the soft-deleted ones are
-              // dropped — a slice of rows already read, so the total is exact
-              // for the window. The alert below says when the window is short
-              // of the site.
-              count={events.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-            />
-          )}
-          {eventsTruncated ? (
-            <Alert severity="info">
-              {`Showing the newest ${EVENT_CEILING} events. This site has ` +
-                'more, and the older ones are not reachable from here.'}
-            </Alert>
-          ) : null}
-          <Button
-            size="small"
-            color="primary"
-            sx={{ alignSelf: 'flex-start' }}
-            onClick={() =>
-              setDraft({
-                id: null,
-                title: '',
-                startsAt: '',
-                endsAt: '',
-                location: '',
-                organizer: '',
-                description: '',
-                coverImage: '',
-                coverImageAlt: '',
-                status: 'draft',
-              })
-            }
-          >
-            {'Add event'}
-          </Button>
-        </Stack>
-      )}
+          {'Add event'}
+        </Button>
+      </Stack>
 
       <Dialog
         open={Boolean(draft)}
