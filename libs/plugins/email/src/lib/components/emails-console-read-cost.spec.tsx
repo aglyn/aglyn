@@ -42,6 +42,7 @@
 
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { EMAILS_CONSOLE_SECTIONS } from './emails-console-sections'
 
 /**
@@ -133,6 +134,17 @@ jest.mock('firebase/firestore', () => {
 const mockFirestore = { __firestore: true }
 const mockUser = { data: { uid: 'u1' }, status: 'success' }
 const mockOrgId = { orgId: 'org1', ready: true }
+/*
+ * The org lookup, ALREADY SETTLED.
+ *
+ * `useOrgDataScope` resolves the owning org with an async `getDoc` and hands
+ * back `scope: null` until it lands, and the audiences card holds its query
+ * until it does. Left unmocked, that section registered ZERO listens here and
+ * the meter reported it as free — which is why this file used to render it and
+ * assert `true`. A card whose reads are all behind an unresolved promise is
+ * not a cheap card, it is an unmeasured one.
+ */
+const mockScope = { orgId: 'org1', ready: true, scope: ['orgs', 'org1'] }
 const mockHostRoute = { orgSlug: 'acme', subdomain: 'site', base: '/acme/hosts/site' }
 const mockPlan = { org: { plan: 'business', features: {} }, ready: true }
 const mockResourceApi = { data: undefined, loading: false }
@@ -158,6 +170,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useFirestore: () => mockFirestore,
     useUser: () => mockUser,
     useHostOrgId: () => mockOrgId,
+    useOrgDataScope: () => mockScope,
     useConsoleHostRoute: () => mockHostRoute,
     // Entitled and settled: an unentitled org renders upsells instead of
     // cards, which would measure the refusal rather than the page.
@@ -252,6 +265,19 @@ const SECTION_COLLECTIONS = {
   suppressions: ['suppressions'],
 } as const
 
+/**
+ * The audiences section's ceiling, in documents.
+ *
+ * A NUMBER rather than "no more listens than before", because the thing being
+ * guarded is what Firestore is asked to RETURN. List management added a
+ * membership table, and a membership table is the surface where a read budget
+ * goes wrong quietly: one listener per row would open an agency's fifty on
+ * arrival, each with its own limit, to render a table nobody has asked for.
+ * The section opens one listener, over `lists`, and the panel that reads a
+ * list's `members` is mounted only when a reader expands that list.
+ */
+const AUDIENCES_DOCUMENT_CEILING = TABLE_PAGE_SIZE_DEFAULT + 1
+
 function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
 }
@@ -336,12 +362,52 @@ describe('emails console read cost (AGL-2501)', () => {
     expect(seen).not.toContain('experiments')
   })
 
-  it('reports the designs and audiences sections too', async () => {
+  it('reports the designs section too', async () => {
     await renderConsole('designs')
     summarize('designs section', mockListens)
-    mockListens.length = 0
-    await renderConsole('audiences')
-    summarize('audiences section', mockListens)
     expect(true).toBe(true)
+  })
+
+  /*
+   * AUDIENCES, metered rather than merely reported.
+   *
+   * It used to be one of two sections this file rendered and then asserted
+   * `true` about — a reading printed to the log and checked by nobody, which
+   * is exactly the budget a new table walks through. List management put a
+   * membership table on this section, so the number now has to be held.
+   */
+  describe('the audiences section', () => {
+    it('opens ONE listen, over the lists, inside the page budget', async () => {
+      await renderConsole('audiences')
+      summarize('audiences section', mockListens)
+      expect(listenedCollections()).toContain('lists')
+      expect(mockListens).toHaveLength(1)
+      expect(documentCeiling(mockListens)).toBeLessThanOrEqual(
+        AUDIENCES_DOCUMENT_CEILING,
+      )
+    })
+
+    /*
+     * THE ASSERTION. A member document is PII and there is one per subscriber,
+     * so the members collection is the largest thing this surface can reach
+     * and the one that must stay unread until somebody asks for it. Reading it
+     * on mount would charge every operator who came to look at the list of
+     * lists for the membership of all of them.
+     */
+    it('reads NO list’s members until a list is opened', async () => {
+      await renderConsole('audiences')
+      expect(listenedCollections()).not.toContain('members')
+      expect(
+        mockListens.filter((listen) => listen.path.includes('/members')),
+      ).toHaveLength(0)
+    })
+
+    it('does not reach the other sections’ collections either', async () => {
+      await renderConsole('audiences')
+      const seen = listenedCollections()
+      for (const collection of Object.values(SECTION_COLLECTIONS).flat()) {
+        expect(seen).not.toContain(collection)
+      }
+    })
   })
 })

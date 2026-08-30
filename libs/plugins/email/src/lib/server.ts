@@ -410,3 +410,22 @@ export function registerEmailApi(): void {
   registerPluginApiRoute('email/unsubscribe', unsubscribeHandler)
   registerPluginApiRoute('email/resubscribe', resubscribeHandler)
 }
+
+/*
+ * The CONSOLE half of the same `email` prefix, kept in its own module.
+ *
+ * Two audiences, one entry point: the tenant loads this file for
+ * `registerEmailApi` (the signed unsubscribe links a recipient clicks, no
+ * session behind them), and the console loads it for
+ * `registerEmailConsoleApi` (list membership, behind an org-wide role). The
+ * manifest generator resolves both surfaces through `@aglyn/plugins-email/server`,
+ * so this re-export is what makes the console half reachable — a second entry
+ * point would be a second thing to keep in step with plugins.config.json.
+ */
+export {
+  registerEmailConsoleApi,
+  emailListMembersAddHandler,
+  emailListMembersPreviewHandler,
+  CONSOLE_ADD_SOURCE,
+  LIST_MEMBER_BATCH_MAX,
+} from './server-console'

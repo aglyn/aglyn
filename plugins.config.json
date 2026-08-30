@@ -67,7 +67,8 @@
       "register": {
         "site": "registerEmailPlugin",
         "console": "registerEmailConsole",
-        "tenantApi": "registerEmailApi"
+        "tenantApi": "registerEmailApi",
+        "consoleApi": "registerEmailConsoleApi"
       },
       "apiPrefixes": [
         "email"

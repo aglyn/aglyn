@@ -3390,6 +3390,61 @@ describe('org-shared data (AGL-237)', () => {
     )
   })
 
+  /**
+   * Enrolling is API-only; removing is not.
+   *
+   * A member document carries the consent basis that says why this person may
+   * be mailed. A browser that can write one can write `marketingConsent: true`
+   * beside an address nothing has checked — no stored opt-in consulted, no
+   * suppression list consulted, and nothing afterwards to tell it apart from a
+   * basis somebody actually gave. So the CREATE and the UPDATE belong to the
+   * route that runs the shared enrollment policy, and only the DELETE is the
+   * client's: taking somebody off a list needs no basis.
+   *
+   * Asserted from the OWNER, who holds every org-wide write there is. A denial
+   * proved only against a viewer or a scoped collaborator would be a denial of
+   * their role rather than of the operation.
+   */
+  it('list membership: create/update are API-only, delete is not (AGL-254)', async () => {
+    // THE CONTROL. The same account, on the same collection, doing the thing
+    // that IS allowed — without it every assertion below passes for an owner
+    // who simply cannot reach this path at all.
+    await assertSucceeds(
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
+    )
+
+    // A membership minted in the browser, consent field and all.
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm2'), {
+        email: 'new@y.z',
+        marketingConsent: true,
+        marketingConsentBasis: 'contact-opt-in',
+      }),
+    )
+    // The same act against a row that already exists: an UPDATE is the other
+    // half of the same hole, and a rule that closed only the create would let
+    // a client add the consent field to any enrollment it can name.
+    await assertFails(
+      updateDoc(
+        doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1'),
+        { marketingConsent: true },
+      ),
+    )
+    await assertFails(
+      setDoc(
+        doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1'),
+        { marketingConsent: true },
+        { merge: true },
+      ),
+    )
+
+    // Removal stays the client's. Console list management is what needs it,
+    // and it is not suppression: nothing here writes the list that stops mail.
+    await assertSucceeds(
+      deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
+    )
+  })
+
   it('media docs and folders are editor-writable (DAM parity); installs stay API-only', async () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'media', 'm1')))
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'installs', 'p1')))

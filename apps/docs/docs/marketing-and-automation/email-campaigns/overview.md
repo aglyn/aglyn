@@ -154,8 +154,60 @@ kinds, chosen when you create it.
 ### Manual lists
 
 A manual list holds the people you put in it. Grow it with the **"Enroll in a list"**
-automation step (e.g. on form completion) or popup email capture. Members stay until
-they are removed.
+automation step (e.g. on form completion), popup email capture, the **Add to a list**
+card in the Inbox, or by hand from the list itself. Members stay until they are
+removed.
+
+### See and manage who is on a list {#list-members}
+
+Press **Members** on any list row to open it. You get the membership a page at a time —
+address, name, when they joined, how they got there, and what their consent record
+says — plus the controls to change it. Press **Close** to collapse it again; nothing is
+read until you open a list.
+
+**How** tells a rule match apart from somebody who was added. A person a rule enrolled
+leaves when they stop matching; a person who was added stays.
+
+**Consent** is the basis the membership carries, and the two kinds are not the same
+fact:
+
+- **Opted in** — this person ticked a box, on the date shown. Their own decision.
+- **Attested by your team** — somebody on your team stated they had this person's
+  permission. That statement is the basis, and it is recorded against their account
+  with the date.
+- **No basis on record** — nothing either way. Not a refusal; see
+  [who a campaign is allowed to reach](#who-a-campaign-is-allowed-to-reach).
+
+**Rename** the list from the same panel. The name is what the campaign composer's
+audience picker shows, so renaming it is safe at any time — the list, its members and
+any campaign already sent are untouched.
+
+### Add someone by hand {#add-to-a-list}
+
+Type an address (or paste a whole column of them) and press **Check**. Every address is
+checked against that person's consent record and both suppression lists before anything
+is written, and you are told what would happen to each one:
+
+- Somebody with a **stored opt-in** is added carrying that opt-in — including the
+  original date they gave it, not today's.
+- Somebody with **no opt-in on record** can only be added if you state that you have
+  their permission. That statement is recorded against your account, with the date.
+  Adding them does not create an opt-in for them, and nothing else here does either.
+- Somebody who **declined**, or whose address is **suppressed**, is not added, and
+  there is no override. This is deliberate: if asserting permission could reach past a
+  recorded refusal, recording one would mean nothing.
+
+Pasting many addresses works the same way. You see the counts — how many already have
+an opt-in, how many need your say-so, how many cannot be added at all — before you
+confirm, and one statement covers the batch. Addresses that are not valid are listed
+back to you rather than quietly dropped. Up to 100 at a time.
+
+### Removing someone is not an unsubscribe {#remove-from-a-list}
+
+**Remove** takes a person off that one list. It is not a suppression: it does not stop
+any other list reaching them, and it does not record that they asked you to stop. If
+somebody has asked to stop hearing from you, [suppress the address](#suppressions)
+instead — that is the record that holds across every list and every campaign.
 
 ### Lists built from a rule
 

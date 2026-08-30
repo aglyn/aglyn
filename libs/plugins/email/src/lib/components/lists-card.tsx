@@ -48,13 +48,14 @@ import {
   query,
   setDoc,
 } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   useFirestore,
   useOrgDataScope,
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import ListMembersPanel from './list-members-panel'
 
 export interface OrgListsCardProps {
   hostId: string
@@ -116,6 +117,16 @@ export function OrgListsCard(props: OrgListsCardProps) {
     { idField: '$id' },
   )
   const [counts, setCounts] = useState<Record<string, number>>({})
+  /*
+   * Bumped by an add or a removal, and by nothing else.
+   *
+   * The counts below are server aggregates, one per visible list, taken once
+   * per page of lists. That is the right cost for reading — but a figure taken
+   * before an add would sit directly above the members table that shows the
+   * person who was just added, disagreeing with it. Re-taking them on a
+   * MUTATION keeps the column honest without turning a read into a poll.
+   */
+  const [membershipVersion, setMembershipVersion] = useState(0)
   useEffect(() => {
     // `lists` can only be non-empty when `scope` resolved, but the
     // effect must say so for itself — it reads `scope` outside the query.
@@ -149,8 +160,19 @@ export function OrgListsCard(props: OrgListsCardProps) {
   }, [
     firestore,
     scope,
+    membershipVersion,
     JSON.stringify(lists.map((l: any) => l.$id)),
   ])
+
+  /*
+   * The one list whose membership is open, if any.
+   *
+   * One at a time, and closed by default. Each open panel is a Firestore
+   * listener over that list's `members`; rendering one per row would open an
+   * agency's fifty on arrival, to show a table nobody asked for. The reader
+   * asks, and the panel unmounts — listener with it — when they close it.
+   */
+  const [openListId, setOpenListId] = useState('')
 
   const [name, setName] = useState('')
   /*
@@ -394,7 +416,8 @@ export function OrgListsCard(props: OrgListsCardProps) {
             </TableHead>
             <TableBody>
               {lists.map((list) => (
-                <TableRow key={list.$id}>
+                <Fragment key={list.$id}>
+                <TableRow>
                   <TableCell>{list.name}</TableCell>
                   <TableCell>
                     {list.kind === 'dynamic' ? (
@@ -426,6 +449,16 @@ export function OrgListsCard(props: OrgListsCardProps) {
                   <TableCell align="right">
                     <Button
                       size="small"
+                      onClick={() =>
+                        setOpenListId((current) =>
+                          current === list.$id ? '' : list.$id,
+                        )
+                      }
+                    >
+                      {openListId === list.$id ? 'Close' : 'Members'}
+                    </Button>
+                    <Button
+                      size="small"
                       color="error"
                       onClick={() => void handleDelete(list)}
                     >
@@ -433,6 +466,26 @@ export function OrgListsCard(props: OrgListsCardProps) {
                     </Button>
                   </TableCell>
                 </TableRow>
+                {openListId !== list.$id || !scope ? null : (
+                  <TableRow>
+                    {/*
+                      One cell across the table, so the panel is not squeezed
+                      into the actions column. `colSpan` is the header count.
+                     */}
+                    <TableCell colSpan={4} sx={{ py: 0 }}>
+                      <ListMembersPanel
+                        hostId={hostId}
+                        scope={scope as readonly [string, string]}
+                        listId={list.$id}
+                        listName={String(list.name ?? '')}
+                        onMembershipChanged={() =>
+                          setMembershipVersion((version) => version + 1)
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
+                </Fragment>
               ))}
             </TableBody>
           </Table>
