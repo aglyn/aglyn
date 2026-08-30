@@ -389,8 +389,6 @@ export function HostCampaignsCard(props: {
       {
         field: 'emails',
         headerName: 'Emails',
-        align: 'right',
-        headerAlign: 'right',
         width: 110,
         align: 'right',
         headerAlign: 'right',
@@ -405,8 +403,6 @@ export function HostCampaignsCard(props: {
       {
         field: 'sent',
         headerName: 'Sent',
-        align: 'right',
-        headerAlign: 'right',
         width: 100,
         align: 'right',
         headerAlign: 'right',
@@ -417,8 +413,6 @@ export function HostCampaignsCard(props: {
       {
         field: 'opens',
         headerName: 'Opens',
-        align: 'right',
-        headerAlign: 'right',
         width: 100,
         align: 'right',
         headerAlign: 'right',
@@ -429,8 +423,6 @@ export function HostCampaignsCard(props: {
       {
         field: 'clicks',
         headerName: 'Clicks',
-        align: 'right',
-        headerAlign: 'right',
         width: 100,
         align: 'right',
         headerAlign: 'right',
