@@ -41,7 +41,59 @@
  * it into granted is what the product does today. Both are wrong, so the
  * split is carried through to the caller as three counts rather than a
  * boolean.
+ *
+ * ## A basis also records WHOSE act it was
+ *
+ * A basis an operator asserted over existing records — see
+ * `tools/scripts/backfill-marketing-consent.mjs` — is mailable, because an
+ * org that asserted it meant that data to be reachable. It is not, however,
+ * the same fact as a checkbox somebody ticked, and two fields that store
+ * only `true` and a date cannot tell the difference. So an asserted basis
+ * carries {@link MARKETING_CONSENT_SOURCE_FIELD} naming who asserted it,
+ * when, and why, and every reader gets that distinction back as
+ * {@link MarketingConsentRecord.assertedBy}. Consent is only evidence for as
+ * long as its origin survives with it.
  */
+
+/**
+ * The document field carrying WHO asserted a stored basis, and why.
+ *
+ * `marketingConsent` on its own records only WHAT the basis is. A record
+ * written by an operator and a record written from a checkbox a person
+ * ticked are the same two fields with the same two values, so nothing
+ * downstream — a console readout, an export, a regulator's question — can
+ * tell them apart. That is the difference between consent that is evidence
+ * and consent that is an assertion, so it is carried on the record itself
+ * rather than left to be reconstructed from when a script happened to run.
+ *
+ * Absent on every record written from a capture surface, which is why
+ * {@link readMarketingBasis} reads its absence as the person's own act: the
+ * six checkbox writers are the norm and an operator assertion is the thing
+ * that has to announce itself.
+ */
+export const MARKETING_CONSENT_SOURCE_FIELD = 'marketingConsentSource'
+
+/**
+ * The `kind` an operator backfill stamps. A named constant because the
+ * script that writes it and the reader that finds it are in different
+ * languages and cannot share a type.
+ */
+export const OPERATOR_BACKFILL_CONSENT_KIND = 'operator-backfill'
+
+/** The provenance stored alongside a basis somebody other than the person set. */
+export interface MarketingConsentSource {
+  /** What kind of assertion this is — {@link OPERATOR_BACKFILL_CONSENT_KIND}. */
+  kind: string
+  /** The operator who asserted it. Never blank on a well-formed record. */
+  by: string
+  /** When they asserted it. */
+  atMs: number | null
+  /** Why, in prose, for whoever audits this later. */
+  reason: string
+}
+
+/** Whose act a stored basis represents. */
+export type MarketingConsentAssertedBy = 'person' | 'operator'
 
 /** What a person's stored consent record says, if anything. */
 export type MarketingBasis =
@@ -55,6 +107,20 @@ export type MarketingBasis =
 /** One recipient's consent facts, as read off whichever silo produced them. */
 export interface MarketingConsentRecord {
   basis: MarketingBasis
+  /**
+   * Whose act the basis represents, or `null` when there is no basis to
+   * attribute. `'person'` for the capture surfaces, `'operator'` for a basis
+   * an operator asserted on somebody's behalf.
+   *
+   * Not a second grade of mailability — {@link marketingConsentVerdict}
+   * ignores it, because an org that asserted a basis for its own seed data
+   * meant that data to be reachable. It exists so every surface that reports
+   * consent can report which kind it has, instead of presenting an assertion
+   * as evidence.
+   */
+  assertedBy: MarketingConsentAssertedBy | null
+  /** The provenance behind an `'operator'` basis; `null` for a person's own. */
+  source: MarketingConsentSource | null
   /** When the basis was recorded, when the writer stamped it. */
   basisAtMs: number | null
   /**
@@ -213,16 +279,53 @@ export function readMarketingBasis(
   record: Record<string, unknown> | null | undefined,
 ): MarketingConsentRecord {
   if (!record) {
-    return { basis: 'unrecorded', basisAtMs: null, capturedAtMs: null }
+    return {
+      basis: 'unrecorded',
+      assertedBy: null,
+      source: null,
+      basisAtMs: null,
+      capturedAtMs: null,
+    }
   }
   const consent = record['marketingConsent']
   const basis: MarketingBasis =
     consent === true ? 'granted' : consent === false ? 'declined' : 'unrecorded'
+  const source = readConsentSource(record[MARKETING_CONSENT_SOURCE_FIELD])
   return {
     basis,
+    // A basis with no provenance is the person's own: the capture surfaces
+    // write nothing here, so absence is the norm and an operator assertion
+    // is what has to be stated. Attributing an absent basis to nobody keeps
+    // `unrecorded` from reading as a person who declined to be attributed.
+    assertedBy:
+      basis === 'unrecorded' ? null : source !== null ? 'operator' : 'person',
+    source,
     basisAtMs: timestampMs(record['marketingConsentAtMs']),
     capturedAtMs:
       timestampMs(record['createdAt']) ?? timestampMs(record['addedAt']),
+  }
+}
+
+/**
+ * Parses the provenance field, or `null` when there is none to parse.
+ *
+ * A malformed value reads as `null` — the person's own act — rather than as
+ * a nameless operator assertion, because the only writer of this field is a
+ * script that always fills `kind` and `by`. Inventing an unattributed
+ * operator out of a corrupt value would put a claim in the audit trail that
+ * nothing in the product ever made.
+ */
+function readConsentSource(value: unknown): MarketingConsentSource | null {
+  if (!value || typeof value !== 'object') return null
+  const source = value as Record<string, unknown>
+  const kind = typeof source['kind'] === 'string' ? source['kind'] : ''
+  const by = typeof source['by'] === 'string' ? source['by'] : ''
+  if (!kind || !by) return null
+  return {
+    kind,
+    by,
+    atMs: timestampMs(source['atMs']),
+    reason: typeof source['reason'] === 'string' ? source['reason'] : '',
   }
 }
 
@@ -257,6 +360,15 @@ export interface MarketingConsentSplit {
   mailable: string[]
   /** Of `mailable`, how many carry a recorded basis. */
   consented: number
+  /**
+   * Of `consented`, how many hold a basis an OPERATOR asserted rather than
+   * one the person gave — see {@link MarketingConsentRecord.assertedBy}.
+   *
+   * A subset of `consented` and not a fourth population, because it is not a
+   * different mailability. It is reported separately so a surface showing
+   * "N consented" can avoid presenting a backfill as N opt-ins.
+   */
+  consentedByOperator: number
   /** Of `mailable`, how many are reachable only because of grandfathering. */
   grandfathered: number
   /** Refused by the consent rule, and therefore never metered or mailed. */
@@ -283,12 +395,15 @@ export function splitByMarketingConsent(
   const split: MarketingConsentSplit = {
     mailable: [],
     consented: 0,
+    consentedByOperator: 0,
     grandfathered: 0,
     withheld: 0,
   }
   for (const email of emails) {
     const record = records.get(email) ?? {
       basis: 'unrecorded' as const,
+      assertedBy: null,
+      source: null,
       basisAtMs: null,
       capturedAtMs: null,
     }
@@ -296,6 +411,7 @@ export function splitByMarketingConsent(
       case 'consented':
         split.mailable.push(email)
         split.consented += 1
+        if (record.assertedBy === 'operator') split.consentedByOperator += 1
         break
       case 'grandfathered':
         split.mailable.push(email)

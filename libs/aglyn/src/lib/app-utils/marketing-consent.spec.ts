@@ -28,6 +28,8 @@
 import {
   DEFAULT_MARKETING_CONSENT_POLICY,
   MARKETING_CONSENT_ENFORCED_FROM_MS,
+  MARKETING_CONSENT_SOURCE_FIELD,
+  OPERATOR_BACKFILL_CONSENT_KIND,
   marketingConsentVerdict,
   readMarketingBasis,
   resolveMarketingConsentPolicy,
@@ -42,8 +44,19 @@ const record = (
   over: Partial<MarketingConsentRecord> = {},
 ): MarketingConsentRecord => ({
   basis: 'unrecorded',
+  assertedBy: null,
+  source: null,
   basisAtMs: null,
-    capturedAtMs: null,
+  capturedAtMs: null,
+  ...over,
+})
+
+/** The provenance an operator backfill stamps, as it is stored. */
+const operatorSource = (over: Record<string, unknown> = {}) => ({
+  kind: OPERATOR_BACKFILL_CONSENT_KIND,
+  by: 'zach@aglyn.com',
+  atMs: 1_000,
+  reason: 'pre-release seed data',
   ...over,
 })
 
@@ -278,5 +291,120 @@ describe('splitting an audience', () => {
     )
     expect(split.mailable).toEqual([])
     expect(JSON.stringify(split)).not.toContain('d@x.com')
+  })
+
+  /**
+   * The count that keeps a readout from presenting a backfill as opt-ins. A
+   * surface showing only `consented` would report both of these as two people
+   * who asked to hear from the merchant, and one of them never did.
+   */
+  it('separates an operator-asserted basis from a person s own', () => {
+    const split = splitByMarketingConsent(
+      ['a@x.com', 'b@x.com'],
+      new Map([
+        ['a@x.com', record({ basis: 'granted', assertedBy: 'person' })],
+        ['b@x.com', record({ basis: 'granted', assertedBy: 'operator' })],
+      ]),
+      DEFAULT_MARKETING_CONSENT_POLICY,
+    )
+    expect(split.consented).toBe(2)
+    expect(split.consentedByOperator).toBe(1)
+    // A subset, not a fourth population: both are mailable.
+    expect(split.mailable).toEqual(['a@x.com', 'b@x.com'])
+  })
+})
+
+/**
+ * The provenance half of a basis. `marketingConsent: true` says WHAT was
+ * recorded; without these fields nothing downstream can say whose act it
+ * was, and an assertion an operator made over seed data is then indexed
+ * identically to a checkbox somebody ticked.
+ */
+describe('who asserted a basis', () => {
+  it('attributes a bare stored opt-in to the person', () => {
+    expect(
+      readMarketingBasis({ marketingConsent: true, marketingConsentAtMs: 42 }),
+    ).toMatchObject({ basis: 'granted', assertedBy: 'person', source: null })
+  })
+
+  it('attributes one carrying a backfill source to the operator', () => {
+    const read = readMarketingBasis({
+      marketingConsent: true,
+      marketingConsentAtMs: 1_000,
+      [MARKETING_CONSENT_SOURCE_FIELD]: operatorSource(),
+    })
+    expect(read.assertedBy).toBe('operator')
+    expect(read.source).toEqual({
+      kind: OPERATOR_BACKFILL_CONSENT_KIND,
+      by: 'zach@aglyn.com',
+      atMs: 1_000,
+      reason: 'pre-release seed data',
+    })
+  })
+
+  /**
+   * The whole point of the field is that an auditor can tell the two apart.
+   * If a backfilled record serialized to the same bytes as a real opt-in
+   * there would be nothing to audit.
+   */
+  it('leaves a backfilled record distinguishable from a real opt-in', () => {
+    const optIn = readMarketingBasis({
+      marketingConsent: true,
+      marketingConsentAtMs: 1_000,
+    })
+    const backfilled = readMarketingBasis({
+      marketingConsent: true,
+      marketingConsentAtMs: 1_000,
+      [MARKETING_CONSENT_SOURCE_FIELD]: operatorSource(),
+    })
+    expect(backfilled.basis).toBe(optIn.basis)
+    expect(backfilled).not.toEqual(optIn)
+    expect(backfilled.assertedBy).not.toBe(optIn.assertedBy)
+  })
+
+  it('attributes nothing when there is no basis to attribute', () => {
+    expect(readMarketingBasis({ email: 'x@y.com' })).toMatchObject({
+      basis: 'unrecorded',
+      assertedBy: null,
+    })
+    expect(readMarketingBasis(null).assertedBy).toBeNull()
+  })
+
+  /**
+   * A source missing `by` names nobody, so it cannot be the audit trail it
+   * exists to be. Reading it as a nameless operator would put a claim in the
+   * record that no writer in the product ever makes.
+   */
+  it('ignores a source that names no one, rather than inventing an operator', () => {
+    for (const broken of [
+      operatorSource({ by: '' }),
+      operatorSource({ kind: '' }),
+      'operator-backfill',
+      42,
+      null,
+    ]) {
+      const read = readMarketingBasis({
+        marketingConsent: true,
+        [MARKETING_CONSENT_SOURCE_FIELD]: broken,
+      })
+      expect(read.source).toBeNull()
+      expect(read.assertedBy).toBe('person')
+    }
+  })
+
+  /**
+   * Provenance is not a third mailability. An org that asserted a basis over
+   * its own records meant them to be reachable, and making an operator basis
+   * withhold would leave the backfill unable to do the one thing it is for.
+   */
+  it('does not change what the policy decides', () => {
+    for (const mode of ['forward', 'strict'] as const) {
+      expect(
+        marketingConsentVerdict(
+          record({ basis: 'granted', assertedBy: 'operator' }),
+          { mode, enforceFromMs: MARKETING_CONSENT_ENFORCED_FROM_MS },
+        ),
+      ).toBe('consented')
+    }
   })
 })
