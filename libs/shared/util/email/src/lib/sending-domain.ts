@@ -641,14 +641,45 @@ export function assessSendingRecords(
   Which identity does a send leave on?
 ==========================================*/
 
+/**
+ * WHO IS SPEAKING in this message, which is the whole of what decides whether
+ * `USAGE_EMAIL_FROM` is reachable.
+ *
+ * `platform` — Aglyn talking to its own customers. Billing, account notices,
+ * console password resets, staff alerts. These belong on `aglyn.com` and are
+ * the only mail that does.
+ *
+ * `tenant` — a site talking to its visitors. Marketing AND transactional: a
+ * receipt, a booking reminder, a membership password reset are all the tenant
+ * speaking, and all of them carry the tenant's list quality. These leave on
+ * the site's own domain or they do not leave at all.
+ *
+ * The distinction is not promotional-versus-not. A merchant who imports a
+ * purchased list and mails it produces complaints; if that merchant's receipts
+ * ride the same domain as the platform's invoices, one merchant's import
+ * degrades every other merchant's account mail. Splitting by CONTENT would put
+ * the receipts on the safe domain and leave the reputation shared anyway,
+ * because the complaints follow the domain and not the subject line.
+ */
+export type SendingIdentityAudience = 'platform' | 'tenant'
+
 export interface SendingIdentityInput {
   /**
    * The site's chosen sending domain, or null when it has not chosen one.
-   * Null is the ordinary case and resolves to the platform identity.
    */
   selection?: SendingDomainSelection | null
   /** `USAGE_EMAIL_FROM`, the platform's own verified identity. */
   platformFrom?: string | null
+  /**
+   * Whose mail this is. Defaults to `platform`, which is what every caller
+   * that resolves a PLATFORM identity means and never has to say.
+   *
+   * A default is safe here only because the tenant side never reaches this
+   * function directly: `resolveHostSendingIdentity` is the single door for
+   * host-scoped mail and it passes `tenant` unconditionally. A tenant caller
+   * cannot forget the flag, because it is not the tenant caller that sets it.
+   */
+  audience?: SendingIdentityAudience
 }
 
 export type SendingIdentitySource = 'custom' | 'platform'
@@ -664,6 +695,21 @@ export type SendingIdentityRefusalCode =
   | 'domain-failed'
   /** No custom domain, and the platform identity is not configured either. */
   | 'platform-unconfigured'
+  /**
+   * TENANT mail from a site that has no sending domain yet.
+   *
+   * The arm that used to be a silent fallback to `USAGE_EMAIL_FROM`. A site
+   * with no identity of its own does not borrow the platform's: `aglyn.com`
+   * carries the platform's own billing and account mail, and a tenant's list
+   * quality must never be charged against it.
+   *
+   * Ordinarily transient and self-healing — provisioning issues the site a
+   * domain inside the platform mail apex without the tenant doing anything —
+   * so the message says "not ready yet" rather than asking for DNS work the
+   * tenant does not owe. It is a REFUSAL and not a delay because a message
+   * sent from the wrong domain cannot be recalled, and a send that waits can.
+   */
+  | 'tenant-identity-unprovisioned'
 
 export interface SendingIdentityRefusal {
   code: SendingIdentityRefusalCode
@@ -697,21 +743,33 @@ export interface SendingIdentityVerdict {
  * The whole rule, and the reason this function exists rather than an inline
  * `?:` at the send site:
  *
- * 1. No selection → the platform identity, named as such.
- * 2. Selection, `verified` → the custom identity.
- * 3. Selection, anything else → **REFUSED**.
+ * 1. Selection, `verified` → that identity.
+ * 2. Selection, anything else → **REFUSED**.
+ * 3. No selection, `platform` audience → the platform identity, named as such.
+ * 4. No selection, `tenant` audience → **REFUSED**.
  *
- * There is no fourth arm, and specifically there is no arm that reaches a
- * platform address from an unverified selection. A customer who has told us to
- * send as their domain has made a statement about what their recipients will
- * see; quietly sending as somebody else instead is not a degraded version of
- * honoring it.
+ * There is no arm that reaches a platform address from an unverified
+ * selection. A customer who has told us to send as their domain has made a
+ * statement about what their recipients will see; quietly sending as somebody
+ * else instead is not a degraded version of honoring it.
+ *
+ * Arm 4 is the same principle applied to a site that has not chosen anything
+ * yet, and it is the one that keeps tenant mail off `aglyn.com`. It used to
+ * fall through to arm 3. That fallback covered TRANSACTIONAL mail too —
+ * receipts, booking reminders, membership password resets — so the platform's
+ * own billing domain carried the delivery consequences of every tenant's list,
+ * which is exactly the coupling a per-tenant sending domain exists to break.
+ * Closing it in the resolver rather than at the call sites is what makes it a
+ * property: `resolveHostSendingIdentity` passes `tenant` for every host-scoped
+ * send, so no individual caller has to remember.
  */
 export function resolveSendingIdentity(
   input: SendingIdentityInput,
 ): SendingIdentityVerdict {
   const selection = input?.selection ?? null
   const platformFrom = String(input?.platformFrom ?? '').trim() || null
+  const audience: SendingIdentityAudience =
+    input?.audience === 'tenant' ? 'tenant' : 'platform'
 
   if (selection) {
     const domain = normalizeSendingDomain(selection.domain)
@@ -754,6 +812,31 @@ export function resolveSendingIdentity(
               `verified yet, so this send was refused rather than sent from a ` +
               `different address. Publish the records shown on the sending ` +
               `domain card, then verify.`,
+      },
+    }
+  }
+
+  /*
+   * TENANT mail with nothing selected. The platform identity is not consulted
+   * at all — not preferred-but-overridable, not a last resort. It is simply
+   * not an address this audience can reach, which is why the check sits above
+   * the `platformFrom` read rather than inside it.
+   */
+  if (audience === 'tenant') {
+    return {
+      from: null,
+      source: null,
+      domain: null,
+      summary: 'Blocked: this site has no sending domain yet.',
+      refusal: {
+        code: 'tenant-identity-unprovisioned',
+        domain: null,
+        missing: [],
+        message:
+          'This site does not have a sending domain yet, so the message was ' +
+          'refused rather than sent from the shared Aglyn address. Its ' +
+          'domain is set up automatically and is usually ready within a few ' +
+          'minutes of the site being created — try again shortly.',
       },
     }
   }

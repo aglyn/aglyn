@@ -739,3 +739,90 @@ describe('sendEmail', () => {
     })
   })
 })
+
+describe('whose mail is this', () => {
+  const originalFetch = global.fetch
+  const originalEnv = { ...process.env }
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    process.env = { ...originalEnv }
+  })
+
+  /**
+   * THE LAST LINE BEFORE A MESSAGE LEAVES.
+   *
+   * `USAGE_EMAIL_FROM` is an address on `aglyn.com`, where Aglyn's own
+   * billing, account and console mail leaves from. A SITE's mail reaching it
+   * means that site's complaint rate is charged against the domain every other
+   * customer's password reset depends on.
+   *
+   * `resolveHostSendingIdentity` refuses first and the coverage sweep makes
+   * sure every tenant sender declares itself; this is the arm for a sender
+   * that declared itself and resolved nothing. The environment is deliberately
+   * CONFIGURED, so what is asserted is that a usable platform address was not
+   * reached — not that none existed.
+   */
+  it('refuses a tenant message that resolved no identity', async () => {
+    configure('re_test', FROM)
+    const fetchMock = mockFetch({})
+
+    const result = await sendEmail({
+      to: 'buyer@example.com',
+      subject: 'Your receipt',
+      text: 'Thanks',
+      audience: 'tenant',
+      context: 'receipt',
+    })
+
+    expect(result.sent).toBe(false)
+    expect(result.reason).toBe('unverified-domain')
+    // Nothing reached the wire. A refusal that still sent would be the whole
+    // bug wearing a false negative.
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sends a tenant message on the identity it resolved', async () => {
+    configure('re_test', FROM)
+    const fetchMock = mockFetch({})
+
+    const result = await sendEmail({
+      to: 'buyer@example.com',
+      subject: 'Your receipt',
+      text: 'Thanks',
+      audience: 'tenant',
+      sendingIdentity: {
+        from: 'hello@acme.mail.aglyn.app',
+        source: 'custom',
+        domain: 'acme.mail.aglyn.app',
+        summary: 'Sending as hello@acme.mail.aglyn.app.',
+        refusal: null,
+      },
+      context: 'receipt',
+    })
+
+    expect(result.sent).toBe(true)
+    expect(lastBody(fetchMock).from).toBe('hello@acme.mail.aglyn.app')
+    expect(lastBody(fetchMock).from).not.toContain('aglyn.com')
+  })
+
+  /**
+   * The other half, and the control: without it the refusal above would pass
+   * against a `sendEmail` that had stopped sending anything at all. Aglyn's
+   * own mail to its own customers still leaves on `aglyn.com`.
+   */
+  it('still sends platform mail on the configured address', async () => {
+    configure('re_test', FROM)
+    const fetchMock = mockFetch({})
+
+    const result = await sendEmail({
+      to: 'owner@example.com',
+      subject: 'Your invoice',
+      text: 'Invoice attached',
+      context: 'billing',
+    })
+
+    expect(result.sent).toBe(true)
+    expect(lastBody(fetchMock).from).toBe(FROM)
+  })
+})

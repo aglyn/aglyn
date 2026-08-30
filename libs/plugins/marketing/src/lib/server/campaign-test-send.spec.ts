@@ -594,15 +594,26 @@ describe('a test send leaves on the identity the composer chose', () => {
     })
   })
 
-  it('honors an explicit choice of the shared Aglyn domain', async () => {
+  /**
+   * The choice that no longer exists, asserted where it used to be honored.
+   *
+   * A merchant asking to send a campaign from the shared Aglyn domain is
+   * asking to charge their list's complaint rate against the domain every
+   * other customer's billing and password-reset mail depends on. The request
+   * is ignored rather than refused — it is not a value this field has — and
+   * the send leaves on the site's own identity exactly as an absent field
+   * would produce.
+   */
+  it('ignores a request to send from the shared Aglyn domain', async () => {
     verifyDomain()
 
     await test$({ sendingIdentity: 'platform' })
 
     expect(sent[0]['sendingIdentity']).toMatchObject({
-      from: 'noreply@aglyn.com',
-      source: 'platform',
+      from: 'news@acme.com',
+      source: 'custom',
     })
+    expect(sent[0]['sendingIdentity'].from).not.toContain('aglyn.com')
   })
 
   it('refuses when the site’s domain is not verified', async () => {
@@ -688,10 +699,16 @@ describe('each half of the reduction is load-bearing on its own', () => {
     expect(draft['sendingIdentity']).toBeUndefined()
   })
 
-  it('THE EDGE: a draft DOES store an explicit platform choice', async () => {
-    // The control. Without it the assertion above passes against a route that
-    // stores nothing at all, which would lose a merchant's choice instead of
-    // protecting them from somebody else's.
+  /**
+   * The control that keeps the assertion above from being vacuous — a draft
+   * route storing NOTHING would satisfy it too.
+   *
+   * It can no longer be `sendingIdentity`, which is now read by nothing, so it
+   * is a neighbouring field written through the same path. If drafts stopped
+   * storing composer choices altogether this fails, which is what the original
+   * control was for.
+   */
+  it('THE EDGE: a draft DOES store the composer’s other choices', async () => {
     await post({
       hostId: HOST,
       action: 'draft',
@@ -699,11 +716,13 @@ describe('each half of the reduction is load-bearing on its own', () => {
       subject: 'Spring sale',
       body: 'The sale is on.',
       audience: 'leads',
-      sendingIdentity: 'platform',
+      fromName: 'Northwind Coffee',
     })
 
     const draft = store.get(`hosts/${HOST}/campaigns/draft-2`) ?? {}
-    expect(draft['sendingIdentity']).toBe('platform')
+    expect(draft['fromName']).toBe('Northwind Coffee')
+    // And the removed field is stored by nothing, however it arrives.
+    expect(draft['sendingIdentity']).toBeUndefined()
   })
 
   it('THE RESOLVER: a domain reaching the send function is still ignored', async () => {

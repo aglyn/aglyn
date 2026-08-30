@@ -32,6 +32,7 @@ import {
 import { renderTextEmailHtml } from './text-email-html'
 import {
   sendingIdentityRefusal,
+  type SendingIdentityAudience,
   type SendingIdentityVerdict,
 } from './sending-domain'
 import {
@@ -114,6 +115,20 @@ export interface SendEmailOptions {
    * address cannot move off a verified identity.
    */
   sendingIdentity?: SendingIdentityVerdict | null
+  /**
+   * Whose mail this is — see {@link SendingIdentityAudience}.
+   *
+   * `tenant` says the message belongs to a SITE, and it makes the platform
+   * sender unreachable: a tenant message with no resolved identity is refused
+   * rather than sent from `aglyn.com`. Pair it with `sendingIdentity` from
+   * `hostSendingIdentity(hostId)` and the ordinary path is unchanged; the flag
+   * is what decides the behavior when that resolution is missing or refuses.
+   *
+   * Omitted, a send is platform mail and keeps the configured sender, because
+   * that is what the console's own senders are. `email-audience-coverage.spec`
+   * sweeps the tenant-owned trees so the omission cannot be an accident there.
+   */
+  audience?: SendingIdentityAudience
   /**
    * Short label for logs, e.g. `'invite'` or `'usage-summary'`. Makes a
    * failure in the runtime logs traceable to the feature that caused it.
@@ -493,6 +508,37 @@ export async function sendEmail(
   // Two sources, and `options` is neither of them. Nothing the caller passes
   // reaches the address — only the display name in front of it.
   const resolvedFrom = options.sendingIdentity?.from ?? null
+
+  /*
+   * THE PLATFORM DOMAIN IS NOT A FALLBACK FOR TENANT MAIL.
+   *
+   * `configuredFrom` is `USAGE_EMAIL_FROM` — an address on `aglyn.com`, where
+   * Aglyn's own billing, account and console mail leaves from. A site's mail
+   * reaching it means that site's list quality is charged against the domain
+   * every other customer's password reset depends on.
+   *
+   * `resolveHostSendingIdentity` already refuses above, so a tenant caller
+   * that resolved an identity never arrives here with `resolvedFrom` null.
+   * This is the arm for a tenant caller that resolved NOTHING — the shape a
+   * new send site takes when its author does not know an identity is owed —
+   * and it is checked here rather than left to the call sites because ninety
+   * of them cannot each be relied on to remember.
+   */
+  if (options.audience === 'tenant' && !resolvedFrom) {
+    console.warn(
+      `${label} refused — a site's mail cannot leave on the shared platform ` +
+        'domain, and no sending identity was resolved for it',
+    )
+    return {
+      sent: false,
+      reason: 'unverified-domain',
+      detail:
+        'This message belongs to a site and no sending identity was ' +
+        'resolved for it, so it was refused rather than sent from the ' +
+        'shared Aglyn address.',
+    }
+  }
+
   const from = applyFromName(
     resolvedFrom ?? configuredFrom,
     options.fromName,

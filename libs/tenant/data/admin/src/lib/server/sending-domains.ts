@@ -88,6 +88,7 @@ import {
 } from '@aglyn/shared-util-email'
 import firebaseAdmin from './firebase-admin'
 import { lookupMx, lookupTxt } from './dns-probe'
+import { getOrgForHost } from './organizations'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -520,9 +521,24 @@ export async function releaseSendingDomain(
 /**
  * The identity one host sends on, ready to hand to `sendEmail`.
  *
- * Two document reads at most, and none at all for the overwhelmingly common
- * case of a host that has selected nothing. The host document is passed in
- * rather than re-fetched because every caller already holds it.
+ * Two document reads at most, and none at all for a host that has no
+ * selection. The host document is passed in rather than re-fetched because
+ * every caller already holds it.
+ *
+ * ## This function cannot return an `aglyn.com` address, and that is the point
+ *
+ * Every caller here is resolving mail FOR A SITE — that is what "host" in the
+ * name means — so every verdict it produces is tenant mail by construction.
+ * `audience: 'tenant'` is therefore passed unconditionally and is not a
+ * parameter: a caller that could choose would eventually choose wrong, and the
+ * wrong choice puts a merchant's list quality onto the domain the platform's
+ * own invoices and password resets leave on.
+ *
+ * It used to fall through to `USAGE_EMAIL_FROM` whenever a site had selected
+ * nothing, which was almost every site — so the platform domain was not a
+ * fallback so much as the default, and it covered transactional mail as well
+ * as marketing. A site with no domain of its own now REFUSES, and provisioning
+ * is what makes that state temporary.
  */
 export async function resolveHostSendingIdentity(options: {
   orgId: string | null | undefined
@@ -537,7 +553,11 @@ export async function resolveHostSendingIdentity(options: {
   const domain = normalizeSendingDomain(options?.selectedDomain ?? '')
 
   if (!domain || !options?.orgId) {
-    return resolveSendingIdentity({ selection: null, platformFrom })
+    return resolveSendingIdentity({
+      selection: null,
+      platformFrom,
+      audience: 'tenant',
+    })
   }
 
   const record = readSendingDomainRecord(await domainRef(options.orgId, domain).get())
@@ -558,7 +578,63 @@ export async function resolveHostSendingIdentity(options: {
       }
     : { domain, status: 'failed', localPart: '', missing: [] }
 
-  return resolveSendingIdentity({ selection, platformFrom })
+  return resolveSendingIdentity({ selection, platformFrom, audience: 'tenant' })
+}
+
+/**
+ * The identity one site sends on, from a `hostId` alone.
+ *
+ * The door every tenant sender uses. {@link resolveHostSendingIdentity} needs
+ * the org id and the host's two selection fields, and a survey of the tenant
+ * send sites found that all of them hold a `hostId` while only three hold an
+ * org id and half never read the host document at all. Asking nineteen call
+ * sites to each assemble the same three values is the shape that produces a
+ * twentieth which does not — and the cost of forgetting here is a message
+ * leaving on the platform's own domain.
+ *
+ * ## The cache is per-call-graph, not per-process
+ *
+ * Passed a `cache`, repeated resolutions for one host cost one pair of reads.
+ * A sweep that mails two hundred abandoned carts across a dozen sites, or a
+ * webhook that sends a receipt and a seller notice for the same order, holds
+ * one map for the run and pays for each site once.
+ *
+ * Deliberately NOT a module-level cache. Verification status is exactly the
+ * thing that changes underneath a long-lived process — the re-check sweep
+ * un-verifies a domain whose records have gone — and a stale entry would keep
+ * a site sending on a domain that no longer authenticates. A caller that
+ * declares a cache has also declared how long it may be trusted.
+ */
+export async function hostSendingIdentity(
+  hostId: string | null | undefined,
+  cache?: Map<string, SendingIdentityVerdict>,
+): Promise<SendingIdentityVerdict> {
+  const id = String(hostId ?? '').trim()
+  if (!id) {
+    // No host is not "the platform is speaking" — it is a caller that does
+    // not know which site it is sending for, and the honest answer to that is
+    // a refusal rather than the shared domain.
+    return resolveSendingIdentity({ selection: null, audience: 'tenant' })
+  }
+
+  const hit = cache?.get(id)
+  if (hit) return hit
+
+  const snapshot = await firestore()
+    .collection('hosts')
+    .doc(id)
+    .get()
+    .catch(() => null)
+  const owner = await getOrgForHost(id).catch(() => null)
+
+  const verdict = await resolveHostSendingIdentity({
+    orgId: owner?.orgId ?? null,
+    selectedDomain: snapshot?.get('sendingDomain') ?? '',
+    selectedLocalPart: snapshot?.get('sendingLocalPart') ?? '',
+  })
+
+  cache?.set(id, verdict)
+  return verdict
 }
 
 /** The record keys a surface highlights as outstanding. */

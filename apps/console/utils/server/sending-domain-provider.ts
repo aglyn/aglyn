@@ -125,6 +125,18 @@ export interface SendingDomainProvider {
   configured(): boolean
   /** Create the domain at the provider and return the records it issued. */
   issue(domain: string): Promise<SendingDomainIssue>
+  /**
+   * Delete the provider's domain object, freeing the account quota slot it
+   * holds. `true` when the object is gone — INCLUDING when it was already
+   * gone, because a teardown that has to succeed exactly once is a teardown
+   * that can never be retried.
+   *
+   * This exists because the provider's per-account domain limit is low enough
+   * to be reached: 3 on Free, 10 on Pro. A deleted site whose domain object
+   * lingers is a slot spent on a domain nothing will ever send from, and
+   * enough of them means the next real site cannot be provisioned at all.
+   */
+  release(providerDomainId: string): Promise<boolean>
 }
 
 function issueResult(
@@ -347,6 +359,44 @@ export const RESEND_SENDING_DOMAIN_PROVIDER: SendingDomainProvider = {
       return issueResult('failed', domain, { detail })
     }
   },
+
+  /**
+   * `DELETE /domains/{id}`.
+   *
+   * A `404` counts as success. The object being absent is the state this call
+   * exists to reach, and treating "already gone" as a failure would make a
+   * retried teardown permanently unable to finish — which is the failure mode
+   * that leaves quota slots spent on deleted sites.
+   */
+  async release(providerDomainId: string): Promise<boolean> {
+    const apiKey = resendDomainsKey()
+    const id = String(providerDomainId ?? '').trim()
+    if (!apiKey || !id) return false
+
+    try {
+      const response = await fetch(
+        `${RESEND_DOMAINS_ENDPOINT}/${encodeURIComponent(id)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: deadline(),
+        },
+      )
+      if (response.ok || response.status === 404) return true
+      const detail = providerDetail(
+        response.status,
+        await response.json().catch(() => null),
+      )
+      console.error('[sending-domain-provider:resend] release failed', detail)
+      return false
+    } catch (error) {
+      console.error(
+        '[sending-domain-provider:resend] release threw',
+        abortedDetail(error),
+      )
+      return false
+    }
+  },
 }
 
 /** The full-access credential. Read HERE and nowhere else in the workspace. */
@@ -450,6 +500,10 @@ export const NO_SENDING_DOMAIN_PROVIDER: SendingDomainProvider = {
     issueResult('skipped', normalizeSendingDomain(domain), {
       detail: 'unconfigured',
     }),
+  // Nothing was ever created, so nothing is left to release. `true` rather
+  // than `false`: a teardown asking a driver that issues nothing to clean up
+  // has finished, and reporting failure would stall it forever.
+  release: async () => true,
 }
 
 /**

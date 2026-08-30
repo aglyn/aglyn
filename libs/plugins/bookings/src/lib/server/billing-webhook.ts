@@ -26,6 +26,7 @@ import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   meterHostEmail,
   renderHostEmailWithTokens,
   sendGa4Purchase,
@@ -378,6 +379,8 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             fromName: branding.fromName,
+            sendingIdentity: await hostSendingIdentity(String(hostId)),
+            audience: 'tenant',
             context: 'paid booking confirmation',
           })
           // Cost meter (AGL-1438), matching the free-booking path.

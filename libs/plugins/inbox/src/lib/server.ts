@@ -99,6 +99,7 @@ import {
   enrollListMember,
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   isEmailSuppressed,
   meterHostEmail,
   orgDataCollectionForHost,
@@ -266,6 +267,8 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
       text: composeReplyBody({ message, fields, siteName }),
       replyTo,
       fromName: branding.fromName,
+      sendingIdentity: await hostSendingIdentity(hostId),
+      audience: 'tenant',
       context: REPLY_CONTEXT,
     })
 

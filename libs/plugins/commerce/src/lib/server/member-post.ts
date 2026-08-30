@@ -18,6 +18,7 @@
 import {
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
@@ -126,6 +127,14 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
           cname: hostSnapshot.get('cname'),
           subdomain: hostSnapshot.get('subdomain'),
         }) ?? ''
+      /*
+       * ONE site, up to two hundred recipients — so the identity is resolved
+       * once and reused, not read per message. Hoisted rather than cached
+       * inside the helper for the reason its docblock gives: verification can
+       * change under a long-lived process, so how long a resolution may be
+       * trusted is the caller's declaration.
+       */
+      const identity = await hostSendingIdentity(hostId)
       for (const to of recipients) {
         /*
          * MARKETING. A member post is a merchant mailing their audience, so
@@ -142,6 +151,8 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
           subject: title,
           text: postBody || title,
           fromName: branding.fromName,
+          sendingIdentity: identity,
+          audience: 'tenant',
           context: 'member post',
           marketing: { hostId, siteBase },
         })

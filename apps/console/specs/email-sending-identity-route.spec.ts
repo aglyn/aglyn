@@ -105,6 +105,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   lockdownRefusal: async () => null,
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'agency' } }),
   listSendingDomains: async () => mockState.domains,
+  /*
+   * The site's own provisioned domain. Built through the REAL naming
+   * function, so "clearing the selection returns the site to its own domain"
+   * is a statement about the name the product would actually issue rather
+   * than about a literal written here.
+   */
+  ensureHostSendingDomain: async (options: Record<string, any>) => {
+    const email = jest.requireActual('@aglyn/shared-util-email')
+    const domain = email.platformSendingDomainFor(
+      String(mockHostDoc['sendingLabel'] ?? options?.subdomain ?? ''),
+    )
+    return { domain: domain || null, label: null, created: false, error: null }
+  },
   memberHasOrgPermission: async () => mockState.canManage,
   resolveOrgMembership: async () => ({ member: { role: 'admin' } }),
   /*
@@ -235,9 +248,15 @@ describe('the read reports what a SEND would resolve, not a second opinion', () 
     const body = await (await read()).json()
     const offered = body.options.map((one: any) => one.value)
 
-    expect(offered).toContain('platform')
     expect(offered).toContain('acme.com')
     expect(offered).not.toContain('other-client.com')
+    // And the shared Aglyn address is not among them. It used to head this
+    // list; a site sending there charges its list's complaint rate against
+    // the domain the platform's own billing mail depends on.
+    expect(offered).not.toContain('platform')
+    for (const value of offered) {
+      expect(String(value)).not.toContain('aglyn.com')
+    }
   })
 
   it('marks an unfinished domain as offered-but-not-selectable', async () => {
@@ -298,20 +317,27 @@ describe('a selection is only accepted for a verified domain', () => {
     expect(mockState.written).toBeNull()
   })
 
-  it('accepts the shared domain as an explicit choice', async () => {
-    /*
-     * Clearing the selection is a decision, not a fallback.
-     *
-     * Both keys are DELETED rather than blanked: a `sendingDomain` of `''`
-     * and an absent one read the same to the resolver today, and leaving a
-     * blank behind is how they stop reading the same later.
-     */
+  /**
+   * Clearing the selection returns the site to ITS OWN domain, never to the
+   * shared Aglyn one and never to nothing at all.
+   *
+   * It used to delete both keys, which meant "send as Aglyn". That is the
+   * coupling this feature exists to break. Deleting them NOW would be worse
+   * still: a site with no sending domain refuses every message, so an admin
+   * choosing "stop using our own domain" would silently switch their receipts
+   * off.
+   *
+   * `sendingLocalPart` is still deleted — the mailbox reverts to the default
+   * while the domain becomes the site's provisioned one.
+   */
+  it('returns the site to its own provisioned domain, not to aglyn.com', async () => {
+    mockHostDoc = { subdomain: 'acme', sendingLabel: 'acme' }
+
     const response = await write({ domain: 'platform' })
 
     expect(response.status).toBe(200)
-    expect(mockState.written).toEqual({
-      sendingDomain: '__delete__',
-      sendingLocalPart: '__delete__',
-    })
+    expect(mockState.written.sendingDomain).toBe('acme.mail.aglyn.app')
+    expect(mockState.written.sendingDomain).not.toContain('aglyn.com')
+    expect(mockState.written.sendingLocalPart).toBe('__delete__')
   })
 })

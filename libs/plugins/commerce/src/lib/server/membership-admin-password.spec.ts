@@ -62,6 +62,27 @@ let mockDecodedToken: Record<string, unknown> = {}
 let mockThrottleAllows = true
 const mockMetered: Array<[string, number, string]> = []
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The site's own sending identity, which every tenant send now resolves.
+   *
+   * A VERIFIED one, because these specs are about the mail their subject
+   * sends rather than about the identity boundary — a refusing stub would
+   * turn each of them into an assertion that no mail was sent, which is not
+   * what any of them was written to check. The boundary itself is proved in
+   * `platform-sending-domain.spec.ts`, `host-sending-domain.spec.ts` and
+   * `email-audience-coverage.spec.ts`.
+   *
+   * The domain is the SITE's, never `aglyn.com`, so an assertion on a From:
+   * address in this file cannot accidentally pass against a platform
+   * fallback.
+   */
+  hostSendingIdentity: async () => ({
+    from: 'hello@site.mail.aglyn.app',
+    source: 'custom',
+    domain: 'site.mail.aglyn.app',
+    summary: 'Sending as hello@site.mail.aglyn.app.',
+    refusal: null,
+  }),
   isImpersonationSession: () => false,
   // White-Label Phase 3: the handler resolves the owning org's brand for the
   // sender from-name; a bare stub keeps it on the Aglyn defaults here.

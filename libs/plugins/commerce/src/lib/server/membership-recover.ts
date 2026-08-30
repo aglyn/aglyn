@@ -23,6 +23,7 @@ import {
   consumeMembershipRecoverSend,
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   isEmailSuppressed,
   meterHostEmail,
   RECOVER_MIN_MEMBER_AGE_MS,
@@ -238,6 +239,8 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
         'ask for this, you can safely ignore this email — your ' +
         'password is unchanged.',
       fromName: branding.fromName,
+      sendingIdentity: await hostSendingIdentity(hostId),
+      audience: 'tenant',
       context: 'membership recovery',
     })
     // Cost meter (AGL-1438). Transactional, and the clearest case for why a

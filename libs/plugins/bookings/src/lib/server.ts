@@ -100,6 +100,7 @@ import {
   getPluginConfig,
   resolveOrgIdForHost,
   renderHostEmailWithTokens,
+  hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
@@ -762,6 +763,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         text: designed?.text || fallbackText,
         ...(designed?.html ? { html: designed.html } : {}),
         fromName: branding.fromName,
+        sendingIdentity: await hostSendingIdentity(hostId),
+        audience: 'tenant',
         context: 'booking confirmation',
       })
       // Cost meter (AGL-1438). Transactional: counted, never capped — a
@@ -832,6 +835,18 @@ export async function scanBookingReminders(
   const brandingByHost = new Map<
     string,
     ReturnType<typeof resolveBrandingProfile>
+  >()
+  /*
+   * One identity resolution per SITE, not per booking.
+   *
+   * The same reason the branding and template maps above exist: this sweep
+   * runs across every site, and an uncached resolution would be two Firestore
+   * reads per reminder rather than per host. Scoped to the run, so a domain
+   * un-verified between runs is picked up on the next one.
+   */
+  const identityByHost = new Map<
+    string,
+    Awaited<ReturnType<typeof hostSendingIdentity>>
   >()
   for (const doc of upcoming.docs) {
     const data = doc.data()
@@ -905,6 +920,8 @@ export async function scanBookingReminders(
           `scheduled for ${when}.\n\nReference: ${doc.id}`,
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostId)?.fromName,
+      sendingIdentity: await hostSendingIdentity(hostId, identityByHost),
+      audience: 'tenant',
       context: 'booking reminder',
     })
     if (result.sent) {

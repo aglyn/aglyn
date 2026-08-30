@@ -20,6 +20,7 @@ import * as CommerceModel from '../model'
 import {
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
@@ -72,6 +73,18 @@ export async function scanRestockAlerts(
   // White-label brand per host (White-Label Phase 3): resolved once per host
   // from the owning org doc through the one shared resolver.
   const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
+  /*
+   * One identity resolution per SITE, not per message.
+   *
+   * The same reason the branding map above exists: this sweep runs across
+   * every site, and an uncached resolution here would be two Firestore reads
+   * per recipient rather than per host. Scoped to the run, so a domain
+   * un-verified by the re-check sweep is picked up on the next one.
+   */
+  const identityByHost = new Map<
+    string,
+    Awaited<ReturnType<typeof hostSendingIdentity>>
+  >()
   /** Each site's public origin, for the unsubscribe link on the alert. */
   const siteBaseByHost = new Map<string, string>()
   let skippedLocked = 0
@@ -184,6 +197,8 @@ export async function scanRestockAlerts(
           `out:\n\n${productUrl}`,
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostRef.id)?.fromName,
+      sendingIdentity: await hostSendingIdentity(hostRef.id, identityByHost),
+      audience: 'tenant',
       context: 'restock alert',
       priority: 'bulk',
       marketing: { hostId: hostRef.id, siteBase: siteBaseByHost.get(hostRef.id) ?? '' },

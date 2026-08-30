@@ -20,6 +20,7 @@ import { randomBytes } from 'crypto'
 import {
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   meterHostEmail,
   renderHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin'
@@ -182,6 +183,8 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
             'Enter it at checkout to apply the balance.',
         ...(designed?.html ? { html: designed.html } : {}),
         fromName: Aglyn.resolveBrandingProfile(owner?.org as never).fromName,
+        sendingIdentity: await hostSendingIdentity(hostId),
+        audience: 'tenant',
         context: 'gift card',
       })
         .then(() => true)

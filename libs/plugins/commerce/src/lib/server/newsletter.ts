@@ -27,6 +27,7 @@ import {
 import {
   enrollListMember,
   firebaseAdmin,
+  hostSendingIdentity,
   meterHostEmail,
   orgDataCollectionForHost,
   recordPendingTopicConfirmation,
@@ -170,6 +171,8 @@ async function requestConfirmation(options: {
         `Please confirm that you want to receive ${stream} at this ` +
         `address:\n\n${url}\n\nThe link works for three days. If you did ` +
         'not sign up, ignore this message — nothing will be sent.',
+      sendingIdentity: await hostSendingIdentity(options.hostId),
+      audience: 'tenant',
       context: 'newsletter confirmation',
     })
     /*

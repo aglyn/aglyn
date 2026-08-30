@@ -83,6 +83,21 @@ class MockFreeWorkspaceCapError extends Error {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The site's sending-domain CLAIM, made at creation so the mail label is
+   * pinned from the name the site was created under.
+   *
+   * Stubbed to a no-op here: these specs are about the host-creation
+   * transaction, and the claim is deliberately best-effort and after it — a
+   * create must not fail because a mail claim did. What the claim actually
+   * does is proved in `host-sending-domain.spec.ts`.
+   */
+  ensureHostSendingDomain: async () => ({
+    domain: null,
+    label: null,
+    created: false,
+    error: null,
+  }),
   __esModule: true,
   firebaseAdmin: {
     firestore: {

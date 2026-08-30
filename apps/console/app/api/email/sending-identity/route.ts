@@ -59,6 +59,7 @@
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
+  ensureHostSendingDomain,
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
@@ -71,6 +72,7 @@ import {
 import {
   normalizeLocalPart,
   normalizeSendingDomain,
+  platformSendingDomainFor,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
 
@@ -88,12 +90,12 @@ const DEFAULT_LOCAL_PART = 'hello'
  * changed.
  */
 interface IdentityOption {
-  /** `platform`, or the domain. Sent back as `sendingIdentity` on a send. */
+  /** The domain. Always a real one — there is no reserved `platform` value. */
   value: string
   from: string | null
   /** False for a domain whose DNS is unfinished — offered, never selectable. */
   selectable: boolean
-  status: SendingDomainRecord['status'] | 'platform'
+  status: SendingDomainRecord['status']
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -197,17 +199,37 @@ async function handler(request: Request): Promise<Response> {
       selectedLocalPart: localPart,
     })
 
-    const options: IdentityOption[] = [
-      {
-        value: 'platform',
-        from: process.env.USAGE_EMAIL_FROM || null,
-        // The shared domain is always selectable when it is configured at
-        // all. `platform-unconfigured` is an operator's problem, and it
-        // surfaces as the refusal on `resolved` rather than as a missing row.
-        selectable: Boolean(process.env.USAGE_EMAIL_FROM),
-        status: 'platform',
-      },
-    ]
+    /*
+     * THE SHARED AGLYN DOMAIN IS NOT AN OPTION, and is not offered as one.
+     *
+     * It used to head this list. `USAGE_EMAIL_FROM` is an address on
+     * `aglyn.com`, where the platform's own billing and account mail leaves
+     * from, and a site sending there charges its list's complaint rate against
+     * every other customer's password reset.
+     *
+     * What replaces it is the site's OWN provisioned domain, which is the
+     * thing the removed row was actually standing in for: an address the
+     * merchant does not have to do any DNS work for. It is offered under its
+     * real name so a merchant can see what their recipients will see.
+     */
+    const platformDomain = platformSendingDomainFor(
+      String(hostSnapshot.get('sendingLabel') ?? ''),
+    )
+    const platformRecord = platformDomain
+      ? records.find((entry) => entry.domain === platformDomain)
+      : null
+
+    const options: IdentityOption[] = []
+    if (platformDomain) {
+      options.push({
+        value: platformDomain,
+        from: `${localPart}@${platformDomain}`,
+        // Selectable only once it verifies, exactly like a customer's own
+        // domain. Provisioning is automatic, not instantaneous.
+        selectable: platformRecord?.status === 'verified',
+        status: platformRecord?.status ?? 'requested',
+      })
+    }
     /*
      * Only the domain THIS SITE has selected becomes an option, even though
      * the org may have proved several.
@@ -222,7 +244,10 @@ async function handler(request: Request): Promise<Response> {
     const selectedRecord = records.find(
       (record) => record.domain === selectedDomain,
     )
-    if (selectedDomain) {
+    // `!== platformDomain` because the site's own provisioned domain is now
+    // the DEFAULT selection, so it is ordinarily both — and listing it twice
+    // would render a control offering the same address as two choices.
+    if (selectedDomain && selectedDomain !== platformDomain) {
       options.push({
         value: selectedDomain,
         from: `${localPart}@${selectedDomain}`,
@@ -234,12 +259,14 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({
       orgId: orgId || null,
       /*
-       * What the composer sends back, and it is NOT the domain: the send path
-       * accepts the reserved `platform` or nothing at all. Reported as the
-       * chosen option's `value` so the control has one identifier, and read
-       * on the way in as the two-valued thing it is.
+       * The chosen option's `value`, which is always a DOMAIN now.
+       *
+       * It used to be able to read `platform`, meaning the shared Aglyn
+       * address. That is no longer a thing a site can be, so falling back to
+       * the site's own provisioned domain is the honest answer for a site
+       * that has made no explicit choice — it is what such a site sends as.
        */
-      selected: selectedDomain || 'platform',
+      selected: selectedDomain || platformDomain || '',
       localPart,
       identity: resolved.summary,
       identitySource: resolved.source,
@@ -268,34 +295,76 @@ async function handler(request: Request): Promise<Response> {
       { status: 403 },
     )
   }
-  if (!entitled) {
-    return Response.json(
-      { error: 'Custom sending domains require the Agency plan' },
-      { status: 403 },
-    )
-  }
-
   const requested = String(body?.['domain'] ?? '').trim()
   const nextLocalPart =
     normalizeLocalPart(String(body?.['localPart'] ?? '')) || DEFAULT_LOCAL_PART
 
   /*
-   * Clearing the selection moves this site back to the shared domain, and it
-   * is an explicit act rather than the absence of one.
+   * Clearing the selection moves this site back to ITS OWN provisioned
+   * domain — `{label}.mail.aglyn.app` — and never to the shared Aglyn one.
    *
-   * Distinct from the fallback this feature forbids: nothing here happens
-   * because a verification failed. An admin said "send as Aglyn again", which
-   * they are entitled to say.
+   * The difference matters twice. Sending as `aglyn.com` is what this whole
+   * feature exists to stop: a site's list quality must not be charged against
+   * the domain the platform's own billing and account mail depends on. And
+   * clearing to NOTHING would be worse still, because a site with no sending
+   * domain refuses every message — so an admin choosing "stop using our own
+   * domain" would silently switch their receipts off.
+   *
+   * `ensureHostSendingDomain` rather than a bare read, so a site that somehow
+   * has no claim gets one here instead of being left unable to send. It is
+   * idempotent, so a site that already has one keeps exactly the name it has.
    */
   if (!requested || requested === 'platform') {
+    const provisioned = await ensureHostSendingDomain({
+      hostId,
+      orgId,
+      subdomain: String(hostSnapshot.get('subdomain') ?? ''),
+    }).catch(() => null)
+
+    if (!provisioned?.domain) {
+      return Response.json(
+        {
+          error:
+            'This site does not have a sending domain of its own yet, so it ' +
+            'cannot be moved back to one. It is set up automatically and is ' +
+            'usually ready within a few minutes — try again shortly.',
+        },
+        { status: 409 },
+      )
+    }
+
     await hostRef.set(
       {
-        sendingDomain: firebaseAdmin.firestore.FieldValue.delete(),
+        sendingDomain: provisioned.domain,
         sendingLocalPart: firebaseAdmin.firestore.FieldValue.delete(),
       },
       { merge: true },
     )
-    return Response.json({ selected: 'platform', localPart: DEFAULT_LOCAL_PART })
+    return Response.json({
+      selected: provisioned.domain,
+      localPart: DEFAULT_LOCAL_PART,
+    })
+  }
+
+  /*
+   * THE PLAN GATE APPLIES TO A CUSTOM DOMAIN, AND ONLY TO ONE.
+   *
+   * It used to sit above the clear-the-selection branch too, which was
+   * harmless while clearing meant "send as Aglyn" — the shared domain was
+   * free to everyone. It is not harmless now: clearing means "send as your own
+   * `{label}.mail.aglyn.app`", which is the PLATFORM DEFAULT, and a site that
+   * cannot reach its default cannot send at all. Gating it would make an
+   * un-entitled site's mail stop, which is worse than the shared-domain
+   * behavior this replaced.
+   *
+   * Sending as a domain the CUSTOMER owns is still white-labeling the mail,
+   * and still Agency.
+   */
+  if (!entitled) {
+    return Response.json(
+      { error: 'Custom sending domains require the Agency plan' },
+      { status: 403 },
+    )
   }
 
   const domain = normalizeSendingDomain(requested)

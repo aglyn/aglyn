@@ -57,6 +57,7 @@ import {
   firebaseAdmin,
   flowEmailRefusal,
   getOrgForHost,
+  hostSendingIdentity,
   meterHostEmail,
   notifyHostManagers,
   orgDataCollectionForHost,
@@ -605,6 +606,8 @@ async function executeAction(
           to,
           subject: String(step.subject ?? '').slice(0, 200),
           text: String(step.body ?? '').slice(0, 5000),
+          sendingIdentity: await hostSendingIdentity(hostId),
+          audience: 'tenant',
           context: enrollmentRef ? 'flow step' : 'event action',
           /*
            * A resumed step may take `'bulk'` where an immediate one may not,
