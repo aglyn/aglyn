@@ -32,6 +32,8 @@
 import {
   campaignListRows,
   campaignRollup,
+  campaignSendDisplay,
+  campaignSendIsMidFlight,
   campaignSendListIds,
   campaignWindowState,
   type CampaignSend,
@@ -118,6 +120,131 @@ describe('rolling a campaign’s sends into one set of figures', () => {
 
     expect(rollup.sends).toBe(1)
     expect(rollup.scheduled).toBe(1)
+  })
+})
+
+/*==========================================
+ * A SEND THAT IS STILL GOING HAS STILL GONE.
+ *
+ * An audience larger than one batch is delivered over several runs, and
+ * between them the email is stored as `scheduled` — the state the processor
+ * claims to resume it. Read literally that is a campaign row reporting
+ * "nothing sent yet" about an email that has put five hundred messages in
+ * five hundred inboxes, and a rollup that drops its figures entirely.
+ *=========================================*/
+describe('a campaign holding a send that is still going out', () => {
+  const midFlight = {
+    status: 'scheduled',
+    sendAtMs: NOW + 60_000,
+    stats: { recipients: 500, sent: 500, delivered: 480, audienceSize: 3000 },
+    resume: { remaining: 2500, batch: 1, nextAtMs: NOW + 60_000 },
+  } as never as CampaignSend
+
+  it('counts it among the sends, not among the scheduled', () => {
+    const rollup = campaignRollup([midFlight])
+    expect(rollup.sends).toBe(1)
+    expect(rollup.scheduled).toBe(0)
+    expect(rollup.sending).toBe(1)
+  })
+
+  it('keeps an email that has delivered nothing yet as scheduled', () => {
+    // THE CONTROL. The narrower `scheduled` must still hold the case it has
+    // always held — a campaign waiting for its time — or the fix has simply
+    // moved the lie.
+    const rollup = campaignRollup([
+      { status: 'scheduled', sendAtMs: NOW + DAY } as never as CampaignSend,
+    ])
+    expect(rollup.scheduled).toBe(1)
+    expect(rollup.sending).toBe(0)
+    expect(rollup.sends).toBe(0)
+  })
+
+  it('includes its figures in the campaign totals', () => {
+    /*
+     * The other half of the same fault. Excluded from `gone`, the five
+     * hundred messages this email has actually delivered were missing from
+     * every aggregate on the campaign — a merchant reading the row would see
+     * a campaign that had sent nothing while their audience was receiving it.
+     */
+    const rollup = campaignRollup([midFlight])
+    expect(rollup.sent.value).toBe(500)
+    expect(rollup.delivered.value).toBe(480)
+  })
+
+  it('is not counted twice when the campaign also holds a finished send', () => {
+    const rollup = campaignRollup([
+      midFlight,
+      send({ $id: 'done', stats: { sent: 10, delivered: 10 } }),
+    ])
+    expect(rollup.sends).toBe(2)
+    expect(rollup.sent.value).toBe(510)
+  })
+})
+
+describe('what a row says about one email', () => {
+  it('says a draft is a draft', () => {
+    /*
+     * The progress derivation cannot: an absent status reads as `sent` and a
+     * draft has no counters, so asking it answers "Sent to 0" — the worst
+     * available sentence about an email nobody has written yet.
+     */
+    const display = campaignSendDisplay({ status: 'draft' } as never)
+    expect(display.state).toBe('draft')
+    expect(display.label).toBe('Draft')
+  })
+
+  it('says a mid-flight campaign is SENDING, with the count', () => {
+    const display = campaignSendDisplay({
+      status: 'scheduled',
+      stats: { sent: 500, audienceSize: 3000 },
+      resume: { remaining: 2500, batch: 1, nextAtMs: NOW + 1 },
+    } as never)
+    expect(display.state).toBe('sending')
+    expect(display.label).toBe('Sending — reached 500 of 3,000')
+    // Never the stored word, which is what a status-driven chip showed.
+    expect(display.label).not.toMatch(/scheduled/i)
+  })
+
+  it('still says Scheduled for one that has delivered nothing', () => {
+    const display = campaignSendDisplay({
+      status: 'scheduled',
+      sendAtMs: NOW + DAY,
+    } as never)
+    expect(display.state).toBe('pending')
+    expect(display.label).toBe('Scheduled')
+  })
+
+  it('names the shortfall on a send that stopped part way', () => {
+    const display = campaignSendDisplay({
+      status: 'canceled',
+      stats: { sent: 1500, audienceSize: 3000 },
+      resume: { remaining: 1500, batch: 3 },
+    } as never)
+    expect(display.state).toBe('stopped')
+    expect(display.label).toMatch(/1,500 not addressed/)
+  })
+
+  it('reads only a send with more to come as mid-flight', () => {
+    expect(
+      campaignSendIsMidFlight({
+        status: 'scheduled',
+        stats: { sent: 500 },
+        resume: { remaining: 2500, batch: 1, nextAtMs: NOW + 1 },
+      } as never),
+    ).toBe(true)
+    // A campaign waiting for its time is not in flight, and neither is one a
+    // merchant stopped however much of its audience is left.
+    expect(
+      campaignSendIsMidFlight({ status: 'scheduled', sendAtMs: NOW } as never),
+    ).toBe(false)
+    expect(
+      campaignSendIsMidFlight({
+        status: 'canceled',
+        stats: { sent: 1500 },
+        resume: { remaining: 1500, batch: 3 },
+      } as never),
+    ).toBe(false)
+    expect(campaignSendIsMidFlight({ status: 'draft' } as never)).toBe(false)
   })
 })
 

@@ -31,7 +31,14 @@
  *
  * The other thing this file holds down is the cost the campaign route was
  * split out to avoid: the composer opens listens of its own, and a reader who
- * came for numbers must not pay for one.
+ * came for numbers must not pay for one — and neither the edit drawer's topic
+ * picker.
+ *
+ * EDITING and DELETING live here because a record is managed on its own page
+ * in this console. The two are written through different doors on purpose:
+ * the container is client-writable and the edit uses the same client SDK the
+ * create drawer does, while the delete has to detach the campaign's SENDS,
+ * which no client may touch, so it is a POST.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -52,10 +59,61 @@ let filters: any[] = []
 /** Every `limit` the sends query asked for. */
 let limits: number[] = []
 let pushed: string[] = []
+/** Every client write the card made: [path, value]. */
+let writes: Array<[string, Record<string, any>]> = []
+/** Every POST the card made: [url, parsed body]. */
+let posted: Array<[string, Record<string, any>]> = []
+/** What the next POST answers with. */
+let postAnswer = { ok: true, body: {} as Record<string, unknown> }
+/** Every `enabled` the card asked the topic hook for, in order. */
+let topicsEnabled: boolean[] = []
+/** Whether the operator agrees to a destructive act. */
+let confirmAccepts = true
+const mockConfirm = jest.fn((_options?: Record<string, unknown>) =>
+  confirmAccepts ? Promise.resolve(undefined) : Promise.reject(new Error('no')),
+)
+
+jest.mock('@aglyn/shared-ui-snackstack', () => ({
+  __esModule: true,
+  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
+}))
+
+/*
+ * The barrel, kept REAL except for the confirmation: `CardDisplay` and the
+ * overflow menu come from here and a stub would leave the assertions below
+ * testing the stub. The default confirmation context answers `undefined`
+ * rather than a promise, which the delete handler awaits.
+ */
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  ...jest.requireActual('@aglyn/shared-ui-jsx'),
+  useConfirmationContext: () => ({ confirm: mockConfirm }),
+}))
+
+/*
+ * The topic catalog ANSWERS NOTHING UNLESS IT IS ASKED, so the gate itself is
+ * assertable rather than only the picker's contents.
+ */
+jest.mock('./use-org-email-topics', () => ({
+  useOrgEmailTopics: (_hostId: string, options?: { enabled?: boolean }) => {
+    const enabled = options?.enabled ?? true
+    topicsEnabled.push(enabled)
+    return {
+      topics: enabled
+        ? [
+            { id: 'marketing', name: 'Promotions and offers' },
+            { id: 'sales', name: 'Sales outreach' },
+          ]
+        : [],
+    }
+  },
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
+  // Nobody signed in. The delete posts through `useCampaignManageApi`, which
+  // reads the user to mint a token; the `fetch` double answers regardless.
+  useUser: () => ({ data: null }),
   useFirestoreDoc: (build: () => any) => {
     const built = build()
     const id = String(built?.path ?? '').split('/').pop() ?? ''
@@ -99,6 +157,16 @@ jest.mock('firebase/firestore', () => ({
   orderBy: (field: unknown) => ({ orderBy: field }),
   documentId: () => '__name__',
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  updateDoc: async (ref: any, value: Record<string, any>) => {
+    writes.push([String(ref?.path ?? ''), value])
+  },
+  /*
+   * The sentinel, kept as a MARKER rather than flattened to undefined.
+   * Clearing a topic must REMOVE the field — the model has no null topic and
+   * the composer is handed it as `string | undefined` — and a double that
+   * lost the distinction would let a write of `null` pass.
+   */
+  deleteField: () => ({ __delete: true }),
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -164,7 +232,17 @@ beforeEach(() => {
   filters = []
   limits = []
   pushed = []
+  writes = []
+  posted = []
+  postAnswer = { ok: true, body: {} }
+  topicsEnabled = []
+  confirmAccepts = true
+  mockConfirm.mockClear()
   docStatus = 'success'
+  global.fetch = (async (url: string, init: any) => {
+    posted.push([String(url), JSON.parse(String(init?.body ?? '{}'))])
+    return { ok: postAnswer.ok, json: async () => postAnswer.body }
+  }) as unknown as typeof fetch
 })
 
 /**
@@ -453,5 +531,288 @@ describe('an id that names a SEND', () => {
     expect(screen.getByText('send report for legacy-send')).toBeTruthy()
     // And nothing was pushed: the URL RESOLVES, it does not bounce.
     expect(pushed).toEqual([])
+  })
+})
+
+/*==========================================
+ * EDITING A CAMPAIGN, ON THE CAMPAIGN'S OWN PAGE.
+ *
+ * Everything a container holds is editable, and nothing it holds describes
+ * mail that has been delivered — that lives on the SENDS, which record their
+ * own subject, audience and topic at send time and are never rewritten. So
+ * unlike an email, where only the console-only display name survives the
+ * send, a campaign has no field that could come to disagree with an inbox.
+ *=========================================*/
+describe('editing a campaign', () => {
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  const openEditor = async () => {
+    await mount('camp-1')
+    fireEvent.click(
+      // BY NAME. The emails table below carries a menu per row, and the
+      // header's is the one labelled with the campaign.
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit campaign' }))
+    await settle()
+  }
+
+  const field = (label: string) =>
+    screen.getByLabelText(label) as HTMLInputElement
+
+  it('is reached from the page’s own overflow, never from the table', async () => {
+    await mount('camp-1')
+    fireEvent.click(
+      // BY NAME. The emails table below carries a menu per row, and the
+      // header's is the one labelled with the campaign.
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    expect(
+      screen.getAllByRole('menuitem').map((item) => item.textContent),
+    ).toEqual(['Edit campaign', 'Delete campaign'])
+  })
+
+  it('opens on the campaign as stored', async () => {
+    await openEditor()
+    expect(field('Name').value).toBe('Spring sale')
+    // UTC, matching the writer: reading a UTC-midnight date back in local
+    // time shows the previous day to everyone west of Greenwich, which is a
+    // campaign changing its own start date by being opened.
+    expect(field('Starts').value).toBe('2026-03-01')
+    expect(field('Ends').value).toBe('2026-03-31')
+  })
+
+  it('saves the container with the client SDK, as the create does', async () => {
+    await openEditor()
+    fireEvent.change(field('Name'), { target: { value: 'Spring clearance' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+
+    expect(writes).toHaveLength(1)
+    const [path, value] = writes[0]
+    // The CONTAINER collection. The send collection is untouched, which is
+    // what leaves every delivered `cid` resolving.
+    expect(path).toBe('hosts/host-1/emailCampaigns/camp-1')
+    expect(value.name).toBe('Spring clearance')
+  })
+
+  it('writes a cleared date as null, which is the absence the model spells', async () => {
+    await openEditor()
+    fireEvent.change(field('Ends'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+
+    expect(writes[0][1].endAtMs).toBeNull()
+    expect(writes[0][1].startAtMs).toBe(Date.UTC(2026, 2, 1))
+  })
+
+  it('REMOVES a cleared topic rather than storing a null one', async () => {
+    // The model has no null topic and the composer is handed it as
+    // `string | undefined`; a stored null would reach the picker as a value.
+    await openEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+
+    expect(writes[0][1].topicId).toEqual({ __delete: true })
+  })
+
+  it('refuses a window that ends before it starts', async () => {
+    // Refused in the form rather than stored: no window state describes a
+    // campaign that ends before it starts, so it would draw as "Ended" from
+    // the day it was made.
+    await openEditor()
+    fireEvent.change(field('Ends'), { target: { value: '2026-01-01' } })
+
+    expect(
+      screen.getByRole('button', { name: 'Save campaign' }),
+    ).toHaveProperty('disabled', true)
+    expect(writes).toHaveLength(0)
+  })
+
+  it('refuses a campaign with no name', async () => {
+    await openEditor()
+    fireEvent.change(field('Name'), { target: { value: '  ' } })
+    expect(
+      screen.getByRole('button', { name: 'Save campaign' }),
+    ).toHaveProperty('disabled', true)
+  })
+
+  /*
+   * The topic catalog is 200 documents filling one picker inside a drawer
+   * nobody has opened. A reader who came for the campaign's numbers must not
+   * pay for it — the same rule the composer below already follows.
+   */
+  it('does not read the topic catalog until the drawer opens', async () => {
+    await mount('camp-1')
+    expect(topicsEnabled.length).toBeGreaterThan(0)
+    expect(topicsEnabled.some((enabled) => enabled)).toBe(false)
+
+    fireEvent.click(
+      // BY NAME. The emails table below carries a menu per row, and the
+      // header's is the one labelled with the campaign.
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit campaign' }))
+    await settle()
+    expect(topicsEnabled.some((enabled) => enabled)).toBe(true)
+  })
+})
+
+/*==========================================
+ * DELETING A CAMPAIGN FROM ITS OWN PAGE.
+ *
+ * What survives a delete is `campaign-manage.spec.ts`, against the route that
+ * does it. What belongs here is the half the page owns: that it asks first,
+ * says what is KEPT and what is not stopped, posts rather than writing, and
+ * leaves the page it has just removed.
+ *=========================================*/
+describe('deleting a campaign', () => {
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  const pressDelete = async () => {
+    fireEvent.click(
+      // BY NAME. The emails table below carries a menu per row, and the
+      // header's is the one labelled with the campaign.
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete campaign' }))
+    await settle()
+  }
+
+  it('names what is KEPT before it asks', async () => {
+    await mount('camp-1')
+    await pressDelete()
+
+    const options = mockConfirm.mock.calls[0][0] as Record<string, any>
+    expect(String(options.description)).toMatch(/2 emails in it are kept/i)
+    expect(String(options.description)).toMatch(/unsubscribe links/i)
+  })
+
+  it('says a scheduled email still goes out', async () => {
+    // Deleting a campaign groups nothing; it does not cancel anything.
+    sends = [
+      {
+        $id: 'due-friday',
+        subject: 'Due Friday',
+        status: 'scheduled',
+        sendAtMs: Date.UTC(2026, 5, 5),
+      },
+    ]
+    await mount('camp-1')
+    await pressDelete()
+
+    expect(String(mockConfirm.mock.calls[0][0]?.description)).toMatch(
+      /still going out or still due/i,
+    )
+  })
+
+  it('posts, rather than writing the container away from the client', async () => {
+    await mount('camp-1')
+    await pressDelete()
+
+    expect(writes).toHaveLength(0)
+    expect(posted).toHaveLength(1)
+    expect(posted[0][0]).toBe('/api/campaigns/manage')
+    expect(posted[0][1]).toMatchObject({
+      hostId: 'host-1',
+      action: 'deleteCampaign',
+      campaignId: 'camp-1',
+    })
+  })
+
+  it('returns to the campaigns list once it is gone', async () => {
+    await mount('camp-1')
+    await pressDelete()
+    expect(pushed).toContain('/acme/hosts/store/emails/campaigns')
+  })
+
+  it('posts NOTHING when the operator cancels', async () => {
+    confirmAccepts = false
+    await mount('camp-1')
+    await pressDelete()
+
+    expect(mockConfirm).toHaveBeenCalled()
+    expect(posted).toHaveLength(0)
+    expect(pushed).not.toContain('/acme/hosts/store/emails/campaigns')
+  })
+
+  it('stays put and says nothing was removed when the route refuses', async () => {
+    postAnswer = { ok: false, body: { error: 'Unknown campaign' } }
+    await mount('camp-1')
+    await pressDelete()
+
+    expect(pushed).not.toContain('/acme/hosts/store/emails/campaigns')
+  })
+})
+
+/*==========================================
+ * A CAMPAIGN'S EMAILS TABLE SAYS WHAT EACH ONE IS DOING.
+ *
+ * An email delivering an audience larger than one batch is stored as
+ * `scheduled` between runs, so a cell branching on the status read
+ * "Scheduled" about a send that had already delivered five hundred messages.
+ *=========================================*/
+describe('the state of each email in the campaign', () => {
+  const stateCells = () =>
+    Array.from(document.querySelectorAll('tbody tr')).map((row) =>
+      String(row.querySelectorAll('td')[1]?.textContent ?? ''),
+    )
+
+  it('says a mid-flight send is SENDING, with the count', async () => {
+    sends = [
+      {
+        $id: 'big',
+        subject: 'Big one',
+        status: 'scheduled',
+        stats: { sent: 500, audienceSize: 3000 },
+        resume: { remaining: 2500, batch: 1, nextAtMs: Date.now() + 60_000 },
+      },
+    ]
+    await mount('camp-1')
+    expect(stateCells()[0]).toBe('Sending — reached 500 of 3,000')
+  })
+
+  it('still says Scheduled, with the time, for one that has sent nothing', async () => {
+    // THE CONTROL, and the one case where a due date answers the question.
+    sends = [
+      {
+        $id: 'later',
+        subject: 'Due Friday',
+        status: 'scheduled',
+        sendAtMs: Date.UTC(2026, 5, 5),
+      },
+    ]
+    await mount('camp-1')
+    expect(stateCells()[0]).toMatch(/^Scheduled · /)
+  })
+
+  it('orders a draft by when it was created, not last', async () => {
+    sends = [
+      {
+        $id: 'sent-1',
+        subject: 'Went out',
+        status: 'sent',
+        sentAt: { seconds: Date.UTC(2026, 2, 1) / 1000 },
+      },
+      {
+        $id: 'draft-1',
+        subject: 'Half-written',
+        status: 'draft',
+        createdAtMs: Date.UTC(2026, 6, 1),
+      },
+    ]
+    await mount('camp-1')
+    const subjects = Array.from(document.querySelectorAll('tbody tr')).map(
+      (row) => String(row.querySelector('a')?.textContent ?? ''),
+    )
+    expect(subjects).toEqual(['Half-written', 'Went out'])
   })
 })

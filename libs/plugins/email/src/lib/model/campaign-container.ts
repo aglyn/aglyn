@@ -59,7 +59,6 @@ import {
   type CampaignRate,
   type CampaignStats,
 } from './campaign-report'
-import { emailIsUnsent } from './email-record'
 
 /**
  * The field on a SEND naming the campaign it belongs to.
@@ -117,6 +116,15 @@ export interface CampaignSend {
   status?: string
   sentAt?: { seconds?: number } | null
   sendAtMs?: number
+  /**
+   * When the record was minted, stamped by every writer that creates one.
+   *
+   * Absent on a send written before the stamp existed. The lists that draw
+   * drafts beside sends order on it through `emailListTimeMs`, which is why
+   * it is here rather than only on the loose record shape: a draft carries
+   * neither `sentAt` nor `sendAtMs`, so this is the only time it has.
+   */
+  createdAtMs?: number
   stats?: CampaignStats
   /** How far a send that goes out over several batches has got. */
   resume?: CampaignResume
@@ -281,6 +289,56 @@ export function campaignSendProgress(
 }
 
 /**
+ * What a ROW says about one email, in one word and one line.
+ *
+ * {@link campaignSendProgress} answers what a send is DOING, and a draft is
+ * not doing anything: it has no status the progress states cover, and — since
+ * an absent status reads as `sent` and a draft has no counters — asking it
+ * about one answers "Sent to 0", which is the worst available sentence about
+ * an email nobody has written yet. So the draft is settled here and
+ * everything else is deferred, unchanged, to the derivation that owns it.
+ *
+ * One helper rather than the same two-line branch on four surfaces. The
+ * campaigns table, the emails list, an email's own page and a campaign's
+ * emails table all draw this, and four copies is how three of them come to
+ * say "Scheduled" about a campaign that has delivered five hundred messages.
+ */
+export type CampaignSendDisplayState = 'draft' | CampaignSendProgressState
+
+export interface CampaignSendDisplay {
+  state: CampaignSendDisplayState
+  /** One line a surface may show verbatim. */
+  label: string
+  /** The progress underneath, for a surface that wants the figures. */
+  progress: CampaignSendProgress
+}
+
+export function campaignSendDisplay(
+  send: CampaignSend | null | undefined,
+): CampaignSendDisplay {
+  const progress = campaignSendProgress(send)
+  if (String(send?.status ?? '') === 'draft') {
+    return { state: 'draft', label: 'Draft', progress }
+  }
+  return { state: progress.state, label: progress.label, progress }
+}
+
+/**
+ * Whether this email is between batches, with more of its audience to reach.
+ *
+ * The one question two controls on an email's page turn on. It is stored as
+ * `scheduled` — the state the processor claims — so a surface reading the
+ * status alone offers "Send now" on a campaign that is already going out, and
+ * `sendNow` re-resolves the WHOLE audience rather than continuing: everyone
+ * already reached would receive a second copy under the same `cid`.
+ */
+export function campaignSendIsMidFlight(
+  send: CampaignSend | null | undefined,
+): boolean {
+  return campaignSendProgress(send).state === 'sending'
+}
+
+/**
  * The lists ONE SEND addressed — which can be narrower than the lists its
  * campaign is aimed at.
  *
@@ -323,8 +381,17 @@ export interface CampaignAggregate {
 export interface CampaignRollup {
   /** Sends that have actually gone out. */
   sends: number
-  /** Sends still waiting for their send time. */
+  /** Sends still waiting for their send time, having delivered nothing. */
   scheduled: number
+  /**
+   * Sends part way through an audience larger than one batch.
+   *
+   * Counted apart from `scheduled` and from `sends`, because it is neither:
+   * mail has gone out, and more is going to. Both of those are facts a
+   * merchant reading a campaign row needs, and the stored status carries
+   * only the first.
+   */
+  sending: number
   /**
    * Emails that have been created and not yet written or sent.
    *
@@ -403,14 +470,39 @@ export function campaignRollup(sends: CampaignSend[]): CampaignRollup {
    * the M — publishing a coverage figure that says the campaign is missing
    * data it was never going to have.
    *=========================================*/
-  const gone = sends.filter((send) => !emailIsUnsent(send))
+  /*
+   * A SEND THAT IS STILL GOING HAS STILL GONE.
+   *
+   * `emailIsUnsent` reads the stored status, and an email delivering an
+   * audience larger than one batch is stored as `scheduled` between runs —
+   * so reading it literally drops a send that has put five hundred messages
+   * in five hundred inboxes out of every total on the campaign, and counts it
+   * under "scheduled" as though nothing had happened. `campaignSendProgress`
+   * is what tells "waiting for its time" from "part way through", and only
+   * the first is genuinely unsent.
+   *
+   * A DRAFT is settled by the status because the progress states do not cover
+   * it — see `campaignSendDisplay`.
+   */
+  const notYet = (send: CampaignSend): boolean =>
+    String(send.status ?? '') === 'draft' ||
+    campaignSendProgress(send).state === 'pending'
+  const gone = sends.filter((send) => !notYet(send))
   const measurable = sends.filter(
     (send) => send.stats?.delivered !== undefined,
   )
   const deliveredTotal = aggregate(measurable, (stats) => stats.delivered)
   return {
     sends: gone.filter((send) => send.status !== 'canceled').length,
-    scheduled: sends.filter((send) => send.status === 'scheduled').length,
+    // Waiting for its time with nothing delivered — which is what
+    // "scheduled" meant before an email could be delivered over several runs,
+    // and is now narrower than the stored status of that name.
+    scheduled: sends.filter(
+      (send) => campaignSendProgress(send).state === 'pending',
+    ).length,
+    sending: sends.filter(
+      (send) => campaignSendProgress(send).state === 'sending',
+    ).length,
     drafts: sends.filter((send) => send.status === 'draft').length,
     addressed: aggregate(gone, (stats) => stats.recipients),
     sent: aggregate(gone, (stats) => stats.sent),

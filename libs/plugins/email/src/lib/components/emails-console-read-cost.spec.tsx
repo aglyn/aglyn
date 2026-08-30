@@ -184,10 +184,12 @@ const mockOrgId = { orgId: 'org1', ready: true }
  * unmeasured one.
  *
  * The printed figures move because of this, and the movement is the meter
- * catching up rather than the page getting dearer: the campaigns section reads
- * 6 listens / <=382 documents here where it used to read 4 / <=282. Those two
- * listens were always issued in a browser; they were invisible to a harness
- * whose org never resolved.
+ * catching up rather than the page getting dearer: two org-scoped listens on
+ * the campaigns section were always issued in a browser and were invisible to
+ * a harness whose org never resolved. One of the two — the org lists, which
+ * the Lists column draws — is inside {@link CAMPAIGNS_DOCUMENT_CEILING}; the
+ * other, the topic catalog, moved behind the create drawer once it could be
+ * seen at all.
  */
 const mockScope = { orgId: 'org1', ready: true, scope: ['orgs', 'org1'] }
 const mockHostRoute = { orgSlug: 'acme', subdomain: 'site', base: '/acme/hosts/site' }
@@ -322,6 +324,36 @@ const SECTION_COLLECTIONS = {
  * list's `members` is mounted only when a reader expands that list.
  */
 const AUDIENCES_DOCUMENT_CEILING = TABLE_PAGE_SIZE_DEFAULT + 1
+
+/**
+ * The campaigns section's ceiling, in documents.
+ *
+ * Campaigns is the most expensive section on this surface, and this is the
+ * number that says how expensive it is allowed to be. Three listens, and each
+ * of the three is drawn on screen:
+ *
+ *   31   `campaigns`       the send ceiling, plus the probe that says there
+ *                          are more
+ *   51   `emailCampaigns`  the container ceiling, plus its probe
+ *   50   `lists`           so the Lists column names what a campaign is aimed
+ *                          at rather than printing document ids
+ *
+ * The org's TOPIC CATALOG is deliberately not among them, and it is the
+ * biggest single read this section could make at 200 documents. It fills one
+ * picker in the create drawer and is drawn nowhere in the table, so it moved
+ * behind the click that opens that drawer — the same move the audiences
+ * section made with a list's members, and the emails list with the campaigns
+ * it offers its own drawer. `does not read the topic catalog until somebody
+ * asks to create` below is the assertion that keeps it there; the reading
+ * that proves it is read once the drawer OPENS is in
+ * `campaigns-table.spec.tsx`, which can drive the button.
+ *
+ * A number rather than "no more than before" for the reason the audiences
+ * ceiling gives: what is being guarded is what Firestore is asked to RETURN,
+ * and a card that listens with `limit(200)` to render twenty rows is buying
+ * two hundred.
+ */
+const CAMPAIGNS_DOCUMENT_CEILING = 132
 
 function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
@@ -480,6 +512,62 @@ describe('emails console read cost (AGL-2501)', () => {
     await renderConsole('campaigns')
     expect(listenedCollections()).toContain('campaigns')
     expect(documentCeiling(mockListens)).toBeGreaterThan(2)
+  })
+
+  /*==========================================
+   * CAMPAIGNS, metered rather than merely reported.
+   *
+   * It was the other section this file rendered and then asserted `true`
+   * about — the most expensive one on the surface, logged for a reader and
+   * checked by nobody. Two of its four listens were org-scoped, which made
+   * them invisible to this harness until `useOrgDataScope` was mocked: they
+   * were always issued in a browser and the meter simply could not see them.
+   * A section whose reads are behind an unresolved promise is not a cheap
+   * section, it is an unmeasured one.
+   *=========================================*/
+  describe('the campaigns section', () => {
+    it('opens THREE listens, inside the page budget', async () => {
+      await renderConsole('campaigns')
+      summarize('campaigns section', mockListens)
+      expect(mockListens).toHaveLength(3)
+      expect(documentCeiling(mockListens)).toBeLessThanOrEqual(
+        CAMPAIGNS_DOCUMENT_CEILING,
+      )
+    })
+
+    it('reads only the collections the table DRAWS', async () => {
+      await renderConsole('campaigns')
+      // Each of the three has a column or a chip that needs it: the sends and
+      // the containers are the rows, the lists are the Lists column.
+      expect([...listenedCollections()].sort()).toEqual([
+        'campaigns',
+        'emailCampaigns',
+        'lists',
+      ])
+    })
+
+    /*
+     * THE ASSERTION. The topic catalog is 200 documents — more than the rest
+     * of the section put together — and nothing in the table shows a topic.
+     * Reading it on mount charged every operator who came to look at their
+     * campaigns for a dropdown in a drawer they never opened.
+     */
+    it('does not read the topic catalog until somebody asks to create', async () => {
+      await renderConsole('campaigns')
+      expect(listenedCollections()).not.toContain('emailTopics')
+      expect(
+        mockListens.filter((listen) => listen.path.includes('emailTopics')),
+      ).toHaveLength(0)
+    })
+
+    it('does not reach the other sections’ collections either', async () => {
+      await renderConsole('campaigns')
+      const seen = listenedCollections()
+      expect(seen).not.toContain('suppressions')
+      expect(seen).not.toContain('screens')
+      expect(seen).not.toContain('experiments')
+      expect(seen).not.toContain('contactSegments')
+    })
   })
 
   it('reports the designs section too', async () => {

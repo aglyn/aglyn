@@ -56,8 +56,40 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   ...jest.requireActual('@aglyn/shared-ui-jsx'),
-  useConfirmationContext: () => ({ confirm: () => Promise.reject() }),
+  useConfirmationContext: () => ({ confirm: mockConfirm }),
 }))
+
+/*
+ * Rejecting is the DEFAULT and every test that does not say otherwise gets
+ * it. A test that wants the confirmed branch sets `confirmAccepts` for
+ * itself, and `beforeEach` puts it back — so the safe answer is the one
+ * nobody has to remember.
+ */
+let confirmAccepts = false
+const mockConfirm = jest.fn((_options?: Record<string, unknown>) =>
+  confirmAccepts ? Promise.resolve(undefined) : Promise.reject(new Error('no')),
+)
+beforeEach(() => {
+  confirmAccepts = false
+  mockConfirm.mockClear()
+  mockPushed.length = 0
+})
+
+/*
+ * The router, which the page reaches for so that discarding a draft can send
+ * the reader back to the list rather than leaving them on the page of a
+ * record that no longer exists.
+ */
+jest.mock('next/navigation', () => ({
+  __esModule: true,
+  useRouter: () => ({ push: (href: string) => mockPushed.push(href) }),
+  usePathname: () => '/acme/hosts/site/emails/emails/msg_1',
+  useSearchParams: () => new URLSearchParams(),
+  useParams: () => ({}),
+}))
+
+/** Every route the page pushed. */
+const mockPushed: string[] = []
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
@@ -365,6 +397,160 @@ const openOverflow = () => {
 /** The labels currently in that menu. */
 const overflowLabels = (): (string | null)[] =>
   screen.getAllByRole('menuitem').map((item) => item.textContent)
+
+/*==========================================
+ * AN EMAIL PART WAY THROUGH AN AUDIENCE LARGER THAN ONE BATCH.
+ *
+ * It is stored as `scheduled` — the state the processor claims to resume it —
+ * so every control on this page that keyed on `scheduled` alone was offering
+ * an action about an email already going out. The worst of them is "Send
+ * now": it re-resolves the WHOLE audience with nobody subtracted, so pressing
+ * it would deliver a second copy to everyone the earlier batches reached,
+ * under the same `cid` whose unsubscribe links are in their inboxes.
+ *=========================================*/
+/*==========================================
+ * DISCARDING A DRAFT, AND WHAT MUST NEVER BE DISCARDABLE.
+ *
+ * The narrowest removal on the surface: an email that was never sent, whose
+ * record nobody outside the console has ever seen. A sent message's report is
+ * what a merchant answers a complaint with and its id is inside the HMAC of
+ * every unsubscribe link it delivered; a scheduled one is withdrawn with
+ * Cancel, which keeps the record and takes it off the clock.
+ *=========================================*/
+describe('discarding a draft', () => {
+  const asDraft = { status: 'draft', sentAt: undefined, stats: undefined }
+
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  it('is offered on a draft', async () => {
+    await renderEmail({ email: asDraft })
+    openOverflow()
+    expect(overflowLabels()).toContain('Discard draft')
+  })
+
+  it.each([
+    ['sent', {}],
+    ['scheduled', { status: 'scheduled', sentAt: undefined, sendAtMs: 1 }],
+    ['canceled', { status: 'canceled' }],
+    ['sending', { status: 'sending', sentAt: undefined }],
+  ])('is ABSENT on a %s email', async (_state, email) => {
+    /*
+     * Hidden rather than disabled, and that is the deliberate difference from
+     * `Reschedule` beside it: a disabled control says the action exists for
+     * this record and is momentarily unavailable, and there is no state in
+     * which a sent email becomes discardable.
+     */
+    await renderEmail({ email })
+    openOverflow()
+    expect(overflowLabels()).not.toContain('Discard draft')
+  })
+
+  it('asks first, and posts nothing when the operator declines', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({}),
+    }))
+    ;(globalThis as never as { fetch: unknown }).fetch = fetchMock
+    await renderEmail({ email: asDraft })
+    openOverflow()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Discard draft' }))
+    await settle()
+
+    expect(mockConfirm).toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('posts the discard and returns to the list once agreed', async () => {
+    confirmAccepts = true
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ discarded: true }),
+    }))
+    ;(globalThis as never as { fetch: unknown }).fetch = fetchMock
+    await renderEmail({ email: asDraft })
+    openOverflow()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Discard draft' }))
+    await settle()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0] as never as [string, never]
+    expect(String(url)).toBe('/api/campaigns/manage')
+    expect(JSON.parse(String((init as { body: string }).body))).toMatchObject({
+      hostId: 'site1',
+      action: 'discardEmail',
+      campaignId: 'msg_1',
+    })
+    /*
+     * Back to the list. Staying would leave the reader on the page of a
+     * record that no longer exists, which renders the "could not be loaded"
+     * branch and reads as a failure.
+     */
+    expect(mockPushed).toContain('/acme/hosts/site/emails/emails')
+  })
+})
+
+describe('an email that is still going out', () => {
+  const MID_FLIGHT = {
+    status: 'scheduled',
+    sentAt: undefined,
+    sendAtMs: 2_000_000_000_000,
+    stats: { ...STATS, sent: 500, audienceSize: 3000 },
+    resume: { remaining: 2500, batch: 1, nextAtMs: 2_000_000_000_000 },
+  }
+
+  it('says it is SENDING, not scheduled', async () => {
+    await renderEmail({ email: MID_FLIGHT })
+    expect(screen.getByText('Sending — reached 500 of 3,000')).toBeTruthy()
+    expect(screen.queryByText('Scheduled')).toBeNull()
+  })
+
+  it('says how many are left and when the next run is', async () => {
+    await renderEmail({ email: MID_FLIGHT })
+    expect(screen.getByText('Next batch')).toBeTruthy()
+    expect(screen.getByText(/2,500 still to reach/)).toBeTruthy()
+  })
+
+  it('does NOT offer Send now', async () => {
+    // The double-send. `sendNow` mails the whole audience again.
+    await renderEmail({ email: MID_FLIGHT })
+    expect(screen.queryByText('Send now')).toBeNull()
+  })
+
+  it('offers Stop sending as the one primary act', async () => {
+    await renderEmail({ email: MID_FLIGHT })
+    expect(screen.getByText('Stop sending')).toBeTruthy()
+  })
+
+  it('does not offer to reschedule what is already going out', async () => {
+    // Moving `sendAtMs` under the processor mid-campaign changes when the
+    // REST of a delivery happens rather than when it starts.
+    await renderEmail({ email: MID_FLIGHT })
+    openOverflow()
+    expect(overflowLabels()).not.toContain('Reschedule')
+    // And the withdraw entry is not duplicated beside the header button.
+    expect(overflowLabels()).not.toContain('Cancel send')
+  })
+
+  it('CONTROL: a scheduled email that has delivered nothing is unchanged', async () => {
+    /*
+     * The pre-batching meaning of `scheduled` is the common one. Every
+     * assertion above is of the form "this control is gone", and a page that
+     * lost them all would satisfy every one of them.
+     */
+    await renderEmail({
+      email: { status: 'scheduled', sentAt: undefined, sendAtMs: 1 },
+    })
+    expect(screen.getByText('Send now')).toBeTruthy()
+    expect(screen.queryByText('Stop sending')).toBeNull()
+    openOverflow()
+    expect(overflowLabels()).toContain('Reschedule')
+    expect(overflowLabels()).toContain('Cancel send')
+  })
+})
 
 describe('sending an email that has not gone out', () => {
   it('offers Send now on a scheduled email', async () => {

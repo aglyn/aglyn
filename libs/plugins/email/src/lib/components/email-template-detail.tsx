@@ -54,7 +54,8 @@ import {
 import { useRouter } from 'next/navigation'
 import { useMemo } from 'react'
 import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
-import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
+import { emailSendTimeMs } from '../model/email-record'
+import { campaignSendDisplay } from '../model/campaign-container'
 import { templateProvenance } from '../model/template-provenance'
 import {
   templateReport,
@@ -576,9 +577,15 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
                           </AppLink>
                         </TableCell>
                         <TableCell>
+                          {/*
+                            What the message is DOING. One delivering an
+                            audience larger than one batch is written back as
+                            `scheduled` between runs, so the stored status
+                            reads "Scheduled" about a send already in progress.
+                           */}
                           <Chip
                             size="small"
-                            label={emailStateLabel(message.status)}
+                            label={campaignSendDisplay(message as never).label}
                           />
                         </TableCell>
                         <TableCell>

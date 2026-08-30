@@ -20,6 +20,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   mdiCalendarClockOutline,
   mdiCloseCircleOutline,
+  mdiDeleteOutline,
   mdiPencilOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -42,6 +43,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import {
   campaignLinkReport,
@@ -49,19 +51,24 @@ import {
   type CampaignLinkRollup,
   type CampaignStats,
 } from '../model/campaign-report'
-import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
+import {
+  campaignSendDisplay,
+  CAMPAIGN_SEND_CONTAINER_FIELD,
+} from '../model/campaign-container'
 import {
   emailAudienceLabel,
   emailIsUnsent,
   emailSendTimeMs,
-  emailStateLabel,
 } from '../model/email-record'
 import CampaignComposer from './campaign-composer'
 import EmailDesignPreview from './email-design-preview'
 import EmailEditDrawer from './email-edit-drawer'
 import EmailRecipientsCard from './email-recipients-card'
 import { Figure, percent, RateRow, Section } from './report-figures'
-import { useCampaignSendApi } from './use-campaign-send-api'
+import {
+  useCampaignManageApi,
+  useCampaignSendApi,
+} from './use-campaign-send-api'
 
 const previewDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#the-campaign-report',
@@ -176,6 +183,16 @@ export function EmailDetail(props: EmailDetailProps) {
   const composedBody = String(email?.body ?? '')
   const sendTimeMs = email ? emailSendTimeMs(email) : 0
   const state = String(email?.status ?? '')
+  /** What this email is doing, which the stored status alone cannot say. */
+  const display = campaignSendDisplay(email as never)
+  /**
+   * Part way through an audience larger than one batch.
+   *
+   * Stored as `scheduled` — the state the processor claims to resume it — so
+   * every control below that keyed on `scheduled` alone was offering an
+   * action about an email that is already going out.
+   */
+  const midFlight = display.state === 'sending'
   /**
    * This email has not gone to anybody yet.
    *
@@ -421,14 +438,34 @@ export function EmailDetail(props: EmailDetailProps) {
     state,
   ])
 
+  /*==========================================
+   * STOPPING A SEND, WHICH NOW MEANS TWO DIFFERENT THINGS.
+   *
+   * `cancel` acts on `scheduled`, and an email delivering an audience larger
+   * than one batch is stored as `scheduled` between runs — so the control
+   * that withdraws a campaign before it goes also stops one that is half
+   * delivered, with no change to the route. That is a real capability, and a
+   * merchant watching a send go wrong needs to be told which of the two they
+   * are about to do: nothing has been mailed, or two thousand people already
+   * have it and are keeping it.
+   *=========================================*/
   const handleCancel = useCallback(async () => {
+    const reached = display.progress.reached
+    const left = display.progress.remaining
     const agreed = await confirm({
-      title: 'Cancel this scheduled email?',
-      description:
-        'It will not be sent at the time it is scheduled for. The email ' +
-        'and everything written on it are kept, but a canceled email ' +
-        'cannot be put back on the schedule — you would compose a new one.',
-      confirmationText: 'Cancel send',
+      title: midFlight ? 'Stop sending this email?' : 'Cancel this scheduled email?',
+      description: midFlight
+        ? `It has reached ${reached.toLocaleString()} ` +
+          `${reached === 1 ? 'person' : 'people'} so far, and stopping it ` +
+          `leaves ${left.toLocaleString()} unaddressed. What has already ` +
+          'gone out cannot be taken back — those messages stay in inboxes ' +
+          'and keep their unsubscribe links. The email and its report are ' +
+          'kept, but a stopped send cannot be resumed; reaching the rest ' +
+          'means composing a new email.'
+        : 'It will not be sent at the time it is scheduled for. The email ' +
+          'and everything written on it are kept, but a canceled email ' +
+          'cannot be put back on the schedule — you would compose a new one.',
+      confirmationText: midFlight ? 'Stop sending' : 'Cancel send',
     })
       .then(() => true)
       .catch(() => false)
@@ -436,10 +473,13 @@ export function EmailDetail(props: EmailDetailProps) {
     await runAction(
       'cancel',
       { action: 'cancel' },
-      () => 'This email will not be sent',
+      () =>
+        midFlight
+          ? 'This email has stopped sending'
+          : 'This email will not be sent',
       'This email could not be canceled',
     )
-  }, [confirm, runAction])
+  }, [confirm, display.progress, midFlight, runAction])
 
   const handleReschedule = useCallback(
     async (values: { sendAtMs?: number }) => {
@@ -456,6 +496,65 @@ export function EmailDetail(props: EmailDetailProps) {
     },
     [runAction],
   )
+
+  /*==========================================
+   * DISCARDING A DRAFT, WHICH IS THE ONE REMOVAL THIS PAGE HAS.
+   *
+   * Only ever offered on a `draft`, and refused again by the route inside the
+   * transaction that deletes — the state on screen is a snapshot, and
+   * `sendNow` claims a draft by moving it to `sending` in a transaction of
+   * its own, so a check made only here could remove a record the send path
+   * was mailing from.
+   *
+   * A sent email is never discardable from anywhere. Its report is what a
+   * merchant answers a complaint with, and its id is inside the HMAC of every
+   * unsubscribe link it delivered; a scheduled one is withdrawn with Cancel,
+   * which keeps the record and takes it off the clock.
+   *
+   * The reader is sent back to the list afterwards rather than left on the
+   * page of a record that no longer exists — which would render the "could
+   * not be loaded" branch and read as a failure.
+   *=========================================*/
+  const manageApi = useCampaignManageApi(hostId)
+  const router = useRouter()
+
+  const handleDiscard = useCallback(async () => {
+    const agreed = await confirm({
+      title: 'Discard this draft?',
+      description:
+        'This email has not been sent to anybody, and discarding it removes ' +
+        'it for good — the subject, the message and everything else written ' +
+        'on it. There is no undo.',
+      confirmationText: 'Discard',
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (!agreed) return
+    if (busy) return
+    setBusy('discard')
+    try {
+      const { response, payload } = await manageApi({
+        action: 'discardEmail',
+        campaignId: emailId,
+      })
+      if (!response.ok) {
+        return void enqueueSnackbar(
+          payload?.error ?? 'This draft could not be discarded',
+          { variant: 'warning', allowDuplicate: true },
+        )
+      }
+      enqueueSnackbar('Draft discarded', { variant: 'success', persist: false })
+      router.push(`${basePath}/emails`)
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('This draft could not be discarded', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy('')
+    }
+  }, [basePath, busy, confirm, emailId, enqueueSnackbar, manageApi, router])
 
   const handleRename = useCallback(
     async (values: { displayName?: string }) => {
@@ -498,7 +597,13 @@ export function EmailDetail(props: EmailDetailProps) {
       icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
       onClick: () => setEditing('details'),
     },
-    ...(draft || scheduled
+    /*
+      Rescheduling an email that is ALREADY GOING OUT is not a thing to
+      offer: its remaining batches are due when the sender said, and moving
+      `sendAtMs` under the processor mid-campaign changes when the rest of a
+      delivery happens rather than when it starts.
+     */
+    ...((draft || scheduled) && !midFlight
       ? [
           {
             key: 'schedule',
@@ -508,7 +613,7 @@ export function EmailDetail(props: EmailDetailProps) {
           } as RowActionsMenuItem,
         ]
       : []),
-    ...(scheduled
+    ...(scheduled && !midFlight
       ? [
           {
             key: 'cancel',
@@ -518,6 +623,30 @@ export function EmailDetail(props: EmailDetailProps) {
             disabled: Boolean(busy),
             disabledReason: 'Another action on this email is still running',
             onClick: () => void handleCancel(),
+          } as RowActionsMenuItem,
+        ]
+      : []),
+    /*
+      Discard is offered ONLY on a draft, and it is hidden rather than
+      disabled everywhere else — the opposite of how this menu treats
+      `Reschedule`, and deliberately.
+
+      A disabled control tells a reader that the action exists for this
+      record and is momentarily unavailable. There is no state in which a
+      sent email becomes discardable, so showing the entry greyed out on one
+      would be an offer this product will never honor, sitting under the
+      report it is promising to destroy.
+     */
+    ...(draft
+      ? [
+          {
+            key: 'discard',
+            label: 'Discard draft',
+            icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+            destructive: true,
+            disabled: Boolean(busy),
+            disabledReason: 'Another action on this email is still running',
+            onClick: () => void handleDiscard(),
           } as RowActionsMenuItem,
         ]
       : []),
@@ -533,7 +662,7 @@ export function EmailDetail(props: EmailDetailProps) {
    * and neither does one that is mid-send.
    */
   const primaryAction =
-    draft || scheduled ? (
+    (draft || scheduled) && !midFlight ? (
       <Button
         size="small"
         variant="contained"
@@ -541,6 +670,26 @@ export function EmailDetail(props: EmailDetailProps) {
         onClick={() => void handleSendNow()}
       >
         {busy === 'sendNow' ? 'Checking…' : 'Send now'}
+      </Button>
+    ) : midFlight ? (
+      /*
+        A CAMPAIGN THAT IS ALREADY GOING OUT HAS ONE ACT: STOPPING IT.
+
+        "Send now" is withheld rather than disabled, and the reason is not
+        cosmetic — `sendNow` re-resolves the WHOLE audience and mails it, with
+        no subtraction of anyone already reached, so pressing it on an email
+        between batches sends a second copy to every person who has had the
+        first. Withholding it leaves exactly one primary action, and it is the
+        one a merchant watching a send go wrong actually wants.
+       */
+      <Button
+        size="small"
+        variant="contained"
+        color="error"
+        disabled={Boolean(busy)}
+        onClick={() => void handleCancel()}
+      >
+        {'Stop sending'}
       </Button>
     ) : state === 'sent' ? (
       <Button
@@ -624,12 +773,44 @@ export function EmailDetail(props: EmailDetailProps) {
           <Section title="Where this went">
             <Table size="small">
               <TableBody>
+                {/*
+                  WHAT THIS EMAIL IS DOING, not the field it stores.
+
+                  An email delivering an audience larger than one batch is
+                  written back as `scheduled` between runs — the state the
+                  processor claims to resume it — so the stored status read
+                  "Scheduled" on a page reporting five hundred deliveries.
+                 */}
                 <TableRow>
                   <TableCell>{'State'}</TableCell>
                   <TableCell align="right">
-                    <Chip size="small" label={emailStateLabel(state)} />
+                    <Chip
+                      size="small"
+                      color={
+                        display.state === 'sending'
+                          ? 'info'
+                          : display.state === 'stopped'
+                            ? 'warning'
+                            : undefined
+                      }
+                      label={display.label}
+                    />
                   </TableCell>
                 </TableRow>
+                {midFlight ? (
+                  <TableRow>
+                    <TableCell>{'Next batch'}</TableCell>
+                    <TableCell align="right">
+                      {`${display.progress.remaining.toLocaleString()} still ` +
+                        'to reach, ' +
+                        (display.progress.nextAtMs
+                          ? `next run ${new Date(
+                              display.progress.nextAtMs,
+                            ).toLocaleString()}`
+                          : 'next run due')}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 <TableRow>
                   <TableCell>
                     {state === 'sent' ? 'Sent' : 'Scheduled for'}

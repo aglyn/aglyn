@@ -148,6 +148,12 @@ jest.mock('./use-campaign-send-api', () => ({
     posted.push(payload)
     return Promise.resolve(apiResult)
   },
+  // The row menu's discard posts through this one. Nothing in this file
+  // discards; the hook only has to exist for the card to render.
+  useCampaignManageApi: () => (payload: Record<string, unknown>) => {
+    posted.push(payload)
+    return Promise.resolve(apiResult)
+  },
 }))
 
 const SEND = {
