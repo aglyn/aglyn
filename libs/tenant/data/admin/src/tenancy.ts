@@ -30,6 +30,7 @@ export * from './lib/server/auth-handoff'
 export * from './lib/server/console-domains'
 export * from './lib/server/dns-probe'
 export * from './lib/server/sending-domains'
+export * from './lib/server/sending-domain-recheck'
 // The hosting seam itself, so a door can ask whether this deployment is able
 // to register a name at all before it promises the caller one.
 // `workspace-domains` re-exports the pieces its own callers share with it; the
@@ -87,6 +88,7 @@ export * from './lib/server/rate-limit-store'
 export * from './lib/server/vercel-drain-signature'
 export * from './lib/server/vercel-log-drain'
 export * from './lib/server/visitor-write-rate-limit'
+export * from './lib/server/console-api-rate-limit'
 export * from './lib/server/realm-plugins'
 export * from './lib/server/release-flags'
 export * from './lib/server/resolve-people'

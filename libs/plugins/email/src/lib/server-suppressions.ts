@@ -304,9 +304,12 @@ export const emailSuppressionStatusHandler: PluginApiHandler = async (
 /**
  * Registration.
  *
- * Not on the machine-path exemption list in `plugin-api-rate-limit.ts`: this
- * is reached by a person pressing a button in a browser, so the visitor
- * limiter's per-(site, IP) budget is far above any real use of it.
+ * Not on the machine-path exemption list in `plugin-api-rate-limit.ts`, and
+ * both handlers refuse anything but POST, so both are counted against the
+ * console dispatcher's per-subject budget — which is far above a person
+ * pressing a button in a browser. The limiter is `consoleApiRateLimitRefusal`
+ * in `apps/console`; the visitor one is installed only in `apps/tenant` and
+ * has never seen a request to either of these paths.
  */
 export function registerEmailSuppressionsApi(): void {
   registerPluginApiRoute('email/suppression-add', emailSuppressionAddHandler)

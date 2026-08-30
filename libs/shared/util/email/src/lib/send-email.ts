@@ -70,18 +70,32 @@ export interface SendEmailOptions {
   /** Delivery tags for the opens/clicks webhook. */
   tags?: EmailTag[]
   replyTo?: string | string[]
-  /**
-   * Overrides the configured sender. Almost nothing should set this — the
-   * whole point of `USAGE_EMAIL_FROM` is one verified sender identity.
+  /*
+   * THERE IS NO `from`.
+   *
+   * There was: a raw override of the configured sender, subordinate to a
+   * resolved identity but winning over everything else, verified against
+   * nothing. Every address this function can send from now comes from one of
+   * exactly two places — the deployment's own `USAGE_EMAIL_FROM`, or a
+   * {@link SendingIdentityVerdict} the server resolved from a document — and
+   * neither is reachable from a request body.
+   *
+   * Deleting it rather than guarding it is what makes that a property instead
+   * of a habit. A guard would have to be written correctly at each of the
+   * ninety-odd call sites, or once here and then trusted; an option that does
+   * not exist cannot be passed by the next sender, and `resolveSendingIdentity`
+   * becomes the whole of the answer to "as whom does this leave".
+   *
+   * The resolution below reads no `from` from `options` either, so this is not
+   * only a compile-time close. Marketplace plugin bundles reach `sendEmail` as
+   * JavaScript and are typechecked against nothing.
    */
-  from?: string
   /**
    * White-label display name for the sender (White-Label Phase 1). Replaces
-   * only the display name in front of the configured verified address — the
-   * address itself must stay on the verified domain, so this cannot forge a
-   * different sender. Ignored when `from` is set explicitly. Callers pass
-   * `resolveBrandingProfile(org).fromName` here so an agency's mail reads as
-   * their brand instead of "Aglyn".
+   * only the display name in front of the verified address — the address
+   * itself is never taken from the caller, so this cannot forge a different
+   * sender. Callers pass `resolveBrandingProfile(org).fromName` here so an
+   * agency's mail reads as their brand instead of "Aglyn".
    */
   fromName?: string
   /**
@@ -89,10 +103,10 @@ export interface SendEmailOptions {
    * `resolveSendingIdentity`.
    *
    * Supplied, it decides the address and it may refuse the send outright —
-   * both `from` and `fromName` are subordinate to it, because a verdict is
-   * the answer to "may this leave, and as whom" and a request-shaped
-   * override is not. Omitted, every existing caller keeps the behavior it
-   * had: the configured platform identity with an optional display name.
+   * `fromName` is subordinate to it, because a verdict is the answer to "may
+   * this leave, and as whom" and a display name is not. Omitted, every
+   * existing caller keeps the behavior it had: the configured platform
+   * identity with an optional display name.
    *
    * Callers resolve it from the ORG DOCUMENT, never from request input. An
    * address assembled from a request body is a `From:` override wearing a new
@@ -456,14 +470,18 @@ export async function sendEmail(
     }
   }
 
-  // A resolved identity outranks both `from` and the configured sender: it is
-  // the server's answer to which verified address this message leaves on.
-  // Without one, explicit `from` wins and otherwise the white-label display
-  // name is applied to the configured verified sender (White-Label Phase 1).
+  // A resolved identity outranks the configured sender: it is the server's
+  // answer to which verified address this message leaves on. Without one, the
+  // white-label display name is applied to the configured verified sender
+  // (White-Label Phase 1).
+  //
+  // Two sources, and `options` is neither of them. Nothing the caller passes
+  // reaches the address — only the display name in front of it.
   const resolvedFrom = options.sendingIdentity?.from ?? null
-  const from = resolvedFrom
-    ? applyFromName(resolvedFrom, options.fromName)
-    : (options.from ?? applyFromName(configuredFrom, options.fromName))
+  const from = applyFromName(
+    resolvedFrom ?? configuredFrom,
+    options.fromName,
+  )
 
   if (!apiKey || !from) {
     console.warn(

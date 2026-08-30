@@ -698,16 +698,23 @@ const JOB_SITES: JobSite[] = JOB_ROOTS.flatMap((root) =>
 
 /**
  * Jobs that legitimately touch NOTHING a lock could be about, and may
- * therefore declare `{ scope: 'platform' }`. Empty today, and that is the
- * honest state: every registered job on this platform acts for hosts.
+ * therefore declare `{ scope: 'platform' }`.
  *
- * Held as a named table anyway, checked for equality in BOTH directions,
- * because the alternative is that `scope: 'platform'` becomes a word an
- * author can type to leave the walk. A job claiming it has to be argued for
- * here, in a file a reviewer reads, and a job that stops claiming it has to
- * be struck rather than left as a stale entry.
+ * Held as a named table, checked for equality in BOTH directions, because the
+ * alternative is that `scope: 'platform'` becomes a word an author can type to
+ * leave the walk. A job claiming it has to be argued for here, in a file a
+ * reviewer reads, and a job that stops claiming it has to be struck rather
+ * than left as a stale entry.
  */
-const PLATFORM_JOBS: Record<string, string> = {}
+const PLATFORM_JOBS: Record<string, string> = {
+  'apps/tenant/utils/sending-domain-recheck-job.ts#recheck-sending-domains':
+    'Reads DNS for org-owned sending domains at ' +
+    'orgs/{orgId}/sendingDomains/{domain} and resolves no host, so it has ' +
+    'nothing to ask the gate about. Its strongest effect is to un-verify a ' +
+    'domain, which makes a site REFUSE to send — the direction a lock points ' +
+    'rather than something a lock would withhold. It never restores a ' +
+    'domain and never moves a host onto another sending identity.',
+}
 
 /**
  * Background jobs that mutate for a host and do NOT resolve a lockdown.

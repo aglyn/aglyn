@@ -84,6 +84,7 @@ import {
   type SendingDomainRecord,
   type SendingDomainSelection,
   type SendingIdentityVerdict,
+  type SendingVerification,
 } from '@aglyn/shared-util-email'
 import firebaseAdmin from './firebase-admin'
 import { lookupMx, lookupTxt } from './dns-probe'
@@ -124,7 +125,15 @@ export interface SendingDomainResult {
   status: number
 }
 
-function readRecord(
+/**
+ * One stored document as a record.
+ *
+ * Exported so the re-check sweep, which reaches these documents through a
+ * collection-group query rather than by org and name, shapes them the same way
+ * every other reader here does — a second reader with its own defaults is how
+ * two callers come to disagree about what an absent field means.
+ */
+export function readSendingDomainRecord(
   snapshot: FirebaseFirestore.DocumentSnapshot,
 ): SendingDomainRecord | null {
   if (!snapshot?.exists) return null
@@ -166,7 +175,7 @@ export async function requestSendingDomain(options: {
   const ref = domainRef(options.orgId, domain)
   const existing = await ref.get()
   if (existing.exists) {
-    return { record: readRecord(existing), error: null, status: 200 }
+    return { record: readSendingDomainRecord(existing), error: null, status: 200 }
   }
 
   const record: SendingDomainRecord = {
@@ -233,7 +242,7 @@ export async function recordIssuedSendingDomain(options: {
     return { record: null, error: 'No claim on that domain', status: 404 }
   }
 
-  const existing = readRecord(snapshot)
+  const existing = readSendingDomainRecord(snapshot)
   const held = String(existing?.dkimPublicKey ?? '').trim()
   if (held && held !== key) {
     return {
@@ -286,7 +295,7 @@ export async function recordIssuedSendingDomain(options: {
     },
     { merge: true },
   )
-  return { record: readRecord(await ref.get()), error: null, status: 200 }
+  return { record: readSendingDomainRecord(await ref.get()), error: null, status: 200 }
 }
 
 /**
@@ -336,7 +345,7 @@ export async function getSendingDomain(
 ): Promise<SendingDomainView | null> {
   const domain = normalizeSendingDomain(rawDomain)
   if (!orgId || !domain) return null
-  const record = readRecord(await domainRef(orgId, domain).get())
+  const record = readSendingDomainRecord(await domainRef(orgId, domain).get())
   if (!record) return null
   return { record, records: sendingDnsRecords(record), dmarc: null }
 }
@@ -350,7 +359,7 @@ export async function listSendingDomains(
     .doc(orgId)
     .collection(SENDING_DOMAINS_COLLECTION)
     .get()
-  return snapshot.docs.map(readRecord).filter(Boolean)
+  return snapshot.docs.map(readSendingDomainRecord).filter(Boolean)
 }
 
 /**
@@ -374,6 +383,43 @@ export async function readDmarcPolicy(
 }
 
 /**
+ * Read the live DNS for one record and say what it establishes. Writes
+ * nothing.
+ *
+ * Split out so the two callers that need this answer ask the SAME question of
+ * the SAME resolvers: {@link verifySendingDomain}, which acts on it
+ * immediately, and the unattended re-check sweep, which counts conclusive
+ * failures before it acts. A sweep that assessed the records its own way would
+ * be a second opinion on "are these published", and the customer would meet
+ * whichever one happened to run last.
+ *
+ * The three lookups run together because they are independent and the caller
+ * is waiting on the slowest either way.
+ */
+export async function probeSendingRecords(
+  record: SendingDomainRecord,
+): Promise<SendingVerification> {
+  const domain = normalizeSendingDomain(record?.domain ?? '')
+  const sendHost = `${SENDING_SUBDOMAIN}.${domain}`
+  const dkimHost = `${record.dkimSelector}._domainkey.${domain}`
+  const [spf, dkim, mx] = await Promise.all([
+    lookupTxt(sendHost),
+    lookupTxt(dkimHost),
+    lookupMx(sendHost),
+  ])
+
+  return assessSendingRecords(record, {
+    spfTxt: spf.records,
+    dkimTxt: dkim.records,
+    mx: mx.records,
+    // All three, not any: a record we could not read is not a record that is
+    // absent, and one unreadable lookup is enough to make the whole answer
+    // evidence of nothing.
+    conclusive: spf.answered && dkim.answered && mx.answered,
+  })
+}
+
+/**
  * Check the live DNS and move the record to `verified` or `failed`.
  *
  * Never throws: a sweep across every org must not stop at the first bad zone.
@@ -383,6 +429,13 @@ export async function readDmarcPolicy(
  * tenant's mail — and must not fail a customer who is midway through
  * publishing either. This is the `hold` arm the SSO drift sweep uses, and the
  * reason `assessSendingRecords` has three outcomes rather than two.
+ *
+ * Acts on ONE conclusive answer, and that is right for this caller: an admin
+ * pressed Verify and is watching the result, so the check is attended and its
+ * outcome is immediately visible and immediately retryable. The unattended
+ * sweep over already-verified domains is the caller that cannot say that, and
+ * `sending-domain-recheck.ts` is where the extra evidence it needs is
+ * gathered.
  */
 export async function verifySendingDomain(
   orgId: string,
@@ -399,7 +452,7 @@ export async function verifySendingDomain(
   }
 
   const ref = domainRef(orgId, domain)
-  const record = readRecord(await ref.get())
+  const record = readSendingDomainRecord(await ref.get())
   if (!record) {
     return {
       record: null,
@@ -409,20 +462,7 @@ export async function verifySendingDomain(
     }
   }
 
-  const sendHost = `${SENDING_SUBDOMAIN}.${domain}`
-  const dkimHost = `${record.dkimSelector}._domainkey.${domain}`
-  const [spf, dkim, mx] = await Promise.all([
-    lookupTxt(sendHost),
-    lookupTxt(dkimHost),
-    lookupMx(sendHost),
-  ])
-
-  const verdict = assessSendingRecords(record, {
-    spfTxt: spf.records,
-    dkimTxt: dkim.records,
-    mx: mx.records,
-    conclusive: spf.answered && dkim.answered && mx.answered,
-  })
+  const verdict = await probeSendingRecords(record)
 
   const now = Date.now()
   if (verdict.status === 'inconclusive') {
@@ -446,7 +486,7 @@ export async function verifySendingDomain(
   )
 
   return {
-    record: readRecord(await ref.get()),
+    record: readSendingDomainRecord(await ref.get()),
     missing: verdict.missing,
     inconclusive: false,
     error: null,
@@ -500,7 +540,7 @@ export async function resolveHostSendingIdentity(options: {
     return resolveSendingIdentity({ selection: null, platformFrom })
   }
 
-  const record = readRecord(await domainRef(options.orgId, domain).get())
+  const record = readSendingDomainRecord(await domainRef(options.orgId, domain).get())
 
   /*
    * A selection naming a domain with no record refuses rather than falling
