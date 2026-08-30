@@ -30,6 +30,10 @@ import {
   resolveSendPriority,
 } from './send-rate'
 import { renderTextEmailHtml } from './text-email-html'
+import {
+  sendingIdentityRefusal,
+  type SendingIdentityVerdict,
+} from './sending-domain'
 
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -73,6 +77,22 @@ export interface SendEmailOptions {
    * their brand instead of "Aglyn".
    */
   fromName?: string
+  /**
+   * The server-resolved sending identity for this message, from
+   * `resolveSendingIdentity`.
+   *
+   * Supplied, it decides the address and it may refuse the send outright —
+   * both `from` and `fromName` are subordinate to it, because a verdict is
+   * the answer to "may this leave, and as whom" and a request-shaped
+   * override is not. Omitted, every existing caller keeps the behavior it
+   * had: the configured platform identity with an optional display name.
+   *
+   * Callers resolve it from the ORG DOCUMENT, never from request input. An
+   * address assembled from a request body is a `From:` override wearing a new
+   * name, and the invariant `applyFromName` exists to hold is that the
+   * address cannot move off a verified identity.
+   */
+  sendingIdentity?: SendingIdentityVerdict | null
   /**
    * Short label for logs, e.g. `'invite'` or `'usage-summary'`. Makes a
    * failure in the runtime logs traceable to the feature that caused it.
@@ -143,6 +163,21 @@ export type SendEmailFailureReason =
   | 'rejected'
   | 'network'
   | 'rate-limited'
+  /**
+   * The org selected a custom sending domain and that domain is not verified.
+   *
+   * Distinct from `unconfigured` because the two need opposite responses: an
+   * unconfigured deployment is the operator's to fix, while this is a
+   * customer's DNS that is not finished, and the customer is the only person
+   * who can finish it. `detail` carries the sentence naming the domain.
+   *
+   * This is the LAST line of defence, not the visible one. A caller that
+   * reaches it has already skipped the check its route should have made, and
+   * a refusal seen only here is a log line — which is the shape of the
+   * `USAGE_EMAIL_FROM` outage. `performCampaignSend` refuses first, with a
+   * `409`, so a person finds out.
+   */
+  | 'unverified-domain'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -311,11 +346,38 @@ export async function sendEmail(
   options: SendEmailOptions,
 ): Promise<SendEmailResult> {
   const { apiKey, from: configuredFrom } = getEmailConfig()
-  // Explicit `from` wins; otherwise apply any white-label display name to the
-  // configured verified sender (White-Label Phase 1).
-  const from =
-    options.from ?? applyFromName(configuredFrom, options.fromName)
   const label = options.context ? `${options.context} email` : 'email'
+
+  /*
+   * THE SENDING-IDENTITY REFUSAL.
+   *
+   * Enforced here AND at the campaign route, independently, for the reason
+   * the send-rate governor is enforced twice: the route's check is the one a
+   * person sees, and this one is what holds when a caller does not make it.
+   * A governor is injectable and a route is skippable, so neither may be the
+   * only thing standing between an unverified domain and a send.
+   *
+   * Placed above the `apiKey`/`from` gate so a refusal cannot be reported as
+   * `unconfigured` — the two have different owners and different fixes.
+   */
+  const identityRefusal = sendingIdentityRefusal(options.sendingIdentity)
+  if (identityRefusal) {
+    console.warn(`${label} refused — ${identityRefusal.message}`)
+    return {
+      sent: false,
+      reason: 'unverified-domain',
+      detail: identityRefusal.message,
+    }
+  }
+
+  // A resolved identity outranks both `from` and the configured sender: it is
+  // the server's answer to which verified address this message leaves on.
+  // Without one, explicit `from` wins and otherwise the white-label display
+  // name is applied to the configured verified sender (White-Label Phase 1).
+  const resolvedFrom = options.sendingIdentity?.from ?? null
+  const from = resolvedFrom
+    ? applyFromName(resolvedFrom, options.fromName)
+    : options.from ?? applyFromName(configuredFrom, options.fromName)
 
   if (!apiKey || !from) {
     console.warn(
