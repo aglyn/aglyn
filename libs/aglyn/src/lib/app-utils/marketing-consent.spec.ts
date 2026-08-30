@@ -54,7 +54,7 @@ const record = (
 /** The provenance an operator backfill stamps, as it is stored. */
 const operatorSource = (over: Record<string, unknown> = {}) => ({
   kind: OPERATOR_BACKFILL_CONSENT_KIND,
-  by: 'zach@aglyn.com',
+  by: 'operations@aglyn.com',
   atMs: 1_000,
   reason: 'pre-release seed data',
   ...over,
@@ -336,7 +336,7 @@ describe('who asserted a basis', () => {
     expect(read.assertedBy).toBe('operator')
     expect(read.source).toEqual({
       kind: OPERATOR_BACKFILL_CONSENT_KIND,
-      by: 'zach@aglyn.com',
+      by: 'operations@aglyn.com',
       atMs: 1_000,
       reason: 'pre-release seed data',
     })
