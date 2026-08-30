@@ -747,6 +747,80 @@ describe('form survey fields (AGL-544)', () => {
     })
   })
 
+  /**
+   * A form is a thing, not the caption an author typed.
+   *
+   * `formName` is free text copied onto each submission and reconciled with
+   * nothing, so renaming a form split its history in two and two pages
+   * sharing a label had always been one list. The binding that fixed it is
+   * `formId`, and what makes it a binding rather than a second caption is
+   * that the besigner PICKS it — a text box would put the identity back in
+   * the author's typing.
+   */
+  describe('a form is bound by id, not by its caption', () => {
+    it('offers the form entity through a picker, not a text box', () => {
+      const formId = formSchema.attributes?.find(
+        (attribute) => attribute.name === 'formId',
+      )
+      expect(formId?.component).toBe(Aglyn.FieldComponentType.FORM_SELECT)
+      expect(formId?.component).not.toBe(Aglyn.FieldComponentType.TEXT_FIELD)
+    })
+
+    it('offers it unconditionally, on every document a Form can sit on', () => {
+      // The legacy dataset-by-name field is `condition`-gated so it only
+      // shows while a name is still set. The form binding must not be: a
+      // gate is how an attribute becomes unreachable on some surfaces.
+      const formId = formSchema.attributes?.find(
+        (attribute) => attribute.name === 'formId',
+      )
+      expect(formId?.condition).toBeUndefined()
+    })
+
+    it('keeps the caption a caption — a plain text field beside it', () => {
+      const formName = formSchema.attributes?.find(
+        (attribute) => attribute.name === 'formName',
+      )
+      expect(formName?.component).toBe(Aglyn.FieldComponentType.TEXT_FIELD)
+    })
+
+    it('sends the id, with the caption riding along', async () => {
+      const { form } = renderForm(<FormField fieldName="email" />, {
+        formId: 'form-1',
+        formName: 'Contact us',
+      })
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      const body = submittedBody(fetchMock)
+      expect(body.formId).toBe('form-1')
+      // The pre-entity `?form=` filter reads the caption, and adopting a
+      // form must not be the moment that stops working.
+      expect(body.formName).toBe('Contact us')
+    })
+
+    it('sends only the caption for a form nobody has bound yet', async () => {
+      const { form } = renderForm(<FormField fieldName="email" />, {
+        formName: 'Contact us',
+      })
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      const body = submittedBody(fetchMock)
+      expect(body.formId).toBeUndefined()
+      expect(body.formName).toBe('Contact us')
+    })
+
+    it('sends the same id whatever the caption is renamed to', async () => {
+      // The whole point of the id: one form, one submission list, however
+      // many times its label changes or however many pages place it.
+      const { form } = renderForm(<FormField fieldName="email" />, {
+        formId: 'form-1',
+        formName: 'Get in touch',
+      })
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      expect(submittedBody(fetchMock).formId).toBe('form-1')
+    })
+  })
+
   describe('formFieldSchema', () => {
     it('offers every survey field type in the editor', () => {
       const fieldType = formFieldSchema.attributes?.find(
