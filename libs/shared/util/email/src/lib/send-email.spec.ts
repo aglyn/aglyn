@@ -333,27 +333,35 @@ describe('sendEmail', () => {
       expect(contextTag(undefined)).toEqual([])
     })
 
-    it('lets an explicit from override the configured sender', async () => {
+    it('ignores a from the caller passes anyway', async () => {
+      // The option is gone from the type, so a TypeScript caller cannot write
+      // this — but a marketplace plugin bundle reaches `sendEmail` as
+      // JavaScript and is typechecked against nothing. The close has to hold
+      // at RUNTIME, which is what the cast is here to drive.
       const fetchMock = mockFetch({})
       await sendEmail({
         to: 'a@example.com',
         subject: 'Hi',
-        from: 'Support <help@aglyn.com>',
-      })
-      expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+        from: 'Support <help@elsewhere.com>',
+      } as Parameters<typeof sendEmail>[0])
+
+      expect(lastBody(fetchMock).from).toBe(FROM)
     })
 
-    it('sends when only from is overridden and env has no sender', async () => {
+    it('does not let a from stand in for an unconfigured sender', async () => {
+      // The deployment has no verified address, and the caller offers one.
+      // Answering `unconfigured` is the operator's problem being reported to
+      // the operator; sending would be the caller choosing our sender for us.
       configure('re_test', null)
       const fetchMock = mockFetch({})
       const result = await sendEmail({
         to: 'a@example.com',
         subject: 'Hi',
-        from: 'Support <help@aglyn.com>',
-      })
+        from: 'Support <help@elsewhere.com>',
+      } as Parameters<typeof sendEmail>[0])
 
-      expect(result).toEqual({ sent: true, id: 'email_123' })
-      expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect((result as { reason?: string }).reason).toBe('unconfigured')
     })
 
     it('applies a white-label fromName to the configured verified address', async () => {
@@ -367,15 +375,17 @@ describe('sendEmail', () => {
       expect(lastBody(fetchMock).from).toBe('"Acme Sites" <noreply@aglyn.com>')
     })
 
-    it('lets an explicit from win over fromName', async () => {
+    it('keeps the verified address when a from and a fromName arrive together', async () => {
       const fetchMock = mockFetch({})
       await sendEmail({
         to: 'a@example.com',
         subject: 'Hi',
-        from: 'Support <help@aglyn.com>',
+        from: 'Support <help@elsewhere.com>',
         fromName: 'Acme Sites',
-      })
-      expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+      } as Parameters<typeof sendEmail>[0])
+
+      // The display name is the only thing a caller may choose.
+      expect(lastBody(fetchMock).from).toBe('"Acme Sites" <noreply@aglyn.com>')
     })
   })
 
@@ -469,9 +479,11 @@ describe('sendEmail', () => {
       expect(JSON.stringify(result)).not.toContain('noreply@aglyn.com')
     })
 
-    it('refuses even when an explicit from was supplied', async () => {
+    it('refuses even when a from was supplied anyway', async () => {
       // A verdict is the server's answer to whether this may leave at all; an
-      // options-level address is not a way around it.
+      // options-level address is not a way around it — and since the option
+      // was deleted it is not a way around anything, which this drives at
+      // runtime rather than trusting the type to have removed the risk.
       configure('re_test', FROM)
       const fetchMock = mockFetch({})
 
@@ -481,7 +493,7 @@ describe('sendEmail', () => {
         text: 'Hi',
         from: 'anything@elsewhere.com',
         sendingIdentity: unverified,
-      })
+      } as Parameters<typeof sendEmail>[0])
 
       expect(fetchMock).not.toHaveBeenCalled()
       expect((result as { reason?: string }).reason).toBe('unverified-domain')
@@ -524,11 +536,11 @@ describe('sendEmail', () => {
       expect(lastBody(fetchMock).from).toBe('hello@acme.com')
     })
 
-    it('outranks an explicit from on the allowed path too', async () => {
-      // The refusal arm returns before `from` is read, so refusing with a
-      // `from` present proves nothing about precedence. This is the case that
-      // does: a verdict that ALLOWS, with an options-level address competing.
-      // Losing here would let any caller move mail off the verified identity
+    it('sends on the verdict, not a from, on the allowed path too', async () => {
+      // The refusal arm returns early, so refusing with a `from` present
+      // proves nothing about what the address would have been. This is the
+      // case that does: a verdict that ALLOWS, with an options-level address
+      // competing. Winning here would move mail off the verified identity
       // while verification still reported success.
       configure('re_test', FROM)
       const fetchMock = mockFetch({})
@@ -545,7 +557,7 @@ describe('sendEmail', () => {
           summary: 'Sending as hello@acme.com on your verified domain acme.com.',
           refusal: null,
         },
-      })
+      } as Parameters<typeof sendEmail>[0])
 
       expect(lastBody(fetchMock).from).toBe('hello@acme.com')
     })
