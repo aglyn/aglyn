@@ -818,8 +818,16 @@ const GRID_FOOTER_SWITCHED_OFF = /hideFooter/
  * fixed vocabulary and always was; a row built from a CAPPED COLLECTION READ
  * is a window over something that grows, which is the entire subject of this
  * file.
+ *
+ * `collectionPage` and `collectionCeiling` count as the same thing, because
+ * they ARE it: the cap moved inside the shared query builders and the word
+ * `limit` moved with it, so a card converted to them left this detector's
+ * sight whether or not it grew a footer. That is the shape of a guard that
+ * retires itself — the more of this list is fixed the right way, the less of
+ * the console the check can still see.
  */
-const READS_A_CAPPED_COLLECTION = /\blimit\(/
+const READS_A_CAPPED_COLLECTION =
+  /\blimit\(|\bcollection(?:Page|Ceiling)\(/
 /**
  * The repeated ROW elements, as this codebase actually writes them.
  *
@@ -1097,28 +1105,9 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'An organization’s invoices, one per month forever.',
   ],
   [
-    'apps/console/components/org-licences-panel.component.tsx',
-    'Marketplace licences held and sold, which grow with every purchase.',
-  ],
-  [
     'apps/console/components/org-sso-card.component.tsx',
     'The accounts a domain claim would move. A large customer’s domain is ' +
       'not a bounded preview.',
-  ],
-  [
-    'apps/console/components/idempotency-claims-card.component.tsx',
-    'Pending claims. They accumulate exactly when a process is stuck, which ' +
-      'is the state this card exists to show — so the long list is the one ' +
-      'that matters. `hideFooter` here was about rows having no detail page ' +
-      'of their own, which is a different question from paging.',
-  ],
-  [
-    'apps/console/components/pending-erasures-card.component.tsx',
-    'Pending erasures, which accumulate for the same reason.',
-  ],
-  [
-    'apps/console/components/staff-org-refund-card.component.tsx',
-    'An organization’s charges, which grow with its trading.',
   ],
   /*========================================================================
    * The widened shape's own tranche: real lists, still footerless, each with
@@ -1131,12 +1120,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'Metered usage, one row per period forever. Billing is held by another ' +
       'agent’s split of that page; the classification is not why it is ' +
       'untouched.',
-  ],
-  [
-    'apps/console/components/site-member-drawer.component.tsx',
-    'One member’s orders and subscriptions. Bounded by that person rather ' +
-      'than by the site, which makes it small — but it grows for as long as ' +
-      'they keep buying, so it is a list and not a fixed set.',
   ],
   [
     'libs/plugins/bookings/src/lib/components/bookings-console-page.tsx',
@@ -1158,33 +1141,10 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'over `screens`. The email plugin’s page shell is mid-conversion.',
   ],
   [
-    'libs/plugins/events-calendar/src/lib/components/events-console-page.tsx',
-    'Events, a `limit(200)` window. ORDERED now — `orderBy(startsAtMs)` was ' +
-      'safe on all three counts: the only writer refuses a save without the ' +
-      'field, the server feed already orders by it, and `events` is not in ' +
-      '`IMPORTABLE_FIELDS`. So the window is the newest 200 rather than a ' +
-      'document-id sample, and what is still owed is the footer.',
-  ],
-  [
-    'libs/plugins/redirects/src/lib/components/redirects-console-page.tsx',
-    'Redirect rules, an unordered `limit(200)`. The QUOTA half is fixed: the ' +
-      'gate and the readout now read an aggregation count over the whole ' +
-      'collection, which is what `app/api/hosts/resources` enforces on, ' +
-      'instead of the window length minus soft-deleted rows. What remains is ' +
-      'the window itself — a document-id sample sorted by source in the ' +
-      'browser — and the footer. Ordering needs a field every writer sets, ' +
-      'and `source` is not yet checked that way.',
-  ],
-  [
     'libs/plugins/marketplace/src/lib/components/host-plugins-card.component.tsx',
     'Installed plugins, per site and per org, both unordered `limit(50)`. ' +
       'Bounded by the marketplace rather than by the account, but the ' +
       'marketplace is the thing that grows.',
-  ],
-  [
-    'libs/plugins/marketplace/src/lib/components/listing-reviews.component.tsx',
-    'Reviews of one listing, an unordered `limit(100)`. A popular listing ' +
-      'accumulates them for as long as it is published.',
   ],
 ]
 
@@ -1201,6 +1161,26 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     ).toBe(true)
     // A grid whose own footer was switched off and given nothing in its place.
     expect(unpaginatedTable(`<ListTable rows={rows} hideFooter />`)).toBe(true)
+    /*
+     * And a card that caps its read through the SHARED builders, which is
+     * the spelling every conversion in this arc leaves behind. The word
+     * `limit` lives inside `collectionPage`/`collectionCeiling` now, so a
+     * detector that only knew the literal went blind to a surface at exactly
+     * the moment it was half-fixed — capped correctly, still footerless, and
+     * no longer visible to the check that would have said so.
+     */
+    expect(
+      unpaginatedTable(`
+        const rows = collectionCeiling(collection(db, 'reviews'), 200)
+        return rows.map((row) => (<Stack key={row.$id} />))
+      `),
+    ).toBe(true)
+    expect(
+      unpaginatedTable(`
+        const rows = collectionPage(collection(db, 'suppliers'), pageLimit)
+        return rows.map((row) => (<Stack key={row.$id} />))
+      `),
+    ).toBe(true)
   })
 
   it('THE CONTROL: it does not fire when a footer IS present', () => {
@@ -1277,7 +1257,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // A ratchet. Converting one of these means lowering the number with it;
     // adding a surface to the list means raising it, which is a change a
     // reviewer sees rather than a line lost in a diff.
-    expect(OWES_A_FOOTER).toHaveLength(22)
+    expect(OWES_A_FOOTER).toHaveLength(14)
     expect(NOT_A_LIST).toHaveLength(27)
   })
 })

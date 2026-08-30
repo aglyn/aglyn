@@ -29,13 +29,17 @@ import {
 import {
   collection,
   doc,
+  documentId,
   limit,
+  orderBy,
   query,
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ceilingedWindow, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import useBranding from '../hooks/use-branding'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
@@ -46,6 +50,18 @@ import {
 } from '../utils/site-member-purchases'
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+/**
+ * How many order documents this drawer reads for one member.
+ *
+ * A CEILING, not a page size: the lifetime-purchase figure above the list is
+ * summed from these rows, so the drawer has to hold every one it intends to
+ * count. A server page would make that headline number the total of ten
+ * orders and print it as a lifetime.
+ */
+const ORDER_CEILING = 100
+/** The same, for the subscriptions this member holds. */
+const SUBSCRIPTION_CEILING = 25
 
 /**
  * The reversal suffix on one order row, split by the door the money left
@@ -89,9 +105,14 @@ export interface SiteMemberDrawerProps {
  * membership APIs enforce the flag at sign-in and account load).
  *
  * Orders match by email (mirrors membership-account, AGL-294) and sort
- * client-side — `orderBy` would need a composite index and drop docs
- * missing `createdAt`. `orders` reads are admin/editor-only in rules
- * (AGL-502), so viewers get a note instead of history.
+ * client-side. The QUERY orders on the document name: `orderBy('createdAt')`
+ * would want a composite index and, worse, would drop every order missing the
+ * field, while an equality filter plus `orderBy(documentId())` rides the
+ * automatic single-field index and can drop nothing — a document's name
+ * cannot be absent. That makes the window total rather than a pseudo-random
+ * hundred, which is what the newest-first sort below was quietly disguising.
+ * `orders` reads are admin/editor-only in rules (AGL-502), so viewers get a
+ * note instead of history.
  */
 export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
   const { hostId, member, onClose } = props
@@ -114,17 +135,25 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
         ? query(
             collection(firestore, 'hosts', hostId, 'orders'),
             where('customerEmail', '==', email),
-            limit(100),
+            orderBy(documentId()),
+            // One document past the ceiling, so "this member has more" is a
+            // fact. `length === 100` cannot tell a member with exactly a
+            // hundred orders from one with a thousand, and the difference is
+            // whether the lifetime figure above is a total or a floor.
+            limit(ORDER_CEILING + 1),
           )
         : null,
     [firestore, hostId, email],
     { idField: '$id' },
   )
+  const { rows: readOrders, truncated: ordersTruncated } = ceilingedWindow<any>(
+    orderDocs,
+    ORDER_CEILING,
+  )
   const orders = useMemo(
     () =>
-      [...(orderDocs ?? [])].sort(
-        (a, b) => orderCreatedMs(b) - orderCreatedMs(a),
-      ),
+      [...readOrders].sort((a, b) => orderCreatedMs(b) - orderCreatedMs(a)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [orderDocs],
   )
   const lifetimeCents = useMemo(
@@ -150,21 +179,76 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
         ? query(
             collection(firestore, 'hosts', hostId, 'subscriptions'),
             where('customerEmail', '==', email),
-            limit(25),
+            // The same decision as the orders above, for the same reason: a
+            // subscription written without `createdAt` would be hidden by a
+            // field ordering rather than mis-sorted by it.
+            orderBy(documentId()),
+            limit(SUBSCRIPTION_CEILING + 1),
           )
         : null,
     [firestore, hostId, email],
     { idField: '$id' },
   )
+  const { rows: subscriptions, truncated: subscriptionsTruncated } =
+    ceilingedWindow<any>(subscriptionDocs, SUBSCRIPTION_CEILING)
   // Product names for subscriptions, loaded only when any exist.
   const { data: productDocs } = useFirestoreCollection<any>(
     () =>
       email && (subscriptionDocs?.length ?? 0) > 0
-        ? query(collection(firestore, 'hosts', hostId, 'products'), limit(100))
+        ? query(
+            collection(firestore, 'hosts', hostId, 'products'),
+            // A LOOKUP, not a list — but the same ordering decision, so the
+            // hundred it reads is a reachable hundred rather than a sample,
+            // and a product past it degrades a subscription's label to its
+            // id rather than hiding the subscription.
+            orderBy(documentId()),
+            limit(100),
+          )
         : null,
     [firestore, hostId, email, (subscriptionDocs?.length ?? 0) > 0],
     { idField: '$id' },
   )
+  /*==========================================
+   * BOTH LISTS PAGE IN MEMORY.
+   *
+   * The drawer holds each ceiling whole, which is what lets it sort the
+   * orders newest-first and sum the lifetime figure over all of them. A
+   * server page would have made both about ten rows instead of about this
+   * member.
+   *=========================================*/
+  const [orderPage, setOrderPage] = useState(0)
+  const [orderPageSize, setOrderPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleOrders = useMemo(
+    () =>
+      orders.slice(
+        orderPage * orderPageSize,
+        orderPage * orderPageSize + orderPageSize,
+      ),
+    [orders, orderPage, orderPageSize],
+  )
+  const [subscriptionPage, setSubscriptionPage] = useState(0)
+  const [subscriptionPageSize, setSubscriptionPageSize] = useState(
+    TABLE_PAGE_SIZE_DEFAULT,
+  )
+  const visibleSubscriptions = useMemo(
+    () =>
+      subscriptions.slice(
+        subscriptionPage * subscriptionPageSize,
+        subscriptionPage * subscriptionPageSize + subscriptionPageSize,
+      ),
+    [subscriptions, subscriptionPage, subscriptionPageSize],
+  )
+  /*
+   * A different member starts at page one. The drawer is reused for whoever
+   * is selected, so without this the next member opens three pages into a
+   * history they may not have — which renders as an empty list and reads as
+   * "this person never bought anything".
+   */
+  useEffect(() => {
+    setOrderPage(0)
+    setSubscriptionPage(0)
+  }, [memberId])
+
   const productNames = useMemo(() => {
     const map: Record<string, string> = {}
     for (const product of productDocs ?? []) {
@@ -310,11 +394,23 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
 
           <Divider textAlign="left">{'Lifetime purchases'}</Divider>
           <Typography variant="h6">
-            {ordersUnreadable ? '—' : usd(lifetimeCents)}
+            {/*
+              "at least", or nothing at all. This figure is summed over the
+              order WINDOW, so once the probe finds an order past the ceiling
+              it is a lower bound — and a lower bound printed as a lifetime is
+              the number a support agent quotes back to the customer.
+            */}
+            {ordersUnreadable
+              ? '—'
+              : `${ordersTruncated ? 'at least ' : ''}${usd(lifetimeCents)}`}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {'Charged order totals minus refunds; pending and canceled ' +
               'orders excluded.'}
+            {ordersTruncated
+              ? ` Summed over the ${ORDER_CEILING} orders read here; this ` +
+                'member has more.'
+              : ''}
           </Typography>
 
           <Divider textAlign="left">{'Orders'}</Divider>
@@ -327,7 +423,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
               {'No orders yet.'}
             </Typography>
           ) : (
-            orders.map((order: any) => (
+            visibleOrders.map((order: any) => (
               <Stack key={order.$id} spacing={0}>
                 <Stack
                   direction="row"
@@ -366,11 +462,24 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
               </Stack>
             ))
           )}
+          {ordersUnreadable || orders.length === 0 ? null : (
+            <ListPagination
+              page={orderPage}
+              pageSize={orderPageSize}
+              rowCount={visibleOrders.length}
+              // The orders this drawer HOLDS — a slice of rows already read,
+              // so the total is exact for the window. The lifetime caption
+              // above is where the window's own shortfall is stated.
+              count={orders.length}
+              onPageChange={setOrderPage}
+              onPageSizeChange={setOrderPageSize}
+            />
+          )}
 
-          {(subscriptionDocs?.length ?? 0) > 0 ? (
+          {subscriptions.length > 0 ? (
             <>
               <Divider textAlign="left">{'Subscriptions'}</Divider>
-              {(subscriptionDocs ?? []).map((subscription: any) => (
+              {visibleSubscriptions.map((subscription: any) => (
                 <Stack
                   key={subscription.$id}
                   direction="row"
@@ -434,6 +543,21 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
                   />
                 </Stack>
               ))}
+              <ListPagination
+                page={subscriptionPage}
+                pageSize={subscriptionPageSize}
+                rowCount={visibleSubscriptions.length}
+                // This member's subscriptions, in full for the window.
+                count={subscriptions.length}
+                onPageChange={setSubscriptionPage}
+                onPageSizeChange={setSubscriptionPageSize}
+              />
+              {subscriptionsTruncated ? (
+                <Typography variant="caption" color="text.secondary">
+                  {`Showing ${SUBSCRIPTION_CEILING} subscriptions; this ` +
+                    'member has more.'}
+                </Typography>
+              ) : null}
             </>
           ) : null}
 

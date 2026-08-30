@@ -43,13 +43,15 @@ import {
   doc,
   getCountFromServer,
   getDoc,
-  limit,
-  query,
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
+  ceilingedWindow,
+  collectionCeiling,
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
@@ -57,6 +59,18 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+
+/**
+ * How many redirect documents this page reads.
+ *
+ * A CEILING, not a page size. Everything the page decides is computed over
+ * the WHOLE rule set: the duplicate-source check, the chain-loop walk that
+ * follows internal destinations through the rules, and the inline tester that
+ * runs the enforcement matcher. A server page would give each of them a
+ * tenth of the rules to reason about, and the duplicate check would then
+ * create exactly the collision it exists to prevent.
+ */
+const REDIRECT_CEILING = 200
 
 interface RedirectDraft {
   id: string | null
@@ -108,15 +122,53 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
      */
     fromCache: redirectsFromCache,
   } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'redirects'), limit(200)),
+    /*
+     * ORDERED AND CEILINGED, with a probe (AGL-2501).
+     *
+     * `limit(200)` alone is answered in DOCUMENT-ID order and the ids are
+     * generated, so the window was a pseudo-random two hundred of the site's
+     * rules — sorted by `source` in the browser afterwards, which is what
+     * made it invisible: the rules on screen run alphabetically and are
+     * simply the wrong rules, and the ones missing leave no gap to notice.
+     *
+     * `orderBy('source')` is the tempting fix and the dangerous one. It
+     * matches only documents that HAVE the field, and nothing validates
+     * `source` for presence — `/api/hosts/resources` stores an allow-list of
+     * fields and checks none of them — so a rule saved without one would
+     * vanish from this page while still redirecting live traffic. The
+     * document NAME cannot be absent, so the walk is total: every rule is
+     * reachable, and the alphabetical order stays where it belongs, in the
+     * sort below over a window the page holds whole.
+     */
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'redirects'),
+        REDIRECT_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const redirects = [...(redirectDocs ?? [])]
+  const { rows: readRedirects, truncated: redirectsTruncated } =
+    ceilingedWindow<any>(redirectDocs, REDIRECT_CEILING)
+  const redirects = [...readRedirects]
     .filter((redirect: any) => !redirect.deletedAt)
     .sort((a: any, b: any) =>
       String(a.source ?? '').localeCompare(String(b.source ?? '')),
     )
+
+  /*
+   * The page is a SLICE of the ceiling, which is what the three whole-set
+   * consumers above require. The count is the rules this page HOLDS, after
+   * soft-deleted ones are dropped — not the quota, which is a server count of
+   * every document including the soft-deleted, and is read separately below.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visibleRedirects = useMemo(
+    () => redirects.slice(page * pageSize, page * pageSize + pageSize),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [redirectDocs, page, pageSize],
+  )
 
   /**
    * What the ENFORCING route counts, which is not what this page was counting.
@@ -546,7 +598,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
                 'traffic).'}
             </Typography>
           ) : null}
-          {redirects.map((redirect: any) => (
+          {visibleRedirects.map((redirect: any) => (
             <Stack
               key={redirect.$id}
               direction="row"
@@ -635,6 +687,27 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
               </Button>
             </Stack>
           ))}
+          {redirects.length === 0 ? null : (
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={visibleRedirects.length}
+              // The rules this page HOLDS, after the soft-deleted ones are
+              // dropped. Not the quota figure below it: that is a server
+              // count over every document, soft-deleted rows included,
+              // because a deleted rule still occupies a slot.
+              count={redirects.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
+          {redirectsTruncated ? (
+            <Alert severity="info">
+              {`Showing ${REDIRECT_CEILING} rules, ordered by id. This site ` +
+                'has more — the duplicate check and the tester below only ' +
+                'cover the ones listed here.'}
+            </Alert>
+          ) : null}
           <Button
             size="small"
             color="primary"
