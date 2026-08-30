@@ -140,17 +140,41 @@ describe('the provider reads the host forms collection', () => {
 
   it('lists the forms of the host it was mounted for', () => {
     const provider = source(PROVIDER)
-    expect(provider).toContain(
-      "collection(firestore, 'hosts', hostId, 'forms')",
-    )
+    expect(provider).toContain("['hosts', hostId, 'forms']")
   })
 
   it('orders by document id, so an unnamed form is still in its own picker', () => {
     // `orderBy` on a data field DROPS every document missing it, and a form
     // saved without a name would then be invisible in the picker that is
     // supposed to offer it — indistinguishable from a site with no forms.
+    // Every kind's BROWSE read is ordered this way for the same reason. The
+    // one data-field ordering in the file is the name search, where it is
+    // safe: `array-contains` on `nameTokens` has already excluded every
+    // document that could be missing `nameLower`.
     const provider = source(PROVIDER)
-    expect(provider).toContain("orderBy('__name__')")
+    expect(provider).toContain('orderBy(documentId())')
     expect(provider).not.toContain("orderBy('displayName')")
+    expect(provider).not.toContain("orderBy('name')")
+    expect(provider).not.toContain("orderBy('updatedAt'")
+    expect(provider.match(/orderBy\('[a-zA-Z]+'\)/g)).toEqual([
+      "orderBy('nameLower')",
+    ])
+  })
+
+  it('reads a page of forms rather than a thousand of them', () => {
+    // The window was `FORMS_MAX_PER_HOST` — 1,000 documents to fill a
+    // dropdown — because one bulk read had to contain whatever an author had
+    // already picked. It does not any more, and the constant has no business
+    // in a picker.
+    const provider = source(PROVIDER)
+    expect(provider).not.toContain('FORMS_MAX_PER_HOST')
+    expect(provider).toContain('ENTITY_PICKER_BROWSE_LIMIT')
+  })
+
+  it('leaves no hand-written read window behind in the provider', () => {
+    // Derived rather than listed: every kind's window is the one constant,
+    // so any bare `limit(<number>)` here is a fifth literal creeping back.
+    const provider = source(PROVIDER)
+    expect(provider.match(/limit\(\d+\)/g)).toBeNull()
   })
 })

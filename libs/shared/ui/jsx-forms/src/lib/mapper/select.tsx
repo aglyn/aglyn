@@ -65,7 +65,20 @@ export interface SelectProps<T = OptionValue> extends BaseFieldProps {
   TextFieldProps?: Record<string, any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputProps?: Record<string, any>
-  onInputChange?: (value: string) => void
+  onInputChange?: (value: string, reason?: string) => void
+  /**
+   * A schema field's own hook on the search box, beside DDF's.
+   *
+   * `onInputChange` cannot be one. `@data-driven-forms/common/select` owns
+   * that prop for its `loadOptions` support and assigns it AFTER spreading the
+   * field's props, so a handler declared on a schema field is overwritten
+   * before it reaches this component — silently, since a dropdown with a
+   * dropped handler still opens, still filters and still selects. A field
+   * whose typing was supposed to fetch more simply fetches nothing.
+   *
+   * This name is not taken, so it survives the spread. Both are called.
+   */
+  onSearchInput?: (value: string, reason?: string) => void
 }
 
 /** Returns label of the selected option. */
@@ -120,7 +133,8 @@ interface InternalSelectProps<T = OptionValue> {
   description?: string
   isMulti?: boolean
   placeholder?: string
-  onInputChange?: (value: string) => void
+  onInputChange?: (value: string, reason?: string) => void
+  onSearchInput?: (value: string, reason?: string) => void
   isFetching?: boolean
   noOptionsMessage?: () => string
   hideSelectedOptions?: boolean
@@ -154,6 +168,7 @@ function InternalSelect<T = OptionValue>({
   isMulti,
   placeholder = 'Please choose',
   onInputChange,
+  onSearchInput,
   isFetching,
   noOptionsMessage,
   hideSelectedOptions,
@@ -251,7 +266,20 @@ function InternalSelect<T = OptionValue>({
           />
         )}
         noOptionsText={noOptionsMessage && noOptionsMessage()}
-        onInputChange={(_event, value) => onInputChange?.(value)}
+        /*
+         * The REASON travels with the text.
+         *
+         * Autocomplete emits this for a typed character (`input`), for the
+         * field taking its own value back (`reset` — which fires on mount and
+         * again on every selection) and for the clear button (`clear`). A
+         * handler that treats all three alike cannot tell somebody searching
+         * from the field describing itself, and one that spends a read per
+         * query would spend one on simply opening the panel.
+         */
+        onInputChange={(_event, value, reason) => {
+          onInputChange?.(value, reason)
+          onSearchInput?.(value, reason)
+        }}
         options={options}
         multiple={isMulti}
         getOptionLabel={(option) =>

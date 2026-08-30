@@ -667,13 +667,32 @@ export const ENTITY_PICKER_KINDS: Readonly<
 
 /** Where an author makes more of each kind, named in the empty picker. */
 const ENTITY_PICKER_ORIGIN: Readonly<
-  Record<Aglyn.EntityPickerKind, { plural: string; page: string }>
+  Record<
+    Aglyn.EntityPickerKind,
+    { singular: string; plural: string; page: string }
+  >
 > = {
-  products: { plural: 'products', page: 'the Products page' },
-  collections: { plural: 'collections', page: 'the Collections page' },
-  categories: { plural: 'categories', page: 'the Categories page' },
-  datasets: { plural: 'datasets', page: 'the Data page' },
-  forms: { plural: 'forms', page: 'the Forms page' },
+  products: {
+    singular: 'product',
+    plural: 'products',
+    page: 'the Products page',
+  },
+  collections: {
+    singular: 'collection',
+    plural: 'collections',
+    page: 'the Collections page',
+  },
+  categories: {
+    singular: 'category',
+    plural: 'categories',
+    page: 'the Categories page',
+  },
+  datasets: {
+    singular: 'dataset',
+    plural: 'datasets',
+    page: 'the Data page',
+  },
+  forms: { singular: 'form', plural: 'forms', page: 'the Forms page' },
 }
 
 /**
@@ -704,22 +723,121 @@ export function entityPickerPlaceholder(
 }
 
 /**
+ * What a picker owes the reader about the list it is showing.
+ *
+ * A browse window is a PAGE of the site's catalog, and a page that does not
+ * say so is the silent-truncation defect: "not in the picker" and "does not
+ * exist" are the same absence to look at, and only one of them is a fact
+ * about their site. The inbox's form filter carries the same sentence for the
+ * same reason.
+ *
+ * Two sentences, because the second half is only true for a kind whose
+ * documents carry the name-search keys. A picker that promised to search the
+ * whole catalog and then searched 25 rows would be a worse lie than saying
+ * nothing.
+ */
+export function entityPickerBrowseNotice(
+  kind: Aglyn.EntityPickerKind,
+  context: Aglyn.EntityPickerContextValue | undefined,
+): string | undefined {
+  if (!context?.truncated?.[kind]) return undefined
+  const { plural } = ENTITY_PICKER_ORIGIN[kind]
+  const first = `Showing the first ${Aglyn.ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more. `
+  return context.searchable?.[kind]
+    ? `${first}Type to search all of them.`
+    : `${first}Typing narrows these ${Aglyn.ENTITY_PICKER_BROWSE_LIMIT} only.`
+}
+
+/**
+ * What the dropdown says when the reader's typing matches nothing it holds.
+ *
+ * On a truncated list that cannot be searched on the server, "no match" is a
+ * statement about the WINDOW and must not be read as one about the site —
+ * this is where an author concludes a form they already made does not exist
+ * and makes a second one.
+ */
+export function entityPickerNoMatchText(
+  kind: Aglyn.EntityPickerKind,
+  context: Aglyn.EntityPickerContextValue | undefined,
+): string {
+  const { plural } = ENTITY_PICKER_ORIGIN[kind]
+  if (context?.truncated?.[kind] && !context?.searchable?.[kind]) {
+    return `No match in the first ${Aglyn.ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more.`
+  }
+  return `No ${plural} match.`
+}
+
+/**
+ * The extra option a picker needs when its stored value is not in the window.
+ *
+ * The counterpart to {@link Aglyn.unresolvedScreenOption}, and it exists for
+ * the same reason: a picker whose value matches no option renders BLANK, which
+ * reads as "nothing chosen" on an element that is bound. An author repairs
+ * that by choosing again — which is how a correct reference gets replaced with
+ * a different one.
+ *
+ * Returns the stored value UNCHANGED as the option's value. Naming a
+ * selection must never rewrite it.
+ *
+ * A value nothing has answered for yet shows as the raw id, NOT as a warning.
+ * Flashing "unavailable" over every live reference for the beat before the
+ * keyed read lands would teach authors to ignore the one warning that means
+ * something — the same call `unavailableScreenLabel` makes.
+ *
+ * The exception is a picker that has settled and has no way to look anything
+ * up. There is no answer coming, so the raw value is all there will ever be,
+ * and left unmarked it would read as a resolved name — which is exactly what
+ * a free-text caption stored where an id belongs looks like.
+ */
+export function entitySelectionOption(
+  context: Aglyn.EntityPickerContextValue | undefined,
+  kind: Aglyn.EntityPickerKind,
+  value: unknown,
+): { value: string; label: string } | undefined {
+  const id = typeof value === 'string' ? value.trim() : ''
+  if (!id) return undefined
+  if ((context?.[kind] ?? []).some((entity) => entity.id === id)) {
+    return undefined
+  }
+  const resolved = context?.resolved?.[kind]?.[id]
+  if (resolved) return { value: id, label: resolved.label }
+  const { singular } = ENTITY_PICKER_ORIGIN[kind]
+  if (resolved === null) {
+    return { value: id, label: `⚠ Unavailable ${singular} (${id}) — deleted` }
+  }
+  const settledWithNoLookup =
+    Aglyn.entityListState(context, kind) === 'ready' && !context?.resolve
+  return {
+    value: id,
+    label: settledWithNoLookup ? `⚠ Unrecognized ${singular} (${id})` : id,
+  }
+}
+
+/**
  * An entity picker rendered as the SELECT the form renderer knows how to
  * draw, resolved against whatever the surface's picker context can offer.
  *
- * Two things this must not do, both of which it used to.
+ * Three things this must not do, each of which renders as something other
+ * than a broken picker.
  *
  * Every option carries the entity's ID, never its label. The label is
  * resolved fresh at edit time and a rename moves it; the id is the whole
  * reference, and for a form it is the difference between one submission list
  * and two (`docs/specs/reusable-forms.md` §2c).
  *
- * And the field is decided by the attribute's own TYPE, not by whether a
- * list happens to have arrived. Keying off the list meant a surface with no
- * picker context dropped the attribute from the panel entirely — no control,
- * no explanation, indistinguishable from a component that simply has no such
+ * The field is decided by the attribute's own TYPE, not by whether a list
+ * happens to have arrived. Keying off the list meant a surface with no picker
+ * context dropped the attribute from the panel entirely — no control, no
+ * explanation, indistinguishable from a component that simply has no such
  * setting. A picker with nothing to offer must still be a picker, and must
  * say what is wrong.
+ *
+ * And the STORED VALUE is offered whether or not the browse window contains
+ * it, which is what lets that window be a console page rather than hundreds
+ * of documents. A picker that took its options and its current selection from
+ * one list needs the list wide enough to hold whatever an author picked last
+ * month, and past that width renders a bound element as unbound anyway. The
+ * selection is a keyed read; this is where its answer is offered.
  */
 export function buildEntityPickerField<
   T extends Aglyn.AglynAttributeSchema,
@@ -727,11 +845,39 @@ export function buildEntityPickerField<
   field: T,
   kind: Aglyn.EntityPickerKind,
   context: Aglyn.EntityPickerContextValue | undefined,
+  value?: unknown,
 ) {
   const entities = context?.[kind] ?? []
+  const selected = entitySelectionOption(context, kind, value)
+  const notice = entityPickerBrowseNotice(kind, context)
+  const search = context?.search
   return {
     ...field,
     component: Aglyn.FieldComponentType.SELECT,
+    // The dropdown's input is read-only without this, so a list of any size
+    // could only be scrolled. Narrowing 25 rows by typing is the cheapest
+    // half of reaching past them.
+    isSearchable: true,
+    ...(search
+      ? {
+          // `onSearchInput` and NOT `onInputChange`: the latter is owned by
+          // `@data-driven-forms/common/select`, which assigns it after
+          // spreading the field's props, so a handler declared here would be
+          // overwritten before the mapper saw it — and a dropped handler is
+          // invisible, since the dropdown still opens and still filters.
+          //
+          // Only a typed character asks for anything. A `reset` fires when
+          // the field takes its own value back on mount and when a choice is
+          // made, and treating those as a query would spend a search read on
+          // opening the panel — the read this whole arc is about not making.
+          onSearchInput: (text: string, reason?: string) => {
+            if (reason && reason !== 'input') return
+            search(kind, text)
+          },
+        }
+      : {}),
+    ...(notice ? { helperText: notice } : {}),
+    noOptionsText: () => entityPickerNoMatchText(kind, context),
     options: [
       {
         value: '',
@@ -744,6 +890,7 @@ export function buildEntityPickerField<
       ...[...entities]
         .sort((a, b) => a.label.localeCompare(b.label))
         .map((entity) => ({ value: entity.id, label: entity.label })),
+      ...(selected ? [selected] : []),
     ],
   }
 }
@@ -816,6 +963,29 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         requestEntities(kind)
       }
     }, [rawAttributes, requestEntities])
+    /**
+     * Learn the name of the entity this node is ALREADY bound to.
+     *
+     * The browse list is a page now, so it answers this only by luck. A keyed
+     * read answers it always, and asking for one is gated hard: only for a
+     * node that carries a value, only once the browse read has settled
+     * without supplying it, and never twice for the same id. A site whose
+     * catalog fits in the window makes no such read at all.
+     */
+    const resolveEntity = entityOptions.resolve
+    useEffect(() => {
+      if (!resolveEntity) return
+      for (const field of rawAttributes ?? []) {
+        const kind = ENTITY_PICKER_KINDS[field.component]
+        if (!kind) continue
+        const id = Aglyn.entityValueNeedsResolution(
+          entityOptions,
+          kind,
+          nodeProps?.[field.name],
+        )
+        if (id) resolveEntity(kind, id)
+      }
+    }, [rawAttributes, nodeProps, entityOptions, resolveEntity])
 
     // Canvas-node options for NODE_SELECT attributes (AGL-557): every
     // other element on the canvas, labeled by component name + a text
@@ -1036,7 +1206,15 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         // that SAYS so instead of one that is not there.
         const entityKind = ENTITY_PICKER_KINDS[field.component]
         if (entityKind) {
-          return buildEntityPickerField(field, entityKind, entityOptions)
+          // The stored value travels with the field: a selection outside the
+          // browse window is offered from its own keyed read, so a bound
+          // element never renders as unbound.
+          return buildEntityPickerField(
+            field,
+            entityKind,
+            entityOptions,
+            nodeProps?.[field.name],
+          )
         }
         // Formatted text is owned by the canvas (AGL-2486). Shown, with
         // the reason, rather than silently editable into a prop the
