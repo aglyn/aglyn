@@ -23,7 +23,7 @@ claims are now false. Anyone planning from it will plan the wrong thing.
 
 | `email-overhaul.md` says | Actually, today |
 | --- | --- |
-| §1c "**Dynamic lists.** Nothing re-evaluates membership from a rule." | **Built and shipped.** `libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts` defines a nine-field rule; `libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts` (441 lines) materializes it on a `*/15` sweep with a scan budget and a resume cursor; the Firestore index is deployed. The console exposes **four** of the nine fields. |
+| §1c "**Dynamic lists.** Nothing re-evaluates membership from a rule." | **Built and shipped.** `libs/aglyn/src/lib/app-utils/dynamic-list-rule.ts` defines a nine-field rule; `libs/tenant/data/admin/src/lib/server/dynamic-list-materialize.ts` (441 lines) materializes it on a `*/15` sweep with a scan budget and a resume cursor; the Firestore index is deployed. The console exposes **all nine**, on the audience's own edit page. |
 | §1c/§1d "`marketingConsent` … is read by **no send path**" | **Built and shipped.** `campaign-send.ts` collects a basis per person while sweeping each silo and joins it through `splitByMarketingConsent`. A basis additionally records **whose act it was** (`assertedBy: 'person' \| 'operator'`), and the composer reports the split before you send. |
 | §1c "Custom sending domains **do not exist in any form.** Not a stub, not a disabled button" | **Server-side complete.** `sending-domains.ts` (417 lines) holds the record, the DNS instructions, the DMARC read and a `requested → records-issued → verified/failed` state machine with an `inconclusive` arm; the send path answers **409** for an unverified identity. Two things are missing: the provider credential that issues the DKIM key, and any console UI at all. |
 | §1b "Campaign statistics … Every campaign's stats read zero" | The webhook edge block was fixed on 2026-08-29 and opens/clicks now increment behind a replay guard. **But see [G2](#g2)** — `delivered`, `bounced`, `complained` and `unsubscribed` are still never aggregated onto a campaign, so the statistics that exist are the two least useful ones. |
@@ -280,22 +280,37 @@ campaign that reached real inboxes with its product blocks missing, and merge ta
 rendered as empty strings for an entire member audience. **Both would have been visible in
 a preview.**
 
-### G4 — Every purchase-behavior filter is built, and none of it is reachable {#g4}
+### G4 — ~~Every purchase-behavior filter is built, and none of it is reachable~~ ✅ SHIPPED {#g4}
 
-**What it is.** `DynamicListRule` carries nine fields. The console form in
-`lists-card.tsx` exposes four: sources, tags, form names, created-after. The five it does
-not expose are `segmentId`, `captureSources`, `createdBeforeMs`, and the entire `behavior`
-block — **`ordersCountAtLeast`, `ltvCentsAtLeast`, `lastPurchaseWithinDays`,
-`noPurchaseForDays`**. The matcher is written, the materializer runs them, the Firestore
-index is deployed, and the customer documentation does not mention them because the form
-does not offer them.
+**What it was.** `DynamicListRule` carries nine fields. The console form in
+`lists-card.tsx` exposed four: sources, tags, form names, created-after. The five it did
+not expose were `segmentId`, `captureSources`, `createdBeforeMs`, and the entire
+`behavior` block — **`ordersCountAtLeast`, `ltvCentsAtLeast`, `lastPurchaseWithinDays`,
+`noPurchaseForDays`**. The matcher was written, the materializer ran them and the
+Firestore index was deployed, so the gap was never engine work: it was a form with
+nowhere to grow, wedged above the table that listed the audiences.
+
+**What shipped.** `dynamic-list-rule-fields.tsx` authors all nine, on the audience's own
+edit page. Lifetime spend is entered in whole currency units and converted to cents in
+one place — a field labeled for the stored unit turns "spent over 500" into five dollars,
+and the audience looks plausible either way. The filters are read back as sentences above
+the controls, because a merchant can check a paragraph against their intent and cannot
+check eleven boxes.
+
+The same builder serves a **fixed** list, which is the other half of this gap: its
+filters FIND people rather than deciding membership, and `email/list-rule-preview`
+answers who they select without writing anything. What it finds goes through the same
+`resolveAddresses` the typed path uses, so a suppressed address comes back refused and
+somebody with no opt-in on record still needs the operator's attestation — see §4 P1,
+which this deliberately does not become a fifth entry in.
 
 **Who has it.** Klaviyo built a company on it. Mailchimp, HubSpot and Brevo all have it;
 Brevo gates equivalent scoring to a **$499/month** tier.
 
-**Our state.** **(B)** — the most literal (B) in the register.
+**Our state.** ✅ Shipped.
 
-**Size.** **S.** Four number inputs and a date input over a shipped engine.
+**Size.** **S**, as estimated — four number inputs and a date input over a shipped
+engine, plus the page that had room for them.
 
 **What it blocks.** The single clearest differentiator we have. "Everyone who has spent
 over $500 and hasn't ordered in 90 days" is the sentence that sells an ecommerce ESP, we

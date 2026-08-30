@@ -128,7 +128,7 @@ team builds something twice.
 ### 1c. Absent
 
 - **Custom or per-org sending domains.** Zero product code matches `dkim|dmarc|spf`. The only reference to Resend's domains API is `RESEND_DOMAINS_ENDPOINT` in `email-health.ts`, used as a read-only credential probe *because it cannot create anything*. Domain setup is a human runbook: `docs/EMAIL_SETUP.md`.
-- ~~**Dynamic lists.**~~ ✅ **BUILT.** A nine-field rule model, a materializer and a `*/15` sweep re-evaluate membership; the index is deployed. `orgs/{orgId}/contactSegments` remains the send-time segment. ⚠️ The console exposes four of the nine rule fields and none of the purchase-behaviour block, so most of what was built is unreachable from the UI — see `email-competitive-gaps.md`.
+- ~~**Dynamic lists.**~~ ✅ **BUILT, and reachable.** A nine-field rule model, a materializer and a `*/15` sweep re-evaluate membership; the index is deployed. `orgs/{orgId}/contactSegments` remains the send-time segment. The audience edit page authors all nine fields, purchase-behavior block included, through `dynamic-list-rule-fields.tsx` — and the same filters serve a fixed list, which uses them to FIND people and add them through the existing consent gate rather than to decide membership.
 - **Any credit or balance concept.** Searched repo-wide: no prepaid ledger, no top-up, no balance on an org. "Credit" in this codebase means Stripe proration, merchant gift cards, or attribution.
 - **Manual suppression entry.** The suppressions card views and removes; it cannot add.
 - **Cross-silo identity.** See §1e.
