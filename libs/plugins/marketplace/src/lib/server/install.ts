@@ -67,7 +67,7 @@ export const installHandler: PluginApiHandler = async (req, res) => {
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+      return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
     // The SAME gate the console's own create path applies to this exact
