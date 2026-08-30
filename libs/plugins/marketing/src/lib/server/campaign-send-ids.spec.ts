@@ -211,6 +211,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     updatedByEmail: null,
     note: '',
   }),
+  claimOrgEmailSendBudget: async (options: any = {}) => {
+    const ceiling = Math.max(1, Math.floor((options.platformPerHour ?? 100_000) * 0.25))
+    const count = Math.max(0, Math.floor(Number(options.count) || 0))
+    return {
+      allowed: true,
+      used: 0,
+      ceiling,
+      remaining: Math.max(0, ceiling - count),
+      retryAtMs: 3_600_000,
+      degraded: false,
+    }
+  },
   readEmailSendRateWindow: async () => ({
     windowStartMs: 0,
     resetMs: 3_600_000,

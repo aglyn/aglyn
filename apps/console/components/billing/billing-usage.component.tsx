@@ -156,7 +156,6 @@ function HostUsageMeters(props: {
     members: number | null
     storageMb: number | null
     workflowRuns: number | null
-    campaignEmails: number | null
   }>({
     screens: null,
     layouts: null,
@@ -165,7 +164,6 @@ function HostUsageMeters(props: {
     members: null,
     storageMb: null,
     workflowRuns: null,
-    campaignEmails: null,
   })
   const entitlements = resolveOrgEntitlements(org)
 
@@ -204,21 +202,7 @@ function HostUsageMeters(props: {
       getDoc(
         doc(firestore, 'hosts', host.$id, 'counters', 'workflowRuns'),
       ).catch(() => null),
-      /*
-       * Campaign email sends this month.
-       *
-       * `campaignEmailSends`, NOT the `emailSends` counter beside it. Since
-       * AGL-1438 those are two different meters on purpose: `emailSends` is
-       * the COST meter and counts every receipt, booking reminder and
-       * password reset the site sent, while `emailSendsPerMonth` is checked
-       * against `campaignEmailSends` and nothing else. Metering the cap
-       * against the cost counter would show a busy store most of its
-       * campaign allowance spent on order confirmations.
-       */
-      getDoc(
-        doc(firestore, 'hosts', host.$id, 'counters', 'campaignEmailSends'),
-      ).catch(() => null),
-    ]).then(([screens, layouts, variables, functions, members, media, runs, campaigns]) => {
+    ]).then(([screens, layouts, variables, functions, members, media, runs]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       const monthKey = new Date().toISOString().slice(0, 7)
@@ -231,12 +215,6 @@ function HostUsageMeters(props: {
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
         workflowRuns: runs?.exists()
           ? Number(runs.data()?.[monthKey] ?? 0)
-          : 0,
-        // A site that has never sent a campaign has no counter document;
-        // that is a settled zero, the same zero the server resolves it to,
-        // not an unmetered "—".
-        campaignEmails: campaigns?.exists()
-          ? Number(campaigns.data()?.[monthKey] ?? 0)
           : 0,
       })
     })
@@ -298,23 +276,11 @@ function HostUsageMeters(props: {
         used={counts.workflowRuns}
         limit={entitlements.workflowRunsPerMonth}
       />
-      {/* Campaign emails, the one operating quota that reached the customer
-          only as a refusal. The label says CAMPAIGN because that is what the
-          cap governs: transactional mail — receipts, booking reminders,
-          password resets — is counted for cost and never refused at any tier
-          (AGL-1438), so a meter labelled "Emails" would promise a limit the
-          product does not enforce and alarm a merchant whose receipts are
-          fine. Per site because `campaign-send.ts` enforces per site. */}
-      <UsageMeter
-        label="Campaign emails (this month)"
-        used={counts.campaignEmails}
-        limit={entitlements.emailSendsPerMonth}
-        /* The section that says what this cap does and does NOT govern —
-           not the topic root, and not `#recipient-count`, which is about the
-           audience size of one send. A meter whose help lands on the wrong
-           heading is the presence-not-correctness failure. */
-        help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
-      />
+      {/* Campaign emails are NOT a per-site meter either — the entitlement is
+          org-wide and the claim is taken against the org's counter, so the
+          meter renders once in `BillingUsageComponent`. Rendering it per site
+          showed each site its own slice against the whole org's cap, which
+          disagreed with the gate on every multi-site org. */}
       {/* Bandwidth is NOT a per-site meter — its limit (`bandwidthGb`) is
           org-wide, so it renders once in `BillingUsageComponent` against an
           org-wide numerator (AGL-1371). Site size moved there too and was then
@@ -360,6 +326,24 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // below — `entitlements.bandwidthGb` is an org-wide band, and the invoice
   // and the cron both compare it against the org-wide total.
   const [bandwidthGb, setBandwidthGb] = useState<number | null>(null)
+  /*
+   * Campaign email sends this month, ORG-WIDE.
+   *
+   * `emailSendsPerMonth` is an org entitlement and `reserveCampaignEmailSends`
+   * claims against `orgs/{orgId}/counters/campaignEmailSends`, so this is the
+   * counter the gate actually decides on. It used to render per site off
+   * `hosts/{hostId}/counters/campaignEmailSends`, which disagreed with the
+   * gate on every multi-site org: three sites at 100 each showed `100/5,000`
+   * three times while the org stood at 300 and the next campaign was refused.
+   *
+   * `campaignEmailSends`, NOT the `emailSends` counter beside it. Those are
+   * two meters on purpose — `emailSends` is the COST meter and counts every
+   * receipt, booking reminder and password reset, while the cap is checked
+   * against campaign volume alone. Metering the cap against the cost counter
+   * would show a busy store most of its allowance spent on order
+   * confirmations.
+   */
+  const [campaignEmails, setCampaignEmails] = useState<number | null>(null)
   useEffect(() => {
     if (!orgId) return
     let active = true
@@ -406,6 +390,23 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         if (active) {
           setApiRequests(
             snapshot.exists() ? Number(snapshot.data()?.count ?? 0) : 0,
+          )
+        }
+      })
+      .catch(() => {
+        // Meter keeps its "not yet metered" state on failure.
+      })
+    void getDoc(
+      doc(firestore, 'orgs', orgId, 'counters', 'campaignEmailSends'),
+    )
+      .then((snapshot) => {
+        if (active) {
+          // An org that has never sent a campaign has no counter document;
+          // that is a settled zero — the same zero the server resolves it to
+          // — not an unmetered "—".
+          const monthKey = new Date().toISOString().slice(0, 7)
+          setCampaignEmails(
+            snapshot.exists() ? Number(snapshot.data()?.[monthKey] ?? 0) : 0,
           )
         }
       })
@@ -607,6 +608,24 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.bandwidthGb}
         unit="GB"
         help={docsHelp('bandwidth', { anchor: '#where-to-see-it' })}
+      />
+      {/* Campaign emails, the one operating quota that reached the customer
+          only as a refusal. The label says CAMPAIGN because that is what the
+          cap governs: transactional mail — receipts, booking reminders,
+          password resets — is counted for cost and never refused at any tier
+          (AGL-1438), so a meter labelled "Emails" would promise a limit the
+          product does not enforce and alarm a merchant whose receipts are
+          fine. Org-wide, matching the entitlement and the counter the claim
+          is taken against. */}
+      <UsageMeter
+        label="Campaign emails (this month, organization)"
+        used={campaignEmails}
+        limit={entitlements.emailSendsPerMonth}
+        /* The section that says what this cap does and does NOT govern —
+           not the topic root, and not `#recipient-count`, which is about the
+           audience size of one send. A meter whose help lands on the wrong
+           heading is the presence-not-correctness failure. */
+        help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
       />
       {hosts.map((host) => (
         <HostUsageMeters
