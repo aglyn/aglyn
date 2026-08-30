@@ -221,6 +221,7 @@ const CONSOLE_FAST_CRON_SCHEDULE = '*/15 * * * *'
 const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
   '/api/campaigns/process-scheduled',
   '/api/admin/finish-domain-attachments',
+  '/api/lists/materialize',
 ]
 
 /** What one POST to a cron route settled as. */

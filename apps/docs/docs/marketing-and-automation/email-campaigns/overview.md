@@ -147,9 +147,41 @@ The statuses a scheduled campaign moves through are **Scheduled** → sending �
 
 ## Email lists
 
-**Lists** are static audiences shared across your organization's sites. Create them on
-the Marketing page, then grow them with the **"Enroll in a list"** automation step (e.g.
-on form completion) or popup email capture. Target any list from the campaign composer.
+**Lists** are audiences shared across your organization's sites. Create them on the
+Marketing page and target any of them from the campaign composer. A list is one of two
+kinds, chosen when you create it.
+
+### Manual lists
+
+A manual list holds the people you put in it. Grow it with the **"Enroll in a list"**
+automation step (e.g. on form completion) or popup email capture. Members stay until
+they are removed.
+
+### Lists built from a rule
+
+A **dynamic** list holds everyone matching a rule, re-checked about every fifteen
+minutes. Pick **From a rule** when you create the list, then say who it draws from:
+
+- **People from** — contacts, leads, site members, form submissions, or any combination.
+- **Tagged** — one or more contact tags, comma separated. Contacts only.
+- **Submitted form** — one or more form names, comma separated. Form submissions only.
+- **Created after** — only people whose record was created on or after that date.
+
+So "everyone who submitted our Contact us form", "contacts tagged `vip`", and "site
+members who joined since March" are each one rule.
+
+The list row shows when the rule last ran. If it says **not yet evaluated**, the next
+sweep has not reached it — a list created a moment ago is normal; hours is not.
+
+Three things worth knowing:
+
+- **People leave when they stop matching**, but only the ones the rule enrolled. Anyone
+  you added by hand stays until you remove them.
+- **A rule is never trimmed to fit a limit.** If it matches more people than a single
+  send allows, every one of them is still on the list and it is the *send* that is
+  refused, telling you the number it found.
+- **Matching a rule is not consent.** A dynamic list decides who is in the audience;
+  [the consent rules](#who-a-campaign-is-allowed-to-reach) still decide who is mailed.
 
 ## Experiments
 

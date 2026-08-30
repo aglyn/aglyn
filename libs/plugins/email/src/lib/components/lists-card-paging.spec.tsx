@@ -196,8 +196,16 @@ describe('the email-list table walks the collection (AGL-2501)', () => {
     // over that list's own `members` subcollection, so it is larger than the
     // page and stays the same when the page changes.
     await mountCard()
+    // Located by its HEADER rather than by a fixed cell index: the column is
+    // what this asserts about, and a positional read turns any new column
+    // into a failure of the count instead of a failure of the layout.
+    const headers = Array.from(document.querySelectorAll('thead th')).map(
+      (cell) => cell.textContent,
+    )
+    const column = headers.indexOf('Subscribers')
+    expect(column).toBeGreaterThan(-1)
     const first = Array.from(document.querySelectorAll('tbody tr'))[0]
-    expect(first.querySelectorAll('td')[1].textContent).toBe(
+    expect(first.querySelectorAll('td')[column].textContent).toBe(
       String(MEMBERS_PER_LIST),
     )
     expect(MEMBERS_PER_LIST).toBeGreaterThan(TABLE_PAGE_SIZE_DEFAULT)

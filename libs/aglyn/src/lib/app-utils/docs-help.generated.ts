@@ -158,7 +158,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contacts: ['#unified-ingestion', '#the-contacts-page', '#segments', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   designedEmails: ['#create-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it'],
-  emailCampaigns: ['#send-a-campaign', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#suppressions', '#related'],
+  emailCampaigns: ['#send-a-campaign', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#who-a-campaign-is-allowed-to-reach', '#schedule-a-send', '#email-lists', '#manual-lists', '#lists-built-from-a-rule', '#experiments', '#opens--clicks', '#compliance', '#suppressions', '#related'],
   events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#where-submissions-go', '#the-inbox', '#who-a-submission-is-from', '#where-this-one-went', '#replying-to-a-submission', '#related'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],

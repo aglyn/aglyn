@@ -16,13 +16,20 @@
  */
 'use client'
 
-import { createResourceUid, pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  createResourceUid,
+  normalizeDynamicListRule,
+  pluginDocsHelp,
+  type DynamicListSource,
+} from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Button,
+  Chip,
+  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -146,6 +153,27 @@ export function OrgListsCard(props: OrgListsCardProps) {
   ])
 
   const [name, setName] = useState('')
+  /*
+   * A dynamic list is authored HERE, with pickers.
+   *
+   * The rule shape is small enough that a merchant could in principle type it
+   * as JSON, and that is exactly the signal that a picker is missing: needing
+   * to hand-write a stored structure is a console feature that did not ship,
+   * not a power-user affordance. Every control below writes one field of the
+   * rule `normalizeDynamicListRule` reads back.
+   */
+  const [kind, setKind] = useState<'manual' | 'dynamic'>('manual')
+  const [sources, setSources] = useState<DynamicListSource[]>(['contacts'])
+  const [tags, setTags] = useState('')
+  const [formNames, setFormNames] = useState('')
+  const [createdAfter, setCreatedAfter] = useState('')
+
+  /** Comma-separated free text → the trimmed, non-empty values. */
+  const splitList = (value: string) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
 
   const handleCreate = async () => {
     // Without an org there is nowhere org-shared to put the list, and the
@@ -153,9 +181,39 @@ export function OrgListsCard(props: OrgListsCardProps) {
     // disabled here; this is the same answer for a stale closure.
     if (!name.trim() || !scope) return
     const id = createResourceUid()
+    /*
+     * Normalized before it is stored, by the same function the materializer
+     * reads it back through. A rule that is coerced on the way out but not on
+     * the way in is a rule the console can display differently from the way
+     * it evaluates.
+     */
+    const rule = normalizeDynamicListRule({
+      sources,
+      ...(splitList(tags).length ? { tags: splitList(tags) } : {}),
+      ...(splitList(formNames).length
+        ? { formNames: splitList(formNames) }
+        : {}),
+      ...(createdAfter ? { createdAfterMs: Date.parse(createdAfter) } : {}),
+    })
     try {
       await setDoc(doc(firestore, scope[0], scope[1], 'lists', id), {
         name: name.trim(),
+        kind,
+        ...(kind === 'dynamic'
+          ? {
+              rule,
+              /*
+               * WHICH SITE'S people the rule draws from.
+               *
+               * Lists are org-shared but leads, members and form submissions
+               * are host-owned, and org contacts are read narrowed to one
+               * host. A dynamic list with no host has no silos at all, so the
+               * sweep skips it — which is why this is stamped at creation
+               * rather than resolved later from whoever happens to sweep.
+               */
+              hostId,
+            }
+          : {}),
         createdAt: Timestamp.now(),
       })
       setName('')
@@ -222,34 +280,114 @@ export function OrgListsCard(props: OrgListsCardProps) {
     >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
-          {'Static audiences shared across your organization. Enroll ' +
-            'contacts with the "Enroll in a list" automation step or popup ' +
-            'email capture, then target a list from the campaign composer.'}
+          {'Audiences shared across your organization. A manual list holds ' +
+            'the people you enroll into it. A dynamic list holds everyone ' +
+            'matching a rule, re-checked about every fifteen minutes. Target ' +
+            'either from the campaign composer.'}
         </Typography>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
           <TextField
             size="small"
             label="New list name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            sx={{ flexGrow: 1, maxWidth: 320 }}
+            sx={{ flexGrow: 1, minWidth: 220, maxWidth: 320 }}
           />
+          <TextField
+            select
+            size="small"
+            label="Membership"
+            value={kind}
+            onChange={(event) =>
+              setKind(event.target.value as 'manual' | 'dynamic')
+            }
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="manual">{'Manual'}</MenuItem>
+            <MenuItem value="dynamic">{'From a rule'}</MenuItem>
+          </TextField>
           <Button
             size="small"
             variant="contained"
             color="primary"
-            disabled={!name.trim() || !scope}
+            disabled={
+              !name.trim() ||
+              !scope ||
+              // A dynamic list with no source matches nobody, and an empty
+              // list is indistinguishable from a rule that has not run yet.
+              (kind === 'dynamic' && sources.length === 0)
+            }
             onClick={() => void handleCreate()}
           >
             {'Create'}
           </Button>
         </Stack>
+        {kind !== 'dynamic' ? null : (
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <TextField
+              select
+              size="small"
+              label="People from"
+              value={sources}
+              onChange={(event) =>
+                setSources(
+                  (typeof event.target.value === 'string'
+                    ? [event.target.value]
+                    : event.target.value) as DynamicListSource[],
+                )
+              }
+              slotProps={{ select: { multiple: true } }}
+              sx={{ minWidth: 220 }}
+            >
+              <MenuItem value="contacts">{'Contacts'}</MenuItem>
+              <MenuItem value="leads">{'Leads'}</MenuItem>
+              <MenuItem value="siteMembers">{'Site members'}</MenuItem>
+              <MenuItem value="formSubmissions">{'Form submissions'}</MenuItem>
+            </TextField>
+            <TextField
+              size="small"
+              label="Tagged"
+              placeholder="vip, wholesale"
+              helperText="Contacts only"
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              sx={{ minWidth: 180 }}
+            />
+            <TextField
+              size="small"
+              label="Submitted form"
+              placeholder="Contact us"
+              helperText="Form submissions only"
+              value={formNames}
+              onChange={(event) => setFormNames(event.target.value)}
+              sx={{ minWidth: 180 }}
+            />
+            <TextField
+              type="date"
+              size="small"
+              label="Created after"
+              value={createdAfter}
+              onChange={(event) => setCreatedAfter(event.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 170 }}
+            />
+          </Stack>
+        )}
+        {kind !== 'dynamic' ? null : (
+          <Typography variant="caption" color="text.secondary">
+            {'Matching people are enrolled automatically and leave when they ' +
+              'stop matching. Anyone you add by hand stays. Being matched by ' +
+              'a rule is not consent to be emailed — a campaign still only ' +
+              'reaches people whose consent is on record.'}
+          </Typography>
+        )}
         {lists.length === 0 ? null : (
           <>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>{'List'}</TableCell>
+                <TableCell>{'Membership'}</TableCell>
                 <TableCell>{'Subscribers'}</TableCell>
                 <TableCell align="right" />
               </TableRow>
@@ -258,6 +396,32 @@ export function OrgListsCard(props: OrgListsCardProps) {
               {lists.map((list) => (
                 <TableRow key={list.$id}>
                   <TableCell>{list.name}</TableCell>
+                  <TableCell>
+                    {list.kind === 'dynamic' ? (
+                      <Chip
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        /*
+                          Freshness, not just kind. A dynamic list that has
+                          stopped being swept looks exactly like one whose
+                          population has not changed, so the last evaluation
+                          time is the only thing that tells them apart — and
+                          it is the first thing to look at when a merchant
+                          reports that somebody is missing from an audience.
+                         */
+                        label={
+                          list.lastEvaluatedAt?.toDate
+                            ? `Rule · ${list.lastEvaluatedAt
+                                .toDate()
+                                .toLocaleString()}`
+                            : 'Rule · not yet evaluated'
+                        }
+                      />
+                    ) : (
+                      <Chip size="small" variant="outlined" label="Manual" />
+                    )}
+                  </TableCell>
                   <TableCell>{counts[list.$id] ?? '…'}</TableCell>
                   <TableCell align="right">
                     <Button

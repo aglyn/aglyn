@@ -1934,6 +1934,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Claims and sends due campaigns. If it stops, a campaign the composer showed as Scheduled sits there and never sends — the AGL-2134 shape, which is sold on /product/marketing.',
   },
   {
+    id: 'lists-materialize',
+    label: 'Dynamic email lists',
+    // Shares the `consoleFastCrons` job with the two rows around it — one
+    // Cloud Scheduler job driving three routes, which is why adding this cost
+    // no scheduler quota.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons \u2192 console /api/lists/materialize',
+    graceMinutes: 45,
+    drives:
+      'Re-evaluates every dynamic list against its rule. If it stops, a list keeps whatever membership it last had, and a campaign sent to it reaches an audience that silently stopped tracking the rule the merchant wrote — which looks exactly like a rule that matched nobody new.',
+  },
+  {
     id: 'finish-domain-attachments',
     label: 'Custom domain re-check',
     // Every fifteen minutes rather than twenty since AGL-1617: it shares one

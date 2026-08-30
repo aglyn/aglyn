@@ -27,6 +27,7 @@ import { marketingSitePageEnricher } from './server/site-page-enricher'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { campaignProcessScheduledHandler } from './server/campaign-process-scheduled'
+import { listsMaterializeHandler } from './server/lists-materialize'
 import { campaignSendHandler } from './server/campaign-send'
 
 /**
@@ -134,4 +135,7 @@ export function registerMarketingConsoleApi(): void {
     'campaigns/process-scheduled',
     campaignProcessScheduledHandler,
   )
+  // The dynamic-list sweep rides the same `*/15` fast-cron as the campaign
+  // processor rather than provisioning a scheduler job of its own.
+  registerPluginApiRoute('lists/materialize', listsMaterializeHandler)
 }
