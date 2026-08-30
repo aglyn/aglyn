@@ -349,6 +349,12 @@ export interface CampaignSendResult {
   /** Dry run only: of `audienceSize`, how many carry a recorded consent basis. */
   consented?: number
   /**
+   * Dry run only: of `consented`, how many hold a basis an OPERATOR asserted
+   * on their behalf rather than one they gave — a backfill over seed data,
+   * say. A subset of `consented` and not a fourth population.
+   */
+  consentedByOperator?: number
+  /**
    * Dry run only: of `audienceSize`, how many are reachable only because
    * consent enforcement is not retroactive. This is the population a strict
    * policy would remove.
@@ -808,13 +814,20 @@ export async function performCampaignSend(
        * consent.
        *
        * Three numbers because one would hide the thing a merchant has to
-       * decide about. `consented` is who asked; `grandfathered` is who is
-       * reachable only because enforcement is not retroactive, and is
+       * decide about. `consented` is who has a basis; `grandfathered` is who
+       * is reachable only because enforcement is not retroactive, and is
        * therefore exactly the population that disappears the day the org
        * turns the strict mode on; `consentWithheld` is who the rule already
        * refuses.
+       *
+       * `consentedByOperator` splits the first of those, because "who has a
+       * basis" and "who asked" stopped being the same question once a basis
+       * could be asserted on somebody's behalf. Reporting only the total
+       * would present an operator backfill as that many opt-ins, which is
+       * the one thing the provenance field exists to prevent.
        */
       consented: consentSplit.consented,
+      consentedByOperator: consentSplit.consentedByOperator,
       grandfathered: consentSplit.grandfathered,
       consentWithheld: consentSplit.withheld,
       // Which identity this campaign would leave on, so the composer can say
