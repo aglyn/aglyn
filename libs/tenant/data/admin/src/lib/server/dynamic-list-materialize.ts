@@ -142,6 +142,22 @@ export interface MaterializeDynamicListResult {
   empty: boolean
 }
 
+/** What a read-only pass over the silos found. */
+export interface DynamicListScanResult {
+  /** Matched people, de-duplicated across silos by their person key. */
+  candidates: DynamicListCandidate[]
+  /** False when the scan budget ran out — `cursor` says where to resume. */
+  complete: boolean
+  cursor: DynamicListCursor | null
+  /**
+   * True when the rule selects nobody by construction — no sources, or a
+   * `segmentId` naming a segment that no longer exists.
+   */
+  empty: boolean
+  /** Documents read, against the budget. */
+  read: number
+}
+
 /**
  * The silo collections, as queries.
  *
@@ -213,41 +229,35 @@ function toCandidate(
 }
 
 /**
- * Re-evaluates one dynamic list and writes the result into its members.
+ * WHO A RULE SELECTS, without writing anything.
  *
- * @param listRef `orgs/{orgId}/lists/{listId}` — the caller has proved it
- *                exists and that it is `kind: 'dynamic'`.
- * @param hostId  the site whose silos the rule draws from, and the scope the
- *                org-owned contacts read is narrowed to.
- * @param resume  a cursor from a previous incomplete run.
+ * The scan and the enrollment used to be one function, so "who would this
+ * match" could only be answered by materializing it. That is the wrong shape
+ * for two callers that now exist: a merchant asking to see an audience before
+ * committing to it, and a fixed list using the filters to FIND people to add.
+ * Neither may write memberships as a side effect of a question.
+ *
+ * One scanner rather than two. Every subtlety here is a place a second
+ * implementation would drift — the in-memory date filter (an `orderBy` on a
+ * data field would DROP undated documents rather than merely not matching
+ * them), the `__name__` paging order, `scopedToHost` on `contacts` and on
+ * nothing else, and a deleted `segmentId` narrowing to nobody rather than
+ * widening to everybody. `materializeDynamicList` reads this and then enrolls.
+ *
+ * NOTHING here writes, and nothing here compares a count against a limit.
  */
-export async function materializeDynamicList(options: {
-  listRef: DocumentReference
+export async function collectDynamicListCandidates(options: {
   hostId: string
   rule: unknown
   resume?: DynamicListCursor | null
   nowMs?: number
-  /**
-   * The scan budget. Passed by NOTHING in production — it exists so the suite
-   * can drive a sweep into an exhausted budget and require that it still
-   * removes nobody. A guarantee that only holds at the production budget was
-   * never that guarantee.
-   */
   scanBudget?: number
-}): Promise<MaterializeDynamicListResult> {
+}): Promise<DynamicListScanResult> {
   const rule: DynamicListRule = normalizeDynamicListRule(options.rule)
   const nowMs = options.nowMs ?? Date.now()
   const budget = options.scanBudget ?? DYNAMIC_LIST_SCAN_BUDGET
-  const empty = dynamicListRuleIsEmpty(rule)
-  if (empty) {
-    return {
-      matched: 0,
-      enrolled: 0,
-      removed: 0,
-      complete: true,
-      cursor: null,
-      empty: true,
-    }
+  if (dynamicListRuleIsEmpty(rule)) {
+    return { candidates: [], complete: true, cursor: null, empty: true, read: 0 }
   }
 
   // A saved segment's filters, resolved ONCE rather than per candidate.
@@ -262,12 +272,11 @@ export async function materializeDynamicList(options: {
     // a rule whose filter vanished must not start matching the whole org.
     if (!snapshot.exists) {
       return {
-        matched: 0,
-        enrolled: 0,
-        removed: 0,
+        candidates: [],
         complete: true,
         cursor: null,
         empty: true,
+        read: 0,
       }
     }
     segment = {
@@ -332,6 +341,72 @@ export async function materializeDynamicList(options: {
       }
       if (snapshot.size < PAGE_SIZE) break
     }
+  }
+
+
+  return {
+    candidates: [...matches.values()],
+    complete,
+    cursor,
+    empty: false,
+    read,
+  }
+}
+
+/**
+ * Re-evaluates one dynamic list and writes the result into its members.
+ *
+ * @param listRef `orgs/{orgId}/lists/{listId}` — the caller has proved it
+ *                exists and that it is `kind: 'dynamic'`.
+ * @param hostId  the site whose silos the rule draws from, and the scope the
+ *                org-owned contacts read is narrowed to.
+ * @param resume  a cursor from a previous incomplete run.
+ */
+export async function materializeDynamicList(options: {
+  listRef: DocumentReference
+  hostId: string
+  rule: unknown
+  resume?: DynamicListCursor | null
+  nowMs?: number
+  /**
+   * The scan budget. Passed by NOTHING in production — it exists so the suite
+   * can drive a sweep into an exhausted budget and require that it still
+   * removes nobody. A guarantee that only holds at the production budget was
+   * never that guarantee.
+   */
+  scanBudget?: number
+}): Promise<MaterializeDynamicListResult> {
+  const scan = await collectDynamicListCandidates({
+    hostId: options.hostId,
+    rule: options.rule,
+    ...(options.resume ? { resume: options.resume } : {}),
+    ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
+    ...(options.scanBudget !== undefined
+      ? { scanBudget: options.scanBudget }
+      : {}),
+  })
+  if (scan.empty) {
+    return {
+      matched: 0,
+      enrolled: 0,
+      removed: 0,
+      complete: true,
+      cursor: null,
+      empty: true,
+    }
+  }
+  const { complete, cursor } = scan
+  /*
+   * Re-keyed by person rather than carried as a Map across the seam.
+   *
+   * Reconciliation below asks `matches.has(key)` about a stored row's id and
+   * about its address, so it needs the same key the scan de-duplicated on —
+   * computed by the same function, from the same addresses.
+   */
+  const matches = new Map<string, DynamicListCandidate>()
+  for (const candidate of scan.candidates) {
+    const key = personKey(candidate.email)
+    if (key) matches.set(key, candidate)
   }
 
   let enrolled = 0

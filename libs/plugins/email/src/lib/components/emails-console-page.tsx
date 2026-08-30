@@ -27,6 +27,8 @@ import EmailTemplateDetail from './email-template-detail'
 import EmailTopicDetail from './email-topic-detail'
 import EmailTopicsCard from './email-topics-card'
 import EmailsListCard from './emails-list-card'
+import ListDetailCard from './list-detail-card'
+import ListEditCard from './list-edit-card'
 import ListsCard from './lists-card'
 import SuppressionsCard from './suppressions-card'
 import type { EmailsConsoleSectionId } from './emails-console-sections'
@@ -114,7 +116,39 @@ function sectionBody(
         <EmailScreensCard hostId={hostId} basePath={basePath} />
       )
     case 'audiences':
-      return <ListsCard hostId={hostId} />
+      /*
+       * A list is a resource with its own pages, on the same terms the
+       * campaign report is: `/emails/audiences/{listId}` is one audience, and
+       * `…/edit` is its settings.
+       *
+       * The membership used to unfold inside the audiences table. That made a
+       * list unlinkable, put the back button one press from leaving the whole
+       * surface, and asked the reader of a list of lists to hold the table
+       * that lists them AND the table of one list's subscribers on the same
+       * screen. The subscribers are also the expensive read here — one PII
+       * document per person — so putting them behind a route is what stops
+       * them being paid for by somebody who came to see which audiences exist.
+       *
+       * Ternaries rather than a lookup: only the branch taken is CONSTRUCTED,
+       * which is the cost this whole function is shaped around.
+       */
+      return detail[0] ? (
+        detail[1] === 'edit' ? (
+          <ListEditCard
+            hostId={hostId}
+            listId={detail[0]}
+            basePath={basePath}
+          />
+        ) : (
+          <ListDetailCard
+            hostId={hostId}
+            listId={detail[0]}
+            basePath={basePath}
+          />
+        )
+      ) : (
+        <ListsCard hostId={hostId} basePath={basePath} />
+      )
     case 'topics':
       // Create is a drawer on the list; EDIT is the topic's own route, which
       // is the section owning its own subtree exactly as `campaigns` does.

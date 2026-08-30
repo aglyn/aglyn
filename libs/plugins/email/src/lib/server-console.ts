@@ -52,14 +52,25 @@
  * call is given with the numbers in front of them. Both routes run the SAME
  * resolution over the SAME inputs — {@link resolveAddresses} — so the summary
  * they were shown is the summary that acts.
+ *
+ * ## Finding people is a read, and it uses the same gate
+ *
+ * `email/list-rule-preview` answers "who do these filters select" without
+ * writing anything, so a fixed list can be filled from a search rather than
+ * from somebody typing addresses one at a time. It runs the addresses it finds
+ * through {@link resolveAddresses} as well — a bulk path that reached the
+ * membership without the suppression check and the attestation would be a way
+ * to enroll exactly the people the single-address path refuses.
  */
 
 import {
   ASSIGNMENT_REFUSAL_MESSAGES,
   assignmentBasis,
   assignmentReadout,
+  dynamicListRuleIsEmpty,
   isOrgWideMember,
   normalizeContactEmail,
+  normalizeDynamicListRule,
   readMarketingBasis,
   registerPluginApiRoute,
   type AddressRefusal,
@@ -68,6 +79,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import {
+  collectDynamicListCandidates,
   enrollListMember,
   filterSendableForHost,
   filterSuppressedEmails,
@@ -683,15 +695,124 @@ export const emailListMembersAddHandler: PluginApiHandler = async (
 }
 
 /**
+ * WHO A SET OF FILTERS FINDS, and what would happen if you added them.
+ *
+ * ## The gap it fills
+ *
+ * The filters behind a list could only ever be MATERIALIZED — the sweep wrote
+ * the matching people straight into the membership. A merchant could not ask
+ * "who is this" without committing to it, and a fixed list could not use the
+ * filters at all: its only way to gain a member was somebody typing or pasting
+ * an address. This answers the question without writing anything.
+ *
+ * ## It is the same consent gate, not a second one
+ *
+ * The addresses the scan finds are put through {@link resolveAddresses} — the
+ * exact function `email/list-members-preview` uses — so a suppressed address
+ * is reported as refused here, and somebody with no opt-in on record is
+ * reported as needing an attestation here, before any of them is offered for
+ * adding. That is deliberate and load-bearing: a bulk path that skipped the
+ * check would be a way to fill a list with people the one-at-a-time path
+ * refuses, which is the defect class this product already has a register entry
+ * for. The ADD still goes through `email/list-members-add`, which re-runs
+ * every check server-side, so this preview is an honest readout rather than a
+ * permission.
+ *
+ * ## What it will not do
+ *
+ * It writes nothing, it enrolls nobody, and it compares no count against any
+ * limit. The batch cap below bounds how many addresses it hands back for a
+ * single add — the scan itself still reports how many people it MATCHED, so a
+ * merchant is told the audience is larger than one batch rather than shown a
+ * truncated number as if it were the whole.
+ */
+export const emailListRulePreviewHandler: PluginApiHandler = async (
+  req,
+  res,
+) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  try {
+    const context = await resolveListContext(req)
+    if (context.ok === false) {
+      return res.status(context.status).json(context.body)
+    }
+    const rule = normalizeDynamicListRule(req.body?.rule)
+    if (dynamicListRuleIsEmpty(rule)) {
+      /*
+       * Not an error, and not an empty result either. A rule with no source
+       * matches nobody by construction, and reporting that as "0 people" is
+       * indistinguishable from a rule that ran and found none — which is the
+       * confusion the `empty` flag exists to prevent everywhere else.
+       */
+      return res.status(200).json({
+        matched: 0,
+        truncated: false,
+        complete: true,
+        empty: true,
+        emails: [],
+        verdicts: [],
+        optedIn: 0,
+        needAttestation: 0,
+        refused: 0,
+      })
+    }
+    const scan = await collectDynamicListCandidates({
+      hostId: context.hostId,
+      rule,
+    })
+    /*
+     * The addresses, in the scan's own order, capped at what one add can
+     * carry. `matched` is reported separately and is NOT this length: a
+     * merchant looking at a 400-person audience must be told it is 400 even
+     * when the button in front of them adds 100.
+     */
+    const emails = scan.candidates
+      .map((candidate) => candidate.email)
+      .filter(Boolean)
+    const batch = emails.slice(0, LIST_MEMBER_BATCH_MAX)
+    const resolution = await resolveAddresses({
+      hostId: context.hostId,
+      inputs: batch,
+    })
+    return res.status(200).json({
+      listName: context.listName,
+      matched: emails.length,
+      /*
+       * Two different reasons a readout can be short of the truth, reported
+       * apart: `truncated` is this batch being smaller than the match, and
+       * `complete: false` is the SCAN having run out of budget, so `matched`
+       * is itself a floor.
+       */
+      truncated: emails.length > batch.length,
+      complete: scan.complete,
+      empty: false,
+      emails: batch,
+      verdicts: resolution.verdicts,
+      optedIn: resolution.optedIn,
+      needAttestation: resolution.needAttestation,
+      refused: resolution.refused,
+    })
+  } catch (error) {
+    console.error('[email] list rule preview failed', error)
+    return res
+      .status(500)
+      .json({ error: 'The audience could not be worked out.' })
+  }
+}
+
+/**
  * Console API registration.
  *
- * Neither of these is on the machine-path exemption list in
+ * None of these is on the machine-path exemption list in
  * `plugin-api-rate-limit.ts`. Each is reached by a person pressing a button in
  * a browser, so the visitor limiter's per-(site, IP) budget is far above any
  * real use of them and is the right ceiling for a surface that puts a person
  * into a marketing audience.
  */
 export function registerEmailConsoleApi(): void {
+  registerPluginApiRoute('email/list-rule-preview', emailListRulePreviewHandler)
   registerPluginApiRoute(
     'email/list-members-preview',
     emailListMembersPreviewHandler,

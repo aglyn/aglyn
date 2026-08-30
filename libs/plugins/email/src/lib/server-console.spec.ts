@@ -61,7 +61,28 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/organizations'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/person-key'),
+  // The rule model, real: the preview route decides whether a set of filters
+  // selects nobody, and a stubbed answer would make that decision a property
+  // of this file.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/dynamic-list-rule'),
 }))
+
+/**
+ * What the silo scan finds, as this suite chooses to answer it.
+ *
+ * The scanner is doubled and the CONSENT GATE is not — which is the division
+ * this file exists to hold. Who a rule selects is `collectDynamicListCandidates`'
+ * own question, tested against real silos in
+ * `dynamic-list-materialize.spec.ts`; what happens to the people it names is
+ * this route's, and that is answered here by the real policy, the real
+ * suppression pair and the real writer.
+ */
+let mockScan: {
+  candidates: Array<{ silo: string; email: string; name?: string }>
+  complete: boolean
+} = { candidates: [], complete: true }
+/** Proves the route asked, rather than answering from somewhere else. */
+let mockScanCalls: Array<Record<string, unknown>> = []
 
 const HOST_ID = 'site-1'
 const ORG_ID = 'org-1'
@@ -158,6 +179,16 @@ const firestoreHandle: any = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  collectDynamicListCandidates: async (options: Record<string, unknown>) => {
+    mockScanCalls.push(options)
+    return {
+      candidates: mockScan.candidates,
+      complete: mockScan.complete,
+      cursor: null,
+      empty: false,
+      read: mockScan.candidates.length,
+    }
+  },
   // The REAL writer. Doubling it would make "the person who declined was not
   // enrolled" a claim about the double rather than about the collection.
   enrollListMember: jest.requireActual(
@@ -191,6 +222,7 @@ import {
   LIST_MEMBER_BATCH_MAX,
   emailListMembersAddHandler,
   emailListMembersPreviewHandler,
+  emailListRulePreviewHandler,
 } from './server-console'
 
 async function drive(
@@ -230,6 +262,17 @@ const preview = (body: Record<string, unknown> = {}, headers?: any) =>
     { hostId: HOST_ID, listId: LIST_ID, ...body },
     headers,
   )
+const findPeople = (body: Record<string, unknown> = {}, headers?: any) =>
+  drive(
+    emailListRulePreviewHandler,
+    {
+      hostId: HOST_ID,
+      listId: LIST_ID,
+      rule: { sources: ['contacts'] },
+      ...body,
+    },
+    headers,
+  )
 
 /** Puts a contact on the org, carrying whatever consent facts. */
 const seedContact = (email: string, consent: Record<string, unknown>) => {
@@ -238,6 +281,8 @@ const seedContact = (email: string, consent: Record<string, unknown>) => {
 
 beforeEach(() => {
   store = {}
+  mockScan = { candidates: [], complete: true }
+  mockScanCalls = []
   contactSeq = 0
   contactsUnreadable = false
   platformSuppressed.clear()
@@ -606,5 +651,174 @@ describe('the preview and the add cannot drift', () => {
       requiresAttestation: true,
       refusal: null,
     })
+  })
+})
+
+/**
+ * FINDING PEOPLE IS THE SAME ACT AS TYPING THEM, and meets the same gate.
+ *
+ * The register already carries four bulk paths that reached real inboxes with
+ * no unsubscribe header, no suppression check and no cap. An "add the 500
+ * people who match" button is exactly the shape of a fifth, and the only thing
+ * that stops it being one is that the addresses a search finds go through the
+ * SAME resolution a pasted column does — before they are offered, and again
+ * when they are added.
+ *
+ * The scanner is doubled here and the policy is not, so every assertion below
+ * is about the gate rather than about who a rule selects.
+ */
+describe('finding people by rule meets the consent gate', () => {
+  it('THE CONTROL: the route asks the scanner and reports what it found', async () => {
+    // Anti-vacuity for the whole block. Every assertion after this is of the
+    // form "the refused address did not come back enrollable", and a route
+    // that returned nothing at all would satisfy all of them.
+    mockScan = {
+      candidates: [{ silo: 'contacts', email: OPTED_IN }],
+      complete: true,
+    }
+    const out = await findPeople()
+    expect(out.code).toBe(200)
+    expect(mockScanCalls).toHaveLength(1)
+    expect(mockScanCalls[0]['hostId']).toBe(HOST_ID)
+    expect(out.body.matched).toBe(1)
+    expect(out.body.emails).toEqual([OPTED_IN])
+    expect(out.body.optedIn).toBe(1)
+    expect(out.body.needAttestation).toBe(0)
+    expect(out.body.refused).toBe(0)
+  })
+
+  it('reports a SUPPRESSED match as refused, not as enrollable', async () => {
+    hostSuppressed.add(UNKNOWN)
+    mockScan = {
+      candidates: [
+        { silo: 'contacts', email: OPTED_IN },
+        { silo: 'contacts', email: UNKNOWN },
+      ],
+      complete: true,
+    }
+    const out = await findPeople()
+    expect(out.body.refused).toBe(1)
+    expect(out.body.optedIn).toBe(1)
+    const verdict = out.body.verdicts.find((row: any) => row.email === UNKNOWN)
+    expect(verdict.refusal).toBeTruthy()
+  })
+
+  it('a match with no opt-in on record needs the attestation', async () => {
+    mockScan = {
+      candidates: [{ silo: 'leads', email: UNKNOWN }],
+      complete: true,
+    }
+    const out = await findPeople()
+    expect(out.body.needAttestation).toBe(1)
+    expect(out.body.optedIn).toBe(0)
+    expect(
+      out.body.verdicts.find((row: any) => row.email === UNKNOWN)
+        .requiresAttestation,
+    ).toBe(true)
+  })
+
+  it('a stored refusal is refused however the person was found', async () => {
+    // The one that matters most. `REFUSED` records `marketingConsent: false`,
+    // and being selected by a rule is not a reason to overrule a person's own
+    // decision — a search that could enroll them would be a way to launder a
+    // refusal through a filter.
+    mockScan = {
+      candidates: [{ silo: 'contacts', email: REFUSED }],
+      complete: true,
+    }
+    const out = await findPeople()
+    expect(out.body.refused).toBe(1)
+    expect(out.body.needAttestation).toBe(0)
+  })
+
+  it('writes nothing at all', async () => {
+    mockScan = {
+      candidates: [{ silo: 'contacts', email: OPTED_IN }],
+      complete: true,
+    }
+    await findPeople()
+    expect(memberRows()).toEqual([])
+  })
+
+  it('adding what it found still meets the add route’s own checks', async () => {
+    // The preview is a readout, never a permission. The add re-runs every
+    // check server-side, so a client that posts the found addresses straight
+    // to the add route gets the same refusals.
+    mockScan = {
+      candidates: [
+        { silo: 'contacts', email: OPTED_IN },
+        { silo: 'contacts', email: REFUSED },
+      ],
+      complete: true,
+    }
+    const found = await findPeople()
+    const out = await add({ emails: found.body.emails, attestConsent: true })
+    expect(out.code).toBe(200)
+    expect(out.body.added).toBe(1)
+    expect(memberFor(OPTED_IN)).toBeTruthy()
+    expect(memberFor(REFUSED)).toBeUndefined()
+  })
+
+  it('caps the batch and still reports the WHOLE match', async () => {
+    /*
+     * The number a merchant is told and the number the button acts on are
+     * different things, and conflating them is how "add everyone who matches"
+     * silently adds a hundred of four hundred. `matched` is the audience;
+     * `emails` is one batch of it; `truncated` says so.
+     */
+    const many = Array.from(
+      { length: LIST_MEMBER_BATCH_MAX + 25 },
+      (_unused, index) => ({
+        silo: 'leads',
+        email: `p${String(index).padStart(3, '0')}@lumen.co`,
+      }),
+    )
+    mockScan = { candidates: many, complete: true }
+    const out = await findPeople()
+    expect(out.body.matched).toBe(LIST_MEMBER_BATCH_MAX + 25)
+    expect(out.body.emails).toHaveLength(LIST_MEMBER_BATCH_MAX)
+    expect(out.body.truncated).toBe(true)
+  })
+
+  it('says when the SCAN itself was cut short', async () => {
+    // A different shortfall from a truncated batch, and reported separately:
+    // here `matched` is a floor rather than a total, because the scan stopped
+    // at its read budget.
+    mockScan = {
+      candidates: [{ silo: 'leads', email: UNKNOWN }],
+      complete: false,
+    }
+    const out = await findPeople()
+    expect(out.body.complete).toBe(false)
+    expect(out.body.truncated).toBe(false)
+  })
+
+  it('a rule with no source is EMPTY, not a search that found nobody', async () => {
+    // The two look identical in a count and are not the same fact — one is a
+    // rule that cannot select anybody, the other is one that ran and matched
+    // none.
+    const out = await findPeople({ rule: { sources: [] } })
+    expect(out.body.empty).toBe(true)
+    expect(out.body.matched).toBe(0)
+    // And it does not pay for a scan to find that out.
+    expect(mockScanCalls).toEqual([])
+  })
+
+  it('is behind the same two gates as the add', async () => {
+    // A single-site collaborator may not read the consent record of everybody
+    // a rule selects, any more than they may enroll them.
+    membership = { orgId: ORG_ID, member: { role: 'editor', allHosts: false } }
+    mockScan = {
+      candidates: [{ silo: 'contacts', email: OPTED_IN }],
+      complete: true,
+    }
+    const out = await findPeople()
+    expect(out.code).toBe(403)
+    expect(mockScanCalls).toEqual([])
+  })
+
+  it('refuses an unauthenticated caller', async () => {
+    const out = await findPeople({}, {})
+    expect(out.code).toBe(401)
   })
 })

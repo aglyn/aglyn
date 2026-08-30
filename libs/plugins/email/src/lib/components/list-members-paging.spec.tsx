@@ -307,35 +307,3 @@ describe('removing somebody is not suppressing them', () => {
     await waitFor(() => expect(deleteDoc).toHaveBeenCalled())
   })
 })
-
-describe('renaming the list', () => {
-  it('writes the new name to the list document', async () => {
-    const { updateDoc } = require('firebase/firestore')
-    updateDoc.mockClear()
-    await mountPanel()
-    const field = screen.getByLabelText('List name') as HTMLInputElement
-    fireEvent.change(field, { target: { value: 'Weekly digest' } })
-    fireEvent.click(screen.getByText('Rename'))
-    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
-    expect(updateDoc.mock.calls[0][0].path).toBe('orgs/org-1/lists/list-1')
-    expect(updateDoc.mock.calls[0][1]).toEqual({ name: 'Weekly digest' })
-  })
-
-  /*
-   * An empty name is not a rename. The card's list table orders on `name`, and
-   * `orderBy` drops a document that does not carry the field — so a list
-   * renamed to nothing would vanish from the very page it was renamed on.
-   */
-  it('refuses to blank the name', async () => {
-    const { updateDoc } = require('firebase/firestore')
-    updateDoc.mockClear()
-    await mountPanel()
-    const field = screen.getByLabelText('List name') as HTMLInputElement
-    fireEvent.change(field, { target: { value: '   ' } })
-    fireEvent.blur(field)
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    expect(updateDoc).not.toHaveBeenCalled()
-  })
-})
