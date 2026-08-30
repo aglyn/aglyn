@@ -744,7 +744,25 @@ async function handler(request: Request): Promise<Response> {
         !reviewUid &&
         (targetSnapshot.get('artifactType') === 'plugin' ||
           targetSnapshot.get('type') === 'plugin')
-      if (isPlugin) {
+      /**
+       * An email starter earns the same treatment for the same reason.
+       *
+       * It is copied on install, so `hiddenAt` alone reaches only the
+       * storefront: every tenant who already installed it goes on MAILING it,
+       * from the sending domain every other tenant shares. The revocation is
+       * what `emailStarterSendBlock` reads at the send, which is the only
+       * chokepoint that can still refuse.
+       *
+       * The five other copied types are deliberately not here. Their content
+       * is rendered on the tenant's own site, where `hiddenAt` blocking the
+       * next install is the whole of what a takedown can honestly promise —
+       * stopping a page from rendering is a different decision, and one nobody
+       * has made.
+       */
+      const killsInstalledCopies =
+        isPlugin ||
+        (!reviewUid && targetSnapshot.get('artifactType') === 'emailStarter')
+      if (killsInstalledCopies) {
         const revocationRef = firestore.collection('revocations').doc(listingId)
         const current = (await revocationRef.get()).data() as
           | PluginRevocation
@@ -778,7 +796,11 @@ async function handler(request: Request): Promise<Response> {
         // time, so without this the bundle we just killed keeps executing on
         // every cached page until it happens to re-render. Best effort: the
         // tenant refuses a revoked plugin at render time regardless.
-        await revalidateHostsWithPlugin(firestore, listingId)
+        //
+        // Plugin-only: it walks the plugin INSTALL PINS, which an email
+        // starter has none of, and an email is never part of a cached page —
+        // its kill is felt at the send, where nothing is cached.
+        if (isPlugin) await revalidateHostsWithPlugin(firestore, listingId)
         // The offer follows the kill switch here too (AGL-2368). AGL-2306
         // taught the per-version revoke and the reject path to repair the
         // mirror and left this one out, so a takedown flattened `versions` to
@@ -794,10 +816,17 @@ async function handler(request: Request): Promise<Response> {
         // true when `reviewUid` is empty, so they are the same document — but
         // that is a fact two conditions apart, and a repair pointed at a
         // review subdocument would write a `latestApprovedVersion` onto it.
-        await repairLatestApprovedVersion(
-          firestore.collection('marketplaceListings').doc(listingId),
-          next,
-        )
+        //
+        // Plugin-only, unlike the revocation write above: the mirror is
+        // recomputed from `pluginVersions`, a collection no other artifact
+        // type has, so running it for an email starter would derive "nothing
+        // approved" from an empty read and write that over the listing.
+        if (isPlugin) {
+          await repairLatestApprovedVersion(
+            firestore.collection('marketplaceListings').doc(listingId),
+            next,
+          )
+        }
       }
 
       await firestore.collection('adminAudit').add({
@@ -816,7 +845,7 @@ async function handler(request: Request): Promise<Response> {
         after: {
           hidden: action === 'hide',
           ...(hideReason ? { reason: hideReason } : {}),
-          ...(isPlugin ? { revoked: action === 'hide' } : {}),
+          ...(killsInstalledCopies ? { revoked: action === 'hide' } : {}),
           // Recorded because it is a side effect of the takedown rather than
           // something the reviewer asked for, and because getting it back is a
           // re-review rather than an undo.
@@ -829,7 +858,7 @@ async function handler(request: Request): Promise<Response> {
         {
           ok: true,
           hidden: action === 'hide',
-          revoked: isPlugin && action === 'hide',
+          revoked: killsInstalledCopies && action === 'hide',
           // The caller shows this — a badge silently disappearing would be
           // worse than one that never existed.
           unverified: stripVerified,

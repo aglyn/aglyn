@@ -555,6 +555,14 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             const componentInstall = installed[listing.$id]
             // datasetSchema/emailTemplate installs are tracked by the source
             // listing stamped on what they created (AGL-789).
+            //
+            // `emailStarter` is deliberately absent. Every other type has ONE
+            // install per site to point at — a pin, a dataset, a draft on a
+            // fixed catalog key, the site's theme — so "Installed" names
+            // something. A starter installs as a NEW email each time, and a
+            // site may keep five of them; there is no single copy for a chip
+            // to describe, and marking the listing installed would grey out
+            // the button that makes the sixth.
             const artifactInstall =
               artifactType === 'datasetSchema' ||
               artifactType === 'emailTemplate' ||

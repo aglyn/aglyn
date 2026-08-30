@@ -24,9 +24,11 @@ import {
   type MarketingConsentRecord,
   createResourceUid,
   decodeStoredNodes,
+  emailStarterSendBlock,
   resolveBrandingProfile,
   visibleToHost,
 } from '@aglyn/aglyn/server'
+import type { PluginRevocation } from '@aglyn/aglyn/server'
 import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@aglyn/plugins-email/model'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
@@ -303,6 +305,40 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
     {}) as Record<string, any>
   if (!Object.keys(nodes).length) {
     throw new CampaignSendError('The email template is empty', 400)
+  }
+  /**
+   * The marketplace kill switch, reaching an email somebody already installed
+   * (AGL-657's copy-on-install is what makes this necessary).
+   *
+   * An installed starter is a copy in this site's own screens, so every other
+   * marketplace lever — unpublish, takedown, a rejected version — stops at the
+   * storefront and is felt by nobody who already has the design. The kill is
+   * the one that has to reach a tenant who installed last week and is sending
+   * today, and this is the only chokepoint every campaign passes through.
+   *
+   * It refuses the SEND and leaves the document alone. The tenant keeps the
+   * design, keeps editing it, keeps previewing it; what they cannot do is put
+   * it on the sending domain every other tenant shares. Reaching into somebody
+   * else's content to enforce a decision about a third party's artifact would
+   * take the wrong thing away.
+   *
+   * Read off the VERSION first, then the screen: the version is the document
+   * these bytes came out of, and a screen whose design was later replaced
+   * wholesale should be judged on what it is now. Costs one document read on a
+   * design that carries no marketplace provenance at all, which is every email
+   * a site wrote itself — the `listingId` guard inside `emailStarterSendBlock`
+   * is what keeps that read from happening.
+   */
+  const installedFrom = (versionSnapshot?.get('installedFrom') ??
+    screenSnapshot.get('installedFrom')) as
+    | { listingId?: string | null; version?: string | null }
+    | undefined
+  if (installedFrom?.listingId) {
+    const revocation = (
+      await firestore.collection('revocations').doc(installedFrom.listingId).get()
+    ).data() as PluginRevocation | undefined
+    const block = emailStarterSendBlock({ installedFrom, revocation })
+    if (block) throw new CampaignSendError(block.reason, 409)
   }
   // Resolve emailProduct references (by id — rename-safe, AGL-343).
   const productIds = [

@@ -860,3 +860,105 @@ describe('a campaign on a verified sending domain', () => {
     expect(preview.identity).not.toContain('acme.com')
   })
 })
+
+/**
+ * The marketplace kill switch, reaching an email a site already installed.
+ *
+ * An installed email starter is a COPY in the site's own screens, so
+ * unpublishing the listing, taking it down and rejecting a version all stop at
+ * the storefront: none of them is felt by a tenant who installed last week and
+ * is sending today. The send is the only chokepoint left, which is why the
+ * check lives beside the load rather than beside the install.
+ *
+ * The refusal is of the SEND. The screen and its version stay exactly where
+ * they were — reaching into a customer's own documents to enforce a decision
+ * about somebody else's artifact would take the wrong thing away.
+ */
+describe('a killed marketplace email stops sending', () => {
+  /** Stamps marketplace provenance onto a seeded design, as the install does. */
+  const installedFrom = (version: string | null) => ({
+    listingId: 'listing-1',
+    version,
+    sha256: 'sha-of-content',
+    artifactType: 'emailStarter',
+    publisherOrgId: 'seller-org',
+    assurance: 'unreviewed',
+  })
+
+  const seedInstalled = (version: string | null = '3') => {
+    seed(pooledBuffer())
+    ;(
+      mockState.store['hosts/host-1/screens/screen-1/versions/v1'] as Record<
+        string,
+        unknown
+      >
+    )['installedFrom'] = installedFrom(version)
+  }
+
+  const kill = (versions: string[] | 'all', reason?: string) => {
+    mockState.store['revocations/listing-1'] = {
+      versions,
+      ...(reason ? { reason } : {}),
+    }
+  }
+
+  it('refuses the send and names why', async () => {
+    seedInstalled()
+    kill(['3'], 'Hidden tracking image')
+
+    await expect(send()).rejects.toThrow(/Hidden tracking image/)
+    expect(mockState.sent).toHaveLength(0)
+    expect(mockState.metered).toHaveLength(0)
+  })
+
+  it('leaves the design in place — the send is what is refused', async () => {
+    seedInstalled()
+    kill('all')
+
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendError)
+    // Both documents still there, untouched, still openable in the besigner.
+    expect(mockState.store['hosts/host-1/screens/screen-1']).toBeDefined()
+    expect(
+      mockState.store['hosts/host-1/screens/screen-1/versions/v1'],
+    ).toBeDefined()
+  })
+
+  it('reaches an install whose provenance is on the SCREEN rather than the version', async () => {
+    seed(pooledBuffer())
+    ;(mockState.store['hosts/host-1/screens/screen-1'] as Record<string, unknown>)[
+      'installedFrom'
+    ] = installedFrom('3')
+    kill(['3'])
+
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendError)
+  })
+
+  it('catches a version-less legacy install with a listing-wide kill', async () => {
+    seedInstalled(null)
+    kill('all')
+
+    await expect(send()).rejects.toBeInstanceOf(CampaignSendError)
+  })
+
+  it('does not stop a DIFFERENT version of the same listing', async () => {
+    seedInstalled('3')
+    kill(['1'])
+
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+
+  it('does not stop an email the site designed itself', async () => {
+    // No provenance at all, and the whole listing killed. Nothing to match on,
+    // so the kill is not this email's business.
+    seed(pooledBuffer())
+    kill('all')
+
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+
+  it('sends normally when nothing is revoked', async () => {
+    seedInstalled()
+
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+  })
+})
