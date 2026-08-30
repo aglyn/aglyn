@@ -1431,6 +1431,15 @@ describe('hosts', () => {
       // list would shorten the parse and leave the suite green having tested
       // one collection fewer.
       'campaigns',
+      // One document per ORDER, recording which campaign the sale was
+      // credited to and how much of it has since come back. Written only by
+      // `email-revenue-attribution.ts` on the Admin SDK, and every operation
+      // is load-bearing: the CREATE is what makes crediting an order
+      // idempotent, so a client that could `set` one would credit a campaign
+      // twice for one sale, and one that could DELETE one would leave a
+      // refund with nothing to reverse — a revenue figure that can only ever
+      // go up. Named here for the `registers` reason above.
+      'emailAttributions',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),

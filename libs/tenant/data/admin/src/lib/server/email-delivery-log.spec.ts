@@ -27,8 +27,11 @@ import {
   readPersonEngagement,
   readPersonEngagementByKeys,
   recordEmailDeliveryEvent,
+  recordEmailCampaignTouch,
   recordEmailDeliverySnapshot,
   recordPersonEngagement,
+  readEmailCampaignTouch,
+  EMAIL_TOUCH_FIELD,
 } from './email-delivery-log'
 import { emailSuppressionKey } from './email-suppression'
 
@@ -1119,6 +1122,38 @@ describe('erasure removes the summary, not only the messages it came from', () =
     expect(
       await readPersonEngagement('person@example.com', firestore),
     ).toMatchObject({ lastEngagedAtMs: null })
+  })
+
+  it('clears the campaign touches revenue attribution is taken over', async () => {
+    const firestore = fakeDeliveryFirestore()
+    await recordEmailCampaignTouch(
+      {
+        email: 'person@example.com',
+        hostId: 'host1',
+        campaignId: 'spring',
+        atMs: 5_000,
+      },
+      firestore,
+    )
+    expect(firestore.readPerson('person@example.com')).toHaveProperty(
+      EMAIL_TOUCH_FIELD,
+    )
+
+    await eraseEmailDeliveriesForAddresses(
+      [{ address: 'person@example.com' }],
+      firestore,
+    )
+
+    // The strongest personal fact on the document — it names the person AND
+    // what they were reading — so it goes with the stamps beside it. Nothing
+    // may go on attributing their future orders to mail they asked us to
+    // forget.
+    expect(firestore.readPerson('person@example.com')).not.toHaveProperty(
+      EMAIL_TOUCH_FIELD,
+    )
+    expect(
+      await readEmailCampaignTouch('person@example.com', 'host1', firestore),
+    ).toBeNull()
   })
 
   it('leaves a contested address’s engagement exactly where it was', async () => {

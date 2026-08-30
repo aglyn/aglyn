@@ -38,6 +38,10 @@ import {
 } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
 import { recordContactRefund } from './contact-refund'
+// Leaf import, not the barrel, for the reason `contact-refund.ts` records: the
+// specs in this library mock `@aglyn/tenant-data-admin` wholesale, and a
+// permissive stub would turn a reversal that never happened green.
+import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
@@ -4664,6 +4668,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               orderId: snapshot.id,
               kind: 'chargeback',
               closedTheOrder: settled.closedTheOrder,
+            })
+            // The campaign's side, through the same door an admin-initiated
+            // refund writes. Money reversed is money reversed whichever way it
+            // left, so a campaign credited with this order stops being paid
+            // for it — and the reversal is recorded beside the credit rather
+            // than subtracted from it, exactly as the contact ledger above
+            // records `refundedCents` beside `ltvCents`.
+            await reverseEmailAttributedRevenue({
+              hostId,
+              orderId: snapshot.id,
+              amountCents: settled.reversedCents,
+              closedTheOrder: settled.closedTheOrder,
+              kind: 'chargeback',
             })
           }
         }

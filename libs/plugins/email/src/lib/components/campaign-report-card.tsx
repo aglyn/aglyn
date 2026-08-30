@@ -39,14 +39,28 @@ import {
   type CampaignLinkRollup,
   type CampaignStats,
 } from '../model/campaign-report'
+import {
+  campaignRevenueReport,
+  type CampaignRevenueRollup,
+} from '../model/campaign-revenue'
 /*
  * The three renderers every email report shares. Imported rather than kept
  * here, so "a rate prints its denominator" is one implementation and not a
  * convention each new card has to remember.
  */
-import { Figure, percent, RateRow, Section } from './report-figures'
+import {
+  Figure,
+  MoneyFigure,
+  MoneyPerMessageRow,
+  percent,
+  RateRow,
+  Section,
+} from './report-figures'
 import { emailSendTimeMs } from '../model/email-record'
-import { campaignSendDisplay } from '../model/campaign-container'
+import {
+  campaignSendDisplay,
+  campaignSendProgress,
+} from '../model/campaign-container'
 
 /**
  * The help affordance, hoisted so BOTH headers carry it.
@@ -58,8 +72,9 @@ import { campaignSendDisplay } from '../model/campaign-container'
 const reportDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#the-campaign-report',
   excerpt:
-    'What one campaign did: delivery, opens, clicks, bounces, complaints ' +
-    'and unsubscribes, each with the population it is measured against.',
+    'What one campaign did: delivery, opens, clicks, bounces, complaints, ' +
+    'unsubscribes and the revenue it was credited with, each with the ' +
+    'population it is measured against.',
 })
 
 export interface CampaignReportCardProps {
@@ -101,19 +116,22 @@ export interface CampaignReportCardProps {
  * through this component that prints a percentage without saying what it is a
  * percentage of.
  *
- * ## Two documents, whatever the campaign's size
+ * ## Three documents, whatever the campaign's size
  *
- * The whole screen is one campaign document plus one link-rollup document.
- * Both are single-document listens, so the cost does not move with the
- * audience — a report over a 50,000-recipient send reads the same two
- * documents as one over ten. Aggregating the per-recipient delivery log on
- * mount would have been the obvious implementation and would have read one
- * document per recipient, every time anybody opened the page.
+ * The whole screen is one campaign document plus one link-rollup document
+ * plus one revenue-rollup document. All three are single-document listens, so
+ * the cost does not move with the audience — a report over a 50,000-recipient
+ * send reads the same three documents as one over ten. Aggregating the
+ * per-recipient delivery log on mount would have been the obvious
+ * implementation and would have read one document per recipient, every time
+ * anybody opened the page; joining orders to campaigns at read time would
+ * have been the same mistake one collection along, which is why the join is
+ * done once at the sale and stored.
  *
  * ## No per-recipient view here, deliberately
  *
  * Every number on this screen is an aggregate that carries no address, and
- * that is what makes it two single-document reads. A per-recipient list is a
+ * that is what makes it three single-document reads. A per-recipient list is a
  * different read and a different question, so it lives where it is asked:
  * the design report's recipients table, which resolves the campaigns from the
  * design on a server that has already checked the reader's site role, and
@@ -147,9 +165,47 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
     () => doc(firestore, 'hosts', hostId, 'campaigns', campaignId, 'reports', 'links'),
     [firestore, hostId, campaignId],
   )
+  /*
+   * The revenue rollup, a third single-document listen.
+   *
+   * Its own document beside the link rollup rather than a field on the
+   * campaign, for the reason the link rollup is: the campaign document is
+   * read by the history list, the glance widget and the send path, and a map
+   * that grows with the campaign's sales would enlarge every one of those
+   * reads. The cost model in this file's header is unchanged in the way that
+   * matters — the page still reads a fixed number of documents whatever the
+   * audience, and no per-order or per-recipient read exists anywhere on it.
+   */
+  const { data: revenue } = useFirestoreDoc<CampaignRevenueRollup>(
+    () =>
+      doc(
+        firestore,
+        'hosts',
+        hostId,
+        'campaigns',
+        campaignId,
+        'reports',
+        'revenue',
+      ),
+    [firestore, hostId, campaignId],
+  )
 
   const report = campaignReport(campaign?.stats)
   const linkReport = campaignLinkReport(links)
+  const revenueReport = campaignRevenueReport({
+    rollup: revenue,
+    /*
+     * The DENOMINATOR, handed over from the same document read at the same
+     * instant rather than re-read here. `report.delivered` is `null` when no
+     * delivery event was ever recorded, and it is passed as `null` so the
+     * revenue figures over it are withheld for exactly the reason every other
+     * rate over it is.
+     */
+    delivered: report.delivered,
+    midFlight: campaign
+      ? campaignSendProgress(campaign as never).state === 'sending'
+      : false,
+  })
   const subject = String(campaign?.subject ?? 'Campaign')
   const sendTimeMs = campaign ? emailSendTimeMs(campaign) : 0
 
@@ -367,6 +423,125 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
               rate={report.rates.unsubscribe}
             />
           </Stack>
+        </Section>
+
+        <Divider />
+
+        {/*==========================================
+          * WHAT THIS CAMPAIGN EARNED.
+          *
+          * The merchant's second question, and the one every compared
+          * product answers by reconstructing revenue probabilistically
+          * because it does not own the order. Here it is a join: the click
+          * and the order are rows in one database, so there is no tracking
+          * script, no catalog sync and nothing estimated except the model.
+          *
+          * THE MODEL IS ON SCREEN, in a sentence, above the money. A revenue
+          * figure whose rule the reader cannot state is worse than no
+          * figure, because they will use it anyway — and the two things they
+          * have to know to use it are which campaign gets the credit when
+          * several touched the buyer, and how long a click stays creditable.
+          *
+          * NET LEADS. Gross and refunded are both shown beside it, because
+          * "this campaign made $4,000" and "this campaign made $4,000 of
+          * which $3,100 came back" are different facts about whether to send
+          * another one.
+          *=========================================*/}
+        <Section title="Revenue">
+          {revenueReport.caveats.map((caveat) => (
+            <Alert key={caveat.id} severity="info">
+              {caveat.message}
+            </Alert>
+          ))}
+          {revenueReport.currencies.length ? (
+            <Stack spacing={3}>
+              {revenueReport.currencies.map((entry) => (
+                <Stack key={entry.currency} spacing={1}>
+                  {/*
+                   * The currency is a HEADING when there is more than one,
+                   * and absent when there is one. A per-currency label on a
+                   * report that only ever shows dollars is noise; the moment
+                   * there are two, the reader has to be able to see at a
+                   * glance that the blocks are not addable — which is also
+                   * what the caveat above says in words.
+                   */}
+                  {revenueReport.multiCurrency ? (
+                    <Typography variant="subtitle2">
+                      {entry.currency.toUpperCase()}
+                    </Typography>
+                  ) : null}
+                  <Stack
+                    direction="row"
+                    spacing={4}
+                    useFlexGap
+                    sx={{ flexWrap: 'wrap' }}
+                  >
+                    <MoneyFigure
+                      label="Net revenue"
+                      cents={entry.netCents}
+                      currency={entry.currency}
+                      note="after refunds"
+                    />
+                    <MoneyFigure
+                      label="Gross revenue"
+                      cents={entry.grossCents}
+                      currency={entry.currency}
+                      note="as charged"
+                    />
+                    <MoneyFigure
+                      label="Refunded"
+                      cents={entry.refundedCents}
+                      currency={entry.currency}
+                      note="handed back"
+                    />
+                    <Figure
+                      label="Orders"
+                      value={entry.orders}
+                      note="credited to this campaign"
+                    />
+                    <Figure
+                      label="Fully refunded"
+                      value={entry.refundedOrders}
+                      note="of those orders"
+                    />
+                  </Stack>
+                  <MoneyPerMessageRow
+                    label="Net revenue per delivered message"
+                    figure={entry.netPerDelivered}
+                  />
+                </Stack>
+              ))}
+              {/*
+               * NO CONVERSION RATE, and this is where a reader would look
+               * for one. Orders over delivered is not a rate: one buyer can
+               * place two orders, so the quotient passes 100% without
+               * anything being wrong — the same defect that keeps `opens`
+               * out of the open-rate numerator two sections above. Counting
+               * distinct buyers instead would need a document per person per
+               * campaign, which is the per-recipient read this screen's cost
+               * model exists to refuse. The order count is shown as a count.
+               */}
+              <Typography variant="caption" color="text.secondary">
+                {`Credited ${revenueReport.model === 'last-click' ? 'to the last campaign whose link the buyer clicked' : `under the ${revenueReport.model} model`}, ` +
+                  `within ${revenueReport.windowDays} days of that click. ` +
+                  'Clicks only — an open is not treated as evidence that ' +
+                  'anybody read the email. An order placed by somebody who ' +
+                  'never clicked, or who checked out without giving an ' +
+                  'address, is credited to no campaign, so this is a floor ' +
+                  'rather than every sale this campaign influenced.'}
+              </Typography>
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {revenueReport.recorded
+                ? 'No orders have been credited to this campaign.'
+                : 'No revenue has been attributed to this campaign. Orders ' +
+                  'are credited to the last campaign whose link the buyer ' +
+                  `clicked, within ${revenueReport.windowDays} days — a ` +
+                  'campaign sent before that was recorded, or one on a site ' +
+                  'with no store, will never show a figure here.'}
+            </Typography>
+          )}
         </Section>
 
         {report.populations.length ? (

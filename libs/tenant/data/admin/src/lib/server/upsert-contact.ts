@@ -25,6 +25,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
+import { attributeOrderToEmail } from './email-revenue-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   getOrgForHost,
@@ -85,10 +86,57 @@ export async function upsertHostContact(options: {
    * anything.
    */
   purchaseCents?: number
+  /**
+   * The currency {@link purchaseCents} is in, lowercase, when the door knows.
+   *
+   * Absent everywhere today, because no order document carries a currency and
+   * every checkout door writes `currency: 'usd'` onto the Stripe line items.
+   * `attributeOrderToEmail` defaults it on that basis and says so. The field
+   * exists so a door that ever charges in something else can pass it, and the
+   * campaign revenue report keeps it in its own bucket rather than adding it
+   * to the dollars.
+   */
+  purchaseCurrency?: string
 }): Promise<void> {
   try {
     const email = normalizeContactEmail(options.email)
     if (!email) return
+
+    /*==========================================
+     * THE PURCHASE DOOR, AND THEREFORE THE ATTRIBUTION DOOR.
+     *
+     * Every way of buying something in this product — the cart, buy-now, the
+     * POS register, a draft order, a reservation, a subscription renewal, a
+     * booking — announces itself here, in exactly one shape: source `order`,
+     * a `purchaseCents` amount, and a `refId` naming what was bought. That
+     * shape IS the purchase chokepoint, which is why the revenue join hangs
+     * off it rather than off seven call sites in a webhook.
+     *
+     * ABOVE the audience-band gate below, and deliberately. Contact creation
+     * is band gated, so a Free org past its included count drops the CRM
+     * record — and an attribution written inside that branch would drop the
+     * revenue with it. The join keys on the address hash, exactly as the
+     * touch and the suppression list do, so it never needs a contact document
+     * to exist: a guest checkout by somebody who is not and never becomes a
+     * contact still credits the campaign whose link they clicked.
+     *
+     * Its own `catch`, inside a function that already swallows: this is the
+     * least important write on the path, and a failure here must not cost the
+     * contact capture below it.
+     *=========================================*/
+    if (options.source === 'order' && options.interaction.refId) {
+      await attributeOrderToEmail({
+        hostId: options.hostId,
+        orderId: String(options.interaction.refId),
+        email,
+        amountCents: Number(options.purchaseCents ?? 0),
+        ...(options.purchaseCurrency
+          ? { currency: options.purchaseCurrency }
+          : {}),
+        orderedAtMs: options.interaction.atMs ?? Date.now(),
+      }).catch(() => null)
+    }
+
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(options.hostId)
     // Contacts are org-scoped (AGL-237): every host in the org feeds one

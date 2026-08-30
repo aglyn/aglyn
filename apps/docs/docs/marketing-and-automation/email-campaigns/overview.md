@@ -361,6 +361,37 @@ The report breaks clicks down by destination. Links are counted by address and
 path — the query string is dropped — so two links to the same page that differ
 only in their tracking parameters count as one row.
 
+### Revenue from a campaign {#revenue-from-a-campaign}
+
+If your site sells something, the report also shows what the campaign earned.
+
+Because your store and your email live in the same product, this is a lookup
+rather than an estimate — there is no tracking script to install, no store to
+connect, and nothing is guessed from a cookie.
+
+**The rule, in one sentence:** an order is credited to the last campaign whose
+link the buyer clicked, if they clicked it within **7 days** before ordering.
+
+Four things follow from that rule, and the report says all four on screen:
+
+- **Clicks only.** An open is not treated as evidence that anybody read the
+  email — Apple's Mail Privacy Protection opens mail on the recipient's behalf,
+  so a large share of recorded opens have no person behind them.
+- **One campaign gets the whole order.** If two campaigns reached the buyer, the
+  more recent click takes the credit. Nothing is split between them.
+- **Refunds come back off.** The report shows gross, refunded and net, and leads
+  with net. A chargeback is treated the same way as a refund.
+- **It is a floor, not a total.** An order from somebody who never clicked, or
+  who checked out without giving an email address, is credited to no campaign at
+  all. Campaigns sent before your store existed will show nothing here.
+
+**Net revenue per delivered message** is the figure to compare between
+campaigns, and like every rate above it names what it is divided by. A campaign
+with no recorded delivery count shows amounts but no per-message figure.
+
+If a campaign earned in more than one currency, each is reported on its own.
+Nothing converts between currencies, so there is deliberately no combined total.
+
 ## Compliance
 
 - Every send includes an **unsubscribe** link, and the header mailbox

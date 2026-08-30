@@ -35,6 +35,7 @@ import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression
 // record staff have of what we sent someone, and a mocked-away writer is a
 // green test over an empty log.
 import {
+  recordEmailCampaignTouch,
   recordEmailDeliveryEvents,
   recordPersonEngagement,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
@@ -642,6 +643,41 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
           campaignRef: hostRef.collection('campaigns').doc(campaignId),
           link: campaignLinkKey(data?.click?.link),
         }).catch(() => undefined)
+
+        /*==========================================
+         * THE TOUCH REVENUE ATTRIBUTION IS TAKEN OVER.
+         *
+         * "Which campaign brought this buyer here" cannot be answered from
+         * anything above: the delivery log holds a row per message, and
+         * finding a person's most recent click would mean reading every one
+         * of them. So the click writes the answer down — one field on the
+         * person's own document, per site — and an order reads it with a
+         * single keyed lookup.
+         *
+         * ONLY a click. An open would be the weaker evidence and, since Mail
+         * Privacy Protection, frequently not a human at all; crediting money
+         * to one would hand a campaign the orders of people who never read
+         * it. `email-revenue-attribution.ts` records the full reasoning.
+         *
+         * The instant is the PROVIDER'S, taken from the outcome the delivery
+         * log already wrote, so a delayed webhook credits the click at the
+         * time it happened rather than at the time we heard about it — which
+         * is the difference between inside and outside the window for a click
+         * near its edge. `Date.now()` is the fallback for a click whose log
+         * write failed, and it is the later of the two, so it can only narrow
+         * the window rather than widen it.
+         *
+         * Best-effort, like the link rollup above it and for the same reason:
+         * a touch that failed to write costs one order's attribution, and it
+         * must not cost the click count the whole report leans on.
+         *=========================================*/
+        await recordEmailCampaignTouch({
+          email: recipient,
+          hostId,
+          campaignId,
+          atMs:
+            outcomes.find((one) => one.type === 'clicked')?.at ?? Date.now(),
+        }).catch(() => false)
       }
 
     // Experiment conversion (AGL-268): clicks are the signal.

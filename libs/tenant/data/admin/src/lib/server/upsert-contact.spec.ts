@@ -27,6 +27,15 @@
 
 import { upsertHostContact } from './upsert-contact'
 
+// The revenue join is a different question, proved in
+// `upsert-contact-attribution.spec.ts`. Stubbed here so this file's fake
+// firestore — which models the contacts collection and nothing else — is not
+// asked for a person document it has no notion of.
+jest.mock('./email-revenue-attribution', () => ({
+  __esModule: true,
+  attributeOrderToEmail: async () => null,
+}))
+
 // Faithful increment semantics: the fake applies `{ __inc }` the way the
 // Admin SDK applies `FieldValue.increment` — add to the stored number, or
 // start from the operand when the field is absent. An unfaithful fake here

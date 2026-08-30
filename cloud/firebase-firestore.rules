@@ -2299,7 +2299,7 @@ service cloud.firestore {
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
-              'flowEnrollments']));
+              'emailAttributions', 'flowEnrollments']));
         // `campaigns` joins all THREE lists. Each document is one email SEND,
         // and every field on it is written server-side: `campaign-send.ts`
         // stamps the audience, the consent and suppression populations and the
@@ -2311,9 +2311,23 @@ service cloud.firestore {
         // was allowed to reach, which is the compliance evidence for that send
         // rather than a vanity metric.
         //
-        // `{document=**}` spans the nested `reports/links` click rollup, so
-        // the exclusion covers the per-link breakdown the report screen
-        // renders beside those counters. It is written by the same webhook.
+        // `{document=**}` spans the nested `reports` documents, so the
+        // exclusion covers the per-link click breakdown the report screen
+        // renders beside those counters — written by the same webhook — and
+        // the `reports/revenue` rollup, which is the money a campaign was
+        // credited with. An editor who could write that one would be
+        // authoring their own sales figures.
+        //
+        // `emailAttributions` joins all THREE lists. One document per order,
+        // recording which campaign the sale was credited to and how much of
+        // it has since come back. It is written only by
+        // `email-revenue-attribution.ts` on the Admin SDK, and every field on
+        // it is evidence: the create is what makes crediting an order
+        // idempotent, so a client that could `set` one would credit a campaign
+        // twice, and one that could DELETE one would leave a refund with
+        // nothing to reverse — revenue that can only ever go up. READ is
+        // untouched; the record carries a campaign, an amount and a currency,
+        // and no address.
         //
         // NOT `emailCampaigns`, which is the campaign CONTAINER — a name, a
         // date window and the lists it is aimed at — created client-side from
@@ -2477,7 +2491,7 @@ service cloud.firestore {
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
-              'flowEnrollments']));
+              'emailAttributions', 'flowEnrollments']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -2524,7 +2538,7 @@ service cloud.firestore {
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
-              'flowEnrollments']));
+              'emailAttributions', 'flowEnrollments']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
