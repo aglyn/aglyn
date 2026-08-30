@@ -110,7 +110,7 @@ export function hostNavTabItems(
     // (AGL-395).
     // Marketing (nav + page) now comes from the marketing plugin's
     // ConsoleExtension, served by the generic route (AGL-395).
-    // Logic, Workflows (nav + page) now come from their plugins'
+    // Logic, Automation (nav + page) now come from their plugins'
     // ConsoleExtensions, served by the generic route (AGL-395).
     // Marketplace (nav + hub page) now comes from the marketplace plugin's
     // ConsoleExtension, served by the generic route (AGL-395); the listing

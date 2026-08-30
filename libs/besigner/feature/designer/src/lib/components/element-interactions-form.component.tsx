@@ -131,7 +131,7 @@ export const ElementInteractionsForm = observer(
                 </Typography>
               ) : null}
               {/* Fluent builder (AGL-319): edit reopens the
-                  inline dialog — no Workflows detour. */}
+                  inline dialog — no Automation detour. */}
               {interactions.onEditInteraction && node?.$id ? (
                 <IconButton
                   size="small"

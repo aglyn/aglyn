@@ -21,7 +21,7 @@ import { lazy } from 'react'
 import { HostActivityCard } from './components/host-activity-card.component'
 import { BUNDLE_ID } from './constants/bundle-common'
 
-/** Code-split: the Workflows console page only loads when opened. */
+/** Code-split: the Automation console page only loads when opened. */
 const WorkflowsConsolePage = lazy(
   () => import('./components/workflows-console-page'),
 )
@@ -30,10 +30,15 @@ const WorkflowsConsolePage = lazy(
  * Workflows feature plugin (AGL-395). Console-only — workflows, actions,
  * and webhooks run server-side (event pipelines, `/api/hooks`), not through
  * a canvas element, so there is no UI bundle. The console half declares the
- * Workflows nav + page through the ConsoleExtension registry, gated by the
+ * Automation nav + page through the ConsoleExtension registry, gated by the
  * `workflows` entitlement (the Actions/Webhooks tabs run their own per-plan
  * checks off the passed `org`). Depends on `@aglyn/plugins-logic` for the
  * shared where-used tooling.
+ *
+ * `pluginId`, `featureFlag` and `navTabId` all still read `workflows`: they
+ * are stored — an org's enabled-plugin ids, the plan's entitlement flags, the
+ * Remote Config release flag — and a section's name is not a reason to orphan
+ * them. Only what a reader sees carries the new name.
  */
 export function registerWorkflowsConsole(): void {
   Aglyn.registerConsoleExtension({
@@ -47,18 +52,22 @@ export function registerWorkflowsConsole(): void {
       },
     ],
     pluginId: BUNDLE_ID,
-    displayName: 'Workflows',
+    displayName: 'Automation',
     featureFlag: 'workflows',
     navItems: [
       {
-        label: 'Workflows',
-        href: '/workflows',
+        label: 'Automation',
+        // Workflows, Actions and Webhooks are the tabs INSIDE this section, so
+        // the section is named for what they have in common. `/workflows` —
+        // the address before the section had its own name — is redirected here
+        // by the console (see `Route.HOST_WORKFLOWS`).
+        href: '/automation',
         // Reuse the existing release-flag nav-tab so staff-preview gating is
         // unchanged now that the tab comes from the plugin (AGL-395).
         navTabId: 'nav-tab-workflows',
         icon: { path: mdiSitemap.path },
         header: {
-          title: 'Workflows',
+          title: 'Automation',
           icon: { path: mdiSitemap.path },
           docsTopic: 'workflows',
         },

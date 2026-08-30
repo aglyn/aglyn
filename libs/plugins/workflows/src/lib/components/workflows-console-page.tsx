@@ -25,12 +25,17 @@ import HostWorkflowsCard from './host-workflows-card.component'
 import RunQuotaLine from './run-quota-line.component'
 
 /**
- * Workflows page (AGL-101/148/149 → AGL-395): the automation surface —
+ * Automation page (AGL-101/148/149 → AGL-395): the automation surface —
  * workflow builder, event-triggered actions, and webhooks — owned by the
  * workflows plugin and rendered by the shell's generic plugin route with
  * the host-setup vertical-tab pattern. Each card runs its own entitlement
  * check (workflows / actions / webhooks are distinct plan flags), so the
  * shell's resolved `org` doc flows into all three.
+ *
+ * The tab ids below are `?tab=` values, which people bookmark and the docs
+ * link to, so they are left exactly as they are. A workflow belongs to the
+ * site and an ACTION belongs to the site too; an interaction belongs to the
+ * document that holds it and is edited on the element, not here.
  */
 export function WorkflowsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org } = props
