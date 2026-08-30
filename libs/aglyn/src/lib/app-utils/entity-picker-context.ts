@@ -28,24 +28,27 @@ export interface EntityOption {
 
 /**
  * Edit-time option lists for id-based entity pickers in component
- * attributes (products, collections, categories, datasets). Names are
+ * attributes (products, collections, categories, datasets, forms). Names are
  * display-only; nodes persist the id, so renames never break references —
  * the same contract as {@link ScreenLinkContext}. Provided by the
  * console's besigner/preview surfaces; absent on the tenant (the tenant
  * only resolves ids, never lists them).
  */
-/** The four lists a picker can ask for. */
+/** The lists a picker can ask for. */
 export type EntityPickerKind =
   | 'products'
   | 'collections'
   | 'categories'
   | 'datasets'
+  | 'forms'
 
 export interface EntityPickerContextValue {
   products?: EntityOption[]
   collections?: EntityOption[]
   categories?: EntityOption[]
   datasets?: EntityOption[]
+  /** The host's form entities, id-first, feeding FORM_SELECT attributes. */
+  forms?: EntityOption[]
   /**
    * Per-dataset model fields (AGL-556), keyed by dataset id, in model
    * order: id = stable model fieldId, label = current display name. Feeds

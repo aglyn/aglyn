@@ -68,11 +68,18 @@ const OVERLAP = 5
  */
 const submissionDocs = Array.from({ length: SUBMISSIONS }, (_, index) => ({
   $id: `sub-${String(SUBMISSIONS - 1 - index).padStart(2, '0')}`,
+  // Every THIRD submission belongs to the adopted form; the rest predate it
+  // and carry no `formId` at all — the state most of a real site's archive is
+  // in on the day a form is adopted.
+  ...(index % 3 === 0 ? { formId: 'form-adopted' } : {}),
   formName: `Form ${String(index).padStart(2, '0')}`,
   fields: { email: `sender${String(index).padStart(2, '0')}@example.test` },
   read: false,
   createdAt: { seconds: (SUBMISSIONS - index) * 86_400 },
 }))
+
+/** The one adopted form, for the Submissions tab's filter. */
+const formDocs = [{ $id: 'form-adopted', displayName: 'Contact' }]
 
 const memberDocs = Array.from({ length: MEMBERS }, (_, index) => ({
   $id: `mem-${String(MEMBERS - 1 - index).padStart(2, '0')}`,
@@ -100,6 +107,7 @@ const leadDocs = Array.from({ length: LEADS }, (_, index) => ({
 }))
 
 const byCollection: Record<string, Array<Record<string, any>>> = {
+  forms: formDocs,
   formSubmissions: submissionDocs,
   siteMembers: memberDocs,
   leads: leadDocs,
@@ -111,13 +119,31 @@ const firestoreAnswer = (
 ) => {
   const order = constraints.find((item) => 'orderBy' in item)
   const cap = constraints.find((item) => 'limit' in item)?.limit
-  // `orderBy` FILTERS as well as sorts.
-  const matching = order
-    ? all.filter((doc) => doc[order.orderBy] !== undefined)
-    : all
+  // Equality predicates are APPLIED, not ignored. A double that dropped them
+  // would answer the unfiltered list for every filter and go green on a form
+  // filter that was never wired to the query at all.
+  const equalities = constraints.filter((item) => item && 'where' in item)
+  // `orderBy` FILTERS as well as sorts — EXCEPT on `__name__`, the document
+  // id, which is the one path every document has. That is exactly why a list
+  // that must not drop rows orders by it.
+  const matching = (
+    order && order.orderBy !== '__name__'
+      ? all.filter((doc) => doc[order.orderBy] !== undefined)
+      : all
+  ).filter((doc) =>
+    equalities.every((clause) =>
+      clause.where === '__name__'
+        ? true
+        : doc[clause.where] === clause.value,
+    ),
+  )
   const sorted = [...matching].sort((a, b) => {
-    const left = order ? a[order.orderBy]?.seconds ?? a[order.orderBy] : a.$id
-    const right = order ? b[order.orderBy]?.seconds ?? b[order.orderBy] : b.$id
+    const key = (doc: Record<string, any>) =>
+      !order || order.orderBy === '__name__'
+        ? doc.$id
+        : doc[order.orderBy]?.seconds ?? doc[order.orderBy]
+    const left = key(a)
+    const right = key(b)
     const step = left < right ? -1 : left > right ? 1 : 0
     return order?.direction === 'desc' ? -step : step
   })
@@ -126,6 +152,8 @@ const firestoreAnswer = (
 
 /** Every ceilinged read's cap, so a ceiling that stops probing is visible. */
 let mockCeilingsAsked: number[] = []
+/** Every paged query the page built, so a filter can be asserted on it. */
+let mockPagedQueries: Array<{ name: string; constraints: any[] }> = []
 const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -155,6 +183,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const windowSize = pageSize * (page + 1)
     const built = build(windowSize + 1)
     const name = String(built?.path ?? '').split('/').pop() ?? ''
+    // Recorded so a filter can be asserted on the QUERY the page issued, not
+    // only on what came back. A filter that never reached Firestore and one
+    // that reached it wrongly are different bugs and the rows alone cannot
+    // tell them apart.
+    mockPagedQueries.push({ name, constraints: built?.constraints ?? [] })
     const answered = firestoreAnswer(
       byCollection[name] ?? [],
       built?.constraints ?? [],
@@ -189,6 +222,11 @@ jest.mock('firebase/firestore', () => ({
     orderBy: field,
     direction,
   }),
+  where: (field: string, op: string, value: unknown) => ({
+    where: field,
+    op,
+    value,
+  }),
   doc: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
   }),
@@ -198,6 +236,16 @@ jest.mock('firebase/firestore', () => ({
 
 jest.mock('@aglyn/aglyn', () => ({
   formSpamCaughtNotice: () => null,
+  FORMS_MAX_PER_HOST: 50,
+  // The REAL derivation, not a stub. The contacts dedupe below is asserted
+  // against it, and a stub that returned the address unchanged would let a
+  // casing-only duplicate render twice while the test stayed green.
+  normalizeContactEmail: (input: unknown) => {
+    const email = String(input ?? '').trim().toLowerCase()
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 320
+      ? email
+      : null
+  },
   formSubmissionsPausedNotice: () => null,
   pluginDocsHelp: () => undefined,
   submissionMonthKey: () => '2026-08',
@@ -377,5 +425,86 @@ describe('the contacts table cannot be paged by the query (AGL-2501)', () => {
     // reads, both asking for one document more than they will render.
     const contactCeilings = mockCeilingsAsked.filter((cap) => cap > 100)
     expect(contactCeilings).toEqual([201, 201])
+  })
+})
+
+/**
+ * The Inbox stays the site-wide list and gains one control.
+ *
+ * `?form=` filtered on `formName` — the caption — so a rename split the
+ * history and two pages sharing a label were one list. This filter is an
+ * equality on `formId`. Every fixture submission carries a DIFFERENT
+ * `formName`, so a filter that still read the caption could never return the
+ * form's whole history and cannot pass these by accident.
+ */
+describe('the submissions tab can narrow to one form', () => {
+  /** The submissions query the page built most recently. */
+  const submissionsQuery = () =>
+    [...mockPagedQueries].reverse().find((q) => q.name === 'formSubmissions')
+        ?.constraints ?? []
+
+  beforeEach(() => {
+    mockPagedQueries = []
+  })
+
+  it('issues NO form clause until one is chosen', async () => {
+    await mountPage()
+    // The site-wide question — "who is waiting for a reply" — does not
+    // decompose by form, so the default must stay the whole inbox.
+    expect(submissionsQuery().filter((c: any) => 'where' in c)).toEqual([])
+  })
+
+  it('offers the site\'s forms and narrows the QUERY when one is picked', async () => {
+    // The wiring proof, end to end: open the picker, choose the form, and
+    // read the clause the page then issued. A filter that renders but never
+    // reaches the query would pass a rows-only assertion on page one, where
+    // the unfiltered and filtered lists can happen to agree.
+    await mountPage()
+    const combobox = document.querySelector(
+      '[role="combobox"]',
+    ) as HTMLElement | null
+    expect(combobox).toBeTruthy()
+    // A MUI select opens on mousedown, not click.
+    fireEvent.mouseDown(combobox as HTMLElement)
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('All forms'),
+    )
+    const option = Array.from(
+      document.querySelectorAll('[role="option"]'),
+    ).find((node) => node.textContent?.trim() === 'Contact')
+    expect(option).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(option as Element)
+    })
+    expect(submissionsQuery().filter((c: any) => 'where' in c)).toEqual([
+      { where: 'formId', op: '==', value: 'form-adopted' },
+    ])
+  })
+
+  it('narrows on formId, and the rows are the FORM\'s', async () => {
+    // Asserted through the same double the page's own query runs through: an
+    // equality on `formId` returns every row of that form regardless of the
+    // caption each was filed under.
+    const rows = firestoreAnswer(submissionDocs, [
+      { where: 'formId', op: '==', value: 'form-adopted' },
+      { orderBy: 'createdAt', direction: 'desc' },
+    ])
+    expect(rows.length).toBe(submissionDocs.filter((s) => s.formId).length)
+    expect(rows.every((row) => row.formId === 'form-adopted')).toBe(true)
+    // The captions genuinely differ, so a `formName` equality could have
+    // returned at most one of these.
+    expect(new Set(rows.map((row) => row.formName)).size).toBeGreaterThan(1)
+  })
+
+  it('leaves unstamped history reachable under all forms', async () => {
+    // An unmatched submission is still in the Inbox — missing from ONE form's
+    // list, which is visible and recoverable, rather than filed under a form
+    // it was never sent to.
+    expect(submissionDocs.some((row) => !row.formId)).toBe(true)
+    const unfiltered = firestoreAnswer(submissionDocs, [
+      { orderBy: 'createdAt', direction: 'desc' },
+    ])
+    expect(unfiltered.length).toBe(submissionDocs.length)
   })
 })

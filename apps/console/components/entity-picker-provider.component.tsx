@@ -21,9 +21,10 @@ import {
   type EntityOption,
   type EntityPickerKind,
   effectiveDatasetModel,
+  FORMS_MAX_PER_HOST,
   isHostCollectionKind,
 } from '@aglyn/aglyn'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -118,6 +119,26 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
     [firestore, hostId, requested],
     { idField: '$id' },
   )
+  // The site's form entities (`docs/specs/reusable-forms.md` §2c). Host-
+  // scoped, unlike datasets, because a form renders on one site's pages and
+  // its submissions already live under that host.
+  //
+  // Bounded by `FORMS_MAX_PER_HOST`, so the whole collection is one small
+  // page. Ordered by `__name__` rather than `displayName`: `orderBy` on a
+  // data field DROPS every document missing it, and a form saved without a
+  // name would then be missing from its own picker.
+  const { data: formDocs } = useFirestoreCollection<any>(
+    () =>
+      requested.has('forms')
+        ? query(
+            collection(firestore, 'hosts', hostId, 'forms'),
+            orderBy('__name__'),
+            limit(FORMS_MAX_PER_HOST),
+          )
+        : null,
+    [firestore, hostId, requested],
+    { idField: '$id' },
+  )
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () =>
       dataScope && requested.has('datasets')
@@ -140,6 +161,8 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
         (collectionDocs ?? []).filter(isHostCollectionKind('catalog')),
       ),
       categories: toOptions(categoryDocs),
+      // Console-created forms store the human name as `displayName`.
+      forms: toOptions(formDocs, 'displayName'),
       // Console-created datasets store the human name as `displayName`
       // (AGL-536); `name` covers pre-migration docs.
       datasets: toOptions(datasetDocs, 'displayName'),
@@ -163,7 +186,7 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
       ),
       request,
     }),
-    [productDocs, collectionDocs, categoryDocs, datasetDocs, request],
+    [productDocs, collectionDocs, categoryDocs, datasetDocs, formDocs, request],
   )
 
   return (

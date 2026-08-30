@@ -92,6 +92,7 @@ export * from './plan-entitlements'
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
+export * from './forms'
 export * from './visitor-record-ceiling'
 export * from './health-report'
 // Did a webhook delivery actually DO anything (AGL-1954)? After

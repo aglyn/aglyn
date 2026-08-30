@@ -307,6 +307,15 @@ export enum FieldComponentType {
    * model fieldId — field renames never break the mapping.
    */
   DATASET_FIELD_SELECT = 'dataset-field-select',
+  /**
+   * Select listing the host's form entities (`docs/specs/reusable-forms.md`
+   * §2c): the editor resolves options from EntityPickerContext.forms and
+   * persists the form id. The same id-first reasoning as every picker in this
+   * family, and here it is load-bearing rather than convenient — the string
+   * it replaces was the form's whole identity, so a rename split the
+   * submission history it named.
+   */
+  FORM_SELECT = 'form-select',
   SELECT = 'select',
   SLIDER = 'slider',
   SUB_FORM = 'sub-form',
