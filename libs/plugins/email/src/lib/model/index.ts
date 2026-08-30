@@ -59,3 +59,17 @@ export * from './email-record'
  * listing and versioned by somebody else.
  */
 export * from './template-provenance'
+
+/**
+ * One campaign message, rendered. Shared by the send loop, the composer's
+ * pre-send preview and any other surface that has to show what will be
+ * mailed — a preview that renders the message a second way previews
+ * something else.
+ */
+export * from './campaign-email-render'
+
+/**
+ * The campaign CONTAINER — its window, its lists, and the arithmetic that
+ * rolls its sends into one set of figures.
+ */
+export * from './campaign-container'
