@@ -45,10 +45,16 @@ and reaching the cap never stops a receipt from reaching a buyer.
 You can see where you stand in two places, without having to be refused first:
 
 - **In the composer**, under the recipient count: `340/500 campaign emails this month`.
-- **On the Billing page**, as the **Campaign emails (this month)** meter, per site.
+- **On the Billing page**, as the **Campaign emails (this month)** meter.
 
-The cap is counted **per site**, so each site in your organization has its own allowance.
-One recipient is one email: a campaign to 200 people spends 200.
+The cap is counted **per workspace**, not per site — every site in your organization draws
+on one shared monthly allowance. One recipient is one email: a campaign to 200 people
+spends 200, whichever site sent it.
+
+Campaigns are also **paced**: a workspace can send a set number per hour, so a very large
+send is spread out rather than refused. The Billing page shows that hourly ceiling beside
+the monthly one. Transactional mail — receipts, invites, password resets — is not paced by
+it and is not counted against the monthly cap.
 
 When a send would take you past the cap, the composer says so while you are still writing
 rather than after you press Send. [Upgrade your plan](../../workspace-and-billing/billing-and-plans/overview.md)
