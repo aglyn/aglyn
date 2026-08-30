@@ -46,8 +46,28 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
       },
+      FieldPath: { documentId: () => '__name__' },
     },
   },
+  /*
+   * BOTH suppression lists, the shape the real helper has (D6). Written out
+   * rather than left permissive because a double that never suppresses
+   * anybody cannot tell a sender consulting one list from one consulting two.
+   */
+  filterSendableForHost: async (hostId: string, emails: string[]) =>
+    emails.filter((email) => {
+      // `require` inside the factory rather than the file's own import: a
+      // mock factory is hoisted above every import, so a top-level binding is
+      // still in its temporal dead zone when this object is built.
+      const key = require('crypto')
+        .createHash('sha256')
+        .update(email.trim().toLowerCase())
+        .digest('hex')
+      return (
+        !mockState.store[`emailSuppressions/${key}`] &&
+        !mockState.store[`hosts/${hostId}/suppressions/${key}`]
+      )
+    }),
   // A plan whose emailSendsPerMonth is non-zero, or the cap refuses the send
   // before any of this is reached. Free is 0 by design.
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
@@ -216,19 +236,38 @@ function mockFirestore(): any {
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
+  /**
+   * The ids directly under `path`, in `__name__` order — which is what the
+   * audience sweep asks for, and what the real Firestore returns for it.
+   */
+  const childIds = (path: string) =>
+    Object.keys(store)
+      .filter(
+        (key) =>
+          key.startsWith(`${path}/`) &&
+          !key.slice(path.length + 1).includes('/'),
+      )
+      .map((key) => key.slice(path.length + 1))
+      .sort()
+  /**
+   * `orderBy` / `startAfter` / `limit`, and `limit` HONORS its argument.
+   *
+   * A double whose `limit` returns everything cannot fail the way the real
+   * one does, so a paging bug would pass here and truncate in production.
+   */
+  const queryRef = (path: string, after?: string): any => ({
+    orderBy: () => queryRef(path, after),
+    startAfter: (cursor: any) => queryRef(path, cursor?.id ?? String(cursor)),
+    limit: (max: number) => ({
+      get: async () => {
+        const ids = childIds(path).filter((id) => !after || id > after)
+        return { docs: ids.slice(0, max).map((id) => snapshot(`${path}/${id}`)) }
+      },
+    }),
+  })
   const collectionRef = (path: string): any => ({
     doc: (id: string) => docRef(`${path}/${id}`),
-    limit: () => ({
-      get: async () => ({
-        docs: Object.keys(store)
-          .filter(
-            (key) =>
-              key.startsWith(`${path}/`) &&
-              !key.slice(path.length + 1).includes('/'),
-          )
-          .map(snapshot),
-      }),
-    }),
+    ...queryRef(path),
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },

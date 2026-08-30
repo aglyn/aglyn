@@ -54,8 +54,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
       },
+      FieldPath: { documentId: () => '__name__' },
     },
   },
+  // Nobody in this file is suppressed; the audience is what is under test.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   // Free's `emailSendsPerMonth` is 0 by design and would refuse the send
   // before any of this is reached.
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
@@ -129,19 +132,30 @@ function mockFirestore(): any {
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
+  /** The ids directly under `path`, in the `__name__` order the sweep asks for. */
+  const childIds = (path: string) =>
+    Object.keys(store)
+      .filter(
+        (key) =>
+          key.startsWith(`${path}/`) &&
+          !key.slice(path.length + 1).includes('/'),
+      )
+      .map((key) => key.slice(path.length + 1))
+      .sort()
+  /** `orderBy` / `startAfter` / `limit`, and `limit` honors its argument. */
+  const queryRef = (path: string, after?: string): any => ({
+    orderBy: () => queryRef(path, after),
+    startAfter: (cursor: any) => queryRef(path, cursor?.id ?? String(cursor)),
+    limit: (max: number) => ({
+      get: async () => {
+        const ids = childIds(path).filter((id) => !after || id > after)
+        return { docs: ids.slice(0, max).map((id) => snapshot(`${path}/${id}`)) }
+      },
+    }),
+  })
   const collectionRef = (path: string): any => ({
     doc: (id: string) => docRef(`${path}/${id}`),
-    limit: () => ({
-      get: async () => ({
-        docs: Object.keys(store)
-          .filter(
-            (key) =>
-              key.startsWith(`${path}/`) &&
-              !key.slice(path.length + 1).includes('/'),
-          )
-          .map(snapshot),
-      }),
-    }),
+    ...queryRef(path),
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },

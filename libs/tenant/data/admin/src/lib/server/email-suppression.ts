@@ -95,6 +95,19 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
 export const EMAIL_SUPPRESSIONS_COLLECTION = 'emailSuppressions'
 
 /**
+ * The PER-SITE list, `hosts/{hostId}/suppressions/{emailKey}` — unsubscribes
+ * from one site's campaigns, plus the bounces and complaints that arrived
+ * carrying that site's tag.
+ *
+ * Named here rather than at each call site because the two lists are read
+ * together by {@link filterSendableForHost}, and a sender that knows one path
+ * as a string literal and the other through this module is one rename away
+ * from consulting a collection that does not exist and finding nobody
+ * suppressed.
+ */
+export const HOST_SUPPRESSIONS_SUBCOLLECTION = 'suppressions'
+
+/**
  * Why an address is suppressed.
  *
  * `bounce` means PERMANENT only. Resend reports `data.bounce.type` as
@@ -291,6 +304,80 @@ export async function filterSuppressedEmails(
     candidates.map((email) => isEmailSuppressed(email, injectedFirestore)),
   )
   return candidates.filter((_email, index) => !verdicts[index])
+}
+
+/**
+ * The sendable subset for a send made in ONE SITE's name — BOTH lists.
+ *
+ * A per-site suppression says "not from this site". A platform suppression
+ * says the address hard-bounced or somebody pressed "report spam", learned
+ * anywhere in the product — including on transactional mail that carried no
+ * site tag at all and could therefore never have reached the per-site list.
+ * Consulting only the site's own list mails a known-dead or complaining
+ * address from the one shared sending domain every tenant's mail leaves by,
+ * which makes it every tenant's deliverability problem rather than one
+ * merchant's.
+ *
+ * Composed from {@link filterSuppressedEmails} rather than reimplementing the
+ * platform half: normalization, de-duplication and the fail-closed posture
+ * live there, and a second copy of them is a second set of rules for two
+ * senders to disagree about.
+ *
+ * ## Both halves fail CLOSED
+ *
+ * A read that throws answers "suppressed". The platform half already does; the
+ * per-site half matches it, because a list we could not read is not a list
+ * that said this address is safe to mail. The cost of the other choice is a
+ * message delivered to somebody who asked us to stop.
+ *
+ * ## One `getAll`, keyed, rather than a scan of the collection
+ *
+ * The per-site half looks up exactly the addresses being mailed, by document
+ * id, in one round trip. Reading the whole collection instead — which is what
+ * the campaign sender did — is bounded by however large the collection has
+ * grown, so a site with more suppressions than the read window fails OPEN on
+ * the remainder: the people most certain not to want the mail are the ones a
+ * truncated read drops.
+ */
+export async function filterSendableForHost(
+  hostId: string,
+  emails: readonly string[],
+  injectedFirestore?: any,
+): Promise<string[]> {
+  const platformSendable = await filterSuppressedEmails(
+    emails,
+    injectedFirestore,
+  )
+  // `getAll` rejects an empty reference list, and there is nothing to ask.
+  if (!platformSendable.length) return []
+  const db = injectedFirestore ?? defaultFirestore()
+  const hostList = db
+    .collection('hosts')
+    .doc(hostId)
+    .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+  // Every survivor of the platform half is keyable — `isEmailSuppressed`
+  // answers `true` for an address it cannot key — so this narrows the type
+  // rather than dropping anybody.
+  const keyed: Array<{ email: string; key: string }> = []
+  for (const email of platformSendable) {
+    const key = emailSuppressionKey(email)
+    if (key) keyed.push({ email, key })
+  }
+  if (!keyed.length) return []
+  try {
+    const snapshots = await db.getAll(
+      ...keyed.map((entry) => hostList.doc(entry.key)),
+    )
+    return keyed
+      .filter((_entry, index) => !snapshots[index]?.exists)
+      .map((entry) => entry.email)
+  } catch (error) {
+    console.error(
+      '[email-suppression] per-site lookup failed; failing closed',
+      error,
+    )
+    return []
+  }
 }
 
 /**

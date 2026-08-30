@@ -18,6 +18,7 @@
 import { createHash } from 'crypto'
 import {
   emailSuppressionKey,
+  filterSendableForHost,
   filterSuppressedEmails,
   isEmailSuppressed,
   releaseEmail,
@@ -194,5 +195,109 @@ describe('filterSuppressedEmails', () => {
         firestore,
       ),
     ).resolves.toEqual(['ok@example.com'])
+  })
+})
+
+/**
+ * D6 of `docs/specs/email-overhaul.md` — a campaign consulted the site's own
+ * list and nothing else.
+ *
+ * The address that matters is the one suppressed PLATFORM-wide and not on this
+ * site's list at all: a hard bounce learned on another site in the org, or on
+ * transactional mail carrying no site tag, which is where most of the platform
+ * list comes from. Mailing that person is not one merchant's deliverability
+ * problem — every tenant's campaigns leave by one sending domain under
+ * `p=reject`.
+ */
+describe('filterSendableForHost', () => {
+  const HOST = 'host-1'
+  const hostList = `hosts/${HOST}/suppressions`
+
+  it('drops an address the PLATFORM suppressed but this site never did', async () => {
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'bounce', firestore })
+    // Nothing under this site — the whole point of the case.
+    expect(firestore.docs(hostList)[KEY]).toBeUndefined()
+
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS, 'ok@example.com'], firestore),
+    ).resolves.toEqual(['ok@example.com'])
+  })
+
+  it('drops an address that unsubscribed from THIS site', async () => {
+    const firestore = fakeFirestore({
+      [hostList]: { [KEY]: { email: ADDRESS, reason: 'unsubscribe' } },
+    })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS, 'ok@example.com'], firestore),
+    ).resolves.toEqual(['ok@example.com'])
+  })
+
+  it('does not apply another site’s unsubscribes to this one', async () => {
+    // An unsubscribe is from ONE site's campaigns. Reading it as platform-wide
+    // would silently shrink every other site in the org.
+    const firestore = fakeFirestore({
+      'hosts/host-2/suppressions': {
+        [KEY]: { email: ADDRESS, reason: 'unsubscribe' },
+      },
+    })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('mails a RELEASED platform record — a release is a real release', async () => {
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'bounce', firestore })
+    await releaseEmail({ email: ADDRESS, firestore })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], firestore),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('normalizes and deduplicates, so casing cannot walk past either list', async () => {
+    const firestore = fakeFirestore({
+      [hostList]: { [KEY]: { email: ADDRESS, reason: 'unsubscribe' } },
+    })
+    await expect(
+      filterSendableForHost(
+        HOST,
+        ['  DANA@Example.com ', ADDRESS, ' OK@example.com ', 'ok@example.com'],
+        firestore,
+      ),
+    ).resolves.toEqual(['ok@example.com'])
+  })
+
+  it('FAILS CLOSED when the per-site lookup throws', async () => {
+    // Matching the platform half. A list we could not read is not a list that
+    // said this address is safe to mail.
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    const exploding: any = {
+      collection: () => ({
+        doc: () => ({
+          get: async () => ({ exists: false }),
+          collection: () => ({ doc: (id: string) => ({ id }) }),
+        }),
+      }),
+      getAll: async () => {
+        throw new Error('firestore down')
+      },
+    }
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], exploding),
+    ).resolves.toEqual([])
+    consoleError.mockRestore()
+  })
+
+  it('asks the per-site list for nobody when the platform list took everyone', async () => {
+    // `getAll` rejects an empty reference list, so the early return is load
+    // bearing rather than an optimisation.
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'complaint', firestore })
+    await expect(
+      filterSendableForHost(HOST, [ADDRESS], firestore),
+    ).resolves.toEqual([])
   })
 })

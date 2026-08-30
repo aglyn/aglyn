@@ -92,12 +92,26 @@ function mockFirestore(): any {
       }
     },
   })
-  const collectionRef = (path: string): any => {
+  /**
+   * `limit` HONORS its argument and `startAfter` advances a cursor, both in
+   * `__name__` order — the audience sweep pages, and a double that answered
+   * every page with the whole collection would certify a sender that cannot
+   * page at all.
+   */
+  const collectionRef = (path: string, after?: string): any => {
     const ref: any = {
       doc: (id: string) => docRef(`${path}/${id}`),
-      limit: () => ref,
       where: () => ref,
       orderBy: () => ref,
+      startAfter: (cursor: any) =>
+        collectionRef(path, cursor?.id ?? String(cursor)),
+      limit: (max?: number) => ({
+        ...ref,
+        get: async () => {
+          const docs = (await ref.get()).docs
+          return { docs: max === undefined ? docs : docs.slice(0, max) }
+        },
+      }),
       get: async () => ({
         docs: Object.keys(mockState.store)
           .filter(
@@ -105,6 +119,8 @@ function mockFirestore(): any {
               key.startsWith(`${path}/`) &&
               !key.slice(path.length + 1).includes('/'),
           )
+          .sort()
+          .filter((key) => !after || key.slice(path.length + 1) > after)
           .map((key) => ({
             id: key.split('/').pop(),
             exists: true,
@@ -173,8 +189,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
       },
+      FieldPath: { documentId: () => '__name__' },
     },
   },
+  // Nobody in this file is suppressed; the hourly governor is under test.
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),

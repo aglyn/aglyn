@@ -31,6 +31,7 @@ import { hostPublicOrigin } from '@aglyn/aglyn/server'
 import {
   orgDataCollectionForHost,
   orgDataQueryForHost,
+  filterSendableForHost,
   firebaseAdmin,
   getOrgForHost,
   meterHostEmail,
@@ -53,7 +54,91 @@ import {
 const MAX_RECIPIENTS_PER_SEND = 500
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** Stable doc id for a suppression entry (emails are PII — hash them). */
+/** How many audience documents one Firestore round trip fetches. */
+const AUDIENCE_PAGE_SIZE = 500
+
+/**
+ * The read budget for resolving one audience — a ceiling on the SCAN, not a
+ * silent cap on the answer.
+ *
+ * It is deliberately the largest window this file already spent (`contacts`
+ * and list members read 5,000), so no audience costs more to resolve than it
+ * did before; `leads` and `siteMembers` read 1,000 and now share the same
+ * number, which is the point — a site with 3,000 leads was told its audience
+ * was 1,000.
+ *
+ * Reaching it does not truncate anything silently. The resolution reports
+ * {@link CampaignSendResult.audienceTruncated}, `audienceSize` becomes a
+ * floor rather than a total, and the composer and the History row both say so.
+ * An audience that regularly exceeds this is asking for the batched send §5d
+ * of `docs/specs/email-overhaul.md` proposes, not a bigger number here.
+ */
+const AUDIENCE_SCAN_CEILING = 5000
+
+/**
+ * Page a query to exhaustion in document-name order.
+ *
+ * ## Why the read has to be ordered at all
+ *
+ * Firestore answers a `limit()` with no `orderBy` in document-id order, and
+ * these ids are generated — so the old bare `limit(1000)` / `limit(5000)`
+ * picked an arbitrary slice of any audience larger than the window, and the
+ * merchant was told that slice was the whole audience. A cursor needs an
+ * ordering regardless; this makes the selection explicable ("the first N by
+ * document name") and stable across sends instead of merely bounded.
+ *
+ * ## Why the document NAME and not a date
+ *
+ * `orderBy(field)` drops every document that lacks that field, so ordering an
+ * audience newest-first would silently un-invite people. There is no field
+ * every writer of these four collections sets: list members carry `addedAt`
+ * only when `enrollListMember` CREATED the row, and the newsletter handler
+ * that wrote the collection before it stored `{ email, name, source }` and no
+ * date at all — so `orderBy('addedAt')` would drop every newsletter
+ * subscriber from every list campaign. `__name__` is the one key every
+ * document has, and an unfiltered collection ordered by it needs no index.
+ *
+ * `startAfter` takes the SNAPSHOT rather than its id, so the cursor keeps
+ * working if a filter is ever added ahead of the ordering.
+ *
+ * @returns the documents, and whether {@link AUDIENCE_SCAN_CEILING} — rather
+ *          than the end of the collection — is what stopped the sweep. The
+ *          flag is settled by one extra single-document read, so "more than
+ *          5,000" is never claimed of a collection holding exactly 5,000.
+ */
+async function sweepAudience(base: FirebaseFirestore.Query): Promise<{
+  docs: FirebaseFirestore.QueryDocumentSnapshot[]
+  truncated: boolean
+}> {
+  const ordered = base.orderBy(
+    firebaseAdmin.firestore.FieldPath.documentId(),
+  )
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  for (;;) {
+    const page = await (cursor ? ordered.startAfter(cursor) : ordered)
+      .limit(AUDIENCE_PAGE_SIZE)
+      .get()
+    docs.push(...page.docs)
+    cursor = page.docs[page.docs.length - 1]
+    if (!cursor || page.docs.length < AUDIENCE_PAGE_SIZE) {
+      return { docs, truncated: false }
+    }
+    if (docs.length >= AUDIENCE_SCAN_CEILING) {
+      const probe = await ordered.startAfter(cursor).limit(1).get()
+      return { docs, truncated: probe.docs.length > 0 }
+    }
+  }
+}
+
+/**
+ * Stable doc id for a suppression entry (emails are PII — hash them).
+ *
+ * A WRITER's derivation now — `email-events.ts` files bounces and complaints
+ * under it. The send path reads through `emailSuppressionKey`, which hashes
+ * the same trimmed, lowercased form and additionally refuses to guess an id
+ * for a value that is not an address.
+ */
 export function suppressionId(email: string): string {
   return createHash('sha256').update(email.toLowerCase()).digest('hex')
 }
@@ -225,18 +310,43 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
  * authenticated send route and the scheduled-campaign processor. The
  * caller owns authorization.
  */
-export async function performCampaignSend(
-  options: CampaignSendOptions,
-): Promise<{
+export interface CampaignSendResult {
   campaignId: string
+  /** Addresses this send ADDRESSED — the audience after the per-send cap. */
   recipients: number
   sent: number
-  /** Dry run only (AGL-2178): recipients left after the suppression list. */
+  /**
+   * The whole audience, deduplicated and validated, BEFORE the per-send cap.
+   *
+   * Reported separately from `recipients` because the two differ whenever an
+   * audience is larger than one send may carry, and a merchant who is only
+   * shown the smaller number has no way to learn that the rest were never
+   * mailed. `recipients` of 500 against an `audienceSize` of 3,000 is the
+   * whole point of the field.
+   *
+   * Named for the SIZE because `audience` on the options and on the stored
+   * campaign is the audience KIND — `'leads'`, `'list'` — and one word
+   * meaning both a name and a count on the same send path is how the two get
+   * read into each other.
+   */
+  audienceSize: number
+  /**
+   * `audienceSize` is a FLOOR, not a total: the resolution stopped at its
+   * read ceiling with documents still unread. Absent means it is exact.
+   */
+  audienceTruncated?: boolean
+  /** Dry run only (AGL-2178): recipients left after the suppression lists. */
   sendable?: number
-  /** Dry run only: how many of `recipients` have unsubscribed. */
+  /** Dry run only: how many of `recipients` are suppressed. */
   suppressed?: number
   dryRun?: boolean
-}> {
+  /** Recipients the hourly governor refused mid-batch (AGL-2409). */
+  deferred?: number
+}
+
+export async function performCampaignSend(
+  options: CampaignSendOptions,
+): Promise<CampaignSendResult> {
   const unsubscribeSecret =
     process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
   if (!isEmailConfigured() || !unsubscribeSecret) {
@@ -295,6 +405,12 @@ export async function performCampaignSend(
     an audience is added here, check what its collection actually writes.
   */
   let recipients: string[]
+  /**
+   * Set when {@link AUDIENCE_SCAN_CEILING} stopped the resolution, so
+   * `audience` below is a floor and every number derived from it says so.
+   * A `manual` audience arrives whole in the request and can never be one.
+   */
+  let audienceTruncated = false
   const names = new Map<string, string>()
   const collectName = (email: string, name: unknown) => {
     const cleaned = email.trim().toLowerCase()
@@ -303,14 +419,16 @@ export async function performCampaignSend(
     }
   }
   if (audience === 'leads') {
-    const leads = await hostRef.collection('leads').limit(1000).get()
+    const leads = await sweepAudience(hostRef.collection('leads'))
+    audienceTruncated = leads.truncated
     recipients = leads.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
       collectName(email, doc.get('name'))
       return email
     })
   } else if (audience === 'members') {
-    const members = await hostRef.collection('siteMembers').limit(1000).get()
+    const members = await sweepAudience(hostRef.collection('siteMembers'))
+    audienceTruncated = members.truncated
     recipients = members.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
       /*==========================================
@@ -353,9 +471,27 @@ export async function performCampaignSend(
     // Scoped (AGL-1039): a campaign sent from one site must not reach
     // another site's audience — the agency case is a client's campaign
     // blasting the whole org's contact list.
-    const contacts = await (
-      await orgDataQueryForHost(hostId, 'contacts')
-    ).query.limit(5000).get()
+    /*
+     * The only audience whose sweep carries a FILTER, and the reason the
+     * ordering is `__name__` rather than a field: Firestore's automatic
+     * single-field index for an array member is keyed on that value and the
+     * document name, so `array-contains-any` plus `orderBy(__name__)` is
+     * served by it. Ordering on any other field would need a composite index
+     * per audience — `cloud/firebase-firestore.indexes.json` carries exactly
+     * that shape for `media`, and a missing one fails the whole send.
+     */
+    const contacts = await sweepAudience(
+      (await orgDataQueryForHost(hostId, 'contacts')).query,
+    )
+    /*
+     * A segment's membership is decided HERE rather than by the query — the
+     * tag and source rules are evaluated in `contactMatchesSegment` against
+     * documents the scan already fetched — so the ceiling bounds CONTACTS
+     * READ, not contacts matched. A narrow segment over a large org therefore
+     * reports a small `audienceSize` with `audienceTruncated` set, reading as
+     * "at least this many, we stopped counting" and not as a total.
+     */
+    audienceTruncated = contacts.truncated
     recipients = contacts.docs
       .filter((doc) =>
         contactMatchesSegment(
@@ -378,7 +514,8 @@ export async function performCampaignSend(
           .doc(listId)
       : null
     if (!listRef) throw new CampaignSendError('Unknown list', 400)
-    const members = await listRef.collection('members').limit(5000).get()
+    const members = await sweepAudience(listRef.collection('members'))
+    audienceTruncated = members.truncated
     recipients = members.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
       collectName(email, doc.get('name'))
@@ -389,29 +526,57 @@ export async function performCampaignSend(
       ? options.emails.map((value: unknown) => String(value))
       : []
   }
-  recipients = [
+  /*
+   * The AUDIENCE — deduplicated and validated, and deliberately measured
+   * BEFORE the per-send cap.
+   *
+   * The cap and the audience are two different numbers and the composer has
+   * always shown only the smaller one, which is how a site with 3,000 leads
+   * was told its audience was 500 and never found out the other 2,500 were
+   * not being mailed. Every result from here down carries both, so a send can
+   * report "reached N of M" rather than reporting N as if it were M.
+   */
+  const resolved = [
     ...new Set(
       recipients
         .map((email) => email.trim().toLowerCase())
         .filter((email) => EMAIL_PATTERN.test(email)),
     ),
-  ].slice(0, MAX_RECIPIENTS_PER_SEND)
+  ]
+  /*
+   * The cap takes the FIRST N of a stable order, which is what makes taking
+   * some of the audience defensible at all: two sends of the same unchanged
+   * audience now address the same people, and which people is answerable
+   * ("the first N by document name"). It was previously whichever slice
+   * Firestore happened to return.
+   */
+  recipients = resolved.slice(0, MAX_RECIPIENTS_PER_SEND)
   if (!recipients.length) {
     throw new CampaignSendError('The audience is empty', 400)
   }
 
-  // Suppression list (unsubscribes).
-  const suppressed = new Set<string>()
-  const suppressions = await hostRef
-    .collection('suppressions')
-    .limit(5000)
-    .get()
-  for (const doc of suppressions.docs) suppressed.add(doc.id)
-  const sendable = recipients.filter(
-    (email) => !suppressed.has(suppressionId(email)),
-  )
+  /*
+   * BOTH suppression lists, on one derivation (D6 of
+   * `docs/specs/email-overhaul.md`).
+   *
+   * This read used to be the site's own list alone, so an address that hard
+   * bounced or reported spam on any OTHER send — another site in the org, or
+   * transactional mail carrying no site tag, which is where most of the
+   * platform list comes from — was mailed anyway. Every tenant's campaigns
+   * leave by one sending domain under `p=reject`, so that is not one
+   * merchant's deliverability, it is everyone's.
+   *
+   * Checked on the capped list rather than the whole audience on purpose: it
+   * is a keyed lookup per address, so its cost is the size of what is being
+   * mailed, and asking about people this send will not reach would buy a
+   * larger read for a number nobody acts on.
+   */
+  const sendable = await filterSendableForHost(hostId, recipients, firestore)
   if (!sendable.length) {
-    throw new CampaignSendError('Every recipient has unsubscribed', 400)
+    throw new CampaignSendError(
+      'Every recipient has unsubscribed or been suppressed',
+      400,
+    )
   }
 
   // Monthly cap by the owning org's plan (dark-launch rule, AGL-238).
@@ -471,11 +636,16 @@ export async function performCampaignSend(
    * It returns from HERE rather than from a counting function of its own,
    * and that is the whole point: the figure has already been through
    * audience resolution, normalisation, de-duplication, the
-   * `MAX_RECIPIENTS_PER_SEND` cap, the suppression list and the monthly
+   * `MAX_RECIPIENTS_PER_SEND` cap, both suppression lists and the monthly
    * quota. A second implementation would be a second set of rules to
    * drift, and the one number a merchant checks before pressing Send is
    * the worst possible place for an estimate that disagrees with what
    * happens.
+   *
+   * `audience` rides along so the composer can show the SHORTFALL rather
+   * than only the send size. The preview is the surface a merchant reads
+   * before deciding, so it is the surface on which "your audience is 3,000
+   * and this send reaches 500" has to appear.
    *
    * Nothing has been written above this line — every step so far is a
    * read — so an early return here leaves no campaign document, no
@@ -485,6 +655,8 @@ export async function performCampaignSend(
     return {
       campaignId: '',
       recipients: recipients.length,
+      audienceSize: resolved.length,
+      ...(audienceTruncated ? { audienceTruncated: true } : {}),
       sendable: sendable.length,
       suppressed: recipients.length - sendable.length,
       sent: 0,
@@ -755,7 +927,14 @@ export async function performCampaignSend(
   }
 
   if (options.recordCampaign === false) {
-    return { campaignId, recipients: sendable.length, sent, ...(deferred ? { deferred } : {}) }
+    return {
+      campaignId,
+      recipients: sendable.length,
+      audienceSize: resolved.length,
+      ...(audienceTruncated ? { audienceTruncated: true } : {}),
+      sent,
+      ...(deferred ? { deferred } : {}),
+    }
   }
   await hostRef.collection('campaigns').doc(campaignId).set(
     {
@@ -769,6 +948,21 @@ export async function performCampaignSend(
       stats: {
         recipients: sendable.length,
         sent,
+        /*
+         * The audience this send was TAKEN FROM, beside what it reached.
+         *
+         * `audienceSize` above `recipients` is a campaign that did not go to
+         * everybody, and the History row is where a merchant answers "did
+         * this reach my list" months later. Recording only the reached figure
+         * makes a truncated send indistinguishable from a complete one, which
+         * is the same fault the deferred count below was added to close.
+         *
+         * `audienceSizeTruncated` marks the figure as a floor: the resolution
+         * stopped at its read ceiling, so the audience is at least this and
+         * the shortfall is at least the difference.
+         */
+        audienceSize: resolved.length,
+        ...(audienceTruncated ? { audienceSizeTruncated: true } : {}),
         // Recorded, not silent (AGL-2409): a campaign that stopped at the
         // hourly ceiling delivered fewer than it resolved, and the History
         // row is the only place a merchant can find out.
@@ -781,7 +975,14 @@ export async function performCampaignSend(
     },
     { merge: true },
   )
-  return { campaignId, recipients: sendable.length, sent, ...(deferred ? { deferred } : {}) }
+  return {
+    campaignId,
+    recipients: sendable.length,
+    audienceSize: resolved.length,
+    ...(audienceTruncated ? { audienceTruncated: true } : {}),
+    sent,
+    ...(deferred ? { deferred } : {}),
+  }
 }
 
 /**

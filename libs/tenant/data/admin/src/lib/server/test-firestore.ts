@@ -37,9 +37,20 @@ import { FieldValue } from 'firebase-admin/firestore'
 const DELETE = FieldValue.delete()
 
 export interface FakeFirestore {
-  /** Every document in a collection, keyed by id. */
+  /**
+   * Every document in a collection, keyed by id.
+   *
+   * A SUBcollection is addressed by its full path — `hosts/host-1/suppressions`
+   * — which is also how it is seeded.
+   */
   docs: (collection: string) => Record<string, any>
   collection: (name: string) => any
+  /**
+   * Several documents in one round trip, the shape the real `getAll` has:
+   * the results come back POSITIONALLY, one per reference, so a caller that
+   * zips them back against its own input list gets what it asked for.
+   */
+  getAll: (...refs: any[]) => Promise<any[]>
 }
 
 export function fakeFirestore(
@@ -59,13 +70,28 @@ export function fakeFirestore(
     }
   }
 
-  return {
+  const fake: FakeFirestore = {
     docs: (collection: string) => store[collection] ?? {},
+    getAll: async (...refs: any[]) =>
+      refs.map((ref) => snapshotFor(ref.collectionPath, ref.id)),
     collection(name: string) {
       store[name] = store[name] ?? {}
       const api: any = {
         doc: (id: string) => ({
           id,
+          /**
+           * Which collection this reference came from, so `getAll` can resolve
+           * a bare reference the way the real client does.
+           */
+          collectionPath: name,
+          /**
+           * A subcollection is a collection at the joined path, so the fake
+           * stays one flat map. Nesting matters here because a per-site list
+           * lives under the site — a fake that returned the same documents for
+           * `hosts/a/suppressions` and `hosts/b/suppressions` would certify a
+           * sender that leaks one site's unsubscribes into another's.
+           */
+          collection: (sub: string) => fake.collection(`${name}/${id}/${sub}`),
           get: async () => snapshotFor(name, id),
           set: async (data: Record<string, any>, options?: { merge?: boolean }) => {
             const base = options?.merge ? (store[name][id] ?? {}) : {}
@@ -102,6 +128,7 @@ export function fakeFirestore(
       return api
     },
   }
+  return fake
 }
 
 export default fakeFirestore

@@ -367,7 +367,14 @@ export function HostCampaignsCard(props: { hostId: string }) {
    * checks before pressing Send.
    */
   const [preview, setPreview] = useState<
-    | { sendable: number; suppressed: number }
+    | {
+        sendable: number
+        suppressed: number
+        /** The whole audience, before the per-send cap. */
+        audienceSize: number
+        /** `audienceSize` is a floor — the resolution hit its read ceiling. */
+        audienceTruncated: boolean
+      }
     | { error: string }
     | null
   >(null)
@@ -404,6 +411,8 @@ export function HostCampaignsCard(props: { hostId: string }) {
         setPreview({
           sendable: Number(payload?.sendable ?? 0),
           suppressed: Number(payload?.suppressed ?? 0),
+          audienceSize: Number(payload?.audienceSize ?? 0),
+          audienceTruncated: Boolean(payload?.audienceTruncated),
         })
       } catch {
         if (active) setPreview(null)
@@ -433,13 +442,28 @@ export function HostCampaignsCard(props: { hostId: string }) {
           : audience.startsWith('list:')
             ? 'list subscriber'
             : 'contact in the segment'
+    /*
+      "every … who hasn't unsubscribed" is only true while the audience fits
+      in one send. When it does not, the dialog says how many of how many —
+      a merchant confirming a send to a third of their list must be told that
+      before they press the button, not left to work it out from History.
+     */
+    const short =
+      preview && !('error' in preview) && preview.audienceSize > preview.sendable
+        ? preview
+        : null
+    const reach = short
+      ? `the first ${short.sendable.toLocaleString()} of ` +
+        `${short.audienceSize.toLocaleString()}${
+          short.audienceTruncated ? ' or more' : ''
+        } ${audienceLabel}s who haven't unsubscribed`
+      : `every ${audienceLabel} who hasn't unsubscribed`
     const confirmed = await confirm({
       title: scheduling ? 'Schedule this campaign?' : 'Send this campaign?',
       description: scheduling
-        ? `"${subject.trim()}" goes to every ${audienceLabel} who hasn't ` +
-          `unsubscribed on ${new Date(sendAtMs).toLocaleString()}.`
-        : `"${subject.trim()}" goes to every ${audienceLabel} who hasn't ` +
-          'unsubscribed.',
+        ? `"${subject.trim()}" goes to ${reach} on ` +
+          `${new Date(sendAtMs).toLocaleString()}.`
+        : `"${subject.trim()}" goes to ${reach}.`,
       confirmationText: scheduling ? 'Schedule' : 'Send',
     })
       .then(() => true)
@@ -507,6 +531,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
     busy,
     user,
     hostId,
+    preview,
     confirm,
     enqueueSnackbar,
   ])
@@ -597,6 +622,12 @@ export function HostCampaignsCard(props: { hostId: string }) {
           (AGL-2178). It reports what the SEND resolved, so an empty
           audience or a monthly cap is said here — before the email is
           written — instead of after the Send button.
+
+          It reports the AUDIENCE beside the send size whenever the two
+          differ. One send carries a bounded number of recipients, and a
+          readout showing only that number tells a merchant with a 3,000
+          person list that their audience is 500 — the other 2,500 are
+          never mailed and nothing anywhere says so.
          */}
         <Typography variant="caption" color="text.secondary">
           {preview === null
@@ -604,8 +635,13 @@ export function HostCampaignsCard(props: { hostId: string }) {
             : 'error' in preview
               ? preview.error || 'Could not count this audience'
               : `Recipients ${preview.sendable.toLocaleString()}` +
+                (preview.audienceSize > preview.sendable
+                  ? ` of ${preview.audienceSize.toLocaleString()}${
+                      preview.audienceTruncated ? '+' : ''
+                    } in this audience`
+                  : '') +
                 (preview.suppressed
-                  ? ` · ${preview.suppressed.toLocaleString()} unsubscribed`
+                  ? ` · ${preview.suppressed.toLocaleString()} unsubscribed or suppressed`
                   : '')}
         </Typography>
         {/*
