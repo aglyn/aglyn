@@ -35,8 +35,9 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { createEmailScreen } from '../utils/create-email-screen'
+import { useCampaignSendApi } from './use-campaign-send-api'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -47,7 +48,6 @@ import {
   useOrgPlan,
   useHostResourceApi,
   useHostVersionApi,
-  useUser,
 } from '@aglyn/tenant-feature-instance'
 
 // The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
@@ -117,6 +117,17 @@ export interface CampaignComposerProps {
    * may legitimately carry a newsletter and a promotion.
    */
   campaignTopicId?: string
+  /**
+   * What the merchant called this email when they created it, for the record
+   * rather than for the recipient.
+   *
+   * Collected by the create drawer on the Emails list, which asks for a name
+   * the way every other create in the console does. It is NOT the subject: an
+   * email's subject is written for the person opening it and gets edited
+   * until the moment it sends, and a merchant looking for "the one with the
+   * discount code" months later has nothing else to look for.
+   */
+  displayName?: string
   /** Called once a send or a schedule lands. */
   onSent?: () => void
 }
@@ -135,6 +146,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
     emailCampaignId,
     campaignListIds,
     campaignTopicId,
+    displayName,
     onSent,
   } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
@@ -145,7 +157,6 @@ export function CampaignComposer(props: CampaignComposerProps) {
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
-  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const router = useRouter()
@@ -315,34 +326,11 @@ export function CampaignComposer(props: CampaignComposerProps) {
   ])
 
   /*
-   * The signed-in user, READ THROUGH A REF.
-   *
-   * `authorizedPost` is a dependency of the two preview effects, so anything
-   * that changes its identity re-issues their requests — and the user object
-   * is a new object on most renders. Depending on it directly made the count
-   * effect fire on every keystroke in the composer: `setPreview(null)`, then a
-   * full audience resolution, for a number that cannot have moved. The token
-   * is fetched at call time either way, so the ref costs nothing and the
-   * callback depends on the one thing that really identifies the request.
+   * The one authorized caller of the campaign API, shared with the email
+   * detail page's "send to more people". It holds the user in a ref for a
+   * reason the preview effects below depend on — see the hook.
    */
-  const userRef = useRef(user)
-  userRef.current = user
-  const authorizedPost = useCallback(
-    async (payload: Record<string, unknown>) => {
-      const idToken = await (userRef.current as any)?.getIdToken?.()
-      const response = await fetch('/api/campaigns/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({ hostId, ...payload }),
-      })
-      const json = await response.json().catch(() => ({}))
-      return { response, payload: json as Record<string, any> }
-    },
-    [hostId],
-  )
+  const authorizedPost = useCampaignSendApi(hostId)
 
   const handleTestSend = useCallback(async () => {
     if (busy) return
@@ -629,6 +617,7 @@ export function CampaignComposer(props: CampaignComposerProps) {
         ...(experimentId ? { experimentId } : {}),
         ...(templateScreenId ? { templateScreenId } : {}),
         ...(emailCampaignId ? { emailCampaignId } : {}),
+        ...(displayName ? { displayName } : {}),
         ...(topicId ? { topicId } : {}),
         fromName: fromName.trim(),
         replyTo: replyTo.trim(),

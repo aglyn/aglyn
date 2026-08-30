@@ -68,6 +68,21 @@ import {
   unsubscribeSignature as sharedUnsubscribeSignature,
 } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
 import { recordMarketingSends } from '@aglyn/tenant-data-admin/server/email-marketing-gate'
+/*
+ * The LEAF module again, and for the third reason listed above `document-id`:
+ * the specs that reach this file mock the `@aglyn/tenant-data-admin` barrel,
+ * and a reach helper resolved through it would be whatever their factory
+ * happens to contain. The one function here that may not be wrong — the read
+ * that decides who has already had this email — is the one that must come
+ * from the real module.
+ */
+import {
+  CAMPAIGN_REACH_CEILING,
+  campaignReachCovers,
+  partitionByCampaignReach,
+  readCampaignReach,
+  recordCampaignReach,
+} from '@aglyn/tenant-data-admin/server/email-campaign-reach'
 import { createHash, createHmac } from 'crypto'
 import {
   EMAIL_MAX_RECIPIENTS_PER_SEND,
@@ -289,8 +304,51 @@ export interface CampaignSendOptions {
    * template's own, and gives a plain-text campaign one at all.
    */
   preheader?: string
+  /**
+   * What the merchant called this email, for the record rather than for the
+   * recipient.
+   *
+   * Never leaves the console — it is not the subject and reaches no header,
+   * so it is stored as typed apart from a length cap. Absent on every send
+   * composed from a campaign, where the campaign is what carries the name.
+   */
+  displayName?: string
   /** Test sends (AGL-349) skip the campaign record and stats. */
   recordCampaign?: boolean
+  /**
+   * SEND THIS EMAIL AGAIN, TO PEOPLE IT HAS NOT REACHED.
+   *
+   * Set with a `campaignId` naming a send that has already gone out. The send
+   * is not copied and no second document is made: this send addresses the
+   * same audience under the same id, minus everyone the earlier sends
+   * reached, and ADDS to the counters already on the record.
+   *
+   * ## Why the same document, rather than a new send
+   *
+   * Two reasons, and both are properties a copy would break.
+   *
+   * The unsubscribe link is the first. Every message this email has already
+   * delivered carries `cid={campaignId}` inside its own HMAC, and those
+   * messages sit in inboxes forever. A follow-up under a new id would be a
+   * second `cid` for one email — two opt-out scopes for one mailing, and an
+   * unsubscribe rate split across two records neither of which is the answer.
+   *
+   * The report is the second. Opens and clicks are attributed by the
+   * `campaignId` tag on the delivered message, so a copy would collect the
+   * follow-up's engagement on a document whose `sent` counts only the
+   * follow-up. Keeping one document keeps every rate over a denominator that
+   * covers the same mail the numerator does — see the additive write at the
+   * bottom of this function for the arithmetic that holds it.
+   *
+   * ## What it does NOT relax
+   *
+   * Nothing. The follow-up runs the whole of this function: the consent
+   * split, both suppression lists, the topic filter, the monthly pre-check
+   * and reservation, the platform and per-workspace hourly ceilings, and the
+   * per-message governor. Its only additions are the subtraction below and
+   * the shape of the write at the end.
+   */
+  followUp?: boolean
   /**
    * The requester's OWN verified address, for the composer's test send
    * (AGL-349). Exempts exactly this address from the marketing-consent rule.
@@ -488,6 +546,18 @@ export interface CampaignSendResult {
   dryRun?: boolean
   /** Recipients the hourly governor refused mid-batch (AGL-2409). */
   deferred?: number
+  /**
+   * Follow-up only: people in the audience this email had already reached, and
+   * which this send therefore did not address.
+   *
+   * Reported rather than netted away, because it is the number that explains
+   * the other ones. A follow-up over a 3,000-person list that addresses 40
+   * people has not failed — 2,960 of them already have the email — and
+   * without this figure the merchant cannot tell that from a broken audience.
+   */
+  alreadyReached?: number
+  /** Whether this send added to an existing email rather than starting one. */
+  followUp?: boolean
 }
 
 export async function performCampaignSend(
@@ -553,6 +623,71 @@ export async function performCampaignSend(
   const hostSnapshot = await hostRef.get()
   if (!hostSnapshot.exists) {
     throw new CampaignSendError('Unknown site', 404)
+  }
+
+  /*==========================================
+   * THE FOLLOW-UP'S ADMISSION CHECKS.
+   *
+   * Here rather than in the route, and re-run even though the route has
+   * already loaded the same document to build these options: the properties
+   * below are the ones that decide whether somebody gets a second copy of an
+   * email, and a check a caller performs is a check the next caller forgets.
+   * Two reads of one small document on a deliberate button press is what that
+   * costs.
+   *=========================================*/
+  let reachedKeys: ReadonlySet<string> | null = null
+  if (options.followUp) {
+    if (!options.campaignId) {
+      throw new CampaignSendError(
+        'A follow-up has to name the email it is adding to',
+        400,
+      )
+    }
+    const sendSnapshot = await hostRef
+      .collection('campaigns')
+      .doc(options.campaignId)
+      .get()
+    if (!sendSnapshot.exists) {
+      throw new CampaignSendError('Unknown email', 404)
+    }
+    /*
+     * Only a SENT email has anybody to add to. A scheduled one has not gone
+     * out — sending it now is what the scheduler is for, and doing it here
+     * would deliver it twice; a canceled one was withdrawn on purpose.
+     */
+    if (sendSnapshot.get('status') !== 'sent') {
+      throw new CampaignSendError(
+        'Only an email that has already been sent can go to more people',
+        400,
+      )
+    }
+    /*
+     * FAILS CLOSED. `readCampaignReach` throws rather than answering
+     * "nobody", and that throw is deliberately not caught: the whole feature
+     * rests on being able to name who already has this email, and a send that
+     * cannot is a send that must not happen.
+     */
+    const keys = await readCampaignReach(hostId, options.campaignId, firestore)
+    const sentSoFar = Number(sendSnapshot.get('stats')?.sent ?? 0)
+    if (!campaignReachCovers(keys, sentSoFar)) {
+      throw new CampaignSendError(
+        'This email does not have a complete record of who it reached, so ' +
+          'it cannot be sent to more people without risking a second copy ' +
+          'for somebody who already has it. Compose a new email to the ' +
+          'people you want to add.',
+        409,
+      )
+    }
+    if (keys.size >= CAMPAIGN_REACH_CEILING) {
+      throw new CampaignSendError(
+        `This email has already reached ${keys.size.toLocaleString()} ` +
+          `people, which is the most one email may reach ` +
+          `(${CAMPAIGN_REACH_CEILING.toLocaleString()}). Compose a new email ` +
+          'for the rest of the audience.',
+        409,
+      )
+    }
+    reachedKeys = keys
   }
 
   /*
@@ -736,15 +871,60 @@ export async function performCampaignSend(
    * not being mailed. Every result from here down carries both, so a send can
    * report "reached N of M" rather than reporting N as if it were M.
    */
-  const resolved = [
+  const addressable = [
     ...new Set(
       recipients
         .map((email) => email.trim().toLowerCase())
         .filter((email) => EMAIL_PATTERN.test(email)),
     ),
   ]
-  if (!resolved.length) {
+  if (!addressable.length) {
     throw new CampaignSendError('The audience is empty', 400)
+  }
+
+  /*==========================================
+   * THE SUBTRACTION: NOBODY GETS THIS EMAIL TWICE.
+   *
+   * ## Why it is HERE, above the per-send cap
+   *
+   * Not a preference — the only position that works. The cap a few lines
+   * below takes "the FIRST N of a stable order", and that stability is what
+   * makes it defensible: two sends of an unchanged audience address the same
+   * people. Which means a follow-up that subtracted AFTER the cap would be
+   * handed the same first 500 addresses the original send took, discover that
+   * all 500 have had the email, and mail nobody — every time, forever, for
+   * any audience larger than one send.
+   *
+   * So the subtraction runs on the whole resolved audience and the cap then
+   * takes the first N of what is LEFT, which is the same rule pointed at the
+   * remainder.
+   *
+   * ## What it costs, and why that is the right trade
+   *
+   * Nothing per address: the reach record is one document, read once above,
+   * and the test is a hash and a set lookup. This is the one filter in the
+   * send that can afford to run over the whole audience rather than the
+   * capped list, which is why suppression stays where it is.
+   *
+   * ## What `resolved` means from here down
+   *
+   * The people this send may address — so on a follow-up it is the NEW part
+   * of the audience, and every figure derived from it (the consent split,
+   * `audienceSize`) describes that part. The write at the bottom adds those
+   * figures to the ones already recorded, so the totals on the email cover
+   * both sends over two populations that cannot overlap.
+   *=========================================*/
+  const partitioned = reachedKeys
+    ? partitionByCampaignReach(addressable, reachedKeys)
+    : { unreached: addressable, alreadyReached: 0 }
+  const alreadyReached = partitioned.alreadyReached
+  const resolved = partitioned.unreached
+  if (!resolved.length) {
+    throw new CampaignSendError(
+      'Everyone in this audience has already had this email, so nothing has ' +
+        'been sent.',
+      400,
+    )
   }
 
   /*
@@ -1006,6 +1186,7 @@ export async function performCampaignSend(
       recipients: recipients.length,
       audienceSize: resolved.length,
       ...(audienceTruncated ? { audienceTruncated: true } : {}),
+      ...(options.followUp ? { followUp: true, alreadyReached } : {}),
       sendable: sendable.length,
       suppressed: recipients.length - sendable.length,
       /*
@@ -1359,6 +1540,30 @@ export async function performCampaignSend(
   await recordMarketingSends(hostId, reached)
   await meterHostEmail(hostId, sent, 'campaign')
 
+  /*
+   * WHO THIS EMAIL HAS NOW REACHED, so a later send can subtract them.
+   *
+   * Written for every real send and not only for follow-ups, because the
+   * record has to exist BEFORE anybody asks for one — an email whose first
+   * send kept no account of itself can never be sent to more people, which is
+   * exactly what `campaignReachCovers` refuses above.
+   *
+   * A test send is excluded with the campaign record it also skips: it
+   * delivers to the requester's own address under an id nothing will ever
+   * follow up, and counting it would file a real person's address against a
+   * mailing that does not exist.
+   *
+   * Ahead of the campaign write below rather than after it, so a failure
+   * between the two leaves an email whose reach record is AHEAD of its
+   * recorded `sent`. `campaignReachCovers` reads that as covered, which is
+   * the safe direction: a follow-up subtracts more people than it strictly
+   * has to. The other order would leave the record short and refuse the
+   * follow-up, which is also safe but loses the feature over a transient.
+   */
+  if (options.recordCampaign !== false) {
+    await recordCampaignReach(hostId, campaignId, reached, firestore)
+  }
+
   // Sends are the email variant's exposures (AGL-255).
   if (experiment && experiment.status === 'running') {
     for (const [variantId, count] of Object.entries(variantSends)) {
@@ -1396,6 +1601,27 @@ export async function performCampaignSend(
       ...(deferred ? { deferred } : {}),
     }
   }
+  /*==========================================
+   * ADDING TO A COUNTER, AS AGAINST REPLACING IT.
+   *
+   * `set(..., {merge: true})` merges a nested map FIELD BY FIELD, so a
+   * follow-up writing a plain `stats.recipients` would overwrite the original
+   * send's figure with its own — and every rate on the report divides by
+   * `sent` or by `delivered`. `delivered`, `opens`, `bounced` and the rest are
+   * incremented by the delivery webhook keyed on this same `campaignId`, so
+   * they already cover BOTH sends. Replacing `sent` with the follow-up's
+   * smaller number would leave a numerator counting two sends over a
+   * denominator counting one, and a delivery rate of 300%.
+   *
+   * So every send-recorded counter goes through here: a plain number the
+   * first time, an increment on a follow-up. The two populations a follow-up
+   * measures are disjoint by construction — it addressed nobody the earlier
+   * sends reached — so the sums are totals rather than double counts.
+   *=========================================*/
+  const additive = (value: number) =>
+    options.followUp
+      ? (firebaseAdmin.firestore.FieldValue.increment(value) as never)
+      : value
   await hostRef.collection('campaigns').doc(campaignId).set(
     {
       subject,
@@ -1427,13 +1653,14 @@ export async function performCampaignSend(
       ...(options.fromName ? { fromName: options.fromName } : {}),
       ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       ...(options.preheader ? { preheader: options.preheader } : {}),
+      ...(options.displayName ? { displayName: options.displayName } : {}),
       ...(options.emailCampaignId
         ? { emailCampaignId: options.emailCampaignId }
         : {}),
       ...(experiment ? { experimentId: experiment.$id } : {}),
       stats: {
-        recipients: sendable.length,
-        sent,
+        recipients: additive(sendable.length),
+        sent: additive(sent),
         /*
          * The audience this send was TAKEN FROM, beside what it reached.
          *
@@ -1447,13 +1674,22 @@ export async function performCampaignSend(
          * stopped at its read ceiling, so the audience is at least this and
          * the shortfall is at least the difference.
          */
-        audienceSize: resolved.length,
+        audienceSize: additive(resolved.length),
         ...(audienceTruncated ? { audienceSizeTruncated: true } : {}),
         // Recorded, not silent (AGL-2409): a campaign that stopped at the
         // hourly ceiling delivered fewer than it resolved, and the History
         // row is the only place a merchant can find out.
-        ...(deferred ? { deferred } : {}),
-        ...(Object.keys(variantSends).length ? { variantSends } : {}),
+        ...(deferred ? { deferred: additive(deferred) } : {}),
+        ...(Object.keys(variantSends).length
+          ? {
+              variantSends: Object.fromEntries(
+                Object.entries(variantSends).map(([variantId, count]) => [
+                  variantId,
+                  additive(count),
+                ]),
+              ),
+            }
+          : {}),
         /*==========================================
          * THE POPULATIONS THIS SEND ALREADY MEASURED.
          *
@@ -1475,11 +1711,11 @@ export async function performCampaignSend(
          * resolved audience, and `suppressed` over the capped recipient list,
          * because that is where each check actually runs.
          *=========================================*/
-        consented: consentSplit.consented,
-        consentedByOperator: consentSplit.consentedByOperator,
-        grandfathered: consentSplit.grandfathered,
-        consentWithheld: consentSplit.withheld,
-        suppressed: recipients.length - sendable.length,
+        consented: additive(consentSplit.consented),
+        consentedByOperator: additive(consentSplit.consentedByOperator),
+        grandfathered: additive(consentSplit.grandfathered),
+        consentWithheld: additive(consentSplit.withheld),
+        suppressed: additive(recipients.length - sendable.length),
         /*
          * That this send's links were trackable at all.
          *
@@ -1494,8 +1730,28 @@ export async function performCampaignSend(
         clickTracked: true,
       },
       status: 'sent',
-      sentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      sentBy: options.senderUid,
+      /*
+       * `sentAt` is WHEN THIS EMAIL WENT OUT, and a follow-up does not change
+       * that. The emails list orders on it and the campaign rollup takes its
+       * `lastSentAtMs` from it, so moving it would restate an email that went
+       * out in March as one that went out today — the same rewriting-history
+       * fault the recorded populations above exist to avoid.
+       *
+       * When the LAST send happened is a different fact and gets a field of
+       * its own, beside a count of how many sends this email has had. Both
+       * are what the detail page needs to say "sent twice, most recently on
+       * the 14th" instead of presenting one date for two mailings.
+       */
+      ...(options.followUp
+        ? {
+            lastSentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            lastSentBy: options.senderUid,
+          }
+        : {
+            sentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            sentBy: options.senderUid,
+          }),
+      sendCount: additive(1),
     },
     { merge: true },
   )
@@ -1504,8 +1760,77 @@ export async function performCampaignSend(
     recipients: sendable.length,
     audienceSize: resolved.length,
     ...(audienceTruncated ? { audienceTruncated: true } : {}),
+    ...(options.followUp ? { followUp: true, alreadyReached } : {}),
     sent,
     ...(deferred ? { deferred } : {}),
+  }
+}
+
+/**
+ * The stored configuration of a send, as the options that would repeat it.
+ *
+ * A follow-up mails the email that is already there, so every field of it
+ * comes off the RECORD and none of it off the request — the caller names a
+ * site and an email id and nothing else. That is not tidiness: `campaignId`
+ * addresses an existing document, so a caller who could also supply the body
+ * and the audience could put arbitrary copy on somebody else's send id, keep
+ * its `cid` and its report, and mail it.
+ *
+ * Refuses the two shapes that have nothing to repeat. A `manual` send's
+ * addresses are typed into the composer and are not stored on an immediate
+ * send, so there is no audience to re-resolve; a send carrying neither a
+ * template nor a body has no message.
+ */
+function followUpOptionsFrom(
+  snapshot: FirebaseFirestore.DocumentSnapshot,
+  hostId: string,
+  senderUid: string,
+): CampaignSendOptions {
+  const audience = String(snapshot.get('audience') ?? '')
+  if (audience === 'manual') {
+    throw new CampaignSendError(
+      'This email went to addresses typed into the composer, which are not ' +
+        'kept, so there is no audience to add anybody from. Compose a new ' +
+        'email to the people you want to reach.',
+      400,
+    )
+  }
+  const templateScreenId = String(snapshot.get('templateScreenId') ?? '')
+  const body = String(snapshot.get('body') ?? '')
+  if (!templateScreenId && !body) {
+    throw new CampaignSendError('This email has no message to send', 400)
+  }
+  const optional = (field: string) => {
+    const value = String(snapshot.get(field) ?? '')
+    return value ? { [field]: value } : {}
+  }
+  return {
+    hostId,
+    campaignId: snapshot.id,
+    followUp: true,
+    senderUid,
+    subject: String(snapshot.get('subject') ?? ''),
+    body,
+    audience,
+    ...(templateScreenId ? { templateScreenId } : {}),
+    ...optional('segmentId'),
+    ...optional('listId'),
+    ...optional('topicId'),
+    ...optional('fromName'),
+    ...optional('replyTo'),
+    ...optional('preheader'),
+    ...optional('displayName'),
+    ...optional('emailCampaignId'),
+    /*
+     * The experiment is deliberately NOT carried over.
+     *
+     * `performCampaignSend` refuses an experiment that is neither running nor
+     * decided, so a finished one would fail the whole follow-up — and a
+     * running one would take the new recipients as fresh exposures on an
+     * experiment whose result the first send has already influenced. So the
+     * follow-up mails the subject and body the record holds, which is the
+     * campaign's own copy rather than any variant's override.
+     */
   }
 }
 
@@ -1539,6 +1864,13 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    */
   const headerSafe = (value: unknown, max: number): string =>
     String(value ?? '')
+      /*
+       * The control characters are the POINT of this class rather than an
+       * accident in it: CR and LF inside a header value ARE the injection
+       * shape, and `no-control-regex` cannot tell a pattern that matches
+       * them in order to remove them from one that matches them by mistake.
+       */
+      // eslint-disable-next-line no-control-regex
       .replace(/[\s\u0000-\u001f\u007f]+/g, ' ')
       .trim()
       .slice(0, max)
@@ -1546,6 +1878,13 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
   const fromName = headerSafe(req.body?.fromName, 78)
   const replyTo = headerSafe(req.body?.replyTo, 254).toLowerCase()
   const preheader = headerSafe(req.body?.preheader, 200)
+  /*
+   * The email's own name, which is console-only. Flattened to a single line
+   * with the header fields beside it even though it reaches no header: it is
+   * rendered into a table and a page title, and a value carrying control
+   * characters is worth normalizing wherever it is going.
+   */
+  const displayName = headerSafe(req.body?.displayName, 60)
   // The campaign this send joins. Validated as a document id here because it
   // is stored and later queried as one.
   const emailCampaignId = String(req.body?.emailCampaignId ?? '')
@@ -1571,7 +1910,19 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
    * body. `renderPreview` is exempt for the same reason in the other
    * direction — it renders whatever has been typed so far, including nothing.
    */
-  const mails = action !== 'cancel' && action !== 'preview' && action !== 'renderPreview'
+  /*
+   * `followUp` joins the exempt actions, and for a stricter reason than the
+   * other three: it does not merely need no copy, it must be given none. The
+   * message it mails is the one already on the record — see
+   * `followUpOptionsFrom` — so a subject and body in the request would be
+   * fields the route silently discards, and a required field that is
+   * discarded is the shape that teaches a caller it was used.
+   */
+  const mails =
+    action !== 'cancel' &&
+    action !== 'preview' &&
+    action !== 'renderPreview' &&
+    action !== 'followUp'
   if (mails && !templateScreenId && (!subject || !body)) {
     return res.status(400).json({ error: 'Missing subject or body' })
   }
@@ -1715,6 +2066,40 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json(result)
     }
 
+    if (action === 'followUp') {
+      /*
+       * SEND AN EMAIL THAT HAS ALREADY GONE OUT TO THE PEOPLE IT HAS NOT
+       * REACHED.
+       *
+       * The request names a site and an email and carries nothing else that
+       * is read. Everything the send needs comes back off the record, and
+       * `performCampaignSend` re-checks the admission rules this branch does
+       * not check at all — it is the same authorization, the same consent
+       * split, the same two suppression lists, the same monthly reservation
+       * and the same hourly ceilings, because it is the same function.
+       *
+       * `dryRun` rides through so the console can ask how many people are
+       * left before offering the button, and the answer comes from the code
+       * that would do the sending rather than from a count of its own.
+       */
+      const followUpId = String(req.body?.campaignId ?? '')
+      if (!isDocumentId(followUpId)) {
+        return res.status(400).json({ error: 'Invalid campaignId' })
+      }
+      const sendSnapshot = await hostRef
+        .collection('campaigns')
+        .doc(followUpId)
+        .get()
+      if (!sendSnapshot.exists) {
+        return res.status(404).json({ error: 'Unknown email' })
+      }
+      const result = await performCampaignSend({
+        ...followUpOptionsFrom(sendSnapshot, hostId, decoded.uid),
+        ...(req.body?.dryRun ? { dryRun: true } : {}),
+      })
+      return res.status(200).json(result)
+    }
+
     if (action === 'schedule') {
       // Scheduling (AGL-272): store the full send config; the
       // process-scheduled cron delivers it through performCampaignSend.
@@ -1756,6 +2141,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           ...(fromName ? { fromName } : {}),
           ...(replyTo ? { replyTo } : {}),
           ...(preheader ? { preheader } : {}),
+          ...(displayName ? { displayName } : {}),
           ...(emailCampaignId ? { emailCampaignId } : {}),
           status: 'scheduled',
           sendAtMs,
@@ -1810,6 +2196,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       fromName,
       replyTo,
       preheader,
+      displayName,
       emailCampaignId,
       senderUid: decoded.uid,
     })

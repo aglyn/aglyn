@@ -28,6 +28,7 @@ import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import {
   ceilingedWindow,
   collectionCeiling,
@@ -35,7 +36,10 @@ import {
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
+  Box,
+  Button,
   Chip,
+  Divider,
   Stack,
   Table,
   TableBody,
@@ -46,12 +50,28 @@ import {
 } from '@mui/material'
 import { collection } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
+import CampaignComposer from './campaign-composer'
 
 /** How many messages one read of this list covers. */
 const EMAIL_CEILING = 30
+
+/** How many campaigns the create drawer offers to file a new email under. */
+const CONTAINER_CEILING = 50
+
+/**
+ * What the create drawer is composing, or `null` when it is not open.
+ *
+ * `emailCampaignId` empty is a SINGLE SEND, not a missing value — see the
+ * comment on the drawer below for why that is a real answer rather than a
+ * deferred one.
+ */
+interface Composing {
+  displayName: string
+  emailCampaignId: string
+}
 
 const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#opens--clicks',
@@ -170,19 +190,78 @@ export function EmailsListCard(props: EmailsListCardProps) {
     ]
   }
 
+  const [createOpen, setCreateOpen] = useState(false)
+  const [composing, setComposing] = useState<Composing | null>(null)
+
+  /*
+   * The campaigns a new email may be filed under, read only while the drawer
+   * is OPEN.
+   *
+   * A null query opens no listener, so the list costs what it always did until
+   * somebody asks to write something. Mounting this unconditionally would put
+   * a second collection read on every reader who came to look at the table,
+   * which is the cost the whole surface is routed to avoid.
+   */
+  const { data: campaignDocs } = useFirestoreCollection<any>(
+    () =>
+      createOpen
+        ? collectionCeiling(
+            collection(firestore, 'hosts', hostId, 'emailCampaigns'),
+            CONTAINER_CEILING,
+          )
+        : null,
+    [firestore, hostId, createOpen],
+    { idField: '$id' },
+  )
+  const campaignOptions = useMemo(
+    () =>
+      [...(campaignDocs ?? [])]
+        .map((campaign: any) => ({
+          value: String(campaign.$id),
+          label: String(campaign.name || 'Untitled campaign'),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [campaignDocs],
+  )
+
+  const handleCreate = useCallback((values: Record<string, any>) => {
+    setComposing({
+      displayName: String(values.displayName ?? '').trim(),
+      emailCampaignId: String(values.emailCampaignId ?? ''),
+    })
+    setCreateOpen(false)
+  }, [])
+
   return (
     <CardDisplay
       header={'Emails'}
       help={emailsDocsHelp}
+      HeaderProps={{
+        action: (
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => setCreateOpen(true)}
+          >
+            {'New email'}
+          </Button>
+        ),
+      }}
       contentGutterX
       contentGutterY
     >
       <Stack spacing={2}>
         {emails.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Nothing has been sent or scheduled yet. A message is created ' +
-              'when a campaign sends, and appears here with its report.'}
-          </Typography>
+          <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>
+            <Typography variant="body2" color="text.secondary">
+              {'Nothing has been sent or scheduled yet. Write one here, or ' +
+                'from a campaign, and it appears in this list with its own ' +
+                'report.'}
+            </Typography>
+            <Button variant="contained" onClick={() => setCreateOpen(true)}>
+              {'New email'}
+            </Button>
+          </Stack>
         ) : (
           <>
             <Table size="small">
@@ -275,7 +354,70 @@ export function EmailsListCard(props: EmailsListCardProps) {
               'scheduled more than that, and the rest are not in this list.'}
           </Alert>
         ) : null}
+
+        {/*
+          THE COMPOSER, ON DEMAND, EXACTLY AS THE CAMPAIGN PAGE MOUNTS IT.
+
+          The create FORM is the drawer, per the console's rule; this is the
+          working surface the form hands off to, and it opens listens of its
+          own — the site's email designs, the org's lists and segments, the
+          running experiments. A reader who came to look at the table must not
+          pay for a composer they did not open, which is the same reason the
+          campaign detail page keeps it behind a flag rather than mounting it
+          with the page.
+        */}
+        {composing ? (
+          <Box>
+            <Divider sx={{ mb: 2 }} />
+            <CampaignComposer
+              hostId={hostId}
+              displayName={composing.displayName}
+              emailCampaignId={composing.emailCampaignId || undefined}
+              onSent={() => setComposing(null)}
+            />
+          </Box>
+        ) : null}
       </Stack>
+      {/*
+        AN EMAIL WRITTEN HERE BELONGS TO A CAMPAIGN, OR TO NO CAMPAIGN.
+
+        The second is a real answer and not a gap in the model. A send with no
+        container is what the product has always had — every message that
+        predates campaigns is one — and `campaignListRows` adopts each of them
+        as a campaign of one at read time, which is the "Single send" chip on
+        the campaigns table. So composing from this list mints nothing, files
+        nothing, and requires nobody to invent a campaign first: it leaves the
+        container empty, and the send that results is presented the way every
+        containerless send already is.
+
+        Offering the campaigns anyway is what stops the opposite mistake — a
+        merchant who DOES have a spring campaign writing its third email into
+        a single send that never joins the rollup.
+      */}
+      <CreateArtifactDrawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="New email"
+        submitLabel="Start writing"
+        includeDescription={false}
+        onSubmit={handleCreate}
+        extraFields={[
+          {
+            component: 'select',
+            name: 'emailCampaignId',
+            label: 'Campaign',
+            initialValue: '',
+            helperText:
+              'Leave this as a single send unless the email belongs with ' +
+              'others',
+            disableDefaultOption: true,
+            options: [
+              { value: '', label: 'Single send — not part of a campaign' },
+              ...campaignOptions,
+            ],
+          },
+        ]}
+      />
     </CardDisplay>
   )
 }

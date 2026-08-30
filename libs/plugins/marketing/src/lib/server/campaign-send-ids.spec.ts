@@ -314,10 +314,27 @@ function seed() {
   })
 }
 
-/** Every campaign document path in the store, at any depth. */
+/**
+ * Every campaign document path in the store, at any depth.
+ *
+ * Deliberately not narrowed to the campaign document itself: the whole point
+ * is to catch a write that landed somewhere UNDER a campaign id that was
+ * really a path, and a filter that only looked one level down would report an
+ * empty list for exactly the bug this file exists to hold.
+ *
+ * So a send's own subcollection documents appear here too, and the
+ * expectations below name them. `reports/reached` is the record of who a send
+ * delivered to, which a later send subtracts so nobody is mailed twice.
+ */
 function campaignPaths(): string[] {
   return [...store.keys()].filter((key) => key.includes('/campaigns/')).sort()
 }
+
+/** The paths one ordinary send leaves behind, in `campaignPaths()` order. */
+const sendPaths = (campaignId: string) => [
+  `hosts/${HOST}/campaigns/${campaignId}`,
+  `hosts/${HOST}/campaigns/${campaignId}/reports/reached`,
+]
 
 function makeResponse() {
   const result = { status: 0, body: undefined as any }
@@ -490,9 +507,7 @@ describe('a merchant-authored variant id', () => {
     )
     // The refusal must not cost the send: the emails really went out.
     expect(result.sent).toBe(1)
-    expect(campaignPaths()).toEqual([
-      `hosts/${HOST}/campaigns/${result.campaignId}`,
-    ])
+    expect(campaignPaths()).toEqual(sendPaths(result.campaignId))
   })
 })
 
@@ -506,7 +521,7 @@ describe('the ordinary campaign still sends', () => {
     const result = await send({ campaignId: 'spring-2026' })
 
     expect(result.sent).toBe(1)
-    expect(campaignPaths()).toEqual([`hosts/${HOST}/campaigns/spring-2026`])
+    expect(campaignPaths()).toEqual(sendPaths('spring-2026'))
     expect(store.get(`hosts/${HOST}/campaigns/spring-2026`)).toMatchObject({
       subject: 'Spring sale',
       status: 'sent',
@@ -516,9 +531,7 @@ describe('the ordinary campaign still sends', () => {
   it('mints an id when the caller supplies none', async () => {
     const result = await send()
 
-    expect(campaignPaths()).toEqual([
-      `hosts/${HOST}/campaigns/${result.campaignId}`,
-    ])
+    expect(campaignPaths()).toEqual(sendPaths(result.campaignId))
   })
 
   it('records exposures for a well-formed variant id', async () => {

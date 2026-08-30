@@ -26,17 +26,37 @@
  * message went — the campaign, and the list as the SEND recorded it.
  */
 
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { CampaignStats } from '../model/campaign-report'
 
 const mockDocs = new Map<string, unknown>()
+const mockEnqueue = jest.fn()
 
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   doc: (_db: unknown, ...segments: string[]) => ({
     __path: segments.join('/'),
   }),
+}))
+
+/*
+ * The two app-shell contexts the page's "send to more recipients" control
+ * needs. Both are providers the console mounts at its root and no test tree
+ * has; without them the hooks answer `null` and the page cannot render at
+ * all, which would turn every assertion in this file into a test of the
+ * harness. `confirm` REJECTS by default — declining is the safe answer for a
+ * control whose confirmed branch mails people — so no test here can send by
+ * accident.
+ */
+jest.mock('@aglyn/shared-ui-snackstack', () => ({
+  __esModule: true,
+  useSnackbar: () => ({ enqueueSnackbar: mockEnqueue }),
+}))
+
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  ...jest.requireActual('@aglyn/shared-ui-jsx'),
+  useConfirmationContext: () => ({ confirm: () => Promise.reject() }),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -216,5 +236,92 @@ describe('a message report names its denominators on screen', () => {
     await renderEmail({ email: null })
     expect(screen.getByText(/could not be loaded/i)).toBeTruthy()
     expect(screen.queryByText('Open rate')).toBeNull()
+  })
+})
+
+/**
+ * SENDING AN EMAIL THAT HAS ALREADY GONE OUT TO MORE PEOPLE.
+ *
+ * The page's part of the feature is small, and the two halves that matter are
+ * both refusals: it is offered only where it means something, and it counts
+ * before it asks. Everything else — who is left, who is suppressed, whether
+ * there is allowance and hourly room — belongs to the send path and is held
+ * in `campaign-follow-up.spec.ts`.
+ */
+describe('an email that has been sent can reach more people', () => {
+  it('offers the control on a sent email', async () => {
+    await renderEmail()
+    expect(screen.getByText('Send to more recipients')).toBeTruthy()
+  })
+
+  it('does NOT offer it on a scheduled email', async () => {
+    // Nothing has gone out, so "more" names nobody. The route refuses it, and
+    // being refused is a worse way to learn that than not being offered it.
+    await renderEmail({
+      email: { status: 'scheduled', sentAt: undefined, sendAtMs: 1 },
+    })
+    expect(screen.queryByText('Send to more recipients')).toBeNull()
+  })
+
+  it('does NOT offer it on a canceled email', async () => {
+    await renderEmail({ email: { status: 'canceled' } })
+    expect(screen.queryByText('Send to more recipients')).toBeNull()
+  })
+
+  it('counts before it asks, and asks before it sends', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ sendable: 12, alreadyReached: 88 }),
+    }))
+    ;(globalThis as any).fetch = fetchMock
+    await renderEmail()
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Send to more recipients'))
+    })
+
+    // Exactly ONE request, and it is the READ. The confirmation rejects in
+    // this harness, so a second request would be a send nobody agreed to.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as any)[1].body))
+    expect(body).toMatchObject({
+      action: 'followUp',
+      campaignId: 'msg_1',
+      dryRun: true,
+    })
+  })
+
+  it('says nothing was sent when the whole audience already has it', async () => {
+    ;(globalThis as any).fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ sendable: 0, alreadyReached: 100 }),
+    }))
+    await renderEmail()
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Send to more recipients'))
+    })
+
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      'Everyone in this audience already has this email',
+      expect.anything(),
+    )
+  })
+
+  it('says how many sends an email has had, so its figures are not read as one mailing', async () => {
+    await renderEmail({
+      email: {
+        sendCount: 3,
+        lastSentAt: { toMillis: () => 1_700_100_000_000 },
+      },
+    })
+    expect(screen.getByText(/^3, most recently/)).toBeTruthy()
+  })
+
+  it('says nothing about sends for an email that has only had one', async () => {
+    await renderEmail()
+    expect(screen.queryByText(/most recently/)).toBeNull()
   })
 })
