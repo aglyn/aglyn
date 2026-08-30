@@ -524,3 +524,67 @@ describe('the send preview says which population is which', () => {
     expect(actual.sent).toBe(preview.sendable)
   })
 })
+
+/*==========================================
+ * THE POPULATIONS THE SEND MEASURED, RECORDED.
+ *
+ * Every one of these was already computed on the real send path and returned
+ * only from the DRY RUN — so once a campaign actually went out, the numbers
+ * that explain WHY it reached the people it did were discarded. The campaign
+ * report needs them, and it must not recompute them: consent records change
+ * and addresses get suppressed, so asking the list next month answers a
+ * question about the list under a heading that claims to describe the send.
+ *=========================================*/
+describe('what a real send writes onto the campaign', () => {
+  const recorded = async () => {
+    configurePolicy('forward')
+    const result = await performCampaignSend({
+      hostId: 'host-1',
+      subject: 'Spring sale',
+      body: 'The sale is on.',
+      audience: 'leads',
+      senderUid: 'uid-1',
+    })
+    return (
+      mockState.store[`hosts/host-1/campaigns/${result.campaignId}`] as any
+    ).stats
+  }
+
+  it('records the consent split the send measured', async () => {
+    // The same four leads and the same policy the dry run above reports on,
+    // so the recorded figures and the previewed ones are checkably the same
+    // numbers rather than two implementations that happen to agree.
+    expect(await recorded()).toMatchObject({
+      audienceSize: 4,
+      recipients: 2,
+      consented: 1,
+      grandfathered: 1,
+      consentWithheld: 2,
+    })
+  })
+
+  it('records how many of the addressed were already suppressed', async () => {
+    expect(await recorded()).toMatchObject({ suppressed: 0 })
+  })
+
+  /*
+   * Click tracking rewrites links in the HTML part, so a send with no HTML
+   * reports zero clicks whatever recipients did. `sendEmail` now synthesises
+   * one for a text-only send; recording that is what lets the report withhold
+   * a click RATE on the campaigns that predate the fix instead of publishing
+   * a structural zero as a measurement.
+   */
+  it('records that this send carried a trackable HTML part', async () => {
+    expect(await recorded()).toMatchObject({ clickTracked: true })
+  })
+
+  it('leaves the counters the delivery webhook owns alone', async () => {
+    const stats = await recorded()
+    // Absent, not zero: the report distinguishes "no delivery events yet"
+    // from "nothing was delivered", and a zero written here would collapse
+    // the two on every campaign from the moment it is sent.
+    expect(stats.delivered).toBeUndefined()
+    expect(stats.opens).toBeUndefined()
+    expect(stats.unsubscribes).toBeUndefined()
+  })
+})
