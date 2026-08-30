@@ -53,7 +53,7 @@ const GATE = 'libs/plugins/marketing/src/lib/server/campaign-send.ts'
 /** Every surface that reports the campaign allowance to a customer. */
 const READOUTS: Record<string, string> = {
   'the campaign composer':
-    'libs/plugins/email/src/lib/components/campaigns-card.tsx',
+    'libs/plugins/email/src/lib/components/campaign-composer.tsx',
   'the billing usage meter':
     'apps/console/components/billing/billing-usage.component.tsx',
   'the public usage API':

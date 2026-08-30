@@ -19,7 +19,7 @@
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import type { ReactNode } from 'react'
-import CampaignReportCard from './campaign-report-card'
+import CampaignDetailCard from './campaign-detail-card'
 import CampaignsCard from './campaigns-card'
 import EmailDetail from './email-detail'
 import EmailScreensCard from './email-screens-card'
@@ -54,25 +54,30 @@ function sectionBody(
   switch (section) {
     case 'campaigns':
       /*
-       * `/emails/campaigns/{campaignId}` is the report for one campaign,
-       * and it is a ROUTE rather than an expanded row for two reasons: it is
-       * linkable, which is what a merchant wants to paste into a message
-       * about last week's send; and the composer plus the thirty-campaign
-       * history are the surface's expensive listens, so a reader who came for
-       * one campaign's numbers must not pay for them.
+       * `/emails/campaigns/{id}` is one campaign, and it is a ROUTE rather
+       * than an expanded row for two reasons: it is linkable, which is what a
+       * merchant wants to paste into a message about last week's send; and
+       * the composer plus the campaign list are the surface's expensive
+       * listens, so a reader who came for one campaign's numbers must not pay
+       * for them.
+       *
+       * The id may name a CAMPAIGN or, for every URL minted before campaigns
+       * grouped their emails, a single SEND. `CampaignDetailCard` answers that
+       * by reading, and falls through to the send's own report — so no pasted
+       * link stops resolving.
        *
        * No registry entry is needed — the shell hands a section every segment
        * beneath it, so a section owns its own subtree. The gate is the
        * section's, which is the same gate the composer is behind.
        */
       return detail[0] ? (
-        <CampaignReportCard
+        <CampaignDetailCard
           hostId={hostId}
           campaignId={detail[0]}
           basePath={basePath}
         />
       ) : (
-        <CampaignsCard hostId={hostId} />
+        <CampaignsCard hostId={hostId} basePath={basePath} />
       )
     case 'emails':
       /*

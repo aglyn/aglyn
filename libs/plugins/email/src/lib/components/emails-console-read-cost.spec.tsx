@@ -97,13 +97,36 @@ jest.mock('firebase/firestore', () => {
     sum: marker('sum'),
     onSnapshot: (
       ref: { __path?: string; __limit?: number; __doc?: boolean },
-      ..._rest: unknown[]
+      ...rest: unknown[]
     ) => {
       mockListens.push({
         path: ref?.__path ?? '(unknown)',
         // A single-document listen reads exactly one document.
         limit: ref?.__doc ? 1 : (ref?.__limit ?? 0),
       })
+      /*
+       * A DOCUMENT listen ANSWERS — with "no such document".
+       *
+       * Collection listens are left silent, which is all this meter ever
+       * needed: a query is recorded when it is opened. A document listen that
+       * never answers is different, because a screen may legitimately render
+       * NOTHING until it knows whether the document exists — the campaign
+       * detail page does exactly that, since the id in the path names either a
+       * campaign or a single send, and guessing wrong flashes the wrong
+       * screen. Left silent, such a screen mounts nothing and the meter
+       * measures a page that was still deciding.
+       */
+      const next = rest.find((argument) => typeof argument === 'function') as
+        | ((snapshot: unknown) => void)
+        | undefined
+      if (ref?.__doc && next) {
+        next({
+          exists: () => false,
+          data: () => undefined,
+          id: String(ref.__path ?? '').split('/').pop() ?? '',
+          metadata: { hasPendingWrites: false, fromCache: false },
+        })
+      }
       return () => undefined
     },
     getDocs: async () => ({ docs: [], empty: true, size: 0 }),
@@ -390,15 +413,28 @@ describe('emails console read cost (AGL-2501)', () => {
    * audience was. These assertions are what stop that quietly becoming a
    * query again.
    *=========================================*/
-  it('the campaign report reads two documents, and no collection', async () => {
+  it('the campaign report reads three documents, and no collection', async () => {
     await renderConsole('campaigns', ['camp_1'])
     summarize('campaign report', mockListens)
 
-    // Every listen is a single document. A collection query would carry a
-    // limit above 1 (or none at all, which the meter scores at ~100).
+    /*
+     * THREE, and the first of them is what keeps this URL working at all.
+     *
+     * `/emails/campaigns/{id}` names either a campaign CONTAINER or — for
+     * every link minted before campaigns grouped their emails, including ones
+     * merchants have pasted into their own messages — a single SEND. Which it
+     * is can only be settled by reading `emailCampaigns/{id}`, and that read
+     * is the price of never rewriting a send id.
+     *
+     * What the ceiling still buys is the property this file exists for: the
+     * report is a fixed number of SINGLE-DOCUMENT reads whatever the size of
+     * the audience, and the campaign view's own collection queries do not open
+     * on a send URL — they are gated on the container having been found.
+     */
     expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(2)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(3)
     expect(mockListens.map((listen) => listen.path)).toEqual([
+      'hosts/site1/emailCampaigns/camp_1',
       'hosts/site1/campaigns/camp_1',
       'hosts/site1/campaigns/camp_1/reports/links',
     ])
@@ -407,12 +443,14 @@ describe('emails console read cost (AGL-2501)', () => {
   it('the report does not mount the composer or the history', async () => {
     await renderConsole('campaigns', ['camp_1'])
 
-    // The campaigns SECTION reads a 30-campaign ceiling plus segments, lists,
-    // screens and experiments. A reader who came for one campaign's numbers
-    // must not pay for any of it — and `emailDeliveries` must never appear at
-    // all, at any limit.
+    // The campaigns SECTION reads a 30-send ceiling plus the campaign
+    // containers, the org's lists, screens and experiments. A reader who came
+    // for one campaign's numbers must not pay for any of it — and
+    // `emailDeliveries` must never appear at all, at any limit.
     const paths = mockListens.map((listen) => listen.path)
     expect(paths).not.toContain('hosts/site1/campaigns')
+    expect(paths).not.toContain('hosts/site1/emailCampaigns')
+    expect(paths.some((path) => path.endsWith('/lists'))).toBe(false)
     expect(paths.some((path) => path.includes('emailDeliveries'))).toBe(false)
     expect(paths.some((path) => path.endsWith('/screens'))).toBe(false)
     expect(paths.some((path) => path.endsWith('/experiments'))).toBe(false)

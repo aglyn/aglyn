@@ -27,10 +27,54 @@ your plan.
 
 ## Send a campaign
 
-1. Build an **audience** — leads, site members, [segments](../../content-and-data/contacts/overview.md#segments),
-   or an **email list**.
-2. Compose the campaign from the **Marketing** page.
+1. **Create a campaign** on the Emails page — a name, the dates it runs between, and the
+   lists it is aimed at.
+2. Open it and **write an email** inside it. Pick the audience for that email — leads,
+   site members, [segments](../../content-and-data/contacts/overview.md#segments), or an
+   email list.
 3. Send — subject to your plan's **send cap**.
+
+### A campaign holds many emails {#campaigns-group-emails}
+
+A campaign is a **container**, not a single message. It carries a name, a start and end
+date, and the lists it is aimed at; the emails you send inside it are its contents, and
+the campaign's page adds their figures up.
+
+- **The campaigns list** shows one row per campaign: its window, its lists, how many
+  emails it has sent, and the totals across them.
+- **Opening a campaign** shows the lists it is aimed at, every email inside it, the
+  delivery and engagement figures summed across those emails, and a composer for writing
+  the next one.
+- **Each email keeps its own report**, reached from the campaign page. Nothing about an
+  individual send's report or its link changed.
+
+**Campaigns you sent before this existed are still there**, each listed as a campaign of
+one and marked **Single send**. Their reports open at the same address they always did,
+and the unsubscribe links in mail already delivered are untouched.
+
+### Who the email comes from {#who-the-email-comes-from}
+
+Three fields sit under the audience picker, and they are per email rather than per site:
+
+- **From name** — the display name in front of your sending address. The address itself
+  is always your site's verified sending identity; a from name changes what a recipient
+  reads, never which domain the mail leaves on.
+- **Reply-to** — where replies land, when that is not the sending address.
+- **Preheader** — the preview line an inbox shows after the subject.
+
+Left empty, the from name falls back to your workspace's branding and no reply-to or
+preheader is set.
+
+### Preview the email {#preview-the-email}
+
+**Preview email** renders the message as it will be mailed — the same renderer, the same
+merge-tag resolution, and the same HTML part that reaches the inbox — personalized for
+your own account so you can see what a merge tag actually resolves to. It re-renders as
+you type and it resolves no audience, so previewing costs nothing against your caps and
+sends nothing to anybody.
+
+**Send test to me** is the other half: it delivers one real message to your own account
+address, which is the way to check how a mail client renders it.
 
 ### Your monthly send cap {#monthly-send-cap}
 
@@ -98,7 +142,14 @@ That means the count already reflects things you would otherwise only discover a
   writing.
 
 While it works it reads `Counting recipients…`. It re-counts whenever you change the
-audience.
+audience. It does **not** re-count while you write: counting resolves your whole audience,
+and nothing about the subject or the body can change how many people are in it.
+
+**The confirmation dialog states the number.** Pressing Send asks you to confirm a send to
+`342 list subscribers`, or `500 of 3,200 in this audience` when the audience is larger
+than one send carries, and names what is not counted — the people withheld for having no
+consent on record, and the ones already unsubscribed or suppressed. If the count could not
+be read, the dialog says so rather than implying the send reaches everyone.
 
 Counting an audience needs the same permission as sending to it — the size of someone
 else's site's audience is not public information.
