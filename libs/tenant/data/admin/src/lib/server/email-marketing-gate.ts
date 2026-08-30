@@ -22,16 +22,67 @@
  * holds the injection seam; this answers the question, because answering it
  * needs Firestore and that library may not hold the Admin SDK.
  *
- * Four things, in the order they cost:
+ * Five things, in the order they cost:
  *
  *  1. **Both suppression lists**, through the one shared helper. A person who
  *     unsubscribed from this site, hard-bounced anywhere in the product, or
  *     pressed "report spam" is not mailed. Asked first because it is the only
  *     one whose answer is permanent.
- *  2. **An engagement sunset**, when an operator has configured a window —
+ *  2. **The pace the RECIPIENT asked for** on the preference page, if they
+ *     asked for one.
+ *  3. **An engagement sunset**, when an operator has configured a window —
  *     off by default, and it costs a read only when it is on.
- *  3. **A frequency ceiling**, per recipient per site, over a rolling day.
- *  4. **The signed unsubscribe URL**, so the message carries a way out.
+ *  4. **A frequency ceiling**, per recipient per site, over a rolling day.
+ *  5. **The signed unsubscribe URL**, so the message carries a way out.
+ *
+ * ## The order of the three pace refusals, and who each one is for
+ *
+ * Suppression is first and needs no argument: its answer is permanent, and
+ * the frequency record must not count a message that was never going to
+ * leave. The other three are all refusals about PACE, and they are ordered by
+ * whose refusal it is, then by what asking costs.
+ *
+ * **The recipient's own cadence is second — above both platform controls.**
+ * It is the only one of the three a PERSON asked for; the sunset is an
+ * inference this platform drew about them and the ceiling is a guard against
+ * the merchant. When more than one applies, the honest answer to "why did
+ * this not send" is the fact somebody stated, not the guess we made. It is
+ * also the cheapest to ask: it is already on the counter document the ceiling
+ * reads, so a recipient who asked for monthly mail never pays for the
+ * sunset's engagement read. And it is the only one that binds a campaign, so
+ * putting it first makes the campaign path and the automated paths evaluate
+ * the same refusals in the same order rather than interleaving one control a
+ * campaign skips with one it does not.
+ *
+ * **The sunset is third, above the ceiling.** Its refusal is TERMINAL and the
+ * ceiling's is not: a sweep defers a `frequency-capped` message and retries
+ * it, so reporting the retryable refusal for a person the sunset would refuse
+ * anyway means the same doomed row comes back on every beat. That argument
+ * does not reach past the cadence, because a cadence gap is a day, a week or
+ * a month — a sweep retries such a row once per interval, not once per beat.
+ *
+ * ## Which refusals bind a campaign
+ *
+ * `MarketingSendContext.capped` is `false` for a campaign, and it governs
+ * exactly two of the four:
+ *
+ * | Refusal            | A campaign is |
+ * | ------------------ | ------------- |
+ * | `suppressed`       | **bound** |
+ * | `cadence-limited`  | **bound** |
+ * | `unengaged`        | exempt (`capped`) |
+ * | `frequency-capped` | exempt (`capped`) |
+ *
+ * The two exemptions share one reason: a campaign is a merchant's reviewed,
+ * one-shot act with a recipient count on screen before they press Send, and a
+ * platform control that silently removed people from that number would make
+ * it a lie. That reason is about a control the merchant did not ask for and
+ * cannot see. It does not reach a request the RECIPIENT made — a campaign
+ * that overrode the preference page would make it a form recording a choice
+ * nothing honors, which is ignoring an unsubscribe one notch quieter.
+ *
+ * A campaign COUNTS toward the ceiling either way; it is exempt from the
+ * refusal, never from the counting.
  *
  * ## The counter is a WINDOW, not a total
  *
@@ -62,15 +113,20 @@
  * anybody, never trims an audience and never deletes a counter row belonging
  * to somebody. `over-limit.ts` states the rule for capacity limits and this is
  * the same instrument pointed at time: the message does not go, the person
- * stays exactly where they were, and the next window mails them again.
+ * stays exactly where they were, and the next window mails them again. The
+ * recipient's own cadence is the same shape — a person who asked for monthly
+ * mail stays on every audience they were on and is mailed again next month.
  */
 
 import {
   getMarketingSendGate,
+  marketingCadenceVerdict,
   marketingFrequencyVerdict,
   marketingSunsetDays,
   marketingSunsetVerdict,
+  normalizeMarketingCadence,
   setMarketingSendGate,
+  type MarketingCadence,
   type MarketingSendGateRequest,
   type MarketingSendGateVerdict,
 } from '@aglyn/shared-util-email'
@@ -91,6 +147,14 @@ const defaultFirestore = () => firebaseAdmin.app().firestore()
  * sites may be unrelated brands.
  */
 export const EMAIL_FREQUENCY_SUBCOLLECTION = 'emailFrequency'
+
+/** How each cadence reads inside a refusal sentence. */
+const CADENCE_PHRASES: Record<MarketingCadence, string> = {
+  all: 'at this pace',
+  daily: 'a day',
+  weekly: 'a week',
+  monthly: 'a month',
+}
 
 /** The stored window. */
 export interface EmailFrequencyRecord {
@@ -118,12 +182,104 @@ export interface EmailFrequencyRecord {
    * clock starts from then rather than from a past nobody recorded.
    */
   firstSentAtMs?: number
+  /**
+   * The most recent marketing send, NEVER trimmed.
+   *
+   * `sentAtMs` is a rolling day, so after a quiet day it is empty and cannot
+   * answer "when did this site last mail this person" — which is the only
+   * question a weekly or monthly cadence asks. One number rather than a
+   * window kept for a month.
+   *
+   * The bookends of the same relationship: `firstSentAtMs` never moves and
+   * this one moves on every send, so between them they answer both "how long
+   * have we been mailing this person" and "how long since we last did".
+   */
+  lastSentAtMs?: number
+  /**
+   * How often the RECIPIENT asked to hear from this site.
+   *
+   * Stored on the counter document rather than beside the topic opt-outs, and
+   * that is the whole reason it costs nothing: the gate already reads this
+   * document on every marketing message, so honoring the preference adds no
+   * round trip to any send. It also puts the preference in the one document
+   * that is already about how much mail this site sends this person.
+   *
+   * Absent on every record written before it existed, which reads as no
+   * expressed preference — see `normalizeMarketingCadence`.
+   */
+  cadence?: MarketingCadence
+  /** When the recipient chose it, for the record that the request was made. */
+  cadenceSetAtMs?: number
 }
 
-/** The stored window and the first-send stamp, read together. */
-interface FrequencyState {
-  sentAtMs: number[]
+/**
+ * What one recipient's counter document says, with its defaults applied.
+ *
+ * Everything the gate asks of Firestore about this person on this site, in
+ * one shape, because it is fetched in one round trip — see
+ * {@link readMarketingFrequencyState}.
+ */
+export interface MarketingFrequencyState {
+  /** Send instants inside the rolling window. */
+  window: number[]
+  /** When this site first mailed them, or `null` for no record. */
   firstSentAtMs: number | null
+  /** The most recent send, or `null` for somebody never mailed. */
+  lastSentAtMs: number | null
+  /** The recipient's chosen pace. */
+  cadence: MarketingCadence
+}
+
+/** What an unreadable, absent or unkeyable counter reads as. */
+const NO_RECORD: MarketingFrequencyState = {
+  window: [],
+  firstSentAtMs: null,
+  lastSentAtMs: null,
+  cadence: 'all',
+}
+
+/**
+ * One counter snapshot, decoded.
+ *
+ * Shared by {@link readMarketingFrequencyState} and
+ * {@link filterCadenceSendable} so the two cannot come to different
+ * conclusions about the same document — in particular about the
+ * `lastSentAtMs` fallback, where a per-message answer and a per-campaign
+ * answer that disagreed would refuse a recipient on one path and mail them on
+ * the other.
+ */
+function stateFromSnapshot(snapshot: any): MarketingFrequencyState {
+  const stored = snapshot.get('sentAtMs')
+  const window = Array.isArray(stored)
+    ? stored.map((at: unknown) => Number(at))
+    : []
+  const first = Number(snapshot.get('firstSentAtMs'))
+  const last = Number(snapshot.get('lastSentAtMs'))
+  return {
+    window,
+    firstSentAtMs: Number.isFinite(first) && first > 0 ? first : null,
+    /*
+     * The stored instant, or the newest entry still inside the window.
+     *
+     * The fallback is what makes this work on every record written before
+     * `lastSentAtMs` existed: those carry a window and nothing else, and
+     * reading `null` for them would let a monthly cadence pass on the first
+     * message after this ships for anybody mailed in the last day.
+     *
+     * `firstSentAtMs` deliberately has NO such fallback. The window would be
+     * the wrong answer for it in exactly the direction that matters: a
+     * relationship dated from a send inside the last day is younger than any
+     * sunset window, so the sunset could never fire — and a relationship
+     * dated from the oldest entry in a rolling DAY is not the first send
+     * either. Absent means "no record", and no record refuses nobody.
+     */
+    lastSentAtMs: Number.isFinite(last)
+      ? last
+      : window.length
+        ? Math.max(...window)
+        : null,
+    cadence: normalizeMarketingCadence(snapshot.get('cadence')),
+  }
 }
 
 function frequencyDoc(
@@ -153,41 +309,82 @@ export async function readMarketingFrequency(
   email: string,
   firestore?: any,
 ): Promise<number[]> {
-  return (await readFrequencyState(hostId, email, firestore)).sentAtMs
+  return (await readMarketingFrequencyState(hostId, email, firestore)).window
 }
 
 /**
- * The whole row: the window AND the first-send stamp, in one read.
+ * The whole counter document — the window, the first send, the last send and
+ * the recipient's chosen pace — in ONE round trip.
  *
- * One read rather than two because the gate needs both on the same send, and
- * the sunset must not add a second round trip to a path that is already one
- * awaited HTTP POST per recipient.
+ * **One read, four facts, and that is a requirement rather than a tidiness.**
+ * Three separate refusals in {@link marketingSendVerdict} read this document,
+ * and each of them was added at a different time; a second `get` for the
+ * newest of them would be a second awaited round trip on a path that is
+ * already one awaited HTTP POST per recipient. Which is also why the
+ * recipient's cadence is stored HERE rather than beside the topic opt-outs:
+ * honoring a preference this gate has to consult on every marketing message
+ * has to cost nothing, and riding on a document already being read is the
+ * only shape that does. See {@link EmailFrequencyRecord.cadence}.
  *
- * FAILS OPEN on both halves, for the same reason and in the same direction:
- * an empty window means "there is room", and a null stamp means "no record",
- * which refuses nobody.
+ * FAILS OPEN on every field, and in the same direction each time: an empty
+ * window means "there is room", a null `firstSentAtMs` means "no record", a
+ * null `lastSentAtMs` means "never mailed", and an unreadable cadence reads
+ * as no preference expressed. An unreadable counter is not evidence that
+ * somebody asked for less, and it is not evidence that they have gone cold —
+ * the opposite of {@link filterSendableForHost}, for the reason
+ * {@link readMarketingFrequency} states.
  */
-async function readFrequencyState(
+export async function readMarketingFrequencyState(
   hostId: string,
   email: string,
   firestore?: any,
-): Promise<FrequencyState> {
+): Promise<MarketingFrequencyState> {
   const key = emailSuppressionKey(email)
-  if (!key) return { sentAtMs: [], firstSentAtMs: null }
+  if (!key) return { ...NO_RECORD }
   try {
     const snapshot = await frequencyDoc(hostId, key, firestore).get()
-    if (!snapshot.exists) return { sentAtMs: [], firstSentAtMs: null }
-    const stored = snapshot.get('sentAtMs')
-    const first = Number(snapshot.get('firstSentAtMs') ?? 0)
-    return {
-      sentAtMs: Array.isArray(stored)
-        ? stored.map((at: unknown) => Number(at))
-        : [],
-      firstSentAtMs: Number.isFinite(first) && first > 0 ? first : null,
-    }
+    if (!snapshot.exists) return { ...NO_RECORD }
+    return stateFromSnapshot(snapshot)
   } catch (error) {
     console.error('[email-marketing] frequency read failed; allowing', error)
-    return { sentAtMs: [], firstSentAtMs: null }
+    return { ...NO_RECORD }
+  }
+}
+
+/**
+ * Records the pace a recipient asked for.
+ *
+ * Written from the preference page, which is unauthenticated and reached by a
+ * signed link — so the CALLER has already proved the request is this
+ * address's. A merge, because the document is the send counter and this must
+ * not disturb the window it shares with.
+ *
+ * Never throws: a preference that failed to store is a page that should say
+ * so, not a 500 on a screen a recipient reached in order to leave.
+ *
+ * @returns whether it was stored.
+ */
+export async function setMarketingCadence(
+  hostId: string,
+  email: string,
+  cadence: MarketingCadence,
+  options?: { nowMs?: number; firestore?: any },
+): Promise<boolean> {
+  const key = emailSuppressionKey(email)
+  if (!key || !hostId) return false
+  try {
+    await frequencyDoc(hostId, key, options?.firestore).set(
+      {
+        email: String(email).trim().toLowerCase(),
+        cadence: normalizeMarketingCadence(cadence),
+        cadenceSetAtMs: options?.nowMs ?? Date.now(),
+      },
+      { merge: true },
+    )
+    return true
+  } catch (error) {
+    console.error('[email-marketing] cadence write failed', error)
+    return false
   }
 }
 
@@ -221,29 +418,25 @@ export async function recordMarketingSends(
     const db = options?.firestore ?? defaultFirestore()
     for (const [key, email] of keyed) {
       const ref = frequencyDoc(hostId, key, db)
-      const existing: FrequencyState = await ref
+      const existing: MarketingFrequencyState = await ref
         .get()
         .then((snapshot: any) =>
-          snapshot.exists
-            ? {
-                sentAtMs: snapshot.get('sentAtMs') ?? [],
-                firstSentAtMs: Number(snapshot.get('firstSentAtMs') ?? 0) || null,
-              }
-            : { sentAtMs: [], firstSentAtMs: null },
+          snapshot.exists ? stateFromSnapshot(snapshot) : { ...NO_RECORD },
         )
-        .catch(() => ({ sentAtMs: [], firstSentAtMs: null }))
+        .catch(() => ({ ...NO_RECORD }))
       const window = marketingFrequencyVerdict(
-        [...(Array.isArray(existing.sentAtMs) ? existing.sentAtMs.map(Number) : []), nowMs],
+        [...existing.window, nowMs],
         nowMs,
       )
       await ref.set(
         {
           email,
           sentAtMs: window.inWindow,
-          // Write-once. Overwriting it would restart the sunset clock on
-          // every send, which would make the sunset unreachable — a person
-          // whose relationship is always "as old as the last message" is
-          // never older than the window.
+          lastSentAtMs: nowMs,
+          // Write-once, unlike `lastSentAtMs` beside it. Overwriting it would
+          // restart the sunset clock on every send, which would make the
+          // sunset unreachable — a person whose relationship is always "as
+          // old as the last message" is never older than the window.
           ...(existing.firstSentAtMs ? {} : { firstSentAtMs: nowMs }),
         },
         { merge: true },
@@ -254,6 +447,92 @@ export async function recordMarketingSends(
     console.error('[email-marketing] frequency record failed', error)
   }
   return recorded
+}
+
+/**
+ * The subset of `emails` that has NOT asked this site for mail less often
+ * than right now.
+ *
+ * The fourth filter a campaign passes, after the platform suppression list,
+ * the site's own and the topic opt-outs — and the only one that is not in
+ * `email-suppression.ts` beside those three, because it reads the counter
+ * document this module owns and that module is this module's dependency.
+ *
+ * {@link marketingSendVerdict} enforces the same rule per message and is what
+ * actually holds the mail. THIS is for the count: the argument for exempting
+ * a campaign from the platform ceiling is that a control which silently
+ * removed people from a reviewed one-shot send would make the number on
+ * screen a lie, and the way to keep a request the recipient actually made
+ * from having that problem is to subtract it where every other refusal is
+ * already subtracted.
+ *
+ * ⚠️ **Nothing calls this yet.** The composer's pre-send split does not
+ * subtract it, so a campaign against a recipient who asked for less is
+ * refused per message by the gate and still counted in the number the
+ * merchant read. The refusal is correct and the count is not; wiring it is
+ * composer work on a surface this module does not own.
+ *
+ * Keyed and read with one `getAll`, matching its three neighbors: one round
+ * trip bounded by the size of the send, and no composite index to go missing.
+ *
+ * ## Fails OPEN, like the topic filter beside it
+ *
+ * A cadence is a PACE, not a stop. Guessing wrong on an unreadable counter
+ * costs one recipient one message sooner than they asked for; guessing wrong
+ * the other way withholds a whole campaign on a transient read failure. The
+ * two suppression lists have already refused everybody who asked us to stop
+ * entirely, so nobody who said "no" reaches this line.
+ */
+export async function filterCadenceSendable(
+  hostId: string,
+  emails: readonly string[],
+  options?: { nowMs?: number; firestore?: any },
+): Promise<string[]> {
+  if (!emails.length || !hostId) return [...emails]
+  const nowMs = options?.nowMs ?? Date.now()
+  // An unkeyable address carries no counter, so it has expressed no pace. It
+  // is dropped from the LOOKUP and kept in the answer, exactly as the topic
+  // filter keeps one: the stricter filters above have already had their say.
+  const lookups: Array<{ email: string; key: string }> = []
+  for (const email of emails) {
+    const key = emailSuppressionKey(email)
+    if (key) lookups.push({ email, key })
+  }
+  if (!lookups.length) return [...emails]
+  try {
+    const db = options?.firestore ?? defaultFirestore()
+    const counters = db
+      .collection('hosts')
+      .doc(hostId)
+      .collection(EMAIL_FREQUENCY_SUBCOLLECTION)
+    const snapshots = await db.getAll(
+      ...lookups.map((entry) => counters.doc(entry.key)),
+    )
+    const holding = new Set<string>()
+    lookups.forEach((entry, index) => {
+      const snapshot = snapshots[index]
+      if (!snapshot?.exists) return
+      // The same decoder the per-message path uses, so the two cannot
+      // disagree about one document. The sunset's `firstSentAtMs` comes back
+      // with it and is deliberately unused: a campaign is exempt from that
+      // refusal, so subtracting on it here would remove people from a count
+      // the gate is going to mail anyway.
+      const state = stateFromSnapshot(snapshot)
+      const verdict = marketingCadenceVerdict(
+        state.cadence,
+        state.lastSentAtMs,
+        nowMs,
+      )
+      if (!verdict.allowed) holding.add(entry.email)
+    })
+    return emails.filter((email) => !holding.has(email))
+  } catch (error) {
+    console.error(
+      '[email-marketing] cadence lookup failed; failing open',
+      error,
+    )
+    return [...emails]
+  }
 }
 
 /**
@@ -293,28 +572,86 @@ export async function marketingSendVerdict(
     email,
   })
 
-  const state = await readFrequencyState(
+  // ONE read, and every refusal below is answered from it — except the
+  // sunset's engagement half, which is a different document and is fetched
+  // only when a window is configured and nothing above has already refused.
+  const state = await readMarketingFrequencyState(
     request.hostId,
     email,
     options?.firestore,
   )
 
   /*
+   * THE RECIPIENT'S OWN REQUEST, first among the three pace refusals and the
+   * only one not subject to `capped`.
+   *
+   * `capped: false` exempts a campaign from the platform CEILING and from the
+   * SUNSET, because a control the merchant did not ask for and cannot see,
+   * silently removing people from a reviewed one-shot send, would make the
+   * recipient count on screen a lie. That argument does not reach this one: a
+   * person used the preference page to ask this site for less mail, and a
+   * campaign that overrode them would make that page a form that records a
+   * request nobody honors — the same failure as ignoring an unsubscribe, one
+   * notch quieter.
+   *
+   * Above the sunset for three reasons. It is the only one of the three a
+   * PERSON asked for, and when both apply the honest answer to "why did this
+   * not send" is the fact somebody stated rather than the inference we drew.
+   * It is answered entirely from the counter document already in hand, so a
+   * recipient who asked for monthly mail never pays for the sunset's second
+   * read. And it is the one refusal a campaign is bound by, so asking it
+   * first gives the campaign path and the automated paths the same order.
+   *
+   * The sunset's terminality argument does not out-rank any of that: a sweep
+   * that defers this row retries it once per cadence interval — a day, a week
+   * or a month — not once per beat, which is what that argument is about.
+   *
+   * `filterCadenceSendable` is the campaign count's half of this, and nothing
+   * calls it yet; see its docblock.
+   */
+  const cadence = marketingCadenceVerdict(
+    state.cadence,
+    state.lastSentAtMs,
+    nowMs,
+  )
+  if (!cadence.allowed) {
+    /*
+     * ⛔ A REFUSAL AND NOTHING ELSE, exactly as below.
+     *
+     * Nobody is unsubscribed, no membership changes, no contact is touched,
+     * and the frequency window is not appended to — a message that never left
+     * must not count against what this person has received. Somebody who
+     * asked for monthly mail stays on every audience they were on and is
+     * mailed again next month.
+     */
+    return {
+      allowed: false,
+      refusal: 'cadence-limited',
+      detail:
+        `This address asked this site for no more than one marketing ` +
+        `message ${CADENCE_PHRASES[state.cadence]}. The next one may go on ` +
+        `${new Date(cadence.nextAllowedAtMs).toISOString()}.`,
+      unsubscribeUrl,
+    }
+  }
+
+  /*
    * THE SUNSET, ahead of the frequency ceiling.
    *
-   * Ordered first among the two because its refusal is TERMINAL and the
+   * Ordered above the ceiling because its refusal is TERMINAL and the
    * ceiling's is not: a sweep defers a `frequency-capped` message and retries
    * it, so reporting the retryable refusal for a person the sunset would
-   * refuse anyway means the same doomed row comes back on every beat. The
-   * suppression above stays first because its answer is permanent.
+   * refuse anyway means the same doomed row comes back on every beat.
    *
    * `request.capped` governs it, the same flag the ceiling reads, so a
    * campaign — a reviewed act with its recipient count on screen — is exempt
    * for the reason recorded on `MarketingSendContext.capped`. That leaves the
    * sunset governing the automated paths, which fire with no human present.
    *
-   * The engagement read is spent only when a window is configured. Off is the
-   * default, and off costs nothing.
+   * The engagement read is the ONLY second round trip on this path, and it is
+   * spent only when a window is configured, the caller is capped, and the
+   * cadence above has already allowed. Off is the default, and off costs
+   * nothing.
    */
   const sunsetDays = marketingSunsetDays()
   if (request.capped && sunsetDays > 0) {
@@ -350,7 +687,7 @@ export async function marketingSendVerdict(
     }
   }
 
-  const verdict = marketingFrequencyVerdict(state.sentAtMs, nowMs)
+  const verdict = marketingFrequencyVerdict(state.window, nowMs)
   if (request.capped && !verdict.allowed) {
     return {
       allowed: false,
@@ -380,6 +717,7 @@ export async function marketingSendVerdict(
         {
           email,
           sentAtMs: appended.inWindow,
+          lastSentAtMs: nowMs,
           // Write-once — see EmailFrequencyRecord.firstSentAtMs. Re-stamping
           // it on every send would keep the relationship permanently younger
           // than any sunset window, so the sunset could never fire.

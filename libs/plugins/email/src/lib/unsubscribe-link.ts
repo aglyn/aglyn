@@ -33,6 +33,9 @@
 
 import { personKey, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { BRAND } from '@aglyn/shared-data-enums'
+// The leaf module, not the barrel: it imports `node:crypto` and nothing else,
+// which is what keeps this file free of Firestore. See `signedConfirmSubject`.
+import { confirmSignatureSubject } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
 import { createHmac, timingSafeEqual } from 'crypto'
 
 /**
@@ -286,6 +289,34 @@ export function signedSubject(params: {
 }
 
 /**
+ * What a CONFIRMATION link's signature covers, or `null` when it cannot be
+ * made unambiguously.
+ *
+ * ## The ONE derivation, not a second one
+ *
+ * The subject itself is `confirmSignatureSubject` in
+ * `@aglyn/tenant-data-admin`, where the SENDER that mints the link lives. The
+ * three unsubscribe forms are stated twice — once there, once here — and they
+ * agree today by inspection; adding a fourth form the same way would be
+ * adding a fourth chance for a signer and a verifier to disagree about a link
+ * that is already sitting in somebody's inbox.
+ *
+ * The deep path rather than the barrel, for the reason `email-suppression.ts`
+ * gives at length: that module imports nothing but `node:crypto`, so this
+ * file stays free of Firestore and a spec can still exercise the signature
+ * scheme without standing up a database double.
+ */
+export function signedConfirmSubject(params: {
+  hostId: string
+  email: string
+  topicId: string
+}): string | null {
+  return (
+    confirmSignatureSubject(params.hostId, params.email, params.topicId) || null
+  )
+}
+
+/**
  * Whether a signature is this link's.
  *
  * `timingSafeEqual` needs equal lengths, so the length is compared first — it
@@ -299,8 +330,22 @@ export function signatureMatches(args: {
   topicId: string
   signature: string
   secret: string
+  /**
+   * Verify the CONFIRMATION subject instead of the unsubscribe forms.
+   *
+   * A flag rather than a second function, so that every signed link in the
+   * product is checked by one comparison against one digest: the warning in
+   * this module's own header — that two implementations of one signature
+   * scheme is how the resubscribe link comes to reject a signature the
+   * unsubscribe link just accepted — applies to a fourth route as much as a
+   * third.
+   */
+  purpose?: 'unsubscribe' | 'confirm'
 }): boolean {
-  const subject = signedSubject(args)
+  const subject =
+    args.purpose === 'confirm'
+      ? signedConfirmSubject(args)
+      : signedSubject(args)
   if (subject === null) return false
   const expected = createHmac('sha256', args.secret)
     .update(subject)
@@ -313,6 +358,7 @@ export function signatureMatches(args: {
     )
   )
 }
+
 
 /**
  * The signed parameters, re-encoded for a form action or a sibling link.

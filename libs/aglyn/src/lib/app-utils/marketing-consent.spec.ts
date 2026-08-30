@@ -27,8 +27,11 @@
 
 import {
   DEFAULT_MARKETING_CONSENT_POLICY,
+  MARKETING_CONSENT_BASIS_FIELD,
   MARKETING_CONSENT_ENFORCED_FROM_MS,
   MARKETING_CONSENT_SOURCE_FIELD,
+  OPERATOR_ATTESTED_CONSENT_BASIS,
+  OPERATOR_ATTESTED_CONSENT_KIND,
   OPERATOR_BACKFILL_CONSENT_KIND,
   marketingConsentVerdict,
   readMarketingBasis,
@@ -360,6 +363,69 @@ describe('who asserted a basis', () => {
     expect(backfilled.basis).toBe(optIn.basis)
     expect(backfilled).not.toEqual(optIn)
     expect(backfilled.assertedBy).not.toBe(optIn.assertedBy)
+  })
+
+  /**
+   * A LIST MEMBERSHIP says who asserted its basis in a different field.
+   *
+   * `list-members.ts` writes `marketingConsentBasis` and the attesting
+   * account; nothing writes a backfill's provenance object onto a membership.
+   * Reading only the provenance field therefore reported every address a
+   * merchant added by hand — and every address an import brings in — as a
+   * checkbox the person ticked, on the exact records where that claim is
+   * least true. The send-time join reads a membership through this function.
+   */
+  it('attributes an attested MEMBERSHIP to the operator', () => {
+    const read = readMarketingBasis({
+      marketingConsent: true,
+      marketingConsentAtMs: 1_000,
+      [MARKETING_CONSENT_BASIS_FIELD]: OPERATOR_ATTESTED_CONSENT_BASIS,
+      marketingConsentByUid: 'editor-uid',
+      marketingConsentReason: 'Imported from a file.',
+    })
+    expect(read.assertedBy).toBe('operator')
+    expect(read.source).toEqual({
+      kind: OPERATOR_ATTESTED_CONSENT_KIND,
+      by: 'editor-uid',
+      atMs: 1_000,
+      reason: 'Imported from a file.',
+    })
+  })
+
+  it('attributes a membership carrying the PERSON’s opt-in to the person', () => {
+    expect(
+      readMarketingBasis({
+        marketingConsent: true,
+        marketingConsentAtMs: 1_000,
+        [MARKETING_CONSENT_BASIS_FIELD]: 'contact-opt-in',
+        marketingConsentByUid: null,
+      }),
+    ).toMatchObject({ assertedBy: 'person', source: null })
+  })
+
+  /**
+   * Losing the uid must not lose the attestation. The basis field is
+   * unambiguous on its own, and falling back to "the person's own act"
+   * because an attribution went missing is the one direction this may never
+   * fail in.
+   */
+  it('still reads an attested membership as the operator’s with no account on it', () => {
+    const read = readMarketingBasis({
+      marketingConsent: true,
+      [MARKETING_CONSENT_BASIS_FIELD]: OPERATOR_ATTESTED_CONSENT_BASIS,
+    })
+    expect(read.assertedBy).toBe('operator')
+    expect(read.source?.by).toBe('')
+  })
+
+  it('lets a backfill provenance outrank the membership basis field', () => {
+    const read = readMarketingBasis({
+      marketingConsent: true,
+      marketingConsentAtMs: 1_000,
+      [MARKETING_CONSENT_SOURCE_FIELD]: operatorSource(),
+      [MARKETING_CONSENT_BASIS_FIELD]: OPERATOR_ATTESTED_CONSENT_BASIS,
+    })
+    expect(read.source?.kind).toBe(OPERATOR_BACKFILL_CONSENT_KIND)
   })
 
   it('attributes nothing when there is no basis to attribute', () => {

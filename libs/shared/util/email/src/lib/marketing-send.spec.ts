@@ -26,14 +26,17 @@
  */
 
 import {
+  MARKETING_CADENCE_INTERVAL_MS,
   MARKETING_FREQUENCY_DEFAULT_PER_WINDOW,
   MARKETING_FREQUENCY_WINDOW_MS,
   appendUnsubscribeHtml,
   appendUnsubscribeText,
+  marketingCadenceVerdict,
   marketingFrequencyCap,
   marketingFrequencyVerdict,
   marketingSunsetDays,
   marketingSunsetVerdict,
+  normalizeMarketingCadence,
   resetMarketingSendGateForTests,
   setMarketingSendGate,
   unsubscribeHeaders,
@@ -168,6 +171,101 @@ describe('the visible opt-out', () => {
   })
 })
 
+/**
+ * THE PACE A RECIPIENT ASKED FOR — `docs/specs/email-competitive-gaps.md`
+ * G10's preference-center half.
+ *
+ * A minimum interval since the last message, not a second rolling window: the
+ * cap guards against a burst and this guards against a drip, and a drip is
+ * answered by one stored instant rather than a month of them.
+ */
+describe('marketingCadenceVerdict', () => {
+  const DAY = 86_400_000
+  const NOW = 1_800_000_000_000
+
+  it('never holds a message at the default pace', () => {
+    expect(marketingCadenceVerdict('all', NOW - 1, NOW).allowed).toBe(true)
+  })
+
+  it('holds a weekly recipient inside the week and releases them after it', () => {
+    expect(marketingCadenceVerdict('weekly', NOW - 6 * DAY, NOW).allowed).toBe(
+      false,
+    )
+    expect(marketingCadenceVerdict('weekly', NOW - 8 * DAY, NOW).allowed).toBe(
+      true,
+    )
+  })
+
+  it('releases exactly at the interval, not a moment later', () => {
+    const last = NOW - MARKETING_CADENCE_INTERVAL_MS['weekly']
+    expect(marketingCadenceVerdict('weekly', last, NOW).allowed).toBe(true)
+    expect(marketingCadenceVerdict('weekly', last + 1, NOW).allowed).toBe(false)
+  })
+
+  it('says when the next one may go', () => {
+    const last = NOW - DAY
+    expect(
+      marketingCadenceVerdict('weekly', last, NOW).nextAllowedAtMs,
+    ).toBe(last + MARKETING_CADENCE_INTERVAL_MS['weekly'])
+  })
+
+  it('allows somebody this site has never mailed', () => {
+    for (const last of [null, undefined, 0, Number.NaN]) {
+      expect(marketingCadenceVerdict('monthly', last, NOW).allowed).toBe(true)
+    }
+  })
+
+  /**
+   * Clocks disagree across processes. A record written a few seconds ahead
+   * must not hold a recipient's mail for a whole interval, which is a far
+   * larger error than the one refusing would prevent.
+   */
+  it('allows rather than refusing when the stored instant is in the future', () => {
+    expect(marketingCadenceVerdict('monthly', NOW + 60_000, NOW).allowed).toBe(
+      true,
+    )
+  })
+
+  it('orders the intervals the way the words do', () => {
+    expect(MARKETING_CADENCE_INTERVAL_MS['all']).toBe(0)
+    expect(MARKETING_CADENCE_INTERVAL_MS['daily']).toBeLessThan(
+      MARKETING_CADENCE_INTERVAL_MS['weekly'],
+    )
+    expect(MARKETING_CADENCE_INTERVAL_MS['weekly']).toBeLessThan(
+      MARKETING_CADENCE_INTERVAL_MS['monthly'],
+    )
+  })
+})
+
+describe('normalizeMarketingCadence', () => {
+  it('keeps the three real choices', () => {
+    for (const value of ['daily', 'weekly', 'monthly'] as const) {
+      expect(normalizeMarketingCadence(value)).toBe(value)
+    }
+  })
+
+  /**
+   * The opposite direction from the consent policy's coercion, deliberately.
+   * A malformed consent value must not switch enforcement off; a malformed
+   * cadence falling to `'monthly'` would withhold mail from everybody whose
+   * record got corrupted, and nobody asked for that either.
+   */
+  it('reads anything else as no preference expressed', () => {
+    for (const value of [
+      'hourly',
+      'ALL',
+      '',
+      null,
+      undefined,
+      7,
+      {},
+      ['weekly'],
+    ]) {
+      expect(normalizeMarketingCadence(value)).toBe('all')
+    }
+  })
+})
+
 describe('isDeferrableSendResult', () => {
   it('is true only for the two refusals a later attempt can pass', () => {
     expect(
@@ -189,6 +287,7 @@ describe('isDeferrableSendResult', () => {
       'unconfigured',
       'no-recipient',
       'unverified-domain',
+      'unengaged',
     ] as const) {
       expect(isDeferrableSendResult({ sent: false, reason })).toBe(false)
     }
@@ -324,6 +423,33 @@ describe('sendEmail with a marketing context', () => {
     expect(result).toMatchObject({ sent: false, reason: 'frequency-capped' })
     // The distinction a resumable sweep acts on.
     expect(isDeferrableSendResult(result)).toBe(true)
+  })
+
+  /**
+   * A recipient who asked for weekly mail asked to receive it LATER, not
+   * never. A sweep that read this as terminal would stamp the subject and
+   * discard the message.
+   */
+  it('reports the recipient’s own pace as deferrable, not as a suppression', async () => {
+    installGate({
+      allowed: false,
+      refusal: 'cadence-limited',
+      detail: 'asked for weekly',
+    })
+    const fetchMock = mockFetch()
+
+    const result = await sendEmail({
+      to: 'a@b.co',
+      subject: 'News',
+      text: 'Hello',
+      context: 'abandoned cart',
+      marketing,
+    })
+
+    expect(result).toMatchObject({ sent: false, reason: 'frequency-capped' })
+    expect(result.detail).toBe('asked for weekly')
+    expect(isDeferrableSendResult(result)).toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('asks the gate BEFORE the hourly governor', async () => {

@@ -24,12 +24,17 @@
 
 import {
   activeEmailTopics,
+  doubleOptInExpired,
   isEmailTopicId,
   mergeEmailTopics,
   normalizeEmailTopic,
+  readTopicSubscriptionState,
   resolveCampaignTopic,
+  topicRequiresDoubleOptIn,
   DEFAULT_CAMPAIGN_TOPIC_ID,
   DEFAULT_EMAIL_TOPICS,
+  DEFAULT_SITE_DOUBLE_OPT_IN,
+  DOUBLE_OPT_IN_EXPIRY_MS,
 } from './email-topics'
 
 describe('isEmailTopicId', () => {
@@ -186,5 +191,131 @@ describe('resolveCampaignTopic', () => {
   it('falls back to the first topic when even the default is gone', () => {
     const trimmed = [{ id: 'only', name: 'Only', description: '' }]
     expect(resolveCampaignTopic('nope', trimmed).id).toBe('only')
+  })
+})
+
+/**
+ * DOUBLE OPT-IN — `docs/specs/email-competitive-gaps.md` P8.
+ *
+ * Of the ten vendors examined none mandates it, so every assertion below is
+ * written to fail in both directions: the default is checked as OFF, and each
+ * of the three states of a topic's own setting is checked against the other
+ * two.
+ */
+describe('topicRequiresDoubleOptIn', () => {
+  it('is off when nobody has asked for it', () => {
+    expect(topicRequiresDoubleOptIn(undefined)).toBe(false)
+    expect(topicRequiresDoubleOptIn({})).toBe(false)
+    expect(DEFAULT_SITE_DOUBLE_OPT_IN).toBe(false)
+  })
+
+  it('takes the site’s answer when the topic has none', () => {
+    expect(topicRequiresDoubleOptIn({}, true)).toBe(true)
+    expect(topicRequiresDoubleOptIn({}, false)).toBe(false)
+  })
+
+  /**
+   * A stored `false` is a decision, not an absence. It is what lets a
+   * merchant confirm everything except one order-related stream, and a
+   * reading that collapsed it into "unset" would take that away.
+   */
+  it('lets a topic overrule the site in BOTH directions', () => {
+    expect(topicRequiresDoubleOptIn({ doubleOptIn: true }, false)).toBe(true)
+    expect(topicRequiresDoubleOptIn({ doubleOptIn: false }, true)).toBe(false)
+  })
+})
+
+describe('normalizeEmailTopic and the confirmation setting', () => {
+  it('carries a stored boolean through, either way', () => {
+    expect(normalizeEmailTopic('t', { doubleOptIn: true })?.doubleOptIn).toBe(
+      true,
+    )
+    expect(normalizeEmailTopic('t', { doubleOptIn: false })?.doubleOptIn).toBe(
+      false,
+    )
+  })
+
+  it('leaves the field ABSENT when the document has no boolean', () => {
+    // Absent is the third state — "ask the site" — so coercing with `=== true`
+    // the way `archived` does would erase it.
+    expect(normalizeEmailTopic('t', {})).not.toHaveProperty('doubleOptIn')
+    expect(normalizeEmailTopic('t', { doubleOptIn: 'yes' })).not.toHaveProperty(
+      'doubleOptIn',
+    )
+  })
+})
+
+describe('readTopicSubscriptionState', () => {
+  it('reads no entry at all as subscribed', () => {
+    expect(readTopicSubscriptionState(undefined)).toBe('subscribed')
+    expect(readTopicSubscriptionState(null)).toBe('subscribed')
+    expect(readTopicSubscriptionState({})).toBe('subscribed')
+  })
+
+  it('reads a live opt-out, and a lifted one as subscribed', () => {
+    expect(
+      readTopicSubscriptionState({ optedOutAt: 1, resubscribedAt: null }),
+    ).toBe('opted-out')
+    expect(readTopicSubscriptionState({ optedOutAt: 1, resubscribedAt: 2 })).toBe(
+      'subscribed',
+    )
+  })
+
+  it('reads an unanswered confirmation as pending, and an answered one as subscribed', () => {
+    expect(readTopicSubscriptionState({ pendingAt: 1, confirmedAt: null })).toBe(
+      'pending',
+    )
+    expect(readTopicSubscriptionState({ pendingAt: 1, confirmedAt: 2 })).toBe(
+      'subscribed',
+    )
+  })
+
+  /**
+   * Leaving is the more recent and more explicit act, and a pending
+   * confirmation that could outrank it would be a way to re-arm sending by
+   * asking again.
+   */
+  it('lets a refusal outrank a pending confirmation', () => {
+    expect(
+      readTopicSubscriptionState({
+        optedOutAt: 5,
+        resubscribedAt: null,
+        pendingAt: 9,
+        confirmedAt: null,
+      }),
+    ).toBe('opted-out')
+  })
+
+  it('is not fooled by a confirmed entry that carries no resubscribedAt', () => {
+    // The shorthand this function replaced — "an entry with no
+    // `resubscribedAt` is a live opt-out" — reads this as somebody who left.
+    expect(readTopicSubscriptionState({ pendingAt: 1, confirmedAt: 2 })).not.toBe(
+      'opted-out',
+    )
+  })
+})
+
+describe('doubleOptInExpired', () => {
+  const NOW = 1_800_000_000_000
+
+  it('is good inside the window and stale outside it', () => {
+    expect(doubleOptInExpired(NOW - DOUBLE_OPT_IN_EXPIRY_MS + 1, NOW)).toBe(false)
+    expect(doubleOptInExpired(NOW - DOUBLE_OPT_IN_EXPIRY_MS - 1, NOW)).toBe(true)
+  })
+
+  it('is still good on the last moment of the window', () => {
+    // Three days means three days, not three days minus an instant. The
+    // boundary is where an expiry silently loses a day.
+    expect(doubleOptInExpired(NOW - DOUBLE_OPT_IN_EXPIRY_MS, NOW)).toBe(false)
+  })
+
+  it('is three days, which is Klaviyo’s and not Brevo’s thirty', () => {
+    expect(DOUBLE_OPT_IN_EXPIRY_MS).toBe(72 * 60 * 60 * 1000)
+  })
+
+  it('treats an unusable or missing instant as expired', () => {
+    for (const at of [null, undefined, 0, Number.NaN, -1]) {
+      expect(doubleOptInExpired(at, NOW)).toBe(true)
+    }
   })
 })

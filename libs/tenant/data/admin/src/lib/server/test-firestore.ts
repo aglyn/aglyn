@@ -51,6 +51,17 @@ export interface FakeFirestore {
    * zips them back against its own input list gets what it asked for.
    */
   getAll: (...refs: any[]) => Promise<any[]>
+  /**
+   * A transaction, real enough for a read-then-write body.
+   *
+   * Reads pass straight through and writes are held until the body resolves,
+   * which is the property the code under test depends on: a writer that
+   * decides what to store FROM what it read must not observe its own
+   * half-finished write. It does not model contention or retries — nothing in
+   * this repo's transaction bodies branches on a retry, and a fake that
+   * pretended to would be asserting the fake.
+   */
+  runTransaction: <T>(body: (transaction: any) => Promise<T>) => Promise<T>
 }
 
 export function fakeFirestore(
@@ -74,6 +85,19 @@ export function fakeFirestore(
     docs: (collection: string) => store[collection] ?? {},
     getAll: async (...refs: any[]) =>
       refs.map((ref) => snapshotFor(ref.collectionPath, ref.id)),
+    async runTransaction<T>(body: (transaction: any) => Promise<T>): Promise<T> {
+      const pending: Array<() => Promise<void>> = []
+      const transaction = {
+        get: (ref: any) => ref.get(),
+        set: (ref: any, data: Record<string, any>, options?: { merge?: boolean }) => {
+          pending.push(() => ref.set(data, options))
+          return transaction
+        },
+      }
+      const result = await body(transaction)
+      for (const write of pending) await write()
+      return result
+    },
     collection(name: string) {
       store[name] = store[name] ?? {}
       const api: any = {

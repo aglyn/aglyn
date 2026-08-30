@@ -83,6 +83,16 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  /**
+   * Whether joining this stream needs a confirmation click.
+   *
+   * Three states, held as a string because a `Select` carries one and a
+   * boolean cannot: `''` defers to the site, `'on'` and `'off'` are decisions
+   * about this stream. Collapsing the first into a boolean would make "not
+   * chosen" indistinguishable from "off", and the site default would then be
+   * unreachable once anybody saved a topic.
+   */
+  const [doubleOptIn, setDoubleOptIn] = useState('')
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -97,11 +107,27 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
     if (loaded || !topics.length) return
     setName(topic.name)
     setDescription(topic.description)
+    setDoubleOptIn(
+      typeof topic.doubleOptIn === 'boolean'
+        ? topic.doubleOptIn
+          ? 'on'
+          : 'off'
+        : '',
+    )
     setLoaded(true)
   }, [loaded, topics, topic])
 
+  const storedDoubleOptIn =
+    typeof topic.doubleOptIn === 'boolean'
+      ? topic.doubleOptIn
+        ? 'on'
+        : 'off'
+      : ''
   const dirty =
-    loaded && (name !== topic.name || description !== topic.description)
+    loaded &&
+    (name !== topic.name ||
+      description !== topic.description ||
+      doubleOptIn !== storedDoubleOptIn)
 
   /**
    * Save what is in the form, optionally changing the retired flag with it.
@@ -127,6 +153,11 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
           name: nextName,
           description: description.trim(),
           archived: patch?.archived ?? !!topic.archived,
+          // `null` clears the field, which is how "whatever the site says"
+          // is expressed. A stored `false` is a different answer and has to
+          // survive as one.
+          doubleOptIn:
+            doubleOptIn === 'on' ? true : doubleOptIn === 'off' ? false : null,
         })
         enqueueSnackbar('Topic saved', { variant: 'success', persist: false })
       } catch (error) {
@@ -136,7 +167,16 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
         setBusy(false)
       }
     },
-    [scope, busy, name, description, firestore, topic, enqueueSnackbar],
+    [
+      scope,
+      busy,
+      name,
+      description,
+      doubleOptIn,
+      firestore,
+      topic,
+      enqueueSnackbar,
+    ],
   )
 
   const toggleArchived = useCallback(async () => {
@@ -221,6 +261,37 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
               disabled={busy || !loaded}
               helperText="One sentence telling them what this stream is."
             />
+            {/*
+              CONFIRMATION — off unless somebody chooses it.
+
+              No jurisdiction verified requires a double opt-in by statute.
+              They require prior express consent plus a burden of proof on
+              the sender, and a confirmation click is the proof the courts
+              have so far accepted — so this is an option a merchant reaches
+              for, never a default the product imposes.
+
+              A three-way select rather than a switch, because the third
+              state is real: this topic can defer to the site's own setting,
+              and a switch has nowhere to put that.
+             */}
+            <TextField
+              select
+              label="Confirmation"
+              size="small"
+              value={doubleOptIn}
+              onChange={(event) => setDoubleOptIn(event.target.value)}
+              disabled={busy || !loaded}
+              helperText={
+                'Ask new subscribers to confirm by email before anything is ' +
+                'sent to them. Until they do, nothing on this stream reaches ' +
+                'them and they stay on your list.'
+              }
+              slotProps={{ select: { native: true } }}
+            >
+              <option value="">{'Use the site setting'}</option>
+              <option value="on">{'Require a confirmation click'}</option>
+              <option value="off">{'No confirmation for this stream'}</option>
+            </TextField>
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"

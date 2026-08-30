@@ -127,6 +127,18 @@ export type MarketingSendRefusal =
   /** This person has already received their ceiling from this site. */
   | 'frequency-capped'
   /**
+   * The RECIPIENT asked for less than this, and it has not been long enough.
+   *
+   * Kept apart from `frequency-capped` even though both are refusals about
+   * pace, because they are refusals on behalf of different people: the
+   * ceiling protects a shared sending domain from a merchant, and this
+   * carries out a request the person on the other end made on the preference
+   * page. Reporting them as one would make "why did this not send" answerable
+   * only by guessing, and it is the merchant-facing half of a promise the
+   * product made to a recipient.
+   */
+  | 'cadence-limited'
+  /**
    * This site has been mailing this person for longer than the sunset window
    * and nothing in that window says they are still listening.
    *
@@ -385,6 +397,111 @@ export function marketingSunsetVerdict(
     days,
     quietForDays: Math.floor((nowMs - since) / 86_400_000),
   }
+}
+
+/**
+ * HOW OFTEN THE RECIPIENT ASKED TO HEAR FROM THIS SITE.
+ *
+ * `docs/specs/email-competitive-gaps.md` G10 shipped its cap half and left
+ * this one: unsubscribe was all-or-nothing plus, since topics, per-stream —
+ * and a recipient who wanted the same mail LESS OFTEN still had only two
+ * levers, one of which is the spam button. On a shared sending domain under
+ * `p=reject` that button is charged to every other tenant, which is what
+ * makes "monthly" a platform control wearing a courtesy's clothes.
+ *
+ * ## A minimum interval, not a second rolling window
+ *
+ * {@link marketingFrequencyVerdict} counts messages inside a day because the
+ * thing it guards against is a burst. This guards against a DRIP, and the
+ * question a drip asks is "how long since the last one" — one stored instant,
+ * not a window that would have to be kept for a month to answer a monthly
+ * choice. Two instruments, because they are two different questions.
+ *
+ * ## New values, so the vocabulary is chosen rather than inherited
+ *
+ * `'all'` is the default and the absence: a record with no cadence, and every
+ * record written before this existed, means the person has expressed no
+ * preference — which is not the same as having asked for everything, but is
+ * the only reading that does not silently withhold mail from people who never
+ * chose.
+ */
+export type MarketingCadence = 'all' | 'daily' | 'weekly' | 'monthly'
+
+/** The default: no expressed preference, so only the platform ceiling binds. */
+export const DEFAULT_MARKETING_CADENCE: MarketingCadence = 'all'
+
+/**
+ * The minimum gap each choice asks for, in millis.
+ *
+ * Calendar-naive on purpose. "At most one a week" is a promise about pace,
+ * and honoring it as seven days from the last message is both what the words
+ * say and what a recipient can check; anchoring it to a calendar week would
+ * let two messages land on a Sunday and a Monday and still be "one a week".
+ */
+export const MARKETING_CADENCE_INTERVAL_MS: Record<MarketingCadence, number> = {
+  all: 0,
+  daily: 86_400_000,
+  weekly: 7 * 86_400_000,
+  monthly: 30 * 86_400_000,
+}
+
+/** How each choice reads, wherever one is named to a person or an operator. */
+export const MARKETING_CADENCE_LABELS: Record<MarketingCadence, string> = {
+  all: 'As they come',
+  daily: 'At most one a day',
+  weekly: 'At most one a week',
+  monthly: 'At most one a month',
+}
+
+/**
+ * Coerces a stored or submitted value to a cadence.
+ *
+ * Everything unrecognized becomes {@link DEFAULT_MARKETING_CADENCE}. The
+ * direction matters and is the opposite of the consent policy's: a malformed
+ * consent value must not become a way to switch enforcement off, because its
+ * failure mode is mail to somebody who declined. A malformed cadence falling
+ * to `'monthly'` would withhold mail from everybody whose record got
+ * corrupted, and nobody asked for that either — so an unreadable preference
+ * reads as no preference, and the person keeps whatever the ceiling allows.
+ */
+export function normalizeMarketingCadence(value: unknown): MarketingCadence {
+  return value === 'daily' || value === 'weekly' || value === 'monthly'
+    ? value
+    : DEFAULT_MARKETING_CADENCE
+}
+
+/**
+ * Whether enough time has passed for one more message at this pace.
+ *
+ * Pure, so the rule can be asserted without a Firestore harness — the same
+ * split {@link marketingFrequencyVerdict} makes.
+ *
+ * @param lastSentAtMs when this site last sent this person marketing mail, or
+ *        `null` for somebody it has never mailed. Never mailed always allows:
+ *        a cadence is a gap between messages and there is no first gap.
+ * @returns the verdict and, on a refusal, the instant the next message may go
+ *          — so a caller that defers has something to defer UNTIL rather than
+ *          a retry loop that discovers the answer by asking again.
+ */
+export function marketingCadenceVerdict(
+  cadence: MarketingCadence,
+  lastSentAtMs: number | null | undefined,
+  nowMs: number,
+): { allowed: boolean; cadence: MarketingCadence; nextAllowedAtMs: number } {
+  const interval = MARKETING_CADENCE_INTERVAL_MS[cadence] ?? 0
+  const last = Number(lastSentAtMs)
+  if (!interval || !Number.isFinite(last) || last <= 0) {
+    return { allowed: true, cadence, nextAllowedAtMs: nowMs }
+  }
+  const nextAllowedAtMs = last + interval
+  /*
+   * A stored instant in the FUTURE allows rather than refusing until it
+   * passes. Clocks disagree across processes and a record written a few
+   * seconds ahead would otherwise hold a recipient's mail for a whole
+   * interval, which is a much larger error than the one it would prevent.
+   */
+  if (last > nowMs) return { allowed: true, cadence, nextAllowedAtMs: nowMs }
+  return { allowed: nowMs >= nextAllowedAtMs, cadence, nextAllowedAtMs }
 }
 
 /**

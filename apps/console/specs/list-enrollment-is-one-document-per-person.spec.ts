@@ -150,6 +150,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyHostManagers: async () => undefined,
   dataStorageRefusal: async () => null,
   upsertHostContact: async () => undefined,
+  /*
+   * The double opt-in seam, answering OFF.
+   *
+   * This file is about one thing — that both enrollment routes write one
+   * document per person — and a site that confirms subscriptions would put
+   * the newsletter route on a different branch of its own. Whether that
+   * branch is right belongs to `newsletter-double-opt-in.spec.ts`; what
+   * matters here is that the setting is off, so the route enrolls.
+   */
+  siteRequiresDoubleOptIn: async () => false,
+  recordPendingTopicConfirmation: async () => ({
+    result: 'pending',
+    pendingAtMs: 1,
+  }),
 }))
 
 import { newsletterHandler } from '@aglyn/plugins-commerce/server/newsletter'

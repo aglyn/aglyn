@@ -898,6 +898,15 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/email/src/lib/components/list-import-drawer.tsx',
+    'The import drawer’s two tables are BOUNDED READOUTS of one act, not ' +
+      'windows onto a collection. The first shows at most ten of the sampled ' +
+      'addresses the server checked, beside the sample size and the file ' +
+      'total, so its length is a constant; the second is one row per refusal ' +
+      'REASON, and there are six reasons. Neither grows with the size of the ' +
+      'file, and a pager on either would offer to page a fixed list.',
+  ],
+  [
     'libs/plugins/email/src/lib/components/email-detail.tsx',
     'One message’s report. Its tables are the message’s own facts — state, ' +
       'send time, campaign, list, template — the fixed population taxonomy, ' +
@@ -1341,15 +1350,18 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // the same version history the component and layout ones do, read the
     // same unordered way, and is blocked on the same `createdAt` audit.
     expect(OWES_A_FOOTER).toHaveLength(15)
-    // 34 since the forms catalog joined them: `FORMS_MAX_PER_HOST` is a flat
-    // platform ceiling of 50 enforced server-side, so the read's `limit(100)`
-    // already exceeds the largest population that can exist. Every table on
-    // this list is bounded by something other than the audience — a fixed
-    // taxonomy, a rollup capped at WRITE time, a ceilinged window that says
-    // so, or a merchant's own vocabulary — which is the property this list
-    // exists to record. Raised here deliberately rather than by a walk that
-    // quietly stopped reaching a file.
-    expect(NOT_A_LIST).toHaveLength(34)
+    // 35 since the Emails surface grew a page per message, per template and
+    // per topic and an import drawer on an audience's own page, and since the
+    // forms catalog joined them: `FORMS_MAX_PER_HOST` is a flat platform
+    // ceiling of 50 enforced server-side, so that read's `limit(100)` already
+    // exceeds the largest population that can exist. Every table on this list
+    // is bounded by something other than the audience — a fixed taxonomy, a
+    // rollup capped at WRITE time, a ceilinged window that says so, a
+    // merchant's own vocabulary, or a readout of one act whose length does
+    // not follow the size of the file it describes — which is the property
+    // this list exists to record. Raised here deliberately rather than by a
+    // walk that quietly stopped reaching a file.
+    expect(NOT_A_LIST).toHaveLength(35)
   })
 })
 
