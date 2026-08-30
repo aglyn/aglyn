@@ -307,12 +307,28 @@ import { campaignProcessScheduledHandler } from './campaign-process-scheduled'
 
 const HOST = 'host-1'
 
+/**
+ * A recorded opt-in, in the shape every capture path writes it: the boolean
+ * plus the millis the writer stamped.
+ *
+ * The send applies a consent join before the cap and the meter, and withholds
+ * any recipient with no recorded basis. So a lead that a rate-limiting suite
+ * expects to see delivered, deferred or counted has to carry one — without it
+ * the whole audience is refused and every assertion below is measuring the
+ * consent rule instead of the rate limiter.
+ */
+const CONSENT_GRANTED = {
+  marketingConsent: true,
+  marketingConsentAtMs: Date.UTC(2026, 7, 1),
+}
+
 function seedHost(leads: string[]) {
   mockState.store[`hosts/${HOST}`] = { subdomain: 'acme', orgId: 'org-1' }
   leads.forEach((email, index) => {
     mockState.store[`hosts/${HOST}/leads/lead-${index}`] = {
       email,
       visibleTo: [HOST],
+      ...CONSENT_GRANTED,
     }
   })
 }

@@ -123,12 +123,25 @@ export const DEFAULT_MARKETING_CONSENT_POLICY: MarketingConsentPolicy = {
  * Every unusable value falls back to the default rather than to "off": there
  * is no off. A malformed setting must not be a way to switch the join back
  * out, because the failure mode of that is mail to people who declined.
+ *
+ * The fallback is {@link DEFAULT_MARKETING_CONSENT_POLICY} itself rather than
+ * a mode repeated here. This function is the ONLY path by which any send
+ * reaches a policy, so a literal in it would be the real default and the
+ * exported constant would be a decoration: changing the constant would move
+ * what `marketing-consent.spec.ts` asserts and nothing that mails anybody.
+ * Only the two modes a caller may actually store are honored, so a stored
+ * value that means neither lands on the default with everything else.
  */
 export function resolveMarketingConsentPolicy(
   stored: unknown,
 ): MarketingConsentPolicy {
   const value = (stored ?? {}) as Record<string, unknown>
-  const mode = value['mode'] === 'strict' ? 'strict' : 'forward'
+  const mode =
+    value['mode'] === 'strict'
+      ? 'strict'
+      : value['mode'] === 'forward'
+        ? 'forward'
+        : DEFAULT_MARKETING_CONSENT_POLICY.mode
   const enforceFromMs = Number(value['enforceFromMs'])
   return {
     mode,
