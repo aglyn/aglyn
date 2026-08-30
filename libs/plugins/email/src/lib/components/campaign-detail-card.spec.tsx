@@ -167,11 +167,9 @@ beforeEach(() => {
   docStatus = 'success'
 })
 
-/** The value drawn under one figure's label. */
+/** The value drawn beside one figure's label, in the shared figure block. */
 const figure = (label: string): string =>
-  screen
-    .getByText(label)
-    .parentElement?.querySelector('p')?.textContent ?? ''
+  screen.getByText(label).parentElement?.querySelector('h6')?.textContent ?? ''
 
 const mount = async (campaignId: string) => {
   render(

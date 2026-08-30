@@ -17,6 +17,7 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { Figure, RateRow, Section } from './report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
@@ -52,7 +53,6 @@ import {
   campaignSendAtMs,
   campaignWindowState,
   type CampaignAggregate,
-  type CampaignRate,
   type CampaignSend,
   type EmailCampaign,
 } from '../model'
@@ -70,63 +70,23 @@ const detailDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 /**
- * One rolled-up number.
+ * A rolled-up figure, in the shared `Figure`'s shape.
  *
- * `null` renders as an em dash and says so, never as `0`: "no send recorded
- * this" and "this happened zero times" lead a reader to opposite conclusions
- * about their sending domain, and a zero renders the first as the second.
- *
- * A total measured over fewer sends than the campaign holds says which part
- * of the campaign it describes, rather than presenting a partial sum as a
- * complete one.
+ * The note is where an aggregate differs from a single send's count: a total
+ * measured over fewer emails than the campaign holds says which part of the
+ * campaign it describes, rather than presenting a partial sum as a complete
+ * one. `null` still renders as an em dash and says "not recorded", which is
+ * the property the shared component already owns.
  */
-function Figure(props: { label: string; value: CampaignAggregate }) {
-  const { label, value } = props
-  const partial =
+const rolled = (
+  value: CampaignAggregate,
+): { value: number | null; note: string } => ({
+  value: value.value,
+  note:
     value.value !== null && value.recorded < value.sends
       ? `across ${value.recorded} of ${value.sends} emails`
-      : ''
-  return (
-    <Stack sx={{ minWidth: 120 }}>
-      <Typography variant="overline" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="h6" component="p">
-        {value.value === null ? '—' : value.value.toLocaleString()}
-      </Typography>
-      <Typography variant="caption" color="text.secondary">
-        {value.value === null ? 'not recorded' : partial}
-      </Typography>
-    </Stack>
-  )
-}
-
-/** One rate, with the denominator it was taken over named beside it. */
-function RateRow(props: { label: string; rate: CampaignRate | null }) {
-  const { label, rate } = props
-  return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
-      <Typography variant="body2" sx={{ minWidth: 140 }}>
-        {label}
-      </Typography>
-      {rate ? (
-        <>
-          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-            {`${(rate.value * 100).toFixed(1)}%`}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {`${rate.numerator.toLocaleString()} of ` +
-              `${rate.denominator.toLocaleString()} ${rate.denominatorLabel}`}
-          </Typography>
-        </>
-      ) : (
-        <Typography variant="caption" color="text.secondary">
-          {'— not enough recorded to compute'}
-        </Typography>
-      )}
-    </Stack>
-  )
-}
+      : `across ${value.sends} email${value.sends === 1 ? '' : 's'}`,
+})
 
 export interface CampaignDetailCardProps {
   hostId: string
@@ -313,21 +273,26 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         </Stack>
 
         <Divider />
-        <Typography variant="subtitle2">{'Across this campaign'}</Typography>
         {/*
           The sum over the campaign's emails, not a second set of counters.
           Nothing is stored per campaign: a rollup document would have to be
           kept true against every delivery event of every email in it, and the
           numbers it duplicates are already on the sends this page reads.
+
+          Drawn by the shared figures so a campaign's rate and a single
+          message's read the same way — denominator named on the line, and an
+          em dash rather than a zero where nothing was recorded.
          */}
-        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
-          <Figure label="Addressed" value={rollup.addressed} />
-          <Figure label="Sent" value={rollup.sent} />
-          <Figure label="Delivered" value={rollup.delivered} />
-          <Figure label="Opens" value={rollup.opens} />
-          <Figure label="Clicks" value={rollup.clicks} />
-          <Figure label="Unsubscribed" value={rollup.unsubscribes} />
-        </Stack>
+        <Section title="Across this campaign">
+          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+            <Figure label="Addressed" {...rolled(rollup.addressed)} />
+            <Figure label="Sent" {...rolled(rollup.sent)} />
+            <Figure label="Delivered" {...rolled(rollup.delivered)} />
+            <Figure label="Opens" {...rolled(rollup.opens)} />
+            <Figure label="Clicks" {...rolled(rollup.clicks)} />
+            <Figure label="Unsubscribed" {...rolled(rollup.unsubscribes)} />
+          </Stack>
+        </Section>
         <Stack spacing={0.5}>
           <RateRow label="Open rate" rate={rollup.openRate} />
           <RateRow label="Click rate" rate={rollup.clickRate} />

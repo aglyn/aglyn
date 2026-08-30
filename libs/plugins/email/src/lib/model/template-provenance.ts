@@ -46,10 +46,17 @@
  * lucky, and a template that was killed upstream is exactly the unlucky case.
  */
 
+/*
+ * The MODULE, not the barrel. `@aglyn/aglyn` re-exports the app-utils index,
+ * which reaches `enabled-plugins-context` and therefore React — and this
+ * model is imported by `email-events.ts`, which runs in the plugin API route's
+ * SERVER graph. Through the barrel that is a client-only module pulled into a
+ * server bundle, which `app-router-graph.spec.ts` refuses.
+ */
 import {
   resolveProvenance,
   type ResolvedProvenance,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/marketplace-provenance'
 
 /** Where a template's content comes from. */
 export type TemplateOrigin = 'local' | 'installed'
