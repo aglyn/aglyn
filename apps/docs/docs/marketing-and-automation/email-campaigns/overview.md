@@ -369,6 +369,7 @@ reason and the date:
 | **Unsubscribed** | They clicked the unsubscribe link. |
 | **Bounced** | The mailbox does not exist. Recorded only for a *permanent* bounce — a full mailbox or a temporary server problem never suppresses anybody. |
 | **Marked as spam** | They reported a message. |
+| **Added by hand** | You added the address yourself — see below. |
 
 This is where the gap between a campaign's recipient count and what it
 actually sent comes from, and a rising **Bounced** count is the earliest sign
@@ -377,6 +378,28 @@ a list is going stale.
 An unsubscribe now records **which campaign** the link was in, so the campaign
 report can show an unsubscribe rate for that send. Links in mail sent before
 this keep working exactly as they did; they simply carry no campaign.
+
+#### Add an address yourself {#add-a-suppression}
+
+**Add**, at the top of the card, opens a drawer where you can type or paste
+addresses — one per line or separated by commas, up to 50 at a time — with an
+optional note recording how the request reached you.
+
+Use it when somebody asks you to stop emailing them by reply, by phone, or in
+person. US law requires an opt-out received *by any means* to be honored, and
+the person who asks in words rather than by clicking has asked just as clearly.
+
+Two things it does not do, both on purpose:
+
+- **It does not remove anybody.** The person stays on every audience and keeps
+  every record you hold about them. Only this site's marketing email stops.
+- **It does not stop transactional mail.** Order confirmations, booking
+  reminders and password resets still reach them, because those answer
+  something the person just did.
+
+An address that is already on the list is left exactly as it is, with the
+reason and date it already had — so adding one by hand can never overwrite the
+record of a bounce or a spam report.
 
 **Remove** puts an address back on your list — use it when somebody asks to
 be re-added, or when a suppression was recorded by mistake. Removing a

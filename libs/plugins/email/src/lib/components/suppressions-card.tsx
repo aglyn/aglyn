@@ -17,17 +17,39 @@
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
+import {
+  CardDisplay,
+  Container,
+  MdiIcon,
+  SrOnly,
+  useConfirmationContext,
+} from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+/*
+ * The shared drawer, reached by its own path.
+ *
+ * `@aglyn/shared-ui-jsx`'s barrel deliberately does not re-export this one, so
+ * a deep import is the supported way in rather than an escape hatch. The
+ * console's `CreateArtifactDrawer` — what Screens, Components, Layouts and
+ * Templates create through — is this same component with a form inside it,
+ * and it lives in `apps/console`, which a plugin library may not import. So
+ * the chrome is composed from the same primitive rather than duplicated from
+ * the wrapper.
+ */
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Chip,
+  IconButton,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material'
 import Button from '@mui/material/Button'
@@ -42,8 +64,12 @@ import {
   query,
   where,
 } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
-import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  useFirestore,
+  usePagedCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 
 export interface SuppressionsCardProps {
   hostId: string
@@ -72,6 +98,15 @@ const REASONS: Record<string, { label: string; color: 'default' | 'warning' | 'e
   unsubscribe: { label: 'Unsubscribed', color: 'default' },
   bounce: { label: 'Bounced', color: 'warning' },
   complaint: { label: 'Marked as spam', color: 'error' },
+  /*
+   * Recorded by a person, through the Add control.
+   *
+   * Its OWN value rather than a reuse of `unsubscribe`: an opt-out arriving
+   * by reply, phone or in person is not somebody clicking a link, and the
+   * difference is exactly what a merchant asked to prove the request was
+   * honored has to be able to show.
+   */
+  manual: { label: 'Added by hand', color: 'default' },
 }
 
 const describeReason = (reason: unknown) =>
@@ -141,8 +176,13 @@ function onDate(row: SuppressionRow): string {
 export function SuppressionsCard(props: SuppressionsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const [adding, setAdding] = useState(false)
+  const [addInput, setAddInput] = useState('')
+  const [addNote, setAddNote] = useState('')
+  const [busy, setBusy] = useState(false)
 
   /*
    * The window IS the query, ordered by the server (AGL-2501, AGL-2292).
@@ -214,16 +254,26 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
         query(suppressionsRef, where('reason', '==', 'complaint')),
         { total: count() },
       ),
+      // A FOURTH read, and it is not optional. Unsubscribes are the
+      // REMAINDER, so every reason that is counted explicitly has to be
+      // subtracted — a hand-added entry left out of this list would be
+      // reported as somebody who clicked unsubscribe.
+      getAggregateFromServer(
+        query(suppressionsRef, where('reason', '==', 'manual')),
+        { total: count() },
+      ),
     ])
-      .then(([all, bounced, complained]) => {
+      .then(([all, bounced, complained, added]) => {
         if (!active) return
         const total = Number(all.data().total ?? 0)
         const bounce = Number(bounced.data().total ?? 0)
         const complaint = Number(complained.data().total ?? 0)
+        const manual = Number(added.data().total ?? 0)
         setTotals({
-          unsubscribe: Math.max(0, total - bounce - complaint),
+          unsubscribe: Math.max(0, total - bounce - complaint - manual),
           bounce,
           complaint,
+          manual,
         })
       })
       .catch(() => {
@@ -238,6 +288,83 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     // one-shot read and would otherwise keep reporting the breakdown from
     // before the address was put back.
   }, [firestore, hostId, totalsEpoch])
+
+  /*
+   * The ADD, through a route rather than a client write.
+   *
+   * The Remove button below writes straight from the browser, and this does
+   * not, which looks inconsistent until the document id is considered: an
+   * entry is keyed by `sha256` of the normalized address, and a browser
+   * computing that itself would be a second derivation of the key every
+   * reader shares. Getting it wrong is silent and one-directional — the
+   * merchant is told the person is suppressed and the mail keeps going. A
+   * removal has no such hazard: it names a row that is already on screen.
+   */
+  const handleAdd = useCallback(async () => {
+    const typed = addInput.trim()
+    if (!typed || busy) return
+    setBusy(true)
+    try {
+      const idToken = await (user as { getIdToken?: () => Promise<string> })
+        ?.getIdToken?.()
+      const response = await fetch('/api/email/suppression-add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ hostId, emails: typed, note: addNote.trim() }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(
+          payload?.error ?? 'The address could not be suppressed.',
+          { variant: 'error' },
+        )
+      }
+      const results = (payload?.results ?? []) as Array<{
+        input: string
+        added: boolean
+        refusal?: string
+      }>
+      const added = Number(payload?.added ?? 0)
+      const rejected = results.filter(
+        (result) => result.refusal === 'not-an-address',
+      )
+      // The refusals are NAMED, because "3 of 5 added" leaves an operator to
+      // work out which two, and the two that failed are the ones somebody
+      // asked to stop being emailed.
+      if (rejected.length) {
+        enqueueSnackbar(
+          `Not an email address: ${rejected
+            .map((result) => result.input)
+            .join(', ')}`,
+          { variant: 'warning' },
+        )
+      }
+      if (added) {
+        enqueueSnackbar(
+          added === 1
+            ? 'Added to the suppression list'
+            : `${added} addresses added to the suppression list`,
+          { variant: 'success', persist: false },
+        )
+      } else if (!rejected.length) {
+        enqueueSnackbar('Already on the suppression list', { variant: 'info' })
+      }
+      if (added) {
+        setAddInput('')
+        setAddNote('')
+        setAdding(false)
+        setTotalsEpoch((epoch) => epoch + 1)
+      }
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', { variant: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }, [addInput, addNote, busy, user, hostId, enqueueSnackbar])
 
   const handleRemove = async (row: SuppressionRow) => {
     const reason = describeReason(row.reason).label.toLowerCase()
@@ -277,13 +404,25 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
       contentGutterX
       contentGutterY
       contentBordered="all"
+      HeaderProps={{
+        action: (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setAdding(true)}
+          >
+            {'Add'}
+          </Button>
+        ),
+      }}
     >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
-          {'Addresses your campaigns skip. Someone lands here by clicking ' +
-            'unsubscribe, by bouncing permanently, or by marking a message ' +
-            'as spam — this is where the gap between a campaign’s recipient ' +
-            'count and what it actually sent comes from.'}
+          {'Addresses this site’s marketing email skips. Someone lands here ' +
+            'by clicking unsubscribe, by bouncing permanently, by marking a ' +
+            'message as spam, or because you added them — this is where the ' +
+            'gap between a campaign’s recipient count and what it actually ' +
+            'sent comes from.'}
         </Typography>
         {entries.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -385,6 +524,94 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
           </>
         )}
       </Stack>
+      {/*
+        A DRAWER, not a form stacked above the table.
+        Creating is a drawer and picking is a dialog, which is how Screens,
+        Components, Layouts and Templates all take a name before they create
+        one; the chrome here is the same `NavigationDrawerComponent` those go
+        through, composed directly because the console's wrapper around it
+        lives in an application a plugin library may not import.
+      */}
+      <NavigationDrawerComponent
+        open={adding}
+        anchor="right"
+        variant="temporary"
+        onClose={() => setAdding(false)}
+        AppBarProps={{ color: 'surface' }}
+        appBarLeft={
+          <>
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={() => setAdding(false)}
+              sx={{ mr: 2 }}
+            >
+              <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+              <SrOnly>{'close drawer'}</SrOnly>
+            </IconButton>
+            <Typography variant="h6" component="div">
+              {'Stop emailing an address'}
+            </Typography>
+          </>
+        }
+        appBarRight={
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => setAdding(false)}
+          >
+            {'Cancel'}
+          </Button>
+        }
+      >
+        <Container gutterY>
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              {'Use this when somebody asks you to stop emailing them by ' +
+                'reply, by phone, or in person. They stay on your audiences ' +
+                'and keep every record you hold about them — this only stops ' +
+                'this site’s marketing email reaching them.'}
+            </Typography>
+            <TextField
+              label="Email addresses"
+              value={addInput}
+              onChange={(event) => setAddInput(event.target.value)}
+              multiline
+              minRows={3}
+              fullWidth
+              autoFocus
+              helperText={
+                'One per line, or separated by commas. Up to 50 at a time.'
+              }
+            />
+            <TextField
+              label="Note (optional)"
+              value={addNote}
+              onChange={(event) => setAddNote(event.target.value)}
+              fullWidth
+              helperText={
+                'How the request reached you. Kept with the entry as the ' +
+                'record that it was honored.'
+              }
+              slotProps={{ htmlInput: { maxLength: 200 } }}
+            />
+            <Alert severity="info">
+              {'Order confirmations, booking reminders and password resets ' +
+                'are unaffected. Somebody who asked to stop hearing from ' +
+                'your marketing still gets their receipt.'}
+            </Alert>
+            <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+              <Button
+                variant="contained"
+                disabled={busy || !addInput.trim()}
+                onClick={() => void handleAdd()}
+              >
+                {'Add to suppression list'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Container>
+      </NavigationDrawerComponent>
     </CardDisplay>
   )
 }

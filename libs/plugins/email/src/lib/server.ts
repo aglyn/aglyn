@@ -527,6 +527,14 @@ export function registerEmailApi(): void {
  * point would be a second thing to keep in step with plugins.config.json.
  */
 export {
+  emailSuppressionAddHandler,
+  MANUAL_SUPPRESSION_REASON,
+  SUPPRESSION_ADD_BATCH_MAX,
+  readSuppressionAddresses,
+  registerEmailSuppressionsApi,
+} from './server-suppressions'
+
+export {
   registerEmailConsoleApi,
   emailListMembersAddHandler,
   emailListMembersPreviewHandler,

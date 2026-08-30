@@ -58,6 +58,11 @@ const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
+  // The Add drawer posts to a route, so the card holds a signed-in user to
+  // authenticate with. A double rather than nothing: `useUser()` returning
+  // undefined would throw on destructure and take every case in this file
+  // with it, which is a harness failure wearing a product failure's clothes.
+  useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'tok' } }),
   /*
    * The table pages its own query (AGL-2501), and the SERVER decides the order.
    * The double sorts the way `orderBy('createdAt','desc')` would, so "newest
@@ -201,6 +206,30 @@ describe('SuppressionsCard (AGL-2410)', () => {
     // The reasonless legacy row, counted as the REMAINDER — an equality on
     // `reason` would exclude it, which is the same field-presence trap as
     // ordering on a field a writer can omit.
+    expect(screen.getByText('Unsubscribed: 1')).toBeTruthy()
+  })
+
+  it('counts a hand-added entry as its own reason, not as an unsubscribe', async () => {
+    // Unsubscribes are the REMAINDER — total minus the reasons counted
+    // explicitly — so every reason that gets its own writer has to get its
+    // own aggregate too. A `manual` row left out of that subtraction is
+    // reported as somebody who clicked a link they never saw, and the merchant
+    // reading the chip cannot tell the two apart.
+    suppressionDocs = [
+      ...suppressionDocs,
+      {
+        $id: 'hash-d',
+        email: 'kim@example.com',
+        reason: 'manual',
+        createdAt: { seconds: DAY + 200_000 },
+        suppressedAt: { seconds: DAY + 200_000 },
+      },
+    ]
+    render(<SuppressionsCard hostId="host-1" />)
+
+    await waitFor(() =>
+      expect(screen.getByText('Added by hand: 1')).toBeTruthy(),
+    )
     expect(screen.getByText('Unsubscribed: 1')).toBeTruthy()
   })
 
