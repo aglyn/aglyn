@@ -246,22 +246,46 @@ See "What a human must still do" below.
 
 Each of these is a deliberate boundary, not an oversight.
 
-### 1. Nothing re-checks a verified domain
+### 1. ~~Nothing re-checks a verified domain~~ — BUILT
 
-Verification happens when someone asks for it. A customer who removes their
-DKIM record months later keeps sending until somebody verifies again.
+`sending-domain-recheck.ts` re-reads the DNS for verified domains whose last
+check has gone stale, and un-verifies the ones whose records are conclusively
+gone.
 
-The re-check belongs on the existing `*/15` `consoleFastCrons` job, beside
-`finish-domain-attachments`, and the machinery it needs is already built:
-`verifySendingDomain` is idempotent, never throws, and already holds the
-`inconclusive` arm that stops a resolver outage from un-verifying every
-customer at once. What remains is the sweep route, its `CRON_SECRET` and
-`recordCronBeat` preamble, a bounded query, and registration in
-`CONSOLE_FAST_CRON_ROUTES` plus `health-report.ts`.
+It carries the drift discipline this section asked for. An `inconclusive`
+probe maps to `unreachable`, which HOLDS — it neither counts the failure nor
+clears a run already gathered, so an outage cannot un-verify every customer at
+once and cannot launder away evidence either. A conclusive miss is counted
+rather than acted on: `SENDING_DOMAIN_FAILURES_BEFORE_REVOKE` in a row **and**
+`SENDING_DOMAIN_DRIFT_MIN_AGE_MS` since the first, so a beat firing too often
+cannot compress the wait.
 
-It should also carry the drift discipline `sso-drift-logic.ts` already
-implements — N consecutive conclusive failures **and** a wall-clock floor
-before acting — rather than un-verifying on a single bad sweep.
+The probe is `probeSendingRecords`, extracted from `verifySendingDomain` and
+shared with it, so the sweep and the console's Verify button ask the same
+question of the same resolvers and cannot form two opinions about whether the
+records are published. What differs is only how much evidence each acts on:
+the button's caller is watching and can retry, the sweep's caller is nobody.
+
+**Not a `consoleFastCrons` route, as this section proposed.** It rides the
+existing platform job beat through `registerPluginJob`, under the `core`
+namespace `publish-schedule-job.ts` established, which is a registration
+rather than a route plus a scheduler entry plus an inventory row plus a
+monitor. `core` also passes the release filter untouched — a workspace with
+the email plugin switched off still has hosts pointed at these records, and a
+domain's trust must not outlive its DNS because of a plugin flag.
+
+The staleness bound is in the query, so a beat with nothing due bills one empty
+read. Ordering by `lastCheckedAtMs` is what makes it resumable without a
+cursor: each pass stamps the field and moves the domain to the back of the
+queue. That ordering also decides what is VISIBLE — Firestore drops a document
+missing the field — so `verifySendingDomain` stamping it on the verified
+transition is an invariant the spec pins, because a second writer of that
+status would otherwise make its domains silently untouchable.
+
+**Needs the `(status, lastCheckedAtMs)` collection-group index on
+`sendingDomains`**, added to `cloud/firebase-firestore.indexes.json` and not
+yet deployed. Until it is, the sweep's query throws, the runner isolates the
+failure, and the beat retries.
 
 ### 2. There is no console card
 
