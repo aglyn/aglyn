@@ -36,7 +36,9 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type { CampaignStats } from '../model/campaign-report'
+import type {
+  CampaignStats,
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 
 /** What each `useFirestoreDoc` call answers, keyed by document path. */
 const mockDocs = new Map<string, unknown>()

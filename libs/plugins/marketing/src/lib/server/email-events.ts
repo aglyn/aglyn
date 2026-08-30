@@ -43,13 +43,13 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
 // The link rollup's key derivation and its cap live beside the READER that
-// renders them (`@aglyn/plugins-email/model`) rather than here, so the shape
-// the webhook writes and the shape the report reads cannot drift into two
-// definitions of what a "link" is.
+// renders them (`@aglyn/shared-ui-email-campaigns/model`) rather than here, so
+// the shape the webhook writes and the shape the report reads cannot drift
+// into two definitions of what a "link" is.
 import {
   CAMPAIGN_LINK_ROLLUP_MAX,
   campaignLinkKey,
-} from '@aglyn/plugins-email/model'
+} from '@aglyn/shared-ui-email-campaigns/model'
 import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'

@@ -429,7 +429,9 @@ import { emailEventsHandler } from './email-events'
 // The REAL cap, not a local copy: a spec that retyped it would go on passing
 // after the value it asserts moved. (`suppressionId` is imported further
 // down, beside the block that explains why it is not recomputed here.)
-import { CAMPAIGN_LINK_ROLLUP_MAX } from '@aglyn/plugins-email/model'
+import {
+  CAMPAIGN_LINK_ROLLUP_MAX,
+} from '@aglyn/shared-ui-email-campaigns/model'
 
 // ---------------------------------------------------------------------------
 // Fixtures

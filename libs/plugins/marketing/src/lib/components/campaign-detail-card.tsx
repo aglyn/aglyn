@@ -28,7 +28,11 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { Figure, RateRow, Section } from '@aglyn/plugins-email/components/report-figures'
+import {
+  Figure,
+  RateRow,
+  Section,
+} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
@@ -79,7 +83,7 @@ import {
   type CampaignAggregate,
   type CampaignSend,
   type EmailCampaign,
-} from '@aglyn/plugins-email/model'
+} from '@aglyn/shared-ui-email-campaigns/model'
 import CampaignComposer from '@aglyn/plugins-email/components/campaign-composer'
 import CampaignEditDrawer, {
   type CampaignEditValues,

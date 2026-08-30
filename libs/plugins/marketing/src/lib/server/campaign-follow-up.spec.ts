@@ -297,7 +297,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
-import { campaignReport } from '@aglyn/plugins-email/model'
+import { campaignReport } from '@aglyn/shared-ui-email-campaigns/model'
 import { CAMPAIGN_REACH_CEILING } from '@aglyn/tenant-data-admin/server/email-campaign-reach'
 import { campaignSendHandler, performCampaignSend } from './campaign-send'
 
