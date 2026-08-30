@@ -150,7 +150,8 @@ string.
 | DMARC read and the report-only suggestion | same |
 | The identity decision and the refusal | same (`resolveSendingIdentity`) |
 | The record-vs-live comparison, three-outcome | same (`assessSendingRecords`) |
-| Firestore store, DNS verification, per-org selector | `libs/tenant/data/admin/src/lib/server/sending-domains.ts` |
+| Firestore store, DNS verification, the proposed per-org selector | `libs/tenant/data/admin/src/lib/server/sending-domains.ts` |
+| Recording an issued key, and recording a provider refusal without a status | same (`recordIssuedSendingDomain`, `recordSendingDomainIssueFailure`) |
 | Pinned-resolver TXT/MX lookup, extracted from two inline copies | `libs/tenant/data/admin/src/lib/server/dns-probe.ts` |
 | The send path's refusal and custom-address send | `libs/shared/util/email/src/lib/send-email.ts` |
 | The campaign `409`, and `preview` reporting which identity is in use | `libs/plugins/marketing/src/lib/server/campaign-send.ts` |

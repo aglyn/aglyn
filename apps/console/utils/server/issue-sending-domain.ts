@@ -66,7 +66,10 @@ export async function issueSendingDomainRecords(options: {
 }): Promise<IssuedSendingDomain> {
   const record = options?.record
   if (!record?.domain || !options?.orgId) {
-    return { record, outcome: 'skipped', detail: 'unconfigured' }
+    // Distinct from `unconfigured`: nothing was asked for, as against nothing
+    // being able to answer. Collapsing the two would tell an operator their
+    // credential is missing when the claim is.
+    return { record, outcome: 'skipped', detail: 'no-claim' }
   }
 
   // Already issued. No provider call, no second domain at the provider, and
@@ -141,5 +144,11 @@ export async function issueSendingDomainRecords(options: {
     }
   }
 
-  return { record: stored.record, outcome: issue.outcome, detail: null }
+  /*
+   * `?? record` because the store re-reads the document after writing it, and
+   * a domain released between the two reads comes back null. The caller
+   * renders records off this and would otherwise throw on a race whose worst
+   * honest outcome is showing the claim as it was a moment ago.
+   */
+  return { record: stored.record ?? record, outcome: issue.outcome, detail: null }
 }
