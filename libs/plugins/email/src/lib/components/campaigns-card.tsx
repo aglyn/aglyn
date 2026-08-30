@@ -351,6 +351,8 @@ export function HostCampaignsCard(props: {
       {
         field: 'emails',
         headerName: 'Emails',
+        align: 'right',
+        headerAlign: 'right',
         width: 110,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">
@@ -363,6 +365,8 @@ export function HostCampaignsCard(props: {
       {
         field: 'sent',
         headerName: 'Sent',
+        align: 'right',
+        headerAlign: 'right',
         width: 100,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">{figure(row.rollup.sent)}</Typography>
@@ -371,6 +375,8 @@ export function HostCampaignsCard(props: {
       {
         field: 'opens',
         headerName: 'Opens',
+        align: 'right',
+        headerAlign: 'right',
         width: 100,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">{figure(row.rollup.opens)}</Typography>
@@ -379,6 +385,8 @@ export function HostCampaignsCard(props: {
       {
         field: 'clicks',
         headerName: 'Clicks',
+        align: 'right',
+        headerAlign: 'right',
         width: 100,
         renderCell: ({ row }: any) => (
           <Typography variant="body2">{figure(row.rollup.clicks)}</Typography>
