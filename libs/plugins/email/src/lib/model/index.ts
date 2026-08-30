@@ -43,3 +43,19 @@ export {
  * rather than chosen in JSX.
  */
 export * from './campaign-report'
+
+/**
+ * The same math taken across every message sent from one TEMPLATE. Separate
+ * from `campaign-report` because a sum has a membership: which messages went
+ * into it, and therefore which population the rate describes.
+ */
+export * from './template-report'
+
+/** Reading one message record — its state, and when it went out. */
+export * from './email-record'
+
+/**
+ * Whose template this is: authored here, or installed from a marketplace
+ * listing and versioned by somebody else.
+ */
+export * from './template-provenance'
