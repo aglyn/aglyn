@@ -177,6 +177,10 @@ export * from './marketplace-provenance'
 export * from './marketplace-update-state'
 export * from './dataset-query'
 export * from './plugin-manifest'
+// After `plugin-manifest`, whose revocation predicates it asks the kill
+// question with, and after `media-ref`, whose grammar decides what counts as a
+// first-party image.
+export * from './email-starter-policy'
 export * from './safe-json-ld'
 export * from './request-geo'
 export * from './request-ip'

@@ -641,6 +641,63 @@ describe('a takedown and a restore re-derive the offer (AGL-2368)', () => {
     expect(docs.has(`revocations/${LISTING}`)).toBe(false)
     expect(mirror()).toBe(VERSION)
   })
+
+  /**
+   * An email starter is the one copied artifact that keeps ACTING after a
+   * takedown.
+   *
+   * A component or a template renders on the tenant's own site; hiding the
+   * listing blocks the next install and that is honestly the whole of what a
+   * takedown can promise. An installed email is MAILED — from the sending
+   * domain every other tenant shares — so a takedown that reached only the
+   * storefront would leave the design going out from every workspace that
+   * already had it. The revocation is what `emailStarterSendBlock` reads at
+   * the send, which is the last chokepoint that can still refuse.
+   */
+  const seedEmailStarter = () => {
+    docs.set(`marketplaceListings/${LISTING}`, {
+      artifactType: 'emailStarter',
+      displayName: 'Spring sale',
+      reviewStatus: 'listed',
+      latestVersion: '2',
+    })
+  }
+
+  it('writes the kill switch when an EMAIL STARTER is taken down', async () => {
+    seedEmailStarter()
+    const response = await hide('Hidden tracking image.')
+    expect(response.status).toBe(200)
+    expect(docs.get(`revocations/${LISTING}`)?.['versions']).toBe('all')
+    expect(docs.get(`revocations/${LISTING}`)?.['reason']).toBe(
+      'Hidden tracking image.',
+    )
+  })
+
+  it('reports the kill in the response, so staff are not left guessing', async () => {
+    seedEmailStarter()
+    const response = await hide()
+    expect(await response.json()).toMatchObject({ revoked: true })
+  })
+
+  it('lifts the kill when the listing is restored', async () => {
+    seedEmailStarter()
+    await hide()
+    const response = await POST(post({ listingId: LISTING, action: 'unhide' }))
+    expect(response.status).toBe(200)
+    expect(docs.has(`revocations/${LISTING}`)).toBe(false)
+  })
+
+  it('does not touch the plugin-only approved-version mirror', async () => {
+    // Recomputed from `pluginVersions`, a collection this type has none of, so
+    // running the repair would derive "nothing approved" from an empty read.
+    seedEmailStarter()
+    docs.set(`marketplaceListings/${LISTING}`, {
+      ...(docs.get(`marketplaceListings/${LISTING}`) as object),
+      latestApprovedVersion: '2',
+    })
+    await hide()
+    expect(mirror()).toBe('2')
+  })
 })
 
 /**

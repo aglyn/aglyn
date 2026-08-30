@@ -45,6 +45,8 @@ function endpointForArtifact(artifactType: string): string {
       return 'marketplace/install-dataset-schema'
     case 'emailTemplate':
       return 'marketplace/install-email-template'
+    case 'emailStarter':
+      return 'marketplace/install-email-starter'
     case 'theme':
       return 'marketplace/install-theme'
     default:
@@ -73,6 +75,13 @@ function landingMessage(
       return (
         `Saved "${displayName}" as a draft version — activate it in the ` +
         'email designer to start sending it.'
+      )
+    case 'emailStarter':
+      // A copy, and saying so is the point: the publisher cannot reach it
+      // again, and nothing goes out until a campaign is sent from it.
+      return (
+        `Added "${displayName}" to your Email templates as your own copy — ` +
+        'edit it freely, nothing is sent until you send a campaign.'
       )
     case 'datasetSchema':
       return `Created "${displayName}" as a new, empty dataset.`
@@ -228,6 +237,47 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
             variant: 'warning',
             persist: true,
           })
+        }
+        /**
+         * What was, and was not, checked about an email somebody else wrote.
+         *
+         * Said HERE because this is the moment the design enters the
+         * workspace, and because the two facts are the ones a sender cannot
+         * recover afterwards by looking at the design. `unreviewed` is the
+         * ordinary case — email starters are auto-listed like every other
+         * copied artifact — so the sentence has to be a statement rather than
+         * an alarm, and it must never be silence: an install that said nothing
+         * would be read as a review that happened.
+         *
+         * The link hosts are the inspectable half of the link policy. The
+         * remote-asset rule is mechanical and the route enforces it, but where
+         * a template points a tenant's own customers is a judgment only the
+         * tenant can make, and they can only make it if they are shown the
+         * list.
+         */
+        if (payload.assurance) {
+          const hosts: string[] = payload.linkHosts ?? []
+          enqueueSnackbar(
+            (payload.assurance === 'approved'
+              ? 'Reviewed by Aglyn. '
+              : 'Nobody at Aglyn has reviewed this design. ') +
+              (hosts.length
+                ? `It links to ${hosts.join(', ')}. `
+                : 'It links nowhere outside your site. ') +
+              'Read it before you send from it.',
+            { variant: 'info', persist: true },
+          )
+        }
+        // A media reference that still resolves against the publisher's own
+        // library — served by our CDN, so no third party learns who opened the
+        // mail, but the picture behind it is still theirs to change.
+        if (payload.foreignMediaScopes?.length) {
+          enqueueSnackbar(
+            'Some images in this email are still served from the publisher’s ' +
+              'own media library, so they can change after you install. ' +
+              'Replace them with your own to pin them.',
+            { variant: 'info', persist: false },
+          )
         }
         // A schema whose reference fields couldn't be relinked installs with
         // those fields degraded to text — silently changing a field's type

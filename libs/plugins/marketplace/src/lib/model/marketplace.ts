@@ -267,6 +267,7 @@ export const ARTIFACT_TYPE_LABELS: Record<MarketplaceArtifactType, string> = {
   layout: 'Layout',
   datasetSchema: 'Dataset schema',
   emailTemplate: 'Email template',
+  emailStarter: 'Email starter',
   theme: 'Theme',
 }
 
@@ -307,6 +308,8 @@ export const INSTALL_TARGETS: Record<
   // scope — as a new empty dataset, not a pin (AGL-657).
   datasetSchema: ['org'],
   emailTemplate: ['host'],
+  // A campaign email is a screen, and a screen belongs to a site.
+  emailStarter: ['host'],
   // A theme is one site's visual identity, written to `hosts/{h}.theme`
   // (AGL-1020). Applying one org-wide would repaint every site at once from a
   // control that says "install".
@@ -1093,6 +1096,34 @@ export const MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST: readonly string[] = [
   'emailText',
 ]
 
+/**
+ * Email block ids publishable as an `emailStarter` — the transactional list
+ * minus `emailRichtext`.
+ *
+ * Derived rather than written out, so a block added to the list above cannot
+ * silently miss this one. What it subtracts is the reason it exists.
+ *
+ * `emailRichtext` holds its content in an `html` prop, and the email renderer's
+ * `sanitize` hook defaults to identity with no production caller supplying one
+ * — so that prop reaches the recipient's inbox exactly as authored. On a
+ * transactional design that is the site's own author writing their own mail. In
+ * a STARTER it is a stranger's markup mailed from the shared sending domain
+ * under the tenant's From header, which is the raw-HTML escape hatch
+ * `emailHtml` was excluded for, wearing a friendlier block name. A remote
+ * `<img>` inside it is a tracking pixel that the src policy on `emailImage`
+ * would otherwise have caught.
+ *
+ * Subtracting the block is deliberate rather than sanitizing its markup: an
+ * allowlist over someone else's HTML is a judgment we would have to keep
+ * re-making, and everything rich text can express in an email — a heading, a
+ * paragraph, a link, a button — the remaining blocks already express as a
+ * structured tree we render ourselves.
+ */
+export const MARKETPLACE_EMAIL_STARTER_COMPONENT_ID_ALLOWLIST: readonly string[] =
+  MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST.filter(
+    (componentId) => componentId !== 'emailRichtext',
+  )
+
 /** Serialized definition size cap (Firestore doc limit is 1 MiB). */
 export const MARKETPLACE_DEFINITION_MAX_BYTES = 200 * 1024
 
@@ -1601,6 +1632,8 @@ const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
   layout: 'An editable layout you can apply to any screen',
   datasetSchema: 'A new empty dataset with its fields already defined',
   emailTemplate: 'An editable email design you can send campaigns from',
+  emailStarter:
+    'A new email in your Email templates list, ready to edit and send',
   theme: 'A theme applied to the site you choose',
 }
 
