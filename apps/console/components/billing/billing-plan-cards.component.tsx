@@ -394,11 +394,30 @@ export interface BillingPlanCardsProps {
  */
 function headlineLimits(
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+  pricing: (typeof PLAN_PRICING)[OrgPlan],
 ): string[] {
+  /*
+   * ⚠️ THE PER-UNIT PRICE IS PART OF THE LIMIT, not decoration on it.
+   *
+   * Six of the seven plans carry `meteredInfraPassThrough`, so most of these
+   * numbers are the point where BILLING starts rather than the point where
+   * the product stops. "1,000 contacts" and "1,000 contacts (+$1/1k over)"
+   * describe different products: one reads as a wall, the other as a meter,
+   * and a customer choosing a tier on the first reading is choosing on the
+   * wrong fact. The comparison grid has always shown these; the focused view
+   * dropped them, which is exactly the sort of thing a condensed card must
+   * not condense away.
+   *
+   * Enterprise is the one plan with no meter at all — every band is
+   * `UNLIMITED` and the price is negotiated, so there is no rate to print and
+   * the `!= null` guards below fall through to nothing on their own.
+   */
+  const per = (rate: number | null | undefined, unit: string) =>
+    rate != null ? ` (+$${rate}${unit})` : ''
   return [
     `${quotaLabel(entitlements.hostLimit)} host${
       entitlements.hostLimit === 1 ? '' : 's'
-    }`,
+    }${per(pricing.extraHostMonthlyUsd, '/extra')}`,
     `${quotaLabel(entitlements.screensPerHost)} screens per host`,
     `${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`,
     `${mbLabel(entitlements.storagePerHostMb)} storage`,
@@ -409,11 +428,14 @@ function headlineLimits(
     } bandwidth`,
     `${quotaLabel(entitlements.managersPerOrg)} team seat${
       entitlements.managersPerOrg === 1 ? '' : 's'
-    }`,
+    }${per(pricing.extraSeatMonthlyUsd, '/extra')}`,
     `${quotaLabel(entitlements.membersPerHost)} site collaborator${
       entitlements.membersPerHost === 1 ? '' : 's'
-    }`,
-    `${quotaCount(entitlements.contactsPerHost)} contacts`,
+    }${per(pricing.extraCollaboratorMonthlyUsd, '/extra')}`,
+    `${quotaCount(entitlements.contactsPerHost)} contacts${per(
+      pricing.extraContactsUsdPer1k,
+      '/1k over',
+    )}`,
   ]
 }
 
@@ -833,6 +855,9 @@ function FocusedTierView(props: {
                 <Stack spacing={0.5}>
                   {headlineLimits(
                     PLAN_ENTITLEMENTS[
+                      rung === 'enterprise' ? 'enterprise' : (rung as OrgPlan)
+                    ],
+                    PLAN_PRICING[
                       rung === 'enterprise' ? 'enterprise' : (rung as OrgPlan)
                     ],
                   ).map((line) => (

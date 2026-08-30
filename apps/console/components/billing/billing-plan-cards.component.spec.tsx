@@ -306,10 +306,31 @@ describe('the page opens on the decision, not the catalogue', () => {
    * fills breaks the comparison. Enterprise states the same limits as every
    * other tier; the answer is just "Unlimited" all the way down.
    */
+  /**
+   * Six of the seven plans meter overage, so most of these numbers are where
+   * BILLING starts, not where the product stops. A condensed card that drops
+   * the rate turns a meter into a wall, and a customer choosing on that
+   * reading is choosing on the wrong fact.
+   */
+  it('a metered limit carries its rate, not just its number', () => {
+    renderCards({ plan: 'starter' })
+    expect(screen.queryAllByText(/contacts \(\+\$[\d.]+\/1k over\)/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/hosts? \(\+\$[\d.]+\/extra\)/).length).toBeGreaterThan(0)
+  })
+
+  it('and Enterprise, which has no meter, prints no rate', () => {
+    renderCards({ plan: 'agency' })
+    // Every band UNLIMITED and the price negotiated, so there is no
+    // pass-through to quote — the row is the word, with nothing after it.
+    expect(screen.queryAllByText('Unlimited contacts').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/Unlimited contacts \(\+/)).toHaveLength(0)
+  })
+
   it('the Enterprise card states its limits like every other card', () => {
     renderCards({ plan: 'agency' })
-    // Agency's own figures, and Enterprise's answer beside them.
-    expect(screen.queryAllByText('100 hosts')).toHaveLength(1)
+    // Agency's own figures — with its per-unit rate, since Agency meters —
+    // and Enterprise's answer beside them, which carries no rate.
+    expect(screen.queryAllByText(/^100 hosts/)).toHaveLength(1)
     expect(screen.queryAllByText('Unlimited hosts')).toHaveLength(1)
     // Never the raw sentinel (AGL-2482).
     expect(screen.queryAllByText(/∞|Infinity/)).toHaveLength(0)
