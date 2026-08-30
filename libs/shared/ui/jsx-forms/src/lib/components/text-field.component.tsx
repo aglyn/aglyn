@@ -48,9 +48,25 @@ const TextFieldComponent = forwardRef<any, TextFieldProps>((props, ref) => {
     validateOnMount,
     meta,
     inputProps,
+    type,
+    slotProps,
     ...rest
   } = useFieldApi(props as UseFieldApiConfig)
   const invalidMessage = validationMessage(meta, validateOnMount)
+  /*
+   * A date, time or colour input paints its own placeholder whether or not it
+   * is focused, so a label left to float sits ON TOP of `mm/dd/yyyy` and both
+   * are unreadable. Shrinking is not a preference for these types, it is the
+   * only legible state — so it is decided here rather than at every call site,
+   * where forgetting it looks like a typo in the label.
+   */
+  const alwaysFilled =
+    type === 'date' ||
+    type === 'time' ||
+    type === 'datetime-local' ||
+    type === 'month' ||
+    type === 'week' ||
+    type === 'color'
   const helpText =
     invalidMessage ||
     ((meta.touched || validateOnMount) && meta.warning) ||
@@ -64,7 +80,27 @@ const TextFieldComponent = forwardRef<any, TextFieldProps>((props, ref) => {
       disabled={isDisabled}
       error={Boolean(invalidMessage)}
       helperText={helpText}
-      slotProps={{ htmlInput: { readOnly: isReadOnly, ...inputProps } }}
+      type={type}
+      /*
+       * Merged rather than overwritten: a caller passing `slotProps` for one
+       * slot must not silently drop the read-only flag on another.
+       */
+      slotProps={{
+        ...slotProps,
+        htmlInput: {
+          readOnly: isReadOnly,
+          ...inputProps,
+          ...(slotProps as any)?.htmlInput,
+        },
+        ...(alwaysFilled
+          ? {
+              inputLabel: {
+                shrink: true,
+                ...(slotProps as any)?.inputLabel,
+              },
+            }
+          : {}),
+      }}
       label={label}
       placeholder={placeholder}
       required={isRequired}

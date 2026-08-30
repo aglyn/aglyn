@@ -299,7 +299,12 @@ export function HostCampaignsCard(props: {
           <Stack
             direction="row"
             spacing={1}
-            sx={{ alignItems: 'center', minWidth: 0 }}
+            /*
+              `minWidth: 0` on the row AND on the name: a flex child will not
+              shrink below its content without it, so the chip beside it is
+              what gets clipped instead of the name being ellipsed.
+             */
+            sx={{ alignItems: 'center', minWidth: 0, width: 1 }}
           >
             {/*
               The name is a real anchor as well as the row being clickable, so
@@ -314,13 +319,14 @@ export function HostCampaignsCard(props: {
                 onClick={(event: { stopPropagation: () => void }) =>
                   event.stopPropagation()
                 }
+                style={{ minWidth: 0 }}
               >
                 <Typography variant="body2" noWrap>
                   {row.name}
                 </Typography>
               </AppLink>
             ) : (
-              <Typography variant="body2" noWrap>
+              <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
                 {row.name}
               </Typography>
             )}
@@ -329,6 +335,8 @@ export function HostCampaignsCard(props: {
                 size="small"
                 variant="outlined"
                 label="Single send"
+                // A label that reads "Single sen" is worse than a shorter name.
+                sx={{ flexShrink: 0 }}
                 title={
                   'Sent before campaigns grouped their emails. Its report ' +
                   'and its unsubscribe links are unchanged.'
@@ -366,7 +374,7 @@ export function HostCampaignsCard(props: {
       {
         field: 'listIds',
         headerName: 'Lists',
-        width: 160,
+        width: 140,
         sortable: false,
         renderCell: ({ row }: any) => (
           <Typography variant="body2" noWrap>
@@ -389,7 +397,7 @@ export function HostCampaignsCard(props: {
       {
         field: 'emails',
         headerName: 'Emails',
-        width: 110,
+        width: 96,
         align: 'right',
         headerAlign: 'right',
         renderCell: ({ row }: any) => (
@@ -403,7 +411,7 @@ export function HostCampaignsCard(props: {
       {
         field: 'sent',
         headerName: 'Sent',
-        width: 100,
+        width: 84,
         align: 'right',
         headerAlign: 'right',
         renderCell: ({ row }: any) => (
@@ -413,7 +421,7 @@ export function HostCampaignsCard(props: {
       {
         field: 'opens',
         headerName: 'Opens',
-        width: 100,
+        width: 84,
         align: 'right',
         headerAlign: 'right',
         renderCell: ({ row }: any) => (
@@ -423,7 +431,7 @@ export function HostCampaignsCard(props: {
       {
         field: 'clicks',
         headerName: 'Clicks',
-        width: 100,
+        width: 84,
         align: 'right',
         headerAlign: 'right',
         renderCell: ({ row }: any) => (
@@ -562,9 +570,6 @@ function campaignFields(
       label: 'Starts',
       type: 'date',
       helperText: 'When the campaign window opens',
-      // The label would otherwise sit on top of the browser's own date
-      // placeholder, which a date input paints whether or not it is focused.
-      InputLabelProps: { shrink: true },
     },
     {
       component: 'text-field',
