@@ -101,7 +101,22 @@ const AUDIENCE_CONTEXTS = [
   'abandoned cart',
   'restock alert',
   'event action',
+  'flow step',
 ]
+
+/**
+ * How a label is recognized at its call site.
+ *
+ * Anchored to the `context:` key, but tolerant of an expression between the
+ * key and the label — a sender that picks its label per call
+ * (`context: resumed ? 'flow step' : 'event action'`) is the same sender and
+ * must not fall out of the sweep because of how it names itself. A plain
+ * substring test on the whole file would match a label in a comment; this
+ * cannot, because it has to reach the key first and may not cross a comma or
+ * a line break to do it.
+ */
+const contextMatcher = (label: string) =>
+  new RegExp(`context:[^,\\n]*'${label}'`)
 
 /** How a sender declares itself, and what the declaration buys. */
 const DECLARES_MARKETING = /\bmarketing:\s*\{/
@@ -125,7 +140,7 @@ for (const root of SEARCH_ROOTS) {
     if (!CALLS_SEND_EMAIL.test(text)) continue
     const path = relative(REPO_ROOT, file).split(sep).join('/')
     const mailsAnAudience = AUDIENCE_CONTEXTS.some((label) =>
-      text.includes(`context: '${label}'`),
+      contextMatcher(label).test(text),
     )
     if (!mailsAnAudience) continue
     audienceSenders.push({ path, text })

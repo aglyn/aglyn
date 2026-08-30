@@ -127,15 +127,15 @@ Aglyn state is one of:
 | Capability | MC | HS | PD | KL | BV | CIO | Aglyn |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Trigger → action automations | ✅ | ✅ *Professional+* | ✅ | ✅ | ✅ | ✅ | **(C)** a **form**, not a canvas: one trigger + one condition group + an ordered step list |
-| **Wait / delay step** | ✅ | ✅ | ✅ | ✅ | ✅ min 1 minute | ✅ delay, window, **wait-until** | **(A)** — no delay step exists, so no sequence can exist. See [G6](#g6) |
-| Branching inside a flow | ✅ splits *Standard+* | ✅ | ✅ | ✅ up to 20 paths | ✅ conditional + percentage | ✅ true/false, multi-split, random cohort | **(A)** conditions gate the whole action, not a step |
-| Wait until an event happens | ✅ up to 10 | ✅ | ✅ | ❌ | ✅ with a timeout branch | ✅ | **(A)** |
+| **Wait / delay step** | ✅ | ✅ | ✅ | ✅ | ✅ min 1 minute | ✅ delay, window, **wait-until** | **(✔)** `wait`, 1 minute to 90 days, resumed from a durable row on the job beat — see [G6](#g6) |
+| Branching inside a flow | ✅ splits *Standard+* | ✅ | ✅ | ✅ up to 20 paths | ✅ conditional + percentage | ✅ true/false, multi-split, random cohort | **(✔)** every step takes a `when` guard; `exitFlow` is the exit branch. No percentage or cohort split |
+| Wait until an event happens | ✅ up to 10 | ✅ | ✅ | ❌ | ✅ with a timeout branch | ✅ | **(✔)** `waitForEvent` with a mandatory timeout; woken by a keyed lookup on the event, never a poll |
 | Update a contact field mid-flow | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(C)** `updateDataset` exists; no contact-property write |
 | Call a webhook from a flow | ✅ *Standard+* | ✅ | ✅ | ✅ | ✅ | ✅ bidirectional | **(✔)** `webhookPost` step |
 | **Purchase / order as a trigger** | ✅ | ✅ | ➖ | ✅ | ✅ needs their tracker | ✅ | **(A)** `HOST_EVENT_TYPES` has no order event |
 | Abandoned cart | ✅ | ✅ | ➖ | ✅ | ✅ | ➖ build it yourself | **(C)** a single reminder, Pro-gated, on the job beat — not a series |
 | Back-in-stock | ✅ | ➖ | ❌ | ✅ | ✅ *Professional* | ➖ | **(C)** a single alert |
-| Welcome / win-back / post-purchase series | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(A)** blocked entirely by the missing wait step |
+| Welcome / win-back / post-purchase series | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **(✔)** buildable from `wait` + `sendEmail`; no packaged templates for them yet |
 
 ### 1e. Reporting
 
@@ -343,23 +343,56 @@ list and no way to bring it. The counterweight is real: M3AAWG's guidance is tha
 import is the fastest way to destroy a shared sending domain, and the controls are
 specified in [§4 P4](#p4). **Do not ship the importer without them.**
 
-### G6 — There is no wait step, so there are no sequences {#g6}
+### G6 — ~~There is no wait step, so there are no sequences~~ ✅ SHIPPED {#g6}
 
-**What it is.** `HostActionStep` has 30-odd step types and not one of them is a delay.
+**What it was.** `HostActionStep` had 30-odd step types and not one of them was a delay.
 (`showElement`/`hideElement` carry a `delayMs`, but that is a browser-side animation.)
-An automation is therefore always trigger → immediate actions. No welcome series, no
+An automation was therefore always trigger → immediate actions. No welcome series, no
 win-back, no post-purchase follow-up, no "wait three days then ask for a review."
 
-**Who has it.** All six. It is the reason the category is called *marketing automation*.
+**What shipped.** Three step types, and the shape §5.2 asked for rather than a canvas:
 
-**Our state.** **(A)**.
+- **`wait`** — a durable delay, 1 minute to 90 days.
+- **`waitForEvent`** — resumes when a named event arrives for that person, with a
+  mandatory timeout; the step after it reads `_waitTimedOut` to be the timeout branch.
+- **`exitFlow`** — ends the enrollment, which with a step condition is the exit branch.
 
-**Size.** **L.** A delay needs durable scheduled resumption, which is a genuinely new
-mechanism — though `campaign-process-scheduled.ts` already demonstrates the pattern
-(a `*/15` sweep over due work with a transaction that prevents double-execution).
+Every step also takes an optional **`when`** guard — the same clause type and combinator
+the trigger uses, evaluated against the same scope. That closes the *"conditions gate the
+whole action, not a step"* row in [§1d](#1d-automation-and-journeys) as well.
 
-**What it blocks.** An entire product category. Note the shape of the fix, though: the
-gap is **the wait step**, not a visual canvas. See [§5.2](#5-what-not-to-build).
+**The scheduling model.** There is no timer anywhere. A wait is a ROW —
+`hosts/{hostId}/flowEnrollments/{actionId}__{sha256(email)}` carrying `resumeAtMs`, the
+step index, and a **snapshot of the step list** — and the resume is the platform job beat
+querying for rows whose time has come. Nothing is held in a process, so a deploy, a
+restart, a cold start and a region failover all leave the row where it was.
+
+- **Cost.** The sweep reads DUE rows only (`resumeAtMs <= now`), so ten thousand people
+  waiting three days cost nothing on the beats before those three days are up. On top of
+  that a scan budget bounds one beat and a cursor resumes it, which is what gets the beat
+  past a wall of rows belonging to a locked site.
+- **Concurrency.** The document id is derived from the person, so a second concurrent
+  enrollment is a write to a document that already exists rather than a race to detect.
+  A finished flow deletes its row, so the same person can enter the same series again.
+- **Editing mid-wait.** The enrollment runs the snapshot it entered with, so an edit
+  applies to everyone who enrolls after it and to nobody already inside — a step index is
+  a position in a list, and resuming against an edited list delivers whichever step now
+  happens to sit there. **Disabling or deleting the action is different and does stop
+  mid-wait enrollments**, because a kill switch that keeps mailing for three days is not
+  a kill switch.
+- **A flow email is marketing mail.** It declares `marketing: { hostId, siteBase }`, so
+  it takes the unsubscribe header pair, both suppression lists and the per-person
+  frequency ceiling at the shared chokepoint — and, because a message sent three days
+  later is the merchant's schedule rather than the recipient's act, it additionally
+  passes **the consent split and the topic filter** through `flowEmailRefusal`. An
+  immediate reply deliberately does not: that is a response to what the visitor just did.
+  A deferrable refusal (the platform hour, the person's own window) leaves the enrollment
+  on the same step for the next beat rather than being counted as sent.
+
+**Left open.** A console surface listing who is currently waiting inside a flow; the
+step-level guard is one clause where the trigger's is a chain of five; and whether a flow
+send should draw down `emailSendsPerMonth` is a packaging question — today it is metered
+on the cost meter and refused by no quota, like the cart reminder it resembles.
 
 ### G7 — Engagement is recorded per message and never rolled up {#g7}
 
@@ -489,7 +522,7 @@ charged to every other tenant.
 
 ### 3a. Table stakes — required, and worth nothing on their own
 
-[G1](#g1), [G2](#g2), [G3](#g3), [G5](#g5), [G6](#g6), [G7](#g7), [G9](#g9) and
+[G1](#g1), [G2](#g2), [G3](#g3), [G5](#g5), ~~[G6](#g6)~~, [G7](#g7), [G9](#g9) and
 [G10](#g10) all exist in all six compared products. Shipping every one of them makes
 Aglyn a credible ESP and **makes nobody choose Aglyn**. They are the entry fee, and the
 register ranks them highly for exactly that reason: an entry fee is what you pay first.

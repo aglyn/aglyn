@@ -702,7 +702,7 @@ export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
 export const DOCS_HELP_ANCHORS = {
   abuseReports: ['#where-reports-come-from', '#triage-by-severity', '#csam', '#which-lever', '#statuses', '#disclosure', '#dmca', '#counter-notices', '#counter-notice-clock', '#counter-notice-steps', '#repeat-infringers', '#repeat-infringer-threshold', '#known-gaps', '#related'],
   account: ['#google-sign-in', '#sign-in-methods', '#signing-in-with-any-of-your-addresses', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#when-the-console-asks-you-to-sign-in-again', '#recent-sign-ins', '#when-we-do-not-email-you', '#signing-a-device-out', '#passkeys', '#removing-one', '#blocked--possible-credential-copy', '#downloading-your-data', '#downloading-a-whole-workspace', '#closing-your-account'],
-  actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
+  actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#step-conditions', '#sequences', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],

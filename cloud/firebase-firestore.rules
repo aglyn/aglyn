@@ -2231,7 +2231,8 @@ service cloud.firestore {
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency', 'campaigns']));
+              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'flowEnrollments']));
         // `campaigns` joins all THREE lists. Each document is one email SEND,
         // and every field on it is written server-side: `campaign-send.ts`
         // stamps the audience, the consent and suppression populations and the
@@ -2275,6 +2276,28 @@ service cloud.firestore {
         // would be choosing the CSS a publisher's revert restores — arbitrary
         // styling pushed onto a live site from the narrowest role we sell,
         // and it would arrive looking like the site's own history.
+        //
+        // `flowEnrollments` joins all THREE lists. Each document is one person
+        // suspended part-way through an automation: their address, the step
+        // list they entered with, the position inside it, and the instant the
+        // flow continues. Every field is written by the executor and the
+        // resume beat on the Admin SDK, and there is no client writer of any
+        // kind to break.
+        //
+        // A client that could forge one would be scheduling mail from the
+        // shared sending domain to an address of its choosing, at a time of
+        // its choosing, with a merchant-authored body attached — the send
+        // gates would still refuse a suppressed recipient, but the enrollment
+        // itself is an instruction to send. One that could rewrite one could
+        // move `nextStepIndex` into a different step of somebody else's
+        // sequence, or push `resumeAtMs` far enough out to silently cancel a
+        // sequence a merchant is relying on. One that could delete one would
+        // do the same by removing the row, and the person mid-flow is the
+        // party least able to notice either.
+        //
+        // READ is untouched, on the same footing as `checkouts` beside it: it
+        // is the state a console surface would show a merchant about their own
+        // site's automations.
         //
         // `stockHolds` joins all THREE lists (AGL-2356). It is the release
         // index for the units a live checkout has reserved: written inside the
@@ -2386,7 +2409,8 @@ service cloud.firestore {
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency', 'campaigns']));
+              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'flowEnrollments']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -2432,7 +2456,8 @@ service cloud.firestore {
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency', 'campaigns']));
+              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'flowEnrollments']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
