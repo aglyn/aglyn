@@ -71,14 +71,41 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { parseDeployArgs } from './lib/deploy-args.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..', '..')
 
-const apply = process.argv.includes('--apply')
-const selfTest = process.argv.includes('--self-test')
-const hostArg = process.argv.find((a) => a.startsWith('--host='))
-const onlyHost = hostArg ? hostArg.slice('--host='.length) : null
+/*
+ * ARGUMENTS FAIL CLOSED, for the same reason the deploys do (AGL-1489).
+ *
+ * Scanning argv for known flags and ignoring the rest makes a typo silent,
+ * and the two typos available here both widen the run rather than narrowing
+ * it. `--hosts=abc` or `--host abc` leaves `onlyHost` null, so a run the
+ * operator scoped to one site sweeps EVERY host on the platform; `--aply`
+ * leaves a run they believe is writing as a dry run, which reads as success
+ * and stamps nothing. Both produce a report about a job that is not the job
+ * that ran.
+ *
+ * So an unrecognized argument exits 2 having written nothing, and `--help`
+ * prints usage instead of scanning a live project.
+ */
+const args = parseDeployArgs({
+  command: 'backfill-form-ids',
+  summary:
+    'Stamp `formId` onto the submissions an adopted form already collected, ' +
+    'matching on the (formName, path) pair. Writes to the live project with ' +
+    '--apply.',
+  effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
+  flags: [
+    { flag: '--apply', key: 'apply', describe: 'Write. Without it, a dry run.' },
+    { flag: '--self-test', key: 'selfTest', describe: 'Run the fixtures, touching no project.' },
+    { flag: '--host', key: 'host', value: 'string', describe: 'Limit to one host.' },
+  ],
+})
+const apply = args.apply
+const selfTest = args.selfTest
+const onlyHost = args.host
 
 /** How many submissions to read per page. */
 const PAGE_SIZE = 400
