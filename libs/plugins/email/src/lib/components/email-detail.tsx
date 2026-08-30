@@ -406,18 +406,28 @@ export function EmailDetail(props: EmailDetailProps) {
                     {emailAudienceLabel(email)}
                   </TableCell>
                 </TableRow>
-                {templateScreenId ? (
-                  <TableRow>
-                    <TableCell>{'Template'}</TableCell>
-                    <TableCell align="right">
+                {/*
+                  Always a row, never a hidden one. A template this email did
+                  not use and a template row that was not rendered look
+                  identical to a reader, and the second sends them looking for
+                  a link that was never going to be there.
+                 */}
+                <TableRow>
+                  <TableCell>{'Template'}</TableCell>
+                  <TableCell align="right">
+                    {templateScreenId ? (
                       <AppLink
                         href={`${basePath}/templates/${templateScreenId}`}
                       >
                         {template?.displayName ?? 'Untitled template'}
                       </AppLink>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        {'Written as plain text in the composer'}
+                      </Typography>
+                    )}
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
             {/*
