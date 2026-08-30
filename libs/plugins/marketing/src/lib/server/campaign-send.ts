@@ -34,6 +34,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   meterHostEmail,
+  claimOrgEmailSendBudget,
   orgCampaignEmailSendsForMonth,
   readEmailSendRateConfig,
   readEmailSendRateWindow,
@@ -44,13 +45,23 @@ import {
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHash, createHmac } from 'crypto'
 import {
+  EMAIL_MAX_RECIPIENTS_PER_SEND,
   EMAIL_NODE_ROOT_ID,
   isEmailConfigured,
   rateLimitedRetryAtMs,
   sendEmail,
 } from '@aglyn/shared-util-email'
 
-const MAX_RECIPIENTS_PER_SEND = 500
+/**
+ * Recipients one send may address.
+ *
+ * The number lives in `send-ceilings.ts` with the other two email ceilings
+ * rather than here, because it only means anything in relation to them: it has
+ * to fit inside a workspace's share of the platform hour, which in turn has to
+ * fit inside the platform hour. Held privately here it was a third number
+ * nobody could check against the other two.
+ */
+const MAX_RECIPIENTS_PER_SEND = EMAIL_MAX_RECIPIENTS_PER_SEND
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /** Stable doc id for a suppression entry (emails are PII — hash them). */
@@ -562,6 +573,48 @@ export async function performCampaignSend(
           'will go out automatically on the next run, or you can send it again ' +
           'after the hour rolls.',
         window.resetMs,
+      )
+    }
+
+    /*
+     * THIS WORKSPACE'S SHARE OF THAT HOUR.
+     *
+     * The check above bounds the platform; it does not bound how much of the
+     * platform one tenant may take. Without this, an org with a large audience
+     * occupies the whole hour and every other customer's campaigns are refused
+     * by a ceiling they did nothing to reach.
+     *
+     * The ceiling is DERIVED from the live platform ceiling
+     * (`orgHourlyCampaignCeiling`), so a staff ramp moves both together and
+     * the two can never contradict each other. See `send-ceilings.ts` for the
+     * arithmetic tying this to the per-send cap and the plan allowance.
+     *
+     * A deferral, not a refusal: the campaign stays a draft, the audience is
+     * untouched, no list membership changes and no suppression or delivery
+     * record is affected. A send is a flow rather than a holding, which is the
+     * one place the enforce-at-the-reduction rule does not reach — refusing a
+     * flow strands nobody's data.
+     *
+     * Taken BEFORE the monthly claim so that a workspace deferred for the hour
+     * has not spent a month's allowance on a campaign that did not go.
+     */
+    const hourly = await claimOrgEmailSendBudget({
+      orgId,
+      count: sendable.length,
+      platformPerHour: config.perHour,
+      enabled: config.enabled,
+    })
+    if (!hourly.allowed) {
+      throw new CampaignSendDeferredError(
+        `This workspace may send ${hourly.ceiling.toLocaleString()} campaign ` +
+          `emails an hour and has sent ${hourly.used.toLocaleString()} this ` +
+          `hour, so there is room for ${hourly.remaining.toLocaleString()} ` +
+          `and this campaign needs ${sendable.length.toLocaleString()}. ` +
+          'Nothing has been sent and nothing has been counted — the campaign ' +
+          'is unchanged and will go out automatically on the next run, or you ' +
+          'can send it again after the hour rolls. Transactional mail — ' +
+          'receipts, booking reminders, password resets — keeps sending.',
+        hourly.retryAtMs,
       )
     }
   }
