@@ -478,6 +478,16 @@ export async function performCampaignSend(
    * A `manual` audience arrives whole in the request and can never be one.
    */
   let audienceTruncated = false
+  /**
+   * The list's name as it stands at the moment of the send.
+   *
+   * Recorded on the campaign rather than looked up when a report is read, for
+   * the reason every other send-time figure is recorded: a list can be
+   * renamed or deleted, and resolving the name later either rewrites the
+   * history of a campaign that went out months ago or loses it entirely. The
+   * campaign went to the list under this name, and that stays true.
+   */
+  let listName = ''
   const names = new Map<string, string>()
   /*
    * The consent facts ride out of the audience sweep with the names
@@ -607,6 +617,9 @@ export async function performCampaignSend(
           .doc(listId)
       : null
     if (!listRef) throw new CampaignSendError('Unknown list', 400)
+    // One document beside a sweep that reads up to the audience ceiling, and
+    // the only place the name is knowable without a second round trip later.
+    listName = String((await listRef.get()).get('name') ?? '')
     const members = await sweepAudience(listRef.collection('members'))
     audienceTruncated = members.truncated
     recipients = members.docs.map((doc) => {
@@ -1253,6 +1266,18 @@ export async function performCampaignSend(
       subject,
       body,
       audience,
+      /*
+       * WHICH audience, not only which KIND.
+       *
+       * `audience` is `'list'` or `'segment'` — a kind — and on its own it
+       * cannot answer "which lists has this design been sent to", because
+       * every list send looks identical to every other. The scheduled branch
+       * of the handler has always recorded these; the immediate send dropped
+       * them, so a campaign's own document could not say where it went.
+       */
+      ...(options.listId ? { listId: options.listId } : {}),
+      ...(listName ? { listName } : {}),
+      ...(options.segmentId ? { segmentId: options.segmentId } : {}),
       ...(options.templateScreenId
         ? { templateScreenId: options.templateScreenId }
         : {}),
