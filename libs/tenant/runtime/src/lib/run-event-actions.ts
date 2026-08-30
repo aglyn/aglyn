@@ -24,6 +24,7 @@ import {
   WEBHOOK_URL_PATTERN,
   evaluateExpression,
   evaluateTriggerConditions,
+  hostPublicOrigin,
   isClientActionStep,
   type HostAction,
   type HostActionAlert,
@@ -39,7 +40,11 @@ import {
   resolveOrgEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn/server'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  isEmailConfigured,
+  sendEmail,
+  sendFailureReason,
+} from '@aglyn/shared-util-email'
 import {
   dataStorageRefusal,
   enrollListMember,
@@ -451,13 +456,54 @@ async function executeAction(
           stepErrors.push('no recipient email in the event payload')
           continue
         }
+        // The site's own origin, for the unsubscribe link. Read here rather
+        // than carried on the run env because most action runs send no email
+        // at all, and a document read every workflow pays for is a read on
+        // the hot path for a link nine runs in ten never need.
+        const siteBase =
+          hostPublicOrigin(
+            (await hostRef.get().catch(() => null))?.data() as never,
+          ) ?? ''
+        /*
+         * MARKETING. The subject and body are merchant-authored and the
+         * recipient comes out of the event payload — which, for the collect
+         * route, is a write triggered by an anonymous visitor. So this is a
+         * site mailing an address on the merchant's say-so, and it owes what
+         * every other such message owes: the unsubscribe header pair and a
+         * visible link, both suppression lists, and a share of the ceiling on
+         * how much one person receives from this site.
+         *
+         * Priority stays transactional. An action run is not resumable — the
+         * event has already happened and there is no beat that comes back for
+         * it — and the rule on `'bulk'` is that only a resumable sweep may
+         * refuse in a way the recipient survives.
+         *
+         * A merchant who wants an internal alert that no suppression can stop
+         * uses the `notifyAdmins` step beside this one: it reaches managers
+         * in the console rather than the shared sending domain, which is the
+         * right instrument for a notification nobody consented to receive.
+         */
         const result = await sendEmail({
           to,
           subject: String(step.subject ?? '').slice(0, 200),
           text: String(step.body ?? '').slice(0, 5000),
           context: 'event action',
+          marketing: { hostId, siteBase },
         })
-        if (!result.sent) stepErrors.push('email delivery failed')
+        // Named rather than lumped into "delivery failed": a suppression and
+        // a frequency ceiling are the controls working, and a merchant
+        // reading the run's alerts has a different thing to do about each.
+        const refusal = sendFailureReason(result)
+        if (refusal) {
+          stepErrors.push(
+            refusal === 'suppressed'
+              ? 'the recipient is unsubscribed or suppressed'
+              : refusal === 'frequency-capped'
+                ? 'the recipient has already had today’s limit of email ' +
+                  'from this site'
+                : 'email delivery failed',
+          )
+        }
         // Cost meter (AGL-1438). A workflow notification is transactional:
         // counted, never capped. `sent` is false when Resend refused or the
         // environment is unconfigured, and an email that never left is not a

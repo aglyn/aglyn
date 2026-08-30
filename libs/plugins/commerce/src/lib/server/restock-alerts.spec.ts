@@ -207,6 +207,13 @@ const sendEmail = jest.fn<
 >(async () => ({ sent: true }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
+  // The REAL classifier, not a double. It is what decides whether the sweep
+  // stamps `notifiedAtMs` or leaves the alert for the next beat, so a stub
+  // here would let this suite pass over a sweep that discards deferred
+  // messages — the exact behavior the stamping rule exists to prevent.
+  isDeferrableSendResult: jest.requireActual(
+    '@aglyn/shared-util-email/send-email',
+  ).isDeferrableSendResult,
   isEmailConfigured: () => true,
   loadHostEmail: async () => null,
   renderLoadedHostEmail: () => null,

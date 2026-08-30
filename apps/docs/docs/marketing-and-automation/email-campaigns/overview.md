@@ -320,6 +320,45 @@ only in their tracking parameters count as one row.
   open would quietly shrink your list.
 - Unsubscribes are honored automatically so you stay compliant.
 
+### Which mail this applies to {#marketing-mail}
+
+The unsubscribe link, the suppression list and the daily limit below apply to
+every message your site sends its own audience, not only to campaigns:
+
+| Message | Sent when |
+| --- | --- |
+| A campaign | You press Send, or a scheduled send comes due |
+| A **members post** | You publish one with "Email subscribers" ticked |
+| An **abandoned-cart reminder** | A shopper leaves a cart behind |
+| A **back-in-stock alert** | A product a shopper asked about returns |
+| A **workflow email** | An automation's *Send email* step runs |
+
+Transactional mail is deliberately **not** in this list and never carries an
+unsubscribe link: order confirmations, booking reminders, password resets and
+teammate invites answer something the person just did, and somebody who
+unsubscribed from your newsletter still gets their receipt.
+
+Somebody who unsubscribes, hard-bounces or reports a message as spam is
+skipped by **all five** of the message types above, from that point on.
+
+### The daily limit {#frequency-cap}
+
+One person receives at most **five marketing messages from one site per
+24 hours**. It is the same number on every plan, because it protects the
+sending domain your mail shares with every other Aglyn site rather than
+anything you buy.
+
+In practice it cannot reach a normal week: a campaign plus a cart reminder
+plus a restock alert plus a members post is four. What it stops is a loop — a
+workflow that fires on every form submission, or a members post published
+repeatedly.
+
+When the limit is reached, the **message is skipped and the person is left
+exactly where they were**. Nobody is unsubscribed, nothing is removed from an
+audience, and no contact is deleted. A reminder or alert that was skipped is
+retried on the next sweep once the window rolls; a campaign is never refused
+by this limit, though it does count toward it.
+
 ### Suppressions
 
 **Emails ▸ Suppressions** lists every address your campaigns skip, with the

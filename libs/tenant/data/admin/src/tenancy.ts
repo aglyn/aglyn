@@ -46,6 +46,12 @@ export * from './lib/server/csp-aggregate'
 export * from './lib/server/data-storage-gate'
 export * from './lib/server/contact-suppression'
 export * from './lib/server/email-suppression'
+export * from './lib/server/email-unsubscribe-link'
+// Side-effecting on purpose, for the reason `email-send-rate` below is:
+// evaluating this module INSTALLS the marketing gate on `sendEmail`, so the
+// unsubscribe header, the suppression check and the frequency ceiling reach
+// every bulk sender without a call at each server entrypoint.
+export * from './lib/server/email-marketing-gate'
 export * from './lib/server/sms-keywords'
 export * from './lib/server/document-id'
 export * from './lib/server/edit-access-authz'

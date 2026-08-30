@@ -16,9 +16,12 @@
  */
 
 import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  emailSuppressionKey,
+  firebaseAdmin,
+  unsubscribeSignatureMatches,
+} from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
-import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import { BRAND } from '@aglyn/shared-data-enums'
 
 /**
@@ -76,10 +79,25 @@ import { BRAND } from '@aglyn/shared-data-enums'
  * repo work.
  */
 
-/** Suppression list keys are the SHA-256 of the address (emails are PII). */
-function suppressionKey(email: string): string {
-  return createHash('sha256').update(email).digest('hex')
-}
+/**
+ * Suppression list keys are the SHA-256 of the TRIMMED, LOWERCASED address
+ * (emails are PII), through the one derivation every reader and writer uses.
+ *
+ * This file hashed the address exactly as the link carried it, while
+ * `campaign-send.ts` and both suppression readers lowercase. The two agreed
+ * only because the campaign sender lowercases every address far upstream, so
+ * no link had ever carried a mixed-case one. Marketing mail reaches addresses
+ * nothing upstream normalized — a checkout's `customerEmail`, a form
+ * payload's `email` — and a suppression filed under `sha256('Bob@x.com')` is
+ * invisible to a send path looking up `sha256('bob@x.com')`. That is the
+ * worst shape this area has: the recipient is told they are unsubscribed and
+ * the mail keeps coming.
+ *
+ * Returns null for anything that is not an address rather than guessing an
+ * id — suppressing the wrong person while believing you suppressed the right
+ * one is worse than refusing.
+ */
+const suppressionKey = emailSuppressionKey
 
 /** Minimal HTML-attribute escaping for the values echoed into the form. */
 function escapeAttribute(value: string): string {
@@ -184,48 +202,16 @@ function readParams(req: Parameters<PluginApiHandler>[0]): {
 }
 
 /**
- * Whether a signature is this link's.
+ * Whether a signature is this link's, through the one module that owns the
+ * signed subject.
  *
- * ## Two signed forms, and why that is not a weakening
- *
- * A link minted before campaign attribution existed signs `hostId:email`. A
- * link minted since signs `hostId:email:campaignId`. Both are in inboxes
- * right now and both have to keep working — an email is not recallable, and
- * an unsubscribe link that has stopped honouring itself is the one failure in
- * this area nobody gets to shrug at.
- *
- * Which form is checked is decided by the LINK, not by the signature: a link
- * carrying no `cid` is checked against the two-part form and a link carrying
- * one against the three-part form. There is no fallback between them, and
- * that is what stops this being a downgrade — an attacker cannot take a
- * three-part link, drop the `cid` and have it verify, because the two-part
- * check over the same `hostId:email` produces a different digest. Nor can
- * they bolt a `cid` onto a two-part link: the three-part check then fails.
- *
- * `timingSafeEqual` needs equal lengths, so the length is compared first —
- * it is not a secret, both digests are fixed-width hex, and the call throws
- * on a mismatch rather than returning false.
+ * The verifier and the minter were separate implementations of the same
+ * string, and the marketing gate made a third party to it — three copies of
+ * an HMAC subject stay correct only while nobody adds a fourth. The module it
+ * moved to documents both signed forms and why a link carrying no `cid` is
+ * checked against the two-part one.
  */
-function signatureMatches(args: {
-  hostId: string
-  email: string
-  campaignId: string
-  signature: string
-  secret: string
-}): boolean {
-  const { hostId, email, campaignId, signature, secret } = args
-  const subject = campaignId
-    ? `${hostId}:${email}:${campaignId}`
-    : `${hostId}:${email}`
-  const expected = createHmac('sha256', secret).update(subject).digest('hex')
-  return (
-    expected.length === signature.length &&
-    timingSafeEqual(
-      new Uint8Array(Buffer.from(expected)),
-      new Uint8Array(Buffer.from(signature)),
-    )
-  )
-}
+const signatureMatches = unsubscribeSignatureMatches
 
 /**
  * A campaign id that is safe to use as a Firestore path component.

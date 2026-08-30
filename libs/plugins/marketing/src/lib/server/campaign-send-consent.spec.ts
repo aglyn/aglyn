@@ -40,6 +40,24 @@ const mockState: {
 } = { store: {}, sent: [], metered: [], reserved: [], org: { plan: 'starter' } }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The unsubscribe-link signer and URL builder are the REAL ones. They need
+   * nothing but `crypto`, and a double would let a spec assert on a URL shape
+   * the product does not actually mint — which is the whole failure mode of a
+   * stubbed policy module.
+   */
+  ...jest.requireActual(
+    '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
+  ),
+  /*
+   * The marketing frequency window is a no-op here, and deliberately so: it
+   * is a durable counter whose behavior is proven against a Firestore double
+   * in `tenant-data-admin`, and the campaign sender's only contract with it
+   * is that it is called with the addresses that were reached and that it
+   * cannot fail a send.
+   */
+  recordMarketingSends: async (_hostId: string, emails: readonly string[]) =>
+    emails.length,
   // No site here selects a custom sending domain, so every send resolves to
   // the platform identity — the behavior these suites were written against.
   resolveHostSendingIdentity: async () =>
