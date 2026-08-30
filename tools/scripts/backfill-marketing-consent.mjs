@@ -565,7 +565,7 @@ async function runSelfTest(firestore) {
       failures.push(label)
     }
   }
-  const OPERATOR = 'operator@aglyn.com'
+  const OPERATOR = 'operator@example.com'
   const REASON = 'self-test'
   const AT = 1_700_000_000_000
   const run = (over = {}) =>
