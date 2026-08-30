@@ -466,6 +466,18 @@ export async function filterTopicSendable(
   }
 }
 
+/*
+ * THE FOURTH FILTER IS NOT IN THIS FILE, and where it is is forced.
+ *
+ * `filterCadenceSendable` — the subset that has not asked this site for mail
+ * less often than right now — lives in `email-marketing-gate.ts`, because it
+ * reads the per-recipient counter document that module owns and names. That
+ * module already imports this one for the two suppression lists, so putting
+ * the cadence filter here would close a cycle. A campaign's subtraction chain
+ * therefore reads: this file's two lists, this file's topic opt-outs, then
+ * that file's cadence.
+ */
+
 /**
  * The staff queue, newest first, ordered by `suppressedAt` so a re-recorded or
  * released entry surfaces again — the operator's question is "what changed",

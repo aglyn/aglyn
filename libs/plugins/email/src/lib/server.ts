@@ -32,7 +32,22 @@ import {
   TOPIC_OPT_OUTS_SUBCOLLECTION,
   type EmailTopic,
 } from '@aglyn/aglyn/app-utils/email-topics'
-import { firebaseAdmin, resolveOrgIdForHost } from '@aglyn/tenant-data-admin'
+import {
+  EMAIL_FREQUENCY_SUBCOLLECTION,
+  firebaseAdmin,
+  resolveOrgIdForHost,
+  setMarketingCadence,
+} from '@aglyn/tenant-data-admin'
+/*
+ * The pure cadence rule from the shared email library, where the SEND path
+ * reads it too. The preference page and the gate must agree about what
+ * `'weekly'` means down to the coercion of a malformed value, and two copies
+ * of that is how a page comes to record a choice the gate does not recognize.
+ */
+import {
+  normalizeMarketingCadence,
+  type MarketingCadence,
+} from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   escapeAttribute,
@@ -566,6 +581,23 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
     })
 
     /*
+     * HOW OFTEN, recorded from the same submit as WHAT.
+     *
+     * They are one decision — "less of this, and less often" — so they are
+     * one form and one round trip. It is stored on the send counter rather
+     * than beside the topic opt-outs because that is the document the send
+     * path already reads for every marketing message, which is what makes
+     * honoring the request free at the point it has to be honored.
+     *
+     * A value that is not a cadence lands on `'all'` rather than erroring:
+     * this page is reached with no session by anybody holding the link, so
+     * `body` is untrusted, and the failure a recipient must not meet on the
+     * screen they came to in order to leave is a 500.
+     */
+    const cadence = normalizeMarketingCadence(body['cadence'])
+    const cadenceStored = await setMarketingCadence(hostId, email, cadence)
+
+    /*
      * A person asking for SOME mail is asking not to be suppressed from ALL of
      * it, so a whole-site unsubscribe standing against this address is lifted
      * — through the same guard the resubscribe route uses, which refuses to
@@ -585,8 +617,27 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
           heading(drop.length ? 'Sorry to see you go' : 'Preferences saved') +
           paragraph(
             changeSummary({ email, keep: [...keep], drop, topics }),
-            20,
+            cadence === 'all' && cadenceStored ? 20 : 8,
           ) +
+          /*
+           * The pace is reported only when it is a CHOICE. "As they come" is
+           * the default and the absence, so announcing it would tell somebody
+           * who touched nothing that they had just asked for something.
+           */
+          (cadence !== 'all' && cadenceStored
+            ? paragraph(
+                `They will arrive no more than ${cadenceSentence(cadence)}.`,
+                20,
+              )
+            : '') +
+          (!cadenceStored
+            ? paragraph(
+                'One thing we could not change: how often these arrive. Your ' +
+                  'other choices are saved — come back to this page to try ' +
+                  'that one again.',
+                20,
+              )
+            : '') +
           (stillBlocked
             ? paragraph(
                 'One thing we could not change: this address is on hold ' +
@@ -656,14 +707,27 @@ interface SubscriptionState {
   protectedRecord: boolean
   /** Topic ids this address has left and not rejoined. */
   optedOut: Set<string>
+  /** The pace this address last asked for, or `'all'` for never asked. */
+  cadence: MarketingCadence
+}
+
+/** How a chosen cadence reads inside a sentence about what will happen. */
+function cadenceSentence(cadence: MarketingCadence): string {
+  return cadence === 'daily'
+    ? 'one a day'
+    : cadence === 'weekly'
+      ? 'one a week'
+      : 'one a month'
 }
 
 /**
- * Both per-site records for one address, in two keyed `get()`s.
+ * All three per-site records for one address, in three keyed `get()`s.
  *
  * By document id rather than a query, matching `filterSendableForHost`: no
  * composite index to go missing, and nothing that can fail open on a read
- * window.
+ * window. The third is the send counter, which is where the recipient's
+ * chosen pace lives — see `EmailFrequencyRecord.cadence` for why it is stored
+ * on the document the send path already reads rather than on this page's own.
  */
 async function readSubscriptionState(
   firestore: any,
@@ -671,9 +735,17 @@ async function readSubscriptionState(
   key: string,
 ): Promise<SubscriptionState> {
   const hostRef = firestore.collection('hosts').doc(hostId)
-  const [suppression, optOuts] = await Promise.all([
+  const [suppression, optOuts, frequency] = await Promise.all([
     hostRef.collection('suppressions').doc(key).get(),
     hostRef.collection(TOPIC_OPT_OUTS_SUBCOLLECTION).doc(key).get(),
+    hostRef
+      .collection(EMAIL_FREQUENCY_SUBCOLLECTION)
+      .doc(key)
+      .get()
+      // The pace is the one field on this page whose absence is a legitimate
+      // answer, so a read that fails renders the default rather than an
+      // error — the recipient still gets their topic checkboxes.
+      .catch(() => null),
   ])
   const stored = (optOuts?.exists ? optOuts.get('topics') : null) ?? {}
   const optedOut = new Set<string>()
@@ -689,6 +761,9 @@ async function readSubscriptionState(
     protectedRecord:
       !!suppression?.exists && suppression.get('reason') !== 'unsubscribe',
     optedOut,
+    cadence: normalizeMarketingCadence(
+      frequency?.exists ? frequency.get('cadence') : null,
+    ),
   }
 }
 
@@ -791,6 +866,47 @@ function topicRow(
   )
 }
 
+/**
+ * HOW OFTEN — the half of the preference center that shipped without.
+ *
+ * `docs/specs/email-competitive-gaps.md` G10: the frequency CAP shipped and
+ * this did not, so a recipient who wanted the same mail less often had two
+ * options and one of them was the spam button.
+ *
+ * Radio buttons rather than a select, and every option written out. The whole
+ * value of the control is that somebody skimming a footer link can see, in
+ * one glance, that "less" is available at all — a collapsed select says only
+ * that there is a setting.
+ *
+ * The default option is named ("As they come") rather than left as the empty
+ * choice, because a radio group whose default is unlabeled reads as a
+ * question the recipient has not answered, and answering it is not something
+ * this page should require of somebody who came here to uncheck one box.
+ */
+function cadenceFieldset(current: MarketingCadence): string {
+  const option = (value: MarketingCadence, label: string): string =>
+    `<label style="display:flex;gap:12px;align-items:center;padding:10px 0;cursor:pointer">` +
+    `<input type="radio" name="cadence" value="${escapeAttribute(value)}"` +
+    (value === current ? ' checked' : '') +
+    ' style="margin:0;width:18px;height:18px;flex:none">' +
+    `<span style="font-size:14px;color:${PAL.ink}">${label}</span></label>`
+  return (
+    `<div style="border-top:1px solid ${PAL.divider};padding-top:18px;margin-top:6px">` +
+    `<div style="font-size:14px;font-weight:600;color:${PAL.ink};margin-bottom:2px">` +
+    'How often' +
+    '</div>' +
+    `<div style="font-size:13px;line-height:1.45;color:${PAL.muted};margin-bottom:6px">` +
+    'This applies to everything above. Nothing is cancelled — messages just ' +
+    'wait until the next one is due.' +
+    '</div>' +
+    option('all', 'As they come') +
+    option('daily', 'At most one a day') +
+    option('weekly', 'At most one a week') +
+    option('monthly', 'At most one a month') +
+    '</div>'
+  )
+}
+
 /** The preference page's body. */
 function preferencesFormBody(args: {
   email: string
@@ -836,6 +952,17 @@ function preferencesFormBody(args: {
         ),
       )
       .join('') +
+    /*
+     * HOW OFTEN, inside the same form as WHAT.
+     *
+     * The alternative to letting somebody choose "monthly" is letting them
+     * choose "report spam", and on a shared sending domain under `p=reject`
+     * that choice is charged to every other tenant. It sits under the topics
+     * because it is the smaller decision of the two and a recipient who has
+     * already found the thing they wanted to stop should not have to read
+     * past a frequency question to stop it.
+     */
+    cadenceFieldset(state.cadence) +
     `<div style="border-top:1px solid ${PAL.divider};padding-top:20px;margin-top:6px">` +
     submitButton('Save my preferences') +
     '</div></form>' +

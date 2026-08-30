@@ -537,8 +537,22 @@ export async function sendEmail(
         verdict = null
       }
       if (verdict && !verdict.allowed) {
+        /*
+         * A cadence refusal reports as `frequency-capped` rather than earning
+         * a value of its own in {@link SendEmailFailureReason}.
+         *
+         * That union is what {@link isDeferrableSendResult} switches on, and
+         * the two are deferrable for exactly the same reason: a later attempt
+         * passes because time went by. A third value would have to be added
+         * to that predicate as well, and a sweep built against the older
+         * vocabulary would silently treat the recipient's own request as
+         * terminal and stamp the subject — discarding a message the recipient
+         * asked to receive later rather than never. Which of the two it was
+         * is in `detail`, where a person reading a log needs it.
+         */
         const reason: SendEmailFailureReason =
-          verdict.refusal === 'frequency-capped'
+          verdict.refusal === 'frequency-capped' ||
+          verdict.refusal === 'cadence-limited'
             ? 'frequency-capped'
             : 'suppressed'
         console.warn(`${label} not sent — ${verdict.detail ?? reason}`)

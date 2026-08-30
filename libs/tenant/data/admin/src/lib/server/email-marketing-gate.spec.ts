@@ -34,9 +34,11 @@ import {
 import { emailSuppressionKey } from './email-suppression'
 import {
   EMAIL_FREQUENCY_SUBCOLLECTION,
+  filterCadenceSendable,
   marketingSendVerdict,
   readMarketingFrequency,
   recordMarketingSends,
+  setMarketingCadence,
 } from './email-marketing-gate'
 import { fakeFirestore } from './test-firestore'
 
@@ -324,5 +326,222 @@ describe('readMarketingFrequency', () => {
     await expect(
       readMarketingFrequency(HOST, ADDRESS, fakeFirestore()),
     ).resolves.toEqual([])
+  })
+})
+
+/**
+ * THE RECIPIENT'S OWN REQUEST — `docs/specs/email-competitive-gaps.md` G10's
+ * preference-center half.
+ *
+ * Every assertion here is written to fail in both directions: a cadence that
+ * refuses is checked against the same store one interval later, and against a
+ * recipient in the same store who asked for nothing.
+ */
+describe('the pace the recipient asked for', () => {
+  const DAY = 86_400_000
+  const withCadence = (cadence: string, lastSentAtMs: number | null) =>
+    fakeFirestore({
+      [FREQUENCY_PATH]: {
+        [KEY]: {
+          email: ADDRESS,
+          cadence,
+          ...(lastSentAtMs === null ? {} : { lastSentAtMs }),
+          sentAtMs: [],
+        },
+      },
+    })
+
+  it('refuses a second message inside a weekly recipient’s week', async () => {
+    const firestore = withCadence('weekly', NOW - 3 * DAY)
+    await expect(ask(firestore)).resolves.toMatchObject({
+      allowed: false,
+      refusal: 'cadence-limited',
+    })
+    // The other direction, same store: somebody who asked for nothing goes.
+    await expect(ask(firestore, { email: OTHER })).resolves.toMatchObject({
+      allowed: true,
+    })
+  })
+
+  it('allows it once the week has passed', async () => {
+    const firestore = withCadence('weekly', NOW - 8 * DAY)
+    await expect(ask(firestore)).resolves.toMatchObject({ allowed: true })
+  })
+
+  it('holds a daily recipient for a day and a monthly one for a month', async () => {
+    await expect(
+      ask(withCadence('daily', NOW - 2 * 3_600_000)),
+    ).resolves.toMatchObject({ allowed: false, refusal: 'cadence-limited' })
+    await expect(
+      ask(withCadence('daily', NOW - 25 * 3_600_000)),
+    ).resolves.toMatchObject({ allowed: true })
+    await expect(
+      ask(withCadence('monthly', NOW - 10 * DAY)),
+    ).resolves.toMatchObject({ allowed: false, refusal: 'cadence-limited' })
+    await expect(
+      ask(withCadence('monthly', NOW - 31 * DAY)),
+    ).resolves.toMatchObject({ allowed: true })
+  })
+
+  it('mails somebody it has never mailed, whatever pace they chose', async () => {
+    await expect(
+      ask(withCadence('monthly', null)),
+    ).resolves.toMatchObject({ allowed: true })
+  })
+
+  /**
+   * `capped: false` exempts a campaign from the platform CEILING, on the
+   * argument that a control the merchant cannot see must not silently shrink
+   * a reviewed send. That argument does not reach a request the recipient
+   * made: a campaign that overrode it would make the preference page a form
+   * recording a choice nothing honors.
+   */
+  it('binds a campaign, which the platform ceiling does not', async () => {
+    const firestore = withCadence('weekly', NOW - 3 * DAY)
+    await expect(
+      ask(firestore, { capped: false }),
+    ).resolves.toMatchObject({ allowed: false, refusal: 'cadence-limited' })
+  })
+
+  it('does not count a message the pace refused', async () => {
+    const firestore = withCadence('weekly', NOW - 3 * DAY)
+    await ask(firestore)
+    expect(firestore.docs(FREQUENCY_PATH)[KEY].sentAtMs).toEqual([])
+  })
+
+  it('still offers the unsubscribe URL on a refusal', async () => {
+    const refused = await ask(withCadence('weekly', NOW - 3 * DAY))
+    expect(refused.unsubscribeUrl).toContain('/api/email/unsubscribe')
+  })
+
+  it('treats an unreadable or absent choice as no choice', async () => {
+    await expect(ask(withCadence('fortnightly', NOW - 1))).resolves.toMatchObject(
+      { allowed: true },
+    )
+    await expect(
+      ask(
+        fakeFirestore({
+          [FREQUENCY_PATH]: {
+            [KEY]: { email: ADDRESS, lastSentAtMs: NOW - 1, sentAtMs: [] },
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({ allowed: true })
+  })
+
+  /**
+   * Every record written before `lastSentAtMs` existed carries a window and
+   * nothing else. Reading `null` for those would let one message through at
+   * any pace on the first send after this ships.
+   */
+  it('falls back to the newest instant in the window', async () => {
+    const firestore = fakeFirestore({
+      [FREQUENCY_PATH]: {
+        [KEY]: {
+          email: ADDRESS,
+          cadence: 'weekly',
+          sentAtMs: [NOW - 5 * 3_600_000, NOW - 9 * 3_600_000],
+        },
+      },
+    })
+    await expect(ask(firestore)).resolves.toMatchObject({
+      allowed: false,
+      refusal: 'cadence-limited',
+    })
+  })
+
+  it('records the last send so the next interval can be measured', async () => {
+    const firestore = fakeFirestore()
+    await ask(firestore)
+    expect(firestore.docs(FREQUENCY_PATH)[KEY].lastSentAtMs).toBe(NOW)
+  })
+
+  it('records the last send from a batch too', async () => {
+    const firestore = fakeFirestore()
+    await recordMarketingSends(HOST, [ADDRESS], { nowMs: NOW, firestore })
+    expect(firestore.docs(FREQUENCY_PATH)[KEY].lastSentAtMs).toBe(NOW)
+  })
+
+  it('does not disturb the window when the choice is stored', async () => {
+    const firestore = fakeFirestore({
+      [FREQUENCY_PATH]: { [KEY]: { email: ADDRESS, sentAtMs: [NOW - 10] } },
+    })
+    await expect(
+      setMarketingCadence(HOST, ADDRESS, 'weekly', { nowMs: NOW, firestore }),
+    ).resolves.toBe(true)
+    expect(firestore.docs(FREQUENCY_PATH)[KEY]).toMatchObject({
+      cadence: 'weekly',
+      cadenceSetAtMs: NOW,
+      sentAtMs: [NOW - 10],
+    })
+  })
+
+  it('refuses to key a choice for a value that is not an address', async () => {
+    const firestore = fakeFirestore()
+    await expect(
+      setMarketingCadence(HOST, 'not-an-address', 'weekly', {
+        nowMs: NOW,
+        firestore,
+      }),
+    ).resolves.toBe(false)
+    expect(Object.keys(firestore.docs(FREQUENCY_PATH))).toHaveLength(0)
+  })
+})
+
+/**
+ * The campaign's pre-send subtraction, so the recipient count on the
+ * composer is true before anybody presses Send.
+ */
+describe('filterCadenceSendable', () => {
+  const DAY = 86_400_000
+  const OTHER_KEY = emailSuppressionKey(OTHER) as string
+
+  it('holds back the person who asked for less and keeps everybody else', async () => {
+    const firestore = fakeFirestore({
+      [FREQUENCY_PATH]: {
+        [KEY]: { email: ADDRESS, cadence: 'weekly', lastSentAtMs: NOW - DAY },
+        [OTHER_KEY]: { email: OTHER, cadence: 'weekly', lastSentAtMs: NOW - 8 * DAY },
+      },
+    })
+    await expect(
+      filterCadenceSendable(HOST, [ADDRESS, OTHER], { nowMs: NOW, firestore }),
+    ).resolves.toEqual([OTHER])
+  })
+
+  it('keeps an address with no counter at all', async () => {
+    await expect(
+      filterCadenceSendable(HOST, [ADDRESS], {
+        nowMs: NOW,
+        firestore: fakeFirestore(),
+      }),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('keeps a value it cannot key rather than refusing it a second time', async () => {
+    await expect(
+      filterCadenceSendable(HOST, ['not-an-address'], {
+        nowMs: NOW,
+        firestore: fakeFirestore(),
+      }),
+    ).resolves.toEqual(['not-an-address'])
+  })
+
+  /**
+   * Fails OPEN, unlike the two suppression lists. A pace is not a stop, and
+   * withholding a whole campaign on a transient read failure is the larger
+   * error — everybody who asked us to stop entirely has already been refused
+   * one layer up.
+   */
+  it('sends the whole audience when the counter cannot be read', async () => {
+    const broken = fakeFirestore()
+    broken.getAll = async () => {
+      throw new Error('unavailable')
+    }
+    await expect(
+      filterCadenceSendable(HOST, [ADDRESS, OTHER], {
+        nowMs: NOW,
+        firestore: broken,
+      }),
+    ).resolves.toEqual([ADDRESS, OTHER])
   })
 })
