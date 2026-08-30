@@ -44,6 +44,20 @@
  * type has four states rather than a boolean: "we checked and it is fine" and
  * "we did not check" lead a reader to the same action only when they are
  * lucky, and a template that was killed upstream is exactly the unlucky case.
+ *
+ * ## Today every installed template reads `unread`, and that is not a bug
+ *
+ * Nothing writes `installedFrom.standing`. The install stamps
+ * `installedFrom.assurance` — whether that VERSION carried a review verdict —
+ * which is a different fact and is knowable at install time. Standing is not:
+ * a publisher withdraws or is killed AFTER somebody installed, so recording it
+ * needs a later read or a fan-out write that does not exist.
+ *
+ * What actually protects a tenant is the SEND: `loadEmailTemplate` consults
+ * the marketplace revocation record and refuses to mail from a killed
+ * template. This badge is the softer, earlier warning, and until something
+ * computes standing it correctly declines to claim one. Do not go looking for
+ * the writer — there is none yet.
  */
 
 /*
