@@ -114,6 +114,28 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     updatedByEmail: null,
     note: '',
   }),
+  /*
+   * The per-org hourly share of the platform ceiling. Wide open here, like the
+   * platform governor above it: this file is about something else, and a
+   * ceiling that refused would make every assertion below a test of the
+   * ceiling. `campaign-send-rate.spec.ts` owns the pacing.
+   *
+   * Listed because the barrel factory is a CLOSED WORLD — anything the sender
+   * imports and this object omits arrives as `undefined` and throws at the
+   * call.
+   */
+  claimOrgEmailSendBudget: async (options: any = {}) => {
+    const ceiling = Math.max(1, Math.floor((options.platformPerHour ?? 100_000) * 0.25))
+    const count = Math.max(0, Math.floor(Number(options.count) || 0))
+    return {
+      allowed: true,
+      used: 0,
+      ceiling,
+      remaining: Math.max(0, ceiling - count),
+      retryAtMs: 3_600_000,
+      degraded: false,
+    }
+  },
   readEmailSendRateWindow: async () => ({
     windowStartMs: 0,
     resetMs: 3_600_000,
