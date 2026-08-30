@@ -167,9 +167,20 @@ beforeEach(() => {
   docStatus = 'success'
 })
 
-/** The value drawn beside one figure's label, in the shared figure block. */
+/**
+ * The value drawn beside one figure's label, in the shared figure block.
+ *
+ * `getAllByText`, because the emails table below carries column headers that
+ * legitimately share three of these nouns — `Sent`, `Opens`, `Clicks` name a
+ * campaign-wide total above and a per-email count below. The figure is the
+ * occurrence whose sibling is the value; a column header's parent is a
+ * `<tr>`, which has none.
+ */
 const figure = (label: string): string =>
-  screen.getByText(label).parentElement?.querySelector('h6')?.textContent ?? ''
+  screen
+    .getAllByText(label)
+    .map((node) => node.parentElement?.querySelector('h6')?.textContent)
+    .find((text): text is string => typeof text === 'string') ?? ''
 
 const mount = async (campaignId: string) => {
   render(
@@ -230,9 +241,117 @@ describe('an id that names a campaign', () => {
   it('links each email to its own report', async () => {
     await mount('camp-1')
 
-    fireEvent.click(screen.getAllByText('Report')[0])
+    // Newest first, so `send-2` is the first row.
+    const rows = document.querySelectorAll('tbody tr')
+    fireEvent.click(rows[0])
 
     expect(pushed).toContain('/acme/hosts/store/emails/campaigns/send-2')
+  })
+
+  it('the subject is a real link, and does not double-push', async () => {
+    // A click handler offers nothing to a middle click, a ⌘-click, "Open link
+    // in new tab", or "Copy link address" — so the subject is an anchor as
+    // well as the row being clickable, and it stops the row's own handler
+    // rather than pushing the same route twice.
+    await mount('camp-1')
+
+    const link = document
+      .querySelectorAll('tbody tr')[1]
+      .querySelector('a') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe(
+      '/acme/hosts/store/emails/campaigns/send-1',
+    )
+    fireEvent.click(link)
+    expect(pushed).toEqual([])
+  })
+
+  it('the email’s actions are in the overflow menu, not in the row', async () => {
+    await mount('camp-1')
+
+    // The affordance it replaced: a `Report` text button sitting in the row.
+    expect(screen.queryByText('Report')).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Second mailing' }),
+    )
+    expect(
+      screen.getAllByRole('menuitem').map((item) => item.textContent),
+    ).toEqual(['Open report', 'Open its template'])
+    // And opening it does not open the email underneath it.
+    expect(pushed).toEqual([])
+  })
+
+  it('nor does clicking the actions column beside the menu', async () => {
+    /*
+     * The menu BUTTON guards itself, so the assertion above passes with or
+     * without the cell's own guard — and the cell is bigger than the button.
+     * A press landing on the padding around it is a press inside a row whose
+     * handler opens the email's report.
+     */
+    await mount('camp-1')
+
+    const cells = document.querySelectorAll('tbody tr')[0].querySelectorAll('td')
+    fireEvent.click(cells[cells.length - 1])
+    expect(pushed).toEqual([])
+  })
+
+  it('a message built from a template opens it, as a real anchor', async () => {
+    sends = [
+      {
+        $id: 'send-2',
+        subject: 'From a design',
+        templateScreenId: 'screen-9',
+        stats: { sent: 1 },
+      },
+    ]
+    await mount('camp-1')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for From a design' }),
+    )
+    const linked = screen.getByRole('menuitem', { name: 'Open its template' })
+    expect(linked.tagName).toBe('A')
+    expect(linked.getAttribute('href')).toBe(
+      '/acme/hosts/store/emails/templates/screen-9',
+    )
+  })
+
+  it('a message built from NO template says so rather than hiding the item', async () => {
+    // An absent control and an inapplicable one look identical, and only one
+    // of them tells the reader which case they are in.
+    sends = [{ $id: 'send-1', subject: 'Inline', stats: { sent: 1 } }]
+    await mount('camp-1')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Inline' }),
+    )
+    const inert = screen.getByRole('menuitem', { name: 'Open its template' })
+    expect(inert.getAttribute('aria-disabled')).toBe('true')
+    // A disabled item is never an anchor: a link whose destination is refused
+    // still navigates on a middle click, which is the one route around the
+    // disabled state that `pointer-events: none` misses.
+    expect(inert.tagName).not.toBe('A')
+  })
+
+  it('the numeric columns are right-aligned in the head AND the body', async () => {
+    /*
+     * A figure is read by its last digit, so a column of them lines up on the
+     * right or it does not line up at all — and a header aligned one way over
+     * cells aligned another is the defect this table was reported for.
+     */
+    await mount('camp-1')
+
+    const headers = Array.from(document.querySelectorAll('thead th'))
+    const cells = Array.from(
+      document.querySelectorAll('tbody tr')[0].querySelectorAll('td'),
+    )
+    for (const index of [2, 3, 4]) {
+      expect(headers[index].className).toMatch(/alignRight/)
+      expect(cells[index].className).toMatch(/alignRight/)
+    }
+    // THE CONTROL: the text columns are not right-aligned, so the assertion
+    // above is about alignment rather than about every cell in the table.
+    expect(headers[0].className).not.toMatch(/alignRight/)
+    expect(cells[0].className).not.toMatch(/alignRight/)
   })
 
   it('reads one email past the ceiling and says when the ceiling bit', async () => {

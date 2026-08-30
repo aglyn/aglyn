@@ -18,6 +18,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
+import { mdiEmailCheckOutline } from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,
   Container,
@@ -26,6 +27,7 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 /*
  * The shared drawer, reached by its own path.
  *
@@ -557,14 +559,34 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                         />
                       </TableCell>
                       <TableCell>{onDate(row)}</TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          color="error"
-                          onClick={() => void handleRemove(row)}
-                        >
-                          {'Remove'}
-                        </Button>
+                      {/*
+                        A SUPPRESSION HAS NO PAGE, so the row does not open
+                        one — this is the surface's one table whose rows are
+                        not a way in to anything. What it does have is the one
+                        act a merchant performs on an entry, and the trailing
+                        cluster is where every other table on this surface
+                        keeps that: a bare `Remove` in the row is a click that
+                        puts an address back into mailing range, sitting where
+                        the reader's eye is running along the row.
+                       */}
+                      <TableCell align="right" sx={{ width: 56 }}>
+                        <RowActionsMenu
+                          label={row.email || 'this entry'}
+                          items={[
+                            {
+                              key: 'remove',
+                              label: 'Remove from the list',
+                              icon: (
+                                <MdiIcon
+                                  path={mdiEmailCheckOutline.path}
+                                  size={0.8}
+                                />
+                              ),
+                              destructive: true,
+                              onClick: () => void handleRemove(row),
+                            },
+                          ]}
+                        />
                       </TableCell>
                     </TableRow>
                   )

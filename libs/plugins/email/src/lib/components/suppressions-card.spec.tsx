@@ -147,6 +147,25 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 const DAY = 1_800_000_000
 
+/**
+ * Remove one row, through the affordance the row actually has.
+ *
+ * The removal lives in the row's overflow menu rather than as a `Remove`
+ * button in the row, so reaching it is two presses: the menu, then the item.
+ * Addressed BY ADDRESS rather than by row index, which is also what makes
+ * "the row the operator pressed Remove on" a claim this file can check — an
+ * index says which button was pressed and nothing about which entry it
+ * belonged to.
+ */
+const pressRemove = (email: string) => {
+  fireEvent.click(
+    screen.getByRole('button', { name: `More actions for ${email}` }),
+  )
+  fireEvent.click(
+    screen.getByRole('menuitem', { name: 'Remove from the list' }),
+  )
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
   /*
@@ -251,14 +270,14 @@ describe('SuppressionsCard (AGL-2410)', () => {
     render(<SuppressionsCard hostId="host-1" />)
 
     expect(screen.getByText(/Nobody is suppressed/i)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /More actions/ })).toBeNull()
   })
 
   it('deletes the row the operator pressed Remove on', async () => {
     render(<SuppressionsCard hostId="host-1" />)
 
     // Newest first, so `sam` is row one and `dana` row two.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(deleteDoc).toHaveBeenCalledTimes(1))
     expect((deleteDoc as jest.Mock).mock.calls[0][0]).toEqual({
@@ -269,7 +288,7 @@ describe('SuppressionsCard (AGL-2410)', () => {
   it('confirms with the REASON, not a generic “are you sure”', async () => {
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     const [options] = confirmation.seen
@@ -295,7 +314,7 @@ describe('SuppressionsCard (AGL-2410)', () => {
     })
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     const [options] = confirmation.seen
@@ -313,7 +332,7 @@ describe('SuppressionsCard (AGL-2410)', () => {
     // warning case.
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     expect(confirmation.seen[0].title).toMatch(/back on your list/i)
@@ -330,7 +349,7 @@ describe('SuppressionsCard (AGL-2410)', () => {
     })
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     expect(confirmation.seen[0].title).toMatch(/back on your list/i)
@@ -344,7 +363,7 @@ describe('SuppressionsCard (AGL-2410)', () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1])
+    pressRemove('dana@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     expect(confirmation.seen[0].title).toMatch(/back on your list/i)
@@ -355,7 +374,7 @@ describe('SuppressionsCard (AGL-2410)', () => {
     confirmation.accepted = false
     render(<SuppressionsCard hostId="host-1" />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0])
+    pressRemove('sam@example.com')
 
     await waitFor(() => expect(confirmation.seen).toHaveLength(1))
     expect(deleteDoc).not.toHaveBeenCalled()

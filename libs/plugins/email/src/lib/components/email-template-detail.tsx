@@ -18,7 +18,11 @@
 
 import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { ICON_VARIANT_BESIGNER } from '@aglyn/shared-data-enums'
+import { mdiBullhornOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -47,7 +51,9 @@ import {
   query,
   where,
 } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import { useMemo } from 'react'
+import { CAMPAIGN_SEND_CONTAINER_FIELD } from '../model/campaign-container'
 import { emailSendTimeMs, emailStateLabel } from '../model/email-record'
 import { templateProvenance } from '../model/template-provenance'
 import {
@@ -85,6 +91,20 @@ export interface EmailTemplateDetailProps {
 }
 
 /**
+ * A message row on this page: what the report needs, plus what the ROW needs.
+ *
+ * `TemplateCampaign` is the report's shape and stays that — it is the input to
+ * `templateReport`, and a field the figures do not read has no business in it.
+ * The send time this table sorts on and the campaign its row menu offers are
+ * both properties of the row rather than of the report.
+ */
+type TemplateMessage = TemplateCampaign & {
+  scheduledForMs: number
+  /** Absent on a message written before campaigns grouped their emails. */
+  emailCampaignId?: string
+}
+
+/**
  * ONE EMAIL TEMPLATE: what it looks like, and what it has done.
  *
  * ## What was missing
@@ -115,6 +135,7 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
   const { hostId, screenId, basePath } = props
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
+  const router = useRouter()
 
   const { data: screen, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'screens', screenId),
@@ -192,12 +213,27 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
           ...(message.listName ? { listName: String(message.listName) } : {}),
           stats: message.stats,
           scheduledForMs: emailSendTimeMs(message),
-        })) as (TemplateCampaign & { scheduledForMs: number })[],
+          /*
+           * The campaign this message belongs to, carried through so the row
+           * can offer it. A message written before campaigns grouped anything
+           * names no container, which is why it is optional rather than
+           * defaulted to the message's own id — a menu item that navigated to
+           * the message you are already looking at would be worse than one
+           * that says the message belongs to no campaign.
+           */
+          ...(message[CAMPAIGN_SEND_CONTAINER_FIELD]
+            ? {
+                emailCampaignId: String(
+                  message[CAMPAIGN_SEND_CONTAINER_FIELD],
+                ),
+              }
+            : {}),
+        })) as TemplateMessage[],
     [messageDocs],
   )
   const orderedMessages = useMemo(
     () =>
-      [...(messages as (TemplateCampaign & { scheduledForMs: number })[])].sort(
+      [...(messages as TemplateMessage[])].sort(
         (a, b) => b.scheduledForMs - a.scheduledForMs,
       ),
     [messages],
@@ -207,6 +243,37 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
     [messages, truncated],
   )
   const provenance = useMemo(() => templateProvenance(screen), [screen])
+
+  const messageHref = (message: TemplateMessage) =>
+    `${basePath}/emails/${message.campaignId}`
+
+  /**
+   * What one message sent from this template can be opened into.
+   *
+   * Its own report, and the campaign that grouped it. The template is the page
+   * the reader is standing on, so it is not offered a third time. A message
+   * sent before campaigns existed belongs to no container, and the item says
+   * so rather than vanishing.
+   */
+  const messageActions = (message: TemplateMessage): RowActionsMenuItem[] => [
+    {
+      key: 'details',
+      label: 'Open report',
+      icon: <MdiIcon path={mdiEyeOutline.path} size={0.8} />,
+      href: messageHref(message),
+    },
+    {
+      key: 'campaign',
+      label: 'Open its campaign',
+      icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
+      href: message.emailCampaignId
+        ? `${basePath}/campaigns/${message.emailCampaignId}`
+        : undefined,
+      disabled: !message.emailCampaignId,
+      disabledReason:
+        'Sent before campaigns grouped their emails, so it belongs to none',
+    },
+  ]
 
   const listUrl = `${basePath}/templates`
   const besignerUrl =
@@ -490,14 +557,28 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
                       <TableCell align="right">{'Addressed'}</TableCell>
                       <TableCell align="right">{'Opens'}</TableCell>
                       <TableCell align="right">{'Clicks'}</TableCell>
+                      <TableCell align="right" />
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {orderedMessages.map((message) => (
-                      <TableRow key={message.campaignId} hover>
+                      <TableRow
+                        key={message.campaignId}
+                        hover
+                        onClick={() => router.push(messageHref(message))}
+                        sx={{ cursor: 'pointer' }}
+                      >
                         <TableCell>
+                          {/*
+                            The row's own handler would fire too and push the
+                            same route twice — one history entry per back
+                            press.
+                           */}
                           <AppLink
-                            href={`${basePath}/emails/${message.campaignId}`}
+                            href={messageHref(message)}
+                            onClick={(event: {
+                              stopPropagation: () => void
+                            }) => event.stopPropagation()}
                           >
                             {message.subject}
                           </AppLink>
@@ -525,6 +606,16 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
                         </TableCell>
                         <TableCell align="right">
                           {Number(message.stats?.clicks ?? 0).toLocaleString()}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ width: 56 }}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <RowActionsMenu
+                            label={String(message.subject)}
+                            items={messageActions(message)}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
