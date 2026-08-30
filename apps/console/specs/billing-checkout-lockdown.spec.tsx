@@ -323,7 +323,7 @@ const TARGET_PLAN = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')[0]
 
 async function clickUpgrade() {
   render(<BillingPage />)
-  const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+  const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
   fireEvent.click(upgrades[0])
   await waitFor(() => {
     expect(checkoutCalls.length).toBeGreaterThan(0)
@@ -466,7 +466,7 @@ describe('AGL-1557 · the notice appears only when the server refuses', () => {
     await clickUpgrade()
     expect(await screen.findByRole('alert')).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Upgrade' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /^Upgrade/ })[0])
     await waitFor(() => {
       expect(checkoutCalls.length).toBe(2)
     })

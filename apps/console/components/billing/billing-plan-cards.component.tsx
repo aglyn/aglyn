@@ -383,6 +383,496 @@ export interface BillingPlanCardsProps {
 }
 
 /**
+ * The four quotas the focused view leads with.
+ *
+ * Four rather than the full checklist, because the checklist is why the grid
+ * became unreadable: seven tiers each carrying thirty-odd lines is a
+ * reference table, and a reference table is what you open deliberately, not
+ * what a billing page opens with. These are the numbers a customer actually
+ * hits a ceiling on — the full list is one click away and unchanged.
+ */
+function headlineLimits(
+  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+): string[] {
+  return [
+    `${quotaLabel(entitlements.hostLimit)} host${
+      entitlements.hostLimit === 1 ? '' : 's'
+    }`,
+    `${quotaLabel(entitlements.screensPerHost)} screens per host`,
+    `${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`,
+    `${mbLabel(entitlements.storagePerHostMb)} storage`,
+    `${
+      entitlements.bandwidthGb === UNLIMITED
+        ? 'Unlimited'
+        : `${entitlements.bandwidthGb} GB`
+    } bandwidth`,
+    `${quotaLabel(entitlements.managersPerOrg)} team seat${
+      entitlements.managersPerOrg === 1 ? '' : 's'
+    }`,
+    `${quotaLabel(entitlements.membersPerHost)} site collaborator${
+      entitlements.membersPerHost === 1 ? '' : 's'
+    }`,
+    `${quotaCount(entitlements.contactsPerHost)} contacts`,
+  ]
+}
+
+/**
+ * A few things the tier turns ON, under its quotas.
+ *
+ * Numbers alone do not say what a plan IS — "10 GB storage" and "Scheduled
+ * publishing" answer different questions, and a card carrying only the first
+ * reads as a capacity meter. Capped, because the point is a sense of the
+ * tier: the exhaustive tick-list is the comparison grid, one click away.
+ *
+ * Read from the same source the grid derives its checklist from, so a flag
+ * added to a tier appears here without a second edit.
+ */
+function keyFeatures(
+  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+  brand: string,
+): string[] {
+  return featureGroups(brand)
+    .flatMap((group) => group.rows)
+    .filter((row) => entitlements.features[row.key])
+    .slice(0, 5)
+    .map((row) => row.label)
+}
+
+/**
+ * What moving up one tier actually BUYS, as a delta rather than a restatement.
+ *
+ * A card listing "3 hosts" next to a card listing "1 host" makes the reader do
+ * the subtraction; saying "3 hosts, up from 1" does it for them. That is the
+ * whole difference between a price list and an upgrade path, and it is the
+ * thing the previous grid could not express because every card was rendered
+ * in ignorance of the one beside it.
+ *
+ * Quotas first, then newly-unlocked features, capped — the point is the
+ * shape of the step, and a list long enough to need scanning is the
+ * reference table again.
+ */
+function upgradeGains(
+  from: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+  to: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+  brand: string,
+): string[] {
+  const gains: string[] = []
+  const bumped = (a: number, b: number) => b > a
+  if (bumped(from.hostLimit, to.hostLimit))
+    gains.push(
+      `${quotaLabel(to.hostLimit)} hosts, up from ${quotaLabel(from.hostLimit)}`,
+    )
+  if (bumped(from.screensPerHost, to.screensPerHost))
+    gains.push(`${quotaLabel(to.screensPerHost)} screens per host`)
+  if (bumped(from.storagePerHostMb, to.storagePerHostMb))
+    gains.push(`${mbLabel(to.storagePerHostMb)} storage`)
+  if (bumped(from.managersPerOrg, to.managersPerOrg))
+    gains.push(`${quotaLabel(to.managersPerOrg)} team seats`)
+  if (bumped(from.contactsPerHost, to.contactsPerHost))
+    gains.push(`${quotaCount(to.contactsPerHost)} contacts`)
+  // Newly-ticked flags, read from the same source the checklist derives from,
+  // so a feature added to a tier shows up here without a second edit.
+  for (const row of featureGroups(brand).flatMap((group) => group.rows)) {
+    if (!from.features[row.key] && to.features[row.key]) gains.push(row.label)
+  }
+  return gains.slice(0, 7)
+}
+
+/**
+ * The focused default: what you are on, and the one step up (AGL-1859 §1).
+ *
+ * The previous default rendered every self-serve tier at once — seven cards,
+ * each with its own thirty-line checklist, six identical contained `UPGRADE`
+ * buttons, and a single small chip as the only thing distinguishing the
+ * recommended step from the other five. Whatever the code intended, what the
+ * page DID was present the whole ladder at equal weight, which is a price
+ * list. De-emphasis cannot be read when there is nothing beside it to be
+ * emphasized against.
+ *
+ * So the page now opens on the decision a customer is actually being asked to
+ * make. The full grid is unchanged and one click away — it is a comparison
+ * table, and this is what you see before you ask to compare.
+ *
+ * ⚠️ NOTHING IS REMOVED, and the button says what it reveals and how many.
+ * Every lower tier, every higher tier and the Enterprise card are all still
+ * reachable in one click. Hiding the cheaper plans outright would be a dark
+ * pattern and would also lose the downsell the retention funnel depends on
+ * (AGL-1863) — what changes is which view is the DEFAULT.
+ */
+/** A rung in the focused view: a self-serve tier, or Enterprise above them. */
+type FocusedRung = OrgPlan | 'enterprise'
+
+/**
+ * The three rungs the page opens on, and why three.
+ *
+ * ENTERPRISE IS THE RUNG ABOVE AGENCY. Treating it as part of one ladder is
+ * what makes the rules fall out of a single walk instead of needing a special
+ * case each: `current + the next two up`, clipped at the top and back-filled
+ * downward when there is not enough above to reach three.
+ *
+ *   free      → Free · Starter · Pro
+ *   business  → Business · Scale · Advanced
+ *   advanced  → Advanced · Agency · Enterprise
+ *   agency    → Advanced · Agency · Enterprise   (one down, one up)
+ *   enterprise→ nothing
+ *
+ * An Enterprise org gets NO rungs. There is no self-serve step to offer it —
+ * that agreement changes by talking to us — so opening on a tier ladder would
+ * be showing a customer a decision they cannot make from this page.
+ */
+function focusedRungs(plan: OrgPlan, enterprise: boolean): FocusedRung[] {
+  if (enterprise) return []
+  const ladder: FocusedRung[] = [...PLAN_ORDER, 'enterprise']
+  const at = ladder.indexOf(plan)
+  if (at < 0) return []
+  const above = ladder.slice(at + 1, at + 3)
+  // Back-fill downward only when the top of the ladder cut the walk short.
+  const short = 3 - (1 + above.length)
+  const below = short > 0 ? ladder.slice(Math.max(0, at - short), at) : []
+  return [...below, plan, ...above]
+}
+
+/**
+ * What each rung is FOR, which is what decides how loud its control is.
+ *
+ * The asymmetry AGL-1859 §2 asks for is expressed here rather than in the
+ * markup: exactly one contained button on the page, the step up; anything
+ * further up is available but quieter; anything below is quiet text, because
+ * a downgrade is never a one-click peer of an upgrade.
+ */
+type RungRole = 'current' | 'recommended' | 'higher' | 'lower' | 'enterprise'
+
+function rungRole(rung: FocusedRung, plan: OrgPlan): RungRole {
+  if (rung === 'enterprise') return 'enterprise'
+  if (rung === plan) return 'current'
+  // Positions on the LADDER, never positions in the rendered array — those
+  // two are not the same number, and confusing them made every rung read as
+  // `higher`: nothing was ever recommended, and the tier back-filled BELOW
+  // Agency offered an Upgrade button for what is actually a downgrade.
+  const at = PLAN_ORDER.indexOf(rung)
+  const currently = PLAN_ORDER.indexOf(plan)
+  if (at < currently) return 'lower'
+  return at === currently + 1 ? 'recommended' : 'higher'
+}
+
+/**
+ * What the current tier does NOT include, and something above it does.
+ *
+ * A card that lists only what you have cannot tell you what you are missing,
+ * and "what am I missing" is the question a billing page exists to answer.
+ * Derived by asking what any HIGHER tier turns on that this one does not — so
+ * a flag nobody sells above you is correctly absent rather than listed as a
+ * loss, and nothing here is a feature that does not exist to be bought.
+ *
+ * Rendered on the current card only. On an upgrade card the same information
+ * is already the gains list, from the other direction.
+ */
+function missingFromTier(plan: OrgPlan, brand: string): string[] {
+  const mine = PLAN_ENTITLEMENTS[plan]
+  const above = PLAN_ORDER.slice(PLAN_ORDER.indexOf(plan) + 1)
+  return featureGroups(brand)
+    .flatMap((group) => group.rows)
+    .filter(
+      (row) =>
+        !mine.features[row.key] &&
+        above.some((tier) => PLAN_ENTITLEMENTS[tier].features[row.key]),
+    )
+    .slice(0, 6)
+    .map((row) => row.label)
+}
+
+/**
+ * The focused default: the decision, not the catalogue (AGL-1859 §1).
+ *
+ * The previous default rendered every self-serve tier at once — seven cards,
+ * each carrying its own thirty-line checklist, six identical contained
+ * `UPGRADE` buttons, and one small chip as the only thing separating the
+ * recommended step from the other five. Whatever the code intended, what the
+ * page DID was present the whole ladder at equal weight, which is a price
+ * list. De-emphasis cannot be read when there is nothing beside it to be
+ * emphasized against.
+ *
+ * ⚠️ NOTHING IS REMOVED, and the control that reveals the rest says so and
+ * counts them. Hiding the cheaper plans outright would be a dark pattern and
+ * would lose the downsell the retention funnel depends on (AGL-1863). What
+ * changes is which view is the DEFAULT.
+ */
+function FocusedTierView(props: {
+  currentTier: OrgPlan
+  rungs: FocusedRung[]
+  interval: 'month' | 'year'
+  taglines: Record<OrgPlan, string>
+  brand: string
+  totalCount: number
+  subscribeCollectsNotice: string | null
+  onSelect: (plan: OrgPlan) => void
+  onCompare: () => void
+}) {
+  const {
+    currentTier,
+    rungs,
+    interval,
+    taglines,
+    brand,
+    totalCount,
+    subscribeCollectsNotice,
+    onSelect,
+    onCompare,
+  } = props
+  const current = PLAN_ENTITLEMENTS[currentTier]
+  const price = (tier: OrgPlan) =>
+    interval === 'year'
+      ? PLAN_PRICING[tier].basePriceAnnualMonthlyUsd
+      : PLAN_PRICING[tier].basePriceMonthlyUsd
+  const perMonth = (tier: OrgPlan) =>
+    interval === 'year' && tier !== 'free' ? '/month, billed yearly' : '/month'
+  const span = rungs.length ? Math.floor(12 / rungs.length) : 12
+
+  return (
+    <>
+      {rungs.map((rung, index) => {
+        const role = rungRole(rung, currentTier)
+        const label =
+          rung === 'enterprise' ? 'Enterprise' : PLAN_LABELS[rung as OrgPlan]
+        return (
+          <Grid key={String(rung)} size={{ xs: 12, md: span }}>
+            <Card
+              variant="outlined"
+              sx={{
+                height: '100%',
+                borderColor:
+                  role === 'recommended'
+                    ? 'primary.main'
+                    : role === 'current'
+                      ? 'success.main'
+                      : 'divider',
+                borderWidth: role === 'recommended' || role === 'current' ? 2 : 1,
+              }}
+            >
+              <CardContent>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', mb: 0.5 }}
+                >
+                  <Typography variant="h6">{label}</Typography>
+                  {role === 'current' ? (
+                    <Chip label="Current plan" color="success" size="small" />
+                  ) : role === 'recommended' ? (
+                    <Chip label="Recommended" color="primary" size="small" />
+                  ) : null}
+                </Stack>
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  sx={{ alignItems: 'baseline', my: 1 }}
+                >
+                  {rung === 'enterprise' ? (
+                    <Typography variant="h6" component="span">
+                      {'Custom pricing'}
+                    </Typography>
+                  ) : (
+                    <>
+                      <Typography variant="h4" component="span">
+                        {`$${price(rung as OrgPlan)}`}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {perMonth(rung as OrgPlan)}
+                      </Typography>
+                    </>
+                  )}
+                </Stack>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1.5, minHeight: 40 }}
+                >
+                  {rung === 'enterprise'
+                    ? `Custom limits, invoicing and support, arranged with us.`
+                    : taglines[rung as OrgPlan]}
+                </Typography>
+
+                {/* Exactly one contained control on the page. */}
+                {role === 'recommended' ? (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={() => onSelect(rung as OrgPlan)}
+                  >
+                    {`Upgrade to ${label}`}
+                  </Button>
+                ) : role === 'higher' ? (
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    onClick={() => onSelect(rung as OrgPlan)}
+                  >
+                    {`Upgrade to ${label}`}
+                  </Button>
+                ) : role === 'lower' ? (
+                  <Button
+                    fullWidth
+                    variant="text"
+                    sx={{ color: 'text.secondary', opacity: 0.66 }}
+                    onClick={() => onSelect(rung as OrgPlan)}
+                  >
+                    {`Downgrade to ${label}`}
+                  </Button>
+                ) : role === 'enterprise' ? (
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    href={ENTERPRISE_CONTACT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {'Contact us'}
+                  </Button>
+                ) : (
+                  <Button fullWidth disabled>
+                    {'Your plan'}
+                  </Button>
+                )}
+
+                {role === 'recommended' && subscribeCollectsNotice ? (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mt: 1 }}
+                  >
+                    {subscribeCollectsNotice}
+                  </Typography>
+                ) : null}
+
+                <Divider sx={{ my: 1.5 }} />
+
+                {/* ONE SKELETON ON EVERY CARD: the quotas, then a tick
+                    list. The recommended card differs only in what its tick
+                    list SAYS — the gains rather than the inventory — because
+                    a card that reorders its own sections cannot be read
+                    across from its neighbours, which is the entire job of
+                    three cards side by side. */}
+                <Stack spacing={0.5}>
+                  {(rung === 'enterprise'
+                    ? ENTERPRISE_HIGHLIGHTS.slice(0, 6).map(
+                        (highlight) => highlight.label,
+                      )
+                    : headlineLimits(PLAN_ENTITLEMENTS[rung as OrgPlan])
+                  ).map((line) => (
+                    <Typography key={line} variant="body2" color="text.secondary">
+                      {line}
+                    </Typography>
+                  ))}
+                </Stack>
+
+                {role === 'recommended' ? (
+                  <>
+                    <Divider sx={{ my: 1.5 }} />
+                    <Typography variant="overline" color="primary">
+                      {'What you gain'}
+                    </Typography>
+                    <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                      {upgradeGains(
+                        current,
+                        PLAN_ENTITLEMENTS[rung as OrgPlan],
+                        brand,
+                      ).map((line) => (
+                        <Stack
+                          key={line}
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'center' }}
+                        >
+                          <MdiIcon
+                            color="success"
+                            fontSize="small"
+                            path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
+                          />
+                          <Typography variant="body2">{line}</Typography>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </>
+                ) : (
+                  <Stack spacing={0.5}>
+                    {rung === 'enterprise' ? null : (
+                      <>
+                        <Divider sx={{ my: 1.5 }} />
+                        {keyFeatures(
+                          PLAN_ENTITLEMENTS[rung as OrgPlan],
+                          brand,
+                        ).map((line) => (
+                          <Stack
+                            key={line}
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center' }}
+                          >
+                            <MdiIcon
+                              color="success"
+                              fontSize="small"
+                              path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
+                            />
+                            <Typography variant="body2">{line}</Typography>
+                          </Stack>
+                        ))}
+                      </>
+                    )}
+                    {role === 'current' &&
+                    missingFromTier(currentTier, brand).length ? (
+                      <>
+                        <Divider sx={{ my: 1.5 }} />
+                        <Typography variant="overline" color="text.secondary">
+                          {'Not in your plan'}
+                        </Typography>
+                        {missingFromTier(currentTier, brand).map((line) => (
+                          <Stack
+                            key={line}
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center', opacity: 0.66 }}
+                          >
+                            <MdiIcon
+                              color="disabled"
+                              fontSize="small"
+                              path={ICON_VARIANT_SYMBOL_MINUS.path}
+                            />
+                            <Typography variant="body2" color="text.secondary">
+                              {line}
+                            </Typography>
+                          </Stack>
+                        ))}
+                      </>
+                    ) : null}
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        )
+      })}
+
+      <Grid size={{ xs: 12 }}>
+        {/* Deliberately a real control rather than a quiet hint. Every plan
+            the focused view does not show is behind this one button, so a
+            customer who wants the cheaper end has to be able to SEE the way
+            there — a de-emphasized route to the downsell is the dark-pattern
+            version of the same idea. */}
+        <Button
+          fullWidth
+          variant="outlined"
+          size="large"
+          onClick={onCompare}
+          sx={{ textTransform: 'none' }}
+        >
+          {`Compare all ${totalCount} plans`}
+        </Button>
+      </Grid>
+    </>
+  )
+}
+
+/**
  * Tiers BELOW the org's current plan, collapsed behind a disclosure (AGL-1859
  * §1: "hide or de-emphasize the lower subscription tiers … upgrade paths
  * prominent and one-click").
@@ -509,6 +999,43 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     () => highlightIndex >= 0 && currentIndex >= 0 && highlightIndex < currentIndex,
   )
   const lowerTierCount = currentIndex > 0 ? currentIndex : 0
+
+  /*
+   * WHICH VIEW THE PAGE OPENS ON.
+   *
+   * Focused only for an org that HAS a plan, because the focused view is
+   * "you are here, this is the step up" and neither half of that sentence
+   * exists otherwise. A prospect with no plan is comparing, which is what the
+   * grid is for; an enterprise org has no self-serve step to recommend; and a
+   * deep-linked `?plan=` named a specific card, so opening anywhere else
+   * would make the link look broken (AGL-1117).
+   *
+   * Those three cases open on the grid — the behavior every existing case
+   * already had — so this narrows what the DEFAULT is without removing a
+   * view anyone previously reached.
+   */
+  const rungs = plan ? focusedRungs(plan, enterprise) : []
+  const canFocus =
+    currentIndex >= 0 && !enterprise && highlightIndex < 0 && rungs.length > 0
+  const [compareAll, setCompareAll] = useState(() => !canFocus)
+
+  if (!compareAll && plan) {
+    return (
+      <Grid container spacing={2} id="plans">
+        <FocusedTierView
+          currentTier={plan}
+          rungs={rungs}
+          interval={interval}
+          taglines={taglines}
+          brand={branding.productName}
+          totalCount={PLAN_ORDER.length}
+          subscribeCollectsNotice={subscribeCollectsNotice}
+          onSelect={onSelect}
+          onCompare={() => setCompareAll(true)}
+        />
+      </Grid>
+    )
+  }
   // A subscriber on a paid tier has a real route to Free, and it is the cancel
   // flow (AGL-2156). Enterprise is excluded for the same reason every other
   // self-serve CTA is: that agreement is changed by talking to us.
@@ -838,6 +1365,21 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
         expanded={showLowerTiers}
         onToggle={() => setShowLowerTiers((shown) => !shown)}
       />
+      {/* The way back, offered only where there is a focused view to go back
+          TO. An org with no plan, an enterprise org and a deep link all open
+          here and have nothing narrower to return to. */}
+      {canFocus ? (
+        <Grid size={{ xs: 12 }}>
+          <Button
+            size="small"
+            color="inherit"
+            onClick={() => setCompareAll(false)}
+            sx={{ color: 'text.secondary', textTransform: 'none' }}
+          >
+            {'Show just my plan and the next step'}
+          </Button>
+        </Grid>
+      ) : null}
       {/* Enterprise (AGL-1118): custom-priced, so it shows what it includes
           and how to get it — never a headline price or a checkout button. */}
       <Grid size={{ xs: 12 }}>

@@ -509,7 +509,7 @@ describe('Upgrade with nothing on file', () => {
   it('starts collecting instead of subscribing, and quotes only after the address', async () => {
     await mountLoaded()
 
-    await press('Upgrade')
+    await press(/^Upgrade/)
 
     // THE REVERSAL. The button was disabled here; clicking it now opens the
     // collection flow. The dialog's presence is the proof the branch was
@@ -574,7 +574,7 @@ describe('Upgrade with nothing on file', () => {
 
   it('a tax ID given during the flow is on file BEFORE the quote it changes', async () => {
     await mountLoaded()
-    await press('Upgrade')
+    await press(/^Upgrade/)
     const dialog = await screen.findByRole('dialog')
     await saveAddress(dialog)
     await waitFor(() => expect(previews()).toHaveLength(1))
@@ -628,7 +628,7 @@ describe('Upgrade with everything on file', () => {
     // there first rather than pass quietly here.
     await mountLoaded()
 
-    await press('Upgrade')
+    await press(/^Upgrade/)
 
     await waitFor(() => expect(subscribes()).toHaveLength(1))
     // Nothing was collected, because nothing was missing — and no dialog was
@@ -655,7 +655,7 @@ describe('the client does not decide what the server refuses', () => {
     }
     await mountLoaded()
 
-    await press('Upgrade')
+    await press(/^Upgrade/)
     await waitFor(() => expect(subscribes()).toHaveLength(1))
     await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
 

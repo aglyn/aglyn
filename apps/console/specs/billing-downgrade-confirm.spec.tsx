@@ -343,21 +343,44 @@ const previews = () => subscriptionCalls.filter((c) => c.action === 'preview')
 async function press(label: 'Downgrade' | 'Upgrade') {
   render(<BillingPage />)
   if (label === 'Downgrade') {
+    // TWO deliberate acts now, not one. The page opens on the current plan
+    // and the step up, so the grid has to be asked for before the disclosure
+    // holding the lower tiers even exists. Both clicks are the friction
+    // AGL-1859 §2 is about, and neither is scaffolding.
+    fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
     const disclosure = await screen.findByRole('button', {
       name: /Show \d+ lower plans?/,
     })
     fireEvent.click(disclosure)
   }
-  const buttons = await screen.findAllByRole('button', { name: label })
+  const buttons = await screen.findAllByRole('button', {
+    // The focused view names its destination ("Upgrade to Pro"); the grid
+    // says just "Upgrade". Anchored so `Downgrade` can never satisfy a
+    // search for `Upgrade`.
+    name: label === 'Downgrade' ? /^Downgrade/ : /^Upgrade/,
+  })
   fireEvent.click(buttons[0])
 }
 
 describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', () => {
   it('the lower tiers are not even ON SCREEN until the customer asks', async () => {
     render(<BillingPage />)
-    // The disclosure exists, and the Downgrade button behind it does not.
+    // Not the disclosure, and not the tiers behind it: the page opens on the
+    // current plan and the step up, so a downgrade is two asks away.
+    await screen.findByRole('button', { name: /Compare all/ })
+    expect(
+      screen.queryByRole('button', { name: /Show \d+ lower plans?/ }),
+    ).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Downgrade/ })).toBeNull()
+  })
+
+  it('and the collapse is still there once the grid is asked for', async () => {
+    render(<BillingPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Compare all/ }))
+    // The AGL-1864 collapse is unchanged behind the new default: the lower
+    // tiers are folded, never removed, so the downsell stays reachable.
     await screen.findByRole('button', { name: /Show \d+ lower plans?/ })
-    expect(screen.queryByRole('button', { name: 'Downgrade' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Downgrade/ })).toBeNull()
   })
 
   it('the click PRICES the move and changes nothing — the confirm comes first', async () => {
@@ -451,7 +474,7 @@ describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', 
 describe('an upgrade is the frictionless direction (AGL-1859 §2)', () => {
   it('is reachable WITHOUT a disclosure — it is on screen already', async () => {
     render(<BillingPage />)
-    const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+    const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
     expect(upgrades.length).toBeGreaterThan(0)
   })
 
@@ -664,7 +687,7 @@ describe('the plan grid announces what an upgrade will collect', () => {
       paymentMethods: [],
     })
     await screen.findAllByText(/a payment method and a billing address/i)
-    const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+    const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
     expect(upgrades[0].hasAttribute('disabled')).toBe(false)
   })
 
@@ -677,7 +700,7 @@ describe('the plan grid announces what an upgrade will collect', () => {
       taxIds: [],
       paymentMethods: [CARD],
     })
-    const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+    const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
     expect(upgrades[0].hasAttribute('disabled')).toBe(false)
     expect(screen.queryByText(/as you go/i)).toBeNull()
   })

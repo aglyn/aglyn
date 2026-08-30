@@ -68,7 +68,7 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_SUPPORT_URL,
 } from '@aglyn/aglyn'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /**
@@ -299,11 +299,25 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
     expect(currentPlanLabel()).toBe(PLAN_LABELS.pro)
   })
 
-  it('NEGATIVE CONTROL: once ready, the AGL-1864 collapse is engaged', () => {
+  it('NEGATIVE CONTROL: once ready, the focused view is engaged', () => {
     render(<BillingPage />)
-    // The tiers under Pro are folded away, and the disclosure that reveals
-    // them is on screen — the behaviour the hold above exists to protect.
+    // The page opens on the decision, not the catalogue: the current plan and
+    // the one step up, with everything else behind a named control. Starter
+    // is neither of those, so its absence here means the focused view
+    // rendered — not that the hold above is still swallowing the page.
     expect(cardFor(PLAN_LABELS.starter)).toBeNull()
+    expect(
+      screen.getByRole('button', { name: /Compare all/ }),
+    ).toBeTruthy()
+  })
+
+  it('NEGATIVE CONTROL: and the collapse is still there behind it', () => {
+    render(<BillingPage />)
+    // One click further in, the AGL-1864 behaviour the hold protects is
+    // unchanged — the lower tiers are folded, not deleted. Asserted through
+    // the real button rather than by rendering the grid directly, because
+    // "reachable" is the property that matters.
+    fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
     expect(
       screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
     ).toBeTruthy()
