@@ -92,6 +92,30 @@ export const DYNAMIC_LIST_SCAN_BUDGET = 5_000
 /** Documents read per source page. */
 const PAGE_SIZE = 500
 
+/**
+ * ⚠️ THE DATE FIELDS THIS FILE READS, AND WHO WRITES THEM.
+ *
+ * `createdAfterMs`/`createdBeforeMs` are applied IN MEMORY against
+ * `createdAt`, never as a Firestore `orderBy` or `where`. That distinction is
+ * the whole safety property: an `orderBy` on a data field drops every document
+ * missing it from the QUERY, invisibly, where an in-memory filter still reads
+ * the document and merely decides it does not match. The paging order is
+ * `__name__`, the one key every document has.
+ *
+ * The rule's decision for an undated record is to EXCLUDE it, so the writers
+ * were checked rather than assumed — a silo with an unstamped writer would
+ * quietly shrink every dated rule:
+ *
+ * - `leads` — `addHostLead` is the single writer and always stamps it.
+ * - `siteMembers` — `membership-register.ts` is the only creator; the other
+ *   member routes read or update an existing document.
+ * - `contacts` — `upsertHostContact`'s create path and the v1 API both stamp.
+ * - `formSubmissions` — the submit route is the only creator; the v1 API and
+ *   the inbox reply route read.
+ *
+ * A new writer of any of those four must stamp `createdAt` or be added here.
+ */
+
 /** Where a partial sweep stopped, so the next run resumes rather than restarts. */
 export interface DynamicListCursor {
   /** The source being scanned when the budget ran out. */
