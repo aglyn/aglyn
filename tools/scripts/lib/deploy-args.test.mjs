@@ -19,7 +19,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { ALLOW_DIRTY_FLAG, parseDeployArgs } from './deploy-args.mjs'
+import { ALLOW_DIRTY_FLAG, DEPLOY_EFFECT, parseDeployArgs } from './deploy-args.mjs'
 
 const SPEC = {
   command: 'deploy-firestore-rules',
@@ -112,6 +112,35 @@ describe('a deploy script never deploys on an argument it did not understand', (
     assert.deepEqual(run.result, { allowDirty: true })
   })
 
+  it('says what did NOT happen, in the words of the calling script', () => {
+    // A backfill that refuses must not claim nothing was DEPLOYED: the
+    // operator is trying to work out which of their beliefs was wrong, and
+    // the wrong noun sends them to the wrong question.
+    let said = ''
+    parseDeployArgs({
+      ...SPEC,
+      command: 'backfill-marketing-consent',
+      effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
+      argv: ['--nope'],
+      io: {
+        log: () => undefined,
+        error: (text) => {
+          said = text
+        },
+        exit: () => 'EXITED',
+      },
+    })
+    assert.match(said, /NOTHING WAS WRITTEN/)
+    assert.match(said, /could not run/)
+    assert.doesNotMatch(said, /DEPLOYED/)
+  })
+
+  it('CONTROL — a caller that names no effect still speaks of deploying', () => {
+    const run = harness(['--nope'])
+    assert.match(run.error.join('\n'), /NOTHING WAS DEPLOYED/)
+    assert.equal(DEPLOY_EFFECT.past, 'DEPLOYED')
+  })
+
   it('the usage text names every flag it accepts', () => {
     const flags = [ALLOW_DIRTY_FLAG, { flag: '--dry-run', key: 'dryRun', describe: 'Show the plan.' }]
     const help = harness(['--help'], flags).log.join('\n')
@@ -124,11 +153,15 @@ describe('every deploy script actually USES the parser', () => {
   // ⚠️ THE WIRING CHECK. The parser above can be perfect and irrelevant: the
   // bug was in the call sites, and a call site that still reads
   // `process.argv.includes(...)` has all of this and none of its protection.
+  // The backfill is here for the same reason the deploys are, and its typo
+  // case is worse: a discarded `--exclude=` writes a consent basis onto the
+  // record of a real person the operator meant to leave alone.
   const SCRIPTS = [
     'deploy-firestore-rules',
     'deploy-storage-rules',
     'deploy-database-rules',
     'deploy-firestore-indexes',
+    'backfill-marketing-consent',
   ]
   const source = (name) =>
     readFileSync(

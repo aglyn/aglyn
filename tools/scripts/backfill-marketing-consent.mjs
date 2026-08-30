@@ -116,15 +116,48 @@ import { fileURLToPath } from 'node:url'
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
+import { parseDeployArgs } from './lib/deploy-args.mjs'
+
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..', '..')
 
-const apply = process.argv.includes('--apply')
-const selfTest = process.argv.includes('--self-test')
-const flag = (name) => {
-  const found = process.argv.find((a) => a.startsWith(`--${name}=`))
-  return found ? found.slice(name.length + 3) : null
-}
+/*
+ * ARGUMENTS FAIL CLOSED, for the same reason the deploys do (AGL-1489) and
+ * with a sharper consequence.
+ *
+ * Scanning argv for known flags and ignoring the rest means a TYPO IS SILENT:
+ * `--exlude=someone@example.com` is discarded, the run proceeds with no
+ * exclusion, and the operator reads a report of a job they believe they
+ * scoped. Here that writes `marketingConsent: true` onto the record of a real
+ * person who never agreed to anything — the one outcome this script exists to
+ * be careful about — and it is unrecoverable in the sense that matters, since
+ * the false basis is indistinguishable from a real one to everything
+ * downstream that reads it.
+ *
+ * So an unrecognized argument exits 2 having written nothing, and `--help`
+ * prints usage instead of sweeping a live project.
+ */
+const args = parseDeployArgs({
+  command: 'backfill-marketing-consent',
+  summary:
+    'Record an operator-attested marketing-consent basis on person records ' +
+    'that carry none. Writes to the live project with --apply.',
+  effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
+  flags: [
+    { flag: '--apply', key: 'apply', describe: 'Write. Without it, a dry run.' },
+    { flag: '--self-test', key: 'selfTest', describe: 'Run the emulator fixtures.' },
+    { flag: '--operator', key: 'operator', value: 'string', describe: 'Who attests the basis.' },
+    { flag: '--reason', key: 'reason', value: 'string', describe: 'Why, recorded on every record.' },
+    { flag: '--org', key: 'org', value: 'string', describe: 'Limit to one org.' },
+    { flag: '--host', key: 'host', value: 'string', describe: 'Limit to one host.' },
+    { flag: '--exclude', key: 'exclude', value: 'string', describe: 'Comma-separated addresses to leave alone.' },
+    { flag: '--max-records', key: 'maxRecords', value: 'string', describe: 'Lower the record ceiling.' },
+  ],
+})
+const apply = args.apply
+const selfTest = args.selfTest
+const flag = (name) =>
+  args[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] ?? null
 const onlyOrg = flag('org')
 const onlyHost = flag('host')
 

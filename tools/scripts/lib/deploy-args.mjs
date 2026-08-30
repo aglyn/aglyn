@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
-// Argument parsing for the four deploy scripts, which all SHIP SOMETHING when
-// they run (AGL-1489).
+// Argument parsing for scripts whose run HAS AN EFFECT (AGL-1489) — the four
+// deploys, and the data backfills, which write to a live project.
+//
+// The default wording is the deploy one; {@link parseDeployArgs} takes an
+// `effect` for a script that does something other than deploy, so the refusal
+// says what did not happen rather than a generic "error".
 //
 // ── WHY THESE SCRIPTS MAY NOT IGNORE AN ARGUMENT ──────────────────────────
 //
@@ -48,8 +52,21 @@
 // deliberately NOT 1, so a refusal is distinguishable from a deploy that ran
 // and failed.
 
+/**
+ * What running the script DOES, in the three places the parser has to say it.
+ *
+ * A refusal that names the effect is the point of this module: "NOTHING WAS
+ * DEPLOYED" and "NOTHING WAS WRITTEN" tell an operator which of their
+ * beliefs was wrong, where a bare non-zero exit tells them nothing.
+ */
+export const DEPLOY_EFFECT = {
+  gerund: 'deploying',
+  past: 'DEPLOYED',
+  failure: 'could not deploy',
+}
+
 /** Printed for `--help`, and again on stderr when an argument is refused. */
-function usageText({ command, summary, flags }) {
+function usageText({ command, summary, flags, effect }) {
   const width = Math.max(...flags.map((one) => one.flag.length))
   return [
     summary,
@@ -60,7 +77,7 @@ function usageText({ command, summary, flags }) {
     ...flags.map(
       (one) => `  ${one.flag.padEnd(width)}  ${one.describe}`,
     ),
-    `  ${'--help, -h'.padEnd(width)}  Print this and exit WITHOUT deploying.`,
+    `  ${'--help, -h'.padEnd(width)}  Print this and exit WITHOUT ${effect.gerund}.`,
   ].join('\n')
 }
 
@@ -78,12 +95,16 @@ function usageText({ command, summary, flags }) {
  * @param {{flag: string, describe: string, key: string, value?: 'string'}[]} spec.flags
  * @param {string[]} [spec.argv]   defaults to this process's arguments
  * @param {{log: Function, error: Function, exit: Function}} [spec.io] for tests
+ * @param {{gerund: string, past: string, failure: string}} [spec.effect]
+ *   what running it does, for a script that does not deploy. Defaults to
+ *   {@link DEPLOY_EFFECT}.
  * @returns {Record<string, string|boolean>} one key per flag, defaults applied
  */
-export function parseDeployArgs({ command, summary, flags, argv, io }) {
+export function parseDeployArgs({ command, summary, flags, argv, io, effect }) {
   const out = io ?? { log: console.log, error: console.error, exit: process.exit }
   const args = argv ?? process.argv.slice(2)
-  const usage = usageText({ command, summary, flags })
+  const doing = effect ?? DEPLOY_EFFECT
+  const usage = usageText({ command, summary, flags, effect: doing })
 
   const parsed = {}
   for (const one of flags) parsed[one.key] = one.value === 'string' ? null : false
@@ -112,9 +133,9 @@ export function parseDeployArgs({ command, summary, flags, argv, io }) {
     // understood, and told plainly that nothing was deployed — a deploy
     // script that exits quietly is indistinguishable from one that ran.
     out.error(
-      `Unknown argument ${JSON.stringify(arg)} — NOTHING WAS DEPLOYED.\n\n` +
+      `Unknown argument ${JSON.stringify(arg)} — NOTHING WAS ${doing.past}.\n\n` +
         `${usage}\n\n` +
-        'Exiting 2 (could not deploy). That is NOT the same as a clean run.',
+        `Exiting 2 (${doing.failure}). That is NOT the same as a clean run.`,
     )
     return out.exit(2)
   }
