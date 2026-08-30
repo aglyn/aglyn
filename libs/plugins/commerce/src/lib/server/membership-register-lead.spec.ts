@@ -182,3 +182,40 @@ describe('the lead a sign-up leaves behind (AGL-2303)', () => {
     expect('displayName' in mockState.members[0]).toBe(false)
   })
 })
+
+/**
+ * The consent field `siteMembers` never had.
+ *
+ * The sign-up checkbox reached the lead and the contact and was dropped for
+ * the member document, so `hosts/{hostId}/siteMembers` carried no consent
+ * signal of any kind and `audience: 'members'` had nothing for the send-time
+ * join to read — the audience could not be filtered even in principle
+ * (`docs/specs/email-overhaul.md` §1d).
+ *
+ * The other two documents are not a substitute for it: a member is deduped in
+ * this transaction while leads append every time, and contacts are org-scoped
+ * where a member belongs to one site.
+ */
+describe('the consent a member signs up with', () => {
+  it('persists a ticked checkbox on the member document', async () => {
+    await register({ displayName: 'Dana Reed', marketingConsent: true })
+    expect(mockState.members).toHaveLength(1)
+    expect(mockState.members[0]).toMatchObject({ marketingConsent: true })
+    expect(
+      typeof mockState.members[0]['marketingConsentAtMs'],
+    ).toBe('number')
+  })
+
+  /**
+   * THE CONTROL. Signing up is not opting in — that is why the checkbox
+   * exists and why it defaults unchecked. An absent field reads back as an
+   * UNRECORDED basis, which is a third state and not a quiet refusal, so
+   * writing `false` here would be a different claim than the one the person
+   * made.
+   */
+  it('writes nothing at all when the box was not ticked', async () => {
+    await register({ displayName: 'Dana Reed' })
+    expect('marketingConsent' in mockState.members[0]).toBe(false)
+    expect('marketingConsentAtMs' in mockState.members[0]).toBe(false)
+  })
+})
