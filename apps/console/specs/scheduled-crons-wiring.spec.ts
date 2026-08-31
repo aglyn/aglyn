@@ -72,6 +72,63 @@ describe('scheduled-crons.yml wiring', () => {
     [...workflow.matchAll(/^\s*- (\/api\/\S+)$/gm)].map((match) => match[1]),
   )
 
+  /*==========================================
+   * THE OTHER RUNNER'S SOURCE, parsed once at this level.
+   *
+   * Read as TEXT for the reason the Cloud Scheduler block below states, and
+   * parsed HERE rather than inside it because two separate questions need
+   * the same two lists: whether the inventory matches the scheduler, and
+   * whether the deploy-ordering guard can answer for these routes at all.
+   *=========================================*/
+  const functions = readFileSync(
+    join(repoRoot, 'cloud', 'functions', 'src', 'index.ts'),
+    'utf8',
+  )
+
+  const fastRoutesBlock = /const CONSOLE_FAST_CRON_ROUTES[^=]*=\s*\[([^\]]*)\]/.exec(
+    functions,
+  )?.[1]
+  const fastRoutes = [
+    ...(fastRoutesBlock ?? '').matchAll(/'(\/api\/[^']+)'/g),
+  ].map((match) => match[1])
+
+  /**
+   * The DAILY family, one `onSchedule` per job.
+   *
+   * Parsed the same way and for the same reason as the fast pair: a table
+   * pinned in a named const is only worth anything if the exports actually
+   * read it, so the assertions below check both the table and the fact that
+   * each job is exported through `consoleDailyCron`.
+   */
+  const dailyBlock = /const CONSOLE_DAILY_CRONS[^=]*=\s*\{([\s\S]*?)\n\} as const/.exec(
+    functions,
+  )?.[1]
+  const dailyCrons = new Map(
+    [
+      ...(dailyBlock ?? '').matchAll(
+        /'([^']+)':\s*\{\s*schedule:\s*'([^']+)',\s*route:\s*'([^']+)',/g,
+      ),
+    ].map((match) => [match[1], { schedule: match[2], route: match[3] }]),
+  )
+
+  /**
+   * Every console route ANY runner POSTs on a schedule.
+   *
+   * The workflow's `case` arms plus both Cloud Scheduler families. Routes
+   * move between runners — AGL-1617 took two off GitHub Actions and the
+   * dailies followed — so anything that has to be true of a scheduled console
+   * route has to be asserted over this union rather than over whichever
+   * runner happens to hold it today. `plugin-jobs-beat` is deliberately
+   * absent: it POSTs the TENANT app, which is a different deployment.
+   */
+  const consoleCronRoutes = [
+    ...new Set([
+      ...caseArms.values(),
+      ...fastRoutes,
+      ...[...dailyCrons.values()].map((daily) => daily.route),
+    ]),
+  ]
+
   it('parses the workflow at all', () => {
     // A regex that silently matched nothing would make every assertion
     // below vacuously true — the exact shape this file exists to catch.
@@ -211,39 +268,9 @@ describe('scheduled-crons.yml wiring', () => {
    * test refuses to let a regex that matched nothing make the rest vacuous.
    */
   describe('the Cloud Scheduler inventory (AGL-1617)', () => {
-    const functions = readFileSync(
-      join(repoRoot, 'cloud', 'functions', 'src', 'index.ts'),
-      'utf8',
-    )
-
     const fastSchedule = /^const CONSOLE_FAST_CRON_SCHEDULE = '([^']+)'$/m.exec(
       functions,
     )?.[1]
-    const fastRoutesBlock = /const CONSOLE_FAST_CRON_ROUTES[^=]*=\s*\[([^\]]*)\]/.exec(
-      functions,
-    )?.[1]
-    const fastRoutes = [
-      ...(fastRoutesBlock ?? '').matchAll(/'(\/api\/[^']+)'/g),
-    ].map((match) => match[1])
-
-    /**
-     * The DAILY family, one `onSchedule` per job.
-     *
-     * Parsed the same way and for the same reason as the fast pair: a table
-     * pinned in a named const is only worth anything if the exports actually
-     * read it, so the assertions below check both the table and the fact that
-     * each job is exported through `consoleDailyCron`.
-     */
-    const dailyBlock = /const CONSOLE_DAILY_CRONS[^=]*=\s*\{([\s\S]*?)\n\} as const/.exec(
-      functions,
-    )?.[1]
-    const dailyCrons = new Map(
-      [
-        ...(dailyBlock ?? '').matchAll(
-          /'([^']+)':\s*\{\s*schedule:\s*'([^']+)',\s*route:\s*'([^']+)',/g,
-        ),
-      ].map((match) => [match[1], { schedule: match[2], route: match[3] }]),
-    )
 
     /** Inventory rows driven by `consoleFastCrons`, keyed by the route. */
     const fastJobs = SCHEDULED_JOBS.filter(
@@ -416,22 +443,60 @@ describe('scheduled-crons.yml wiring', () => {
    * a route → source-file mapping that nothing else re-derives. So the tests
    * below hold both ends: the mapping must resolve every scheduled route to a
    * file that really exists, and the POST step must keep failing on a 404.
+   *
+   * THE MAPPING COVERS BOTH RUNNERS, not just this workflow's. Which runner
+   * holds a route is not a fixed property of it — AGL-1617 moved two off
+   * GitHub Actions and the dailies followed — and the question the mapping
+   * answers is about the route, not about who POSTs it. A Cloud Scheduler
+   * route with no correct arm is worse than a GitHub one with none, because
+   * `consoleFastCrons` consults nothing before POSTing: main schedules a
+   * route production does not serve, every tick 404s, and the only trace is
+   * a `console cron refused` line in the function's own logs and a row on
+   * /api/health/crons that only a tree ahead of production even renders.
+   * Being in `workflow_dispatch` is what makes that answerable by a person —
+   * a manual run reports the deploy state in the job summary and skips
+   * rather than POSTing into a 404.
    */
   describe('the deploy-ordering guard (AGL-2359)', () => {
     const script = join(repoRoot, 'tools', 'scripts', 'cron-deploy-state.sh')
     const implFor = (route: string) =>
       execFileSync(script, ['--impl', route], { encoding: 'utf8' }).trim()
 
-    it('resolves every scheduled route to a file that exists', () => {
+    it('has a route list that both runners really contributed to', () => {
+      // The anti-vacuum guard for the two tests below. Either functions-file
+      // regex returning nothing would leave the union holding only the six
+      // workflow arms, and "every route resolves" would then be a sentence
+      // about a set with the interesting half missing — clean, green, and
+      // blind to exactly the runner this file had to learn to watch.
+      expect(consoleCronRoutes.length).toBeGreaterThanOrEqual(12)
+      expect(consoleCronRoutes).toContain('/api/lists/materialize')
+    })
+
+    it('resolves every scheduled console route to a file that exists', () => {
       // A mapping that points at a moved or renamed file is not a harmless
       // typo: that file is absent from BOTH refs, so the route would read as
       // "not deployed yet" forever and the cron would stop silently. The
       // script fails closed on exactly this (it answers `unknown`, and the
       // job POSTs anyway) — this test is the other half, catching it at the
       // commit that breaks it rather than at the next 404.
-      const missing = [...caseArms.values()]
+      //
+      // Over EVERY runner's routes. A plugin-served route reaching the
+      // console through `/api/[...pluginApi]` resolves by App Router
+      // convention to a path that is on no ref at all, which is a mapping
+      // that has already stopped working and says nothing.
+      const missing = consoleCronRoutes
         .map((route) => [route, implFor(route)] as const)
         .filter(([, impl]) => !impl || !existsSync(join(repoRoot, impl)))
+      expect(missing).toEqual([])
+    })
+
+    it('can be asked about every route, from either runner, by hand', () => {
+      // `workflow_dispatch` is the only door into the deploy-state step, and
+      // the only way to force a sweep between ticks after an incident. A
+      // Cloud Scheduler route missing from the list has neither.
+      const missing = consoleCronRoutes.filter(
+        (route) => !dispatchOptions.has(route),
+      )
       expect(missing).toEqual([])
     })
 
