@@ -202,20 +202,52 @@ export function contextTag(context: string | undefined): EmailTag[] {
 }
 
 /**
- * Why a send did not happen. `unconfigured`, `no-recipient` and
- * `rate-limited` mean nothing was attempted; `rejected` and `network` mean
- * Resend was called and failed.
+ * Why a send did not happen. `unconfigured` and `no-recipient` mean nothing
+ * was attempted; `rejected` and `network` mean Resend was called and failed;
+ * `rate-limited` is either, and says so in `status`.
  *
  * `rate-limited` (AGL-2409) and `frequency-capped` are the two a caller may
  * reasonably retry unchanged — see {@link isDeferrableSendResult}, which is
- * where that distinction is made once rather than at each sweep. Neither can
- * be produced for a transactional message that declares no marketing context.
+ * where that distinction is made once rather than at each sweep.
  */
 export type SendEmailFailureReason =
   | 'unconfigured'
   | 'no-recipient'
+  /**
+   * Resend answered and would not take this message.
+   *
+   * Per-message and terminal: a malformed payload, an address the provider
+   * will not accept, a tag it rejected. A caller that retries it unchanged
+   * gets the same answer, so a batch settles the recipient rather than
+   * holding a slot open for them.
+   *
+   * A 429 is deliberately NOT this. See `rate-limited`.
+   */
   | 'rejected'
   | 'network'
+  /**
+   * A refusal that is about the RATE, not about this message — so the message
+   * is intact and a later attempt sends it.
+   *
+   * Two sources, which is why it is one value. The platform hourly governor
+   * refuses before the network and nothing is attempted (AGL-2409). Resend
+   * answers `429` on the wire when requests arrive faster than it accepts
+   * them, and `status` is 429 in that case.
+   *
+   * The provider arm reports here rather than as `rejected` because of what
+   * the two mean to a batch. A `rejected` recipient is settled and never
+   * addressed again, which is right for an address the provider will not take
+   * and wrong for every recipient a 429 touches: nothing about them was
+   * refused, the request was simply too soon. Classified as `rejected` a
+   * single rate-limited burst silently deletes the rest of a campaign's
+   * audience while the campaign reports itself complete — and the `sent`
+   * figure stays honest throughout, so no rate on the report can show it.
+   *
+   * The provider's quota errors — `daily_quota_exceeded`,
+   * `monthly_quota_exceeded` — are also 429 and also land here. That is the
+   * right answer for the same reason: none of them is a statement about the
+   * recipient, and all of them clear with time.
+   */
   | 'rate-limited'
   /**
    * The org selected a custom sending domain and that domain is not verified.
@@ -274,9 +306,10 @@ export type SendEmailResult =
       /** Resend's error body or the thrown message, trimmed for logs. */
       detail?: string
       /**
-       * `rate-limited` only: when the platform hourly window rolls and the
-       * caller may try again. A resumable sweep does not need to wait on it —
-       * its next scheduled run is the retry.
+       * `rate-limited` only: the earliest instant a caller may try again —
+       * when the platform hourly window rolls, or what the provider's own
+       * `retry-after` asked for. A resumable sweep does not need to wait on
+       * it; its next scheduled run is the retry.
        */
       retryAtMs?: number
     }
@@ -299,6 +332,59 @@ export function rateLimitedRetryAtMs(
   if (!failure || failure.reason !== 'rate-limited') return null
   const retryAtMs = Number(failure.retryAtMs)
   return Number.isFinite(retryAtMs) ? retryAtMs : 0
+}
+
+/**
+ * How long to wait when the provider names no interval of its own.
+ *
+ * One second, because Resend's rate limit is counted per second — so a wait
+ * of a whole window is the shortest one that is certain to have cleared it.
+ */
+const PROVIDER_RETRY_FALLBACK_MS = 1_000
+
+/**
+ * The longest wait a provider header may ask for.
+ *
+ * A `retry-after` is read off the network and reaches a scheduler, so it is
+ * clamped rather than trusted: a header of `86400` would park a campaign for
+ * a day on one response nobody saw. An hour is past every documented window
+ * and short enough that a wrong one costs a run rather than a day.
+ */
+const PROVIDER_RETRY_MAX_MS = 3_600_000
+
+/** One header as whole seconds, or null when it is absent or unreadable. */
+function headerSeconds(
+  headers: { get?: (name: string) => string | null } | null | undefined,
+  name: string,
+): number | null {
+  const raw = headers?.get?.(name)
+  // `Number(null)` and `Number('')` are both 0, which would read as "retry
+  // immediately" for a header that is not there at all.
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null
+  const seconds = Number(raw)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
+}
+
+/**
+ * When the provider says a refused request may be repeated.
+ *
+ * Read from the two headers Resend documents beside a 429, both in whole
+ * seconds: `retry-after` first because it is the direct answer to this
+ * question, then `ratelimit-reset`, which names when the window rolls. A
+ * response carrying neither falls back to one window.
+ */
+export function providerRetryAtMs(
+  headers: { get?: (name: string) => string | null } | null | undefined,
+  nowMs: number = Date.now(),
+): number {
+  const seconds =
+    headerSeconds(headers, 'retry-after') ??
+    headerSeconds(headers, 'ratelimit-reset')
+  const waitMs =
+    seconds === null
+      ? PROVIDER_RETRY_FALLBACK_MS
+      : Math.min(seconds * 1_000, PROVIDER_RETRY_MAX_MS)
+  return nowMs + waitMs
 }
 
 /**
@@ -821,6 +907,32 @@ export async function sendEmail(
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '')
+      /*
+       * A 429 IS NOT A STATEMENT ABOUT THIS RECIPIENT, so it does not report
+       * as one. See the `rate-limited` member of
+       * {@link SendEmailFailureReason} for why the distinction is load-bearing
+       * rather than cosmetic — every caller in the tree already has a branch
+       * for a deferral, and none of them has one for "rejected, but try this
+       * exact address again later".
+       *
+       * A warning rather than an error: the provider asking for a slower pace
+       * is a normal thing to be told, and logging it at the level a failed
+       * delivery uses is what teaches an operator to skim past both.
+       */
+      if (response.status === 429) {
+        const retryAtMs = providerRetryAtMs(response.headers)
+        console.warn(
+          `${label} deferred — the provider is rate limiting; retry in ` +
+            `${Math.max(0, Math.round((retryAtMs - Date.now()) / 1000))}s`,
+        )
+        return {
+          sent: false,
+          reason: 'rate-limited',
+          status: response.status,
+          retryAtMs,
+          detail: detail.slice(0, 500),
+        }
+      }
       console.error(`${label} failed`, response.status, detail)
       return {
         sent: false,
