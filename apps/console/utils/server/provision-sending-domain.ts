@@ -193,14 +193,32 @@ export async function provisionSendingDomain(options: {
           domain,
           detail: 'at-capacity',
         })
+        /*
+         * Addressed to an OPERATOR, and it names the levers an operator has.
+         * None of them is a customer plan change: the site refused here keeps
+         * sending on the shared pool, so this is a shortage of ours and not
+         * something the merchant can buy their way out of.
+         *
+         * The two levers pull on different resources and the message keeps
+         * them apart, because conflating them is how the expensive answer
+         * gets chosen. The ADD-ON is what raises the count. Moving merchants
+         * onto domains they own spends a provider slot just the same, but
+         * costs nothing in our zone and nothing in the sweep we run against
+         * it, so it is what stops the demand for platform subdomains growing
+         * with every paying site.
+         */
         console.error(
           `[provision-sending-domain] at the sending-domain ceiling ` +
-            `(${held}/${capacity}) — ${domain} cannot be provisioned. Buy ` +
-            'the provider domain add-on (Resend: $20/mo for 100 more ' +
-            'domains, on Pro or Scale) and raise ' +
-            'AGLYN_SENDING_DOMAIN_CAPACITY to the new allowance. A tier ' +
-            'upgrade buys the same domains for more; the tier is for send ' +
-            'volume.',
+            `(${held}/${capacity}) — ${domain} cannot be provisioned. The ` +
+            'site keeps sending on the shared pool meanwhile, so this is ' +
+            'degraded delivery reputation and not stopped mail. To raise ' +
+            'the count, buy the provider domain add-on (Resend: $20/mo for ' +
+            '100 more domains, on Pro or Scale) and set ' +
+            'AGLYN_SENDING_DOMAIN_CAPACITY to the new allowance — a tier ' +
+            'upgrade buys the same domains for more, because the tier is ' +
+            'for send volume. To stop the demand growing, move merchants ' +
+            'onto domains they own: those cost no records in our zone and ' +
+            'no place in our re-verification sweep.',
         )
         return { domain, outcome: 'at-capacity', detail: 'at-capacity' }
       }
@@ -283,6 +301,37 @@ async function countProvisionedDomains(): Promise<number> {
     .count()
     .get()
   return Number(snapshot.data().count) || 0
+}
+
+/** Where this deployment stands against its sending-domain ceiling. */
+export interface SendingDomainCapacityReport {
+  held: number
+  capacity: number
+  /** True once a new domain would be refused. `capacity: -1` is never true. */
+  atCapacity: boolean
+}
+
+/**
+ * The ceiling as a READ, for a report rather than for a decision.
+ *
+ * The dry run's whole job is to answer "what would this sweep do" without
+ * doing it, and a sweep at the ceiling does nothing at all — so a dry run that
+ * printed only the pending count would report a queue and no reason it was not
+ * moving. That is the same silence the loud log exists to break, arriving at
+ * the one surface an operator visits on purpose.
+ *
+ * It answers `atCapacity: false` for a negative capacity, which is the
+ * configured way to switch the check off, and for a count that cannot be read.
+ * Both are the same claim: this deployment has no ceiling to be at.
+ */
+export async function readSendingDomainCapacity(): Promise<SendingDomainCapacityReport> {
+  const capacity = sendingDomainCapacity()
+  const held = await countProvisionedDomains().catch(() => -1)
+  return {
+    held,
+    capacity,
+    atCapacity: capacity >= 0 && held >= 0 && held >= capacity,
+  }
 }
 
 export interface ProvisionSweepSummary {

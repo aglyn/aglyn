@@ -475,6 +475,20 @@
             }
           },
           {
+            "label": "Send email from your own domain",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "—",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
             "label": "Video & file uploads",
             "duplicateOf": null,
             "values": {

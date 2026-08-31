@@ -477,8 +477,8 @@ Domain count is `O(1) + O(customers who want isolation)`, never `O(hosts)`:
 | Shape | Reputation | Provider slots | Our zone records | Who |
 | --- | --- | --- | --- | --- |
 | **Shared pool** | Pooled across the sites on one member | 4 | **12** | Every site with no domain of its own. Transactional ONLY. |
-| **Customer-owned** | Fully the customer's | 1 each | **0** | Anyone who wants isolation and a name recipients recognize |
-| **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above, provisioned on upgrade |
+| **Customer-owned** | Fully the customer's | 1 each | **0** | Pro and above (`customSendingDomain`), for anyone who wants isolation and a name recipients recognize |
+| **Dedicated platform subdomain** | Fully the site's | 1 each | 3 each | Pro and above, provisioned on upgrade, **best-effort** |
 
 The pool is flat at every scale — twelve records whether the platform has
 twelve sites or a hundred thousand. Customer-owned domains scale with
@@ -492,8 +492,18 @@ and it is the only shape whose cost lands in our zone. It is therefore a
 above, claimed at the upgrade rather than at signup, and capped by
 `AGLYN_SENDING_DOMAIN_CAPACITY`. Past roughly a thousand of them the honest
 answer is to move merchants who want isolation onto their own domains, which is
-an argument for offering customer-owned domains BELOW the Agency plan, since
-they are the cheap shape and are currently gated the most tightly.
+why customer-owned domains start at Pro rather than at Agency: they are the
+cheap shape, and gating the cheap shape most tightly made the expensive one the
+default at every tier that can send.
+
+**The subdomain is an optimization; the pool is the guarantee.** A site whose
+subdomain has not been provisioned — the ceiling reached, a zone write failed,
+the sweep not yet run — sends its transactional mail on the pool and keeps
+sending it. That is what makes a platform-wide ceiling a safe thing to enforce
+rather than a fatal one: hitting it costs delivery *isolation*, never receipts.
+`resolveSendingIdentity` draws the line at whose domain it is, not at whether
+one is verified — a customer's own unverified domain still refuses, because
+there the merchant told us what their recipients would see.
 
 ### Dedicated IPs
 
@@ -574,7 +584,27 @@ allowance has to cover the site count BEFORE that deploy, not after.
 `AGLYN_SENDING_DOMAIN_CAPACITY` is the backstop if it does not: the sweep
 stops at the ceiling, stores `at-capacity` on the records it could not
 provision, and logs the count. Nothing is lost, and a later tick finishes the
-remainder once the allowance is raised.
+remainder once the allowance is raised. A `GET` of the same route reports
+`held`, `capacity` and `atCapacity` without writing anything, which is how to
+tell a queue waiting on vendor work from a queue waiting on a purchase.
+
+Sites in that queue keep sending on the pool throughout, so the ceiling is a
+purchasing decision and not an incident. The two levers pull on different
+resources and are worth keeping apart:
+
+- **To raise the count** — buy the provider's domain add-on and set
+  `AGLYN_SENDING_DOMAIN_CAPACITY` to the new allowance. A tier upgrade buys
+  the same domains for considerably more; choose the tier by send volume.
+- **To stop the demand growing** — move merchants onto domains they own. A
+  provider slot is spent either way, but a customer's domain costs nothing in
+  our zone and nothing in the re-verification sweep we run against it.
+
+Neither lever is a customer plan change, and the at-capacity log says so.
+Growing `AGLYN_TENANT_SHARED_POOL_SIZE` (capped at 64) is a third, unrelated
+knob: it does not relieve the dedicated ceiling, it widens the floor beneath
+it, so that the sites parked on the pool are spread across more reputations.
+Rendezvous hashing means growing the pool moves a site only onto a member that
+did not exist before, so it is safe to do at any time.
 
 ### Could `RESEND_READ_API_KEY` serve instead?
 

@@ -36,9 +36,9 @@
  *
  * ## THE BOUNDARY THAT MATTERS MOST
  *
- * **A SELECTED sending domain that is not verified refuses the send. It never
- * falls back to any other identity.** {@link resolveSendingIdentity} has no
- * arm that reaches another address from a selected-but-unverified domain, and
+ * **A CUSTOMER'S OWN sending domain that is not verified refuses the send. It
+ * never falls back to any other identity.** {@link resolveSendingIdentity} has
+ * no arm that reaches another address from such a domain, and
  * {@link sendingIdentityRefusal} is what a caller must print.
  *
  * Silent fallback would be wrong three ways, and each is independently
@@ -47,13 +47,24 @@
  * and the tenant's reputation risk lands back on the shared domain the custom
  * domain existed to move it off.
  *
- * **SELECTED is the load-bearing word.** A site that has chosen nothing has
- * made no statement about what its recipients will see, so there is nothing to
- * contradict — and it still has receipts to send. That site sends on the
- * shared platform identity, which is what the console has always told
- * merchants happens. The two cases look similar and are opposites: one is a
- * merchant whose instruction we would be ignoring, the other is a merchant who
- * gave none.
+ * **WHOSE DOMAIN IT IS carries the whole rule**, and it is the distinction
+ * `SendingDomainSelection.platformIssued` records. There are three cases and
+ * only the first refuses:
+ *
+ *   - A domain the CUSTOMER owns, unverified. An instruction of theirs that we
+ *     would be ignoring. Refused.
+ *   - A platform subdomain we issued, unverified. Not an instruction at all —
+ *     we chose the name, wrote the records and pointed the site at it — so
+ *     there is nothing to contradict, and everything that can leave it
+ *     unfinished is ours to fix. Sends on the pool.
+ *   - Nothing selected. Likewise no statement to contradict, and the site
+ *     still has receipts to send. Sends on the pool, which is what the console
+ *     has always told merchants happens.
+ *
+ * The last two are why the DEDICATED subdomain can be rationed safely: it is
+ * an optimization on top of a floor that always holds, so exhausting the
+ * provider's domain allowance degrades delivery reputation rather than
+ * stopping the mail.
  *
  * ## The shared identity is TRANSACTIONAL only
  *
@@ -217,6 +228,29 @@ export interface SendingDomainSelection {
   localPart: string
   /** Required records not seen by the last conclusive lookup. */
   missing?: string[] | null
+  /**
+   * Whether this domain is one the PLATFORM issued the site — a subdomain of
+   * our own mail apex, whose records we write into our own zone — rather than
+   * a name the customer owns and published DNS for.
+   *
+   * It decides what an UNVERIFIED selection means, which is the one place the
+   * two kinds of domain must not be treated alike. A customer's own domain is
+   * an instruction: they told us what their recipients would see, and sending
+   * as anything else contradicts it. A platform subdomain is not an
+   * instruction at all — the platform picked the name, wrote the records and
+   * pointed the site at it, all without the merchant asking — so a subdomain
+   * that has not finished provisioning is our unfinished work and not the
+   * merchant's unfinished DNS. See {@link resolveSendingIdentity}.
+   *
+   * Carried on the selection rather than derived here because the apex lives
+   * in `platform-sending-domain.ts`, which imports from this module; reading
+   * it here would be a cycle. The durable half sets it with
+   * `isPlatformSendingDomain`.
+   *
+   * Absent means "a domain the customer owns", which is the direction that
+   * refuses. A caller that forgets gets the strict answer.
+   */
+  platformIssued?: boolean
 }
 
 /*==========================================
@@ -847,27 +881,36 @@ export interface SendingIdentityVerdict {
  * `?:` at the send site:
  *
  * 1. Selection, `verified` → that identity.
- * 2. Selection, anything else → **REFUSED**.
- * 3. No selection, `tenant` audience, `marketing` → **REFUSED**.
- * 4. No selection, `tenant` audience, `transactional` → the shared identity,
+ * 2. Selection of a PLATFORM-ISSUED subdomain, not verified → treated as no
+ *    selection, and resolved by arms 4-5.
+ * 3. Selection of a CUSTOMER'S OWN domain, not verified → **REFUSED**.
+ * 4. No selection, `tenant` audience, `marketing` → **REFUSED**.
+ * 5. No selection, `tenant` audience, `transactional` → the shared identity,
  *    if this deployment has one; **REFUSED** if it does not.
- * 5. No selection, `platform` audience → the platform identity, named as such.
+ * 6. No selection, `platform` audience → the platform identity, named as such.
  *
- * There is no arm that reaches ANY other address from an unverified selection.
- * A customer who has told us to send as their domain has made a statement
- * about what their recipients will see; quietly sending as somebody else
- * instead is not a degraded version of honoring it. That is arm 2, it is
- * checked before anything else, and neither the shared identity nor the
- * platform one is consulted inside it.
+ * There is no arm that reaches ANY other address from an unverified selection
+ * a CUSTOMER made. Somebody who has told us to send as their domain has made a
+ * statement about what their recipients will see; quietly sending as somebody
+ * else instead is not a degraded version of honoring it. That is arm 3, and
+ * neither the shared identity nor the platform one is consulted inside it.
  *
- * Arms 3 and 4 are the site that has chosen nothing. It is not the same case
- * and must not get the same answer: there is no instruction to contradict, and
- * a site that cannot send a receipt is not a site. So transactional mail goes,
- * on the pooled identity, which is what the console has always disclosed. What
- * does NOT go is marketing, because the pool is only usable while nobody is
- * spending it on a list.
+ * Arm 2 is the same sentence read the other way. A platform subdomain is a
+ * name WE chose, provisioned and pointed the site at; the merchant made no
+ * statement for it to contradict, and everything that can leave one unverified
+ * — the provider's domain allowance, a zone write, a sweep that has not run —
+ * is ours rather than theirs. Refusing there would make the dedicated domain a
+ * single point of failure for receipts on exactly the tiers that pay for it.
  *
- * Arm 5 is the platform's own mail and is unreachable from a tenant audience,
+ * Arms 4 and 5 are the site that has chosen nothing. It is not the same case
+ * as arm 3 and must not get the same answer: there is no instruction to
+ * contradict, and a site that cannot send a receipt is not a site. So
+ * transactional mail goes, on the pooled identity, which is what the console
+ * has always disclosed. What does NOT go is marketing, because the pool is
+ * only usable while nobody is spending it on a list — and arm 2 lands here
+ * too, so a campaign from a site whose subdomain is unfinished still refuses.
+ *
+ * Arm 6 is the platform's own mail and is unreachable from a tenant audience,
  * which is what keeps a merchant's list quality off `aglyn.com`. The `tenant`
  * checks sit ABOVE the `platformFrom` read rather than inside it, so the
  * platform address is not preferred-but-overridable for a tenant — it is
@@ -905,6 +948,39 @@ export function resolveSendingIdentity(
         summary: `Sending as ${from} on your verified domain ${domain}.`,
         refusal: null,
       }
+    }
+
+    /*
+     * AN UNFINISHED PLATFORM SUBDOMAIN IS NOT A SELECTION, AND FALLS THROUGH.
+     *
+     * The dedicated subdomain is an OPTIMIZATION and the pool is the
+     * GUARANTEE, which is the property that lets the dedicated tier be
+     * rationed at all. Everything that can stop one arriving is ours: the
+     * provider's account-wide domain allowance, a zone write that failed, a
+     * provisioning sweep that has not run yet, DNS that has not propagated.
+     * None of it is anything the merchant can act on, and all of it would
+     * otherwise refuse their receipts — leaving a PAYING workspace unable to
+     * send while a free one, which is never issued a subdomain and therefore
+     * never has a selection, sends on the pool perfectly well.
+     *
+     * So this drops to the unselected arm below, which is the same code path a
+     * site with no domain of its own takes. That arm still refuses MARKETING,
+     * and it must: the reason a campaign may not leave on the pool — one
+     * merchant's complaint rate charged against every other site's password
+     * resets — is unrelated to why this site has no domain yet.
+     *
+     * A CUSTOMER'S OWN domain is the opposite case and is deliberately not
+     * included. Arm 2 below still refuses it outright, because there the
+     * merchant published DNS and told us what their recipients would see.
+     */
+    if (selection.platformIssued && audience === 'tenant') {
+      return resolveSendingIdentity({
+        selection: null,
+        platformFrom,
+        sharedFrom,
+        purpose,
+        audience,
+      })
     }
 
     // A selected domain that is verified but has no usable address is a

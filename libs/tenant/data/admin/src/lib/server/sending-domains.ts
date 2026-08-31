@@ -70,6 +70,7 @@
 import {
   assessDmarc,
   assessSendingRecords,
+  isPlatformSendingDomain,
   isSharedSendingDomain,
   normalizeLocalPart,
   normalizeSendingDomain,
@@ -593,11 +594,28 @@ export async function resolveHostSendingIdentity(options: {
   const record = readSendingDomainRecord(await domainRef(options.orgId, domain).get())
 
   /*
-   * A selection naming a domain with no record refuses rather than falling
-   * back. The record can be gone because it was released, or because the
-   * selection was written against a different org — both mean the site is
+   * Whose domain this is, decided from the NAME rather than from the record.
+   *
+   * The record is what a released domain no longer has, and a site pointed at
+   * a subdomain of our own apex is still pointed at a subdomain of our own
+   * apex whether or not one exists for it. Deriving this from the name keeps
+   * the two possible failures apart: a missing record for OUR name is our
+   * provisioning that did not finish, a missing record for THEIRS is a domain
+   * they asked to send as and nothing has verified.
+   */
+  const platformIssued = isPlatformSendingDomain(domain)
+
+  /*
+   * A selection naming a CUSTOMER'S domain with no record refuses rather than
+   * falling back. The record can be gone because it was released, or because
+   * the selection was written against a different org — both mean the site is
    * configured to send as a domain nothing has verified, and neither is a
    * reason to send as somebody else.
+   *
+   * `platformIssued` rides on the selection either way, and the resolver reads
+   * it only on the unverified branch: a platform subdomain that has not
+   * finished provisioning drops to the pool for transactional mail instead,
+   * because nothing about it is a merchant instruction to contradict.
    */
   const selection: SendingDomainSelection = record
     ? {
@@ -605,8 +623,9 @@ export async function resolveHostSendingIdentity(options: {
         status: record.status,
         localPart: normalizeLocalPart(options.selectedLocalPart ?? '') || 'hello',
         missing: record.lastMissing ?? [],
+        platformIssued,
       }
-    : { domain, status: 'failed', localPart: '', missing: [] }
+    : { domain, status: 'failed', localPart: '', missing: [], platformIssued }
 
   /*
    * `sharedFrom` is passed even here, where a selection exists and will decide

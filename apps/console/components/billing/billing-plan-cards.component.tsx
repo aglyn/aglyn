@@ -279,6 +279,7 @@ const featureGroups = (
       { key: 'dataStore', label: 'Datasets & dynamic data' },
       { key: 'bookings', label: 'Appointment bookings' },
       { key: 'marketingOverlays', label: 'Announcement bar & popups' },
+      { key: 'customSendingDomain', label: 'Send email from your own domain' },
       { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
       { key: 'abTesting', label: 'A/B testing' },
       { key: 'marketplaceSelling', label: 'Sell on the marketplace' },

@@ -332,6 +332,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: 'An email body, not a page. A remote image here is an open-tracking pixel aimed at the RECIPIENT, which is a different problem with a different owner — recorded so it is not mistaken for a tenant sink.',
   },
+  'libs/plugins/email/src/lib/unsubscribe-link.ts': {
+    markers: 1,
+    guard: 'scheme-guard',
+    why: "The sending site's logo on the unsubscribe and preference pages. NOT off-tenant: the reader is an email recipient, so the IP at risk is a visitor's, exactly this issue's actor pair. `safeLogoUrl` resolves the stored `logo` token through absoluteMediaSrc and then keeps the result only if it matches https:, so http: and every unknown scheme are dropped to the wordmark; the host stays open, as everywhere else under AGL-1725. The page additionally carries `<meta name=\"referrer\" content=\"no-referrer\">` and the img carries referrerpolicy=\"no-referrer\", because THIS URL names the recipient and carries the HMAC that authorizes acting on it — so the image host learns an IP and not the link.",
+  },
   'libs/plugins/events-calendar/src/lib/components/event-list.tsx': {
     markers: 3,
     guard: 'media-ref',

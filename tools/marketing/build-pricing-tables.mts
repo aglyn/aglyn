@@ -251,6 +251,14 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       },
       { label: 'Contacts included', value: talk((p) => num(E(p).contactsPerHost)) },
       { label: 'Email sends / mo', value: talk((p) => num(E(p).emailSendsPerMonth)) },
+      // Beside the send band rather than beside "Custom domain & SSL", which
+      // is the site's public web address and authorizes nothing about mail.
+      // What this row answers is where a campaign's reputation lives, so it
+      // belongs to the email axis and reads with the allowance above it.
+      {
+        label: 'Send email from your own domain',
+        value: (p) => bool(F(p).customSendingDomain),
+      },
       { label: 'Video & file uploads', value: (p) => bool(F(p).videoMedia) },
     ],
   },
@@ -999,6 +1007,8 @@ if (!frameTable) {
 const EXPECTED_MISSING: Record<string, string> = {
   'Single sign-on (SAML/OIDC)':
     'added beyond the frame when AGL-1210 shipped self-serve SSO; `ssoEnabled` is real and Enterprise-only, and the page said so before the design did',
+  'Send email from your own domain':
+    '`customSendingDomain` is a capability the frame predates entirely — sending identity was not a published axis when it was drawn. It is real from Pro up, and it is the row that says a campaign leaves on a name whose reputation is the merchant’s. Resolves when the four responsive /pricing frames are hand-edited',
 }
 
 /** Rows the FRAME carries that we deliberately do not emit, each with why. */

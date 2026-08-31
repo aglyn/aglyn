@@ -27,7 +27,9 @@
  *                   and three records in OUR zone, per site. **This module.**
  *   customer-owned  `hello@acme.com`. One provider domain object and records
  *                   the customer publishes in THEIR zone. Gated separately, on
- *                   the `whiteLabel` feature flag.
+ *                   the `customSendingDomain` feature flag, and available from
+ *                   a LOWER tier than this one — it is the option that costs
+ *                   the platform no zone records at all.
  *
  * ## Why the dedicated tier is a gate at all
  *

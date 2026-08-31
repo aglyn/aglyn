@@ -647,6 +647,143 @@ describe('the shared identity carries transactional mail only', () => {
   })
 })
 
+/*==========================================
+  The dedicated subdomain is an optimization; the pool is the floor
+==========================================*/
+
+/**
+ * WHOSE DOMAIN IT IS, not whether it is verified, decides what a stalled
+ * selection means.
+ *
+ * A platform subdomain is a name the platform chose, provisioned and pointed
+ * the site at, so an unverified one is our unfinished work — a provider at its
+ * domain allowance, a zone write that failed, a sweep that has not run. None
+ * of that is anything the merchant can act on, and all of it would otherwise
+ * refuse their receipts.
+ *
+ * That property is what makes rationing the dedicated tier safe. Without it,
+ * every ceiling on dedicated domains is a ceiling on which paying customers
+ * can send at all.
+ */
+describe('a platform subdomain that has not verified falls back to the pool', () => {
+  const ISSUED = 'acme.mail.aglyn.app'
+
+  function issued(
+    status: SendingDomainStatus,
+  ): SendingDomainSelection {
+    return {
+      domain: ISSUED,
+      status,
+      localPart: 'hello',
+      platformIssued: true,
+    }
+  }
+
+  it.each(['requested', 'records-issued', 'failed'] as const)(
+    'sends transactional mail on the pool while its subdomain is %s',
+    (status) => {
+      const verdict = resolveSendingIdentity({
+        selection: issued(status),
+        platformFrom: 'noreply@aglyn.com',
+        sharedFrom: SHARED_FROM,
+        audience: 'tenant',
+      })
+
+      expect(verdict.refusal).toBeNull()
+      expect(verdict.from).toBe(SHARED_FROM)
+      expect(verdict.source).toBe('shared')
+      // And never onto the platform's own domain, which is the address this
+      // whole split exists to keep a tenant's list quality away from.
+      expect(verdict.from).not.toContain('aglyn.com')
+    },
+  )
+
+  it('prefers the subdomain the moment it verifies', () => {
+    const verdict = resolveSendingIdentity({
+      selection: issued('verified'),
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+
+    expect(verdict.source).toBe('custom')
+    expect(verdict.from).toBe(`hello@${ISSUED}`)
+  })
+
+  /**
+   * THE CONTROL FOR AN INDISCRIMINATE FALLBACK.
+   *
+   * The same domain, the same status, the same pool available — and the
+   * customer's own name still refuses. A change that pooled every unverified
+   * selection would pass every assertion above and fail here, which is the
+   * only way that regression ever surfaces: it sends, from a working address,
+   * and nothing errors.
+   */
+  it.each(['requested', 'records-issued', 'failed'] as const)(
+    'still refuses a CUSTOMER-owned domain at %s, with the pool right there',
+    (status) => {
+      const verdict = resolveSendingIdentity({
+        selection: { ...selection(status), platformIssued: false },
+        platformFrom: 'noreply@aglyn.com',
+        sharedFrom: SHARED_FROM,
+        audience: 'tenant',
+      })
+
+      expect(verdict.from).toBeNull()
+      expect(verdict.source).toBeNull()
+      expect(verdict.refusal.domain).toBe(DOMAIN)
+    },
+  )
+
+  /**
+   * An absent flag reads as the customer's own domain, so a caller that
+   * forgets to set it gets the refusing answer rather than the pooling one.
+   */
+  it('treats an unset flag as a customer domain', () => {
+    const verdict = resolveSendingIdentity({
+      selection: selection('records-issued'),
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+    })
+    expect(verdict.refusal.code).toBe('domain-unverified')
+  })
+
+  /**
+   * MARKETING is unchanged by any of this. The reason a campaign may not leave
+   * on the pool is one merchant's complaint rate landing on every other site's
+   * password resets, which has nothing to do with why this site's subdomain is
+   * unfinished.
+   */
+  it('refuses marketing from a site whose subdomain has not verified', () => {
+    const verdict = resolveSendingIdentity({
+      selection: issued('records-issued'),
+      sharedFrom: SHARED_FROM,
+      audience: 'tenant',
+      purpose: 'marketing',
+    })
+
+    expect(verdict.from).toBeNull()
+    expect(verdict.refusal.code).toBe('shared-identity-marketing')
+  })
+
+  /**
+   * The fallback is a TENANT arm and cannot reach the platform's own identity.
+   * A deployment with no pool refuses as an operator fault, exactly as an
+   * unprovisioned site does — the subdomain does not become a second route to
+   * `aglyn.com`.
+   */
+  it('refuses rather than borrowing the platform identity when no pool exists', () => {
+    const verdict = resolveSendingIdentity({
+      selection: issued('requested'),
+      platformFrom: 'noreply@aglyn.com',
+      sharedFrom: '',
+      audience: 'tenant',
+    })
+
+    expect(verdict.from).toBeNull()
+    expect(verdict.refusal.code).toBe('tenant-identity-unprovisioned')
+  })
+})
+
 describe('sharedIdentityMarketingRefusal — the backstop at the send', () => {
   /**
    * The half that does not depend on anybody remembering. An identity is

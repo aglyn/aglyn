@@ -156,7 +156,10 @@ import {
   releaseHostSendingDomain,
   restartHostSendingDomain,
 } from './host-sending-domain'
-import { hostSendingIdentity } from './sending-domains'
+import {
+  hostSendingIdentity,
+  resolveHostSendingIdentity,
+} from './sending-domains'
 
 const ORG = 'org123'
 const HOST = 'HostAbc123'
@@ -753,6 +756,90 @@ describe('the identity a site sends on, from a hostId alone', () => {
     // the disclosure and the resolver cannot drift apart.
     expect(verdict.summary).toMatch(/pooled/i)
     expect(verdict.from).not.toContain('aglyn.com')
+  })
+
+  /**
+   * THE PAID SITE WHOSE DEDICATED DOMAIN NEVER ARRIVED.
+   *
+   * A claim pins `hosts/{id}.sendingDomain` before any vendor has been called,
+   * so between the claim and a successful verification the site is pointing at
+   * a domain that cannot sign. Read as a merchant's SELECTION that would refuse
+   * every message the site sends — receipts included — which puts a paying
+   * workspace strictly behind a free one, whose unclaimed site sends on the
+   * pool.
+   *
+   * The pool is the floor and the dedicated domain is the optimization, so the
+   * states this can be stuck in — `requested` because provisioning has not run,
+   * `records-issued` because DNS has not propagated, `failed` because the zone
+   * write did not land — all send transactional mail on the pool meanwhile.
+   */
+  it.each(['requested', 'records-issued', 'failed'])(
+    'sends on the pool while its own dedicated domain is still %s',
+    async (status) => {
+      seedHost(HOST, 'acme')
+      const provisioned = await ensureHostSendingDomain({
+        hostId: HOST,
+        orgId: ORG,
+        subdomain: 'acme',
+      })
+      store.set(`orgs/${ORG}/sendingDomains/${provisioned.domain}`, {
+        ...store.get(`orgs/${ORG}/sendingDomains/${provisioned.domain}`),
+        status,
+      })
+
+      const verdict = await hostSendingIdentity(HOST)
+
+      expect(verdict.refusal).toBeNull()
+      expect(verdict.source).toBe('shared')
+      expect(verdict.from).toMatch(/^notifications@shared\d+\.mail\.aglyn\.app$/)
+      expect(verdict.from).not.toContain('aglyn.com')
+    },
+  )
+
+  /**
+   * Capacity exhaustion DEGRADES. The provider ceiling is an operator problem
+   * and the merchant is not the one who can act on it, so a site refused for
+   * capacity keeps confirming its orders.
+   */
+  it('sends on the pool when the dedicated domain was refused for capacity', async () => {
+    seedHost(HOST, 'acme')
+    const provisioned = await ensureHostSendingDomain({
+      hostId: HOST,
+      orgId: ORG,
+      subdomain: 'acme',
+    })
+    store.set(`orgs/${ORG}/sendingDomains/${provisioned.domain}`, {
+      ...store.get(`orgs/${ORG}/sendingDomains/${provisioned.domain}`),
+      lastIssueError: 'at-capacity',
+    })
+
+    const verdict = await hostSendingIdentity(HOST)
+
+    expect(verdict.refusal).toBeNull()
+    expect(verdict.source).toBe('shared')
+  })
+
+  /**
+   * The fallback is TRANSACTIONAL only, and the pool rule is unchanged by it.
+   *
+   * A campaign from a site whose dedicated domain has not verified still
+   * refuses, because the reason marketing may not use the pool — one
+   * merchant's complaint rate charged against everybody's receipts — has
+   * nothing to do with why this site has no domain yet.
+   */
+  it('still refuses MARKETING while the dedicated domain is unverified', async () => {
+    seedHost(HOST, 'acme')
+    await ensureHostSendingDomain({ hostId: HOST, orgId: ORG, subdomain: 'acme' })
+
+    const verdict = await resolveHostSendingIdentity({
+      orgId: ORG,
+      hostId: HOST,
+      selectedDomain: `acme.${MAIL_APEX}`,
+      purpose: 'marketing',
+    })
+
+    expect(verdict.from).toBeNull()
+    expect(verdict.refusal).not.toBeNull()
   })
 
   /**

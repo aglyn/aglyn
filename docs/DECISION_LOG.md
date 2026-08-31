@@ -92,6 +92,66 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-08-31 — A custom sending domain starts at Pro, and the platform subdomain becomes best-effort
+
+- **Decided by:** the account owner — the cheap shape is unlocked down the ladder and the expensive one is made degradable, so the platform's domain count stops growing with paying sites.
+- **Scope:** packaging
+- **Evidence:** the sending model has three shapes (`docs/design/email-sending-domains.md` §"What the model is instead"). The shared pool is flat — 4 provider domains and 12 DNS records at any number of sites. A **customer-owned** domain costs one provider slot and **zero** records in our zone, because the customer publishes them. A **dedicated platform subdomain** costs a provider slot, three records in our zone and a permanent place in the re-verification sweep, per site. Resend's self-serve ceiling is 1,100 domains (Scale's 1,000 plus a one-time +100 add-on toggle, not a repeatable per-100 purchase); five are used today.
+
+**No charged price moves.** This adds a capability to Pro and above; every
+price stays where the Sept-1 lock put it.
+
+### The inversion
+
+The option that costs the platform nothing was gated on `whiteLabel` — Agency
+and Enterprise — while the option that costs it a slot, three records and a
+recurring check was the default from Pro up. At 100,000 hosts with 10% paying
+that is 10,000 dedicated domains against a 1,095-domain headroom, 30,000 zone
+records, and about ten hours of Vercel's 50-records-per-minute creation limit.
+
+Both halves are corrected:
+
+- **`customSendingDomain`** is a new entitlement, held from Pro up, and it is
+  what the two sending routes read. It is deliberately **not** `whiteLabel`:
+  that flag replaces the Aglyn brand across every surface — product name, logo,
+  colors, support URL, console chrome, favicon — and widening it would hand Pro
+  a set of unrelated Agency features. Sending as your own name is one narrow
+  consequence of white-labeling, not the whole of it. `whiteLabel` itself is
+  untouched and stays Agency and Enterprise.
+- **The dedicated subdomain becomes an optimization on top of the pool.** A
+  site whose subdomain has not verified — the ceiling reached, a zone write
+  failed, the sweep not yet run — sends its transactional mail on the pool and
+  keeps sending it.
+
+### What the second half fixes, which was a live defect
+
+A claim pins `hosts/{id}.sendingDomain` before any vendor is called, and the
+resolver read that as a merchant's SELECTION. So between the claim and a
+successful verification a **paying** site refused every message it sent,
+receipts included, while a free site — never issued a subdomain, so never
+holding a selection — sent on the pool perfectly well. Capacity exhaustion
+would have converted a purchasing decision into an outage for exactly the tiers
+that pay.
+
+The line the resolver now draws is **whose domain it is**, not whether one is
+verified. A customer's own unverified domain still refuses outright: there the
+merchant published DNS and told us what their recipients would see, and sending
+as somebody else is not a degraded way of honoring that. A platform subdomain is
+a name we chose, provisioned and pointed the site at, so there is no instruction
+to contradict. Marketing is unchanged and still refuses on the pool, because one
+merchant's complaint rate must not be charged against every other site's
+password resets.
+
+### The resulting cost curve
+
+Domain count is `4 + (customers who bring their own) + (dedicated subdomains
+issued, bounded by AGLYN_SENDING_DOMAIN_CAPACITY)`. Only the middle term grows,
+it grows with willingness to pay rather than with signups, and it costs nothing
+in our zone. The ceiling on the last term is now safe to enforce: reaching it
+costs delivery isolation, never receipts.
+
+---
+
 ## 2026-08-28 — Fourteen commits cited issue ids that never existed; history stands and a guard refuses the next one
 
 - **Decided by:** the account owner — the history is not rewritten, the citations are corrected in place, and the issue-creation freeze holds.
