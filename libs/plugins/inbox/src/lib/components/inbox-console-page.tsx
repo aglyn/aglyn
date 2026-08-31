@@ -33,7 +33,6 @@ import {
 // component path reaches the same module without crossing that entry point.
 import { default as HostCampaignsCard } from '@aglyn/plugins-marketing/components/campaigns-card'
 import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
-import { default as HostOrdersCard } from '@aglyn/plugins-commerce/components/console/host-orders-card.component'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -101,9 +100,15 @@ const CONTACT_CEILING = 200
 
 /**
  * Inbox (AGL-77/104/109 → AGL-395): form submissions reader, site members +
- * leads, orders, and campaigns — owned by the inbox plugin and rendered by
- * the shell's generic plugin route. Depends on the commerce + email plugins
- * for the borrowed Orders and Campaigns tabs.
+ * leads, and campaigns — owned by the inbox plugin and rendered by the
+ * shell's generic plugin route. Depends on the email plugin for the borrowed
+ * Campaigns tab.
+ *
+ * Orders are NOT here. A sale is not something that arrived in an inbox, and
+ * the card was nested inside the members section rather than carrying a tab
+ * of its own — so the rail listed three sections while the page drew a fourth
+ * subject. Commerce already owns it: `commerce-console-sections.ts` declares
+ * an `orders` section that renders the same card.
  */
 export function InboxConsolePage(props: ConsolePluginPageProps) {
   const { hostId } = props
@@ -883,7 +888,6 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                 </>
               )}
                     </CardDisplay>
-                    <HostOrdersCard hostId={hostId} />
                   </Stack>
                 ),
               },
