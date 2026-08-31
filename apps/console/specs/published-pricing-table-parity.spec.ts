@@ -177,16 +177,54 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Storage per site — 250 MB · 2 · 10 · 50 · 75 · 100 · 200 GB', () => {
-      expect(quotaColumn('storagePerHostMb')).toEqual([
-        250, 2048, 10240, 51200, 76800, 102400, 204800,
-      ] satisfies Row)
+    /**
+     * ⚠️ THE CODE IS AHEAD OF THE PAGE — same situation, same treatment, as
+     * the email sends row below. See its docblock for why the transcription
+     * is not simply rewritten.
+     *
+     * `storagePerHostMb` and `bandwidthGb` are per-tier bands whose cost was
+     * never multiplied against the tier's price. Bandwidth is the largest
+     * single line item on every plan above Pro — one GB is 1,748 page views
+     * at `ESTIMATED_PAGE_TRANSFER_BYTES`, which is $0.175 of measured cost —
+     * so Agency's 20 TB alone was $3,495/month against a $799 subscription.
+     * `tier-margin-floor.spec.ts` carries the model and the resulting figures.
+     */
+    it('Storage per site — the four upper bands came down', () => {
+      const PUBLISHED: Row = [250, 2048, 10240, 51200, 76800, 102400, 204800]
+      const CODE: Row = [250, 2048, 10240, 20480, 30720, 40960, 61440]
+      expect(quotaColumn('storagePerHostMb')).toEqual(CODE)
+      // Free, Starter and Pro did not move — a sweep that halved all seven
+      // would not read as this change.
+      expect(CODE.slice(0, 3)).toEqual(PUBLISHED.slice(0, 3))
+      expect(
+        PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
+          .filter(([, was, now]) => was !== now),
+      ).toEqual([
+        ['business', 51200, 20480],
+        ['scale', 76800, 30720],
+        ['advanced', 102400, 40960],
+        ['agency', 204800, 61440],
+      ])
     })
 
-    it('Bandwidth / mo — 5 · 50 · 250 GB · 1 · 2.5 · 5 · 20 TB', () => {
-      expect(quotaColumn('bandwidthGb')).toEqual([
-        5, 50, 250, 1000, 2500, 5000, 20000,
-      ] satisfies Row)
+    it('Bandwidth / mo — the four upper bands and Free came down', () => {
+      const PUBLISHED: Row = [5, 50, 250, 1000, 2500, 5000, 20000]
+      const CODE: Row = [2, 50, 250, 500, 900, 1500, 4000]
+      expect(quotaColumn('bandwidthGb')).toEqual(CODE)
+      // Starter and Pro did not move. FREE did, and it is the one band on
+      // that tier that can never be metered — there is no subscription to
+      // bill an overage onto, so it is a pure give at $0.175 a GB.
+      expect(CODE.slice(1, 3)).toEqual(PUBLISHED.slice(1, 3))
+      expect(
+        PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
+          .filter(([, was, now]) => was !== now),
+      ).toEqual([
+        ['free', 5, 2],
+        ['business', 1000, 500],
+        ['scale', 2500, 900],
+        ['advanced', 5000, 1500],
+        ['agency', 20000, 4000],
+      ])
     })
 
     it.each([
@@ -343,16 +381,32 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ] satisfies Row)
     })
 
-    it('Form submissions / mo — 20 · 200 · 1k · 10k · 50k · 100k · Unlimited', () => {
-      expect(quotaColumn('formSubmissionsPerMonth')).toEqual([
-        20,
-        200,
-        1000,
-        10000,
-        50000,
-        100000,
-        UNLIMITED,
-      ] satisfies Row)
+    /**
+     * ⚠️ THE CODE IS AHEAD OF THE PAGE — and Agency's cell changes KIND, not
+     * only value: "Unlimited" becomes a number.
+     *
+     * This band is per HOST and `meteredIncludedAllowance` expands it by
+     * `hostLimit`, so at Agency's 100 hosts an unbounded figure was not
+     * merely large — it made the tier's whole cost model unbounded, and an
+     * unbounded term reads as ZERO in any analysis that scores an absent band
+     * as nothing. It was the biggest thing nobody was counting.
+     *
+     * Bounding it is safe because Agency METERS: `meteredInfraPassThrough` is
+     * true, so submissions past the band bill at the pass-through rate rather
+     * than being refused, and a merchant's lead form does not stop working at
+     * 25,000.
+     */
+    it('Form submissions / mo — Agency stops being unlimited', () => {
+      const PUBLISHED: Row = [20, 200, 1000, 10000, 50000, 100000, UNLIMITED]
+      const CODE: Row = [20, 200, 1000, 8000, 25000, 40000, 25000]
+      expect(quotaColumn('formSubmissionsPerMonth')).toEqual(CODE)
+      expect(CODE.slice(0, 3)).toEqual(PUBLISHED.slice(0, 3))
+      // Every cell is now a finite number, which is the property the cost
+      // model needs and the one the published table cannot express.
+      for (const value of CODE) expect(Number.isFinite(value)).toBe(true)
+      expect(PUBLISHED[6]).toBe(UNLIMITED)
+      // Metered, so the bound bills rather than refuses.
+      expect(PLAN_PRICING.agency.meteredInfraPassThrough).toBe(true)
     })
 
     it('Contacts included — 100 · 1k · 10k · 100k · 500k · 1M · Unlimited', () => {
@@ -421,10 +475,16 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         }
       })
 
-      it('no CHARGED price moved with it — the freeze holds', () => {
+      it('no CHARGED price moved with the email change itself', () => {
+        // The allowance reduction is separable from the price move that came
+        // after it: the six tiers whose email band this row is about are all
+        // still at their published price, and Agency's rise is a different
+        // change with its own reasoning, pinned in the `prices` block below.
         expect(
-          PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
-        ).toEqual([0, 25, 56, 139, 249, 399, 799] satisfies Row)
+          PUBLISHED_COLUMNS.filter((plan) => plan !== 'agency').map(
+            (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
+          ),
+        ).toEqual([0, 25, 56, 139, 249, 399])
       })
 
       it('names the republish this change is waiting on', () => {
@@ -561,18 +621,55 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // Headline prices and the add-on rate table.
   // ---------------------------------------------------------------------
   describe('prices', () => {
-    it('monthly — $0 · $25 · $56 · $139 · $249 · $399 · $799', () => {
+    /**
+     * ⚠️ ONE CHARGED PRICE HAS MOVED, AND IT IS NOT YET PUBLISHED.
+     *
+     * This is the row the header's freeze warning is about, so it is worth
+     * being exact: Agency $799 -> $1,299 monthly and $649 -> $1,055 annual.
+     * Six of the seven columns are untouched.
+     *
+     * Agency included 100 hosts, 20 TB of bandwidth and an UNBOUNDED
+     * form-submission band against $799. It was simultaneously the worst
+     * margin on the ladder and the most underpriced against the field: Duda
+     * charges ~$1,396-1,493/mo for 100 sites, BigCommerce Enterprise starts
+     * at $1,499, Shopify Plus at $2,300. $1,299 still undercuts all three.
+     *
+     * ⛔ NOTHING HERE MAKES THIS LIVE. `/pricing` still publishes $799, and
+     * Stripe prices are immutable — the live SKUs are `aglyn_agency_v2` at
+     * $799 and `_yearly` at $7,788, and charging $1,299 needs NEW Stripe
+     * prices plus new `STRIPE_PRICE_AGENCY` / `STRIPE_PRICE_AGENCY_YEARLY`
+     * values. Until both happen this constant is what the console DISPLAYS
+     * and not what any customer is charged, and that gap is the thing this
+     * case exists to keep visible.
+     */
+    it('monthly — six columns unchanged, Agency at $1,299', () => {
+      const PUBLISHED: Row = [0, 25, 56, 139, 249, 399, 799]
+      const CODE: Row = [0, 25, 56, 139, 249, 399, 1299]
       expect(
         PUBLISHED_COLUMNS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
-      ).toEqual([0, 25, 56, 139, 249, 399, 799] satisfies Row)
+      ).toEqual(CODE)
+      expect(
+        PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
+          .filter(([, was, now]) => was !== now),
+      ).toEqual([['agency', 799, 1299]])
     })
 
-    it('annual, per month — $0 · $16 · $39 · $99 · $179 · $299 · $649', () => {
+    it('annual, per month — the same one column, at the same discount', () => {
+      const PUBLISHED: Row = [0, 16, 39, 99, 179, 299, 649]
+      const CODE: Row = [0, 16, 39, 99, 179, 299, 1055]
       expect(
         PUBLISHED_COLUMNS.map(
           (plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd,
         ),
-      ).toEqual([0, 16, 39, 99, 179, 299, 649] satisfies Row)
+      ).toEqual(CODE)
+      expect(
+        PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
+          .filter(([, was, now]) => was !== now),
+      ).toEqual([['agency', 649, 1055]])
+      // The discount held its ratio. Moving the monthly alone would have
+      // widened Agency's annual discount to 50% on the one tier being
+      // repriced for margin — a bigger leak than the rise closes.
+      expect(1 - 1055 / 1299).toBeCloseTo(1 - 649 / 799, 2)
     })
 
     it('Enterprise publishes no list price — the card reads "Custom"', () => {
@@ -599,9 +696,26 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ]).toEqual([null, null, null, null, null, null, null])
     })
 
-    it('Extra site, per month — $10 · $8 · $5 · $5 · $4 · $3', () => {
-      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual([
-        10, 8, 5, 5, 4, 3,
+    /**
+     * ⚠️ THE CODE IS AHEAD OF THE PAGE. The descending ladder was inverted
+     * against its own cost: an extra host adds that tier's per-host storage
+     * and form-submission bands to the org's included allowance, so the tiers
+     * granting the most were charging the least — 24% margin at Advanced and
+     * 6% at Agency. Flat $8 above Starter; Business stays at $5 because it
+     * genuinely grants the smallest bands of the four, and raising a shipped
+     * price needs a decision this change did not have.
+     */
+    it('Extra site, per month — flat $8 above Starter', () => {
+      const PUBLISHED = [10, 8, 5, 5, 4, 3]
+      const CODE = [10, 8, 5, 8, 8, 8]
+      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual(CODE)
+      expect(
+        PAID.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
+          .filter(([, was, now]) => was !== now),
+      ).toEqual([
+        ['scale', 5, 8],
+        ['advanced', 4, 8],
+        ['agency', 3, 8],
       ])
     })
 
@@ -623,10 +737,25 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ])
     })
 
-    it('Extra dataset storage — $0.25 / GB-month on every paid plan', () => {
+    /**
+     * ⚠️ THE CODE IS AHEAD OF THE PAGE. $0.25 against a
+     * `dataStoragePerGbMonth` cost of $0.18 is a 28% line margin — close
+     * enough to the infrastructure pass-through's 23% that the two looked
+     * like the same kind of number while being sold as opposites. $0.36 is
+     * the 50% retail floor.
+     *
+     * ⛔ This is the DATASET add-on line, not the metered storage
+     * pass-through: `/pricing` carries two per-GB-month figures and the other
+     * one, $0.0338, is correct and must not be touched.
+     */
+    it('Extra dataset storage — floored at the retail margin', () => {
       expect(PAID.map((p) => PLAN_PRICING[p].extraDataGbMonthlyUsd)).toEqual([
-        0.25, 0.25, 0.25, 0.25, 0.25, 0.25,
+        0.36, 0.36, 0.36, 0.36, 0.36, 0.36,
       ])
+      // Both halves of the reason, so a future editor cannot restore $0.25
+      // without seeing what it costs.
+      expect((0.25 - 0.18) / 0.25).toBeLessThan(0.5)
+      expect((0.36 - 0.18) / 0.36).toBeGreaterThanOrEqual(0.5)
     })
 
     it('API requests per 1,000 over limit — — · — · $0.50 · $0.35 · $0.20 · $0.15', () => {

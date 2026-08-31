@@ -866,13 +866,13 @@ describe('AGL-1878: usage is withheld rather than forfeited when nothing can bil
  * direction the locked-pricing rule reserves for him.
  *=========================================*/
 describe('contacts and dataset storage bill the month, not the sweep (AGL-2399)', () => {
-  /** Starter: 1,000 contacts included at $1.00/1k, 1,024 MB at $0.25/GB. */
+  /** Starter: 1,000 contacts included at $1.00/1k, 1,024 MB at $0.36/GB. */
   const CONTACTS_AT_PERIOD_END = 6_000
   const DATA_MB_AT_PERIOD_END = 5_000
   /** 5,000 contacts over the band at $1/1k. */
   const EXPECTED_CONTACT_OVERAGE_USD = 5
-  /** (5000 - 1024) MB = 3.8828125 GB x $0.25, rounded to the cent. */
-  const EXPECTED_DATA_OVERAGE_USD = 0.97
+  /** (5000 - 1024) MB = 3.8828125 GB x $0.36, rounded to the cent. */
+  const EXPECTED_DATA_OVERAGE_USD = 1.4
 
   /**
    * What last month's daily in-progress sweeps left on the document — the

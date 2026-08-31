@@ -213,9 +213,18 @@ describe('the included campaign-email bands', () => {
     // Without this the assertion above could be satisfied by a ceiling set so
     // loosely that nothing could ever fail it. These are the figures that
     // were shipping, and four of them are offenders.
-    const prices = Object.fromEntries(
-      PAID.map((plan) => [plan, PLAN_PRICING[plan].basePriceMonthlyUsd]),
-    )
+    //
+    // The PRICES are the pre-change ones too, written out rather than read:
+    // Agency's has since moved to $1,299, and measuring an old band against a
+    // new price would compare two states neither of which ever shipped.
+    const prices = {
+      starter: 25,
+      pro: 56,
+      business: 139,
+      scale: 249,
+      advanced: 399,
+      agency: 799,
+    }
     expect(
       tiersOverCogsCeiling(
         {
@@ -248,7 +257,9 @@ describe('the included campaign-email bands', () => {
       business: 16.2,
       scale: 14.5,
       advanced: 14.7,
-      agency: 14.6,
+      // Agency reads lower than its neighbours because its PRICE moved as
+      // well as its band — $1,299, not $799.
+      agency: 9,
     })
   })
 })
@@ -626,28 +637,50 @@ describe('band and rate agree about whether an "over" exists', () => {
 // ---------------------------------------------------------------------------
 // No charged price moved.
 // ---------------------------------------------------------------------------
-describe('the Sept 1 price freeze is intact', () => {
-  it('every list price is what it was', () => {
+describe('exactly one list price moved with the email change', () => {
+  it('the six unchanged ones are still what they were', () => {
+    // The email work moved no price at all; the band resize that followed it
+    // moved exactly one. Both halves are asserted, because "we changed a
+    // price" and "we changed the price list" are different events.
     expect(
-      SELF_SERVE_PLANS.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd),
-    ).toEqual([0, 25, 56, 139, 249, 399, 799])
+      SELF_SERVE_PLANS.filter((plan) => plan !== 'agency').map(
+        (plan) => PLAN_PRICING[plan].basePriceMonthlyUsd,
+      ),
+    ).toEqual([0, 25, 56, 139, 249, 399])
     expect(
-      SELF_SERVE_PLANS.map(
+      SELF_SERVE_PLANS.filter((plan) => plan !== 'agency').map(
         (plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd,
       ),
-    ).toEqual([0, 16, 39, 99, 179, 299, 649])
+    ).toEqual([0, 16, 39, 99, 179, 299])
   })
 
-  it('the dataset add-on rate is untouched, and is NOT a metered rate', () => {
+  it('Agency is the one that did, on both intervals together', () => {
+    // Moving the monthly alone would have widened the annual discount to 50%
+    // on the single tier being repriced for margin.
+    expect(PLAN_PRICING.agency.basePriceMonthlyUsd).toBe(1299)
+    expect(PLAN_PRICING.agency.basePriceAnnualMonthlyUsd).toBe(1055)
+    const discount =
+      1 -
+      PLAN_PRICING.agency.basePriceAnnualMonthlyUsd /
+        PLAN_PRICING.agency.basePriceMonthlyUsd
+    expect(discount).toBeCloseTo(1 - 649 / 799, 2)
+  })
+
+  it('the dataset add-on rate is NOT the metered storage pass-through', () => {
     // `/pricing` carries two per-GB-month figures and they mean different
-    // things: $0.0338 is the metered storage pass-through, $0.25 is the
-    // dataset add-on retail line. Confusing them is a standing hazard, so
-    // both are pinned here beside each other.
+    // things: $0.0338 is the metered pass-through on GCS media bytes, and
+    // this is the retail line on Firestore-backed dataset bytes. Confusing
+    // them is a standing hazard, so both are pinned here beside each other.
     for (const plan of PAID) {
       expect(`${plan}: ${PLAN_PRICING[plan].extraDataGbMonthlyUsd}`).toBe(
-        `${plan}: 0.25`,
+        `${plan}: 0.36`,
       )
     }
     expect(METERED_BILLED_RATES_USD.storagePerGbMonth).toBeCloseTo(0.0338, 6)
+    // …and the retail line clears the 50% floor against its own cost, which
+    // is what moved it off $0.25 (a 28% margin).
+    const cost = ORG_COGS_UNIT_RATES_USD.dataStoragePerGbMonth
+    expect((0.36 - cost) / 0.36).toBeGreaterThanOrEqual(0.5)
+    expect((0.25 - cost) / 0.25).toBeLessThan(0.5)
   })
 })

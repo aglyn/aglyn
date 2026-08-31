@@ -258,7 +258,7 @@ const MONTH = '2026-07'
 /**
  * One org, one host, every band blown by 100–1000×.
  *
- * Free includes 250 MB of media, ~8,948 page views (5 GB), 20 form
+ * Free includes 250 MB of media, ~3,495 page views (2 GB), 20 form
  * submissions, 0 MB of dataset storage, 0 API requests and 100 contacts.
  */
 function seedOrg(plan: string) {

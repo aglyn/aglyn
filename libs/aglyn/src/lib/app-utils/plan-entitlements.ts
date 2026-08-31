@@ -230,7 +230,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 1,
     maxManagersPerOrg: 1,
     maxMembersPerHost: 1,
-    bandwidthGb: 5,
+    bandwidthGb: 2,
     formSubmissionsPerMonth: 20,
     // No saved-form CATALOG on Free: the form entity rides
     // `reusableComponents`, which is Starter-and-above, so
@@ -470,13 +470,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 51200,
+    storagePerHostMb: 20480,
     membersPerHost: 50,
     managersPerOrg: 15,
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
-    bandwidthGb: 1000,
-    formSubmissionsPerMonth: 10000,
+    bandwidthGb: 500,
+    formSubmissionsPerMonth: 8000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
     functionsPerHost: 250,
@@ -543,13 +543,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 76800,
+    storagePerHostMb: 30720,
     membersPerHost: 75,
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
-    bandwidthGb: 2500,
-    formSubmissionsPerMonth: 50000,
+    bandwidthGb: 900,
+    formSubmissionsPerMonth: 25000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
     functionsPerHost: 500,
@@ -613,13 +613,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 102400,
+    storagePerHostMb: 40960,
     membersPerHost: 100,
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
-    bandwidthGb: 5000,
-    formSubmissionsPerMonth: 100000,
+    bandwidthGb: 1500,
+    formSubmissionsPerMonth: 40000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: 1000,
@@ -687,13 +687,25 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     screensPerHost: UNLIMITED,
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
-    storagePerHostMb: 204800,
+    storagePerHostMb: 61440,
     membersPerHost: 250,
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
-    bandwidthGb: 20000,
-    formSubmissionsPerMonth: UNLIMITED,
+    bandwidthGb: 4000,
+    // FINITE, where every other capacity row on this tier is unbounded.
+    // `formSubmissionsPerMonth` is multiplied by `hostLimit` to get the
+    // org-wide band, so at 100 hosts an unbounded figure was not merely
+    // large — it made this tier's cost model unbounded, and an unbounded
+    // term reads as ZERO in any analysis that scores an absent band as
+    // nothing. That is how it stayed invisible: the biggest line item on the
+    // most expensive self-serve plan, contributing 0 to every total.
+    //
+    // Metering makes it safe to bound. `meteredInfraPassThrough` is true
+    // here, so submissions past the band BILL at the pass-through rate
+    // rather than being refused — a merchant's lead form does not stop
+    // working at 25,000.
+    formSubmissionsPerMonth: 25000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
     functionsPerHost: UNLIMITED,
@@ -943,6 +955,26 @@ export interface PlanPricing {
   /**
    * Monthly price per host beyond `hostLimit` (AGL-68); null when the plan
    * cannot buy extra hosts.
+   *
+   * ## It is not a discount ladder, because what it GRANTS is not constant
+   *
+   * `storagePerHostMb` and `formSubmissionsPerMonth` are per-HOST
+   * entitlements, and `meteredIncludedAllowance` expands both by `hostLimit`
+   * — so an extra host does not add a slot, it adds that tier's per-host
+   * bands to the org's included allowance. A tier that includes more per host
+   * therefore hands over more capacity for the same purchase.
+   *
+   * A ladder that stepped down with the tier inverted that: the tiers
+   * granting the most charged the least, and the two largest ran at 24% and
+   * 6% margin on a line sold as an add-on. The shape now is $10 on Starter,
+   * $8 everywhere above it — flat rather than descending, because above
+   * Starter the capacity an extra host grants is what varies and the price
+   * cannot chase it downward.
+   *
+   * Business sits at $5 and is the exception: it genuinely grants the
+   * smallest bands of the tiers above Pro. It is left where it is rather than
+   * raised to match, because raising a shipped price is a decision with an
+   * invoice behind it and nothing about this line needed one.
    */
   extraHostMonthlyUsd: number | null
   /**
@@ -965,10 +997,21 @@ export interface PlanPricing {
    */
   extraDatasetMonthlyUsd: number | null
   /**
-   * Metered overage per GB-month of dataset storage beyond
-   * `dataStorageMbPerOrg` (AGL-240). Priced from Firestore storage cost
-   * (~$0.18/GiB-mo) at roughly the platform's cost-plus posture; null
-   * when the plan hard-blocks at the included size instead of metering.
+   * Retail overage per GB-month of dataset storage beyond
+   * `dataStorageMbPerOrg` (AGL-240); null when the plan hard-blocks at the
+   * included size instead of metering.
+   *
+   * ⛔ **NOT the metered storage pass-through.** `/pricing` publishes two
+   * per-GB-month figures and they are different products: the pass-through
+   * is `METERED_BILLED_RATES_USD.storagePerGbMonth` at $0.0338, media bytes
+   * on GCS at cost + 30%; this is Firestore-backed DATASET bytes, an order
+   * of magnitude pricier to store, sold as a retail line. Confusing the two
+   * is the easiest way to corrupt a correct price, in either direction.
+   *
+   * Priced against `ORG_COGS_UNIT_RATES_USD.dataStoragePerGbMonth` ($0.18)
+   * at the 50% retail floor. It sat at $0.25 — a 28% line margin, close
+   * enough to the pass-through's 23% that the two looked like the same kind
+   * of number while being sold as opposites.
    */
   extraDataGbMonthlyUsd: number | null
   /**
@@ -1072,7 +1115,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 5,
     extraCollaboratorMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: 1,
     extraEmailSendsUsdPer1k: 2.5,
@@ -1085,7 +1128,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
     extraContactsUsdPer1k: 0.75,
     extraEmailSendsUsdPer1k: 2.25,
@@ -1098,7 +1141,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 3,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.5,
     extraContactsUsdPer1k: 0.5,
     extraEmailSendsUsdPer1k: 2,
@@ -1107,11 +1150,11 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   scale: {
     basePriceMonthlyUsd: 249,
     basePriceAnnualMonthlyUsd: 179,
-    extraHostMonthlyUsd: 5,
+    extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.35,
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.9,
@@ -1120,11 +1163,11 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   advanced: {
     basePriceMonthlyUsd: 399,
     basePriceAnnualMonthlyUsd: 299,
-    extraHostMonthlyUsd: 4,
+    extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.2,
     // FLOORED at the 50% retail margin, not stepped down again. The ladder
     // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
@@ -1135,14 +1178,24 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraEmailSendsUsdPer1k: 1.85,
     meteredInfraPassThrough: true,
   },
+  // Agency is the one tier whose PRICE moved. It included 100 hosts, 20 TB of
+  // bandwidth and an unbounded form-submission band against $799, which made
+  // it both the worst margin on the ladder and the most underpriced against
+  // the field: Duda charges ~$1,396-1,493/mo for 100 sites, BigCommerce
+  // Enterprise starts at $1,499 and Shopify Plus at $2,300. $1,299 still
+  // undercuts all three for the buyer this architecture is built for.
   agency: {
-    basePriceMonthlyUsd: 799,
-    basePriceAnnualMonthlyUsd: 649,
-    extraHostMonthlyUsd: 3,
+    basePriceMonthlyUsd: 1299,
+    // The annual discount holds its ratio (18.8%) across the rise. Leaving
+    // it at $649 while the monthly moved would have widened the annual
+    // discount to 50% on the one tier being repriced for margin — a bigger
+    // leak than the one the rise closes, on the customers who prepay.
+    basePriceAnnualMonthlyUsd: 1055,
+    extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 2,
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.25,
+    extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.15,
     // NULL, not 0.2, because Agency's `contactsPerHost` is UNLIMITED and an
     // uncapped band has no "over" (AGL-2439). The rate was unreachable

@@ -126,7 +126,7 @@ const paidOrg = () => ({ plan: 'starter', subscription: { status: 'active' } }) 
 const FREE = {
   hostLimit: 1,
   storagePerHostMb: 250,
-  bandwidthGb: 5,
+  bandwidthGb: 2,
   formSubmissionsPerMonth: 20,
   contactsPerHost: 100,
   apiRequestsPerMonth: 0,
@@ -155,7 +155,7 @@ describe('the free plan carries no price on any billable dimension', () => {
     // nothing at all, which would pass every assertion here and bill nobody
     // anywhere. Starter is where "free stays free" stops being the rule.
     expect(PLAN_PRICING.starter.meteredInfraPassThrough).toBe(true)
-    expect(PLAN_PRICING.starter.extraDataGbMonthlyUsd).toBe(0.25)
+    expect(PLAN_PRICING.starter.extraDataGbMonthlyUsd).toBe(0.36)
     expect(PLAN_PRICING.starter.extraContactsUsdPer1k).toBe(1)
     expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBe(2.5)
     expect(planMetersInfraOverage(paidOrg())).toBe(true)
