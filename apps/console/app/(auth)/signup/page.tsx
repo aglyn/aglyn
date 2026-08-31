@@ -27,6 +27,8 @@ import {
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { reportPlatformAdConversion } from '@aglyn/aglyn/app-utils/platform-ad-conversions'
+import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
@@ -69,6 +71,7 @@ import {
   useFirestore,
   useSigninCheck,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
@@ -211,15 +214,15 @@ async function provisionSignUpOrg(
   const name = orgName.trim()
   if (!name) return null
   try {
-    const idToken = await credential.user.getIdToken()
-    const response = await fetch('/api/orgs/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`,
+    const response = await authorizedFetch(
+      credential.user,
+      '/api/orgs/create',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
       },
-      body: JSON.stringify({ name }),
-    })
+    )
     const payload = await response.json().catch(() => null)
     // A 409 means the slug was taken — the org was NOT created, so falling
     // through to the picker is right; inventing a suffix here would hand the
@@ -507,6 +510,25 @@ function SignUp() {
             // all instead of three empty ones.
             ...campaignParams,
           })
+          /*
+           * The Google Ads conversion, beside the GA4 event and never instead
+           * of it (AGL-1152).
+           *
+           * A GA4 key event imported into Ads lands as a conversion ACTION
+           * without creating a conversion GOAL, and only a goal can be bid on
+           * or reported in the Conversions column. This tag-fired one is what
+           * makes `Sign-ups` a goal at all.
+           *
+           * Fired from the BROWSER rather than the server path `purchase`
+           * uses: an Ads website conversion is matched to the ad click through
+           * the GCLID the tag holds, which no webhook has.
+           *
+           * Gated on this visitor's advertising verdict, passed in rather than
+           * read inside the reporter — and it degrades to "not sent" when no
+           * tag has booted, which is precisely the visitor who refused. A
+           * signup must never fail because a conversion could not be reported.
+           */
+          reportPlatformAdConversion('signup', platformAdvertisingAllowed())
           // Record the acceptance FIRST (AGL-1497). Both branches below can
           // end in `window.location.assign`, which tears this page down — a
           // record started after that navigation is a record that sometimes

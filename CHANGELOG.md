@@ -9,6 +9,559 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.28 — 2026-08-31
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/97daf9521...v1.0.0-beta.28)
+
+### Added
+
+- **console:** a campaign holds the screens, forms and contacts a push runs across
+- **console:** the inbox's sections are addresses, not tabs
+- **email:** an email is written on its own page, and its message has one source
+- **marketing:** a campaign of several emails reports what it earned
+- **email:** a site holds several senders and an email picks one
+- **billing:** a dedicated sending domain is an entitlement, not a tier
+- **console:** a campaign's page says what it caused and where it sent people
+- **email:** a site chooses the address and the person its mail comes from
+- **billing:** a custom sending domain begins at Pro
+- **email:** a site without its own domain sends receipts, not nothing
+- **pricing:** campaign email begins at Pro, and Starter cannot send
+- **email:** the opt-out pages carry the sending site's brand, not the platform's ([AGL-2411](https://linear.app/aglyn/issue/AGL-2411))
+- **console:** a plugin widget asks who is looking, once per page
+- **console:** the organization can see the person its sites share
+- **console:** the register and the email console declare who may open them
+- **billing:** the page-view rate is held to the page weight it prices
+- **console:** the modules the conversions surfaces are built from
+- **console:** what the campaigns caused is finally on screen
+- **console:** the utilization every margin figure assumes is measured
+- **console:** the shell decides who may open a plugin surface, not the plugin
+- **console:** the page heading says which section of a surface is open
+- **billing:** assist is metered in what it costs, not in how often it is asked
+- **console:** the Forms create button moves up into the page header
+- **billing:** the tier bands are costed against the prices they are sold at
+- **billing:** email sending is priced, and the top plan is no longer unbounded
+- **email:** the provisioning sweep claims for sites that have none
+- **email:** a site's mail leaves on its own domain, never on aglyn.com
+- **tenant:** a campaign gets credit for the form, lead, contact and booking it caused
+- **console:** the forms surface reaches parity with reusable components
+- **email:** the composer names the address it leaves on, and refuses before Send
+- **email:** a tenant can add a sending domain, publish its records and verify it
+- **email:** one site's sending identity has a route, and only an org admin may write it
+- **email:** a test send picks its persona, its recipient and its identity
+- **billing:** how many forms a site may hold stops being a per-tier lever
+- **billing:** how many forms a site may hold is a plan allowance, and it is published
+- **email:** a campaign says what it earned, because we own the checkout
+- **email:** stop mailing an address that has gone quiet, without removing it
+- **email:** an audience can ask who opened, and say "any of" and "not"
+- **email:** engagement is rolled onto the person, not only the message
+- **email:** the console says what a send is doing, and lets a campaign be edited
+- **email:** a campaign can be removed and a draft thrown away, without losing a send
+- **email:** a merchant can require a confirmation click, per stream
+- **email:** a verified sending domain has to keep proving itself
+- **besigner:** a form is designed in the besigner, and cannot be published broken
+- **console:** forms have a list and a page of their own
+- **forms:** a form is a versioned document, on the rails a component runs on
+- **email:** a recipient can ask for less mail instead of none
+- **email:** a campaign reaches an audience larger than one send
+- **email:** a workspace has its own bounce and complaint rate, and a new one is ramped
+- **automations:** an automation can wait, so a sequence can exist
+- **email:** a customer can bring the list they already have
+- **email:** an email is written, sent and withdrawn on its own page
+- **forms:** a design that would silently stop collecting cannot be published
+- **email:** you can write an email here, and send one to more people later
+- **email:** every remaining list on the surface reads by the same row grammar
+- **email:** a campaign row is a link and carries the console's trailing actions cluster
+- **email:** a message row opens the message, and carries where else it leads
+- **email:** a topic row opens the topic, and Edit moves off the row
+- **email:** the templates list is a table, and its actions are where every other list keeps them
+- **email:** a plain-text message previews the mail it actually sent
+- **email:** the platform suppression list has a reader, a release and an explanation
+- **email:** the composer sends under a topic, and creates through the shared drawer
+- **email:** an audience is a resource, with pages and a real filter builder
+- **email:** a campaign holds many emails, and the send dialog states its size
+- **marketplace:** a campaign email can start from somebody else's design
+- **email:** a recipient can leave one stream instead of the whole site
+- **email:** a merchant can put an address on the suppression list by hand
+- **email:** an email and a template each get their own page
+- **email:** the delivery log answers who opened one site's mail
+- **email:** a send records which list it went to
+- **console:** billing shows the pace a workspace is throttled at ([AGL-2409](https://linear.app/aglyn/issue/AGL-2409), [AGL-890](https://linear.app/aglyn/issue/AGL-890), [AGL-2482](https://linear.app/aglyn/issue/AGL-2482), [AGL-1046](https://linear.app/aglyn/issue/AGL-1046))
+- **console:** an email list can be read, renamed, added to and taken from
+- **console:** a campaign report, with every denominator on screen
+- **email:** a campaign keeps the populations its own send measured
+- **email:** the unsubscribe link can say which campaign it came from
+- **email:** the delivery webhook records what a campaign rate divides by
+- **email:** campaign reporting math where every denominator is named
+- **data:** a dataset record can be read without being opened for editing
+- **console:** plan cards state the campaign email allowance, three to a row ([AGL-1438](https://linear.app/aglyn/issue/AGL-1438))
+- **console:** the site's name, address and backups move to the Admin hub
+- **console:** billing opens on the upgrade decision, not the whole catalogue ([AGL-1864](https://linear.app/aglyn/issue/AGL-1864), [AGL-1863](https://linear.app/aglyn/issue/AGL-1863), [AGL-1859](https://linear.app/aglyn/issue/AGL-1859))
+- **console:** a sending domain can ask a provider for its signing key ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **forms:** the forms that already exist can be adopted, and keep their history
+- **forms,inbox:** per-form submission lists key on the id, not the caption
+- **forms,leads:** a form captures a lead, and one person is one lead ([AGL-76](https://linear.app/aglyn/issue/AGL-76))
+- **forms:** a form is a thing, not the caption an author typed
+- **email:** the default consent policy enforces retroactively ([AGL-2499](https://linear.app/aglyn/issue/AGL-2499))
+- **tools:** backfill a marketing-consent basis over the pre-release records
+- **email:** a consent basis records whose act it was, not just what it says
+- **inbox,console,docs:** add a form's sender to a list, on a basis somebody stated
+- **tenant-data-admin:** a list membership records WHY it may be mailed, and honors a refusal
+- **cloud:** the dynamic-list sweep gets the index its query needs
+- **email:** a list can be a rule, and the rule never drops anybody
+- **email:** a campaign reaches the people who agreed to hear from it ([AGL-301](https://linear.app/aglyn/issue/AGL-301))
+- **console:** the sending-domain records are shown, not guessed at
+- **marketing:** a campaign on an unverified domain answers 409, not silence
+- **tenant-data-admin:** a site's bulk send can ask both suppression lists
+- **email:** a sending domain that DNS has not proved cannot reach verified
+- **email:** a workspace gets a share of the platform hour, not all of it
+- **email:** the send path refuses an unverified identity, twice over
+- **email:** the three send ceilings are dimensioned against each other
+- **email:** a sending domain that is not verified refuses the send
+- **aglyn:** one address-derived document id, on the server side of the barrel ([AGL-2499](https://linear.app/aglyn/issue/AGL-2499))
+- **console:** the dashboard keeps the cards you keep
+- **plugins:** a dashboard widget declares the name its switch will carry
+- **inbox,console:** answer a form submission from the Inbox
+- **inbox,console:** the dashboard says what is waiting for a reply ([AGL-419](https://linear.app/aglyn/issue/AGL-419))
+- **console,commerce,email:** the dashboard glance cards are registered, not imported ([AGL-433](https://linear.app/aglyn/issue/AGL-433))
+- **console:** the upgrade collects what it needs instead of sending you away ([AGL-1132](https://linear.app/aglyn/issue/AGL-1132))
+- **console,tenant:** the subscription lifecycle reaches the workspace feed ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **tools:** fold one person's two accounts together, by sweeping for the uid ([AGL-2005](https://linear.app/aglyn/issue/AGL-2005), [AGL-2029](https://linear.app/aglyn/issue/AGL-2029))
+- **console:** the Stripe portal gains a staff door on the org page ([AGL-275](https://linear.app/aglyn/issue/AGL-275))
+- **tenant-data-admin,commerce,marketplace:** a payout that never landed leaves a record
+- **aglyn,console,commerce:** a plugin console page can be a hub of routes ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console,tenant,scripts:** creation is an event too, and a check that says so ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **console,docs:** a way to pay an overdue invoice, and a quote that explains its tax
+- **console,tenant:** a resource records who made it, and the route records that it was made ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **scripts,docs:** reconstruct the activity entries that were never written ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **console:** subscribing is our own page now, and billing details need no plan ([AGL-1340](https://linear.app/aglyn/issue/AGL-1340))
+- **console,shared-util-email:** open a delivery row to read the message
+- **console,shared-util-email,tenant-data-admin:** import the mail sent before the feed existed
+- **console,aglyn:** a plugin page owns its switch ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1014](https://linear.app/aglyn/issue/AGL-1014), [AGL-428](https://linear.app/aglyn/issue/AGL-428))
+- **console,docs:** where the platform files its sales tax is a control, not a redeploy ([AGL-2021](https://linear.app/aglyn/issue/AGL-2021))
+- **console,shared-ui-theme:** the card form is ours now, and nothing opens over the page
+- **console,docs,aglyn,tenant:** the ad tags reach every surface we own, and stop on the same word
+- **tools:** one paste sets a secret in .env and on Vercel
+- **console,docs:** billing settings you can read and change without a popup ([AGL-940](https://linear.app/aglyn/issue/AGL-940), [AGL-1133](https://linear.app/aglyn/issue/AGL-1133))
+- **console,shared-util-email,tenant-data-admin:** what we sent someone, on their staff page
+- **tenant,tools:** already-published images get their intrinsic size ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console,tenant,aglyn:** a site's plugin settings follow the workspace's, and can stop ([AGL-428](https://linear.app/aglyn/issue/AGL-428), [AGL-1014](https://linear.app/aglyn/issue/AGL-1014), [AGL-1608](https://linear.app/aglyn/issue/AGL-1608), [AGL-1440](https://linear.app/aglyn/issue/AGL-1440))
+- **aglyn:** a plugin setting a workspace answers once, a site may answer itself
+- **console,aglyn,marketing:** an authored analytics event carries params ([AGL-1587](https://linear.app/aglyn/issue/AGL-1587), [AGL-577](https://linear.app/aglyn/issue/AGL-577))
+- **commerce:** a member account door reports to the host's own GA4 ([AGL-1591](https://linear.app/aglyn/issue/AGL-1591))
+- **console,docs:** the sales tax return files where the deployment is registered
+- **mui,besigner,console:** images carry their own dimensions, so the page stops shifting ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **tenant:** a hostname becomes reachable without a hosting vendor ([AGL-2436](https://linear.app/aglyn/issue/AGL-2436))
+- **console:** a paid subscription reports its Google Ads conversion ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **aglyn,console:** a signup reports the Google Ads conversion it earned ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console,aglyn,tenant-instance:** the console asks before it measures ([AGL-1597](https://linear.app/aglyn/issue/AGL-1597), [AGL-1498](https://linear.app/aglyn/issue/AGL-1498))
+- **aglyn,console,tenant:** a site can run its own Google Ads and LinkedIn tags ([AGL-1608](https://linear.app/aglyn/issue/AGL-1608))
+
+### Fixed
+
+- **console:** a record's detail page is headed by the record, not by its list
+- **tenant:** the admin bar's Orders link opens Orders
+- **email:** a dedicated domain reads as the request it is, and senders are documented
+- **email:** a campaign batch keeps inside the provider's request rate
+- **email:** a provider rate limit defers the recipient instead of settling them
+- **repo:** a test spanning two plugins moves out of the app that owns neither
+- **email:** a confirmed opt-in lifts the bounce it just disproved
+- **console:** a review verdict stops chasing a dead publisher mailbox
+- **marketing:** a campaign page leads with what the campaign caused
+- **console:** orders are not an inbox
+- **rules:** the sending-label pin and its request stamp are Admin-SDK only
+- **email:** a dedicated sending domain is requested, not issued
+- **email:** the sender picker offers everyone who works on the site
+- **console:** the emails hub's first section stops repeating the hub's name
+- **email:** a spec binding named module fails the next lint rule
+- **billing:** every upgrade card says what the next screen will ask for
+- **email:** a sending domain no longer outlives the site that owned it
+- **runtime:** an immediate action email asks who it is mailing
+- **email:** a topic opt-out reaches the senders that only the gate guards
+- **tenant:** the unsubscribe page logo is named in the image-sink inventory ([AGL-1725](https://linear.app/aglyn/issue/AGL-1725))
+- **email:** the shared pool is the floor under a dedicated sending domain
+- **email:** a campaign honors the pace its recipients asked for
+- **billing:** a plan the org did not buy says so, instead of a dead button ([AGL-1118](https://linear.app/aglyn/issue/AGL-1118), [AGL-1795](https://linear.app/aglyn/issue/AGL-1795), [AGL-2156](https://linear.app/aglyn/issue/AGL-2156), [AGL-1028](https://linear.app/aglyn/issue/AGL-1028), [AGL-1715](https://linear.app/aglyn/issue/AGL-1715))
+- **console:** the zone read sees the whole zone, not its first page
+- **aglyn:** campaignAttributions is classified for the media scan
+- **console:** the usage meters hold until the plan is known ([AGL-1422](https://linear.app/aglyn/issue/AGL-1422))
+- **repo:** the spec configs compile against the types they are asserting
+- **console:** the plan grid delivers all eight plans and says each fact once ([AGL-1864](https://linear.app/aglyn/issue/AGL-1864), [AGL-1117](https://linear.app/aglyn/issue/AGL-1117), [AGL-1859](https://linear.app/aglyn/issue/AGL-1859), [AGL-2156](https://linear.app/aglyn/issue/AGL-2156), [AGL-2297](https://linear.app/aglyn/issue/AGL-2297))
+- **repo:** npm run lint runs the linters again
+- **billing:** the plan count includes the plan the grid folds away
+- **rules:** reading the CRM asks for the permission its console asks for
+- **email:** the audience table reports the basis the sender acts on
+- **console:** the sending-domain sweep runs on a scheduler instead of nothing
+- **pricing:** publish the email-send and assist overage rates the product already bills
+- **email:** a mailbox provider can reach the unsubscribe link it is told to POST ([AGL-2408](https://linear.app/aglyn/issue/AGL-2408))
+- **email:** a domain the provider already holds is adopted, not refused forever
+- **email:** a sending domain's own page is reachable from the list
+- **auth:** a request that cannot be authorized is not sent, and does not hang
+- **console:** the marketing conversions tab has a title
+- **email:** the sending-domain provisioning sweep has the index it queries
+- **rules:** reading who is on an audience needs the authority to manage data
+- **email:** scheduling a campaign that cannot be authorized says so instead of nothing
+- **rules:** a custom role that revokes data.manage is honored by the rules
+- **console:** the conversions section says why the kinds stand apart
+- **pricing:** the margin model counts assist credits, and cannot miss the next cost
+- **tools:** the page-weight gate's --entry note names a client root
+- **repo:** the deploy-ordering guard covers the Cloud Scheduler routes too ([AGL-2359](https://linear.app/aglyn/issue/AGL-2359), [AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **console:** the margin surface answers the console's standing guards
+- **pricing:** the add-on tables state the rates the code charges
+- **console:** one mock key per name, so the app typechecks
+- **billing:** our cost of goods stops crossing the customer boundary
+- **pricing:** every table the /pricing generator emits is reconciled, not two
+- **pricing:** the published tables carry the resized allowances
+- **console:** the enrollment double declares its campaign lookup once
+- **console:** the relaxed-coverage test measures the band before it trusts it
+- **selfhost:** the per-site sending domain answers to the two self-host guards
+- **console:** a plugin's site page and its workspace page title apart
+- **pricing:** the Pro bandwidth band is sized to the tier's own cost model
+- **console:** a plugin section gets its own browser-tab title
+- **forms:** the catalog quotes the allowance the server enforces
+- **billing:** the assist credit odometer declares its lockdown posture
+- **billing:** close the last of the negative tails, on both levers
+- **pricing:** the annual Agency price is the one Stripe charges
+- **consent:** a marketing basis runs to a brand, not to an account
+- **console:** the identity picker offers the site's own domain, not aglyn.com
+- **console:** the enrollment double answers the campaign-touch lookup
+- **console:** the content entries page IS the query
+- **commerce:** the recovery queue counts an ordered walk
+- **commerce:** the orders table reads the most recent orders, and says so
+- **commerce:** the money cards read the period they report
+- **bookings:** a refunded appointment stops counting as revenue a campaign earned
+- **besigner,console:** a form is placeable from any document, and an empty picker says so
+- **email:** the attribution record is server-only, and three assertions were vacuous
+- **console:** forms are reachable from the nav
+- **ui:** a table row's cells sit on one vertical centre
+- **email:** a confirmation message is counted like every other send
+- **email:** the erasure double did not honor a field deletion
+- **email:** three specs typecheck under their own tsconfigs
+- **email:** the sender's address comes from the server, and only from the server
+- **console:** the console plugin API dispatcher bounds what one operator can spend
+- **email:** an immediate send may name an email, but only an unsent one
+- **console:** the discoverable-form scan is a text file again
+- **scripts:** the form-id backfill refuses an argument it does not understand
+- **email:** an email always says which template it used, or that it used none
+- **forms:** a date field's label stops sitting on its own placeholder
+- **email:** a campaign of one names its email, and one record opens one page
+- **aglyn:** the media usage scan classifies the campaign container
+- **email:** a site editor cannot forge a campaign's delivery record
+- **email:** one alignment decision per campaign column, not two
+- **email:** the send-ceiling spec may read the price table it checks against
+- **email:** the copy that gets mailed is sanitized like the copy that gets previewed
+- **email:** the pre-send preview answers, and one renderer draws what is mailed
+- **email:** bulk mail carries an unsubscribe, a suppression check and a ceiling
+- **email:** an unrecorded delivered count read as a 0% delivery rate
+- **console:** the enrollment-and-send spec doubles the two helpers its sender now calls
+- **marketing:** the Figma pricing frames carry the lowered email allowances
+- **data:** the record view renders a list item by item, not as a join
+- **aglyn:** a consent-provenance fixture names a role, not a person
+- **pricing:** the top two email allowances come down to what we can deliver
+- **console:** a metered limit on a plan card carries its rate ([AGL-1864](https://linear.app/aglyn/issue/AGL-1864))
+- **console:** the Enterprise card states its limits instead of omitting them ([AGL-1864](https://linear.app/aglyn/issue/AGL-1864), [AGL-2482](https://linear.app/aglyn/issue/AGL-2482))
+- **console:** the Enterprise card stops printing its highlights twice ([AGL-1864](https://linear.app/aglyn/issue/AGL-1864))
+- **console:** each plan card states what it alone adds ([AGL-1864](https://linear.app/aglyn/issue/AGL-1864))
+- **console:** the issuing join survives a domain released mid-write
+- **besigner:** the form picker offers the site's forms instead of nothing
+- **scripts:** the demo-host check reports a failure it could only call unknown ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **marketing:** a replayed delivery event no longer counts twice ([AGL-268](https://linear.app/aglyn/issue/AGL-268))
+- **scripts:** a typo in the backfill's --exclude no longer writes over a real person ([AGL-1489](https://linear.app/aglyn/issue/AGL-1489))
+- **marketing:** proofing your own draft is not a marketing send ([AGL-349](https://linear.app/aglyn/issue/AGL-349))
+- **email:** the default consent policy is the one the sends actually apply
+- **console,email:** the campaign allowance is reported off the counter that gates it ([AGL-2113](https://linear.app/aglyn/issue/AGL-2113))
+- **cloud:** the dynamic-list query wants a single-field index, not a composite
+- **marketing,docs:** a campaign reaches a knowable set of people, and says which
+- **email:** one person subscribing twice is one list member, not two ([AGL-2499](https://linear.app/aglyn/issue/AGL-2499))
+- **inbox,console:** the reply card stops spacing itself, and admits its window
+- **console:** the automation guard reads the section ids where they now live
+- **plugins-redirects:** the plan refusal belongs to the shell that renders it ([AGL-2484](https://linear.app/aglyn/issue/AGL-2484))
+- **console:** the Traffic card takes the row, and reads across it ([AGL-2500](https://linear.app/aglyn/issue/AGL-2500))
+- **console:** the workspace pickers page on the shared footer ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501), [AGL-2336](https://linear.app/aglyn/issue/AGL-2336))
+- **aglyn:** the admin-gate check reads rules, not prose
+- **console,plugins:** the refusal names the add-on, and cannot grant itself ([AGL-2484](https://linear.app/aglyn/issue/AGL-2484), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **marketplace,marketing:** a role refusal names the roles it admits
+- **console:** a member's orders page, and the lifetime figure stops guessing ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **console:** the refund charge list pages, and admits it is a window ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **redirects:** the rule list pages, and the walk names its order ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **events-calendar:** the events list pages, and says when it is short ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **console:** the events page stops promising an upgrade it can't deliver
+- **console:** a legal acceptance's sha256 links to the document it hashes
+- **console:** the flags page banner stops carrying an oversized help icon
+- **marketplace:** a listing's reviews page, and the guard sees the helpers ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **console:** the licence lists page, and name the order they walk ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **console:** the stuck-claims list pages, and its figures say "at least" ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **console:** the erasure queue pages, and says when it is a floor ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **cloud,tools:** themeHistory is server-owned, and the split can now run ([AGL-1302](https://linear.app/aglyn/issue/AGL-1302), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334))
+- **repo:** drop 85 citations that named the wrong real issue ([AGL-2500](https://linear.app/aglyn/issue/AGL-2500), [AGL-1488](https://linear.app/aglyn/issue/AGL-1488), [AGL-1478](https://linear.app/aglyn/issue/AGL-1478), [AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** a self-host dunning email points at the operator's own console ([AGL-2176](https://linear.app/aglyn/issue/AGL-2176))
+- **console:** a card that needs authentication gets to authenticate ([AGL-1877](https://linear.app/aglyn/issue/AGL-1877))
+- **repo:** the list-pagination arc cites the issue it is actually about ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501), [AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2500](https://linear.app/aglyn/issue/AGL-2500))
+- **tools,repo:** a citation names an issue that exists, and a guard keeps it that way ([AGL-2500](https://linear.app/aglyn/issue/AGL-2500), [AGL-2499](https://linear.app/aglyn/issue/AGL-2499), [AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2306](https://linear.app/aglyn/issue/AGL-2306), [AGL-1476](https://linear.app/aglyn/issue/AGL-1476))
+- **tenant,plugins:** four specs assert against shapes the compiler allows
+- **commerce,console:** the commerce lists reach past their first window ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **tools:** a deploy script refuses an argument it cannot parse ([AGL-1489](https://linear.app/aglyn/issue/AGL-1489))
+- **console:** a retained version is an event; a resource's first is not ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **console,tenant:** a site's lifecycle events reach its own log ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **console:** the staff overview names the workspace, not its id ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console,tenant:** a manager seat is taken in the transaction that grants it ([AGL-2068](https://linear.app/aglyn/issue/AGL-2068))
+- **tenant-data-admin,console:** erasure stops at an address two accounts hold ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1140](https://linear.app/aglyn/issue/AGL-1140))
+- **workflows,console:** the actions list is bounded, the expander is a footer ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-2292](https://linear.app/aglyn/issue/AGL-2292))
+- **commerce:** the discounts hub reaches the payment link and the register ([AGL-305](https://linear.app/aglyn/issue/AGL-305), [AGL-2159](https://linear.app/aglyn/issue/AGL-2159))
+- **aglyn,cloud:** the sign-in screen is an admin decision ([AGL-553](https://linear.app/aglyn/issue/AGL-553), [AGL-1361](https://linear.app/aglyn/issue/AGL-1361))
+- **console:** the order row declares the two fields that decide its mode
+- **console:** capacity cannot be dropped out from under what is using it ([AGL-2439](https://linear.app/aglyn/issue/AGL-2439), [AGL-483](https://linear.app/aglyn/issue/AGL-483))
+- **commerce:** a rehearsal stops reporting itself into the merchant's analytics ([AGL-2040](https://linear.app/aglyn/issue/AGL-2040))
+- **console:** the bank challenge runs against the intent Stripe is holding ([AGL-1132](https://linear.app/aglyn/issue/AGL-1132))
+- **commerce,console,aglyn:** a smoke-test order stops counting as revenue
+- **redirects,events-calendar:** the redirect cap counts what the server counts ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1716](https://linear.app/aglyn/issue/AGL-1716))
+- **console:** a half-typed site setting survives changing tab ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **tenant,logic,workflows,email,console:** the detector learns the shape a plugin list is actually written in ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-185](https://linear.app/aglyn/issue/AGL-185))
+- **console:** a seat pool cannot shrink under the sites holding it ([AGL-2439](https://linear.app/aglyn/issue/AGL-2439), [AGL-2438](https://linear.app/aglyn/issue/AGL-2438))
+- **console,commerce:** the billing address gets one editor, sharing moves out ([AGL-1133](https://linear.app/aglyn/issue/AGL-1133), [AGL-1048](https://linear.app/aglyn/issue/AGL-1048))
+- **console:** the mode notice covers the org it was written for, and Plan fills its row
+- **console:** the downgrade warning measures what the plan includes ([AGL-483](https://linear.app/aglyn/issue/AGL-483))
+- **tenant:** a workflow step stops writing dataset rows nobody paid for ([AGL-2253](https://linear.app/aglyn/issue/AGL-2253))
+- **commerce:** the discounts hub reaches buy-now, and the product page can take a code ([AGL-96](https://linear.app/aglyn/issue/AGL-96))
+- **marketplace,console:** a facilitated sale records the state it was taxed in ([AGL-2137](https://linear.app/aglyn/issue/AGL-2137))
+- **console,tenant-data-admin:** mail history and erasure see every address ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console,tenant-data-admin:** a provider address joins the uniqueness index ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **commerce:** a scoped discount stops discounting the whole catalog
+- **console:** a marketplace moderation decision is retrievable by what it acted on
+- **commerce:** one dashboard stops showing two different revenues
+- **console:** an audit entry reaches the page of the person it is about
+- **console:** one opening of a message is one audited access
+- **console,commerce:** the ledger stops asserting money arrived
+- **console:** the tax ID is asked for before the charge it changes
+- **console:** a mid-cycle plan change quotes its tax
+- **marketplace:** a publisher can take their bio down ([AGL-1009](https://linear.app/aglyn/issue/AGL-1009))
+- **console:** an abandoned bank confirmation stops being invisible
+- **commerce:** a coupon can be given the expiry both checkouts already enforce
+- **console,docs:** the confirm quotes the proration too, not next month's invoice ([AGL-535](https://linear.app/aglyn/issue/AGL-535))
+- **commerce,marketplace,console:** a stranded merchant gets a door into Stripe
+- **commerce:** a line refund gives back what the buyer paid, not the list price
+- **console,scripts:** a site with one member has no mystery about who built it ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **commerce:** a free-shipping code stops charging for shipping
+- **commerce:** an abandoned booking stops holding its dates forever
+- **aglyn,console:** an abandoned signup stops holding a paid plan and booking its MRR
+- **commerce:** a cancelled order stops counting as revenue at a glance
+- **commerce:** the payments card stops calling stranded funds enabled ([AGL-1997](https://linear.app/aglyn/issue/AGL-1997))
+- **commerce,email,inbox,marketing,workflows,console:** the plugin lists get a footer, and name what they page ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-2408](https://linear.app/aglyn/issue/AGL-2408))
+- **console,tenant,aglyn:** a site built from a template records that it was ([AGL-118](https://linear.app/aglyn/issue/AGL-118))
+- **console:** a plan switch quotes what it costs, not next month's invoice ([AGL-535](https://linear.app/aglyn/issue/AGL-535))
+- **console:** the delivery dialog settles, and every cell sits on one line
+- **workflows,tenant-runtime:** the run history asks for its own rows ([AGL-2292](https://linear.app/aglyn/issue/AGL-2292))
+- **commerce,bookings:** the public availability reads stop at their own horizon ([AGL-2159](https://linear.app/aglyn/issue/AGL-2159))
+- **tenant-data-admin:** the cross-pool user sweeps ask the pools together ([AGL-1122](https://linear.app/aglyn/issue/AGL-1122))
+- **console:** a table with rows under it has a footer under those ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console,docs:** a finding names its rows, and we stop filing our own sale ([AGL-1900](https://linear.app/aglyn/issue/AGL-1900), [AGL-1582](https://linear.app/aglyn/issue/AGL-1582), [AGL-1811](https://linear.app/aglyn/issue/AGL-1811))
+- **console:** the delivery table is one line per row, at full width
+- **console:** the recovery queue names its seller, and the label map is in scope ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the Assist board names its workspaces and states its cuts ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2340](https://linear.app/aglyn/issue/AGL-2340))
+- **console:** the audit log pages on the shared footer ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2324](https://linear.app/aglyn/issue/AGL-2324))
+- **console:** the staff Users list pages what it draws, not what it fetched ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122))
+- **shared-ui-jsx:** a hidden footer stops paging, and a dead size menu stops drawing ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the site artifact lists page an ordered walk ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1716](https://linear.app/aglyn/issue/AGL-1716))
+- **tenant-data-admin:** a dotted key in a merge-set is a field NAME, not a path
+- **console,tools:** a refused save says why, and the guard covers the EIN
+- **console:** a compact field stops truncating its own label
+- **docs:** the trust page stops denying the ad signals it now grants ([AGL-1597](https://linear.app/aglyn/issue/AGL-1597), [AGL-1649](https://linear.app/aglyn/issue/AGL-1649))
+- **console:** the ad tags this console mounts are named in its candidate CSP
+- **console,shared-ui-next:** a breadcrumb names the section you are on
+- **console:** the country namer stops being assigned twice
+- **console,docs:** a site's plugin page gets its own help destination
+- **tools:** the new guard's own advice published an unprovisioned mailbox ([AGL-1577](https://linear.app/aglyn/issue/AGL-1577))
+- **shared-util-email:** every message carries an HTML part, so its links are links
+- **monitoring,docs:** every uptime check carries the firewall bypass header ([AGL-1717](https://linear.app/aglyn/issue/AGL-1717))
+- **console:** the site collaborator list is in the order it looks like it is in ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **plugins-marketplace,console:** the marketplace shelf and the template gallery page ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-1196](https://linear.app/aglyn/issue/AGL-1196), [AGL-827](https://linear.app/aglyn/issue/AGL-827))
+- **plugins-data:** the records table walks the collection instead of sampling it ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2335](https://linear.app/aglyn/issue/AGL-2335))
+- **docs:** the two customer-facing uptime checks have been dark for a week ([AGL-1717](https://linear.app/aglyn/issue/AGL-1717))
+- **aglyn,console,tenant:** one client-address reader, and a hop a caller cannot pick ([AGL-2014](https://linear.app/aglyn/issue/AGL-2014))
+- **monitoring,docs:** the receiver and the channel get read honestly ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **shared-util-email:** the credential probe stops looking like failed mail ([AGL-709](https://linear.app/aglyn/issue/AGL-709))
+- **commerce,bookings,mui,marketing:** every paid path reports its checkout ([AGL-1591](https://linear.app/aglyn/issue/AGL-1591), [AGL-2481](https://linear.app/aglyn/issue/AGL-2481))
+- **monitoring,cloud,docs:** the platform 5xx log gets a policy that watches it ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **tenant,console,docs:** a tenant site is not a page that uploads ([AGL-1452](https://linear.app/aglyn/issue/AGL-1452), [AGL-1273](https://linear.app/aglyn/issue/AGL-1273))
+- **shared-ui-next,console:** the vertical tab rail follows its own URL ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the screen and layout editors report a refused cache drop ([AGL-1483](https://linear.app/aglyn/issue/AGL-1483))
+- **tenant:** the wildcard driver claimed apexes nobody named ([AGL-2436](https://linear.app/aglyn/issue/AGL-2436))
+- **console:** a publish says so when the live pages were not refreshed ([AGL-1483](https://linear.app/aglyn/issue/AGL-1483))
+- **aglyn:** two env-mutating specs shared one global loader ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console,besigner:** a refused save no longer publishes and says it worked ([AGL-1483](https://linear.app/aglyn/issue/AGL-1483))
+- **aglyn,console:** a closed tab no longer loses the subscribe conversion ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console,aglyn:** the privacy control reaches pages with no account menu ([AGL-1498](https://linear.app/aglyn/issue/AGL-1498), [AGL-1597](https://linear.app/aglyn/issue/AGL-1597))
+- **aglyn,console,tenant:** the geo signal and build stamp work off Vercel ([AGL-2436](https://linear.app/aglyn/issue/AGL-2436))
+- **aglyn,console:** the country signal is not one platform's header ([AGL-2436](https://linear.app/aglyn/issue/AGL-2436))
+- **aglyn,console,docs:** the console declares the advertising it actually does ([AGL-1597](https://linear.app/aglyn/issue/AGL-1597))
+- **plugins-data:** the delete spy declares the argument it is asserted on
+- **plugins-mui,commerce:** a subtitle names its element at the call site ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **aglyn,plugins-data,console,tenant:** a record delete asks the query, not a page ([AGL-180](https://linear.app/aglyn/issue/AGL-180))
+- **shared-ui-theme,commerce:** a subtitle is a type style, not a heading ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1487](https://linear.app/aglyn/issue/AGL-1487))
+- **tenant,aglyn,plugins-mui:** every published page gets a main landmark ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **tenant:** the analytics hits reach Google again, on both of its domains ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** a tracking id can be turned off, not just on ([AGL-1608](https://linear.app/aglyn/issue/AGL-1608))
+- **commerce,console:** a scanned barcode reaches the whole catalog ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2292](https://linear.app/aglyn/issue/AGL-2292))
+- **commerce,console:** the catalog search reaches the whole catalog ([AGL-693](https://linear.app/aglyn/issue/AGL-693), [AGL-2292](https://linear.app/aglyn/issue/AGL-2292))
+
+### Performance
+
+- **tenant:** the root layout stops pulling the icon catalog for one constant
+- **tools:** the page-weight gate pins the boundary, not only the ceiling
+- **tenant:** the published page stops reaching core through a barrel
+- **tenant:** the page-weight gate and the host module its parent commit names
+- **tenant:** a published page stops downloading the console half of core
+- **besigner:** an entity picker browses a page instead of a catalog
+- **plugins:** the console cards order their windows and read pickers on demand
+- **commerce:** the product editor reads its pickers when it is opened
+- **inbox:** the inbox mounts the section being read, not all of them ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** one read for a whole page of /v1/sites, not one per site ([AGL-1302](https://linear.app/aglyn/issue/AGL-1302))
+- **tenant-data-admin:** the media delivery gate reads three fields, in one batch ([AGL-1302](https://linear.app/aglyn/issue/AGL-1302))
+- **console:** a hub index redirects on the server, so it stops flashing blank ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **commerce:** one catalog read seeds every grid on the page
+
+### Reverted
+
+- **tools:** drop set-env-secret, which only worked for Aglyn
+
+### Changed
+
+- **console:** the zone read uses the documented endpoint version
+- **console:** a form is a capability with both halves, so it is a plugin
+- **plugins:** the campaign shapes marketing reads stop living inside the email plugin
+- **console:** a campaign is a marketing object, and now lives there
+- **ui:** the rule that a rate names its denominator has one home
+- **email:** the templates section says templates in its URL too
+- **email:** one figure component, and one name for a message's campaign
+- **ui:** the create drawer moves to a library so plugin pages can use it
+- **aglyn:** the list-enrollment rule moves to the framework both callers can reach
+- **console:** the section that holds Workflows is no longer called Workflows
+- **rules:** the host membership helper is named for the test it makes
+- **console:** drop the second spelling of the Setup tab-id list
+- **console:** the Setup layout stops importing the cards it no longer renders
+- **console:** Host Setup is five routes, and its sections stop costing what they never showed ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **email,marketing,workflows:** three more plugin hubs are routes, metered first ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** drop the pre-split billing page
+- **console,aglyn:** billing is four sections, and an unopened one costs nothing ([AGL-1422](https://linear.app/aglyn/issue/AGL-1422))
+- **console:** delete the embedded checkout panel
+- **console,commerce:** marketplace sections are routes, unopened tabs stop reading ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** drop the checkout dialog the panel replaced
+- **console,shared-ui-next:** the tab param's compatibility layer goes
+- **console,tenant:** the console asks a provider for a name, not Vercel ([AGL-2436](https://linear.app/aglyn/issue/AGL-2436), [AGL-1273](https://linear.app/aglyn/issue/AGL-1273))
+- **aglyn,console,tenant:** one consent dialog, on every surface ([AGL-1498](https://linear.app/aglyn/issue/AGL-1498))
+- **console:** the account page becomes six routes ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+
+### Documentation
+
+- **pricing:** checking a live page needs the probe header, not a browser
+- **pricing:** the SEO description is a ninth surface, and one request cannot confirm a publish
+- **pricing:** the page caught up, and the SEO description is a surface too
+- **pricing:** the Agency raise is recorded, and every surface it had to reach
+- **email:** two comments cite copy that no longer says what they quote
+- **email:** the words describe the sending model the product actually has
+- **self-host:** the two shared-pool settings get their rows
+- **email:** a sending-domain slot is a bundled quota, not a per-domain price
+- **pricing:** the recorded page weight is first paint, and says so
+- **rules:** record the resolved-permission projection where the other two live
+- **selfhost:** state the ratchet's rule as a technical fact
+- **specs:** record what the read-cost pass fixed and what is left
+- **specs:** classify every oversized read by who pays for it
+- **email:** the gate's comments state the rule, not how it was assembled
+- **email:** sending domains and the proof drawer are documented, and the registers agree
+- **repo:** the plugin boundary audit names the elements filed in the wrong library
+- **email:** tell customers about import, opt-down and confirmation
+- **repo:** the one-click unsubscribe check says what a human must actually do
+- **email:** the gap register records what closed, and what P11 leaves open
+- **email:** a template's standing has no writer yet, and says so
+- **specs:** the email registers say what is actually built
+- **self-host:** the marketing frequency ceiling is a configurable number
+- **email:** the gap register marks what has since been closed
+- **email:** the nine-field rule is reachable, and G4 is closed
+- **email:** topics and the preference page, for customers and for operators
+- **email:** the campaign send cap is per workspace, not per site
+- **specs:** the email overhaul spec stops describing problems that are fixed
+- **console:** the read meter records why the emails figures moved
+- **specs:** the shared domain hides which tenant earned a complaint
+- **specs:** where email actually stands against the products it is sold beside
+- **api:** the form-submission object publishes its form id and its routing
+- **self-host:** the two sending-domain variables an operator must set
+- **tenant-data-admin:** name every writer the dated rule filters depend on
+- **design:** what custom sending domains do, and where the build stops
+- **specs:** the email spec described a send order the code never had
+- **specs:** the list-member key is one derivation, and not in the file either spec named ([AGL-2499](https://linear.app/aglyn/issue/AGL-2499))
+- **specs:** why the Inbox got a reply button and not an add-to-list one
+- the automation section is named Automation, its tabs keep their names
+- **specs:** a form is not an object in this product, and that is the whole problem
+- **specs:** correct the email spec's headline finding — the secret was set
+- **specs:** the email feature is mostly built and mostly switched off
+- send readers to Admin for the surfaces that already live there
+- **console,tools:** the unmetered months are written off, and why not to chase them ([AGL-1280](https://linear.app/aglyn/issue/AGL-1280))
+- **console:** the Billing address card says which tax it sets ([AGL-1133](https://linear.app/aglyn/issue/AGL-1133))
+- **marketplace,console:** name the listing review state and pin the queue
+- **releasing,scripts,tenant:** the owed rules deploy, the billing decision, and the field a feed cannot be read without ([AGL-118](https://linear.app/aglyn/issue/AGL-118), [AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **aglyn:** the dead-status note stops citing a bucket that no longer exists
+- put the stale-GA-settings marker where the paragraph still reads ([AGL-1597](https://linear.app/aglyn/issue/AGL-1597))
+- **analytics,docs:** five places still said Google Signals was off ([AGL-1597](https://linear.app/aglyn/issue/AGL-1597), [AGL-1649](https://linear.app/aglyn/issue/AGL-1649), [AGL-1594](https://linear.app/aglyn/issue/AGL-1594), [AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+- **tenant,aglyn:** a comment that claimed a reader, and a person quoted
+- the domain provider gets a runbook, and four shipped surfaces get a page
+- the self-host template names the domain driver and the tax jurisdiction
+- **docs,aglyn,console:** every env var a self-host operator sets, in one place ([AGL-905](https://linear.app/aglyn/issue/AGL-905), [AGL-2436](https://linear.app/aglyn/issue/AGL-2436))
+- **tenant:** the CSP says why it carries no script-src and no trusted types ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **analytics:** google signals is on, and on deliberately
+
+<details>
+<summary>Also in this release: 34 test, 8 chore, 4 style</summary>
+
+- **email:** a free site is proved to send, not just to be ungated
+- **email:** the batched-send clock is the one the code reads
+- **email:** the guards on a branded opt-out page
+- **console:** the metering case derives its bands instead of retyping them
+- **console:** the two conversions assertions that were passing on nothing
+- **email:** the campaigns section holds a document ceiling, not a log line
+- **console:** the forms list drops a snackbar it never raises
+- **forms:** the contract check stands between the author and the write
+- **leads:** a returning person's capture serialises against nobody ([AGL-2404](https://linear.app/aglyn/issue/AGL-2404), [AGL-2231](https://linear.app/aglyn/issue/AGL-2231))
+- **email:** every create control sits in its card header, contained
+- **email:** campaign figures line up under their own headers
+- **email:** the seven campaign-send doubles model the topic filter
+- **console:** classify the campaign report's two tables ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **repo:** ignore the isolated nx cache directories
+- **console:** the two pricing guards follow the lowered allowances
+- **console:** the three plan cards read across cleanly ([AGL-1864](https://linear.app/aglyn/issue/AGL-1864))
+- **scripts:** the citation ceiling admits AGL-2502 ([AGL-2502](https://linear.app/aglyn/issue/AGL-2502))
+- **scripts:** the backfill self-test names no Aglyn hostname
+- **marketing:** the two suites the org hourly claim was not added to
+- **marketing:** a sendable campaign audience carries a consent basis
+- **email:** the three capture surfaces record a basis, and only a basis
+- **scripts:** report the people holding two list rows, and never delete one ([AGL-2499](https://linear.app/aglyn/issue/AGL-2499))
+- **events-calendar,redirects:** the ceiling helpers are real in the doubles ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **console:** the member-drawer double answers the whole firestore surface ([AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **console:** the free-workspace ceiling on /api/orgs/create is covered ([AGL-2265](https://linear.app/aglyn/issue/AGL-2265))
+- **console:** the tax controls join the super-only surface map ([AGL-2021](https://linear.app/aglyn/issue/AGL-2021))
+- **console:** the create doubles carry the audit write and the refusal ([AGL-118](https://linear.app/aglyn/issue/AGL-118), [AGL-2265](https://linear.app/aglyn/issue/AGL-2265))
+- **console:** meter what each Host Setup section reads, before it becomes routes ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **marketplace,console:** the sale's jurisdiction, and that nothing is backfilled ([AGL-2137](https://linear.app/aglyn/issue/AGL-2137))
+- **commerce:** the refund suite can reach line refunds, and stops eating its errors
+- **console:** the crowding spec fills both access halves, so it can fail
+- **console:** the overview answers a spike instead of throwing on it ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **tenant,console:** the console guard names its one ad mount instead of forbidding all of them
+- **aglyn:** the hardcoded-host guard names the personal-identifier checker
+- **tools,console,tenant-data-admin,docs:** the public repo stops naming a person
+- **console:** the footer guard walks every plugin, and a paged list names its order ([AGL-693](https://linear.app/aglyn/issue/AGL-693))
+- **console:** the site-plugins mocks name every component the card renders
+- one canonical author identity
+- untrack the agent handoff notes
+- untrack the agent handoff notes as well
+- untrack the personal agent instructions
+- **console:** the media-alt assertion stopped testing the formatter
+- **aglyn:** type the consent theme spec against the real stored record
+- **aglyn:** the site's consent surface wears the site's theme ([AGL-1591](https://linear.app/aglyn/issue/AGL-1591))
+- **aglyn:** the closed-tab recovery is covered, not just written ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **tenant:** prove the shared gtag library is fetched once, not twice ([AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.27 — 2026-08-27
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.26...v1.0.0-beta.27)

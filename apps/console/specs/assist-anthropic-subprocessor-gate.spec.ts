@@ -187,6 +187,10 @@ const MENTIONS_ONLY = new Map<string, string>([
   ['docs/PLATFORM_PROVISIONING.md', 'Documentation.'],
   ['apps/docs/docs/developers/self-hosting.md', 'Documentation.'],
   [
+    'apps/docs/docs/developers/self-hosting-environment.md',
+    'The published environment-variable reference. Names the key in the row telling an operator to bring their own, alongside the spend ceilings that bound it. Documentation, not a flow.',
+  ],
+  [
     'docs/BREACH_NOTIFICATION.md',
     'The breach runbook (AGL-1915). Names the key only in the list of credentials to rotate after an exposure, alongside FIREBASE_PRIVATE_KEY and STRIPE_SECRET_KEY — a rotation target, not a data flow to Anthropic.',
   ],

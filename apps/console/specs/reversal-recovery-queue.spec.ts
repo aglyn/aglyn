@@ -61,9 +61,21 @@ const mockVerifyIdToken = jest.fn()
 
 const state: {
   purchases: Record<string, Record<string, unknown>>
+  /**
+   * Orgs, and each one's monthly usage rollup by month key.
+   *
+   * Seeded because two of the route's answers are ABOUT an org rather than
+   * merely keyed on one: the recovery queue names the seller, and the anomaly
+   * detector names the workspace that spiked. Neither can be checked against
+   * an empty orgs collection.
+   */
+  orgs: Record<
+    string,
+    { data: Record<string, unknown>; usage?: Record<string, Record<string, unknown>> }
+  >
   /** Every `where(...)` the route issued, so the queue's clause is provable. */
   wheres: Array<[string, string, unknown]>
-} = { purchases: {}, wheres: [] }
+} = { purchases: {}, orgs: {}, wheres: [] }
 
 const stamp = (millis: number) => ({ toMillis: () => millis })
 
@@ -100,6 +112,50 @@ const purchaseQuery = (
   },
 })
 
+/**
+ * A listing over `state.orgs`, including each org's `usage/{month}` docs.
+ *
+ * The usage docs answer through `get(field)`, the way an Admin SDK snapshot
+ * does, and a month that was never seeded reports `exists: false` — which is
+ * what makes "no prior month, so no spike" a case the detector really sees
+ * rather than one the double smooths over.
+ */
+const orgListing = (): any => ({
+  orderBy: () => orgListing(),
+  limit: () => orgListing(),
+  where: () => orgListing(),
+  select: () => orgListing(),
+  count: () => ({
+    get: async () => ({ data: () => ({ count: Object.keys(state.orgs).length }) }),
+  }),
+  get: async () => {
+    const docs = Object.entries(state.orgs).map(([id, org]) => ({
+      id,
+      data: () => org.data,
+      get: (field: string) => org.data[field],
+      ref: {
+        collection: () => ({
+          doc: (month: string) => ({
+            get: async () => {
+              const held = org.usage?.[month]
+              return {
+                exists: Boolean(held),
+                data: () => held ?? {},
+                get: (field: string) => held?.[field],
+              }
+            },
+          }),
+        }),
+      },
+    }))
+    return { docs, size: docs.length, empty: docs.length === 0 }
+  },
+  doc: () => ({
+    get: async () => ({ exists: false, data: () => ({}), get: () => undefined }),
+    collection: () => emptyListing(),
+  }),
+})
+
 /** A listing over nothing, for the collections this file does not seed. */
 const emptyListing = (): any => ({
   orderBy: () => emptyListing(),
@@ -122,8 +178,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
       firestore: () => ({
-        collection: (name: string) =>
-          name === 'marketplacePurchases' ? purchaseQuery() : emptyListing(),
+        collection: (name: string) => {
+          if (name === 'marketplacePurchases') return purchaseQuery()
+          if (name === 'orgs') return orgListing()
+          return emptyListing()
+        },
         collectionGroup: () => emptyListing(),
       }),
     }),
@@ -151,6 +210,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { GET } from '../app/api/admin/overview/route'
+import { previousMonth } from '../utils/billing-month'
 
 const REFUSED_SMALL = 'cs_refused_small'
 const REFUSED_LARGE = 'cs_refused_large'
@@ -165,6 +225,7 @@ const overview = (token = 'staff-token') =>
 
 beforeEach(() => {
   state.wheres = []
+  state.orgs = {}
   state.purchases = {
     // The amounts are the real ones the webhook computes for a $50 and an $80
     // refund of the AGL-1639 worked example ($100 listing, 20% platform rate,
@@ -210,7 +271,7 @@ beforeEach(() => {
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
-    email: 'zach@aglyn.com',
+    email: 'staff@aglyn.com',
     email_verified: true,
     staff: true,
     staffRole: 'super',
@@ -313,5 +374,102 @@ describe('an empty queue is a real answer', () => {
     const body = await (await overview()).json()
     expect(body.reversalRecovery).toEqual([])
     expect(body.metrics.reversalOwedCents).toBe(0)
+  })
+})
+
+/**
+ * THE ORG BEHIND THE ID (AGL-2501).
+ *
+ * A staff reader recognizes a customer by name, never by a document id. Both
+ * answers below are ABOUT an org rather than merely keyed on one: the
+ * recovery queue names the counterparty a staff member is about to go and
+ * collect from, and the anomaly detector names the workspace that spiked.
+ *
+ * The anomaly case is also a regression guard on a live fault. `orgLabel` is
+ * a `const` arrow, and the anomaly list is built eagerly ABOVE where it used
+ * to be declared — a temporal dead zone, so the call threw
+ * `ReferenceError: Cannot access 'orgLabel' before initialization`. It threw
+ * only on a row that actually spiked, because the call sits inside the
+ * ternary's consequent, so the whole staff overview would have started
+ * returning 500 on the first abuse alert and never before it.
+ */
+describe('the overview names the org, not its document id', () => {
+  /** The rollup keys the route reads: last calendar month and the one before. */
+  const month = previousMonth()
+  const [year, monthPart] = month.split('-').map(Number)
+  const prior = new Date(Date.UTC(year, monthPart - 2, 1))
+  const priorMonth = `${prior.getUTCFullYear()}-${String(
+    prior.getUTCMonth() + 1,
+  ).padStart(2, '0')}`
+
+  it('THE CONTROL: the two rollup keys are different months', () => {
+    // A prior key equal to the current one would let one seeded document
+    // satisfy both sides of the ratio, and the spike below would be an
+    // artifact of the fixture rather than of the detector.
+    expect(priorMonth).not.toBe(month)
+  })
+
+  it('carries the seller by NAME on the recovery queue', async () => {
+    state.orgs = {
+      'seller-small': { data: { name: 'Northwind Traders', plan: 'free' } },
+      // No name, no slug: the fallback case. An unfamiliar id is still a
+      // lead a staff member can paste into the org search; a blank is not.
+      'seller-large': { data: { plan: 'free' } },
+    }
+    const body = await (await overview()).json()
+    const rows: any[] = body.reversalRecovery
+    const bySeller = Object.fromEntries(
+      rows.map((row) => [row.sellerOrgId, row]),
+    )
+
+    expect(bySeller['seller-small'].sellerOrgLabel).toBe('Northwind Traders')
+    // The id is kept beside the label rather than replaced — the queue is
+    // worked against Stripe and the org document, and both need the id.
+    expect(bySeller['seller-small'].sellerOrgId).toBe('seller-small')
+    expect(bySeller['seller-large'].sellerOrgLabel).toBe('seller-large')
+  })
+
+  it('answers with a NAMED anomaly instead of throwing on the first spike', async () => {
+    state.orgs = {
+      'org-runaway': {
+        data: { name: 'Globex Shop', plan: 'free' },
+        usage: {
+          // 100 -> 5,000 page views is the >=10x the detector looks for, and
+          // 100 clears its noise floor.
+          [priorMonth]: { month: priorMonth, pageViews: 100 },
+          [month]: { month, pageViews: 5000 },
+        },
+      },
+    }
+
+    const response = await overview()
+    // A 200 is half the assertion. Before the label map was lifted above its
+    // callers this threw, the handler's catch turned it into a 500, and the
+    // whole staff overview went dark at exactly the moment an abuse alert
+    // was the thing somebody needed to read.
+    expect(response.status).toBe(200)
+
+    const body = await response.json()
+    expect(body.anomalies).toHaveLength(1)
+    expect(body.anomalies[0].orgId).toBe('org-runaway')
+    expect(body.anomalies[0].orgLabel).toBe('Globex Shop')
+    expect(body.anomalies[0].spikes[0]).toContain('page views')
+  })
+
+  it('THE CONTROL: a workspace that did not spike is not reported', async () => {
+    // Otherwise the test above is satisfied by a detector that flags every
+    // org it reads, and "named the workspace that spiked" would be a claim
+    // about a list that means nothing.
+    state.orgs = {
+      'org-steady': {
+        data: { name: 'Steady Co', plan: 'free' },
+        usage: {
+          [priorMonth]: { month: priorMonth, pageViews: 100 },
+          [month]: { month, pageViews: 140 },
+        },
+      },
+    }
+    const body = await (await overview()).json()
+    expect(body.anomalies).toEqual([])
   })
 })

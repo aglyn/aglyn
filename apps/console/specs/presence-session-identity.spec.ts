@@ -272,14 +272,14 @@ describe('the room hands the avatar something it can draw', () => {
 
 describe('initials are meaningful for an account with no picture', () => {
   it('reads two letters from a full name', () => {
-    expect(memberInitials('Zach Gover')).toBe('ZG')
+    expect(memberInitials('Ada Lovelace')).toBe('AL')
   })
 
   it('falls back to the email for an SSO account asserting no name', () => {
     // A SAML account signs in through a tenant pool whose assertion carries
     // no picture and may carry no name: `photoURL` and `displayName` both
     // arrive undefined, so initials are the whole avatar for that account.
-    expect(memberInitials('', 'zach@aglyn.com')).toBe('Z')
+    expect(memberInitials('', 'person@example.com')).toBe('P')
   })
 
   it('never renders the @ of an address as an initial', () => {

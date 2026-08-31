@@ -50,12 +50,14 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const COMPONENT = join(
+/** The card form takes the React components; the loader takes `loadStripe`. */
+const CARD_FORM = join(
   __dirname,
   '..',
   'components',
-  'embedded-checkout-dialog.component.tsx',
+  'billing/billing-card-form.component.tsx',
 )
+const LOADER = join(__dirname, '..', 'utils', 'browser-stripe.ts')
 
 /**
  * The named VALUE imports taken from one module specifier.
@@ -93,13 +95,16 @@ function namedValueImportsFrom(source: string, specifier: string): string[] {
     .map((part) => part.split(/\s+as\s+/)[0].trim())
 }
 
-describe('the console embedded checkout imports symbols the package really has', () => {
-  const source = readFileSync(COMPONENT, 'utf8')
-
+describe('the console card form imports symbols the package really has', () => {
   it.each([
-    ['@stripe/react-stripe-js', ['EmbeddedCheckout', 'EmbeddedCheckoutProvider']],
-    ['@stripe/stripe-js', ['loadStripe']],
-  ])('%s exports every symbol the dialog imports from it', (specifier, expected) => {
+    [
+      CARD_FORM,
+      '@stripe/react-stripe-js',
+      ['Elements', 'PaymentElement', 'useElements', 'useStripe'],
+    ],
+    [LOADER, '@stripe/stripe-js', ['loadStripe']],
+  ])('%s: %s exports every symbol it imports', (file, specifier, expected) => {
+    const source = readFileSync(file as string, 'utf8')
     const imported = namedValueImportsFrom(source, specifier as string)
 
     // Fail on a silent no-op. If the parse stops finding the import — the file
@@ -121,6 +126,15 @@ describe('the console embedded checkout imports symbols the package really has',
     // to a value import, the check above starts demanding a runtime `Stripe`
     // export that has never existed, and the natural next move is to weaken
     // the check. Pin the shape instead.
-    expect(source).toMatch(/import \{ loadStripe, type Stripe \} from '@stripe\/stripe-js'/)
+    expect(readFileSync(LOADER, 'utf8')).toMatch(
+      /import \{ loadStripe, type Stripe \} from '@stripe\/stripe-js'/,
+    )
+  })
+
+  it('CONTROL — the card form no longer imports Embedded Checkout at all', () => {
+    // The surface that rendered Stripe's own checkout page is gone. This is
+    // the import-level half of that: the symbols cannot come back quietly.
+    const source = readFileSync(CARD_FORM, 'utf8')
+    expect(source).not.toContain('EmbeddedCheckout')
   })
 })

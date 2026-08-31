@@ -47,11 +47,12 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { withProbeHeaders } from './lib/probe-headers.mjs'
+import { DRIVE_MOUNT_ENV, driveDocPath } from './lib/drive-mount.mjs'
 
-const DEFAULT_DOCS = join(
-  process.env['HOME'] ?? '',
-  'Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/Platform Docs',
-  'Pricing & Packaging/07-GTM-and-Marketing',
+const DEFAULT_DOCS = driveDocPath(
+  'Platform Docs',
+  'Pricing & Packaging',
+  '07-GTM-and-Marketing',
 )
 
 const args = process.argv.slice(2)
@@ -385,14 +386,65 @@ function checkBookingLink() {
 }
 
 // ── P4.4c — the multi-site demo org is actually serving ────────────────────
+/**
+ * The subdomains that have a `hosts` document, or `null` when this leg cannot
+ * run (no service-account credentials — CI, a fork, a contributor's laptop).
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE HTTP LEG CANNOT SEE PAST OUR OWN BOT PROTECTION,
+ * and a check that cannot see reported the same thing as a check that found
+ * nothing wrong. Every one of these hosts answered 429 to a scripted fetch, so
+ * P4.4c degraded to UNKNOWN — while the truth, visible in a browser and in
+ * Firestore, was that not one of the hosts exists. UNKNOWN on a launch blocker
+ * that is knowably FAIL is the quiet-wrongness this whole file replaces.
+ *
+ * Existence is not the whole check and does not try to be: a host document
+ * proves the seeder created the site, never that it serves the right brand.
+ * So this can only turn an UNKNOWN into a FAIL, never into a PASS.
+ */
+async function seededSubdomains() {
+  const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY } =
+    process.env
+  if (!FIREBASE_PROJECT_ID || !FIREBASE_CLIENT_EMAIL || !FIREBASE_PRIVATE_KEY)
+    return null
+  try {
+    const { initializeApp, cert, getApps } = await import('firebase-admin/app')
+    const { getFirestore } = await import('firebase-admin/firestore')
+    if (!getApps().length)
+      initializeApp({
+        credential: cert({
+          projectId: FIREBASE_PROJECT_ID,
+          clientEmail: FIREBASE_CLIENT_EMAIL,
+          privateKey: String(FIREBASE_PRIVATE_KEY).replace(/\\n/g, '\n'),
+        }),
+      })
+    const snapshot = await getFirestore().collection('hosts').get()
+    return new Set(
+      snapshot.docs.map((doc) => String(doc.get('subdomain') ?? '')),
+    )
+  } catch {
+    // Unreadable is not empty. Returning a Set here would report every host
+    // as missing on a credentials or network fault.
+    return null
+  }
+}
+
+/** `northgate-dental` from `https://northgate-dental.aglyn.app/`. */
+const subdomainOf = (url) => new URL(url).hostname.split('.')[0]
+
 async function checkDemoOrg() {
   const missing = []
   const wrongContent = []
   const unreadable = []
+  const absent = []
+  const seeded = await seededSubdomains()
   for (const [id, url, marker] of DEMO_HOSTS) {
     const { status, body } = await fetchPage(url)
     if (status === 429) {
-      unreadable.push(`${id} → 429 (bot protection)`)
+      // The HTTP leg is blind here, but the data leg may not be: a host with
+      // no document cannot be serving anything, whatever the challenge hides.
+      if (seeded && !seeded.has(subdomainOf(url)))
+        absent.push(`${id} → no host document (${subdomainOf(url)})`)
+      else unreadable.push(`${id} → 429 (bot protection)`)
       continue
     }
     if (status !== 200) {
@@ -405,14 +457,19 @@ async function checkDemoOrg() {
     if (!marker.test(body))
       wrongContent.push(`${id} → 200 but no brand content`)
   }
-  if (unreadable.length && !missing.length && !wrongContent.length)
+  if (
+    unreadable.length &&
+    !missing.length &&
+    !wrongContent.length &&
+    !absent.length
+  )
     return record(
       'P4.4c',
       'Multi-site demo org seeded and serving',
       UNKNOWN,
       `${unreadable.join('; ')} — set AGLYN_PROBE_TOKEN or check in a browser`,
     )
-  const problems = [...missing, ...wrongContent, ...unreadable]
+  const problems = [...missing, ...absent, ...wrongContent, ...unreadable]
   return record(
     'P4.4c',
     'Multi-site demo org seeded and serving',
@@ -547,11 +604,11 @@ async function runSelfTest() {
 if (selfTest) {
   await runSelfTest()
 } else {
-  if (!existsSync(docsDir)) {
+  if (!docsDir || !existsSync(docsDir)) {
     console.error(
-      `Pre-flight docs folder not found:\n  ${docsDir}\n\n` +
-        'This is UNKNOWN, not a pass. Mount the "Platform Docs" shared drive, ' +
-        'or pass --docs <path>.',
+      `Pre-flight docs folder not found:\n  ${docsDir ?? '(no path configured)'}\n\n` +
+        'This is UNKNOWN, not a pass. Set ' + DRIVE_MOUNT_ENV + ' to the ' +
+        'directory containing "Platform Docs", or pass --docs <path>.',
     )
     process.exit(2)
   }

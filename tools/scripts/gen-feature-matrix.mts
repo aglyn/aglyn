@@ -40,12 +40,15 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
 import { PLAN_ENTITLEMENTS } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements'
+import { DRIVE_MOUNT_ENV, driveDocPath } from './lib/drive-mount.mjs'
 
 const REPO_OUT = 'docs/feature-matrix.md'
-const DRIVE_OUT =
-  `${process.env['HOME']}/Library/CloudStorage/GoogleDrive-zach@aglyn.com/` +
-  'Shared drives/Platform Docs/Pricing & Packaging/00-Pricing-Source-of-Truth/' +
-  'Feature-Matrix.md'
+const DRIVE_OUT = driveDocPath(
+  'Platform Docs',
+  'Pricing & Packaging',
+  '00-Pricing-Source-of-Truth',
+  'Feature-Matrix.md',
+)
 
 const entitlements = PLAN_ENTITLEMENTS as unknown as Record<
   string,
@@ -105,12 +108,19 @@ if (check) {
 } else {
   writeFileSync(REPO_OUT, body)
   console.log('wrote', REPO_OUT)
-  try {
-    writeFileSync(DRIVE_OUT, body)
-    console.log('wrote', DRIVE_OUT)
-  } catch (error) {
-    // Drive may simply not be mounted on this machine. Not fatal: the repo
-    // copy is the one CI reads, and saying so beats failing the run.
-    console.warn('Drive copy skipped —', (error as Error).message)
+  // The shared-drive copy is best-effort in both directions: unconfigured, and
+  // configured but not materialised. Neither is fatal — the repo copy is the
+  // one CI reads, and saying which case it was beats failing the run.
+  if (!DRIVE_OUT) {
+    console.warn(
+      `Drive copy skipped — no shared drive configured. Set ${DRIVE_MOUNT_ENV} to the directory containing "Platform Docs" to write it.`,
+    )
+  } else {
+    try {
+      writeFileSync(DRIVE_OUT, body)
+      console.log('wrote', DRIVE_OUT)
+    } catch (error) {
+      console.warn('Drive copy skipped —', (error as Error).message)
+    }
   }
 }

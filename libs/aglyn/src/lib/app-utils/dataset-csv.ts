@@ -22,9 +22,9 @@
  * through the same coercion.
  *
  * **Why this lives in core rather than in `@aglyn/plugins-data`** (AGL-2335).
- * AGL-413 moved dataset io out to the plugin, and the PARSING half — the
- * import machinery in `dataset-io.ts` — is still there, correctly: nothing
- * outside the plugin's own console card reads a CSV.
+ * AGL-413 moved dataset io out to the plugin, and the dataset-shaped half of
+ * the import machinery — column mapping against a `DatasetModel` — is still
+ * there, correctly: nothing outside that plugin maps a file onto a dataset.
  *
  * Writing one is different now. `/api/orgs/datasets/export` streams a
  * dataset from the server, and `scope:app` may not import a lib tagged
@@ -34,6 +34,12 @@
  * divergent hand-rolled CSV escapers in this repo; this is not becoming the
  * sixth. `dataset-io.ts` re-exports every name below, so the plugin's own
  * imports are unchanged.
+ *
+ * READING one is shared for the same reason. The email list importer parses
+ * a merchant's contact file, and it lives in `@aglyn/plugins-email`, which
+ * may not import `@aglyn/plugins-data` either. So {@link parseCsv} sits here
+ * beside the escaper that is its inverse, and `dataset-io.ts` re-exports it
+ * exactly as it re-exports the writing half.
  */
 
 import type { DatasetFieldDefinition, DatasetModel } from './dataset-models'
@@ -124,8 +130,8 @@ export function datasetRecordToJson(
  * area is about, and a stream that dies halfway produces a perfectly
  * well-formed shorter file: nothing about the bytes says they are short.
  *
- * Single pass, no array building — `parseCsv` below answers the same
- * question but materialises every cell, which is the wrong trade when the
+ * Single pass, no array building — {@link parseCsv} answers the same
+ * question but materializes every cell, which is the wrong trade when the
  * file may be hundreds of thousands of rows and the only thing wanted is
  * how many there are.
  */
@@ -212,5 +218,59 @@ export function datasetRecordsToCsv(
     datasetCsvHeader(model),
     ...rows.map((row) => datasetCsvRow(model, row)),
   ].join('\n')
+}
+
+/**
+ * Minimal RFC-4180 CSV parser (quoted fields, escaped quotes, CRLF).
+ *
+ * The inverse of the escaper above, and the one parser in the repo — see the
+ * module note for why the email list importer reaches this rather than
+ * writing its own.
+ *
+ * A wholly blank row is dropped. Every spreadsheet writes a trailing newline
+ * and a row of empty cells is not a record; carrying it through would give
+ * every caller the same off-by-one to remember.
+ */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let quoted = false
+  const source = String(text ?? '')
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    if (quoted) {
+      if (char === '"') {
+        if (source[index + 1] === '"') {
+          cell += '"'
+          index += 1
+        } else {
+          quoted = false
+        }
+      } else {
+        cell += char
+      }
+      continue
+    }
+    if (char === '"') {
+      quoted = true
+    } else if (char === ',') {
+      row.push(cell)
+      cell = ''
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && source[index + 1] === '\n') index += 1
+      row.push(cell)
+      cell = ''
+      rows.push(row)
+      row = []
+    } else {
+      cell += char
+    }
+  }
+  if (cell !== '' || row.length) {
+    row.push(cell)
+    rows.push(row)
+  }
+  return rows.filter((cells) => cells.some((value) => value.trim() !== ''))
 }
 

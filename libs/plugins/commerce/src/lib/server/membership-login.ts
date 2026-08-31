@@ -25,6 +25,10 @@ import {
   setMemberCookie,
   verifyMemberPassword,
 } from './membership'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 // Best-effort per-instance brute-force damper (mirrors AGL-87 unlock).
 const attemptsByIp = new Map<string, number[]>()
@@ -44,9 +48,13 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
   if (!hostId || !email || !password) {
     return res.status(400).json({ error: 'Invalid request' })
   }
-  const ip = String(
-    req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown',
-  ).split(',')[0]
+  // Keeps counting under the no-address bucket rather than being skipped: this
+  // damper guards a PASSWORD, and one that stops counting is a password anyone
+  // can grind. On a deployment that cannot name its callers the whole site
+  // shares one attempt budget, which is the direction to be wrong in here.
+  const ip =
+    readClientIp(req.headers, { remoteAddress: req.socket?.remoteAddress }) ??
+    NO_CLIENT_ADDRESS_BUCKET
   const now = Date.now()
   const attempts = (attemptsByIp.get(ip) ?? []).filter(
     (at) => now - at < WINDOW_MS,

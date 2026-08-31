@@ -17,7 +17,9 @@
 'use client'
 
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
-import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
+import revalidateLivePages, {
+  describeRevalidateShortfall,
+} from '../../../../../../../../../../utils/revalidate-live-pages'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
@@ -321,7 +323,18 @@ function LayoutBesignerPage(props) {
       // the console route owns that graph, so it is given the layout id and
       // works out the screens itself.
       if (versionId && versionId === layoutPublishedVersionId) {
-        void revalidateLivePages({ user, hostId, layoutId })
+        // Reported, not discarded (AGL-1483). `revalidated: 0` reads the same
+        // for "nothing was routed here, so there was nothing to drop" as it
+        // does for "the tenant refused the call", and only the second leaves
+        // the live page stale for the rest of its window. Discarding the
+        // result is how a publish came to report itself complete over a page
+        // that kept serving the old HTML.
+        void revalidateLivePages({ user, hostId, layoutId }).then((result) => {
+          const shortfall = describeRevalidateShortfall(result)
+          if (shortfall) {
+            enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+          }
+        })
       }
       return logActivity('Saved the layout', {
         type: 'layout',
@@ -458,7 +471,18 @@ function LayoutBesignerPage(props) {
     }
     // Not awaited: the writes have succeeded, and a cache hint that fails must
     // never make a completed publish look failed.
-    void revalidateLivePages({ user, hostId, layoutId })
+    // Reported, not discarded (AGL-1483). `revalidated: 0` reads the same
+    // for "nothing was routed here, so there was nothing to drop" as it
+    // does for "the tenant refused the call", and only the second leaves
+    // the live page stale for the rest of its window. Discarding the
+    // result is how a publish came to report itself complete over a page
+    // that kept serving the old HTML.
+    void revalidateLivePages({ user, hostId, layoutId }).then((result) => {
+      const shortfall = describeRevalidateShortfall(result)
+      if (shortfall) {
+        enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+      }
+    })
     // Published, so the draft must stop being offered.
     void clearServerDraft(firestore, {
       scope: hostId,

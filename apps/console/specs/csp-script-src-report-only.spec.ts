@@ -147,7 +147,8 @@ describe('console script-src, report-only (AGL-1785)', () => {
     // directive that fires on every page load is noise that gets switched off,
     // which is why the candidate list ships populated rather than empty.
     const clause = scriptClause(await reportOnly())
-    // `loadStripe`, embedded-checkout-dialog.component.tsx:61.
+    // `loadStripe`, in utils/browser-stripe.ts — the one loader behind the
+    // inline card form and the SCA step.
     expect(clause).toContain('https://js.stripe.com')
     // App Check's ReCaptchaV3Provider, firebase-app.ts:55 — path-scoped, so
     // this does NOT hand the rest of two very large Google hosts a free pass.

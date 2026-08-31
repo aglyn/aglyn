@@ -247,7 +247,19 @@ async function handler(request: Request): Promise<Response> {
         ? res.body.data.map(describeCharge)
         : []
       return Response.json(
-        { charges, hasCustomer: true, authority },
+        {
+          charges,
+          hasCustomer: true,
+          authority,
+          /*
+           * Stripe's own answer to "is this all of them", reported rather
+           * than dropped. The list above is a 24-charge window, and without
+           * this an organization with two years of trading is indistinguish-
+           * able from one with two months — on the surface where a support
+           * agent decides there is nothing left to refund.
+           */
+          hasMore: res.body?.has_more === true,
+        },
         { status: 200 },
       )
     }

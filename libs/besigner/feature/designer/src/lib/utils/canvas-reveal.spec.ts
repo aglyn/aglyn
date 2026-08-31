@@ -150,7 +150,7 @@ describe('toggleRevealedNodeId', () => {
 })
 
 /**
- * The write behind "Hide on published site" (AGL-1476) — the control the
+ * The write behind "Hide on published site" — the control the
  * hidden class never had. Before this, the only way to author a panel that
  * starts hidden was to know the literal class name and type it in.
  */

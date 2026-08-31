@@ -51,7 +51,7 @@ export const NAME_TOKEN_MAX_PREFIX = 12
 export const NAME_TOKEN_LIMIT = 120
 
 /**
- * Word-prefix tokens for `array-contains` search (AGL-693).
+ * Word-prefix tokens for `array-contains` search (AGL-2501).
  *
  * `nameSearchKey` supports a PREFIX range, which is anchored at the start of
  * the whole name: "acme" finds "Acme Coffee" and "coffee" does not. That is

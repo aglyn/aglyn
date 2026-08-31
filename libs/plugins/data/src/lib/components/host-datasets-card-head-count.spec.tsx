@@ -19,9 +19,10 @@
  * The Data card's two HEAD-COUNTS are server aggregates, not the lengths of
  * its two capped listeners (AGL-1716, the AGL-1706 shape).
  *
- * The record listener is `limit(500)` and the dataset listener `limit(100)`
- * — both correct for a table and a picker. What neither may do is answer
- * "how many does this org have", and both did:
+ * The dataset listener is `limit(100)` and the record table pages (it was
+ * `limit(500)` when this was written) — both correct for a picker and a
+ * table. What neither may do is answer "how many does this org have", and
+ * both did:
  *
  *  * `records.length` saturated at 500 and was handed to
  *    `checkQuota(org, 'recordsPerDataset', …)`, whose bands are 1,000 /
@@ -48,13 +49,17 @@
  *  3. A DESTRUCTIVE PROMPT QUOTES THE REAL SIZE. Red before: deleting a
  *     600,000-document collection warned about "its 500 documents".
  *  4. THE LISTS KEEP THEIR CAPS. The count and the list are different
- *     questions; fixing the first must not start streaming the second.
+ *     questions; fixing the first must not start streaming the second. The
+ *     record table's cap is now its PAGE (AGL-2501), which is the same
+ *     contract with a smaller number — and a number that must not silently
+ *     grow back into a 500-row read on a card nobody has scrolled.
  *  5. A MUTATION RE-READS THE COUNT. A one-shot goes stale exactly where
  *     the listener used to refresh for free.
  *  6. AN UNANSWERED AGGREGATE DOES NOT ANSWER THE QUESTION. Pending or
- *     denied, the loaded rows stand in — a lower bound and this card's
- *     prior behaviour — never 0, which `checkQuota` would answer as "no
- *     usage" on a collection that is over its band.
+ *     denied, the loaded rows stand in — a lower bound, never 0, which
+ *     `checkQuota` would answer as "no usage" on a collection that is over
+ *     its band. Since the table pages, that bound is one page: a weaker
+ *     lower bound, in the same safe direction.
  *
  * No counting RULE moves: `checkQuota` and `checkDatasetQuota` are
  * untouched, and neither number is metered by `report-usage`.
@@ -65,6 +70,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import type { ReactNode } from 'react'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
 /**
@@ -145,6 +151,34 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const path = build() as string | null
     return {
       data: path === 'datasets' ? datasetDocs : path === 'records' ? recordDocs : [],
+      status: 'success',
+      fromCache: false,
+    }
+  },
+  /*
+   * The records table's window (AGL-2501), modelled rather than stubbed: the
+   * real hook widens the query to cover page 0..n plus one probe row and
+   * slices the page out of the answer, and the arithmetic between "what was
+   * asked for" and "what may be rendered" is exactly what these cases read.
+   * A stub that handed back every row would make the cap assertion vacuous.
+   */
+  usePagedCollection: (build: (pageLimit: number) => unknown) => {
+    const { useState } = require('react')
+    const [page, setPage] = useState(0)
+    const [pageSize, setPageSizeState] = useState(10)
+    const windowSize = pageSize * (page + 1)
+    const path = build(windowSize + 1) as string | null
+    const all = path === 'records' ? recordDocs : []
+    return {
+      rows: all.slice(page * pageSize, windowSize),
+      hasMore: all.length > windowSize,
+      page,
+      setPage,
+      pageSize,
+      setPageSize: (next: number) => {
+        setPageSizeState(next)
+        setPage(0)
+      },
       status: 'success',
       fromCache: false,
     }
@@ -347,10 +381,18 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     await bothCountsAnswered()
 
     // Fixing the head-counts must not turn a picker into 300 rows or a
-    // table into 600,000. That the two questions now have two answers is
-    // the entire point.
+    // table into 600,000. That the two questions have two answers is the
+    // entire point.
     expect(limitSpy).toHaveBeenCalledWith(100)
-    expect(limitSpy).toHaveBeenCalledWith(500)
+    // The table's cap is its PAGE plus the probe row that decides `hasMore`
+    // (AGL-2501). Read off the shared constant rather than written as a
+    // number, so the rule outlives whatever the default becomes.
+    expect(limitSpy).toHaveBeenCalledWith(TABLE_PAGE_SIZE_DEFAULT + 1)
+    // And explicitly NOT the old window. Five hundred documents read and
+    // billed on every mount of a card nobody had scrolled is the cost the
+    // paging removed, and a listener that quietly widened back to it would
+    // pass every other assertion in this file.
+    expect(limitSpy).not.toHaveBeenCalledWith(RECORD_ROWS)
   })
 
   it('re-reads the record count after a delete', async () => {
@@ -375,20 +417,21 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     aggregate.records = null
     mount()
     // Awaiting the record read is what makes the first half non-vacuous:
-    // its fallback of 500 is also the value the FIRST render used, so any
-    // condition that did not await the read itself would be satisfied
-    // BEFORE it had failed — passing while proving nothing. The second half
-    // turns on the DATASET aggregate having answered anyway.
+    // its fallback is also the value the FIRST render used, so any condition
+    // that did not await the read itself would be satisfied BEFORE it had
+    // failed — passing while proving nothing. The second half turns on the
+    // DATASET aggregate having answered anyway.
     await bothCountsAnswered()
 
     fireEvent.click(screen.getAllByText('Delete')[0])
     await waitFor(() => expect(confirm).toHaveBeenCalled())
-    // The 500 known rows still stand in — a lower bound, and this card's
-    // prior behaviour. A defaulted 0 would have deleted the document
-    // warning from a destructive prompt entirely, and would answer
+    // The loaded rows still stand in — since AGL-2501 that is one PAGE rather
+    // than a 500-row window, which is a weaker lower bound in the same safe
+    // direction. What may not happen is a defaulted 0: that would delete the
+    // document warning from a destructive prompt entirely, and would answer
     // `checkQuota` as "no usage" on a collection that is over its band.
     expect(String(confirm.mock.calls[0][0].description)).toContain(
-      'and its 500 documents',
+      `and its ${TABLE_PAGE_SIZE_DEFAULT} documents`,
     )
     // The dataset aggregate answered, so its count is unaffected by the
     // record read failing — one denial does not poison the other.

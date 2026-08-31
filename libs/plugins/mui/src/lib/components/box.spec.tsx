@@ -43,6 +43,9 @@ describe('Box element (AGL-1201)', () => {
   it('leaves the landmark elements to Section', () => {
     // Section owns those, and also exposes the accessible-name field a
     // landmark needs; duplicating them here would produce unnamed ones.
+    // `main` is the exception that belongs to NEITHER component: the tenant
+    // root layout renders the document's only one, so a second from any
+    // author-facing picker makes the landmark ambiguous (AGL-2486).
     for (const landmark of ['section', 'nav', 'header', 'footer', 'main']) {
       expect(BOX_ELEMENTS).not.toContain(landmark as never)
     }

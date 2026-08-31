@@ -64,7 +64,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const { hostId } = props
   /*
    * The link context is the CUSTOMER route's params, and this table also
-   * mounts on the staff host page (AGL-1488), whose route has neither. A
+   * mounts on the staff host page, whose route has neither. A
    * target with no route to it renders as plain text rather than as an
    * anchor to a URL with a hole in it — `activityHref` already answers
    * undefined for an incomplete context, so nothing here has to decide.
@@ -73,7 +73,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const firestore = useFirestore()
   const [rows, setRows] = useState<any[]>([])
   // The console's shared default and the console's shared menu, so this feed
-  // is the same control as every other list (AGL-693).
+  // is the same control as every other list (AGL-2501).
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
   const [page, setPage] = useState(0)
@@ -129,7 +129,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
   }, [loadPage])
 
   /*
-   * One row grammar, the console's (AGL-693) — the same table the artifact
+   * One row grammar, the console's (AGL-2501) — the same table the artifact
    * lists use, minus the row click.
    */
   const activityColumns: GridColDef[] = useMemo(
@@ -162,9 +162,24 @@ export function HostActivityTable(props: HostActivityTableProps) {
       },
       {
         field: 'actorEmail',
-        headerName: 'Who',
+        /*
+         * "Who (then)", not "Who".
+         *
+         * `actorEmail` is a SNAPSHOT taken when the row was written, and an
+         * account's address can change afterwards. The stored value is
+         * evidence and must not be rewritten to match the current address —
+         * an audit trail that mutates is worth less than one that is stale —
+         * but a column headed "Who" presents that old address as the person's
+         * address today, which is the reading a staffer acts on.
+         *
+         * So the header carries the tense and the data is left alone.
+         */
+        headerName: 'Who (then)',
         flex: 1,
         minWidth: 160,
+        description:
+          'The address this account had when the entry was written. It is ' +
+          'not updated if the address changes later.',
         valueGetter: (_value, row: any) => row.actorEmail ?? 'Someone',
       },
       {

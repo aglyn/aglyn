@@ -166,6 +166,27 @@ export function isExplicitConsentStatus(
   )
 }
 
+/**
+ * Which refusal a "no" is, for a visitor in this state.
+ *
+ * `opted-out` when they were defaulted in, `declined` when they were asked
+ * first. The GATE does not care — both refuse — but the RECORD does: "how many
+ * visitors were tracked before they said no" is a question only these two
+ * answers separate, and it is a question a regulator can ask.
+ *
+ * Lives here rather than in either surface that needs it. Both the consent
+ * overlay and the console's own module were deriving it, and a rule with two
+ * derivations is a rule that eventually means two different things.
+ */
+export function refusalStatusFor(
+  stored: { status?: VisitorConsentStatus } | null | undefined,
+  posture: VisitorConsentPosture | null | undefined,
+): VisitorConsentStatus {
+  return stored?.status === 'implied' || posture === 'opt-out'
+    ? 'opted-out'
+    : 'declined'
+}
+
 /** Whether a status grants the analytics category. */
 export function analyticsGrantedByStatus(
   status: VisitorConsentStatus,
@@ -252,6 +273,40 @@ export function advertisingGrantedByStatus(
  * script, so the format gate is load-bearing, not cosmetic.
  */
 export const GA_MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]{4,16}$/
+
+/**
+ * The shape a Meta pixel id has, shared by the LOADER and the console field.
+ *
+ * Declared HERE and not in `advertising-tags.ts`, which the console may not
+ * import: `advertising-tag-gate.spec` case (f) fails any console file that
+ * reaches for that module, because it is what mounts a vendor's script. A
+ * format string is not a vendor, so it lives with the other id patterns and
+ * the loader imports it from here.
+ *
+ * One pattern, because two would be a form that accepts an id the loader then
+ * refuses — the tag never mounts and the operator is left looking at a saved
+ * field and no pixel.
+ */
+export const META_PIXEL_ID_PATTERN = /^[0-9]{8,20}$/
+
+/**
+ * A Google Ads conversion id — `AW-` and digits.
+ *
+ * Distinct from `GA_MEASUREMENT_ID_PATTERN` (`G-…`) on purpose: they are
+ * different products with different ids, and a form that accepted either in
+ * either field would load an analytics id into an ads tag and report nothing.
+ */
+export const GOOGLE_ADS_ID_PATTERN = /^AW-[0-9]{6,16}$/
+
+/**
+ * A LinkedIn Insight partner id — numeric, and short.
+ *
+ * Bounded well under the Meta band rather than sharing it: a partner id is six
+ * or seven digits today, and a pattern loose enough to accept a Meta pixel id
+ * would let a mis-paste into the wrong field validate and then load a tag that
+ * matches nothing.
+ */
+export const LINKEDIN_PARTNER_ID_PATTERN = /^[0-9]{4,10}$/
 
 /** The configured GA id when it is well-formed, else null. */
 export function resolveGaMeasurementId(

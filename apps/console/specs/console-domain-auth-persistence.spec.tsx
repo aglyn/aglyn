@@ -68,6 +68,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
   setFirestoreSessionReporters: jest.fn(),
   setStaleSessionCheck: jest.fn(),
+  // The layout registers its visitor-consent gate at module scope, beside the
+  // two seams above, so importing it at all requires this to exist.
+  setAnalyticsConsentGate: jest.fn(),
   useAnalytics: () => ({}),
   useUser: () => ({ data: null }),
 }))

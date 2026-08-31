@@ -92,6 +92,438 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-08-31 — The dedicated sending subdomain becomes an entitlement, so one org can be granted one
+
+- **Decided by:** the account owner — the gate moves to the mechanism every other capability uses, which makes a per-org grant real rather than a field nothing reads.
+- **Scope:** packaging
+- **Evidence:** `dedicatedSendingDomain` is `false` on Free and Starter and `true` from Pro up, which is the same ladder the plan floor described. The staff override route writes `entitlements.features` from `Object.keys(PLAN_ENTITLEMENTS.free.features)`, so adding the key is what makes the grant writable at all.
+
+**No charged price moves and no plan's default capability moves.** Every tier
+carries exactly what it carried before.
+
+### What changes
+
+The claim path read the org's `plan` word against a floor, so a per-org grant
+of this capability was inert: staff could write it, the write succeeded, an
+audit row was recorded, and nothing consulted it. Read through
+`checkEntitlement`, the same document decides the answer.
+
+Two consequences follow from resolving the whole org rather than one field:
+
+- **A grant takes effect.** A Starter org staff have granted may request a
+  dedicated subdomain without being moved to Pro — which is the support case
+  this gate meets most often, and which previously cost the account a repricing
+  that also moved eight quotas.
+- **A dead subscription revokes.** `resolveEffectivePlan` reads a canceled or
+  unpaid subscription down to `free`, so an org that stops paying stops
+  claiming NEW subdomains. Sites it already holds keep theirs: the pinned-label
+  early return sits above the gate, and a downgrade has never repossessed a
+  name that has earned sending reputation.
+
+### What does not change
+
+The grant is not a way past the ceiling. A claim is still one of three
+conditions — a merchant asks, the org carries the capability, and
+`AGLYN_SENDING_DOMAIN_CAPACITY` has room — and a site refused at any of them
+sends on the shared pool rather than not at all. `whiteLabel` does not move;
+it stays Agency and Enterprise, and the parity assertion that fails if the
+sending gates are ever conflated with the brand gate stays green.
+
+`DEDICATED_SENDING_DOMAIN_MIN_PLAN` survives only as the name an upsell
+quotes, and is now derived from `PLAN_ENTITLEMENTS` rather than declared beside
+it, so the tier a refusal names cannot disagree with the tier the gate
+enforces.
+
+---
+
+## 2026-08-31 — A dedicated sending subdomain is requested, not issued
+
+- **Decided by:** the account owner — degrading to the pool at the ceiling is an improvement and not the same thing as scaling, so the demand curve moves rather than only the failure mode.
+- **Scope:** packaging
+- **Evidence:** three code paths claimed a platform subdomain with nobody asking — `provisionHost` at site creation, `claimOrgSendingDomains` from the billing webhook's plan transition, and `claimUnprovisionedHosts` from the console sweep. All three were gated on the plan, so demand for a bounded resource tracked paying customers. Resend's self-serve ceiling is 1,100 domains and five are used today.
+
+**No price and no entitlement value moves.** `customSendingDomain` and
+`DEDICATED_SENDING_DOMAIN_MIN_PLAN` are both unchanged; what changes is when a
+subdomain is claimed.
+
+### What the earlier entry got right, and what it did not fix
+
+Making an unverified platform subdomain fall back to the pool turned a ceiling
+from an outage into a degradation, which was worth doing on its own — a paying
+site refused every message, receipts included, between claim and verification.
+
+It did not make the count scale. `D` still grew automatically with every
+paying customer, so at 100,000 hosts with 10% paying the demand is 10,000
+domains against roughly 1,095 of headroom. The failure that leaves is a promise
+problem rather than an outage: customers past the ceiling are silently pooled
+after being sold reputation isolation, and nothing tells them or us which ones
+they are.
+
+### The asymmetry, applied one layer down
+
+A customer-owned domain costs the platform zero records in its own zone and no
+place in the re-verification sweep, and now starts at Pro. A platform subdomain
+costs a provider slot, three zone records and a permanent sweep entry — and
+gives the merchant **no branding benefit over a pool member**, only isolation.
+Handing out the expensive one automatically while the free one had to be found
+is the same inversion the entitlement change corrected a layer up.
+
+So the subdomain is offered rather than issued:
+
+- The three automatic claim paths are removed. `claimOrgSendingDomains` and
+  `claimUnprovisionedHosts` are deleted rather than gated, because both existed
+  only to claim without being asked.
+- `ensureHostSendingDomain` is renamed `requestHostSendingDomain` and takes a
+  required `requestedBy`. The rename is the structural half: `ensure…` invites
+  a defensive call, and a process has no honest value for `requestedBy`.
+- Pro's default is the pool for transactional mail, with a domain the merchant
+  owns as the promoted route to isolation and an issued subdomain as the answer
+  for somebody who cannot publish DNS.
+
+### The merchant is not left stuck
+
+Marketing still needs a domain of the site's own, so the refusal a Pro merchant
+meets now names both routes and points at the card, and the card carries the
+offer directly under the identity readout. Both were required: a refusal naming
+a control that is not on screen is the same dead end as no control at all.
+
+### The ceiling is watchable before it binds
+
+`atCapacity` alone is observable only once it has already cost something, and
+the remedy is a billing change plus a config deploy. The provisioning route now
+reports `remaining` and `used` as a `0`–`1` share alongside it, and the sweep
+warns from 80% spent — a share because deployments differ by two orders of
+magnitude, with the absolute count beside it because a share is unreadable at
+an allowance of 10.
+
+### The resulting curve
+
+`4 + R + C`, where `R` is subdomains merchants requested — bounded by the
+ceiling AND no longer growing with anything automatic — and `C` is customers
+who brought their own, which costs our zone nothing. Zone records are `12 + 3R`.
+Nothing in it is a function of host count or of paying-customer count.
+
+---
+## 2026-08-31 — Agency is $1,299/mo and $1,049 annual, and the pin catches up to it
+
+- **Decided by:** the account owner, confirming the raise made under the authorization to fix tier margins — Agency was the worst margin on the ladder and the most underpriced against the field.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING.agency.basePriceMonthlyUsd` 799 → 1299 and `basePriceAnnualMonthlyUsd` 649 → 1049 in `a1e8aaaca`; Stripe `aglyn_agency_v2` $1,299 and `aglyn_agency_v2_yearly` $12,588, both new objects since a Stripe price is immutable and the $799 pair is archived; `npm run check:pricing-drift`.
+
+**A charged price moves.** This is the first entry since the Sept-1 lock that says so, and the lock is not being weakened — the pin moves *with* this record, which is the procedure the lock defines rather than an exception to it.
+
+Agency included 100 hosts, 20 TB of bandwidth and an unbounded form-submission band against $799. Bandwidth is the driver: one GB is 1,748 page views at `ESTIMATED_PAGE_TRANSFER_BYTES`, so 20 TB alone measured about $3,495/month of platform cost against a $799 subscription. The bands came down in the same change; the price had to move as well because the two were set in different places at different times and nothing had ever multiplied one by the other.
+
+$1,299 still undercuts every comparable: Duda charges roughly $1,396–1,493/mo for 100 sites, BigCommerce Enterprise starts at $1,499, Shopify Plus at $2,300.
+
+Every customer-facing surface now carries $1,299: the `/pricing` body, and the page's SEO description, which is a separate hand-edited field that propagates into `<meta name="description">`, `og:description` and `twitter:description`. The description trailed the body for several hours — a page can read correctly while every search result and shared link still quotes the old price. `docs/PRICING_SURFACES.md` lists all nine places a price change has to reach, which of them nothing can check, and why one request against the live page is not enough to confirm a publish.
+
+## 2026-08-31 — A custom sending domain starts at Pro, and the platform subdomain becomes best-effort
+
+- **Decided by:** the account owner — the cheap shape is unlocked down the ladder and the expensive one is made degradable, so the platform's domain count stops growing with paying sites.
+- **Scope:** packaging
+- **Evidence:** the sending model has three shapes (`docs/design/email-sending-domains.md` §"What the model is instead"). The shared pool is flat — 4 provider domains and 12 DNS records at any number of sites. A **customer-owned** domain costs one provider slot and **zero** records in our zone, because the customer publishes them. A **dedicated platform subdomain** costs a provider slot, three records in our zone and a permanent place in the re-verification sweep, per site. Resend's self-serve ceiling is 1,100 domains (Scale's 1,000 plus a one-time +100 add-on toggle, not a repeatable per-100 purchase); five are used today.
+
+**No charged price moves.** This adds a capability to Pro and above; every
+price stays where the Sept-1 lock put it.
+
+### The inversion
+
+The option that costs the platform nothing was gated on `whiteLabel` — Agency
+and Enterprise — while the option that costs it a slot, three records and a
+recurring check was the default from Pro up. At 100,000 hosts with 10% paying
+that is 10,000 dedicated domains against a 1,095-domain headroom, 30,000 zone
+records, and about ten hours of Vercel's 50-records-per-minute creation limit.
+
+Both halves are corrected:
+
+- **`customSendingDomain`** is a new entitlement, held from Pro up, and it is
+  what the two sending routes read. It is deliberately **not** `whiteLabel`:
+  that flag replaces the Aglyn brand across every surface — product name, logo,
+  colors, support URL, console chrome, favicon — and widening it would hand Pro
+  a set of unrelated Agency features. Sending as your own name is one narrow
+  consequence of white-labeling, not the whole of it. `whiteLabel` itself is
+  untouched and stays Agency and Enterprise.
+- **The dedicated subdomain becomes an optimization on top of the pool.** A
+  site whose subdomain has not verified — the ceiling reached, a zone write
+  failed, the sweep not yet run — sends its transactional mail on the pool and
+  keeps sending it.
+
+### What the second half fixes, which was a live defect
+
+A claim pins `hosts/{id}.sendingDomain` before any vendor is called, and the
+resolver read that as a merchant's SELECTION. So between the claim and a
+successful verification a **paying** site refused every message it sent,
+receipts included, while a free site — never issued a subdomain, so never
+holding a selection — sent on the pool perfectly well. Capacity exhaustion
+would have converted a purchasing decision into an outage for exactly the tiers
+that pay.
+
+The line the resolver now draws is **whose domain it is**, not whether one is
+verified. A customer's own unverified domain still refuses outright: there the
+merchant published DNS and told us what their recipients would see, and sending
+as somebody else is not a degraded way of honoring that. A platform subdomain is
+a name we chose, provisioned and pointed the site at, so there is no instruction
+to contradict. Marketing is unchanged and still refuses on the pool, because one
+merchant's complaint rate must not be charged against every other site's
+password resets.
+
+### The resulting cost curve
+
+Domain count is `4 + (customers who bring their own) + (dedicated subdomains
+issued, bounded by AGLYN_SENDING_DOMAIN_CAPACITY)`. Only the middle term grows,
+it grows with willingness to pay rather than with signups, and it costs nothing
+in our zone. The ceiling on the last term is now safe to enforce: reaching it
+costs delivery isolation, never receipts.
+
+---
+
+## 2026-08-28 — Fourteen commits cited issue ids that never existed; history stands and a guard refuses the next one
+
+- **Decided by:** the account owner — the history is not rewritten, the citations are corrected in place, and the issue-creation freeze holds.
+- **Scope:** policy, tooling
+- **Evidence:** AGL-2500; `tools/scripts/check-linear-ids.mjs`, `tools/scripts/linear-issue-ceiling.json`; commits `363d03156`…`b14b3c3b3`
+
+Fourteen commits on `main` cite **AGL-2508–2521** against a workspace whose
+highest issue is **AGL-2499**. The ids reached source comments as well, where
+they outlive the commit message that carried them. A commit citing a
+non-existent issue is worse than one citing none: citing none says there is no
+ticket, while citing AGL-2515 says there is context to find and sends the
+reader to a 404 — so the reader concludes their own access is broken, and the
+cost is paid by every future reader instead of once by the author.
+
+**History is not rewritten.** `main` is shared and 84 commits were already
+unpushed; rewriting them to fix a comment would cost more than the comment is
+worth. The citations are corrected where they live, and
+`npm run check:linear-ids` refuses the next one — comparing against a **cached
+ceiling** checked into the repo rather than the Linear API, because
+`LINEAR_API_KEY` is set nowhere and a guard built on a credential nobody has
+set is born inert.
+
+⛔ **A fabricated id may not be made real by creating the issue.** The
+issue-creation freeze stands. Retag the work to the issue that genuinely covers
+it, or drop the tag.
+
+⚠️ A **second, worse** form of this exists and the guard cannot see it: commits
+citing ids that *do* resolve and look correct, but describe unrelated work.
+Those are found by blame, not by a ceiling — 84 of the 356 references to
+**AGL-1476–1490** were written by those commits and 250 are legitimate, so a
+find-and-replace over the range corrupts correct citations.
+
+⚠️ It is **not confined to that range**. `AGL-2501` (Components page: real table
+and Create button) carried the entire console list-pagination arc, and
+`AGL-2306` (a rejected plugin version stays advertised) was cited by the
+citation guard itself. Both now have real issues — AGL-2501 and AGL-2500.
+
+## 2026-08-30 — The saved-form catalog: a per-plan ladder was built, then withdrawn for one flat ceiling
+
+⚠️ **Read the amendment at the end of this entry before acting on anything in
+the middle of it.** The ladder described below was built, published, and then
+withdrawn the same day on the evidence it had itself gathered. The competitor
+table is the reason the ladder is gone and is the durable part of this entry.
+
+- **Decided by:** the account owner. First that the catalog should be a per-plan allowance published on every pricing surface, with the top tiers uncapped; then, on reading the vendor comparison this work produced, that the axis should not be priced per tier at all.
+- **Scope:** packaging
+- **Evidence:** `OrgEntitlements.formsPerHost` exists and is enforced, but does not vary by plan: `FORMS_PER_HOST_CEILING = 500` on every plan carrying `reusableComponents`, and `0` on Free. Enforced at `apps/console/app/api/hosts/resources/route.ts` (`quotaKey`, inside the create transaction). Published on the billing usage meters and the staff entitlement editor; **not** on the pricing tables and **not** on the plan cards. `FORMS_MAX_PER_HOST` in `libs/aglyn/src/lib/app-utils/forms.ts` is a listing window, never a ceiling.
+
+**No charged price moves.** This adds an allowance and raises a ceiling; every
+price stays where the Sept-1 lock put it.
+
+`FORMS_MAX_PER_HOST = 50` was one flat number for all eight plans, on no price
+list and in no document. It is now `formsPerHost`, a per-site catalog size the
+plan decides.
+
+### The two form dimensions, and why the count is not the lever
+
+`formSubmissionsPerMonth` already exists, is already tiered
+(20 / 200 / 1k / 10k / 50k / 100k / Unlimited / Unlimited), and is already
+metered at cost × 1.30. **It is untouched.** What moves is the other axis: how
+many saved form DEFINITIONS one site may hold.
+
+Verified against live vendor pricing pages on 2026-08-30:
+
+| Vendor | What they gate | Numbers |
+|---|---|---|
+| Squarespace | nothing — no form count, no submission cap; only form *analytics* is tiered | — |
+| Webflow | submissions on the FREE tier only; paid plans advertise "unlimited form submissions"; features (file upload) are the paid lever | 50 on Starter, unlimited above |
+| HubSpot | neither — forms are free and unlimited; the meter is marketing contacts | 1k / 2k / 10k contacts |
+| Typeform | responses per month; "Number of forms — Unlimited" on every tier, stated verbatim | 100 / 1k / 10k responses |
+| Mailchimp | neither — "as many forms as needed per audience"; contacts and sends are billed | — |
+| Wix | **form count**, tightly | 4 / 10 / 25 / 75 |
+| Jotform | form count AND submissions — a form-first product where the form is the billable unit | 5 / 25 / 50 / 100 forms |
+
+Five of seven cap form count at nothing at all. Webflow, historically the
+poster child for per-plan submission caps, has abandoned that lever above its
+free tier. Only Wix meters form count among website builders, and its numbers
+are tight enough to be a known friction point.
+
+**So the count is set as an abuse ceiling that a real customer never meets, not
+as a lever.** It is generous against both vendors that do meter it, and it
+disappears entirely from Advanced up.
+
+⚠️ **The table below is the WITHDRAWN proposal**, kept because the comparator
+column is the working that led to dropping it. The shipped number is one flat
+500 on every plan in it.
+
+| Plan | Saved forms / site (withdrawn) | Nearest metering comparator |
+|---|---|---|
+| Free | — | HubSpot/Typeform/Mailchimp give free forms; see the open question below |
+| Starter $25 | 50 | Wix Core 10 @ $29 · Jotform Bronze 25 @ $39 |
+| Pro $56 | 200 | Wix Business Elite 75 @ $159 · Jotform Gold 100 @ $129 |
+| Business $139 | 500 | past every published competitor number |
+| Scale $249 | 1,000 | — |
+| Advanced $399 | Unlimited | matches the tier's "headroom on every limit" posture |
+| Agency $1,299 | Unlimited | — |
+| Enterprise | Unlimited | contract-bound |
+
+**Nobody loses capacity.** Starter is set at exactly the flat 50 every plan had,
+so the change only ever grants.
+
+### Where it is enforced, and where it deliberately is not
+
+The allowance refuses the CREATE of the next form, inside the transaction that
+counts, and nothing else. A site whose allowance is spent — including one that
+spent it by downgrading — keeps every form it built, editable and readable, and
+every one of them keeps collecting. Submissions are metered revenue on their own
+band, so a catalog ceiling that reached them would refuse the customer's leads
+and the platform's billing in the same request.
+
+⛔ **The catalog is not an `over-limit.ts` capacity and must not become one.**
+Sites, manager seats and datasets are there because holding past a downgrade
+means holding capacity the org is no longer entitled to, and the remedy is to
+release some. Forms have no such remedy: they grandfather, in full, forever.
+
+### What this deliberately did NOT do
+
+- **No submissions change.** The bands and the metered rate are a charged price
+  and are frozen. The comparison did not suggest moving them.
+- **No forms add-on.** Extra forms are not sold, so no new price exists.
+- **`reusableComponents` still gates access.** Free resolves to 0 because that
+  entitlement is Starter-and-above and refuses the create before the count is
+  reached. The number publishes what Free actually gets rather than a promise
+  the route declines.
+
+### Open question for the account owner
+
+**Should Free get a small saved-form catalog?** Every free tier in the
+comparison set offers forms — HubSpot and Mailchimp make free forms the
+acquisition lever that fills the metered resource they actually bill. Free sites
+here already accept 20 submissions a month from an unbound form on a page, so the
+capability is half-present; what they cannot do is SAVE one as a reusable
+definition. Granting it means moving the form entity off `reusableComponents`,
+which is a packaging change on a published feature-matrix row and needs a
+decision, not an implementation.
+
+### Amended the same day — the ladder is withdrawn
+
+**What happened, plainly.** The ladder above was designed, implemented and
+published across the entitlements table, the plan cards, the usage meters, the
+staff editor and the generated pricing tables. Building it required surveying
+what the field actually charges for, and that survey is the competitor table
+above: of seven vendors, five cap saved-form COUNT at nothing whatsoever,
+Webflow abandoned the lever above its free tier, and the only two that meter it
+are Wix and Jotform — the latter a form-first product where a form IS the
+billable unit. The work's own conclusion was that the count is an abuse ceiling
+rather than a marketing lever. The account owner read that and decided not to
+price it per tier.
+
+So the ladder is gone and the mechanism stays.
+
+**The shape: one flat ceiling, not "unlimited".** `formsPerHost` resolves to
+`FORMS_PER_HOST_CEILING = 500` on every plan that can build a form at all, and
+to `0` on Free. It rides an entitlement key rather than a bare platform
+constant for two concrete reasons: `checkQuota` is where a refusal can happen
+inside the transaction that counts, and a per-org `entitlements.formsPerHost`
+override is how one contract gets a larger catalog without moving the number
+everyone else is measured against.
+
+Unlimited-on-every-paid-plan was the alternative and was rejected. Unbounded
+creation of form definitions is a storage and write vector that no price tier
+makes safe, and removing the ceiling from the entitlement would have pushed it
+back onto `FORMS_MAX_PER_HOST` — the page size of two listing reads. That
+coupling is precisely the defect described below: one number serving as both a
+customer-facing ceiling and a query bound means any future change to the page
+size silently changes what customers may hold.
+
+500 is generous by construction: five times Jotform's largest published tier
+(100) and more than six times Wix's (75), and past any catalog a real site
+builds. It is deliberately BELOW the 1,000-row listing window, so the window
+always has headroom over the ceiling.
+
+**Removed from the pricing surfaces.**
+
+- The `Saved forms per site` row is gone from `tools/marketing/build-pricing-tables.mts` and from the generated `tools/marketing/pricing-copy/tables.json`. A limit identical on all eight plans differentiates nothing, and eight matching cells invite a reader to hunt for a difference that is not there.
+- The `EXPECTED_MISSING` declaration that had been added for that row is gone with it. That map is checked in BOTH directions — an entry that stops diverging fails — so leaving it would have broken `check:pricing-tables`.
+- The plan-card line no longer prints the catalog size. It prints the submissions band alone, which is genuinely tiered, genuinely metered and genuinely charged. The ceiling is still shown where it means something: on the per-site usage meters, beside that site's own count.
+
+`check:pricing-tables` and `check:feature-matrix` are both clean.
+
+**Kept, deliberately.**
+
+- The enforcement path: `quotaKey: 'formsPerHost'` through `checkQuota`, inside the counting transaction.
+- The rule that a ceiling refuses only the CREATION of the next form. Forms already built are never deleted, hidden or disabled, and a site above its ceiling keeps collecting submissions on every form it has. This is the standing capacity rule — a limit binds ALLOCATION, never ACCESS — and it is about future paying customers, not about legacy data.
+- The decision NOT to add forms to `over-limit.ts`, for its stated reason: there is nothing to release. A flat ceiling strengthens this — the number is now identical on both sides of any downgrade, so a plan change cannot strand a catalog at all.
+- `formSubmissionsPerMonth`, untouched. Tiered, metered, and part of a charged price.
+
+**No charged price moves.**
+
+### A defect the flattening exposed: a read bound worn as a cap
+
+`FORMS_MAX_PER_HOST` was a hard `limit()` on two reads whose comments both
+described it as a flat platform cap — the besigner entity picker and the inbox
+submissions filter. While three plans resolved to unlimited, that was simply
+false: a site could create more forms than either list could show, and both
+would present the short list as the whole list with nothing on screen saying
+otherwise. This is the defect class this codebase keeps meeting — **a read that
+cannot see something reports the same thing as the thing not existing.**
+
+Raising the constant does not fix it; it picks a larger number to be wrong at.
+The flat ceiling removes the everyday case (500 held, 1,000 readable), but a
+per-org override can still exceed the window, so the invariant is written
+against the disclosure rather than the number:
+
+- The inbox filter reads one document PAST the window, which is the only way truncation is knowable, shows at most a window's worth, and says "Showing the first 1,000 forms" when it cut the list. `inbox-paging.spec.tsx` pins both directions — it must say so when cut, and must NOT say so when the whole catalog fits.
+- The entity-picker provider's comment no longer claims a flat cap. The picker fed from it still owes the same disclosure; that surface is another owner's.
+- `forms.spec.ts` now requires the window to sit STRICTLY above the largest allowance, so the two numbers cannot silently collapse into one.
+
+### Open question for the account owner — still open, and now sharper
+
+**Should Free get a small saved-form catalog?** With the ladder gone, "forms are
+the same on every plan" and "Free gets none" sit oddly together. Free resolves
+to `0` not by a packaging choice but because the form entity rides
+`reusableComponents`, which starts at Starter.
+
+The comparison set argues one way. HubSpot and Mailchimp both make free forms
+the acquisition lever that fills the metered resource they actually bill —
+contacts and sends — and forms are exactly that shape here, since what this
+platform meters is submissions. A Free site already accepts 20 submissions a
+month from an unbound `Form` node on a page, so the capability is half-present
+already; what a Free site cannot do is SAVE one as a reusable definition.
+
+**This is the owner's call and was not decided here.** Granting it means moving
+the form entity off `reusableComponents`, which is a packaging change on a
+published feature-matrix row.
+
+---
+
+## 2026-08-30 — Advanced and Agency email allowances come down to what the platform can deliver
+
+- **Decided by:** the account owner — Agency sold 1,000,000 campaign emails a month against a 360,000 deliverable ceiling, and the repair is to lower the allowance rather than buy capacity that abuse controls have not yet earned.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS.advanced.emailSendsPerMonth` (250,000 → 125,000); `PLAN_ENTITLEMENTS.agency.emailSendsPerMonth` (1,000,000 → 250,000); `libs/shared/util/email/src/lib/send-ceilings.spec.ts` → *R3 holds for the plans we actually sell*; full reasoning in Drive → Pricing & Packaging → 05-Pricing-Decision-Log
+
+**No charged price moves.** Two entitlements come DOWN; every price stays where the Sept-1 lock put it.
+
+One org may claim a quarter of the 2,000/hour platform rate — 500/hour, so 360,000 in a 30-day month is everything it could physically send. Agency's allowance needed about 2,000 hours inside a 720-hour month. Nobody had hit it because there are no customers, but an agency using what it bought would have been throttled to roughly a third with no explanation on any screen.
+
+Advanced moves too, even though 250,000 was already deliverable: leaving it while Agency fell to 250,000 makes the two identical on this dimension across a 2× price step. The pair keeps a 2× step, and Agency sits at 69% of the ceiling — headroom for bursts, retries and warm-up.
+
+Both are floors to raise once abuse controls are tested and the capacity is justifiable. `enterprise` stays `UNLIMITED` deliberately: it is contract-bound, and a number in the entitlement table would be fiction.
+
+A guard now reads the shipped table rather than a number invented in the test file — which is why the model could be proven correct while the plans oversold.
+
+---
+
 ## 2026-08-26 — CDN delivery moves to every plan; the feature matrix becomes a tracked, generated document
 
 - **Decided by:** the account owner — the CDN path is the cheaper one to serve, so gating it raised the cost of the tier that pays nothing; the feature matrix becomes a tracked, generated document in the same pass.

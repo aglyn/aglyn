@@ -1301,6 +1301,23 @@ describe('Share bar block (AGL-582)', () => {
       expect(screen.getByLabelText(label)).toBeTruthy()
     }
   })
+
+  it('labels the buttons without entering the document outline (AGL-2486)', () => {
+    // The title is a `subtitle2`, and MUI's `defaultVariantMapping` sends that
+    // to `<h6>`. On a blog post the nearest heading above the share bar is an
+    // `h2`, so an unguarded title reads as `h2 -> h6` — a skipped level, and a
+    // `heading-order` failure on every page carrying the block.
+    //
+    // The element is asserted rather than the prop, so the `component` is
+    // proven to win Typography's `component || variantMapping[variant] ||
+    // defaultVariantMapping[variant]` resolution.
+    const { container } = render(
+      <CollectionShare heading="Share this article" />,
+    )
+
+    expect(screen.getByText('Share this article').tagName).toBe('P')
+    expect(container.querySelectorAll('h1,h2,h3,h4,h5,h6')).toHaveLength(0)
+  })
 })
 
 describe('Entry meta block (AGL-582)', () => {

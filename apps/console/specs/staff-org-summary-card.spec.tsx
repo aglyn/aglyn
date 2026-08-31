@@ -87,7 +87,7 @@ describe('StaffOrgSummaryCard (AGL-938)', () => {
         org={org}
         owner={{
           uid: org.ownerUid,
-          email: 'zach@aglyn.com',
+          email: 'staff@aglyn.com',
           displayName: 'Zach Gover',
           source: 'auth',
         }}

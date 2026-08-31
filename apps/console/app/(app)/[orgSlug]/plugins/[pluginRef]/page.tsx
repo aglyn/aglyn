@@ -18,25 +18,32 @@
 
 import {
   FIRST_PARTY_PLUGINS,
+  listConsoleExtensions,
+  planLabelGrantingFeature,
   resolveUpdateState,
   updateStateLabel,
 } from '@aglyn/aglyn'
 import { mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
+import { Alert, Button, Chip, Stack, Switch, Typography } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginConfigCards from '../../../../../components/plugin-config-card.component'
+import PluginDependenciesCard from '../../../../../components/plugin-dependencies-card.component'
+import PluginDisableCascadeDialog from '../../../../../components/plugin-disable-cascade-dialog.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
+import useCurrentOrg from '../../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
+import { useOrgPluginSwitchboard } from '../../../../../hooks/use-plugin-switchboard'
+import { resolveExtensionEntitlement } from '../../../../../utils/extension-entitlement'
 
 /**
  * How loudly each update state reads (AGL-1016). `unknown` and `ahead` are
@@ -198,6 +205,38 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
   const installedAnywhere = Boolean(orgPin) ||
     Object.values(sitePins).some(Boolean)
 
+  /**
+   * The workspace switch, from the SAME writer the Plugins list uses.
+   *
+   * The list and this page are two views of one piece of state, and the state
+   * has a dependency cascade attached — so the answer to "two surfaces must
+   * not each own this write" is one writer both call, which is what
+   * `useOrgPluginSwitchboard` is. The cascade check sits in front of the write
+   * inside it, so no surface can reach the write without it.
+   */
+  const switchboard = useOrgPluginSwitchboard({
+    labelFor: (id) =>
+      FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === id)?.label ??
+      (id === pluginRef ? displayName : id),
+  })
+
+  /**
+   * Whether the PLAN runs what this plugin registers (AGL-2484).
+   *
+   * The switch itself is not plan-gated — it is role-gated, and a workspace on
+   * any plan may switch a plugin off — but a plugin whose console extension
+   * declares an entitlement the org does not hold renders nothing when it is
+   * on, and this is the page where an admin would otherwise conclude the
+   * switch is broken. `pending` says nothing at all: an unresolved org
+   * resolves the FREE tier, so a claim made before `ready` tells a paying
+   * workspace it does not have what it pays for.
+   */
+  const { org, ready: orgReady } = useCurrentOrg()
+  const extensionFlag = listConsoleExtensions().find(
+    (extension) => extension.pluginId === pluginId,
+  )?.featureFlag
+  const planState = resolveExtensionEntitlement(extensionFlag, org, orgReady)
+
   return (
     <DashboardLayout
       breadcrumbItems={[
@@ -286,19 +325,73 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
             contentGutterY
           >
             {firstParty ? (
-              <Stack spacing={1}>
-                <Typography variant="body2">
-                  {firstParty.alwaysOn
-                    ? 'Always on, for every site in this organization — it ' +
-                      'is what sites are built out of, so it cannot be ' +
-                      'turned off.'
-                    : 'Every site in this organization. Turn it on or off ' +
-                      'for the whole workspace from Plugins.'}
-                </Typography>
+              <Stack spacing={1.5}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <Typography variant="body2">
+                    {firstParty.alwaysOn
+                      ? 'Always on, for every site in this organization — it ' +
+                        'is what sites are built out of, so it cannot be ' +
+                        'turned off.'
+                      : 'Every site in this organization, while it is ' +
+                        'switched on here.'}
+                  </Typography>
+                  {/*
+                    The switch, on the page about the thing it switches. It
+                    used to live only on the list, so reading a plugin's page
+                    and deciding to turn it off meant navigating back to find
+                    the row again — and the reason given for that (a second
+                    writer would be a second place to forget the cascade) is
+                    answered by sharing the writer, not by withholding the
+                    control.
+                  */}
+                  <Switch
+                    checked={switchboard.isOn(pluginRef) || firstParty.alwaysOn}
+                    disabled={
+                      firstParty.alwaysOn ||
+                      !switchboard.canWrite ||
+                      // Unready means this position is the DEFAULT set rather
+                      // than this workspace's, so it is not something to act
+                      // on yet.
+                      !switchboard.ready ||
+                      switchboard.busy
+                    }
+                    onChange={() =>
+                      switchboard.requestToggle(
+                        pluginRef,
+                        !switchboard.isOn(pluginRef),
+                      )
+                    }
+                    slotProps={{
+                      input: {
+                        'aria-label': `Toggle ${firstParty.label} for this workspace`,
+                      },
+                    }}
+                  />
+                </Stack>
                 {firstParty.description ? (
                   <Typography variant="body2" color="text.secondary">
                     {firstParty.description}
                   </Typography>
+                ) : null}
+                {switchboard.canWrite ? null : (
+                  <Typography variant="body2" color="text.secondary">
+                    {'Only workspace owners and admins can switch a plugin ' +
+                      'on or off.'}
+                  </Typography>
+                )}
+                {planState === 'blocked' ? (
+                  <Alert severity="info" variant="outlined">
+                    {`Switching ${firstParty.label} on does not put it on ` +
+                      'your plan: its console pages stay behind an upgrade ' +
+                      'notice until the plan includes it.' +
+                      (planLabelGrantingFeature(extensionFlag as never)
+                        ? ` Included from ${planLabelGrantingFeature(extensionFlag as never)}.`
+                        : '')}
+                  </Alert>
                 ) : null}
               </Stack>
             ) : (
@@ -314,12 +407,29 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
             )}
           </CardDisplay>
 
+          {/* What it needs, and what needs it. Switching a plugin off is the
+              one act on this page with consequences outside it, and the page
+              said nothing about them — the cascade only appeared once the
+              switch had already been flipped. */}
+          <PluginDependenciesCard pluginId={pluginRef} orgSlug={orgSlug} />
+
           {/* Settings — the reason this page exists. Bookings settings
               only mean anything in the context of the Bookings
               installation; on the Installed tab they were a loose card in
-              a stack of unrelated forms. */}
+              a stack of unrelated forms.
+
+              `manifest` is what lets a MARKETPLACE plugin have settings at
+              all: first-party schemas are registered at module scope, which a
+              sandboxed third-party bundle cannot do, so without the pin's own
+              manifest this card rendered nothing for every plugin the
+              workspace installed. */}
           {pluginId ? (
-            <PluginConfigCards orgId={orgId} pluginId={pluginId} />
+            <PluginConfigCards
+              orgId={orgId}
+              pluginId={pluginId}
+              manifest={pin?.manifest}
+              displayName={displayName}
+            />
           ) : null}
 
           {/* Permissions & data, for third-party code only: a
@@ -388,6 +498,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
           </CardDisplay>
           )}
         </Stack>
+        <PluginDisableCascadeDialog {...switchboard.dialogProps} />
       </Container>
     </DashboardLayout>
   )

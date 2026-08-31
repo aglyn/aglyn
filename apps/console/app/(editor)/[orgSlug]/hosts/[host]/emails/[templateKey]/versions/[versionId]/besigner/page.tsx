@@ -17,6 +17,7 @@
 'use client'
 
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
+import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
@@ -474,6 +475,7 @@ function HostEmailBesignerPage() {
   ) : null
 
   return (
+    <EntityPickerProvider hostId={hostId}>
     <BindingPickerProvider hostId={hostId}>
       {/* Host variables in the email designer (AGL-1023). This surface had no
           binding picker at all, which is the one where it matters most: a
@@ -663,6 +665,7 @@ function HostEmailBesignerPage() {
         />
       )}
     </BindingPickerProvider>
+    </EntityPickerProvider>
   )
 }
 

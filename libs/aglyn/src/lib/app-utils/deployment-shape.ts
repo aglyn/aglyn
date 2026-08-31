@@ -137,6 +137,39 @@ export function isDevelopmentRuntime(
 }
 
 /**
+ * WHERE this instance is serving from, for a forensic marker (AGL-2436).
+ *
+ * The rate-limit degradation marker stamped `VERCEL_REGION` directly, so on
+ * any deployment that is not Aglyn's cloud every episode recorded
+ * `region: null`. Nothing reads the field yet, so this is honest rather than
+ * misleading — but an operator running several replicas has no way to tell
+ * which one shed load, which is the only question the field exists to answer.
+ *
+ * `AGLYN_REGION` is first so an operator can supply the answer their platform
+ * does not: a Kubernetes deployment can pass the node's zone or the pod name
+ * through the downward API, and a compose file can hard-code the site name.
+ * The rest are read because the platforms that set them set them for free.
+ *
+ * Null rather than a guess when nothing is set: a marker that says it does not
+ * know where it ran is usable, and one that invents a locality is not.
+ */
+export function deploymentRegion(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  for (const name of [
+    'AGLYN_REGION',
+    'VERCEL_REGION',
+    'FLY_REGION',
+    'AWS_REGION',
+    'AWS_DEFAULT_REGION',
+  ]) {
+    const value = String(env[name] ?? '').trim()
+    if (value) return value
+  }
+  return null
+}
+
+/**
  * Build metadata that is unset, in every spelling this repo produces.
  *
  * `libs/shared/data/enums/src/lib/global.ts` renders unset build metadata as

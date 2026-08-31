@@ -138,7 +138,7 @@ beforeEach(() => {
 
 describe('the SSO enforcement pre-flight', () => {
   it('THE DEFECT: refuses when nobody would keep a non-IdP way in', async () => {
-    // The `zach@aglyn.com` shape. Two accounts, both with a password today;
+    // The `staff@aglyn.com` shape. Two accounts, both with a password today;
     // enforcing would leave both holding nothing but the SAML link, and a
     // lapsed certificate then locks the organization out permanently.
     poolUsers = [

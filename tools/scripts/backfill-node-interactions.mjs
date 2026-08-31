@@ -17,7 +17,7 @@
 
 /**
  * Moves element-scoped interactions out of `hosts/{h}/actions` and onto the
- * nodes that carry them (AGL-1478).
+ * nodes that carry them.
  *
  * An interaction is what an ELEMENT does; a host action is what the SITE
  * does. Both were stored as actions, bound to an element by a

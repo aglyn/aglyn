@@ -189,6 +189,12 @@ jest.mock('@aglyn/aglyn/server', () => {
   return {
     __esModule: true,
     ...jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/marketing-consent',
+    ),
+    ...jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/consent-groups',
+    ),
+    ...jest.requireActual(
       '../../../libs/aglyn/src/lib/app-utils/api-idempotency',
     ),
     // The REAL normalizer. This is the whole point of the `?email=` test —
@@ -289,13 +295,17 @@ beforeEach(() => {
     tags: [],
   })
 
+  // s1 and s2 are the same FORM under two captions — the rename this entity
+  // exists to survive. Under `?form=` they are two different lists.
   mockDocs.set(`${SUBMISSIONS}/s1`, {
+    formId: 'form-contact',
     formName: 'contact',
     fields: { email: 'a@example.com' },
     read: false,
   })
   mockDocs.set(`${SUBMISSIONS}/s2`, {
-    formName: 'contact',
+    formId: 'form-contact',
+    formName: 'Talk to us',
     fields: { email: 'b@example.com' },
     read: true,
   })
@@ -472,6 +482,37 @@ describe('GET /v1/sites/{siteId}/form-submissions?read=', () => {
     expect((await body(response)).data?.map((s) => s.id)).toEqual(['s3'])
     expect(lastFilters()).toEqual([
       { field: 'formName', op: '==', value: 'newsletter' },
+    ])
+  })
+
+  it('filters by form id, across a rename', async () => {
+    // The point of the id. `s1` and `s2` were sent to ONE form whose caption
+    // changed between them; `?form=` returns one row, `?formId=` returns both.
+    const response = await listSubmissions('?formId=form-contact')
+    expect((await body(response)).data?.map((s) => s.id)).toEqual(['s1', 's2'])
+    expect(lastFilters()).toEqual([
+      { field: 'formId', op: '==', value: 'form-contact' },
+    ])
+    const legacy = await listSubmissions('?form=contact')
+    expect((await body(legacy)).data?.map((s) => s.id)).toEqual(['s1'])
+  })
+
+  it('publishes the form id and the routing on every row', async () => {
+    const response = await listSubmissions('?formId=form-contact')
+    expect((await body(response)).data?.[0]).toMatchObject({
+      form_id: 'form-contact',
+      routing: null,
+    })
+  })
+
+  it('narrows on one clause when the id filter joins read', async () => {
+    // Same composite-index property as `?form=` below: one Firestore clause,
+    // `read` applied to the page. `formId` + `read` + `orderBy(__name__)` is
+    // a three-clause query nobody has shipped an index for.
+    const response = await listSubmissions('?formId=form-contact&read=false')
+    expect((await body(response)).data?.map((s) => s.id)).toEqual(['s1'])
+    expect(lastFilters()).toEqual([
+      { field: 'formId', op: '==', value: 'form-contact' },
     ])
   })
 

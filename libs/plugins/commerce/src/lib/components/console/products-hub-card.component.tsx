@@ -18,11 +18,15 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { PRODUCT_LIST_FILTER_FIELDS } from '../../constants/product-filters'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -44,14 +48,18 @@ import {
   addDoc,
   collection,
   doc,
+  documentId,
   getCountFromServer,
   limit,
+  orderBy,
   query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
+  listFilterConstraints,
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -59,6 +67,24 @@ import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+
+/**
+ * How many catalog documents the table's listener holds.
+ *
+ * A CEILING, not a page size: a 25,000-product catalog does not belong in a
+ * table, and three other readers on this card — the CSV export, the importer's
+ * duplicate-slug check and the reserved-stock clock — need the window whole.
+ * The footer pages what this holds; the query is what bounds it.
+ */
+const CATALOG_CEILING = 500
+
+/**
+ * How many of ONE product's license keys the dialog reads.
+ *
+ * Per product, not per store: the query carries the `productId` equality, so
+ * this bounds a single pool rather than the site's whole key collection.
+ */
+const KEY_POOL_CEILING = 500
 
 export interface ProductsHubCardProps {
   hostId: string
@@ -90,6 +116,23 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const { org, ready: planReady } = useOrgPlan(hostId)
   const { confirm } = useConfirmationContext()
   const [search, setSearch] = useState('')
+  /*
+   * WHICH field the search box searches (AGL-2501).
+   *
+   * The box used to compare four fields at once — name, slug, tag, SKU — over
+   * the rows the listener had already fetched. Server-side that is not one
+   * query: Firestore allows a single `array-contains` per query and cannot OR
+   * across fields, so four fields at once means four queries and a merge, and
+   * a merged result cannot be paged or capped coherently.
+   *
+   * Naming the field is the honest trade. It buys a search that reaches the
+   * WHOLE catalog instead of an arbitrary five hundred rows of it, which is
+   * the case the old box got wrong — and a merchant looking for a SKU knows
+   * they are looking for a SKU.
+   */
+  const [searchField, setSearchField] = useState<'name' | 'skus' | 'barcodes'>(
+    'name',
+  )
   const [statusFilter, setStatusFilter] = useState('all')
   const [editing, setEditing] = useState<ProductRow | null>(null)
   const [creating, setCreating] = useState(false)
@@ -120,55 +163,170 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
      */
     fromCache: productsFromCache,
   } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'products'), limit(500)),
-    [firestore, hostId],
+    () => {
+      /*
+       * FILTERED BY THE QUERY, and ordered rather than merely capped
+       * (AGL-2501, AGL-2292).
+       *
+       * `limit(500)` with no `orderBy` returns documents in ID order, and
+       * products are created at `createResourceUid()` — so that was a
+       * pseudo-random SAMPLE of five hundred, which the client `.sort()` by
+       * name below dressed up as a reliable alphabetical page. The search then
+       * ran over that sample, so a product on the wrong side of the cap
+       * answered "no products match": the one answer a search must never get
+       * wrong, on the list a merchant uses to find one item in their catalog.
+       *
+       * The cap STAYS — a 25,000-product catalog does not belong in a table,
+       * and the head-count has been a server aggregate since AGL-1716. What
+       * changes is that a filter now reaches the whole collection BEFORE the
+       * cap applies.
+       *
+       * ONE request, because Firestore allows one `array-contains` and the
+       * shared translator builds one predicate. Whichever control is set alone
+       * is answered entirely by the server; with BOTH set the name reaches the
+       * whole catalog and the status narrows those matches client-side below,
+       * which is complete unless a single name matches more than five hundred
+       * products.
+       *
+       * ⚠️ The default ordering is by DOCUMENT ID, not by `nameLower`.
+       * Ordering by a denormalized key drops every document that lacks it, and
+       * an unfiltered list must not be able to hide a product — a catalog
+       * imported before the search keys existed, or written by a path that
+       * forgot them, would simply stop appearing. Under a name filter the
+       * ordering does move to `nameLower`, and there it is safe: a document
+       * without the key has no `nameTokens` either, so the `array-contains`
+       * has already excluded it.
+       */
+      const constraints = listFilterConstraints(
+        PRODUCT_LIST_FILTER_FIELDS,
+        search.trim()
+          ? { field: searchField, op: 'contains', value: search.trim() }
+          : statusFilter !== 'all'
+            ? { field: 'status', op: 'equals', value: statusFilter }
+            : null,
+      )
+      return query(
+        collection(firestore, 'hosts', hostId, 'products'),
+        ...(constraints ?? [orderBy(documentId())]),
+        /*
+         * `CATALOG_CEILING + 1` is a PROBE (AGL-2501). One document past the
+         * ceiling turns "this catalog is larger than the table" into a fact.
+         * The probe row is dropped below and never rendered, exported or
+         * counted.
+         */
+        limit(CATALOG_CEILING + 1),
+      )
+    },
+    [firestore, hostId, search, searchField, statusFilter],
     { idField: '$id' },
   )
-  // License key pool (AGL-308) for the open dialog's product.
+  /*
+   * License key pool (AGL-308) for the open dialog's product — asked FOR that
+   * product, and ordered (AGL-2501).
+   *
+   * This read `limit(500)` over the site's whole `licenseKeys` collection with
+   * no `orderBy`, then filtered by `productId` in the browser. Firestore
+   * answers an unordered limit in DOCUMENT-ID order, so on a store past five
+   * hundred keys the window was an arbitrary five hundred taken across every
+   * product — and the "N available" line below counted what happened to be in
+   * it. A product whose keys all hashed high showed a pool of zero while the
+   * storefront went on delivering them.
+   *
+   * The equality moves into the query, so the window is this product's keys
+   * rather than the store's. `orderBy(documentId())` orders on the document
+   * NAME, which cannot be absent — every candidate FIELD here (`createdAtMs`,
+   * `assignedAtMs`, `revokedAtMs`) is either optional by design or absent on
+   * exactly the keys the counts are about. An equality plus an ordering on
+   * `__name__` is served by the automatic single-field index, so this adds no
+   * composite for anyone to deploy.
+   */
   const { data: keyDocs } = useFirestoreCollection<any>(
     () =>
       keysFor
         ? query(
             collection(firestore, 'hosts', hostId, 'licenseKeys'),
-            limit(500),
+            where('productId', '==', keysFor.$id),
+            orderBy(documentId()),
+            // One past the ceiling, so a pool larger than the window is a
+            // fact rather than a guess from `length === 500`.
+            limit(KEY_POOL_CEILING + 1),
           )
         : null,
     [firestore, hostId, keysFor?.$id],
     { idField: '$id' },
   )
+  /** The key pool is larger than the window, so the counts below are partial. */
+  const keyPoolTruncated = (keyDocs?.length ?? 0) > KEY_POOL_CEILING
   // Locations (AGL-286): the stock dialog buckets deltas when they exist.
   const { data: locationDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'locations'), limit(25)),
     [firestore, hostId],
     { idField: '$id' },
   )
+  /** The read went past the ceiling, so the catalog is larger than the window. */
+  const catalogTruncated = (productDocs?.length ?? 0) > CATALOG_CEILING
   const products = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    return [...(productDocs ?? [])]
+    /*
+     * The SEARCH is gone from here — it is the query's job now, and running it
+     * twice would be worse than redundant. A server `contains` matches a word
+     * PREFIX ("cof" finds "Coffee"), while the old `includes` matched a raw
+     * substring, so a two-word search would have been sent to the server as
+     * its first word and then dropped again here by a whole-string compare
+     * that the matching row never satisfies: rows found, then hidden.
+     *
+     * The status narrowing stays, and only earns its keep when a name search
+     * is also active — that is the one combination the single predicate above
+     * cannot express, and here it runs over rows the server already matched by
+     * name across the whole catalog rather than over an arbitrary window.
+     *
+     * Soft-deleted products are still dropped here rather than in the query:
+     * `deletedAt` is absent on a live product, and Firestore cannot ask for
+     * documents that LACK a field.
+     */
+    return (productDocs ?? [])
+      .slice(0, CATALOG_CEILING)
       .filter((product: any) => !product.deletedAt)
       .map((product: any) => ({
         ...CommerceModel.liftLegacyProduct(product),
         $id: product.$id,
       }))
-      .filter((product: ProductRow) => {
-        if (statusFilter !== 'all' && product.status !== statusFilter) {
-          return false
-        }
-        if (!needle) return true
-        return (
-          product.name.toLowerCase().includes(needle) ||
-          product.slug.includes(needle) ||
-          (product.tags ?? []).some((tag) =>
-            tag.toLowerCase().includes(needle),
-          ) ||
-          product.variants.some((variant) =>
-            variant.sku?.toLowerCase().includes(needle),
-          )
-        )
-      })
+      .filter(
+        (product: ProductRow) =>
+          statusFilter === 'all' || product.status === statusFilter,
+      )
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [productDocs, search, statusFilter])
+  }, [productDocs, statusFilter])
+
+  /*==========================================
+   * THE TABLE PAGES, and the READ deliberately does not (AGL-2501).
+   *
+   * The card rendered every row of a five-hundred-document window in one wall
+   * with no footer under it — the shape this sweep is about. What it must not
+   * become is a server-paged query, because three other things in this file
+   * read the same window and every one of them needs it whole:
+   *
+   *  * `handleExport` writes the CSV from these rows. A ten-row page would
+   *    silently export ten products under a filename that claims the catalog.
+   *  * the CSV importer builds `existingSlugs` from them to refuse a
+   *    duplicate slug. Narrowed to a page, it would stop seeing the clash and
+   *    create the duplicate it exists to prevent.
+   *  * the reserved-stock clock arms off them.
+   *
+   * The window is also already correct: `orderBy(documentId())` unfiltered,
+   * `nameLower` under a name filter, and the filters themselves reach the
+   * whole collection through the query. So the fix here is the CONTROL, not
+   * the read — and the head-count beside it has been a server aggregate since
+   * AGL-1716.
+   *=========================================*/
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  // A filter narrows the list under the reader's feet, and page four of the
+  // unfiltered catalog is not a position in the filtered one.
+  useEffect(() => setPage(0), [search, searchField, statusFilter])
+  const visibleProducts = useMemo(
+    () => products.slice(page * pageSize, page * pageSize + pageSize),
+    [products, page, pageSize],
+  )
 
   /**
    * A CLOCK, because a hold lapses without anybody writing anything
@@ -393,6 +551,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           resource: 'product',
           data: {
             ...product,
+            // Search keys travel with the name on the IMPORT path too — a
+            // catalog arrives here in bulk, which is exactly the catalog the
+            // 500-row window cannot show and the search has to reach.
+            ...CommerceModel.productSearchFields(product),
             slug,
             priceUsd: product.variants[0]?.priceUsd ?? 0,
             inventory: CommerceModel.productInventory(product),
@@ -524,7 +686,22 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
 
   return (
     <CardDisplay
-      header={`Products${products.length ? ` (${products.length})` : ''}`}
+      /*
+       * The header count is the SITE'S catalog, not the rows in hand.
+       *
+       * It was `products.length`, which is the filtered, ceilinged, now-paged
+       * view — so it read 500 on a 25,000-product catalog and would read 10
+       * once the table paged. `productCount` is the same server aggregate the
+       * quota gate uses. Under a filter there is no honest number to put here:
+       * the aggregate counts the whole catalog and the view counts matches, so
+       * neither describes what the reader is looking at, and the footer's own
+       * count line answers it instead.
+       */
+      header={
+        search || statusFilter !== 'all'
+          ? 'Products'
+          : `Products${productCount ? ` (${productCount})` : ''}`
+      }
       help={pluginDocsHelp('commerce', { anchor: '#products-hub' })}
       contentGutterX
       contentGutterY
@@ -533,12 +710,34 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField
             label="Search"
-            placeholder="Name, slug, tag, or SKU"
+            placeholder={
+              searchField === 'name'
+                ? 'Product name'
+                : searchField === 'skus'
+                  ? 'Whole SKU'
+                  : 'Whole barcode'
+            }
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             size="small"
             sx={{ flex: 1 }}
           />
+          <TextField
+            label="In"
+            value={searchField}
+            onChange={(event) =>
+              setSearchField(
+                event.target.value as 'name' | 'skus' | 'barcodes',
+              )
+            }
+            size="small"
+            select
+            sx={{ minWidth: 110 }}
+          >
+            <MenuItem value="name">{'Name'}</MenuItem>
+            <MenuItem value="skus">{'SKU'}</MenuItem>
+            <MenuItem value="barcodes">{'Barcode'}</MenuItem>
+          </TextField>
           <TextField
             label="Status"
             value={statusFilter}
@@ -618,7 +817,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {products.map((product) => (
+                {visibleProducts.map((product) => (
                   <TableRow key={product.$id} hover>
                     <TableCell sx={{ maxWidth: 260 }}>
                       <Typography variant="body2" noWrap>
@@ -715,6 +914,26 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             </Table>
           </Box>
         )}
+        {products.length === 0 ? null : (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visibleProducts.length}
+            // The rows matching the current filters, which the card holds in
+            // full below the ceiling. NOT the catalog total — that is
+            // `productCount`, and it answers a different question.
+            count={products.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        {catalogTruncated ? (
+          <Alert severity="info">
+            {`This table holds ${CATALOG_CEILING} products at a time and this ` +
+              'catalog is larger. Search reaches every product; the CSV ' +
+              'export covers what the table holds.'}
+          </Alert>
+        ) : null}
       </Stack>
       <Dialog
         open={Boolean(keysFor)}
@@ -725,9 +944,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         <DialogTitle>{`License keys — ${keysFor?.name ?? ''}`}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {(() => {
-            const productKeys = (keyDocs ?? []).filter(
-              (key: any) => key.productId === keysFor?.$id,
-            )
+            // The query already asked for this product's keys, so no second
+            // filter here: narrowing a window that was already narrowed is how
+            // a reader comes to believe the count covers the pool.
+            const productKeys = (keyDocs ?? []).slice(0, KEY_POOL_CEILING)
             const available = productKeys.filter(
               (key: any) => !key.assignedAtMs,
             )
@@ -745,6 +965,9 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                   {`${available.length} available · ${assigned} assigned` +
                     (retired.length
                       ? ` · ${retired.length} retired (refunded or revoked — not reissued)`
+                      : '') +
+                    (keyPoolTruncated
+                      ? `, of the ${KEY_POOL_CEILING} keys read`
                       : '') +
                     '. Keys deliver automatically on purchase (receipt + account).'}
                 </Typography>

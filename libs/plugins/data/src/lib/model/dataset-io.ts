@@ -18,14 +18,16 @@
 /**
  * Dataset CSV/JSON round-tripping (AGL-182) — the IMPORT half.
  *
- * The serialization half moved to `@aglyn/aglyn`'s `dataset-csv` (AGL-2335)
- * so the server export route can share one escaper; it is re-exported here
- * unchanged, so `@aglyn/plugins-data/model` remains the one import site for
- * everything dataset-io. Nothing outside this plugin parses a CSV, so the
- * parser stays.
+ * Both the serialization half and the CSV parser live in `@aglyn/aglyn`'s
+ * `dataset-csv` (AGL-2335) so that the server export route and the email
+ * list importer can share one escaper and one parser; both are re-exported
+ * here unchanged, so `@aglyn/plugins-data/model` remains the one import site
+ * for everything dataset-io. What stays here is the part that is about
+ * DATASETS — mapping a file's columns onto a `DatasetModel`.
  */
 
 import type { DatasetModel } from '@aglyn/aglyn'
+import { parseCsv } from '@aglyn/aglyn/app-utils/dataset-csv'
 export {
   countCsvDataRows,
   datasetCsvHeader,
@@ -33,52 +35,9 @@ export {
   datasetRecordToJson,
   datasetRecordsToCsv,
   exportShortfall,
+  parseCsv,
   serializeDatasetValue,
 } from '@aglyn/aglyn/app-utils/dataset-csv'
-
-/** Minimal RFC-4180 CSV parser (quoted fields, escaped quotes, CRLF). */
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let cell = ''
-  let quoted = false
-  const source = String(text ?? '')
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index]
-    if (quoted) {
-      if (char === '"') {
-        if (source[index + 1] === '"') {
-          cell += '"'
-          index += 1
-        } else {
-          quoted = false
-        }
-      } else {
-        cell += char
-      }
-      continue
-    }
-    if (char === '"') {
-      quoted = true
-    } else if (char === ',') {
-      row.push(cell)
-      cell = ''
-    } else if (char === '\n' || char === '\r') {
-      if (char === '\r' && source[index + 1] === '\n') index += 1
-      row.push(cell)
-      cell = ''
-      rows.push(row)
-      row = []
-    } else {
-      cell += char
-    }
-  }
-  if (cell !== '' || row.length) {
-    row.push(cell)
-    rows.push(row)
-  }
-  return rows.filter((cells) => cells.some((value) => value.trim() !== ''))
-}
 
 /**
  * Parses pasted/uploaded import text — a JSON array of objects or CSV

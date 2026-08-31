@@ -41,7 +41,7 @@ export {}
  */
 
 const SSO_TENANT = 'aglyn-org-y5v14'
-const TARGET_UID = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+const TARGET_UID = 'SsoTenantUidFixture000000000'
 const ACTOR_UID = 'staff-1'
 const DEVICE_ID = 'dev-stolen-laptop'
 
@@ -74,7 +74,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     }
   }
   const targetRecord = {
-    uid: 'IHumyGGhGxZKjVV26qCRx5Okf573',
+    uid: 'SsoTenantUidFixture000000000',
     email: 'owner@acme.com',
     displayName: null,
     photoURL: null,

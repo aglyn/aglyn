@@ -19,7 +19,9 @@
 
 import {
   ANALYTICS_EVENT_NAMES,
+  buildAddToCartParams,
   buildBeginCheckoutParams,
+  buildViewCartParams,
   configureAnalyticsTransport,
   isFirstPublishedRoute,
   resetAnalyticsTransport,
@@ -405,6 +407,52 @@ describe('analytics-events (AGL-1561)', () => {
     })
   })
 
+  describe('the other two priced ecommerce steps', () => {
+    it('gives view_cart the same shape the cart checks out with', () => {
+      // The point of a sibling builder rather than a second hand-written
+      // shape: a `view_cart` and the `begin_checkout` that follows it describe
+      // ONE cart, and two steps that disagreed about its size would read as
+      // shoppers editing between screens rather than as a reporting defect.
+      const items = [
+        { item_id: 'prod_mug', item_name: 'Enamel mug', price: 19.99, quantity: 2 },
+      ]
+      expect(buildViewCartParams({ value: 34.98, items })).toEqual({
+        currency: 'USD',
+        value: 34.98,
+        items,
+      })
+    })
+
+    it('prices add_to_cart from what was added, not from a stated total', () => {
+      expect(
+        buildAddToCartParams({
+          items: [
+            { item_id: 'prod_mug', item_name: 'Enamel mug', price: 19.99, quantity: 2 },
+          ],
+        }),
+      ).toEqual({
+        currency: 'USD',
+        value: 39.98,
+        items: [
+          { item_id: 'prod_mug', item_name: 'Enamel mug', price: 19.99, quantity: 2 },
+        ],
+      })
+    })
+
+    it('omits the currency/value PAIR when the line cannot be priced', () => {
+      // GA4 drops a `value` that arrives without a `currency`, so the two
+      // travel together or not at all — and an unpriced add reported as
+      // `value: 0` would describe a free product rather than an unknown one.
+      const unpriced = buildAddToCartParams({
+        items: [{ item_id: 'prod_mug', item_name: 'Enamel mug' }],
+      })
+      expect(unpriced).toEqual({
+        items: [{ item_id: 'prod_mug', item_name: 'Enamel mug' }],
+      })
+      expect('currency' in unpriced).toBe(false)
+    })
+  })
+
   describe('the four converted mirrors (AGL-1591)', () => {
     it('sends the commerce and site-runtime events through the sanitizer', () => {
       const calls = installGtag()
@@ -528,7 +576,7 @@ describe('analytics-events (AGL-1561)', () => {
     it('drops identity-bearing param keys outright', () => {
       const safe = sanitizeEventParams({
         form_name: 'Contact',
-        email: 'zach@aglyn.com',
+        email: 'person@example.com',
         first_name: 'Zach',
         org_name: 'Aglyn LLC',
         phone: '+1 555 0100',
@@ -563,7 +611,7 @@ describe('analytics-events (AGL-1561)', () => {
 
     it('scrubs URLs to origin + pathname so a query string cannot smuggle a token', () => {
       const safe = sanitizeEventParams({
-        content_id: 'https://aglyn.com/pricing?email=zach@aglyn.com&token=secret',
+        content_id: 'https://aglyn.com/pricing?email=person@example.com&token=secret',
       })
 
       expect(safe).toEqual({ content_id: 'https://aglyn.com/pricing' })
@@ -600,7 +648,7 @@ describe('analytics-events (AGL-1561)', () => {
         form_name: 'Contact',
         // @ts-expect-error deliberately smuggling a denied key past the types,
         // which is exactly how it would arrive from a careless call site.
-        email: 'zach@aglyn.com',
+        email: 'person@example.com',
       })
 
       expect(calls[0][2]).toEqual({ form_name: 'Contact' })
@@ -626,7 +674,7 @@ describe('analytics-events (AGL-1561)', () => {
       // into the step's params and a customer's address heads for GA.
       trackAuthoredEvent('quote_requested', {
         plan: 'pro',
-        email: 'zach@aglyn.com',
+        email: 'person@example.com',
         contact: 'someone@example.com',
       })
 

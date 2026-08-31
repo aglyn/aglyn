@@ -101,6 +101,11 @@
  */
 
 import {
+  GOOGLE_ADS_ID_PATTERN,
+  LINKEDIN_PARTNER_ID_PATTERN,
+  META_PIXEL_ID_PATTERN,
+} from './visitor-consent'
+import {
   analyticsMayEmit,
   type AnalyticsEnvironment,
   readAnalyticsEnvironment,
@@ -170,6 +175,18 @@ export interface AdvertisingVendor {
    */
   readonly sweepOnly?: true
   /**
+   * Sweep this vendor's cookies even when no marked element is present.
+   *
+   * The element check is an OWNERSHIP test, not a liveness one: a pixel we did
+   * not load is a pixel running on a basis that is not ours to withdraw, so
+   * its cookies are not ours to clear either. `alwaysSweep` is for a vendor
+   * whose cookies cannot belong to anybody else's tag on our surfaces —
+   * Google's `_gcl_*`, which a GTM container or a bare gtag writes without any
+   * marker of ours ever existing. That is the AGL-2486 case, and it is a
+   * property of the COOKIE rather than of the loader.
+   */
+  readonly alwaysSweep?: true
+  /**
    * Strict format check on the configured account id. The id lands inside an
    * inline script, so this is load-bearing exactly as
    * `GA_MEASUREMENT_ID_PATTERN` is (the AGL-138 concern).
@@ -177,6 +194,21 @@ export interface AdvertisingVendor {
   readonly accountIdPattern?: RegExp
   /** The vendor library URL. Constant — no interpolation reaches it. */
   readonly scriptSrc?: string
+  /**
+   * A substring of a library URL this vendor SHARES with another loader.
+   *
+   * Set it and the tag mounts its boot snippet but skips its own `<script>`
+   * when a matching one is already in the document. Google Ads is the case:
+   * `gtag.js` is the same library the GA4 measurement id loads, so a site with
+   * both configured would fetch it twice, define `gtag()` twice, and — the
+   * part that actually corrupts data — push a second `consent default` that
+   * re-denies what the first one granted, mid-pageview.
+   *
+   * The boot snippet still runs, because a `config` for a SECOND product is
+   * exactly how gtag is meant to carry two: one library, two configs, no
+   * double count.
+   */
+  readonly sharesLibrary?: string
   /**
    * Substring that identifies a RESIDENT script element for this vendor,
    * used together with {@link ADVERTISING_TAG_ATTRIBUTE} at teardown.
@@ -198,6 +230,7 @@ export interface AdvertisingVendor {
     granted: boolean,
   ) => void
 }
+
 
 /**
  * Meta (Facebook/Instagram) Pixel.
@@ -234,7 +267,7 @@ export const META_PIXEL_VENDOR: AdvertisingVendor = {
   label: 'Meta Pixel',
   // Meta pixel ids are numeric; the length band is generous on both sides
   // rather than pinned to today's 15-16 digits.
-  accountIdPattern: /^[0-9]{8,20}$/,
+  accountIdPattern: META_PIXEL_ID_PATTERN,
   scriptSrc: 'https://connect.facebook.net/en_US/fbevents.js',
   scriptMatch: 'connect.facebook.net',
   cookiePrefixes: ['_fbp', '_fbc'],
@@ -297,8 +330,132 @@ export const META_PIXEL_VENDOR: AdvertisingVendor = {
 export const GOOGLE_ADS_VENDOR: AdvertisingVendor = {
   id: 'google-ads',
   label: 'Google advertising',
-  sweepOnly: true,
+  /*
+   * A LOADER now, not sweep-only (AGL-1152).
+   *
+   * It was sweep-only because Google's ad tags arrived through something else
+   * — a GA4 id or a GTM container — so there was nothing of ours to mount and
+   * only cookies to clear. That made advertising reachable ONLY through an
+   * analytics product: a site that wanted Google Ads and no analytics had no
+   * route at all, and the CSP gate that reads `adTags` never opened for it.
+   *
+   * `gtag.js` with an `AW-` id is Google's own documented install for Ads
+   * without Analytics. The same library serves both products; what differs is
+   * the id it is configured with, which is why the two patterns are separate
+   * and neither field accepts the other's.
+   */
+  accountIdPattern: GOOGLE_ADS_ID_PATTERN,
+  // Keeps the AGL-2486 sweep it had as a sweep-only vendor: `_gcl_*` is
+  // written by any Google tag, including ones we never marked.
+  alwaysSweep: true,
+  scriptSrc: 'https://www.googletagmanager.com/gtag/js',
+  // The GA4 measurement id loads this exact library. See `sharesLibrary`.
+  sharesLibrary: 'googletagmanager.com/gtag/js',
+  scriptMatch: 'googletagmanager.com/gtag/js',
   cookiePrefixes: ADVERTISING_COOKIE_PREFIXES,
+  bootSnippet: (accountId: string) =>
+    /*
+     * DENIED FIRST, then granted — the AGL-1622 order.
+     *
+     * `gtag('consent', 'default', …)` has to run before the config, or the
+     * library's own default applies to the first hit. This snippet is reached
+     * only where the gate already said yes, so the grant follows immediately;
+     * declaring the default anyway is what makes the first hit carry a state
+     * somebody chose rather than Google's.
+     *
+     * `ad_user_data` and `ad_personalization` are named alongside
+     * `ad_storage`: Consent Mode v2 treats them as separate signals, and a
+     * grant that sets only storage leaves the other two at the library's
+     * default on every EEA request.
+     */
+    /*
+     * NO `consent default` here, deliberately.
+     *
+     * A default is a page-level declaration and something else may already
+     * have made it — the GA4 loader above declares one, and re-declaring it
+     * mid-pageview re-DENIES what that grant allowed until the update lands.
+     * This snippet is reached only where the gate already said yes, so it
+     * states the update and leaves the default to whoever mounts first.
+     *
+     * `ad_user_data` and `ad_personalization` travel with `ad_storage`:
+     * Consent Mode v2 treats them as separate signals, and an update setting
+     * only storage leaves the other two at the library's default on every
+     * EEA request.
+     */
+    'window.dataLayer=window.dataLayer||[];' +
+    'function gtag(){dataLayer.push(arguments);}' +
+    "gtag('consent','update',{ad_storage:'granted'," +
+    "ad_user_data:'granted',ad_personalization:'granted'});" +
+    "gtag('js', new Date());" +
+    `gtag('config', '${accountId}');`,
+  setConsent: (scope: Record<string, unknown>, granted: boolean) => {
+    try {
+      const gtag = scope.gtag
+      if (typeof gtag === 'function') {
+        ;(gtag as (...args: unknown[]) => void)('consent', 'update', {
+          ad_storage: granted ? 'granted' : 'denied',
+          ad_user_data: granted ? 'granted' : 'denied',
+          ad_personalization: granted ? 'granted' : 'denied',
+        })
+      }
+    } catch {
+      // A tag that throws on its own consent call is one we cannot silence
+      // that way; the element removal and the cookie sweep still stand.
+    }
+  },
+}
+
+/**
+ * LinkedIn Insight Tag.
+ *
+ * ## Cookies, and why the prefix list is long
+ *
+ * LinkedIn writes more names than the other two and they do not share a stem:
+ * `li_sugr` and `UserMatchHistory` are the retargeting identifiers, `bcookie`
+ * and `lidc` are set on the `.linkedin.com` domain by the loader, and
+ * `AnalyticsSyncHistory` records the last sync. A prefix list that named only
+ * `li_` would leave three of them behind on withdrawal — the AGL-2486 shape,
+ * where a sweep looks thorough because it cleared the ones that happen to
+ * share a prefix.
+ *
+ * ⚠️ `bcookie` and `lidc` are written at `.linkedin.com`, a domain a page on
+ * our origin cannot delete through `document.cookie`. The sweep removes what
+ * it can reach and the element removal stops the tag writing more; the rest is
+ * LinkedIn's to hold, and saying so is better than a sweep that quietly
+ * half-works.
+ */
+export const LINKEDIN_INSIGHT_VENDOR: AdvertisingVendor = {
+  id: 'linkedin',
+  label: 'LinkedIn Insight Tag',
+  accountIdPattern: LINKEDIN_PARTNER_ID_PATTERN,
+  scriptSrc: 'https://snap.licdn.com/li.lms-analytics/insight.min.js',
+  scriptMatch: 'snap.licdn.com',
+  cookiePrefixes: [
+    'li_sugr',
+    'UserMatchHistory',
+    'AnalyticsSyncHistory',
+    'bcookie',
+    'lidc',
+    'li_gc',
+  ],
+  bootSnippet: (accountId: string) =>
+    // The Insight Tag reads its partner id off a global array the library
+    // drains on load, so the id is pushed before the script is appended
+    // rather than passed to it.
+    `window._linkedin_partner_id='${accountId}';` +
+    'window._linkedin_data_partner_ids=window._linkedin_data_partner_ids||[];' +
+    'window._linkedin_data_partner_ids.push(window._linkedin_partner_id);',
+  setConsent: (scope: Record<string, unknown>, granted: boolean) => {
+    try {
+      // The tag has no consent API of its own. What it does have is the
+      // partner-id array it drains on load: emptying it stops a late or
+      // re-inserted library finding an id to report against. The element
+      // removal and the cookie sweep remain the substance.
+      if (!granted) scope._linkedin_data_partner_ids = []
+    } catch {
+      // Same standing as the others: the teardown does not depend on this.
+    }
+  },
 }
 
 /**
@@ -308,6 +465,7 @@ export const GOOGLE_ADS_VENDOR: AdvertisingVendor = {
 export const ADVERTISING_VENDORS: readonly AdvertisingVendor[] = [
   META_PIXEL_VENDOR,
   GOOGLE_ADS_VENDOR,
+  LINKEDIN_INSIGHT_VENDOR,
 ]
 
 /**
@@ -434,27 +592,43 @@ export function revokeAdvertisingTags(hostname?: string | null): string[] {
   const acted: string[] = []
   const scope = window as unknown as Record<string, unknown>
   for (const vendor of ADVERTISING_VENDORS) {
-    // A sweep-only vendor cannot be gated on something of ours being resident,
-    // because nothing of ours ever is (AGL-2486). The element check below is
-    // what USED to make this loop skip Google entirely, which is how `_gcl_au`
-    // survived every withdrawal.
-    if (vendor.sweepOnly) {
-      const swept = clearCookiesWithPrefixes(vendor.cookiePrefixes, hostname)
-      if (swept.length > 0) acted.push(vendor.id)
-      continue
-    }
-    const elements = markedVendorElements(vendor)
-    if (elements.length === 0) continue
-    acted.push(vendor.id)
-    vendor.setConsent?.(scope, false)
-    for (const element of elements) {
-      try {
-        element.remove()
-      } catch {
-        // A detached or frozen node: the revoke above still stands.
+    /*
+     * The element check is an OWNERSHIP test (AGL-1498 case (e)).
+     *
+     * A pixel we did not load is one running on a basis that is not ours to
+     * withdraw — a customer's own Custom HTML, on their own site, under their
+     * own notice. Killing it, or clearing its cookies, would be us
+     * reconfiguring their site against a consent record their tag never ran
+     * on. So no marker of ours means hands off, cookies included.
+     *
+     * `alwaysSweep` is the narrow exception and it is about the COOKIE, not
+     * the loader: `_gcl_*` is written by any Google tag — a GTM container, a
+     * bare gtag — with no marker of ours ever existing, which is why it
+     * survived every withdrawal until AGL-2486. Giving Google a loader must
+     * not quietly take that sweep away again.
+     *
+     * ORDER, which is the whole of AGL-1608: revoke on the tag FIRST, then
+     * remove it, then sweep. Sweeping first deletes the cookies and the
+     * resident pixel's next automatic event writes them straight back inside
+     * the same pageview.
+     */
+    const elements = vendor.sweepOnly ? [] : markedVendorElements(vendor)
+    const ours = elements.length > 0
+    if (ours) {
+      vendor.setConsent?.(scope, false)
+      for (const element of elements) {
+        try {
+          element.remove()
+        } catch {
+          // A detached or frozen node: the revoke above still stands.
+        }
       }
     }
-    clearCookiesWithPrefixes(vendor.cookiePrefixes, hostname)
+    const maySweep = ours || vendor.sweepOnly || vendor.alwaysSweep
+    const swept = maySweep
+      ? clearCookiesWithPrefixes(vendor.cookiePrefixes, hostname)
+      : []
+    if (ours || swept.length > 0) acted.push(vendor.id)
   }
   return acted
 }

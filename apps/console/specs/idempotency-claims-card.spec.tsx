@@ -66,7 +66,7 @@ import IdempotencyClaimsCard, {
 } from '../components/idempotency-claims-card.component'
 
 /*
- * The card renders the console's shared `ListTable` now (AGL-693), which is a
+ * The card renders the console's shared `ListTable` now (AGL-2501), which is a
  * DataGrid: cells carry `role="gridcell"` and rows `role="row"`, not the
  * `<tr>`/`role="cell"` an MUI `<Table>` emits.
  *

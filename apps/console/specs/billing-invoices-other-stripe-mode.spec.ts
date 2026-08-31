@@ -170,6 +170,19 @@ function loadRoute(mode: 'live' | 'test') {
   ) => Promise<Response>
 }
 
+/** A later page, so "empty" means "no older invoices" rather than a mode gap. */
+function listFrom(
+  get: (request: Request) => Promise<Response>,
+  cursor: string,
+) {
+  return get(
+    new Request(
+      `https://app.aglyn.com/api/billing/invoices?orgId=org-1&startingAfter=${cursor}`,
+      { method: 'GET', headers: { authorization: 'Bearer tok' } },
+    ),
+  )
+}
+
 function list(get: (request: Request) => Promise<Response>) {
   return get(
     new Request('https://app.aglyn.com/api/billing/invoices?orgId=org-1', {
@@ -183,12 +196,19 @@ beforeEach(() => {
   mockStored = { stripeCustomerId: LIVE_ID }
   mockDecoded = { uid: 'u1', email_verified: true, staff: false }
   stripeCalls = []
+  // Stripe answers PER CUSTOMER, which is the whole point of the mode split:
+  // the live customer holds the history and the test twin is empty. A mock
+  // that answered the same for both could not reproduce the case where an org
+  // has BOTH ids — the normal state of any workspace transacted live and then
+  // opened in test.
   global.fetch = jest.fn(async (input: any) => {
-    stripeCalls.push(String(input))
+    const url = String(input)
+    stripeCalls.push(url)
+    const invoices = url.includes(LIVE_ID) ? [PAID_INVOICE] : []
     return {
       ok: true,
       status: 200,
-      json: async () => ({ data: [PAID_INVOICE], has_more: false }),
+      json: async () => ({ data: invoices, has_more: false }),
     }
   }) as any
 })
@@ -310,5 +330,83 @@ describe('the staff console answers the same three ways', () => {
     const body = await (await staffList(loadAdminRoute('test'))).json()
     expect(body.hasCustomer).toBe(false)
     expect(body.otherModeOnly).toBe(false)
+  })
+})
+
+/**
+ * d. BOTH ids populated — the state the first fix could not see.
+ *
+ * `test-org` on 2026-08-28:
+ *
+ *     stripeCustomerId:     cus_UuQjDdd1oxPMNH   (live, holds the history)
+ *     stripeCustomerIdTest: cus_V9ekj4p8tc8dor   (test, empty)
+ *
+ * The customer is NOT missing on localhost, so a notice attached only to the
+ * missing-customer return never fired, Stripe answered with an empty list, and
+ * the card printed "No invoices yet." over an intact live history — state 3
+ * rendered as state 1, on the very org this file names.
+ *
+ * The census answers "does the other mode hold a customer"; the card needs
+ * "is this mode's history empty while the other mode holds one". They differ
+ * exactly here.
+ */
+describe('d. both modes have a customer, and only one holds the history', () => {
+  const BOTH = { stripeCustomerId: LIVE_ID, stripeCustomerIdTest: TEST_ID }
+
+  it('TEST deployment: an empty list says which emptiness it is', async () => {
+    mockStored = BOTH
+    const body = await (await list(loadRoute('test'))).json()
+    expect(body.invoices).toEqual([])
+    // THE REGRESSION. Before this it was `undefined`, and the card said
+    // "No invoices yet."
+    expect(body.otherModeOnly).toBe(true)
+    expect(body.deploymentMode).toBe('test')
+  })
+
+  it('it DID query its own customer — this is not the missing-customer path', async () => {
+    // The distinction that makes this case different from (b): Stripe was
+    // asked, and answered nothing. A fix that merely widened the
+    // missing-customer branch would not cover it.
+    mockStored = BOTH
+    await list(loadRoute('test'))
+    expect(stripeCalls.some((url) => url.includes(TEST_ID))).toBe(true)
+    expect(stripeCalls.some((url) => url.includes(LIVE_ID))).toBe(false)
+  })
+
+  it('still never publishes the other mode’s id', async () => {
+    mockStored = BOTH
+    const body = await (await list(loadRoute('test'))).json()
+    expect(JSON.stringify(body)).not.toContain(LIVE_ID)
+  })
+
+  it('CONTROL — the LIVE deployment lists them and claims nothing', async () => {
+    // The same org, the same both-ids state, read from the mode that can see
+    // the history. A notice here would be a second answer to a question the
+    // list already settled — and this is what proves the case above is about
+    // emptiness rather than about having two ids.
+    mockStored = BOTH
+    const body = await (await list(loadRoute('live'))).json()
+    expect(body.invoices).toHaveLength(1)
+    expect(body.otherModeOnly).toBeUndefined()
+    expect(body.deploymentMode).toBeUndefined()
+  })
+
+  it('CONTROL — an org with neither id still reads as never billed', async () => {
+    // The third state must not be swallowed by the fix to the first two.
+    mockStored = {}
+    const body = await (await list(loadRoute('test'))).json()
+    expect(body.invoices).toEqual([])
+    expect(body.otherModeOnly).toBe(false)
+  })
+
+  it('a later PAGE of an empty result is not a mode problem', async () => {
+    // Paging past the end is an observation about paging. Attaching the mode
+    // notice there would explain a silence that has a different cause.
+    mockStored = BOTH
+    const body = await (
+      await listFrom(loadRoute('test'), 'in_cursor')
+    ).json()
+    expect(body.invoices).toEqual([])
+    expect(body.otherModeOnly).toBeUndefined()
   })
 })

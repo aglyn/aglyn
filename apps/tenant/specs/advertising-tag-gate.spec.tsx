@@ -31,6 +31,7 @@
 import {
   ADVERTISING_TAG_ATTRIBUTE,
   ADVERTISING_VENDORS,
+  GOOGLE_ADS_VENDOR,
   META_PIXEL_VENDOR,
   resolveAdvertisingTags,
   revokeAdvertisingTags,
@@ -567,19 +568,39 @@ describe('the advertising-tag gate', () => {
     })
   })
   /**
-   * The console half of (f). It cannot be a render test, because the thing
-   * being asserted is that there is nothing to render: `app.aglyn.com` does
-   * not go through the tenant route and never mounts `SiteAnalytics`, so no
-   * amount of driving the console can produce a vendor tag. What CAN regress
-   * is someone importing this machinery into the console directly, and that is
-   * what this scans for.
+   * The console half of (f): the vendor reaches the console through ONE
+   * reviewed file and no other.
    *
-   * Aglyn's DPA §3.2 promises customers we do not "sell"/"share" Customer
-   * Personal Data. The console is where customers' own data lives, so an ad
-   * pixel there is the breach this whole feature is scoped away from — the one
-   * worth a guard that fires on an import rather than on a behaviour.
+   * ## What this case used to assert, and why it changed
+   *
+   * That the console had no mount point at all. It now has one —
+   * `apps/console/components/advertising-tags.component.tsx`, mounted from
+   * `providers.tsx` and gated on `platformAdvertisingAllowed()`, the console's
+   * own consent resolver. Aglyn advertises on its own surfaces and the Privacy
+   * Policy names the console among them.
+   *
+   * ## What did NOT change, and is the reason this case survives
+   *
+   * Aglyn's DPA §3.2 promises customers we do not "sell"/"share **Customer**
+   * Personal Data" — the data a customer's site collects about THEIR visitors,
+   * which Aglyn processes as a processor. A console visitor is Aglyn's own
+   * user, and Aglyn is the controller for their data; those are different
+   * relationships and always were. The boundary the DPA draws is enforced
+   * elsewhere in this file and is untouched: `resolveAdvertisingTags` refuses
+   * any host that is not the platform marketing host, so a customer's
+   * published site still mounts nothing.
+   *
+   * ⚠️ Being permitted is not the same as being small. A pixel on a SIGNED-IN
+   * console reports an identified account holder's movement through a product,
+   * which is a heavier disclosure than a marketing pageview — that is why the
+   * mount is confined to one named file rather than allowed to spread, and why
+   * `subprocessor-inventory.ts` says so in as many words.
+   *
+   * So the scan below is unchanged in kind: it still fires on any console file
+   * that imports the vendor module or calls `fbq(`. What moved is that exactly
+   * one file is now expected to, and it is named.
    */
-  describe('(f) the console has no mount point at all', () => {
+  describe('(f) the console reaches the vendor through one reviewed file', () => {
     const consoleSources = () => {
       const listed = execFileSync(
         'git',
@@ -597,7 +618,7 @@ describe('the advertising-tag gate', () => {
       }))
     }
 
-    it('no console file imports the advertising gate or names the vendor', () => {
+    it('only the one console mount imports the advertising gate or names the vendor', () => {
       const files = consoleSources()
       // The scan found the app it is meant to police. Without this the loop
       // below is `[].every()` — green over nothing, the exact vacuous shape
@@ -637,6 +658,22 @@ describe('the advertising-tag gate', () => {
         'apps/console/constants/subprocessor-inventory.ts',
       ])
 
+      /**
+       * The console's ONE advertising mount, and its spec.
+       *
+       * Exempted by NAME rather than by pattern, which is the whole of the
+       * remaining guard: any second console file that imports the vendor
+       * module or calls `fbq(` is still an offender, so the pixel cannot
+       * spread from here into arbitrary console code without turning this
+       * red. The assertion below proves each of these paths still exists and
+       * still trips the scan, so an entry cannot outlive the file it names.
+       */
+      const CONSOLE_AD_MOUNT = new Set([
+        'apps/console/components/advertising-tags.component.tsx',
+        'apps/console/specs/console-advertising-tag-gate.spec.tsx',
+        'apps/console/specs/docs-advertising-tags.spec.ts',
+      ])
+
       // Files that name the advertising-tags module path as DATA — an element
       // of a list of files to READ — rather than as code (AGL-1649).
       //
@@ -670,6 +707,10 @@ describe('the advertising-tag gate', () => {
         ) || /\bfbq\s*\(/.test(code)
 
       const offenders = files.filter(({ file, source }) => {
+        // The named mount is allowed to do both — it is the mount. Checked
+        // FIRST, unlike the two sets below, because those are exemptions from
+        // a substring scan while this is an exemption from the executable one.
+        if (CONSOLE_AD_MOUNT.has(file)) return false
         const code = withoutComments(source)
         if (executesTheVendor(code)) return true
         if (DISCLOSURE_ONLY.has(file) || COPY_AUDIT_ONLY.has(file)) return false
@@ -680,6 +721,30 @@ describe('the advertising-tag gate', () => {
         )
       })
       expect(offenders.map((f) => f.file)).toEqual([])
+
+      // Every named mount still EXISTS and still executes the vendor. An
+      // exemption whose file has been deleted or has stopped importing the
+      // module is a standing permission nobody is reading any more — and here
+      // it would also mean the console had silently stopped mounting the tags
+      // it is supposed to mount.
+      for (const file of CONSOLE_AD_MOUNT) {
+        const entry = files.find((f) => f.file === file)
+        expect([file, Boolean(entry)]).toEqual([file, true])
+        expect([
+          file,
+          executesTheVendor(withoutComments(entry.source)),
+        ]).toEqual([file, true])
+      }
+
+      // The mount is CONSENT-GATED, which is the property the exemption is
+      // worth granting for. A mount that stopped asking the console's resolver
+      // would pass every scan above and load a pixel for a visitor who
+      // refused.
+      const mount = files.find(
+        (f) => f.file === 'apps/console/components/advertising-tags.component.tsx',
+      )
+      expect(mount.source).toContain('platformAdvertisingAllowed')
+      expect(mount.source).toContain('resolvePlatformAdvertisingTags')
 
       // The exemption must not be able to rot into a blanket pass: prove the
       // allowlisted file is still caught when it genuinely executes the vendor.
@@ -756,6 +821,36 @@ describe('the advertising-tag gate', () => {
       // proving the feature does not exist.
       expect(mounts).toEqual(['apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx'])
     })
+
+    it('and the shared mount is used by exactly the surfaces that have a resolver', () => {
+      const root = resolve(__dirname, '../../..')
+      const mounts = execFileSync(
+        'git',
+        [
+          'grep',
+          '-l',
+          '-e',
+          '<AdvertisingTagMounts',
+          '--',
+          'apps',
+          'libs',
+          ':!*.spec.*',
+        ],
+        { cwd: root, encoding: 'utf8' },
+      )
+        .split('\n')
+        .filter(Boolean)
+      // Non-emptiness first: a grep that found nothing would "prove" scope by
+      // proving the feature does not exist.
+      expect(mounts.length).toBeGreaterThan(0)
+      // The tenant wrapper and the console component, and nothing else. A
+      // third caller is a third surface with a third opinion about consent,
+      // which is what the shared mount exists to make unnecessary.
+      expect(mounts.sort()).toEqual([
+        'apps/console/components/advertising-tags.component.tsx',
+        'apps/tenant/app/[host]/[[...slug]]/advertising-tags.tsx',
+      ])
+    })
   })
   /**
    * (g) Every vendor the gate can load is DISCLOSED (AGL-2486).
@@ -788,10 +883,24 @@ describe('the advertising-tag gate', () => {
     const inventorySource = () =>
       readFileSync(resolve(__dirname, '../../..', INVENTORY), 'utf8')
 
-    /** Vendor prefixes with no cookie name declared for them. */
+    /**
+     * Vendor prefixes with no cookie name declared for them.
+     *
+     * Reads the `names: [...]` arrays rather than every quoted underscore in
+     * the file. The old pattern was `/'(_[A-Za-z0-9_<>]+)'/` — every
+     * advertising cookie it had ever seen began with one, and LinkedIn's do
+     * not: `li_sugr`, `bcookie`, `lidc`, `UserMatchHistory`. It failed CLOSED,
+     * which is the right direction, but it could not see a correct disclosure
+     * and so could never go green on that vendor.
+     *
+     * Scoping to the arrays is what lets the pattern widen safely. Matching
+     * any quoted word in the file would fail OPEN instead — a vendor's name
+     * mentioned in a docblock would read as a declared cookie.
+     */
     const undisclosed = (source: string): string[] => {
-      const declared = [...source.matchAll(/'(_[A-Za-z0-9_<>]+)'/g)].map(
-        (match) => match[1],
+      const declared = [...source.matchAll(/names:\s*\[([^\]]*)\]/g)].flatMap(
+        (block) =>
+          [...block[1].matchAll(/'([^']+)'/g)].map((match) => match[1]),
       )
       const missing: string[] = []
       for (const vendor of ADVERTISING_VENDORS) {
@@ -822,5 +931,140 @@ describe('the advertising-tag gate', () => {
         .replace(/'_fbc'/g, "'x'")
       expect(undisclosed(stripped).join(' ')).toContain('Meta')
     })
+  })
+})
+
+/**
+ * ONE `gtag.js`, however many Google products are configured (AGL-1152).
+ *
+ * This is the case that costs money if it is wrong, and it is invisible when
+ * it is: two copies of the same library both work. The page renders, the
+ * network tab shows two 200s, and nothing anywhere reports an error — the only
+ * symptom is that every pageview and every conversion is counted twice, so the
+ * reported cost per conversion is half the real one and Smart Bidding is
+ * trained on the doubled figure.
+ *
+ * Google Ads and GA4 are served by the SAME library at
+ * `googletagmanager.com/gtag/js`; two products on one page is two `config`
+ * calls, not two script tags. The vendor declares that with `sharesLibrary`
+ * and the component skips its own `<script>` when a matching one is already
+ * in the document.
+ *
+ * ⚠️ Asserted on the DOCUMENT, not on a flag. `sharedLibraryPresent` reads
+ * `document.querySelector`, so a test that stubbed it would be testing the
+ * stub; these cases put a real `<script src=…>` in the document and count what
+ * the component adds beside it.
+ */
+describe('a shared library is fetched once, not once per product', () => {
+  const ADS_ID = 'AW-18401436785'
+  const withAds = {
+    ...OUR_HOST,
+    analytics: {
+      ...OUR_HOST.analytics,
+      adTags: { ...OUR_HOST.analytics.adTags, 'google-ads': ADS_ID },
+    },
+  }
+  /** Every element this vendor is answerable for. */
+  const adsScripts = () =>
+    Array.from(
+      document.querySelectorAll(
+        `script[${ADVERTISING_TAG_ATTRIBUTE}="${GOOGLE_ADS_VENDOR.id}"]`,
+      ),
+    )
+  const adsLibrary = () =>
+    adsScripts().filter((element) =>
+      String((element as HTMLScriptElement).getAttribute('src') ?? '').includes(
+        GOOGLE_ADS_VENDOR.scriptMatch,
+      ),
+    )
+  /** What the GA gate itself puts on the page, before this component runs. */
+  const placeGaLoader = () => {
+    const existing = document.createElement('script')
+    existing.src =
+      `https://www.googletagmanager.com/gtag/js?id=${PLATFORM_GA_MEASUREMENT_ID}`
+    document.head.append(existing)
+    return existing
+  }
+
+  it('THE CONTROL: with no GA loader present, Ads brings its own', () => {
+    // Without this the skip below is indistinguishable from Google Ads never
+    // rendering a library at all.
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    return renderGate(withAds).then(() => {
+      expect(adsLibrary().length).toBe(1)
+    })
+  })
+
+  it('skips its own copy when the GA loader is already in the document', async () => {
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    placeGaLoader()
+    await renderGate(withAds)
+    // The library the browser fetches: exactly the one GA put there.
+    expect(adsLibrary().length).toBe(0)
+    expect(
+      document.querySelectorAll(
+        `script[src*="${GOOGLE_ADS_VENDOR.scriptMatch}"]`,
+      ).length,
+    ).toBe(1)
+  })
+
+  it('still boots, so the second product is configured on the one library', async () => {
+    /*
+     * The skip must drop the LIBRARY and keep the BOOT. Dropping both would
+     * leave `gtag.js` loaded with no `config` for the Ads id — no double
+     * count, and no measurement either, which is the failure that looks like
+     * success.
+     */
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    placeGaLoader()
+    await renderGate(withAds)
+    const boots = adsScripts().filter((element) => !element.getAttribute('src'))
+    expect(boots.length).toBe(1)
+    expect(boots[0].textContent).toContain(ADS_ID)
+  })
+
+  it('the boot pushes a consent UPDATE and never a default', async () => {
+    /*
+     * A `consent default` arriving from the second product would re-deny what
+     * the GA loader granted moments earlier, in the same pageview — the tags
+     * would be present and silently collecting nothing.
+     */
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    await renderGate(withAds)
+    const boot = adsScripts().find((element) => !element.getAttribute('src'))
+    expect(boot).toBeTruthy()
+    expect(boot?.textContent).toContain("'update'")
+    expect(boot?.textContent).not.toContain("'default'")
+  })
+
+  it('the vendor names the library it shares, and it is gtag', () => {
+    // The skip is keyed on this string; a typo would silently never match and
+    // the double fetch would come back with no test turning red.
+    expect(GOOGLE_ADS_VENDOR.sharesLibrary).toBe('googletagmanager.com/gtag/js')
+    expect(GOOGLE_ADS_VENDOR.scriptSrc).toContain(
+      GOOGLE_ADS_VENDOR.sharesLibrary as string,
+    )
+  })
+
+  it('Meta does NOT share it, so its own library is never skipped', () => {
+    // The skip is per-vendor. A pixel that inherited it would stop loading on
+    // any site that also runs Google Analytics — which is most of them.
+    expect(META_PIXEL_VENDOR.sharesLibrary).toBeUndefined()
   })
 })

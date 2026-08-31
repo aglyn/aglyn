@@ -476,12 +476,12 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     entity: 'Google LLC (Google Analytics)',
     region: 'United States',
     purpose:
-      'Product and commerce analytics, including server-reported purchase and subscription events',
+      'Product and commerce analytics, including server-reported purchase and subscription events, and the Google Tag Manager container and Google Ads tag where either is configured',
     publishedOn: '2026-08-18',
     reason:
-      'The gtag loader injected into a customer site that has configured its own measurement id. Browser-side, and behind the consent banner — unlike the Measurement Protocol path above.',
+      "The gtag loader injected into a customer site that has configured its own measurement id, and the same host serving `gtm.js` for a Google Tag Manager container and `gtag/js` for a Google Ads id on Aglyn's own surfaces. Browser-side, and behind the consent gate — unlike the Measurement Protocol path above.",
     dataReceived:
-      "Page views and events from a site visitor's browser, with the identifiers gtag sets. Loaded only where the site owner configured an id and, in prior-consent regions, only after the visitor allowed analytics.",
+      "Page views and events from a visitor's browser, with the identifiers gtag sets. Loaded only where an id is configured and, in prior-consent regions, only after the visitor allowed analytics. ⚠️ A CONTAINER is a loader rather than a tag: what it fetches is configured in Google's interface and is not visible from this repository, so this row describes what the container can carry and cannot enumerate what a given container holds.",
   },
   'fonts.googleapis.com': {
     disposition: 'subprocessor',
@@ -513,12 +513,27 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     entity: 'Meta Platforms, Inc.',
     region: 'United States',
     purpose:
-      'Advertising measurement, where a site owner has enabled the advertising question and configured a pixel',
+      "Advertising measurement and retargeting on Aglyn's own surfaces — the marketing site, the console and the docs — and on a customer site whose owner has enabled the advertising question and configured a pixel",
     publishedOn: '2026-08-20',
     reason:
-      'The Meta Pixel loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`. Disclosed by CAPABILITY rather than by rollout, which is the standing rule — the code can load it, so the document says so.',
+      'The Meta Pixel loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted on a tenant page by the tenant runtime, on the console by `apps/console/components/advertising-tags.component.tsx`, and on the docs site by its standalone copy in `apps/docs/src/advertising-tags.ts`. Disclosed by CAPABILITY rather than by rollout, which is the standing rule — the code can load it, so the document says so.',
     dataReceived:
-      'Page views and conversion events from a site visitor who explicitly allowed advertising on a site whose owner turned the question on, with the identifiers the pixel sets.',
+      'Page views and conversion events from a visitor whose recorded consent grants advertising on a surface that asks about it, with the identifiers the pixel sets. On the console that visitor may be signed in, so the pageviews describe an identified account holder moving through a product rather than an anonymous reader of a marketing page.',
+  },
+
+  // MARK – LinkedIn
+
+  'snap.licdn.com': {
+    disposition: 'subprocessor',
+    entity: 'LinkedIn Corporation',
+    region: 'United States',
+    purpose:
+      "Advertising measurement and retargeting on Aglyn's own surfaces — the marketing site, the console and the docs — and on a customer site whose owner has enabled the advertising question and configured a partner id",
+    publishedOn: '2026-08-27',
+    reason:
+      'The LinkedIn Insight Tag loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted on the same three first-party surfaces as the Meta Pixel above. Disclosed by CAPABILITY rather than by rollout, the same standing rule Meta is declared under — the code can load it, so the document says so.',
+    dataReceived:
+      "Page views and conversion events from a visitor whose consent state permits advertising on a surface that asks about it, with the identifiers the tag sets. LinkedIn additionally sets cookies on its own domain, which a page on our origin cannot read or clear. On the console that visitor may be signed in, so the same caveat the Meta row carries applies here.",
   },
 
   // MARK – Requests that are made, and are still not Annex III rows

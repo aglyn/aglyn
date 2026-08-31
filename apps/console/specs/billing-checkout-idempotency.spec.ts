@@ -210,10 +210,25 @@ beforeEach(() => {
     email: 'owner@acme.com',
     email_verified: true,
   })
-  // A free org that has never billed: nothing in the guard's way.
-  mockReadOrgBilling.mockResolvedValue({})
+  // A free org with billing details already on file and no subscription:
+  // nothing in the guard's way, so the CLAIM is what these cases exercise.
+  // The payment method and address are prerequisites of subscribing now, and
+  // they are checked above the claim — an org missing either is refused
+  // before the key is ever minted, which is a different suite's subject.
+  mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: 'cus_test_1' })
   global.fetch = jest.fn(async (url: unknown, init: any) => {
     const href = String(url)
+    // The customer read that precedes the purchase. It carries no
+    // idempotency key and must not be counted as a money call.
+    if (/\/customers\//.test(href)) {
+      return {
+        ok: true,
+        json: async () => ({
+          invoice_settings: { default_payment_method: 'pm_saved_1' },
+          address: { country: 'US' },
+        }),
+      }
+    }
     const idempotencyKey =
       (init?.headers?.['Idempotency-Key'] as string | undefined) ?? null
     calls.push({
@@ -230,8 +245,16 @@ beforeEach(() => {
       return { ok: true, json: async () => sessionsByKey.get(idempotencyKey) }
     }
     const payload = {
-      id: `cs_${++sessionCounter}`,
-      url: `https://checkout.stripe.com/c/session-${sessionCounter}`,
+      id: `sub_${++sessionCounter}`,
+      status: 'active',
+      latest_invoice: {
+        subtotal: 2500,
+        tax: 165,
+        total: 2665,
+        currency: 'usd',
+        automatic_tax: { status: 'complete' },
+        payment_intent: { status: 'succeeded', client_secret: 'pi_secret' },
+      },
     }
     if (idempotencyKey) sessionsByKey.set(idempotencyKey, payload)
     return { ok: true, json: async () => payload }

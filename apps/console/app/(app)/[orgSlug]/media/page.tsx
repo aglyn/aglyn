@@ -24,6 +24,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { MediaLibraryComponent } from '../../../../components/media/media-library.component'
+import OrgDefaultSharingCard from '../../../../components/media/org-default-sharing-card.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
@@ -58,9 +59,17 @@ const OrgMedia: NextPageWithLayout<Record<string, never>> = () => {
           </Alert>
         ) : (
           currentOrg?.$id ? (
-          // Full library (org DAM parity): same card framing, folders,
-          // uploads, editing, references and quota meter as a site's
-          // media page (AGL-368).
+          <>
+          {/* The default sharing a new dataset, folder or upload starts
+              with (AGL-1048). It sits above the library because it is
+              what the library's next Create or Upload will apply, and it
+              is a data/media setting rather than organization identity —
+              which is where it used to render, under Settings → Profile
+              beside the logo and the contact email. */}
+          <OrgDefaultSharingCard />
+          {/* Full library (org DAM parity): same card framing, folders,
+              uploads, editing, references and quota meter as a site's
+              media page (AGL-368). */}
           <CardDisplay
             header={'Library'}
             help={docsHelp('media', {
@@ -75,6 +84,7 @@ const OrgMedia: NextPageWithLayout<Record<string, never>> = () => {
           >
             <MediaLibraryComponent orgId={currentOrg.$id} />
           </CardDisplay>
+          </>
         ) : null
         )}
       </Container>

@@ -25,6 +25,7 @@ import {
   AccordionDetails,
   AccordionSummary,
   Alert,
+  Box,
   Chip,
   LinearProgress,
   Stack,
@@ -37,6 +38,7 @@ import {
 } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -93,6 +95,30 @@ const percent = (value: number | null) =>
  * `turns` is kept beside the money on purpose: a tier that is a third of the
  * traffic and two thirds of the bill is the finding, and neither column says
  * that alone.
+ *
+ * ## Full width, and stacked rather than side by side
+ *
+ * Both breakdowns split the SAME total, so the reader's act is scanning one
+ * against the other: does the tier carrying the turns also carry the money,
+ * and would a cheaper model on the common path move it. Two tables squeezed
+ * into thirds of a row put each Cost column at a different horizontal
+ * position, so that comparison becomes two separate readings held in the
+ * head. Stacked full-width, the Cost and Share columns of both land on the
+ * same axis and the comparison is a glance down the page.
+ *
+ * ## Why the caption is not a row of the table
+ *
+ * It used to be a `colSpan={4}` cell in `TableHead`, which gave it header
+ * styling and made the header two rows deep — so this table's head sat at a
+ * different weight and height from the four sibling tables on the same page,
+ * which is most of what made the card read as a foreign fragment.
+ *
+ * ## No footer, and why
+ *
+ * A breakdown has one row per tier and one per model — single digits, and
+ * bounded by the vocabulary rather than by a collection that grows. There is
+ * no page two to go to, and a pager over four rows is furniture that teaches
+ * a reader to look for pages that never exist.
  */
 function CostSplitTable({
   caption,
@@ -106,45 +132,79 @@ function CostSplitTable({
   totalUsd: number
 }) {
   return (
-    <Table size="small" sx={{ width: 'auto' }}>
-      <TableHead>
-        <TableRow>
-          <TableCell colSpan={4}>
-            <Typography variant="subtitle2">{caption}</Typography>
-          </TableCell>
-        </TableRow>
-        <TableRow>
-          <TableCell>{label}</TableCell>
-          <TableCell align="right">Turns</TableCell>
-          <TableCell align="right">Cost</TableCell>
-          <TableCell align="right">Share</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {!rows.length ? (
+    <Stack spacing={1} sx={{ width: '100%' }}>
+      <Typography variant="subtitle2">{caption}</Typography>
+      <Table size="small">
+        <TableHead>
           <TableRow>
-            <TableCell colSpan={4}>
-              <Typography variant="body2" color="text.secondary">
-                No turns in this sample.
-              </Typography>
-            </TableCell>
+            <TableCell>{label}</TableCell>
+            <TableCell align="right">Turns</TableCell>
+            <TableCell align="right">Cost</TableCell>
+            <TableCell align="right">Share</TableCell>
           </TableRow>
-        ) : (
-          rows.map((row) => (
-            <TableRow key={row.key}>
-              <TableCell>{row.key}</TableCell>
-              <TableCell align="right">
-                {row.messages.toLocaleString()}
-              </TableCell>
-              <TableCell align="right">{money(row.estCostUsd)}</TableCell>
-              <TableCell align="right">
-                {percent(totalUsd > 0 ? row.estCostUsd / totalUsd : null)}
+        </TableHead>
+        <TableBody>
+          {!rows.length ? (
+            <TableRow>
+              <TableCell colSpan={4}>
+                <Typography variant="body2" color="text.secondary">
+                  No turns in this sample.
+                </Typography>
               </TableCell>
             </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
+          ) : (
+            rows.map((row) => (
+              <TableRow key={row.key}>
+                <TableCell>{row.key}</TableCell>
+                <TableCell align="right">
+                  {row.messages.toLocaleString()}
+                </TableCell>
+                <TableCell align="right">{money(row.estCostUsd)}</TableCell>
+                <TableCell align="right">
+                  {percent(totalUsd > 0 ? row.estCostUsd / totalUsd : null)}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Stack>
+  )
+}
+
+/**
+ * The count line under a RANKED table — how much of the ranking is on screen.
+ *
+ * These three tables are not paged, and the reason is the same for all of
+ * them: each is a ranking whose value is its top. Page two of "where are the
+ * docs thin" is, by construction, the pages least worth rewriting, and a
+ * pager over a ranking invites a reader to walk it as if position carried no
+ * meaning. What a pager WOULD have given honestly is the count — how much of
+ * this am I looking at, and is there more — so that is what this says, and it
+ * says it whether or not the ranking was cut.
+ *
+ * Rendered even when nothing was cut. A disclosure that appears only on
+ * truncation is one a reader has never seen before the day it matters, and
+ * cannot tell from a card that simply has no footer.
+ */
+function RankingFootnote({
+  shown,
+  total,
+  noun,
+}: {
+  shown: number
+  total: number
+  /** Both forms: a fleet of one is the common case on a young install. */
+  noun: { one: string; many: string }
+}) {
+  if (!total) return null
+  const counted = `${total.toLocaleString()} ${total === 1 ? noun.one : noun.many}`
+  return (
+    <Typography variant="caption" color="text.secondary">
+      {shown >= total
+        ? `Showing all ${counted}.`
+        : `Showing the top ${shown.toLocaleString()} of ${counted}. This is a ranking, not a page — what is past the cut is what it ranked lowest.`}
+    </Typography>
   )
 }
 
@@ -165,12 +225,10 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
       setLoading(true)
       setError(null)
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/admin/assist-signals', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/assist-signals',
+        )
         const body = await response.json().catch(() => null)
         if (!active) return
         if (!response.ok) {
@@ -332,8 +390,33 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                 <Typography variant="body2" color="text.secondary">
                   {loading ? 'Reading signals…' : 'No assist turns recorded yet.'}
                 </Typography>
+              ) : totals.estCostUsd === 0 ? (
+                /*
+                 * ZERO SPEND IS A FINDING, NOT AN EMPTY TABLE.
+                 *
+                 * Rendered as a sentence rather than two grids of `$0.0000`
+                 * and em dashes. A share column is a proportion of the total,
+                 * and there is no proportion of nothing — so the grid could
+                 * only ever print a dash in every cell, which reads as a card
+                 * that failed rather than as a bill that is genuinely zero.
+                 *
+                 * The two zeros mean OPPOSITE things and are separated here.
+                 * Every turn deflected is the deflection path working: those
+                 * turns were answered from the docs index or the answer cache
+                 * with no provider call, so nothing was spent because nothing
+                 * was bought. A turn that reached a model and still priced at
+                 * zero is the other case — the model is missing from
+                 * `ASSIST_MODEL_RATES_USD` and its spend is landing nowhere,
+                 * which is a hole in the meter and must not be reported as
+                 * thrift.
+                 */
+                <Typography variant="body2" color="text.secondary">
+                  {totals.deflected >= totals.messages
+                    ? `Nothing spent on these ${totals.messages.toLocaleString()} turns — every one was answered from the docs index or the answer cache, with no model call. There is no split to show until a turn reaches a provider.`
+                    : `${(totals.messages - totals.deflected).toLocaleString()} of ${totals.messages.toLocaleString()} turns reached a model and every one priced at $0. That is a gap in the rate table, not a saving — the serving model has no entry in the cost model, so its spend is landing nowhere.`}
+                </Typography>
               ) : (
-                <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 3 }}>
+                <Stack spacing={3}>
                   <CostSplitTable
                     caption="By tier"
                     label="Tier"
@@ -403,6 +486,11 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                   )}
                 </TableBody>
               </Table>
+              <RankingFootnote
+                shown={report?.docsGaps?.length ?? 0}
+                total={report?.ranked?.docsGaps ?? 0}
+                noun={{ one: 'cited page', many: 'cited pages' }}
+              />
             </CardDisplay>
 
             <CardDisplay
@@ -446,6 +534,11 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                   )}
                 </TableBody>
               </Table>
+              <RankingFootnote
+                shown={report?.ungrounded?.routes?.length ?? 0}
+                total={report?.ranked?.ungroundedRoutes ?? 0}
+                noun={{ one: 'screen', many: 'screens' }}
+              />
             </CardDisplay>
 
             {/*
@@ -507,12 +600,14 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                                   : 'no documentation matched'
                               }
                             />
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ fontFamily: 'monospace' }}
-                            >
-                              {`${row.route} · ${row.orgId}`}
+                            <Typography variant="caption" color="text.secondary">
+                              <Box
+                                component="span"
+                                sx={{ fontFamily: 'monospace' }}
+                              >
+                                {row.route}
+                              </Box>
+                              {` · ${row.orgLabel ?? row.orgId}`}
                             </Typography>
                           </Stack>
                           {row.expired ? (
@@ -581,9 +676,15 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                   ) : (
                     report.orgs.map((row) => (
                       <TableRow key={row.orgId}>
-                        <TableCell sx={{ fontFamily: 'monospace' }}>
-                          {row.orgId}
-                        </TableCell>
+                        {/*
+                          The workspace's NAME. The route resolves it and
+                          falls back to the id, so a deleted workspace still
+                          renders a lead a staff member can search for rather
+                          than an empty cell. Not monospaced: monospace is how
+                          this page marks a value you copy, and a customer's
+                          name is one you read.
+                        */}
+                        <TableCell>{row.orgLabel ?? row.orgId}</TableCell>
                         <TableCell align="right">{row.messages}</TableCell>
                         <TableCell align="right">
                           {row.inputTokens.toLocaleString()}
@@ -603,6 +704,11 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                   )}
                 </TableBody>
               </Table>
+              <RankingFootnote
+                shown={report?.orgs?.length ?? 0}
+                total={report?.ranked?.orgs ?? 0}
+                noun={{ one: 'workspace', many: 'workspaces' }}
+              />
             </CardDisplay>
           </Stack>
         </StaffOnly>

@@ -50,6 +50,7 @@ import {
   operatorDmcaAgent,
   operatorIdentity,
 } from '@aglyn/aglyn/server'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 /** Escape a string for interpolation into HTML text or an attribute value. */
 export const escapeHtml = (value: string): string =>
@@ -59,11 +60,17 @@ export const escapeHtml = (value: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 
-/** First hop of `x-forwarded-for`, or `unknown`. Rate-limit key material only. */
-export const clientIp = (request: Request): string =>
-  String(request.headers.get('x-forwarded-for') ?? 'unknown')
-    .split(',')[0]
-    .trim() || 'unknown'
+/**
+ * The reporter's address, or `null` when nothing readable named one.
+ *
+ * Rate-limit key material only, and both intake routes SKIP their limiter
+ * rather than sharing a bucket when it is null: a refused counter-notice is a
+ * person losing a legal remedy, and one `abuse-report:unknown` budget would
+ * refuse them on behalf of everybody else on the deployment. The honeypot
+ * field each form carries still applies.
+ */
+export const clientIp = (request: Request): string | null =>
+  readClientIp(request.headers)
 
 /** Does the caller want JSON back, or is this a browser form post? */
 export const wantsJson = (request: Request): boolean => {

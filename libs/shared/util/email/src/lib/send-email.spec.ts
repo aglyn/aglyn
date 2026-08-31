@@ -20,6 +20,7 @@ import {
   applyFromName,
   contextTag,
   isEmailConfigured,
+  postResendEmail,
   sendEmail,
 } from './send-email'
 
@@ -171,6 +172,7 @@ describe('sendEmail', () => {
         to: ['a@example.com'],
         subject: 'Hi',
         text: 'Body',
+        html: expect.stringContaining('<p style="margin:0 0 16px;">Body</p>'),
       })
     })
 
@@ -183,6 +185,49 @@ describe('sendEmail', () => {
       expect(body).not.toHaveProperty('headers')
       expect(body).not.toHaveProperty('tags')
       expect(body).not.toHaveProperty('reply_to')
+    })
+
+    /*
+     * THE SYNTHESIZED HTML PART.
+     *
+     * Every send in the product went out as `"html": ""`, because twelve
+     * senders have no HTML path and the other twenty-seven only produce one
+     * when a staff-designed template is published. A message with no HTML
+     * part has no anchors, so Resend's click tracking — which works by
+     * rewriting `<a href>` — could never record a single click no matter how
+     * long anyone waited, and the URLs arrived as inert text.
+     *
+     * Asserted on the POSTED BODY, for the same reason the `context` tag
+     * above is: HTML rendered correctly and never attached is exactly the
+     * shape the defect had.
+     */
+    it('synthesizes an html part from text when the caller supplies none', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Reset your password',
+        text: 'Choose a new one here:\n\nhttps://app.aglyn.com/reset?a=1&b=2',
+      })
+
+      const html = String(lastBody(fetchMock).html)
+      // The link is an anchor, and the query separator is an entity rather
+      // than a raw `&` — which is what an href attribute must carry.
+      expect(html).toContain(
+        '<a href="https://app.aglyn.com/reset?a=1&amp;b=2"',
+      )
+      expect(html).toContain('<title>Reset your password</title>')
+    })
+
+    it('never overrides html the caller built', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        text: 'Body https://example.com',
+        html: '<p>Designed</p>',
+      })
+
+      expect(lastBody(fetchMock).html).toBe('<p>Designed</p>')
     })
 
     it('passes through html, headers, tags and reply-to', async () => {
@@ -288,27 +333,35 @@ describe('sendEmail', () => {
       expect(contextTag(undefined)).toEqual([])
     })
 
-    it('lets an explicit from override the configured sender', async () => {
+    it('ignores a from the caller passes anyway', async () => {
+      // The option is gone from the type, so a TypeScript caller cannot write
+      // this — but a marketplace plugin bundle reaches `sendEmail` as
+      // JavaScript and is typechecked against nothing. The close has to hold
+      // at RUNTIME, which is what the cast is here to drive.
       const fetchMock = mockFetch({})
       await sendEmail({
         to: 'a@example.com',
         subject: 'Hi',
-        from: 'Support <help@aglyn.com>',
-      })
-      expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+        from: 'Support <help@elsewhere.com>',
+      } as Parameters<typeof sendEmail>[0])
+
+      expect(lastBody(fetchMock).from).toBe(FROM)
     })
 
-    it('sends when only from is overridden and env has no sender', async () => {
+    it('does not let a from stand in for an unconfigured sender', async () => {
+      // The deployment has no verified address, and the caller offers one.
+      // Answering `unconfigured` is the operator's problem being reported to
+      // the operator; sending would be the caller choosing our sender for us.
       configure('re_test', null)
       const fetchMock = mockFetch({})
       const result = await sendEmail({
         to: 'a@example.com',
         subject: 'Hi',
-        from: 'Support <help@aglyn.com>',
-      })
+        from: 'Support <help@elsewhere.com>',
+      } as Parameters<typeof sendEmail>[0])
 
-      expect(result).toEqual({ sent: true, id: 'email_123' })
-      expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect((result as { reason?: string }).reason).toBe('unconfigured')
     })
 
     it('applies a white-label fromName to the configured verified address', async () => {
@@ -322,15 +375,17 @@ describe('sendEmail', () => {
       expect(lastBody(fetchMock).from).toBe('"Acme Sites" <noreply@aglyn.com>')
     })
 
-    it('lets an explicit from win over fromName', async () => {
+    it('keeps the verified address when a from and a fromName arrive together', async () => {
       const fetchMock = mockFetch({})
       await sendEmail({
         to: 'a@example.com',
         subject: 'Hi',
-        from: 'Support <help@aglyn.com>',
+        from: 'Support <help@elsewhere.com>',
         fromName: 'Acme Sites',
-      })
-      expect(lastBody(fetchMock).from).toBe('Support <help@aglyn.com>')
+      } as Parameters<typeof sendEmail>[0])
+
+      // The display name is the only thing a caller may choose.
+      expect(lastBody(fetchMock).from).toBe('"Acme Sites" <noreply@aglyn.com>')
     })
   })
 
@@ -364,6 +419,182 @@ describe('sendEmail', () => {
       )
     })
   })
+
+  /**
+   * The send path's own refusal, independent of the campaign route's.
+   *
+   * Every assertion here is about the WIRE, not the return value: a refusal
+   * that still called Resend would be a refusal in name only, and the return
+   * shape would look identical either way.
+   */
+  describe('sending identity', () => {
+    const unverified = {
+      from: null,
+      source: null,
+      domain: 'acme.com',
+      summary: 'Blocked: acme.com is not verified.',
+      refusal: {
+        code: 'domain-unverified' as const,
+        domain: 'acme.com',
+        missing: ['TXT:send.acme.com'],
+        message: 'acme.com has not been verified yet.',
+      },
+    }
+
+    it('refuses an unverified domain and never reaches Resend', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: unverified,
+      })
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result).toEqual({
+        sent: false,
+        reason: 'unverified-domain',
+        detail: 'acme.com has not been verified yet.',
+      })
+    })
+
+    it('does not silently fall back to the configured platform sender', async () => {
+      // The platform identity is fully configured and usable here. That is
+      // the whole point: the refusal must not be a side effect of there being
+      // nothing else to send as.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: unverified,
+      })
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(result.sent).toBe(false)
+      expect(JSON.stringify(result)).not.toContain('noreply@aglyn.com')
+    })
+
+    it('refuses even when a from was supplied anyway', async () => {
+      // A verdict is the server's answer to whether this may leave at all; an
+      // options-level address is not a way around it — and since the option
+      // was deleted it is not a way around anything, which this drives at
+      // runtime rather than trusting the type to have removed the risk.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        from: 'anything@elsewhere.com',
+        sendingIdentity: unverified,
+      } as Parameters<typeof sendEmail>[0])
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect((result as { reason?: string }).reason).toBe('unverified-domain')
+    })
+
+    it('reports a refusal as unverified-domain, never as unconfigured', async () => {
+      // Opposite owners, opposite fixes: `unconfigured` is the operator's,
+      // this is the customer's DNS. Asserted with the env ALSO empty, which is
+      // the case a precedence mistake would collapse into `unconfigured`.
+      configure(null, null)
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: unverified,
+      })
+
+      expect((result as { reason?: string }).reason).toBe('unverified-domain')
+    })
+
+    it('sends from the verified custom address when the verdict allows it', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      const result = await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      })
+
+      expect(result.sent).toBe(true)
+      expect(lastBody(fetchMock).from).toBe('hello@acme.com')
+    })
+
+    it('sends on the verdict, not a from, on the allowed path too', async () => {
+      // The refusal arm returns early, so refusing with a `from` present
+      // proves nothing about what the address would have been. This is the
+      // case that does: a verdict that ALLOWS, with an options-level address
+      // competing. Winning here would move mail off the verified identity
+      // while verification still reported success.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        from: 'anything@elsewhere.com',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      } as Parameters<typeof sendEmail>[0])
+
+      expect(lastBody(fetchMock).from).toBe('hello@acme.com')
+    })
+
+    it('applies the white-label display name to the custom address', async () => {
+      // The `applyFromName` invariant carried onto the new identity: the
+      // display name varies, the address stays on the verified domain.
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({
+        to: 'a@b.com',
+        subject: 'Hi',
+        text: 'Hi',
+        fromName: 'Acme',
+        sendingIdentity: {
+          from: 'hello@acme.com',
+          source: 'custom' as const,
+          domain: 'acme.com',
+          summary: 'Sending as hello@acme.com on your verified domain acme.com.',
+          refusal: null,
+        },
+      })
+
+      expect(lastBody(fetchMock).from).toBe('"Acme" <hello@acme.com>')
+    })
+
+    it('leaves every caller that passes no identity exactly as it was', async () => {
+      configure('re_test', FROM)
+      const fetchMock = mockFetch({})
+
+      await sendEmail({ to: 'a@b.com', subject: 'Hi', text: 'Hi' })
+
+      expect(lastBody(fetchMock).from).toBe(FROM)
+    })
+  })
+
 
   describe('failure handling', () => {
     beforeEach(() => configure('re_test', FROM))
@@ -440,5 +671,160 @@ describe('sendEmail', () => {
 
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('invite email'))
     })
+  })
+
+  /*
+   * THE TRANSPORT BOUNDARY.
+   *
+   * `sendEmail` filters recipients before it gets here, so these cases are
+   * unreachable through it. They matter for the other way to the send
+   * endpoint: `RESEND_SEND_ENDPOINT` is exported, so a module can POST to it
+   * directly and skip every check above — which is how a recipientless
+   * request reached Resend and came back 422, visible only in the vendor
+   * dashboard.
+   */
+  describe('postResendEmail', () => {
+    it('refuses a payload with no recipient before the network', async () => {
+      const fetchMock = mockFetch({})
+
+      await expect(
+        postResendEmail('re_test', { from: FROM, subject: 'Hi' }),
+      ).rejects.toThrow(/no `to` field/)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('refuses an empty recipient list and a blank address', async () => {
+      const fetchMock = mockFetch({})
+
+      await expect(
+        postResendEmail('re_test', { from: FROM, to: [] }),
+      ).rejects.toThrow()
+      await expect(
+        postResendEmail('re_test', { from: FROM, to: '  ' }),
+      ).rejects.toThrow()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('names the caller so the refusal identifies the sender', async () => {
+      mockFetch({})
+
+      await expect(
+        postResendEmail('re_test', { from: FROM }, 'usage-summary'),
+      ).rejects.toThrow(/usage-summary/)
+    })
+
+    /*
+     * The control for this block: the guard refuses one specific shape, not
+     * every request. Without it the three refusals above would all pass on a
+     * transport that had stopped working entirely.
+     */
+    it('puts a well-formed payload on the wire', async () => {
+      const fetchMock = mockFetch({})
+
+      await postResendEmail(
+        're_test',
+        { from: FROM, to: ['a@example.com'], subject: 'Hi' },
+        'invite',
+      )
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(url).toBe(RESEND_SEND_ENDPOINT)
+      expect(init.method).toBe('POST')
+      expect(init.headers.Authorization).toBe('Bearer re_test')
+      expect(JSON.parse(init.body)).toMatchObject({
+        to: ['a@example.com'],
+        subject: 'Hi',
+      })
+    })
+  })
+})
+
+describe('whose mail is this', () => {
+  const originalFetch = global.fetch
+  const originalEnv = { ...process.env }
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    process.env = { ...originalEnv }
+  })
+
+  /**
+   * THE LAST LINE BEFORE A MESSAGE LEAVES.
+   *
+   * `USAGE_EMAIL_FROM` is an address on `aglyn.com`, where Aglyn's own
+   * billing, account and console mail leaves from. A SITE's mail reaching it
+   * means that site's complaint rate is charged against the domain every other
+   * customer's password reset depends on.
+   *
+   * `resolveHostSendingIdentity` refuses first and the coverage sweep makes
+   * sure every tenant sender declares itself; this is the arm for a sender
+   * that declared itself and resolved nothing. The environment is deliberately
+   * CONFIGURED, so what is asserted is that a usable platform address was not
+   * reached — not that none existed.
+   */
+  it('refuses a tenant message that resolved no identity', async () => {
+    configure('re_test', FROM)
+    const fetchMock = mockFetch({})
+
+    const result = await sendEmail({
+      to: 'buyer@example.com',
+      subject: 'Your receipt',
+      text: 'Thanks',
+      audience: 'tenant',
+      context: 'receipt',
+    })
+
+    expect(result).toMatchObject({
+      sent: false,
+      reason: 'unverified-domain',
+    })
+    // Nothing reached the wire. A refusal that still sent would be the whole
+    // bug wearing a false negative.
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sends a tenant message on the identity it resolved', async () => {
+    configure('re_test', FROM)
+    const fetchMock = mockFetch({})
+
+    const result = await sendEmail({
+      to: 'buyer@example.com',
+      subject: 'Your receipt',
+      text: 'Thanks',
+      audience: 'tenant',
+      sendingIdentity: {
+        from: 'hello@acme.mail.aglyn.app',
+        source: 'custom',
+        domain: 'acme.mail.aglyn.app',
+        summary: 'Sending as hello@acme.mail.aglyn.app.',
+        refusal: null,
+      },
+      context: 'receipt',
+    })
+
+    expect(result.sent).toBe(true)
+    expect(lastBody(fetchMock).from).toBe('hello@acme.mail.aglyn.app')
+    expect(lastBody(fetchMock).from).not.toContain('aglyn.com')
+  })
+
+  /**
+   * The other half, and the control: without it the refusal above would pass
+   * against a `sendEmail` that had stopped sending anything at all. Aglyn's
+   * own mail to its own customers still leaves on `aglyn.com`.
+   */
+  it('still sends platform mail on the configured address', async () => {
+    configure('re_test', FROM)
+    const fetchMock = mockFetch({})
+
+    const result = await sendEmail({
+      to: 'owner@example.com',
+      subject: 'Your invoice',
+      text: 'Invoice attached',
+      context: 'billing',
+    })
+
+    expect(result.sent).toBe(true)
+    expect(lastBody(fetchMock).from).toBe(FROM)
   })
 })

@@ -23,12 +23,14 @@ import {
   consumeMembershipRecoverSend,
   firebaseAdmin,
   getOrgForHost,
+  hostSendingIdentity,
   isEmailSuppressed,
   meterHostEmail,
   RECOVER_MIN_MEMBER_AGE_MS,
 } from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { mintPasswordResetToken } from './membership'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -85,9 +87,11 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
   if (!hostId || !EMAIL_PATTERN.test(email)) {
     return res.status(400).json({ error: 'Invalid request' })
   }
-  const ip = String(
-    req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown',
-  ).split(',')[0]
+  // Null when nothing readable names the caller; the throttle then skips its
+  // per-source cap and the per-recipient one carries the control alone.
+  const ip = readClientIp(req.headers, {
+    remoteAddress: req.socket?.remoteAddress,
+  })
   // Control 1. Before the lookup, so both branches spend the same budget.
   // A store failure degrades to the in-process cap rather than refusing
   // (`consumeRateLimit` fails soft on an unreachable store, closed on
@@ -235,6 +239,8 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
         'ask for this, you can safely ignore this email — your ' +
         'password is unchanged.',
       fromName: branding.fromName,
+      sendingIdentity: await hostSendingIdentity(hostId),
+      audience: 'tenant',
       context: 'membership recovery',
     })
     // Cost meter (AGL-1438). Transactional, and the clearest case for why a

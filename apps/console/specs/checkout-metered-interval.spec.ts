@@ -245,11 +245,32 @@ beforeEach(() => {
   jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
     warnings.push(args)
   })
-  global.fetch = jest.fn(async (_url: unknown, init: any) => {
+  global.fetch = jest.fn(async (url: unknown, init: any) => {
+      const href = String(url)
+      if (/\/customers\//.test(href)) {
+        return {
+          ok: true,
+          json: async () => ({
+            invoice_settings: { default_payment_method: 'pm_saved_1' },
+            address: { country: 'US' },
+          }),
+        }
+      }
     capturedBody = new URLSearchParams(String(init?.body ?? ''))
     return {
       ok: true,
-      json: async () => ({ url: 'https://checkout.stripe.com/c/session' }),
+      json: async () => ({
+        id: 'sub_1',
+        status: 'active',
+        latest_invoice: {
+          subtotal: 2500,
+          tax: 165,
+          total: 2665,
+          currency: 'usd',
+          automatic_tax: { status: 'complete' },
+          payment_intent: { status: 'succeeded', client_secret: 'pi_secret' },
+        },
+      }),
     }
   }) as never
 })
@@ -269,10 +290,10 @@ describe('the metered usage item follows the plan interval (AGL-1340/AGL-1280)',
     const post = loadCheckout(BOTH)
     const response = await checkout(post, 'month')
     expect(response.status).toBe(200)
-    expect(capturedBody?.get('line_items[0][price]')).toBe(
+    expect(capturedBody?.get('items[0][price]')).toBe(
       'price_starter_monthly',
     )
-    expect(capturedBody?.get('line_items[1][price]')).toBe('price_metered_usage')
+    expect(capturedBody?.get('items[1][price]')).toBe('price_metered_usage')
     expect(warnings).toHaveLength(0)
   })
 
@@ -280,10 +301,10 @@ describe('the metered usage item follows the plan interval (AGL-1340/AGL-1280)',
     const post = loadCheckout(BOTH)
     const response = await checkout(post, 'year')
     expect(response.status).toBe(200)
-    expect(capturedBody?.get('line_items[0][price]')).toBe(
+    expect(capturedBody?.get('items[0][price]')).toBe(
       'price_starter_yearly',
     )
-    expect(capturedBody?.get('line_items[1][price]')).toBe(
+    expect(capturedBody?.get('items[1][price]')).toBe(
       'price_metered_usage_yearly',
     )
     expect(warnings).toHaveLength(0)
@@ -298,7 +319,7 @@ describe('the metered usage item follows the plan interval (AGL-1340/AGL-1280)',
     for (const env of [BOTH, { STRIPE_PRICE_METERED: 'price_metered_usage' }]) {
       const post = loadCheckout(env)
       await checkout(post, 'year')
-      expect(capturedBody?.get('line_items[1][price]')).not.toBe(
+      expect(capturedBody?.get('items[1][price]')).not.toBe(
         'price_metered_usage',
       )
     }
@@ -310,7 +331,7 @@ describe('the metered usage item follows the plan interval (AGL-1340/AGL-1280)',
     const post = loadCheckout({ STRIPE_PRICE_METERED: 'price_metered_usage' })
     const response = await checkout(post, 'year')
     expect(response.status).toBe(200)
-    expect(capturedBody?.get('line_items[1][price]')).toBeNull()
+    expect(capturedBody?.get('items[1][price]')).toBeNull()
     const note = warnings.find((args) =>
       String(args[0]).includes('metered usage item not attached'),
     )
@@ -324,7 +345,7 @@ describe('the metered usage item follows the plan interval (AGL-1340/AGL-1280)',
       const post = loadCheckout()
       const response = await checkout(post, interval)
       expect(response.status).toBe(200)
-      expect(capturedBody?.get('line_items[1][price]')).toBeNull()
+      expect(capturedBody?.get('items[1][price]')).toBeNull()
     }
     // Both unset is Stripe simply unprovisioned — a deliberate configuration,
     // not a fault: warning on it would train everyone to ignore the warning.

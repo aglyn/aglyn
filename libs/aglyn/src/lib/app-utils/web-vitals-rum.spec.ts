@@ -32,7 +32,22 @@
  *   and dropping on first miss would discard TTFB on every pageview;
  * - the consent gate: a visitor whose tag NEVER arrives produces nothing,
  *   even after the watcher gives up — held metrics die unsent;
+ * - the REGISTERED consent gate, which is a different case and the console's:
+ *   there gtag.js is injected by Firebase and cannot be unloaded, so a
+ *   mid-session withdrawal leaves a resident tag and this module — which calls
+ *   `window.gtag` directly rather than through `deliver()` — is the console's
+ *   one analytics path the refusing transport does not cover. Its control is
+ *   the no-gate case beside it, since a module that never delivered would
+ *   satisfy both refusal cases otherwise;
  * - single install per page load.
+ *
+ * PLANTED REDS for the registered gate (both run, counts observed):
+ *  1. Make "no gate registered" read as refused → 6 fail, i.e. every case that
+ *     delivers anything. That is the shape of silencing a self-hosted console
+ *     or a tenant page by accident.
+ *  2. Delete the check in `deliverMetricEvent` → 1 fails, the mid-session
+ *     withdrawal. The held-metric case survives on the watcher's own check,
+ *     which is why there are two checks and not one.
  */
 
 import type { WebVitalsReportingOptions } from './web-vitals-rum'
@@ -221,6 +236,58 @@ describe('web-vitals → GA4 reporting (AGL-1642)', () => {
     // No timer has ticked — the flush rides the next metric's delivery.
     registered['LCP'](LCP_METRIC)
     expect(gtagCalls.map((call) => call[1])).toEqual(['TTFB', 'LCP'])
+  })
+
+  it('sends nothing while a registered consent gate refuses', async () => {
+    // The console's shape, and the one place the absent-tag gate is not
+    // enough: Firebase injects gtag.js and a page cannot unload a script, so a
+    // visitor who withdraws MID-SESSION leaves a resident tag behind. This
+    // module calls it directly rather than through `deliver()`, so the
+    // console's refusing transport does not cover it.
+    let granted = true
+    mountGtag()
+    await install({ surface: 'console', allowed: () => granted })
+    registered['LCP'](LCP_METRIC)
+    expect(gtagCalls).toHaveLength(1)
+
+    granted = false
+    registered['INP']({
+      name: 'INP',
+      id: 'v4-1723600000000-6',
+      value: 40,
+      delta: 40,
+      rating: 'good',
+    })
+    // Still one: the tag is right there and was not called again.
+    expect(gtagCalls).toHaveLength(1)
+  })
+
+  it('drops what it was HOLDING when consent is refused', async () => {
+    // The prior-consent shape: no tag yet, a metric held waiting for one, and
+    // a Decline click. Emptying the hold is the difference between "stops
+    // adding" and "stops sending" — a held metric would otherwise flush the
+    // moment any tag appeared.
+    let granted = true
+    await install({ surface: 'console', allowed: () => granted })
+    registered['LCP'](LCP_METRIC)
+    expect(gtagCalls).toHaveLength(0)
+
+    granted = false
+    jest.advanceTimersByTime(1_000)
+    mountGtag()
+    jest.advanceTimersByTime(5_000)
+    expect(gtagCalls).toHaveLength(0)
+  })
+
+  it('sends with no gate registered — the control for both cases above', async () => {
+    // A tenant page and a self-hosted console register none: there the absent
+    // `window.gtag` is already the gate, and silencing them would be a fault
+    // their operator cannot diagnose. Without this control, a module that
+    // simply never delivered would satisfy the two cases above.
+    mountGtag()
+    await install({ surface: 'site' })
+    registered['LCP'](LCP_METRIC)
+    expect(gtagCalls).toHaveLength(1)
   })
 
   it('installs once per page load — a second call registers nothing new', async () => {

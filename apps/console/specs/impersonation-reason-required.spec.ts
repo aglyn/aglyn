@@ -124,7 +124,7 @@ describe('staff impersonation records why (AGL-2125)', () => {
       .mockReset()
       .mockResolvedValue({
         uid: 'uid-staff',
-        email: 'zach@aglyn.com',
+        email: 'staff@aglyn.com',
         email_verified: true,
         staff: true,
       })

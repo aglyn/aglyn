@@ -17,6 +17,7 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   Alert,
   LinearProgress,
@@ -35,12 +36,14 @@ import {
   getDoc,
   getDocs,
   limit,
+  orderBy,
   query,
   where,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
 import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -57,12 +60,17 @@ import {
  * Bounded on purpose (AGL-1844): the range query returns one doc per screen
  * per day with traffic, so this is the hard ceiling on what one open of the
  * analytics page can read. 1000 covers ~30 screens over 30 days; beyond it
- * the table under-reports the oldest days rather than reading unboundedly.
+ * the table under-reports rather than reading unboundedly.
+ *
+ * WHICH days it under-reports is the whole question, and it used to be the
+ * wrong ones. A range filter carries an implicit ascending order on its own
+ * field, so `where('day', '>=', start)` with a bare `limit()` answers with
+ * the OLDEST thousand documents in the window: a site over the ceiling saw
+ * the start of its range and none of this week. The explicit descending
+ * `orderBy('day')` inverts that, so the ceiling costs the far end of the
+ * window instead of the near one.
  */
 const QUERY_LIMIT = 1000
-
-/** At most this many rows render — the tail of a large site says nothing. */
-const MAX_ROWS = 50
 
 interface LoadedState {
   rows: ScreenTrafficRow[]
@@ -96,6 +104,18 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
   const entitled = hasEntitlement('screenAnalytics', org)
   const [range, setRange] = useState(14)
   const [loaded, setLoaded] = useState<LoadedState | null>(null)
+  /*
+   * The table PAGES (AGL-2501). It rendered `rows.slice(0, MAX_ROWS)` — fifty
+   * screens, no footer and nothing saying so, on a card whose whole purpose
+   * is comparing screens against each other. A site with sixty screens was
+   * shown the leading fifty as if that were the comparison.
+   *
+   * The rows are AGGREGATED in the browser, so unlike the console's Firestore
+   * lists this one genuinely knows its total and hands it to the footer:
+   * `count` renders a real "1–10 of 63" rather than "more than 10".
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
 
   useEffect(() => {
     if (!orgReady || !entitled) return
@@ -116,6 +136,15 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
         query(
           collection(firestore, 'hosts', hostId, 'screenAnalytics'),
           where('day', '>=', startDay),
+          /*
+            NEWEST first, so `QUERY_LIMIT` bites the far end of the window.
+            Ordering on `day` cannot drop a document the filter kept: an
+            inequality already matches only documents that HAVE the field, so
+            the order is over exactly the same set. No composite index is
+            owed either — the filter and the order name one field, and
+            Firestore indexes every field in both directions on its own.
+          */
+          orderBy('day', 'desc'),
           limit(QUERY_LIMIT),
         ),
       ),
@@ -143,6 +172,13 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
       active = false
     }
   }, [orgReady, entitled, firestore, hostId, range])
+
+  // A shorter range holds fewer screens, and page four of a 63-row table does
+  // not exist in a 12-row one — MUI renders an out-of-range page as an empty
+  // table with no explanation, which reads as the data having gone.
+  useEffect(() => {
+    setPage(0)
+  }, [range])
 
   const help = docsHelp('analytics', {
     anchor: '#per-screen-traffic',
@@ -188,7 +224,11 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
   }
 
   const rows = loaded?.rows ?? []
+  // The SHARE column is a share of the whole window, not of the page — a
+  // percentage that re-based itself per page would sum to 100% on every one
+  // of them.
   const grandTotal = rows.reduce((sum, row) => sum + row.total, 0)
+  const pageRows = rows.slice(page * pageSize, page * pageSize + pageSize)
 
   return (
     <CardDisplay
@@ -221,55 +261,67 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
           {'No per-screen pageviews recorded in this range yet.'}
         </Typography>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Screen'}</TableCell>
-              <TableCell align="right">{'Views'}</TableCell>
-              <TableCell align="right">{'Share'}</TableCell>
-              <TableCell>{'Top device'}</TableCell>
-              <TableCell>{'Top referrer'}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.slice(0, MAX_ROWS).map((row) => {
-              // The routing map only lists screens that still serve; a
-              // screen deleted after collecting history keeps its row under
-              // its id, which is honest — those views happened.
-              const path = loaded.paths[row.screenId]
-              return (
-                <TableRow key={row.screenId}>
-                  <TableCell sx={{ maxWidth: 280 }}>
-                    <Typography variant="body2" noWrap>
-                      {path || row.screenId}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    {row.total.toLocaleString()}
-                  </TableCell>
-                  <TableCell align="right">
-                    {grandTotal
-                      ? `${Math.round((row.total / grandTotal) * 100)}%`
-                      : '--'}
-                  </TableCell>
-                  <TableCell sx={{ textTransform: 'capitalize' }}>
-                    {topDevice(row) || '--'}
-                  </TableCell>
-                  {/*
-                    * Not capitalized: a referrer is a HOSTNAME, and
-                    * `News.ycombinator.com` is a different string from the
-                    * one stored. AGL-2341.
-                    */}
-                  <TableCell sx={{ maxWidth: 200 }}>
-                    <Typography variant="body2" noWrap>
-                      {topReferrer(row) || '--'}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+        <>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>{'Screen'}</TableCell>
+                <TableCell align="right">{'Views'}</TableCell>
+                <TableCell align="right">{'Share'}</TableCell>
+                <TableCell>{'Top device'}</TableCell>
+                <TableCell>{'Top referrer'}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {pageRows.map((row) => {
+                // The routing map only lists screens that still serve; a
+                // screen deleted after collecting history keeps its row under
+                // its id, which is honest — those views happened.
+                const path = loaded.paths[row.screenId]
+                return (
+                  <TableRow key={row.screenId}>
+                    <TableCell sx={{ maxWidth: 280 }}>
+                      <Typography variant="body2" noWrap>
+                        {path || row.screenId}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      {row.total.toLocaleString()}
+                    </TableCell>
+                    <TableCell align="right">
+                      {grandTotal
+                        ? `${Math.round((row.total / grandTotal) * 100)}%`
+                        : '--'}
+                    </TableCell>
+                    <TableCell sx={{ textTransform: 'capitalize' }}>
+                      {topDevice(row) || '--'}
+                    </TableCell>
+                    {/*
+                     * Not capitalized: a referrer is a HOSTNAME, and
+                     * `News.ycombinator.com` is a different string from the
+                     * one stored. AGL-2341.
+                     */}
+                    <TableCell sx={{ maxWidth: 200 }}>
+                      <Typography variant="body2" noWrap>
+                        {topReferrer(row) || '--'}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={pageRows.length}
+            // The total is KNOWN here — the rows are aggregated on the
+            // client, so nothing has to be read to count them.
+            count={rows.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       )}
     </CardDisplay>
   )

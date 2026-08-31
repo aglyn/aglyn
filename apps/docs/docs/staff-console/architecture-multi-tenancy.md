@@ -178,12 +178,19 @@ that 308s to the new one, and a redirect can only run on a hostname that still
 resolves — detaching would break the very redirect the tombstone exists to
 serve.
 
-**The attach can never fail an org.** It runs after the transaction, unawaited,
-and swallows its own errors: the console is path-routed and
-`app.aglyn.com/{slug}` is the canonical form, so a workspace with no subdomain
-is fully usable, while an org creation rolled back because a DNS API was slow
-would not be. With no `VERCEL_TOKEN` it is a silent no-op — self-hosted
-deployments have no Vercel project and must not log an error per signup.
+**The attach can never fail an org.** It runs after the transaction and is
+awaited, but the safety comes from the helper rather than from the `await`:
+`attachWorkspaceDomain` swallows every error and returns an outcome instead of
+throwing. The console is path-routed and `app.aglyn.com/{slug}` is the canonical
+form, so a workspace with no subdomain is fully usable, while an org creation
+rolled back because a DNS API was slow would not be.
+
+**Which vendor registers the name is no longer part of this.** Registration goes
+through the [domain-provider seam](../developers/domain-providers.md), so the
+same workspace subdomain is created by Vercel's API on Aglyn's own hosting, by a
+wildcard record on a Docker install, or by whatever an operator put behind the
+webhook driver. A deployment with no driver at all reports `skipped` and says so
+once per process — it must not log an error per signup.
 
 Drift is therefore expected rather than exceptional, and
 `tools/scripts/reconcile-workspace-domains.mjs` is both the drift check and the
@@ -196,8 +203,9 @@ because deleting a domain is not a reconcile job's decision.
 `VERCEL_TOKEN`, `VERCEL_CONSOLE_PROJECT_ID`, and `VERCEL_TEAM_ID` for a
 team-scoped project; the token needs project-domain scope. **All three are set
 on the console deployment** (production, preview), so this is live rather than
-waiting on ops. Unset in any environment — local dev, self-hosted — is a silent
-no-op by design.
+waiting on ops. They configure the `vercel` **driver**, not the product: unset
+with no `AGLYN_DOMAIN_PROVIDER` — local dev, a self-host on its own proxy — the
+driver is `none` and the attach is a silent no-op by design.
 
 Reading them back is not uniform, which is worth knowing before concluding a
 variable is missing: Vercel returns `encrypted` values through

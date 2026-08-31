@@ -259,6 +259,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // bug.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   createResourceUid: () => `uid-${(mockUid += 1)}`,
+  // The REAL referential-integrity index: both record writes on this route
+  // derive `referencedIds` from their values, and an omitted helper is a
+  // CLOSED WORLD — every create 500s and the cap this suite is about is never
+  // reached.
+  datasetIntegrityFields: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/dataset-models',
+  ).datasetIntegrityFields,
   // Validation is not what this suite is about; the model below accepts the
   // one field every seeded row carries.
   effectiveDatasetModel: () => ({

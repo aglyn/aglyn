@@ -475,12 +475,66 @@ describe('the gates, each forced on its own', () => {
     expect(verdictFor(question, true).answered).toBe(false)
   })
 
+  /**
+   * The vehicle has to BE in the relaxed band, and the band is measured over a
+   * corpus that moves — so the band is asserted before the behaviour is.
+   *
+   * Asserting only the verdicts is sound but silent: it proves the relaxed
+   * clause fired (answered on turn one while the follow-up refuses on
+   * coverage is reachable no other way), and says nothing when the question
+   * stops being that kind of question. It stopped once. The previous vehicle
+   * was "what are webhooks used for in workflows", chosen when the corpus put
+   * it a hair under the bar with an overwhelming margin; the docs it retrieves
+   * changed underneath it until it scored 4.5, refused as `low-score`, and
+   * never reached the coverage gate at all. What the failure said was
+   * `Expected: true, Received: false`, which sends a reader to the gate rather
+   * than to the question.
+   *
+   * So the band comes first, with its own message. A vehicle that drifts out
+   * now says which number moved, and the fix is to re-derive a vehicle from
+   * the diagnostic the measurement test prints rather than to relax anything
+   * here.
+   */
   it('the relaxed coverage floor is a FIRST-TURN allowance', () => {
-    // Wins its page by ~40x and covers 0.69 — inside `RELAXED_COVERAGE` on a
-    // first turn, refused on a follow-up, because mid-thread the part of the
-    // question the page ignored may be the part the conversation supplied.
-    const question = 'what are webhooks used for in workflows'
-    expect(verdictFor(question, false).answered).toBe(true)
+    // Mirrors of the module-private constants in `assist-deflection.ts`. Held
+    // here so that changing one there fails this test by name.
+    const RELAXED_COVERAGE = 0.6
+    const MIN_COVERAGE = 0.7
+    const STRONG_PAGE_MARGIN = 3
+    const FOLLOW_UP_MIN_TOP_SCORE = 8
+
+    // Covers ~0.68 — every question token but `directly`, which the page never
+    // says — and wins so completely that all six retrieved sections are its
+    // own, so there is no rival page and the margin is the winning score.
+    const question = 'how do I edit text directly on the canvas'
+    const first = verdictFor(question, false)
+
+    // THE BAND. Below `MIN_COVERAGE`, so the strict floor cannot be what
+    // admits it; at or above `RELAXED_COVERAGE` with a strong margin, so the
+    // relaxed clause can. And over `FOLLOW_UP_MIN_TOP_SCORE`, or the follow-up
+    // below would be stopped by score before coverage is ever consulted.
+    const band = {
+      coverageUnderStrictFloor: first.coverage < MIN_COVERAGE,
+      coverageOverRelaxedFloor: first.coverage >= RELAXED_COVERAGE,
+      marginStrongEnough: first.pageMargin >= STRONG_PAGE_MARGIN,
+      clearsTheFollowUpScoreBar: first.topScore >= FOLLOW_UP_MIN_TOP_SCORE,
+    }
+    expect([
+      `${question} → top=${first.topScore.toFixed(1)} ` +
+        `margin=${first.pageMargin.toFixed(2)} cov=${first.coverage.toFixed(3)}`,
+      band,
+    ]).toEqual([
+      expect.any(String),
+      {
+        coverageUnderStrictFloor: true,
+        coverageOverRelaxedFloor: true,
+        marginStrongEnough: true,
+        clearsTheFollowUpScoreBar: true,
+      },
+    ])
+
+    // …and only then, the behaviour the band exists to demonstrate.
+    expect(first.answered).toBe(true)
     const followUp = verdictFor(question, true)
     expect(followUp.answered).toBe(false)
     expect(followUp.refusal).toBe('low-coverage')

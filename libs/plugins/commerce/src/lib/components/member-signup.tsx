@@ -16,6 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { trackEventBeforeNavigation } from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { mdiAccountPlusOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -27,7 +29,10 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { continuePathFromLocation } from '../utils/member-continue'
+import {
+  continuePathFromLocation,
+  memberNavigation,
+} from '../utils/member-continue'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -74,6 +79,10 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
             password,
             ...(displayName ? { displayName } : {}),
             ...(marketingConsent ? { marketingConsent: true } : {}),
+            // The campaign this visitor came from, when they came from one.
+            // A sign-up is the identify moment that also writes a lead, so
+            // the touch has to arrive with the request that creates it.
+            ...campaignTouchField(),
           }),
         })
         if (!response.ok) {
@@ -88,7 +97,22 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, email, password }),
         }).catch(() => undefined)
-        window.location.assign(
+        /*
+         * The host's own GA4 property, not Aglyn's (AGL-1591). A storefront
+         * that switched its members to accounts had no way to see it happen:
+         * `sign_up` is a GA4 recommended event and every other funnel step on
+         * this site already reports one, so the account door was the single
+         * hole in a funnel the operator can otherwise follow end to end.
+         *
+         * AWAITED, because the line below tears the document down. Delivery on
+         * this surface is a synchronous `window.gtag` call today, so the await
+         * costs a microtask — it is written this way because the property that
+         * makes a bare call safe is invisible from here, and the day a host
+         * registers an async transport the event would start disappearing on
+         * exactly the branch that navigates.
+         */
+        await trackEventBeforeNavigation('sign_up', { method: 'password' })
+        memberNavigation.assign(
           continuePathFromLocation(continueFallback || '/'),
         )
       } finally {

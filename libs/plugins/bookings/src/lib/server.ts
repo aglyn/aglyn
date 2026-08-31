@@ -22,6 +22,7 @@ import { checkEntitlement,
   registerPluginJob,
   resolveBrandingProfile,
   resolveTransactionFeeCents,
+  sanitizeAuthorHtml,
 } from '@aglyn/aglyn/server'
 import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import {
@@ -93,10 +94,13 @@ import {
   getOrgForHost,
   meterHostEmail,
   notifyHostManagers,
+  attributeCampaignConversion,
+  resolveCampaignTouch,
   upsertHostContact,
   getPluginConfig,
   resolveOrgIdForHost,
   renderHostEmailWithTokens,
+  hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
@@ -108,6 +112,10 @@ import {
   type LoadedHostEmail,
 } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 const BOOKING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -131,7 +139,11 @@ function bookingRateLimited(ip: string): boolean {
  * open times. Server-side because bookings (names/emails) must never be
  * client-readable — only the derived busy intervals are used here.
  */
-const slotsHandler: PluginApiHandler = async (req, res) => {
+// Exported for `bookings-slot-window.spec.ts`: the query's bounds are a
+// read-cost and correctness property of THIS handler, and asserting them
+// through the route registry would test the registry instead. Its siblings
+// (`bookHandler`, the refund and analytics handlers) are exported already.
+export const slotsHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -169,18 +181,35 @@ const slotsHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown service' })
     }
     const fromMs = Date.now()
-    // Booking horizon (AGL-428): org-configurable via the plugin settings
+    // Booking horizon (AGL-428): configurable via the plugin settings
     // framework; defaults to BOOKING_MAX_DAYS_AHEAD through the schema.
+    //
+    // Resolved for THIS SITE (AGL-428, AGL-1014), not just the workspace.
+    // The horizon is the setting per-site overrides were built for — one
+    // chain, one answer, and the flagship branch taking bookings further out
+    // — so reading only the org's would leave the console showing a number
+    // this endpoint never honors.
     const config = await getPluginConfig(
       await resolveOrgIdForHost(hostId),
       'bookings',
+      { hostId },
     )
     const maxDaysAhead = Number(config.maxDaysAhead ?? BOOKING_MAX_DAYS_AHEAD)
     const toMs = fromMs + maxDaysAhead * 24 * 60 * 60_000
+    // Bounded at BOTH ends, to the window the slots are actually computed
+    // over. `computeOpenSlots` below is handed `fromMs`/`toMs` and ignores
+    // anything outside them, so a booking past the horizon was read, billed
+    // and discarded — and worse, it competed for the 500 with the bookings
+    // that do matter, so a service booked far ahead could push the near-term
+    // stays out of its own availability check and offer a taken slot.
+    //
+    // A second range on `startsAtMs` needs no new index: the field already
+    // carries one, and the range it narrows is the one already here.
     const bookedSnapshot = await hostRef
       .collection('bookings')
       .where('serviceId', '==', serviceId)
       .where('startsAtMs', '>=', fromMs - 24 * 60 * 60_000)
+      .where('startsAtMs', '<=', toMs)
       .limit(500)
       .get()
     const booked: BookedInterval[] = bookedSnapshot.docs
@@ -252,9 +281,12 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
   if (startsAtMs < Date.now()) {
     return res.status(409).json({ error: 'That time has already passed' })
   }
-  const ip = String(
-    req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown',
-  ).split(',')[0]
+  // Keeps counting under the no-address bucket rather than being skipped: an
+  // unauthenticated booking endpoint that stops counting writes reservations
+  // for anyone who can reach it.
+  const ip =
+    readClientIp(req.headers, { remoteAddress: req.socket?.remoteAddress }) ??
+    NO_CLIENT_ADDRESS_BUCKET
   if (bookingRateLimited(ip)) {
     return res.status(429).json({ error: 'Too many booking attempts' })
   }
@@ -476,6 +508,35 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       return bookingRef.id
     })
 
+    /*
+     * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE BOOKING.
+     *
+     * A booking is an identify moment: the visitor was anonymous while they
+     * browsed and picked a slot, and this request is the first thing that
+     * names them. Both channels are asked here — the labels their device
+     * carried, and the campaign mail they clicked, joined on the address they
+     * just typed — and the later of the two is credited, exactly as the
+     * revenue join credits the later click.
+     *
+     * Resolved once and handed to the booking record, the contact and the
+     * lead below, so the email-channel lookup is one keyed read for the whole
+     * request and the three records cannot name different campaigns.
+     */
+    const bookedAtMs = Date.now()
+    const campaignTouch = await resolveCampaignTouch({
+      hostId,
+      wire: req.body?.campaignTouch,
+      email,
+      atMs: bookedAtMs,
+    })
+    void attributeCampaignConversion({
+      hostId,
+      kind: 'booking',
+      refId: bookingId,
+      touch: campaignTouch,
+      convertedAtMs: bookedAtMs,
+    })
+
     // Contacts ingestion (AGL-197) — booking requests identify a person.
     void upsertHostContact({
       hostId,
@@ -487,6 +548,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         summary: `Booked "${String(service.name ?? 'a service').slice(0, 60)}"`,
       },
       ...(marketingConsent ? { marketingConsent: true } : {}),
+      ...(campaignTouch ? { campaignTouch } : {}),
     })
 
     if (paid) {
@@ -628,6 +690,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           source: 'booking',
           ...(marketingConsent ? { marketingConsent: true } : {}),
         },
+        ...(campaignTouch ? { touch: campaignTouch } : {}),
       })
       return res
         .status(200)
@@ -646,6 +709,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         source: 'booking',
         ...(marketingConsent ? { marketingConsent: true } : {}),
       },
+      ...(campaignTouch ? { touch: campaignTouch } : {}),
     })
 
     // Event trigger (AGL-128/148/159).
@@ -699,6 +763,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         text: designed?.text || fallbackText,
         ...(designed?.html ? { html: designed.html } : {}),
         fromName: branding.fromName,
+        sendingIdentity: await hostSendingIdentity(hostId),
+        audience: 'tenant',
         context: 'booking confirmation',
       })
       // Cost meter (AGL-1438). Transactional: counted, never capped — a
@@ -770,6 +836,18 @@ export async function scanBookingReminders(
     string,
     ReturnType<typeof resolveBrandingProfile>
   >()
+  /*
+   * One identity resolution per SITE, not per booking.
+   *
+   * The same reason the branding and template maps above exist: this sweep
+   * runs across every site, and an uncached resolution would be two Firestore
+   * reads per reminder rather than per host. Scoped to the run, so a domain
+   * un-verified between runs is picked up on the next one.
+   */
+  const identityByHost = new Map<
+    string,
+    Awaited<ReturnType<typeof hostSendingIdentity>>
+  >()
   for (const doc of upcoming.docs) {
     const data = doc.data()
     // The shared predicate, not a local copy of it (AGL-2431): the console
@@ -823,11 +901,15 @@ export async function scanBookingReminders(
     }
     const serviceName = String(data['serviceName'] ?? 'your booking')
     const designed = loaded
-      ? renderLoadedHostEmail(loaded, {
-          name: String(data['name'] ?? ''),
-          'service.name': serviceName,
-          when,
-        })
+      ? renderLoadedHostEmail(
+          loaded,
+          {
+            name: String(data['name'] ?? ''),
+            'service.name': serviceName,
+            when,
+          },
+          sanitizeAuthorHtml,
+        )
       : null
     const result = await sendEmail({
       to: String(data['email']),
@@ -838,6 +920,8 @@ export async function scanBookingReminders(
           `scheduled for ${when}.\n\nReference: ${doc.id}`,
       ...(designed?.html ? { html: designed.html } : {}),
       fromName: brandingByHost.get(hostId)?.fromName,
+      sendingIdentity: await hostSendingIdentity(hostId, identityByHost),
+      audience: 'tenant',
       context: 'booking reminder',
     })
     if (result.sent) {

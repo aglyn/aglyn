@@ -43,22 +43,45 @@ Choices" and Global Privacy Control. It is a **sale** denial, not a **share**
 denial. Anyone reasoning from the old sentence will conclude retargeting is
 legally blocked when it is not. ⚑ Read the master, not this file's summary of it.
 
-**Current state, verified 2026-08-25:** Google Signals **OFF** (leave it — that
-is cross-device identity on signed-in Google users, a bigger step than cookie
-retargeting and nothing here needs it). Ads personalization is now **307 of 307
-regions**, opened in the Ads console. The server-side sender still asserts
-`non_personalized_ads` per hit.
+⛔ **AND THE REPLACEMENT SENTENCE WAS WRONG TOO.** It said Google Signals was
+off and "should stay off". Both halves were wrong: read from the property's own
+Data collection page on 2026-08-27 (`302497406`, toggle blue and
+`aria-checked="true"`), **Google Signals is ON** and allowed in 307 of 307
+regions — and it is **meant to be on**. Signals is what makes cross-device
+remarketing audiences possible, which is the point of the Google Ads link, so
+the advice to keep it off contradicted the advertising posture the rest of this
+file describes. The lesson the block above teaches is the one this file kept
+failing: ⚑ read the setting, not the note about the setting.
 
-**The AGL-1559 posture line "no Google Ads link" expired on 2026-08-20** — the
-link to account `841-500-9958` exists, with **Personalized Advertising ON**, and
-**ads personalization is now 307 of 307 regions** (opened 2026-08-25). GA4
-audiences therefore export to Google Ads. That is intended: it is what makes
-Google remarketing possible at all, and both legal masters describe it.
+**Current state, verified 2026-08-27 in the GA4 admin:**
 
-Google Signals remains **off** and should stay off — it is cross-device identity
-built on signed-in Google users, a materially bigger step than cookie
-retargeting, and nothing in the current setup needs it. Turning it on is a fresh
-decision, not a continuation of this one.
+| Setting | State |
+| --- | --- |
+| Google Signals | **ON**, allowed in 307 of 307 regions |
+| Ads personalization | **307 of 307 regions** |
+| Google Ads link | account `841-500-9958`, **Personalized Advertising ON** |
+| Granular location and device data | **ON** |
+| User-provided data collection | **ON**, auto-detection ON, receiving on 0 of 1 streams |
+| Data retention | 14 months, event and user, reset on new activity |
+
+Every row is intended, and the *published* subprocessor and cookie disclosures
+describe them. Signals is cross-device identity built on signed-in Google users
+— materially more than cookie retargeting — and that reach is the reason it is
+on: audiences built from it are what the Google Ads link exports.
+
+⚠️ **Turning any of these off is a legal edit, not just a settings change.** The
+Subprocessors and Cookie Policy masters state what this table says; flipping a
+toggle without correcting them leaves a published document describing tracking
+that no longer happens, which is the same defect as the one that had them
+describing tracking that did.
+
+The server-side sender still asserts `non_personalized_ads: true` per hit
+(`ga4-measurement-protocol.ts`), which is a per-event flag and does not depend
+on any of the property settings above.
+
+**The AGL-1559 posture line "no Google Ads link" expired on 2026-08-20.** GA4
+audiences export to Google Ads, which is what makes Google remarketing possible
+at all, and both legal masters describe it.
 
 Cross-domain measurement is configured on the tag (Contains `aglyn.com`, which
 matches `app.aglyn.com` too; plus legacy `aglyn.io`), and `aglyn.com` is listed
@@ -169,17 +192,18 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | ------------------------------ | --------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `sign_up`                      | Reserved        | Console                                                | `method`                                                                                  | Acquisition — signups                                                                                |
 | `login`                        | Reserved        | Console                                                | `method`                                                                                  | engagement / returning users                                                                         |
-| `generate_lead`                | Reserved        | Marketing                                              | `form_name`, `form_location`                                                              | Acquisition — cost/lead, demo bookings                                                               |
+| `generate_lead`                | Reserved        | Marketing + Tenant (forms, newsletter, popup capture, free bookings) | `form_name`, `form_location`                                                              | Acquisition — cost/lead, demo bookings; and the merchant's own form conversions                      |
 | `select_content`               | Reserved        | Marketing                                              | `content_type`, `content_id`, `surface`                                                   | Acquisition — CTA funnel                                                                             |
 | `click`                        | Reserved        | Marketing                                              | `link_domain`, `link_id`, `surface`                                                       | Acquisition — outbound to docs/GitHub                                                                |
 | `org_created`                  | Custom          | Console                                                | `plan?`                                                                                   | Activation                                                                                           |
 | `host_created`                 | Custom          | Console                                                | —                                                                                         | Activation                                                                                           |
 | **`site_published`**           | Custom          | Console + **Server** (tenant)                          | `first_publish?`                                                                          | **Activation — "% who publish a site"**                                                              |
 | `stripe_connected`             | Custom          | Console                                                | —                                                                                         | **Activation — "% who connect Stripe"**                                                              |
-| `begin_checkout`               | Reserved        | Console + Tenant                                       | `currency`, `value`, `items`, `billing_interval?`                                         | Revenue — checkout funnel                                                                            |
+| `begin_checkout`               | Reserved        | Console + Tenant (cart, buy-now, Starter product, reservations, bookings) | `currency`, `value`, `items`, `billing_interval?`                                         | Revenue — checkout funnel                                                                            |
 | `purchase`                     | Reserved        | **Server** (ours) + Tenant storefront **and bookings** (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?`, `shipping?`          | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce **and service** revenue |
 | `view_item`                    | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
-| `add_to_cart`                  | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
+| `add_to_cart`                  | Reserved        | Tenant (storefront)                                    | `items`, `currency?`, `value?`                                                            | Merchant's own product funnel                                                                        |
+| `view_cart`                    | Reserved        | Tenant (storefront)                                    | `currency`, `value`, `items`                                                              | Merchant's own product funnel — tells "never opened the cart" apart from "opened it and left"        |
 | `aglyn_overlay`                | Custom          | Tenant (marketing)                                     | `overlay_action`, `overlay_id?`                                                           | Engagement — announcement bars and popups                                                            |
 | `aglyn_experiment`             | Custom          | Tenant (marketing)                                     | `experiment_id`, `variant_id`, `experiment_action`                                        | Engagement — experiment exposures/conversions                                                        |
 | `refund`                       | Reserved        | **Server** (AGL-1850)                                  | `transaction_id` (the ORIGINAL purchase's), `currency`, `value`                           | Revenue — nets refunded revenue against `purchase`; without it GA can only ever drift UP from Stripe |
@@ -255,17 +279,49 @@ a tenant site pointed at our own property.
 | `login`            | `apps/console/app/(auth)/signin/page.tsx` (password, Google popup, passkey); `use-google-redirect-result.tsx` (mobile redirect); `apps/console/app/(auth)/sso/page.tsx` (`method: 'sso'`, both the desktop popup and the mobile redirect return — AGL-1562)                                                                                                                         |
 | `select_content`   | `libs/aglyn/src/lib/app-utils/analytics-link-clicks.ts`, installed by `apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx` (AGL-1562)                                                                                                                                                                                                                                            |
 | `click`            | the same listener                                                                                                                                                                                                                                                                                                                                                                   |
-| `generate_lead`    | `libs/plugins/mui/src/lib/components/form.tsx` (the generic lead form — `/contact`); `libs/plugins/commerce/src/lib/components/newsletter-signup.tsx` (AGL-301 subscribe)                                                                                                                                                                                                           |
+| `generate_lead`    | `libs/plugins/mui/src/lib/components/form.tsx` (the generic lead form — `/contact`, every successful submit, awaited ahead of the redirect branch); `libs/plugins/commerce/src/lib/components/newsletter-signup.tsx` (AGL-301 subscribe); `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (the popup's email capture — gated on `response.ok`, where the visitor-facing thank-you deliberately is not, so a honeypot verdict cannot be counted as a lead); `libs/plugins/bookings/src/lib/components/booking.tsx` (a FREE booking, which has no Stripe leg and so would otherwise report nothing at all) |
 | `org_created`      | `apps/console/components/create-org-dialog.component.tsx`; `provisionSignUpOrg` in the signup page                                                                                                                                                                                                                                                                                  |
 | `host_created`     | `apps/console/components/create-host-dialog.component.tsx`                                                                                                                                                                                                                                                                                                                          |
 | `site_published`   | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589)                                                                  |
 | `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx`; **server-side** from `libs/tenant/data/admin/…/connect-account-status.ts` when `account.updated` is what first flips `stripeChargesEnabled` on (AGL-1580). Both browser emitters gate on the profile still reading "not connected" at click time, and the AGL-1997 webhook lands while the merchant is still on Stripe's hosted onboarding — so on a deployment that HAS a Connect webhook destination the browser guard is already shut by the time they return, and this was the reason the event had never been seen. The two guards read the same stored flag from opposite sides, so exactly one of them can be open per account                                                                                                                                                                                                                                                          |
-| `begin_checkout`   | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout — AGL-1591)                                                                                                                                                                                                                      |
+| `begin_checkout`   | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout, both the redirect and the in-page-payment branch — AGL-1591); `product-detail.tsx` (buy-now, both branches); `libs/plugins/mui/src/lib/components/product.tsx` (the Commerce Starter block, when its displayed price parses to a positive number); `libs/plugins/commerce/src/lib/components/reservation-widget.tsx` (the DEPOSIT being charged, not the value of the stay); `libs/plugins/bookings/src/lib/components/booking.tsx` (a paid service). Every one fires only after the server returned a session, never on the click |
 | `view_item`        | `libs/plugins/commerce/src/lib/components/product-detail.tsx`, when the product payload resolves                                                                                                                                                                                                                                                                                    |
-| `add_to_cart`      | the same file, on a successful add                                                                                                                                                                                                                                                                                                                                                  |
+| `add_to_cart`      | the same file, on a successful add — priced from the resolved variant and the chosen quantity, so `value` is what went IN and not the cart's running total |
+| `view_cart`        | `libs/plugins/commerce/src/lib/components/cart.tsx`, when the drawer opens or the inline block resolves with lines — never on the badge, which renders on every page of a storefront, and never on an empty cart |
 | `aglyn_overlay`    | `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (`sendOverlayBeacon`)                                                                                                                                                                                                                                                                                                  |
 | `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon                                                                                                                                                                                                                                                                                                             |
 | `purchase`         | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch, from the marketplace webhook handler, and from the bookings webhook handler (AGL-2481). **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx`; and `libs/plugins/bookings/src/lib/utils/use-booking-purchase-event.ts`, mounted by `booking.tsx` — the pages Stripe returns a buyer to (AGL-1641/AGL-2481) |
+
+### The tenant-side events that are deliberately NOT sent
+
+Read this before filing any of them as a gap; each is a decision, not an
+oversight.
+
+**`search`.** The Search Box block is a plain `GET` form to `/search?q=…`, and
+GA4's own Enhanced Measurement already reports that as `view_search_results`
+off the `q` parameter — `q` is first in its default list. Sending our own
+`search` would count one act twice, in two names, in the owner's property. The
+half that would carry information, GA4's `search_term`, is the visitor's free
+text, which the no-PII rule keeps out of every param on principle; a `search`
+with the term removed is a bare count of a thing GA is already counting.
+
+**`add_to_wishlist` and `remove_from_cart`.** GA4 recommends both and neither is
+in the taxonomy. They describe engagement rather than a funnel step, nothing in
+the console reads them, and an event added because GA has a name for it is an
+event nobody has a question for. Add them when a question exists.
+
+**`view_item`'s two fields.** It carries `item_id` and `item_name` only, with no
+`currency`/`value`, which the priced steps beside it now do carry. A product
+page with several variants has no single price at view time, and reporting the
+first available variant's would make "value of items viewed" a figure whose
+basis changes with the option a shopper has not yet chosen.
+
+**`org_created`, `host_created`, `site_published`, `stripe_connected` and the
+Assist and retention events.** Console-only by design — the surfaces that emit
+them do not exist on a published site. `site_published` and `stripe_connected`
+also have SERVER senders, which is how they reach GA when the browser guard is
+already shut; neither is a tenant event.
+
 
 ### `first_publish`, and what all four senders mean by it (AGL-1588)
 
@@ -1035,10 +1091,36 @@ browser console. The author-facing half is `validateHostAction`, which refuses
 to **save** a name the runtime would refuse to send. A silent drop is therefore
 only possible for a step authored before AGL-1587.
 
-Not done, and why: no cap on the _number_ of authored params (GA4 ignores past
-25 and there is no privacy or pollution consequence), and no normalization of
-param _keys_ (an invalid key costs that one param, again with no safety
-consequence). Both are formatting nits on a path whose real risk was PII.
+**The params are authored in the interaction builder, under a cap.**
+`ACTION_MAX_EVENT_PARAMS` (10) bounds the list and
+`ACTION_EVENT_PARAM_NAME_MAX_LENGTH` (40) bounds each name; a value's field
+caps its input at `ANALYTICS_PARAM_MAX_LENGTH`, the very constant
+`sanitizeEventParams` truncates at, so the affordance cannot promise a length
+the delivery shortens. The cap is not a storage concern — these pairs are the
+least trustworthy analytics input on the platform, and a bounded list is one an
+author can read back in full before publishing, which is the only review a
+parameter ever gets.
+
+`validateHostAction` runs the **real** `sanitizeEventParams` over the authored
+params and refuses to save a step carrying a parameter the runtime would strip,
+naming it. Same shape as the reserved-name refusal above and the `showHtml`
+check beside it: the runtime can only drop and stay quiet, so the strip is
+reported where the person who can fix it is looking — and by running the
+shipping function rather than a second description of its rules, so the two can
+never disagree about which parameter survives.
+
+Still not done, and why: no normalization of param _keys_ beyond the length
+bound. An invalid key costs that one param, with no safety consequence — a
+formatting nit on a path whose real risk was PII.
+
+**The step is `actions`-entitled, and the builder says so.** `trackGaEvent` is
+an advanced client step, so `compileClientAutomations` trims it out of the
+published payload for a site without the `actions` feature. The picker
+therefore disables the option and names the plan that carries it, and a step
+already authored under that type explains itself in place — it is _saved_ and
+skipped, not lost, and starts running the moment the plan carries it. Which
+tier the capability sits in is untouched: the gap was a picker that advertised
+a step the compiler was about to drop, with nothing anywhere saying so.
 
 ### 7. The docs site buys its instrumentation from the tag, not from our code (AGL-1579)
 
@@ -1527,13 +1609,18 @@ Worth knowing for anything that ever adds a second Firebase app: the SDK's
 `FirebaseApp` sharing the primary's `appId` — `use-presence.ts` builds exactly
 one — would throw `already-exists` if analytics were ever initialized on it.
 
-**Still open:** two raw `logEvent(analytics, 'screen_view', …)` calls live
-outside the taxonomy, in `hosts/[host]/setup/page.tsx` and `manage/user/page.tsx`.
-They are legal — Firebase treats `screen_view` and the `firebase_` prefix
-specially — but they are the one class of console event neither the compiler nor
-the sanitizer sees. Their own `firebase_screen` / `firebase_screen_class` values
-are authored strings and were never the problem; what rode alongside them was
-the ambient `page_title`, closed by AGL-2087 in §11.
+**Still open:** one raw `logEvent(analytics, 'screen_view', …)` call lives
+outside the taxonomy, in `hosts/[host]/setup/page.tsx`. It is legal — Firebase
+treats `screen_view` and the `firebase_` prefix specially — but it is the one
+class of console event neither the compiler nor the sanitizer sees. Its own
+`firebase_screen` / `firebase_screen_class` values are authored strings and were
+never the problem; what rode alongside them was the ambient `page_title`, closed
+by AGL-2087 in §11.
+
+`manage/user/page.tsx` had the second one. Its sections are routes now
+(AGL-2501), so each one reports through the shared `page_view` effect in
+`firebase-app.layout.tsx` — which fires on every pathname change — rather than
+through a hand-written event a tab click had to remember to send.
 
 ### 11. `page_title` is sent explicitly, and is not the tab title (AGL-2060)
 
@@ -1648,14 +1735,23 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
   bit it: `first_publish` was registered and sent by nothing until AGL-1588,
   which reads the same way from the report end. Registration and a producer
   are two facts, and the doc has to state both;
-- privacy posture verified: Google Signals **off**, ads personalization **0 of
-  307 regions**, user-provided data collection **off**, no Google Ads link,
-  data retention **14 months** (event and user), email redaction **on**.
-  Leave all of it that way — the live privacy policy's flat "we do not sell or
-  share" denial rests on it.
-  ⚑ **"no Google Ads link" expired on 2026-08-20** — see the coupled-controls
-  warning at the top of this doc. Everything else in this bullet was re-verified
-  on 2026-08-25 and still holds.
+- privacy posture **as configured on 2026-08-14**: Google Signals off, ads
+  personalization 0 of 307 regions, user-provided data collection off, no
+  Google Ads link, data retention 14 months (event and user), email redaction
+  on.
+  ⛔ **Every advertising line of that bullet has since been reversed on
+  purpose. Do not read it as current and do not restore it.** Signals is on in
+  307 of 307 regions, ads personalization is on in 307 of 307,
+  user-provided data collection is on, and the Google Ads link exists with
+  Personalized Advertising on — the verified table at the top of this file is
+  the only place in here that states the live posture. The two settings that
+  did not move are the retention period and email redaction.
+  ⛔ The old bullet also rested the whole posture on "the live privacy policy's
+  flat 'we do not sell or share' denial". There is no such denial and there
+  never was; see the correction at the top. Aglyn advertises, remarkets,
+  retargets and measures across all three of its own surfaces. What it does not
+  do is **sell** the data, and that narrow claim is the entire privacy
+  commitment these settings have to stay consistent with.
 
 **Bookings (AGL-2481) needs NO new custom dimension.** Stated positively so
 nobody goes looking: the booking `purchase` carries only `transaction_id`,
@@ -1700,9 +1796,11 @@ quietly comes to mean two things.
 tenant's own first-party collector already made (`apps/tenant/app/api/analytics/collect/route.ts`):
 keyword- and variant-level labels multiply cardinality without answering a
 question anyone asks of a signup, and a keyword string is the likeliest of the
-five to carry something a person typed. `gclid` is out too — it is an
-ads-click identifier and this property runs with ads personalization off in all
-307 regions.
+five to carry something a person typed. `gclid` is out too, on the cardinality
+ground alone. ⛔ The reason recorded here used to be that the property runs ads
+personalization off in all 307 regions — it is **on** in 307 of 307, so nothing
+about this exclusion rests on a privacy posture, and reading it as one would
+misstate what the property does.
 
 **The allowlist is the privacy mechanism, not a convenience.** A parser that
 copied "the campaign-ish parameters" would be one marketing link away from
@@ -1942,7 +2040,8 @@ validates a payload and stores nothing.
 > GMT-5, and the property now reads **30 event-scoped dimensions and 5 custom
 > metrics**. Counted row by row off Admin → Data display → Custom definitions
 > (both tabs, both pages of the dimension list), and corroborated by Account
-> change history, which logs each `Created` with a timestamp and `zach@aglyn.com`.
+> change history, which logs each `Created` with a timestamp and the account
+> that made it.
 >
 > | Registry | Used (2026-08-24 AM) | Used (2026-08-24 PM) | Cap |
 > | -- | -- | -- | -- |
@@ -2349,6 +2448,17 @@ there is the merchant's to make, not one we can make for them.
    "we do not sell or share" conclusion, both of which the GA configuration
    genuinely supports, and replace only the blanket "no third-party analytics"
    with a named, accurate description of the one analytics provider we run.
+
+   ⛔ **THAT DECISION IS SUPERSEDED AND ITS TWO "KEEP" CLAUSES ARE NOW FALSE.**
+   Do not restore either. Aglyn runs advertising technology on all three of its
+   own surfaces, and the GA4 property no longer "genuinely supports" a
+   no-adtech reading — Google Signals and ads personalization are on in every
+   region and the property is linked to Google Ads. The published Privacy
+   Policy §3 was rewritten accordingly: it describes cross-context behavioral
+   advertising outright, names Google, Meta and LinkedIn, and denies only the
+   **sale** of personal information for money. That narrow denial is the
+   surviving claim; it is not a claim that Aglyn does not track, retarget or
+   personalize, and nothing in this file should be read as one.
    **Not yet published** — the privacy page and the Cookie Policy are besigner
    content on the live marketing site, so the correction is a publication step,
    and the hashed v4 snapshot must be re-captured _after_ it, never before: a

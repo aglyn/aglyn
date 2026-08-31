@@ -760,7 +760,7 @@ those hosts as intended), while no API path exists.
 > ## stated blocker for 1099d for two weeks
 >
 > The premise was never re-probed after 2026-08-09. It is false. Measured
-> today, read-only, from this machine as `zach@aglyn.com`:
+> today, read-only, from this machine as the Workspace staff account:
 >
 > ```
 > gcloud projects list
@@ -771,11 +771,11 @@ those hosts as intended), while no API path exists.
 >
 > gcloud projects get-iam-policy recaptcha-migrated-6c9712c2f71
 >   roles/owner:
->     - user:zach@aglyn.com                                     ← already owner
->     - user:zachary.w.gover@gmail.com                          ← already owner
+>     - user:<workspace staff account>                          ← already owner
+>     - user:<break-glass consumer account>                      ← already owner
 >     - serviceAccount:recaptcha-gcp-project-provisioner@system.gserviceaccount.com
 >   roles/resourcemanager.projectOwnerInvitee:
->     - user:zachary1748@gmail.com          ← the pending invite, a THIRD account
+>     - user:<a third consumer account>     ← the pending invite
 > ```
 >
 > **`gcloud recaptcha keys list` returns the key from a project we own.** That
@@ -784,8 +784,8 @@ those hosts as intended), while no API path exists.
 > only on `aglyn-main`, which is why the `aglyn-main` probe above misled), and
 > two accounts we control hold `roles/owner` there.
 >
-> The unaccepted invitation is real but **irrelevant**: it belongs to
-> `zachary1748@gmail.com`, an account nobody needs. Reading its "Action
+> The unaccepted invitation is real but **irrelevant**: it belongs to a third
+> consumer account nobody needs. Reading its "Action
 > required" banner as *our* blocker is what produced this paragraph.
 >
 > The key's `webSettings` are readable, and they settle the ceiling question
@@ -1325,8 +1325,8 @@ the wrong one.
 has nothing to build, and it still blocks 1099c.
 
 > **⚑ Met, 2026-08-23.** That command returns the key from
-> `recaptcha-migrated-6c9712c2f71`, where `zach@aglyn.com` is already
-> `roles/owner`. See the correction box in §5. **1099d is unblocked and has
+> `recaptcha-migrated-6c9712c2f71`, where the Workspace staff account is
+> already `roles/owner`. See the correction box in §5. **1099d is unblocked and has
 > something to build** — `projects.keys.patch` on `webSettings.allowedDomains`,
 > add-on-attach and reclaim-on-detach, driven off the stored `consoleDomains`
 > claim and never re-derived.

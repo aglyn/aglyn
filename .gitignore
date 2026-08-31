@@ -63,9 +63,20 @@ Thumbs.db
 
 .nx/cache
 .nx/workspace-data
+# Isolated nx caches. A worktree does not isolate the nx cache, so parallel
+# runs are given their own via NX_CACHE_DIRECTORY — and those land at the repo
+# root, untracked and unignored, where they get staged by accident.
+.nx-cache*/
 
 vite.config.*.timestamp*
 .claude/worktrees
+# Personal agent instructions. These are prompts written to an assistant, not
+# project configuration: they name the owner's accounts, browser sessions and
+# working habits, and THIS REPOSITORY IS PUBLIC. `settings.json` and
+# `launch.json` stay tracked because they configure the project rather than
+# describe how one person works on it.
+.claude/commands/
+.claude/HANDOFF.md
 .nx/polygraph
 .nx/self-healing
 .vercel

@@ -68,11 +68,12 @@
  * outage on a customer's business. A suppression is not a quota, but the same
  * proportionality applies and lands in the same place:
  *
- *  - **Bulk mail consults this list.** The monthly usage summary and the
- *    usage-alert fan-out go to a LIST of people who did not ask for that
- *    particular message, on a schedule, forever. They are the sends that
- *    re-hit a dead mailbox every month and teach a mailbox provider that
- *    `aglyn.com` does not listen.
+ *  - **Bulk mail consults this list.** The monthly usage summary, the
+ *    usage-alert fan-out and the marketplace review fan-out to a publisher's
+ *    owners and admins go to a LIST of people who did not ask for that
+ *    particular message, on a schedule or on every submission, forever. They
+ *    are the sends that re-hit a dead mailbox every month and teach a mailbox
+ *    provider that `aglyn.com` does not listen.
  *  - **Transactional mail does NOT.** A password reset, a verification, an
  *    invite, a receipt or a booking confirmation answers something the human
  *    just did. Refusing one because an address bounced or because somebody
@@ -86,13 +87,34 @@
  * nothing into the AGL-1438 cost-meter sweep.)
  */
 
-import { createHash } from 'crypto'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+// The leaf entry, not the `@aglyn/aglyn` barrel, for the reason
+// `document-id.ts` gives at length: a barrel import resolves to whatever a
+// spec's `jest.mock` happens to contain, and this module's neighbours are
+// mocked in nearly every spec that touches them.
+import {
+  readTopicSubscriptionState,
+  TOPIC_OPT_OUTS_SUBCOLLECTION,
+} from '@aglyn/aglyn/app-utils/email-topics'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import firebaseAdmin from './firebase-admin'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
 export const EMAIL_SUPPRESSIONS_COLLECTION = 'emailSuppressions'
+
+/**
+ * The PER-SITE list, `hosts/{hostId}/suppressions/{emailKey}` — unsubscribes
+ * from one site's campaigns, plus the bounces and complaints that arrived
+ * carrying that site's tag.
+ *
+ * Named here rather than at each call site because the two lists are read
+ * together by {@link filterSendableForHost}, and a sender that knows one path
+ * as a string literal and the other through this module is one rename away
+ * from consulting a collection that does not exist and finding nobody
+ * suppressed.
+ */
+export const HOST_SUPPRESSIONS_SUBCOLLECTION = 'suppressions'
 
 /**
  * Why an address is suppressed.
@@ -111,6 +133,50 @@ export type EmailSuppressionReason =
   /** Recorded by staff (a written request, a court order, a correction). */
   | 'staff'
 
+/**
+ * The reasons that may be filed PLATFORM-WIDE, as a runtime set.
+ *
+ * ## The split this constant enforces
+ *
+ * A bounce and a complaint are facts about a MAILBOX and about the sending
+ * domain every tenant's mail leaves by: the address does not exist for
+ * anybody, and somebody who pressed "report spam" on `noreply@aglyn.com` has
+ * told every sender behind that domain at once. Those belong everywhere,
+ * immediately.
+ *
+ * An UNSUBSCRIBE is not that. It is a preference a person expressed to ONE
+ * brand — the sender line they read, the newsletter they joined — and an
+ * agency running twelve unrelated clients out of one account would, on a
+ * platform-wide entry, stop mailing that person on behalf of eleven brands
+ * they never heard from. So an unsubscribe lives only in
+ * `hosts/{hostId}/suppressions`, and {@link suppressEmail} refuses it.
+ *
+ * ## Why a runtime refusal and not just the type
+ *
+ * {@link EmailSuppressionReason} already excludes it, and a type is not a
+ * guard: every caller here builds its reason from a webhook payload or a
+ * ternary, `as` casts exist, and the plugin API surface is untyped at the
+ * boundary. The cost of the type being wrong once is an opt-out from one
+ * brand silently applied to every brand in the account, which is invisible
+ * from the console — the mail simply never arrives, and the merchant's own
+ * suppression list does not mention it.
+ */
+export const PLATFORM_SUPPRESSION_REASONS: readonly EmailSuppressionReason[] = [
+  'bounce',
+  'complaint',
+  'staff',
+]
+
+/**
+ * The reason a self-service opt-out is filed under, on the PER-SITE list.
+ *
+ * Named because three call sites compare against it — the unsubscribe writes
+ * it, the resubscribe link refuses to reverse anything else, and the
+ * preference page reads it to decide whether an address may opt back in. A
+ * literal in three places is a literal that can be changed in two.
+ */
+export const UNSUBSCRIBE_SUPPRESSION_REASON = 'unsubscribe'
+
 export interface EmailSuppressionRecord {
   /** The address, in the clear, lowercased. The id is its hash. */
   email: string
@@ -125,6 +191,12 @@ export interface EmailSuppressionRecord {
   hostId: string | null
   /** Non-null once released. A released record does not suppress. */
   releasedAt: unknown | null
+  /** What lifted it. Absent on records written before releases were typed. */
+  releasedVia?: EmailReleaseChannel
+  /** The site whose confirmed double opt-in lifted it, when one did. */
+  releasedHostId?: string | null
+  /** The stream that was confirmed, likewise. */
+  releasedTopicId?: string | null
 }
 
 /**
@@ -141,11 +213,13 @@ export interface EmailSuppressionRecord {
 export function emailSuppressionKey(
   email: string | null | undefined,
 ): string | null {
-  const normalized = String(email ?? '')
-    .trim()
-    .toLowerCase()
-  if (!normalized.includes('@') || /\s/.test(normalized)) return null
-  return createHash('sha256').update(normalized).digest('hex')
+  /*
+   * Delegated, not reimplemented. A second hash of the same address is how
+   * this area got two derivations that agreed only by accident; `personKey`
+   * is the one that normalizes and the one the unsubscribe route already
+   * hashes through, so a suppression filed by either is found by both.
+   */
+  return personKey(email)
 }
 
 export interface SuppressEmailInput {
@@ -180,6 +254,12 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
   if (!key) {
     throw new Error('[email-suppression] cannot key a suppression for that value')
   }
+  if (!PLATFORM_SUPPRESSION_REASONS.includes(input.reason)) {
+    throw new Error(
+      `[email-suppression] ${input.reason} is a per-site preference and ` +
+        'cannot be filed platform-wide',
+    )
+  }
   const db = input.firestore ?? defaultFirestore()
   const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
   const snapshot = await ref.get()
@@ -199,10 +279,31 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
 }
 
 /**
+ * What lifted a suppression, recorded on the record it lifted.
+ *
+ * Written explicitly by both paths rather than left to "absent means staff".
+ * The two are held to different rules — a staff release may lift any reason,
+ * a confirmed opt-in may lift exactly one — so the audit answer to "how did
+ * this address get back on the domain" has to be a stored fact and not an
+ * inference from which field happens to be missing.
+ */
+export type EmailReleaseChannel =
+  /** A staff correction through the admin suppressions surface. */
+  | 'staff'
+  /** A recipient completed a double opt-in from this address. */
+  | 'double-opt-in'
+
+/**
  * Put an address back in circulation (a staff correction, or the person asking
  * to be re-added). The record is kept and marked released, never deleted —
  * same reasoning as `releasePhoneContact`: a deleted record cannot show that
- * the suppression was honoured while it stood.
+ * the suppression was honored while it stood.
+ *
+ * Unconditional on the reason, and that is what separates it from
+ * {@link releaseEmailForConfirmedOptIn}: a human with the staff role has read
+ * the record and is accountable for the row, so they may lift a complaint —
+ * a report filed against the wrong message, an address entered by mistake.
+ * Nothing automatic gets that latitude.
  *
  * @returns false when there was no live record to release.
  */
@@ -223,10 +324,130 @@ export async function releaseEmail(input: {
       releasedAt: FieldValue.serverTimestamp(),
       releasedByUid: input.releasedByUid ?? null,
       releasedNote: input.note ?? null,
+      releasedVia: 'staff' satisfies EmailReleaseChannel,
     },
     { merge: true },
   )
   return true
+}
+
+/**
+ * The ONLY reason a completed round trip may lift, as a runtime set.
+ *
+ * ## Why a bounce is releasable
+ *
+ * A `bounce` record is a claim about a MAILBOX at a moment: mail addressed
+ * here was permanently refused. Somebody clicking a confirmation link that
+ * was delivered to that mailbox has refuted the claim with the only evidence
+ * that could refute it — the message arrived, a human read it, and the round
+ * trip closed. Leaving the record standing after that makes one transient
+ * failure recorded as permanent — a mailbox that was full, a receiving server
+ * that answered 550 while it was misconfigured — a life sentence no route can
+ * undo.
+ *
+ * ## Why a complaint is NOT, and never will be
+ *
+ * `complaint` is not a deliverability fact. It is a person stating they do not
+ * want this mail, and a round trip proves nothing about that statement — it
+ * proves the mailbox works, which nobody doubted. Releasing one here would
+ * make a public signup form into a laundry for spam complaints: submit the
+ * complainant's address, they receive a confirmation (the shared sender is
+ * transactional and consults no list), and one click anywhere in the chain
+ * puts them back on the sending domain that the complaint was filed against.
+ * The same reasoning refuses `staff`, which is a written request, a
+ * correction, or a legal instruction, and is nobody's to reverse from a link.
+ *
+ * A runtime set and not just the type, for the reason
+ * {@link PLATFORM_SUPPRESSION_REASONS} gives: reasons arrive from webhook
+ * payloads through an untyped boundary, and the cost of the type being wrong
+ * once here is a complaint silently laundered.
+ */
+export const OPT_IN_RELEASABLE_REASONS: readonly EmailSuppressionReason[] = [
+  'bounce',
+]
+
+/** What a completed double opt-in did to a platform suppression. */
+export type ConfirmedOptInRelease =
+  /** A live `bounce` record was lifted. The address is mailable again. */
+  | 'released'
+  /** Nothing was suppressed, or it was already released. */
+  | 'nothing-to-release'
+  /** A record stands that a round trip may not lift — see the constant. */
+  | 'refused'
+  /** The read or the write failed. The record, whatever it is, still stands. */
+  | 'failed'
+
+/**
+ * Lift a platform suppression that a completed double opt-in has disproved.
+ *
+ * THE ONE PLACE THE AUTOMATIC RULE IS STATED, mirroring
+ * `releaseSiteSuppression` for the per-site list: every path that puts an
+ * address back in circulation without a human deciding goes through here, so
+ * there is one line to read and one line to change.
+ *
+ * ## Platform-wide, from one site's round trip
+ *
+ * The record being lifted asserts something host-independent — this mailbox
+ * does not exist, learned anywhere in the product, including on transactional
+ * mail that carried no site tag. A confirmation delivered to that mailbox
+ * disproves it just as host-independently, so scoping the release to the
+ * confirming site would leave a record standing that says the mailbox is dead
+ * while we hold proof that it is not. The site and the topic are written onto
+ * the record instead, which is what makes the release reviewable: an operator
+ * reading the row sees which site's round trip lifted it and when.
+ *
+ * ## The per-site list is NOT touched
+ *
+ * `hosts/{hostId}/suppressions` mixes a deliverability fact with a stated
+ * preference — an unsubscribe from that one site lives there too — and the
+ * email plugin's `releaseSiteSuppression` is the single guarded path that
+ * lifts one. Reaching around it from here would put a second, differently
+ * reasoned releaser on a list whose whole protection is that there is one.
+ *
+ * Never throws: it runs inside a recipient's confirmation click, and a
+ * Firestore failure must degrade to a suppression that stays in force, not to
+ * a person told their confirmation failed.
+ */
+export async function releaseEmailForConfirmedOptIn(input: {
+  email: string
+  /** The site whose confirmation link was clicked, for the audit trail. */
+  hostId: string
+  /** The stream that was confirmed, likewise. */
+  topicId: string
+  firestore?: any
+}): Promise<ConfirmedOptInRelease> {
+  const key = emailSuppressionKey(input.email)
+  if (!key) return 'nothing-to-release'
+  try {
+    const db = input.firestore ?? defaultFirestore()
+    const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
+    const snapshot = await ref.get()
+    if (!snapshot.exists || snapshot.get('releasedAt')) {
+      return 'nothing-to-release'
+    }
+    if (!OPT_IN_RELEASABLE_REASONS.includes(snapshot.get('reason'))) {
+      return 'refused'
+    }
+    await ref.set(
+      {
+        releasedAt: FieldValue.serverTimestamp(),
+        // No human released this, so the field says so rather than naming
+        // whoever last touched the record.
+        releasedByUid: null,
+        releasedVia: 'double-opt-in' satisfies EmailReleaseChannel,
+        releasedHostId: input.hostId || null,
+        releasedTopicId: input.topicId || null,
+      },
+      { merge: true },
+    )
+    return 'released'
+  } catch (error) {
+    console.error(
+      '[email-suppression] opt-in release failed; suppression stands',
+      error,
+    )
+    return 'failed'
+  }
 }
 
 /**
@@ -294,22 +515,248 @@ export async function filterSuppressedEmails(
 }
 
 /**
+ * The sendable subset for a send made in ONE SITE's name — BOTH lists.
+ *
+ * A per-site suppression says "not from this site". A platform suppression
+ * says the address hard-bounced or somebody pressed "report spam", learned
+ * anywhere in the product — including on transactional mail that carried no
+ * site tag at all and could therefore never have reached the per-site list.
+ * Consulting only the site's own list mails a known-dead or complaining
+ * address from the one shared sending domain every tenant's mail leaves by,
+ * which makes it every tenant's deliverability problem rather than one
+ * merchant's.
+ *
+ * Composed from {@link filterSuppressedEmails} rather than reimplementing the
+ * platform half: normalization, de-duplication and the fail-closed posture
+ * live there, and a second copy of them is a second set of rules for two
+ * senders to disagree about.
+ *
+ * ## Both halves fail CLOSED
+ *
+ * A read that throws answers "suppressed". The platform half already does; the
+ * per-site half matches it, because a list we could not read is not a list
+ * that said this address is safe to mail. The cost of the other choice is a
+ * message delivered to somebody who asked us to stop.
+ *
+ * ## One `getAll`, keyed, rather than a scan of the collection
+ *
+ * The per-site half looks up exactly the addresses being mailed, by document
+ * id, in one round trip. Reading the whole collection instead — which is what
+ * the campaign sender did — is bounded by however large the collection has
+ * grown, so a site with more suppressions than the read window fails OPEN on
+ * the remainder: the people most certain not to want the mail are the ones a
+ * truncated read drops.
+ */
+export async function filterSendableForHost(
+  hostId: string,
+  emails: readonly string[],
+  injectedFirestore?: any,
+): Promise<string[]> {
+  const platformSendable = await filterSuppressedEmails(
+    emails,
+    injectedFirestore,
+  )
+  // `getAll` rejects an empty reference list, and there is nothing to ask.
+  if (!platformSendable.length) return []
+  const db = injectedFirestore ?? defaultFirestore()
+  const hostList = db
+    .collection('hosts')
+    .doc(hostId)
+    .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+  // Every survivor of the platform half is keyable — `isEmailSuppressed`
+  // answers `true` for an address it cannot key — so this narrows the type
+  // rather than dropping anybody.
+  const keyed: Array<{ email: string; key: string }> = []
+  for (const email of platformSendable) {
+    const key = emailSuppressionKey(email)
+    if (key) keyed.push({ email, key })
+  }
+  if (!keyed.length) return []
+  try {
+    const snapshots = await db.getAll(
+      ...keyed.map((entry) => hostList.doc(entry.key)),
+    )
+    return keyed
+      .filter((_entry, index) => !snapshots[index]?.exists)
+      .map((entry) => entry.email)
+  } catch (error) {
+    console.error(
+      '[email-suppression] per-site lookup failed; failing closed',
+      error,
+    )
+    return []
+  }
+}
+
+/**
+ * The subset of `emails` that may be mailed about `topicId` on this site.
+ *
+ * The third filter a campaign passes, after the platform list and the site's
+ * own: the two suppression lists answer "may we mail this person at all", and
+ * this answers "may we mail them about THIS". A recipient who unticked
+ * "Promotions and offers" on the preference page is not suppressed — they
+ * still get the newsletter — so the fact cannot live on either suppression
+ * list without meaning something it does not mean.
+ *
+ * ## Two ways to be excluded, and both are held here
+ *
+ * Somebody who LEFT the stream, and somebody who has been asked to confirm
+ * joining it and has not. The second is what makes a double opt-in worth
+ * recording: an unconfirmed subscriber has to be a real quarantine, not a
+ * field the send path never looks at. Both come back from
+ * `readTopicSubscriptionState`, which is the only place the three states are
+ * decided.
+ *
+ * Keyed by {@link emailSuppressionKey} and read with one `getAll`, which is
+ * both halves of the point: the same derivation as the two lists it runs
+ * beside, so one person is one document id everywhere; and one round trip
+ * bounded by the size of the send, so adding topics does not make a campaign
+ * cost more to resolve.
+ *
+ * ## This one fails OPEN, and that is the opposite of its neighbors
+ *
+ * Every other filter in this module answers "suppressed" when a read throws,
+ * because the cost of guessing wrong is mailing somebody who told us to stop.
+ * Here the cost of guessing wrong in that direction is refusing to send a
+ * newsletter somebody asked for, on a read that failed for an unrelated
+ * reason — and the campaign has already passed both suppression lists, so
+ * nobody who asked us to stop entirely can reach this line. A topic
+ * preference is a narrower fact than a suppression and it gets the treatment
+ * that matches. A caller that wants the strict posture already has it one
+ * layer up.
+ *
+ * An empty `topicId` is a campaign from before topics existed, or one whose
+ * topic was never resolved. It filters nobody: there is no stream to have
+ * left.
+ */
+export async function filterTopicSendable(
+  hostId: string,
+  topicId: string | null | undefined,
+  emails: readonly string[],
+  injectedFirestore?: any,
+): Promise<string[]> {
+  const topic = String(topicId ?? '').trim()
+  if (!topic || !emails.length) return [...emails]
+  // An unkeyable address cannot carry an opt-out record, so it cannot have
+  // left this topic. It is dropped from the LOOKUP and kept in the answer —
+  // the suppression filters above have already refused it on their own
+  // stricter rule, so this one has no business refusing it a second time.
+  const lookups: Array<{ email: string; key: string }> = []
+  for (const email of emails) {
+    const key = emailSuppressionKey(email)
+    if (key) lookups.push({ email, key })
+  }
+  if (!lookups.length) return [...emails]
+  try {
+    const db = injectedFirestore ?? defaultFirestore()
+    const optOuts = db
+      .collection('hosts')
+      .doc(hostId)
+      .collection(TOPIC_OPT_OUTS_SUBCOLLECTION)
+    const snapshots = await db.getAll(
+      ...lookups.map((entry) => optOuts.doc(entry.key)),
+    )
+    const gone = new Set<string>()
+    lookups.forEach((entry, index) => {
+      const snapshot = snapshots[index]
+      if (!snapshot?.exists) return
+      /*
+       * The shared state reader, never a field test written out here.
+       *
+       * An entry means one of three things and only that function knows all
+       * three. The shorthand this replaced — "an entry with no
+       * `resubscribedAt` is a live opt-out" — reads a CONFIRMED double
+       * opt-in, which carries `pendingAt` and `confirmedAt` and no
+       * `resubscribedAt`, as somebody who left.
+       */
+      const record = (snapshot.get('topics') ?? {})[topic]
+      if (readTopicSubscriptionState(record) !== 'subscribed') {
+        gone.add(entry.email)
+      }
+    })
+    return emails.filter((email) => !gone.has(email))
+  } catch (error) {
+    console.error(
+      '[email-suppression] topic opt-out lookup failed; failing open',
+      error,
+    )
+    return [...emails]
+  }
+}
+
+/*
+ * THE FOURTH FILTER IS NOT IN THIS FILE, and where it is is forced.
+ *
+ * `filterCadenceSendable` — the subset that has not asked this site for mail
+ * less often than right now — lives in `email-marketing-gate.ts`, because it
+ * reads the per-recipient counter document that module owns and names. That
+ * module already imports this one for the two suppression lists, so putting
+ * the cadence filter here would close a cycle. A campaign's subtraction chain
+ * therefore reads: this file's two lists, this file's topic opt-outs, then
+ * that file's cadence.
+ */
+
+/**
  * The staff queue, newest first, ordered by `suppressedAt` so a re-recorded or
  * released entry surfaces again — the operator's question is "what changed",
  * not "what was first written". Mirrors `listContactSuppressions`.
  */
 export async function listEmailSuppressions(options?: {
   limit?: number
+  /**
+   * Where the NEXT page starts: the `suppressedAt` of the last row already
+   * shown, as `seconds.nanoseconds`.
+   *
+   * The full timestamp rather than milliseconds, because `startAfter` skips
+   * exactly the value it is given: a millisecond-truncated cursor sits BEFORE
+   * the record it names, so that record would arrive again at the top of the
+   * following page. Repeating a row is a smaller fault than skipping one and
+   * neither is necessary.
+   */
+  startAfter?: string | null
   firestore?: any
 }): Promise<Array<EmailSuppressionRecord & { $id: string }>> {
   const db = options?.firestore ?? defaultFirestore()
-  const snapshot = await db
+  let query = db
     .collection(EMAIL_SUPPRESSIONS_COLLECTION)
     .orderBy('suppressedAt', 'desc')
+  const cursor = suppressionCursorTimestamp(options?.startAfter)
+  if (cursor) query = query.startAfter(cursor)
+  const snapshot = await query
     .limit(Math.min(Math.max(options?.limit ?? 100, 1), 500))
     .get()
   return snapshot.docs.map((doc: any) => ({
     $id: doc.id,
     ...(doc.data() as EmailSuppressionRecord),
   }))
+}
+
+/**
+ * The cursor a page hands back, from the last row on it.
+ *
+ * Null when the row carries no `suppressedAt` — every entry written since
+ * AGL-1918 does, and `orderBy` has already excluded any that does not, so
+ * this is the type narrowing rather than a case that occurs.
+ */
+export function suppressionCursorFrom(
+  record: Record<string, any> | null | undefined,
+): string | null {
+  const at = record?.['suppressedAt'] as
+    | { seconds?: number; _seconds?: number; nanoseconds?: number; _nanoseconds?: number }
+    | undefined
+  const seconds = at?.seconds ?? at?._seconds
+  if (typeof seconds !== 'number') return null
+  const nanoseconds = at?.nanoseconds ?? at?._nanoseconds ?? 0
+  return `${seconds}.${nanoseconds}`
+}
+
+/** The inverse, for the query. Invalid input yields no cursor, never a guess. */
+export function suppressionCursorTimestamp(
+  cursor: string | null | undefined,
+): Timestamp | null {
+  const [rawSeconds, rawNanos] = String(cursor ?? '').split('.')
+  const seconds = Number(rawSeconds)
+  const nanoseconds = Number(rawNanos ?? 0)
+  if (!Number.isFinite(seconds) || !seconds) return null
+  return new Timestamp(seconds, Number.isFinite(nanoseconds) ? nanoseconds : 0)
 }

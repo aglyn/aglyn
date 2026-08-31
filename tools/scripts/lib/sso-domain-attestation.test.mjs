@@ -103,7 +103,7 @@ test('the domain normalizer still matches the publish path it keys against', () 
     'AGLYN.com',
     '  aglyn.com  ',
     'aglyn.com.',
-    'zach@aglyn.com',
+    'staff@aglyn.com',
     '@aglyn.com',
     'a@b@AGLYN.COM.',
     '',
@@ -176,7 +176,7 @@ test('the domain is normalized before it is keyed, and junk is refused', () => {
     parseAttestArgs(
       [
         `--org=${ORG}`,
-        '--domain=  ZACH@AGLYN.COM. ',
+        '--domain=  STAFF@AGLYN.COM. ',
         `--by=${BY}`,
         `--note=${NOTE}`,
       ],

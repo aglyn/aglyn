@@ -18,8 +18,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import {
   buildBeginCheckoutParams,
+  buildViewCartParams,
   trackEvent,
   trackEventBeforeNavigation,
+  type AnalyticsItem,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   isPaymentsNotConfigured,
@@ -99,6 +101,26 @@ interface CartView {
 }
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+/**
+ * The cart's lines as GA4 `items`.
+ *
+ * One mapping for every event this file sends — `view_cart` and both
+ * `begin_checkout` branches — because the `item_id` is what joins them into a
+ * single per-product funnel with the `view_item` and `add_to_cart` the product
+ * blocks send. Three hand-written copies of the same map are three chances for
+ * one step to start reporting a variant id, or a name, or a different price
+ * basis, and a funnel whose steps disagree about the product silently reports
+ * a drop that never happened.
+ */
+function cartAnalyticsItems(cart: CartView | null): AnalyticsItem[] {
+  return (cart?.lines ?? []).map((line) => ({
+    item_id: line.productId,
+    item_name: line.name,
+    price: line.unitAmountCents / 100,
+    quantity: line.quantity,
+  }))
+}
 
 function CartLines(props: {
   hostId: string
@@ -269,12 +291,7 @@ function CartLines(props: {
           'begin_checkout',
           buildBeginCheckoutParams({
             value: (cart?.subtotalCents ?? 0) / 100,
-            items: (cart?.lines ?? []).map((line) => ({
-              item_id: line.productId,
-              item_name: line.name,
-              price: line.unitAmountCents / 100,
-              quantity: line.quantity,
-            })),
+            items: cartAnalyticsItems(cart),
           }),
         )
         setNativeCheckout({
@@ -310,12 +327,7 @@ function CartLines(props: {
           'begin_checkout',
           buildBeginCheckoutParams({
             value: (cart?.subtotalCents ?? 0) / 100,
-            items: (cart?.lines ?? []).map((line) => ({
-              item_id: line.productId,
-              item_name: line.name,
-              price: line.unitAmountCents / 100,
-              quantity: line.quantity,
-            })),
+            items: cartAnalyticsItems(cart),
           }),
         )
         window.location.assign(payload.url)
@@ -613,6 +625,47 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
     return () => window.removeEventListener(CART_UPDATED_EVENT, handler)
   }, [refresh])
 
+  /**
+   * Has THIS opening of the cart already been reported? A drawer that is
+   * closed and reopened is a second view; a re-render, a badge refresh or a
+   * quantity edit inside an already-open drawer is not.
+   */
+  const viewReported = useRef(false)
+
+  /**
+   * `view_cart` — the funnel step between `add_to_cart` and `begin_checkout`.
+   *
+   * Fired on the cart being SEEN, which is why it hangs off `open` rather off
+   * mount: the button variant renders a badge on every page of a storefront,
+   * and reporting a view there would have made "opened the cart" a synonym for
+   * "loaded a page" and the checkout rate a fraction of pageviews.
+   *
+   * Deferred until the lines have actually arrived. The cart is fetched, so a
+   * drawer opened while that request is in flight has nothing to describe yet
+   * — reporting then would send an empty `items` and a zero `value` for a cart
+   * that in fact had both. An empty cart never reports at all: there is no
+   * view of nothing, and counting it would put every idle badge click into the
+   * denominator of the checkout rate.
+   */
+  useEffect(() => {
+    const onScreen = variant === 'inline' || open
+    if (!onScreen) {
+      viewReported.current = false
+      return
+    }
+    if (viewReported.current || !cart || cart.lines.length === 0) return
+    viewReported.current = true
+    trackEvent(
+      'view_cart',
+      buildViewCartParams({
+        // The server's subtotal, so this and the `begin_checkout` the same
+        // cart sends describe one cart at one size.
+        value: cart.subtotalCents / 100,
+        items: cartAnalyticsItems(cart),
+      }),
+    )
+  }, [variant, open, cart])
+
   const mutate = useCallback(
     async (body: Record<string, unknown>) => {
       if (!hostId) return
@@ -724,9 +777,20 @@ export const schema: Aglyn.ComponentSchema<CartProps> = {
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {
+      // The PROP KEY stays `showCoupon` — it is persisted in every saved page
+      // that uses this component, and renaming it would blank the control on
+      // all of them. Only what the merchant reads changes.
       name: 'showCoupon',
-      label: 'Show coupon field',
-      description: 'Codes are managed on the Products page.',
+      // ONE CONTROL, TWO FEATURES, AND IT ONLY NAMED ONE. This checkbox gates
+      // the gift-card field as well as the coupon field, so a merchant who
+      // wanted gift cards had no reason to look here — gift cards are only
+      // redeemable in the cart, and this is the switch that shows the box.
+      // A control named for one feature that also gates another is how a
+      // shipped feature stays invisible.
+      label: 'Show coupon and gift card fields',
+      description:
+        'One checkbox for both. Coupon codes and gift cards are managed on ' +
+        'the Products page.',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
     {
@@ -759,7 +823,8 @@ export const presets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Cart page',
     pluginId: BUNDLE_ID,
-    description: 'Full cart with quantities, coupon, and checkout',
+    description:
+      'Full cart with quantities, coupon, gift card, and checkout',
     category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
     data: {

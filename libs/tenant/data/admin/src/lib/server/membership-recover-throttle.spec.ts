@@ -133,6 +133,46 @@ describe('consumeMembershipRecoverAttempt (AGL-1966)', () => {
     expect(over.retryAfterSeconds).toBeGreaterThan(0)
   })
 
+  /**
+   * A null address is not an identity, so the per-source cap is skipped rather
+   * than shared. Before the shared client-address reader this arrived as the
+   * literal string `'unknown'`, which put every caller a deployment could not
+   * name into ONE `recover:ip:unknown` budget — five attempts spent by
+   * whoever tried first and password recovery refused for everybody else.
+   */
+  it('skips the per-source cap when no address is readable, and keeps the recipient one', async () => {
+    const firestore = fakeFirestore()
+    // Far past RECOVER_ATTEMPTS_PER_IP: a shared bucket would have refused.
+    for (let n = 1; n <= RECOVER_ATTEMPTS_PER_IP + 5; n += 1) {
+      const result = await consumeMembershipRecoverAttempt({
+        email: `who-${n}@example.com`,
+        ip: null,
+        now: NOW,
+        firestore,
+      })
+      expect(result.allowed).toBe(true)
+      expect(result.limited).toBeNull()
+    }
+    // The recipient cap is untouched by any of that and still bites.
+    for (let n = 1; n <= RECOVER_SENDS_PER_RECIPIENT; n += 1) {
+      const sent = await consumeMembershipRecoverAttempt({
+        email: EMAIL,
+        ip: null,
+        now: NOW,
+        firestore,
+      })
+      expect(sent.allowed).toBe(true)
+    }
+    const over = await consumeMembershipRecoverAttempt({
+      email: EMAIL,
+      ip: null,
+      now: NOW,
+      firestore,
+    })
+    expect(over.allowed).toBe(false)
+    expect(over.limited).toBe('recipient')
+  })
+
   it('refuses on the IP cap when every address is different', async () => {
     const firestore = fakeFirestore()
     for (let n = 1; n <= RECOVER_ATTEMPTS_PER_IP; n += 1) {

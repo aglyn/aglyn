@@ -17,6 +17,7 @@
 
 import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { PasskeyError, verifyAssertion } from '../../../../_lib/passkeys'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 // lockdown-423: exempt — sign-in machinery, pre-session; the session mint (AGL-1501) is the
 // lockdown chokepoint for every authentication flow.
@@ -35,13 +36,19 @@ export const dynamic = 'force-dynamic'
  * bad signature / replayed challenge" occurred is logged, not disclosed.
  */
 export async function POST(request: Request): Promise<Response> {
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
-  const limited = await consumeRateLimit(`passkey-signin-ip:${ip}`, {
-    limit: 30,
-    windowMs: 10 * 60 * 1000,
-  })
-  if (!limited.allowed) {
+  // Skipped, not bucketed under a placeholder, when no address is readable:
+  // one `passkey-signin-ip:unknown` budget shared by every caller would refuse
+  // sign-in for everybody at once on a deployment whose proxy names nobody.
+  // A per-caller control needs a caller; the ceremony's own single-use,
+  // server-issued challenge is the control that does not.
+  const ip = readClientIp(request.headers)
+  const limited = ip
+    ? await consumeRateLimit(`passkey-signin-ip:${ip}`, {
+        limit: 30,
+        windowMs: 10 * 60 * 1000,
+      })
+    : null
+  if (limited && !limited.allowed) {
     return Response.json({ error: 'rate-limited' }, { status: 429 })
   }
   let body: { challengeId?: string; response?: unknown }

@@ -1,0 +1,237 @@
+{
+  "$comment": [
+    "The principals the RULES and /api/orgs/datasets must answer identically",
+    "about, in one table so neither suite can drift into asserting its own",
+    "expectations.",
+    "",
+    "cloud/rules-org-data-permission.spec.mjs seeds these into the emulator",
+    "and asks Firestore. apps/console/specs/dataset-write-authority-agrees",
+    ".spec.ts runs the server's own resolver over the same rows. A row where",
+    "the two disagree is the defect this table exists to pin: the rules read",
+    "the raw `role` against a hardcoded list while the API resolved a custom",
+    "role, so an editor whose `data.manage` was revoked was refused by the",
+    "API and permitted by the rules — and dataset UPDATES and record",
+    "update/deletes go client-direct, gated by nothing else.",
+    "",
+    "`member` is the document AS STORED. A row with no `resolvedPermissions`",
+    "key is a member whose document predates the field or was written by a",
+    "path that bypasses the projection; those rows are the point, not an",
+    "oversight.",
+    "",
+    "`customRole` is what `orgs/{orgId}/roles/{roleId}` holds. The rules never",
+    "read it — that is the whole reason the resolved map is denormalized — but",
+    "the API does, so the agreement assertion needs it.",
+    "",
+    "`mayWriteDatasets` is the ONE expected verdict. `rulesOnly` rows are",
+    "excluded from the agreement check because the API expresses that",
+    "condition through a different mechanism (suspension is `lockdownRefusal`",
+    "there, not a permission)."
+  ],
+  "principals": [
+    {
+      "uid": "uid-owner",
+      "note": "The baseline. If this is ever false the ruleset locks out every workspace.",
+      "member": {
+        "role": "owner",
+        "allHosts": true,
+        "scopeTokens": ["org"],
+        "resolvedPermissions": {
+          "org.settings": true,
+          "org.auditLog": true,
+          "billing.view": true,
+          "billing.manage": true,
+          "members.manage": true,
+          "hosts.create": true,
+          "hosts.delete": true,
+          "data.manage": true,
+          "marketplace.publish": true,
+          "plugins.install": true
+        }
+      },
+      "customRole": null,
+      "mayWriteDatasets": true
+    },
+    {
+      "uid": "uid-editor",
+      "note": "A plain editor: `data.manage` is an editor default.",
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "scopeTokens": ["org"],
+        "resolvedPermissions": {
+          "org.settings": false,
+          "org.auditLog": false,
+          "billing.view": false,
+          "billing.manage": false,
+          "members.manage": false,
+          "hosts.create": false,
+          "hosts.delete": false,
+          "data.manage": true,
+          "marketplace.publish": true,
+          "plugins.install": true
+        }
+      },
+      "customRole": null,
+      "mayWriteDatasets": true
+    },
+    {
+      "uid": "uid-viewer",
+      "note": "A viewer holds nothing. Refused by the role gate on both sides.",
+      "member": {
+        "role": "viewer",
+        "allHosts": true,
+        "scopeTokens": ["org"],
+        "resolvedPermissions": {
+          "org.settings": false,
+          "org.auditLog": false,
+          "billing.view": false,
+          "billing.manage": false,
+          "members.manage": false,
+          "hosts.create": false,
+          "hosts.delete": false,
+          "data.manage": false,
+          "marketplace.publish": false,
+          "plugins.install": false
+        }
+      },
+      "customRole": null,
+      "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-editor-revoked",
+      "note": "THE DEFECT. An editor whose custom role revokes `data.manage`. The API refused this principal; the rules, reading only `role`, permitted every dataset and record write they already had.",
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "roleId": "role-limited",
+        "scopeTokens": ["org"],
+        "resolvedPermissions": {
+          "org.settings": false,
+          "org.auditLog": false,
+          "billing.view": false,
+          "billing.manage": false,
+          "members.manage": false,
+          "hosts.create": false,
+          "hosts.delete": false,
+          "data.manage": false,
+          "marketplace.publish": true,
+          "plugins.install": true
+        }
+      },
+      "customRole": { "id": "role-limited", "permissions": { "data.manage": false } },
+      "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-viewer-granted",
+      "note": "The mirror, and the direction the defect was first guessed to run: a custom role GRANTING `data.manage` to a viewer. Refused by both — the API's writer-role gate leads and has no staff bypass, and the rules' role list is unchanged. A custom role narrows; it has never widened.",
+      "member": {
+        "role": "viewer",
+        "allHosts": true,
+        "roleId": "role-granting",
+        "scopeTokens": ["org"],
+        "resolvedPermissions": {
+          "org.settings": false,
+          "org.auditLog": false,
+          "billing.view": false,
+          "billing.manage": false,
+          "members.manage": false,
+          "hosts.create": false,
+          "hosts.delete": false,
+          "data.manage": true,
+          "marketplace.publish": false,
+          "plugins.install": false
+        }
+      },
+      "customRole": { "id": "role-granting", "permissions": { "data.manage": true } },
+      "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-editor-restored",
+      "note": "Three layers, in order: the custom role revokes and the per-member override puts it back. The precedence the rules could not have reimplemented, arriving pre-resolved.",
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "roleId": "role-limited",
+        "permissions": { "data.manage": true },
+        "scopeTokens": ["org"],
+        "resolvedPermissions": {
+          "org.settings": false,
+          "org.auditLog": false,
+          "billing.view": false,
+          "billing.manage": false,
+          "members.manage": false,
+          "hosts.create": false,
+          "hosts.delete": false,
+          "data.manage": true,
+          "marketplace.publish": true,
+          "plugins.install": true
+        }
+      },
+      "customRole": { "id": "role-limited", "permissions": { "data.manage": false } },
+      "mayWriteDatasets": true
+    },
+    {
+      "uid": "uid-editor-bare",
+      "note": "NO resolvedPermissions AT ALL — the shape of every member written before the field existed. Must resolve to the role's own verdict, so the verdict comes from the role gate alone. If this is false the deploy is a mass lockout.",
+      "member": { "role": "editor", "allHosts": true, "scopeTokens": ["org"] },
+      "customRole": null,
+      "mayWriteDatasets": true
+    },
+    {
+      "uid": "uid-viewer-bare",
+      "note": "The same absent map on a VIEWER. The control that stops 'absent' reading as 'everything allowed': the role gate is a separate conjunct no missing field can satisfy.",
+      "member": { "role": "viewer", "allHosts": true, "scopeTokens": ["org"] },
+      "customRole": null,
+      "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-editor-override-only",
+      "note": "No resolved map, but a per-member override that revokes. The middle rung of the default chain — without it an unprojected member silently regains a permission the console and the API both refuse them.",
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "permissions": { "data.manage": false },
+        "scopeTokens": ["org"]
+      },
+      "customRole": null,
+      "mayWriteDatasets": false
+    },
+    {
+      "uid": "uid-editor-other-key",
+      "note": "A resolved map that says nothing about `data.manage`. The rule must read the KEY, not the presence of the field.",
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "scopeTokens": ["org"],
+        "resolvedPermissions": { "billing.view": false }
+      },
+      "customRole": null,
+      "mayWriteDatasets": true
+    },
+    {
+      "uid": "uid-editor-suspended",
+      "note": "Every permission granted and the org suspended. The suspension conjunct still leads, so a permission map cannot buy a write back.",
+      "rulesOnly": true,
+      "member": {
+        "role": "editor",
+        "allHosts": true,
+        "orgSuspended": true,
+        "scopeTokens": ["org"],
+        "resolvedPermissions": {
+          "org.settings": true,
+          "org.auditLog": true,
+          "billing.view": true,
+          "billing.manage": true,
+          "members.manage": true,
+          "hosts.create": true,
+          "hosts.delete": true,
+          "data.manage": true,
+          "marketplace.publish": true,
+          "plugins.install": true
+        }
+      },
+      "customRole": null,
+      "mayWriteDatasets": false
+    }
+  ]
+}

@@ -37,6 +37,7 @@ import {
   ADDON_KINDS,
   addonPriceId,
   addonQuantitiesFromItems,
+  addonMaxForBaseline,
   addonUnitUsd,
   findPlanItem,
   meteredPriceId,
@@ -50,6 +51,12 @@ import {
   restateExistingPhase,
   subscriptionItemsAsPhaseItems,
 } from '../../../../utils/server/billing-schedule'
+import {
+  capacityReductionRefusal,
+  includedCapacity,
+  isCapacityAddonKind,
+  readCapacityCounts,
+} from '../../../../utils/server/capacity-in-use'
 
 // lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
 // sessions alive PRECISELY so members can reach billing and pay; a 423
@@ -203,33 +210,40 @@ async function refreshScheduleTargetPhase(options: {
 }
 
 /**
- * Max purchasable quantity per kind, from a purchases-free entitlement
- * resolution (plan defaults + staff overrides only) so the ceiling
- * doesn't drift as the org buys: seat/dataset kinds stop at the plan's
- * hard max, hosts/registers use flat ceilings, the Event Calendar is a
- * 0/1 toggle. POS registers additionally require the `pos` feature.
+ * How many seats of a POOLED add-on are currently assigned to sites.
+ *
+ * `null` for kinds that are not pools — manager seats, datasets, extra sites
+ * and the Event Calendar are org-wide capacity with no per-site allocation, so
+ * there is nothing an assignment could contradict and no reduction to refuse.
+ * Returning `null` rather than `0` keeps "not a pool" distinct from "a pool
+ * with nothing assigned"; the second is a real state a reduction may proceed
+ * against.
  */
-function addonMax(
+function allocatedSeatTotal(
   kind: AddonKind,
-  baseline: ReturnType<typeof resolveOrgEntitlements>,
-): number {
-  const bounded = (included: number, max: number) =>
-    Number.isFinite(max) ? Math.max(0, max - included) : EXTRA_HOSTS_ADDON_MAX
-  switch (kind) {
-    case 'managers':
-      return bounded(baseline.managersPerOrg, baseline.maxManagersPerOrg)
-    case 'members':
-      return bounded(baseline.membersPerHost, baseline.maxMembersPerHost)
-    case 'datasets':
-      return bounded(baseline.datasetsPerOrg, baseline.maxDatasetsPerOrg)
-    case 'hosts':
-      return baseline.hostLimit === UNLIMITED ? 0 : EXTRA_HOSTS_ADDON_MAX
-    case 'posRegisters':
-      return baseline.features.pos ? POS_REGISTERS_ADDON_MAX : 0
-    case 'eventCalendar':
-      return 1
-  }
+  org: Record<string, unknown> | null | undefined,
+): number | null {
+  const field =
+    kind === 'posRegisters'
+      ? 'registerAllocations'
+      : kind === 'members'
+        ? 'collaboratorAllocations'
+        : null
+  if (!field) return null
+  const map = (org?.[field] ?? {}) as Record<string, unknown>
+  return Object.values(map).reduce<number>((sum, value) => {
+    const seats = Number(value)
+    return sum + (Number.isFinite(seats) && seats > 0 ? Math.floor(seats) : 0)
+  }, 0)
 }
+
+/**
+ * The per-kind ceiling. Delegates to the shared definition so this route and
+ * `buildTargetItems` — which needs the same ceiling for the TARGET plan on a
+ * plan change — cannot answer differently.
+ */
+const addonMax = addonMaxForBaseline
+
 
 /**
  * Self-serve add-on management (AGL-526), billing.manage-gated. Add-ons
@@ -341,7 +355,7 @@ async function handler(request: Request): Promise<Response> {
       const quantities = addonQuantitiesFromItems(items)
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
-          const unitUsd = addonUnitUsd(kind, plan)
+    const unitUsd = addonUnitUsd(kind, plan)
           const max = addonMax(kind, baseline)
           return [kind, {
             unitUsd,
@@ -380,6 +394,35 @@ async function handler(request: Request): Promise<Response> {
           : `Quantity must be between 0 and ${max}`,
         code: max <= 0 ? 'upgrade_required' : 'invalid_quantity',
       }, { status: max <= 0 ? 409 : 400 })
+    }
+    // REDUCING below what is already ASSIGNED is refused.
+    //
+    // `posRegisters` and `members` are org-level POOLS, and a separate
+    // allocation map says which site each seat sits on. The only check here
+    // was `0 <= quantity <= max`, so shrinking the pool below the assigned
+    // count was accepted silently — the map kept every row, and the pool
+    // arbiter then resolved the shortfall BY SORTED HOST ID. Capacity moved to
+    // a site the merchant did not choose, and re-buying re-granted from the
+    // stale map, so a merchant removing one seat could take a register off a
+    // different store.
+    //
+    // Refused rather than auto-released: which site loses a seat is a business
+    // decision with a consequence at that site, and picking one by id sort is
+    // exactly the arbitrary answer this replaces. The error names how many to
+    // free, so the next step is obvious.
+    const assigned = allocatedSeatTotal(kind, org)
+    if (assigned !== null && quantity < assigned) {
+      return Response.json(
+        {
+          error:
+            `${assigned} of these are assigned to sites. Unassign ` +
+            `${assigned - quantity} first, then reduce the total — otherwise ` +
+            'a site would lose capacity without anyone choosing which.',
+          code: 'assigned_seats_exceed_quantity',
+          assigned,
+        },
+        { status: 409 },
+      )
     }
     const unitUsd = addonUnitUsd(kind, plan)
     if (unitUsd === null) {
@@ -438,6 +481,40 @@ async function handler(request: Request): Promise<Response> {
           : { ok: true, quantities: addonQuantitiesFromItems(items) },
         { status: 200 },
       )
+    }
+
+    // REDUCING below what the org-wide capacity is CARRYING is refused too.
+    //
+    // The pool gate above covers the two kinds with an allocation map. These
+    // three have none — extra sites, datasets and manager seats are org-wide,
+    // and each was checked at CREATE time and nowhere else. So "buy the seat,
+    // invite the person, drop the seat" cost nothing, and `hostLimit` is worse
+    // still: it is consulted at exactly one moment in a site's life, the
+    // transaction that mints it.
+    //
+    // Refused at the reduction rather than re-checked at use, for the reason
+    // `capacity-in-use.ts` sets out at length: use-time enforcement here means
+    // ejecting a teammate or locking a dataset, which lands on customers who
+    // merely downgraded. The clamp inside `capacityReductionRefusal` is what
+    // keeps an org that is over a cap for reasons it did not choose out of
+    // this branch entirely.
+    //
+    // Counted only on an actual reduction of a gated kind. Each count is an
+    // aggregation or a roster list, and this route is hit on every billing
+    // page load.
+    if (
+      isCapacityAddonKind(kind) &&
+      currentQuantity !== null &&
+      quantity < currentQuantity
+    ) {
+      const refusal = capacityReductionRefusal({
+        kind,
+        quantity,
+        currentQuantity,
+        included: includedCapacity(kind, baseline),
+        counts: await readCapacityCounts({ orgId, org, kinds: [kind] }),
+      })
+      if (refusal) return Response.json(refusal, { status: 409 })
     }
 
     // One modified line item, shared by preview and set. Stripe treats

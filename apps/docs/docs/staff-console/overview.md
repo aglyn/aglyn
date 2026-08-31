@@ -213,6 +213,84 @@ has the same control themselves under **Manage account → Security → Recent s
 If the card says the registry **could not be read**, that is not the same as "no other
 devices": do not tell anyone their account is clean from that screen until it loads.
 
+### Email delivery {#email-delivery}
+
+An **Email delivery** card on the same detail page answers *"they say they never got
+it."* It lists every message we sent the account's address, newest first: the subject,
+which of our senders produced it, when it was sent and delivered, and whether it was
+opened or clicked.
+
+Read it before you resend anything. The four states that change what you do next:
+
+- **Delivered, not opened.** It reached the mailbox. Check the spam folder with them
+  rather than sending it again — a second copy lands in the same place.
+- **Bounced.** The mailbox rejected it. A *permanent* bounce means the address does not
+  exist, so correct the address; a *transient* one is a full mailbox or a busy server
+  and will clear on its own. A permanent bounce also adds the address to the
+  do-not-contact list, which is why their newsletters stopped.
+- **Spam complaint.** Somebody pressed *report spam* on a message we sent. Never resend
+  marketing to that address; transactional mail still goes.
+- **Nothing at all.** See the limits below before concluding we never wrote to them.
+
+**Open a row** to read the message itself. The dialog shows the full envelope —
+from, reply-to, cc, message id — the timeline with a timestamp per state, the open and
+click counts, every link the recipient actually followed, and the message rendered as it
+was sent, with a plain-text tab beside it.
+
+The body is fetched from the sending service at the moment you open it; we do not keep
+copies of messages, which would mean storing every reset link and receipt we have ever
+sent. Two consequences worth knowing: a message the service has aged out says so rather
+than showing you a blank preview, and opening one is recorded in the audit log, because
+reading somebody's mail is a legitimate support action and a sensitive one.
+
+Links in the preview are inert on purpose. It is rendered in a locked-down frame with no
+scripts and no navigation, so nothing in a customer's mail can act on your session — and
+you cannot burn a single-use reset link by clicking it out of curiosity. The links the
+recipient followed are listed separately, as text.
+
+**Opens are approximate; clicks are not.** An open is recorded by a hidden image, and
+most inboxes block images by default — a message with no open was very often read. A
+click is a real action and can be trusted. Say it that way to the account holder rather
+than telling them our records show they did not read it.
+
+**What the card cannot see.** The history is built from delivery events reported by the
+sending service, which only start when that feed is connected. Nothing sent before then
+appears on its own — see *Import delivery history* below. Nor does mail sent to a
+*different* address than the one on the account now: the log is filed by address, so an
+account whose email was changed keeps its older mail under the old one. An empty table is
+not proof that nothing was sent.
+
+### Import delivery history {#import-delivery-history}
+
+On **Staff → System emails** there is an **Import delivery history** card. It reads the
+sending service's own record of already-sent mail and files each message under its
+recipient, which is what puts pre-existing mail on the Email delivery cards.
+
+Run it once after connecting the delivery feed, and again any time the feed was down for
+a stretch. It is safe to run as often as you like: a message the live feed already
+recorded is left untouched, and no open or click counts are invented — the history only
+reports a final status per message, so an imported row shows *delivered* or *bounced* but
+never "opened three times".
+
+Two things imported rows do not carry, because the history does not include them:
+
+- **Which of our senders produced the message.** That comes from a tag on the send, so an
+  imported row shows the subject and no sender label.
+- **Open and click counts.** Only the live feed reports those. A message that arrived
+  through the import shows engagement only from the moment the feed picked it up.
+
+It needs its own credential — a full-access API key in `RESEND_READ_API_KEY`. The key
+that sends your mail is scoped to sending and cannot read message history, which is the
+correct posture for it: a leaked sending key should not be able to list everyone you have
+ever emailed. Without that variable the card says so and changes nothing.
+
+If the card says the log **could not be read**, that is not the same as "we never
+emailed them": do not tell anyone their mail was or was not sent from that screen until
+it loads.
+
+The record is ours, not the sending service's. It survives that vendor's own retention
+window, and it survives replacing the vendor.
+
 ### Staff notes {#staff-notes}
 
 Free-text support/billing context on each organization's detail
@@ -262,12 +340,18 @@ payments, refunds — are sent by Stripe from its Dashboard and are listed read-
 #### Platform send rate {#platform-send-rate}
 
 At the top of the same page. Everything Aglyn sends leaves on **one** Resend key
-from **one** verified sending domain, under a `p=reject` DMARC record — so a
-throttle or a reputation hit there is a rejection, not a spam folder, and it
-lands on every customer's password resets at the same time. This is the ceiling
-on outbound mail per hour across the whole platform, and it is a **value, not a
-deploy**: a sending-domain warm-up or a deliverability incident is handled by
-changing the number here.
+and the provider's rate limit is per account, so a throttle lands on every
+customer's password resets at the same time whatever domain each site sends
+from. This is the ceiling on outbound mail per hour across the whole platform,
+and it is a **value, not a deploy**: a sending-domain warm-up or a
+deliverability incident is handled by changing the number here.
+
+Reputation is not shared the same way the rate limit is. Under a `p=reject`
+DMARC record, a hit is a rejection rather than a spam folder — and which mail it
+reaches depends on the domain: the platform's own account mail is on its own
+name, a site with a sending domain of its own carries its reputation alone, and
+the sites with none share one of four pooled members, which is why only
+transactional mail leaves on those.
 
 The card shows the current hour's volume beside the ceiling, because the
 question during an incident is never "what is the limit" but "are we near it".
@@ -276,7 +360,7 @@ question during an incident is never "what is the limit" but "are we near it".
 and a scheduled **bulk sweep** (the monthly usage summary). It can **never**
 refuse transactional mail — password resets, invites, order receipts, booking
 reminders — at any value. Those are counted, because the ceiling is about total
-volume on the domain, but they send regardless.
+volume through the provider account, but they send regardless.
 
 Nothing is lost when the ceiling bites. A scheduled campaign over it goes back
 to `scheduled` and the 15-minute processor picks it up in the next window; a
@@ -431,9 +515,12 @@ the account and revoking its refresh tokens ends the session immediately.
 
 ## Break-glass access
 
-**`zachary.w.gover@gmail.com` holds `super` staff in the project pool, permanently and
-by design.** It is not an oversight, not a migration leftover, and should not be
-"tidied up" — it is the account that still works when SSO does not. If SAML is
+**One consumer Google account — outside the Workspace domain, in the project pool
+rather than the SAML tenant — holds `super` staff permanently and by design.** It is
+not an oversight, not a migration leftover, and should not be "tidied up" — it is the
+account that still works when SSO does not. Which account it is belongs in the
+password manager, not in a published page: naming it here would hand an attacker the
+one identity that is outside Workspace enforcement. If SAML is
 misconfigured, the IdP is down, or a domain rule is set wrong, this is the way back in.
 
 It is a deliberate trade, and the cost is real: an identity outside Google Workspace

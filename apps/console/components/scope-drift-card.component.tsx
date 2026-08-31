@@ -19,6 +19,7 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
 
@@ -98,18 +99,18 @@ export function ScopeDriftCard() {
    */
   const run = useCallback(
     async (dryRun: boolean): Promise<DriftReport> => {
-      const idToken = await (user as any)?.getIdToken?.()
       const totals: DriftReport = { ...EMPTY, byCollection: {} }
       let cursor: string | null = null
       for (let page = 0; page < MAX_PAGES; page += 1) {
-        const response = await fetch('/api/admin/backfill-scope', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/backfill-scope',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dryRun, ...(cursor ? { cursor } : {}) }),
           },
-          body: JSON.stringify({ dryRun, ...(cursor ? { cursor } : {}) }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         // 207 is the route's "finished, and a human must look" — drift was
         // found. It is not an error and must not be thrown away as one.

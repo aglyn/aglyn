@@ -33,6 +33,12 @@ import {
 } from '@aglyn/aglyn/server'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
+import {
+  type PromotionSlotHold,
+  holdPromotionSlot,
+  promotionHoldKey,
+  settlePromotionSlot,
+} from './promotion-hold'
 import { posMaxDiscountPct } from '../plugin-config'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
@@ -72,6 +78,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const customerEmail = String(body.customerEmail ?? '').trim().toLowerCase()
   const reservationId = String(body.reservationId ?? '')
   const registerId = String(body.registerId ?? '')
+  // A code the shopper hands the cashier (AGL-305). The same field name the
+  // storefront doors read, so one resolver answers it the same way.
+  const couponCode = String(body.couponCode ?? '').trim()
   const locationId = String(body.locationId ?? '')
   // REFUSED, NOT CLAMPED (AGL-2161). This used to be
   // `Math.min(100, Math.max(0, …))`, so a register asking for `150` rang up a
@@ -105,6 +114,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   }
 
   let claim: AttemptClaim | null = null
+  /**
+   * The redemption slot this sale reserved (AGL-305), hoisted so every refusal
+   * below the claim — and the catch — can hand it back. A throw after the hold
+   * is placed is the one path that would otherwise leave a slot standing
+   * against the merchant's cap until its TTL lapsed, with no sale to show for
+   * it.
+   */
+  let discountSlot: PromotionSlotHold | null = null
+  let discountHoldKey = ''
+  const releaseDiscountSlot = async (): Promise<void> => {
+    const slot = discountSlot
+    discountSlot = null
+    discountHoldKey = ''
+    if (slot) await slot.release()
+  }
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
@@ -167,8 +191,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // The ceiling defaults to 100 (see `plugin-config.ts` for why that number
     // is the merchant's to lower and not this fix's to invent). What changed
     // is that exceeding it is now an answer instead of a silent rounding.
+    // Resolved for THIS SITE (AGL-428, AGL-1014): a chain that trusts one
+    // branch's register with a deeper discount than the rest sets it on that
+    // site, and
+    // reading only the workspace's answer would refuse the sale the console
+    // says is allowed.
     const maxDiscountPct = posMaxDiscountPct(
-      await getPluginConfig(ownerOrg?.orgId, 'commerce'),
+      await getPluginConfig(ownerOrg?.orgId, 'commerce', { hostId }),
     )
     if (discountPct > maxDiscountPct) {
       return res.status(403).json({
@@ -296,7 +325,88 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       (sum, line) => sum + line.unitAmountCents * line.quantity,
       0,
     )
-    const discountCents = Math.round((itemsCents * discountPct) / 100)
+    const cashierDiscountCents = Math.round((itemsCents * discountPct) / 100)
+    // THE DISCOUNTS HUB, AT THE TILL TOO (AGL-305).
+    //
+    // The register knew exactly one kind of discount: the cashier's own
+    // percentage, bounded by `posMaxDiscountPct` above. A code from the
+    // Discounts card — or a store-wide automatic promotion needing no code at
+    // all — applied on the storefront and applied nothing here, so a shopper
+    // who bought in person paid more than the same shopper buying the same
+    // goods online, and the merchant's own advertised sale did not reach their
+    // own counter.
+    //
+    // TWO DIFFERENT MECHANISMS, DELIBERATELY NOT MERGED. The cashier's
+    // percentage is discretion — a manager's ceiling governs it because the
+    // person holding the till decided it. A hub discount is the MERCHANT's own
+    // published promotion, decided in the console; running it through
+    // `posMaxDiscountPct` would let a register's discretionary ceiling silently
+    // veto a store-wide sale, which is not what that ceiling is for. So they
+    // are resolved separately and added, and only the discretionary half is
+    // bounded.
+    //
+    // BEFORE TAX, because the sum lands in `discountCents` and the tax below
+    // is already computed on `itemsCents - discountCents` — the position the
+    // cashier's discount has always held, and the one the storefront doors
+    // reach by their own route.
+    const posDiscountLines = lineItems.map((line) => ({
+      productId: line.productId,
+      amountCents: line.unitAmountCents * line.quantity,
+    }))
+    const hubDiscounts = await hostRef.collection('discounts').limit(100).get()
+    const resolvedDiscount = CommerceModel.resolveDiscount(
+      hubDiscounts.docs.map((docSnapshot) => ({
+        ...(docSnapshot.data() as CommerceModel.HostDiscount),
+        $id: docSnapshot.id,
+      })),
+      {
+        ...(couponCode ? { code: couponCode } : {}),
+        subtotalCents: itemsCents,
+        productIds: lineItems.map((line) => line.productId),
+        lines: posDiscountLines,
+      },
+    )
+    // A code the cashier typed that cannot apply is an ANSWER they can read to
+    // the shopper, not a silent full-price sale. Above the claim and above
+    // every write with the other deterministic refusals, so re-keying the code
+    // works on the same button.
+    if (resolvedDiscount?.codeProblem) {
+      return res.status(400).json({ error: resolvedDiscount.codeProblem })
+    }
+    // FREE SHIPPING CANNOT BE APPLIED AT A TILL, AND SAYING SO IS THE POINT.
+    //
+    // There is no carriage in an in-person sale — no `shipping_options`, no
+    // rate, nothing to zero — so this benefit resolves perfectly and is worth
+    // nothing here. Falling through would ring the sale at full price with the
+    // shopper holding a valid code, which is the exact shape of the defect that
+    // charged $7.99 for free shipping. An AUTOMATIC free-shipping promotion is
+    // passed over rather than refused: nobody asked for it at the counter, and
+    // refusing the sale over a promotion the shopper never invoked would stop
+    // the till dead.
+    if (resolvedDiscount?.benefit.kind === 'free-shipping') {
+      if (couponCode) {
+        return res.status(400).json({
+          error:
+            'That code is for free shipping, and there is nothing to ship on ' +
+            'an in-person sale.',
+        })
+      }
+    }
+    const hubDiscountCents =
+      resolvedDiscount?.benefit.kind === 'amount'
+        ? resolvedDiscount.benefit.centsOff
+        : 0
+    const appliedDiscountId = hubDiscountCents
+      ? resolvedDiscount!.discountId
+      : ''
+    // Capped at the basket: two independent reductions can sum past it, and a
+    // negative charge is not a sale. `computeOrderTotals` clamps too — this is
+    // here so the tax base and the fee scaling below see the same number the
+    // totals will.
+    const discountCents = Math.min(
+      itemsCents,
+      cashierDiscountCents + hubDiscountCents,
+    )
     // THE PLATFORM FEE (AGL-2110), and its absence was a straight loss.
     //
     // A POS card sale opens a DESTINATION charge
@@ -555,6 +665,46 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     }
     claim = claimed.claim
 
+    // THE REDEMPTION SLOT IS RESERVED HERE (AGL-305), so the till cannot
+    // outrun a cap.
+    //
+    // Without it a merchant's "first 50 customers" promotion is uncapped at the
+    // counter: nothing on this path ever incremented `redemptions`, so every
+    // in-person sale would take the discount and none of them would be counted
+    // — the cap would bound the website only. The CASH and FOLIO tenders settle
+    // the slot the moment the sale is written, a few lines below, because there
+    // is no webhook coming for them; the CARD tender passes it in the session
+    // metadata and the `checkout.session.completed` branch settles it, exactly
+    // as the storefront doors do.
+    //
+    // BELOW the claim because the hold is keyed by the attempt: a retry of one
+    // sale must re-claim its own slot rather than be refused by it.
+    if (appliedDiscountId) {
+      const slot = await holdPromotionSlot({
+        firestore,
+        ref: hostRef.collection('discounts').doc(appliedDiscountId),
+        holdKey: promotionHoldKey(claimed.claim.stripeKey),
+        label: `pos discount ${appliedDiscountId}`,
+      })
+      if (!slot.ok) {
+        // Nothing has been written and no money has moved, so the key goes
+        // back and the cashier can re-ring the sale — at the correct price,
+        // because `resolveDiscount` counts live holds and stops offering an
+        // exhausted promotion.
+        await claim.release()
+        return res.status(409).json({
+          error:
+            couponCode && resolvedDiscount?.discount.code
+              ? CommerceModel.PROMOTION_EXHAUSTED_MESSAGE
+              : CommerceModel.PROMOTION_UNAVAILABLE_MESSAGE,
+        })
+      }
+      if (slot.holdKey) {
+        discountSlot = slot
+        discountHoldKey = slot.holdKey
+      }
+    }
+
     if (payment === 'link') {
       // QR payment link on the merchant account, completed by webhook.
       const ownerProfile = await firestore
@@ -572,6 +722,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           { subject: `POS payment link host ${hostId}` },
         )
       ) {
+        // The slot is handed back before the refusal (AGL-305): this returns
+        // below the hold, and a register that keeps pressing a tender the
+        // merchant never enabled would otherwise consume the promotion's cap
+        // one attempt at a time without ever selling anything.
+        await releaseDiscountSlot()
         return res.status(409).json({ error: 'Card payments not set up' })
       }
       const orderRef = hostRef.collection('orders').doc()
@@ -599,6 +754,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           ...(discountPct > 0
             ? { discountPct, discountBy: decoded.uid }
             : {}),
+          // WHICH PROMOTION, where one applied (AGL-305). `discountPct` and
+          // `discountBy` answer for the cashier's own reduction and cannot
+          // answer for this one — a hub discount has no operator and no
+          // percentage the till chose. Without it a sale carrying a
+          // `totals.discountCents` the cashier never entered reads as
+          // unexplained.
+          ...(appliedDiscountId ? { discountId: appliedDiscountId } : {}),
           // The bucket the sale comes out of (AGL-286). The cash write below
           // has stored this since AGL-1808; the card sale needs it MORE — its
           // decrement runs in the webhook (AGL-1825), where the register's
@@ -682,6 +844,16 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         // what Aglyn took. Recorded even at zero, so "the plan charges no
         // fee" is legible as a decision rather than as a missing field.
         'metadata[feeCents]': String(Math.max(0, feeCents)),
+        // WHAT THE WEBHOOK SETTLES (AGL-305), in the field names the
+        // `checkout.session.completed` branch already reads. The card tender is
+        // the one POS shape with a webhook to settle in — cash and folio settle
+        // their own slot inline below.
+        ...(appliedDiscountId
+          ? { 'metadata[discountId]': appliedDiscountId }
+          : {}),
+        ...(discountHoldKey
+          ? { 'metadata[discountHoldKey]': discountHoldKey }
+          : {}),
       })
       const response = await fetch(
         'https://api.stripe.com/v1/checkout/sessions',
@@ -709,7 +881,10 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       if (!response.ok || !session.url) {
         await orderRef.delete().catch(() => undefined)
         // The sale did not happen — let the same key be tried again rather
-        // than locking this basket out over one flaky moment.
+        // than locking this basket out over one flaky moment. The slot goes
+        // back with it, or the merchant's cap is one short for a sale nobody
+        // made.
+        await releaseDiscountSlot()
         await claim.release()
         return res.status(502).json({ error: 'Payment link failed' })
       }
@@ -748,6 +923,32 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           : `Cash — received $${(cashReceivedCents / 100).toFixed(2)}, ` +
             `change $${((cashReceivedCents - totals.totalCents) / 100).toFixed(2)}`,
     }
+    // THE SLOT IS SETTLED HERE (AGL-305), not by a webhook, because none is
+    // coming: a cash or folio sale is complete the moment this document is
+    // written. Settled BEFORE the write rather than after, so a failure to
+    // count the redemption refuses the sale instead of ringing an uncounted
+    // one — the direction that keeps the merchant's cap honest. Idempotent
+    // under a replayed attempt: the redemption is owed by the presence of the
+    // HOLD, so a second pass finds none and takes nothing.
+    if (appliedDiscountId && discountHoldKey) {
+      const settlement = await settlePromotionSlot({
+        firestore,
+        ref: hostRef.collection('discounts').doc(appliedDiscountId),
+        holdKey: discountHoldKey,
+        label: `pos discount ${appliedDiscountId}`,
+      })
+      if (settlement === 'error') {
+        await releaseDiscountSlot()
+        await claim.release()
+        return res.status(409).json({
+          error: 'That discount could not be applied — try the sale again.',
+        })
+      }
+      // Counted: this attempt no longer holds anything, so the catch below
+      // must not hand back a slot that is already a redemption.
+      discountSlot = null
+      discountHoldKey = ''
+    }
     await firestore.runTransaction(async (transaction) => {
       const counter = await transaction.get(counterRef)
       const number = Number(counter.get('next') ?? 1)
@@ -771,6 +972,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         ...(discountPct > 0
           ? { discountPct, discountBy: decoded.uid }
           : {}),
+        // WHICH PROMOTION, where one applied (AGL-305) — see the card branch
+        // above for why the cashier's two fields cannot answer for it.
+        ...(appliedDiscountId ? { discountId: appliedDiscountId } : {}),
         // The bucket the decrement below comes out of (AGL-1808). Without it
         // a cancellation can only put the units back on the flat total, which
         // the next location-aware write recomputes away.
@@ -1012,7 +1216,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // Release on the way out so a transient failure does not strand the key
     // (AGL-1691). The order write itself may or may not have landed; the
     // cashier reconciles from the orders list, which is the same position
-    // they were in before this endpoint had a claim at all.
+    // they were in before this endpoint had a claim at all. The redemption
+    // slot goes back for the same reason, and only while it is still a HOLD —
+    // a cash sale that already settled its slot cleared the local, so this
+    // cannot give back a counted redemption.
+    await releaseDiscountSlot()
     await claim?.release()
     return res.status(500).json({ error: 'Sale failed' })
   }

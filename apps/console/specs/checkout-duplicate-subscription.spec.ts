@@ -178,11 +178,32 @@ beforeEach(() => {
   })
   mockOrgGet.mockResolvedValue({ get: () => 'acme' })
   mockReadOrgBilling.mockResolvedValue({})
-  global.fetch = jest.fn(async (_url: unknown, init: any) => {
+  global.fetch = jest.fn(async (url: unknown, init: any) => {
+      const href = String(url)
+      if (/\/customers\//.test(href)) {
+        return {
+          ok: true,
+          json: async () => ({
+            invoice_settings: { default_payment_method: 'pm_saved_1' },
+            address: { country: 'US' },
+          }),
+        }
+      }
     sessionCalls.push(new URLSearchParams(String(init?.body ?? '')))
     return {
       ok: true,
-      json: async () => ({ url: 'https://checkout.stripe.com/c/session' }),
+      json: async () => ({
+        id: 'sub_1',
+        status: 'active',
+        latest_invoice: {
+          subtotal: 2500,
+          tax: 165,
+          total: 2665,
+          currency: 'usd',
+          automatic_tax: { status: 'complete' },
+          payment_intent: { status: 'succeeded', client_secret: 'pi_secret' },
+        },
+      }),
     }
   }) as never
 })
@@ -243,19 +264,31 @@ describe('one workspace, one subscription (AGL-1697)', () => {
     expect(sessionCalls[0].get('customer')).toBe('cus_test_1')
   })
 
-  it('CONTROL — a first-ever subscribe is untouched', async () => {
+  it('CONTROL — a churned org with no live subscription is let through', async () => {
+    // The guard is a STATUS test, not a "has a subscription record" test: the
+    // record and the customer id both survive cancellation, so the naive form
+    // would lock every churned workspace out of ever paying us again.
+    mockReadOrgBilling.mockResolvedValue({
+      stripeCustomerId: 'cus_test_1',
+      subscription: { status: 'canceled' },
+    })
     const post = loadCheckout()
     expect((await checkout(post)).status).toBe(200)
+    // One subscription created, against the customer they already had.
     expect(sessionCalls).toHaveLength(1)
-    expect(sessionCalls[0].get('customer_email')).toBe('owner@example.com')
+    expect(sessionCalls[0].get('customer')).toBe('cus_test_1')
   })
 
   it('CONTROL — an incomplete session does not lock the org out', async () => {
     // `incomplete` is what Stripe reports for a subscription whose first
-    // payment never succeeded. There is nothing live to protect, and the
-    // buyer's only way forward is a new session.
+    // payment never succeeded — now also the status a subscription sits in
+    // while an issuer authenticates it. There is nothing live to protect, and
+    // the buyer's only way forward is a new attempt.
     for (const status of ['incomplete', 'incomplete_expired', 'unpaid']) {
-      mockReadOrgBilling.mockResolvedValue({ subscription: { status } })
+      mockReadOrgBilling.mockResolvedValue({
+        stripeCustomerId: 'cus_test_1',
+        subscription: { status },
+      })
       sessionCalls = []
       const post = loadCheckout()
       const response = await checkout(post)

@@ -206,6 +206,11 @@ export async function createPageFromTemplate(
     },
   })
   await publishScreenRoute(firestore, { hostId, screenId }, slug)
+  // No activity append here. `createHostResource` above is
+  // /api/hosts/resources, which records the create server-side from a
+  // verified uid (AGL-118) — so this path logs whether or not its caller
+  // remembers to, which is the property that was missing when three template
+  // surfaces created pages and wrote nothing.
 
   return { screenId, slug, requestedSlug }
 }

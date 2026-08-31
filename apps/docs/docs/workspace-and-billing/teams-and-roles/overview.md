@@ -105,6 +105,28 @@ names the workspace admin to ask instead of offering an upgrade they cannot buy.
 - Gate screens as **members-only** so only signed-in members can view them.
 - New members flow into your [contacts CRM](../../content-and-data/contacts/overview.md).
 
+### The platform safety limit {#visitor-record-ceiling}
+
+There is one ceiling behind all of that, and it is an abuse control rather than a
+plan dimension — the same number on every plan, free through enterprise, with
+nothing to buy:
+
+| Records on one site | Ceiling |
+| --- | --- |
+| Member accounts | 50,000 |
+| Leads | 200,000 |
+
+Past the ceiling, new sign-ups (or lead captures) are refused. The visitor sees
+a plain "not accepting new accounts right now" message that does not name a
+limit, and your console shows a **New member sign-ups are paused** notice with
+the count of refusals this month.
+
+**It does not clear on its own.** Unlike the form and bandwidth ceilings, this
+one counts records you currently hold rather than a month's activity, so nothing
+lifts it at the month boundary — the notice deliberately never names a date.
+Deleting records below the limit starts acceptance again immediately, and if the
+traffic is real, support will raise it.
+
 ## Seats
 
 Seats cover your **team only**: organization seats (workspace-wide) and per-site

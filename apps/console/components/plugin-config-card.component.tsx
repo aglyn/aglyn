@@ -20,6 +20,9 @@ import {
   FIRST_PARTY_PLUGINS,
   listPluginConfigSchemas,
   mergePluginConfig,
+  pluginConfigOverrides,
+  pluginConfigSchemaFromManifest,
+  resolvePluginConfig,
   validatePluginConfigValues,
   type PluginConfigField,
   type PluginConfigSchema,
@@ -28,14 +31,15 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
+  Chip,
   MenuItem,
   Stack,
   Switch,
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, setDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { deleteField, doc, setDoc } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreDoc,
@@ -45,50 +49,140 @@ import {
 import { docsHelp } from '../constants/docs-links'
 
 /**
- * Generic per-plugin settings form (AGL-428): renders every field a
- * LOADED plugin declared through `registerPluginConfigSchema`, backed by
- * `orgs/{orgId}/pluginSettings/{pluginId}`. A plugin gets a settings UI
- * without writing one — Strapi `config/plugins` parity, per workspace.
+ * Generic per-plugin settings form (AGL-428), at either scope.
+ *
+ * It renders every field a LOADED plugin declared through
+ * `registerPluginConfigSchema`, so a plugin gets a settings UI without
+ * writing one — Strapi `config/plugins` parity. Without a `hostId` it is the
+ * WORKSPACE form, backed by `orgs/{orgId}/pluginSettings/{pluginId}`. With
+ * one it is the SITE form, backed by `hosts/{hostId}/pluginSettings/
+ * {pluginId}`, which holds only the keys that site answers for itself and
+ * inherits the rest.
+ *
+ * ONE component for both scopes deliberately. The two forms share their
+ * coercion, their cross-field validation and their seed guard; a second copy
+ * would be a second set of those, and the copy that drifted would be the one
+ * nobody was looking at.
  */
 function SchemaForm({
   orgId,
+  hostId,
   schema,
   disabled,
+  displayName,
 }: {
   orgId: string
+  hostId?: string
   schema: PluginConfigSchema
   disabled?: boolean
+  /** The plugin's own name, for a schema the first-party catalog cannot name. */
+  displayName?: string
 }) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  const siteScoped = Boolean(hostId)
+  /**
+   * Held at null until the scope is known, never addressed as
+   * `orgs/-pending-` or `hosts/-pending-` (AGL-1440). `pluginSettings` is
+   * member-gated at both scopes, so a sentinel id is a guaranteed permission
+   * denial on every mount rather than a read that might succeed.
+   */
   const {
-    data: stored,
-    status,
-    fromCache,
+    data: orgStored,
+    status: orgStatus,
+    fromCache: orgFromCache,
   } = useFirestoreDoc<Record<string, unknown>>(
-    () => doc(firestore, 'orgs', orgId, 'pluginSettings', schema.pluginId),
+    () =>
+      orgId
+        ? doc(firestore, 'orgs', orgId, 'pluginSettings', schema.pluginId)
+        : null,
     [firestore, orgId, schema.pluginId],
   )
+  const {
+    data: hostStored,
+    status: hostStatus,
+    fromCache: hostFromCache,
+  } = useFirestoreDoc<Record<string, unknown>>(
+    () =>
+      hostId
+        ? doc(firestore, 'hosts', hostId, 'pluginSettings', schema.pluginId)
+        : null,
+    [firestore, hostId, schema.pluginId],
+  )
   const [values, setValues] = useState<Record<string, unknown>>({})
+  /**
+   * The keys this SITE is answering for itself, as the form currently stands
+   * — the local counterpart of `pluginConfigOverrides` over the stored
+   * document. Empty and unused at workspace scope, where every key is an
+   * answer by definition.
+   */
+  const [overridden, setOverridden] = useState<string[]>([])
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    if (!dirty && status !== 'loading') {
-      setValues(mergePluginConfig(schema, stored ?? null))
-    }
-    // Reset from the live doc until the user starts editing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stored, status])
+  /** What the workspace answers, which is what an inherited field follows. */
+  const workspace = useMemo(
+    () => mergePluginConfig(schema, orgStored ?? null),
+    [schema, orgStored],
+  )
+  /** The keys the STORED site document overrides, i.e. what a save must clear. */
+  const storedOverrides = useMemo(
+    () => (siteScoped ? pluginConfigOverrides(schema, hostStored ?? null) : []),
+    [siteScoped, schema, hostStored],
+  )
 
+  const settled =
+    orgStatus !== 'loading' && (!siteScoped || hostStatus !== 'loading')
+
+  useEffect(() => {
+    if (dirty || !settled) return
+    // Reset from the live docs until the user starts editing.
+    setValues(
+      siteScoped
+        ? resolvePluginConfig(schema, {
+            org: orgStored ?? null,
+            host: hostStored ?? null,
+          })
+        : mergePluginConfig(schema, orgStored ?? null),
+    )
+    setOverridden(storedOverrides)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgStored, hostStored, settled])
+
+  /**
+   * Editing a field at site scope IS overriding it. A separate "override
+   * this" switch would let a site hold a typed value that is not in force,
+   * which is the state the whole card exists to make unambiguous.
+   */
   const setField = (key: string, value: unknown) => {
     setDirty(true)
     setValues((current) => ({ ...current, [key]: value }))
+    if (siteScoped) {
+      setOverridden((current) =>
+        current.includes(key) ? current : [...current, key],
+      )
+    }
+  }
+
+  /** The one action back to following the workspace. */
+  const inherit = (key: string) => {
+    setDirty(true)
+    setOverridden((current) => current.filter((item) => item !== key))
+    setValues((current) => ({ ...current, [key]: workspace[key] }))
   }
 
   const save = async () => {
-    const valid = validatePluginConfigValues(schema, values)
+    /**
+     * Validated against what the site will RUN with, not against the
+     * overrides alone. A cross-field rule (`schema.validate`) is a statement
+     * about the effective config, so checking a partial document would pass
+     * a site whose one override contradicts an inherited neighbor.
+     */
+    const effective = siteScoped
+      ? { ...workspace, ...pick(values, overridden) }
+      : values
+    const valid = validatePluginConfigValues(schema, effective)
     if (!valid.ok) {
       enqueueSnackbar(valid.error ?? 'Invalid settings', { variant: 'error' })
       return
@@ -99,38 +193,86 @@ function SchemaForm({
        * Never write settings seeded from a read we cannot trust (AGL-1066,
        * AGL-1358, AGL-1449).
        *
-       * The form is seeded from `stored`, and the write below carries
-       * `mergePluginConfig(schema, values)` — the WHOLE config object, not
-       * the one field that changed. `merge: true` protects nothing there,
-       * because every untouched key is present in the payload, so a save
-       * against a bad seed rewrites every other setting to whatever that
-       * seed held.
+       * The workspace form is seeded from `orgStored` and carries the WHOLE
+       * config object, not the one field that changed — `merge: true`
+       * protects nothing there, because every untouched key is in the
+       * payload, so a save against a bad seed rewrites every other setting to
+       * whatever that seed held.
+       *
+       * The site form is narrower but seeded the same way twice over: every
+       * key it still calls an override is written from that seed, and the
+       * keys it clears are the keys the seed said were stored. A cached seed
+       * therefore both restores a stale value another admin has since changed
+       * and leaves a newer override it never saw.
        *
        * This used to be two inline `if`s, and that is exactly why it needed
-       * fixing (AGL-1449): they covered `fromCache` and the session
-       * heuristic and had nothing for `unreadable`, so a listen that went
-       * terminal — where `useFirestoreDoc` clears `data` and this form
-       * re-seeds from `mergePluginConfig(schema, null)`, i.e. every field at
-       * its SCHEMA DEFAULT — sailed straight through and reset the stored
-       * document to defaults while reporting "Settings saved". A hand-rolled
-       * guard only ever holds the conditions whoever wrote it thought of.
+       * fixing (AGL-1449): they covered `fromCache` and the session heuristic
+       * and had nothing for `unreadable`, so a listen that went terminal —
+       * where `useFirestoreDoc` clears `data` and this form re-seeds from
+       * `mergePluginConfig(schema, null)`, i.e. every field at its SCHEMA
+       * DEFAULT — sailed straight through and reset the stored document to
+       * defaults while reporting "Settings saved". A hand-rolled guard only
+       * ever holds the conditions whoever wrote it thought of.
        *
        * The guard WRAPS the write for the same reason: an early return is a
        * shape you can keep while losing the protection.
        */
       const verdict = await writeGuardedBySeed(
         {
-          subject: 'plugin settings',
-          unreadable: status === 'error',
-          fromCache,
+          subject: siteScoped ? 'site plugin settings' : 'plugin settings',
+          unreadable:
+            orgStatus === 'error' || (siteScoped && hostStatus === 'error'),
+          fromCache: orgFromCache || (siteScoped && hostFromCache),
         },
         async () => {
+          if (!siteScoped) {
+            await setDoc(
+              doc(firestore, 'orgs', orgId, 'pluginSettings', schema.pluginId),
+              {
+                ...mergePluginConfig(schema, values),
+                updatedBy: user?.uid ?? null,
+              },
+              { merge: true },
+            )
+            return
+          }
+          /**
+           * ⚠️ CLEARING AN OVERRIDE IS A FIELD DELETE, NEVER AN EMPTY VALUE.
+           *
+           * `setDoc(…, {merge: true})` leaves a field the payload omits
+           * exactly as it is, so a form that simply stops sending a key
+           * cannot clear anything by saving: the override survives
+           * invisibly, and the site keeps ignoring a workspace value that
+           * has since changed. `deleteField()` is the only write that
+           * returns a key to inherited — the same trap, and the same fix, as
+           * the host tracking ids (AGL-1608).
+           *
+           * The key is written LITERALLY, which is correct here and is the
+           * half of that fix worth restating: `setDoc` with `merge` treats a
+           * dotted key as a literal field name and only `updateDoc` reads it
+           * as a path. A nested `deleteField()` would have to be buried in a
+           * nested object — but nothing is nested at this path.
+           * `mergePluginConfig` and `pluginConfigOverrides` both address the
+           * stored document as `stored[field.key]`, so the document is flat
+           * by construction and the delete has to address it the same way the
+           * readers do. `updateDoc` is not an option either way: a site with
+           * no overrides yet has no document, and `updateDoc` refuses a
+           * missing one.
+           */
+          const coerced = mergePluginConfig(schema, effective)
+          const payload: Record<string, unknown> = {
+            updatedBy: user?.uid ?? null,
+          }
+          for (const field of schema.fields) {
+            if (overridden.includes(field.key)) {
+              payload[field.key] = coerced[field.key]
+            } else if (storedOverrides.includes(field.key)) {
+              payload[field.key] = deleteField()
+            }
+          }
           await setDoc(
-            doc(firestore, 'orgs', orgId, 'pluginSettings', schema.pluginId),
-            {
-              ...mergePluginConfig(schema, values),
-              updatedBy: user?.uid ?? null,
-            },
+            doc(firestore, 'hosts', hostId, 'pluginSettings', schema.pluginId),
+            payload,
             { merge: true },
           )
         },
@@ -149,17 +291,24 @@ function SchemaForm({
     }
   }
 
+  /*
+   * The catalog names a bundle; a marketplace plugin is not in it, and falling
+   * through to `schema.pluginId` put a Firestore document id in a card header.
+   * The caller passes the pin's `displayName`, which is what every other
+   * surface calls the same plugin.
+   */
   const label =
     FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === schema.pluginId)
-      ?.label ?? schema.pluginId
+      ?.label ??
+    displayName ??
+    schema.pluginId
 
-  const renderField = (field: PluginConfigField) => {
+  const control = (field: PluginConfigField) => {
     const value = values[field.key]
     switch (field.type) {
       case 'boolean':
         return (
           <Stack
-            key={field.key}
             direction="row"
             sx={{ alignItems: 'center', justifyContent: 'space-between' }}
           >
@@ -182,7 +331,6 @@ function SchemaForm({
       case 'select':
         return (
           <TextField
-            key={field.key}
             select
             size="small"
             label={field.label}
@@ -201,7 +349,6 @@ function SchemaForm({
       case 'number':
         return (
           <TextField
-            key={field.key}
             type="number"
             size="small"
             label={field.label}
@@ -211,15 +358,12 @@ function SchemaForm({
             slotProps={{
               htmlInput: { min: field.min, max: field.max },
             }}
-            onChange={(event) =>
-              setField(field.key, Number(event.target.value))
-            }
+            onChange={(event) => setField(field.key, Number(event.target.value))}
           />
         )
       default:
         return (
           <TextField
-            key={field.key}
             size="small"
             label={field.label}
             helperText={field.description}
@@ -231,20 +375,73 @@ function SchemaForm({
     }
   }
 
+  /**
+   * Where this field's answer comes from, said on the field itself.
+   *
+   * Both halves are load-bearing. The chip says whether the site is following
+   * the workspace, and the workspace's own value is spelled out beside it —
+   * without it, "inherited" tells an operator that a number exists somewhere
+   * else but not what it is, and deciding whether to override means leaving
+   * the page.
+   */
+  const provenance = (field: PluginConfigField) => {
+    const isOverridden = overridden.includes(field.key)
+    return (
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+      >
+        <Chip
+          size="small"
+          color={isOverridden ? 'primary' : 'default'}
+          variant={isOverridden ? 'filled' : 'outlined'}
+          label={isOverridden ? 'Set for this site' : 'Inherited'}
+        />
+        <Typography variant="caption" color="text.secondary">
+          {`Workspace: ${describeValue(field, workspace[field.key])}`}
+        </Typography>
+        {isOverridden ? (
+          <Button
+            size="small"
+            disabled={disabled || busy}
+            onClick={() => inherit(field.key)}
+          >
+            {'Use workspace value'}
+          </Button>
+        ) : null}
+      </Stack>
+    )
+  }
+
   return (
     <CardDisplay
       header={`${label} settings`}
       help={docsHelp('plugins', {
         anchor: '#configure',
-        excerpt:
-          'Settings this plugin exposes for your workspace — saved per ' +
-          'organization and read by the plugin wherever it runs.',
+        excerpt: siteScoped
+          ? 'Settings this plugin exposes for this site — each one either ' +
+            'follows the workspace or is answered here for this site alone.'
+          : 'Settings this plugin exposes for your workspace — saved per ' +
+            'organization and read by the plugin wherever it runs.',
       })}
       contentGutterX
       contentGutterY
     >
       <Stack spacing={2} sx={{ maxWidth: 480 }}>
-        {schema.fields.map(renderField)}
+        {siteScoped ? (
+          <Typography variant="body2" color="text.secondary">
+            {'This site follows the workspace until you answer a field here. ' +
+              'A field you change applies to this site only; the rest keep ' +
+              'following the workspace, including changes made there later.'}
+          </Typography>
+        ) : null}
+        {schema.fields.map((field) => (
+          <Stack key={field.key} spacing={1}>
+            {control(field)}
+            {siteScoped ? provenance(field) : null}
+          </Stack>
+        ))}
         <Stack direction="row">
           <Button
             variant="contained"
@@ -252,7 +449,7 @@ function SchemaForm({
             disabled={disabled || !dirty || busy}
             onClick={() => void save()}
           >
-            {'Save settings'}
+            {siteScoped ? 'Save site settings' : 'Save settings'}
           </Button>
         </Stack>
       </Stack>
@@ -260,12 +457,46 @@ function SchemaForm({
   )
 }
 
+/** The subset of `values` named by `keys`, in schema-agnostic form. */
+function pick(
+  values: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const picked: Record<string, unknown> = {}
+  for (const key of keys) picked[key] = values[key]
+  return picked
+}
+
+/**
+ * A field value as an operator reads it. `select` resolves to its option
+ * label rather than its stored value, and an empty string reads as "Not set"
+ * — an inheritance line that renders as `Workspace: ` says nothing at all.
+ */
+function describeValue(field: PluginConfigField, value: unknown): string {
+  if (field.type === 'boolean') return value === true ? 'On' : 'Off'
+  if (field.type === 'select') {
+    const option = field.options?.find((entry) => entry.value === value)
+    if (option) return option.label
+  }
+  if (value == null || value === '') return 'Not set'
+  return String(value)
+}
+
 export default function PluginConfigCards({
   orgId,
+  hostId,
   disabled,
   pluginId,
+  manifest,
+  displayName,
 }: {
   orgId: string
+  /**
+   * Render the SITE form for this host instead of the workspace one
+   * (AGL-428, AGL-1014). The site's stored document holds only the keys it
+   * answers for itself, and every other field follows the workspace.
+   */
+  hostId?: string
   disabled?: boolean
   /**
    * Render only this plugin's settings (AGL-1007). The installation detail
@@ -274,10 +505,34 @@ export default function PluginConfigCards({
    * rather than show the one every plugin already gets for free.
    */
   pluginId?: string
+  /**
+   * The install pin's manifest, for a MARKETPLACE plugin (AGL-428).
+   *
+   * `listPluginConfigSchemas` reads a module-scope registry that only code
+   * running in this process can fill, and a sandboxed third-party bundle never
+   * runs here — so this card rendered nothing for every plugin a workspace
+   * installed, however carefully its author declared their settings. The
+   * manifest is the declaration the console does hold. It is a FALLBACK, not a
+   * merge: a plugin that registered a schema in-process has already said what
+   * its fields are, and letting a manifest override that would let a pinned
+   * document restate a first-party contract.
+   */
+  manifest?: unknown
+  /** How to name a plugin the first-party catalog does not know. */
+  displayName?: string
 }) {
-  const schemas = listPluginConfigSchemas().filter(
+  const registered = listPluginConfigSchemas().filter(
     (schema) => !pluginId || schema.pluginId === pluginId,
   )
+  const fromManifest =
+    !registered.length && pluginId
+      ? pluginConfigSchemaFromManifest(pluginId, manifest)
+      : undefined
+  const schemas = registered.length
+    ? registered
+    : fromManifest
+      ? [fromManifest]
+      : []
   if (!schemas.length) return null
   return (
     <>
@@ -285,8 +540,10 @@ export default function PluginConfigCards({
         <SchemaForm
           key={schema.pluginId}
           orgId={orgId}
+          hostId={hostId}
           schema={schema}
           disabled={disabled}
+          displayName={displayName}
         />
       ))}
     </>

@@ -45,7 +45,14 @@ export interface PluginApiRequest {
   rawBody?: string
   headers: Partial<Record<string, string | string[]>>
   cookies: Partial<Record<string, string>>
-  /** Node socket — used for the client IP fallback (`remoteAddress`). */
+  /**
+   * Node socket — the client-address fallback (`remoteAddress`).
+   *
+   * On the console's Pages Router this is the real transport peer. Behind the
+   * App Router adapter there is no socket, and `api-adapter.ts` fills it from
+   * the shared client-address reader so a handler falling back to it gets the
+   * same trusted hop rather than a caller-supplied one.
+   */
   socket: { remoteAddress?: string }
 }
 

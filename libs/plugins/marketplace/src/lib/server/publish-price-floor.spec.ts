@@ -419,10 +419,11 @@ describe('every publish door validates the price (AGL-2343)', () => {
   )
 
   it('finds every publish door the repo has', () => {
-    // Not vacuous: seven doors exist today. A directory read that returned
+    // Not vacuous: eight doors exist today. A directory read that returned
     // nothing would otherwise let this whole describe pass.
     expect(doors.map((file) => file.name).sort()).toEqual([
       'publish-dataset-schema.ts',
+      'publish-email-starter.ts',
       'publish-email-template.ts',
       'publish-layout.ts',
       'publish-plugin.ts',

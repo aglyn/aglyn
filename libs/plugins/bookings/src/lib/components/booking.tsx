@@ -16,6 +16,12 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  buildBeginCheckoutParams,
+  trackEvent,
+  trackEventBeforeNavigation,
+} from '@aglyn/aglyn/app-utils/analytics-events'
+import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -155,6 +161,10 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           name,
           email,
           ...(marketingConsent ? { marketingConsent: true } : {}),
+          // The campaign this visitor came from, when they came from one.
+          // A booking is an identify moment like a form submission: the
+          // visitor was anonymous until this request named them.
+          ...campaignTouchField(),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -166,10 +176,57 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
       if (payload?.checkoutUrl) {
         // Paid service (AGL-170): finish payment on Stripe; the webhook
         // confirms the held slot.
+        //
+        // The `begin_checkout` that `purchase` has never had a counterpart to
+        // (AGL-2481 wired the completion and left the intent). Without it a
+        // merchant selling appointments sees a purchase with no checkout step
+        // in front of it, so GA4's shopping funnel reports every paid booking
+        // as an abandoned one — the same shape the bookings plugin was
+        // reporting before it sent anything at all.
+        //
+        // After the server accepted the hold, so a double-booked slot or a
+        // closed calendar — both of which answer !ok above — never counts.
+        //
+        // `item_id` is the SERVICE id, matching the id
+        // `buildBookingPurchaseParams` puts on the completed hit, so the two
+        // steps join into one per-service funnel instead of naming the same
+        // service twice.
+        const service = (services ?? []).find((one) => one.$id === serviceId)
+        await trackEventBeforeNavigation(
+          'begin_checkout',
+          buildBeginCheckoutParams({
+            items: [
+              {
+                item_id: serviceId,
+                item_name: service?.name ?? 'Service',
+                price: service?.priceUsd,
+                quantity: 1,
+              },
+            ],
+          }),
+        )
         window.location.assign(payload.checkoutUrl)
         return
       }
       if (Array.isArray(payload?.alerts)) setAlerts(payload.alerts)
+      // A FREE booking is confirmed right here — there is no Stripe leg, so
+      // nothing downstream will ever report it, and a merchant whose services
+      // are free saw an appointment book with no event of any kind.
+      //
+      // `generate_lead` rather than a zero-value `purchase`: GA4 has no
+      // recommended booking event, `purchase` with `value: 0` would put a
+      // free appointment into the merchant's revenue reports as a sale worth
+      // nothing, and a confirmed request for someone's time IS the lead this
+      // event names. The form's own generic submissions report the same event
+      // from `form.tsx`, so the merchant reads one conversion count.
+      //
+      // `form_name` is the block, not the service and never the guest: the
+      // name and email typed above are the reason this is the only param
+      // shape that may leave here.
+      trackEvent('generate_lead', {
+        form_name: 'Booking',
+        form_location: window.location.pathname,
+      })
       setStatus('booked')
     } catch {
       setErrorMessage('Booking failed — try again')
@@ -184,6 +241,11 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     marketingConsent,
     status,
     siteFetch,
+    // Read for the checkout event's item name and price. Without it the
+    // handler closes over the services list as it was when the handler was
+    // created, which on the first render is `null` — and every paid booking
+    // would report an unnamed, unpriced service.
+    services,
   ])
 
   if (!hostId) {

@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+
 /**
  * Commerce catalog v1 (AGL-276): products with options/variants,
  * hierarchical categories, tags, and manual/smart collections. Pure
@@ -262,6 +264,73 @@ export function commerceSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, COMMERCE_SLUG_MAX_LENGTH)
+}
+
+/**
+ * The search keys a product write carries, so the catalog can be searched by
+ * the QUERY rather than by the rows a listener happened to fetch (AGL-2501).
+ *
+ * The hub lists `limit(500)`, and the search compared what that returned — so
+ * a product past the window answered "no products match", which reads as the
+ * product not existing rather than as the search not reaching it. Filtering
+ * server-side needs fields Firestore can index, and neither of the two things
+ * a merchant searches by is one:
+ *
+ *   - A NAME needs case-insensitive contains, which Firestore has no operator
+ *     for. `nameSearchFields` denormalizes it into the three shapes that are
+ *     indexable — an exact key, word-prefix tokens for `array-contains`, and
+ *     the key reversed so "ends with" becomes a prefix range.
+ *   - A SKU lives inside `variants`, an array of OBJECTS, and Firestore cannot
+ *     query a field inside one. Flattened here into a top-level array so a SKU
+ *     is one `array-contains`.
+ *
+ * ⛔ A SKU therefore matches WHOLE, not as a substring: "abc-123" finds it and
+ * "123" does not. That is the right way round for a SKU, which is a value
+ * somebody copies rather than half-remembers — unlike a name, where the tokens
+ * above buy word-prefix matching precisely because names are half-remembered.
+ *
+ * `barcodes` is the same flattening for the same reason, and it is the one the
+ * register depends on: a keyboard-wedge scanner types the code and presses
+ * Enter, so the lookup has to be exact and has to reach the whole catalog. A
+ * scan is never a half-remembered value.
+ *
+ * Lower-cased because the translator lower-cases the typed query before it
+ * builds the `array-contains`; stored and typed have to be normalized the same
+ * way or the two silently disagree.
+ *
+ * ⚠️ Each array is OMITTED when a product has none, rather than written as
+ * `[]`. `isNotEmpty` is served as `!= null`, and an empty array is not null —
+ * so a product with no SKUs at all would answer "has a SKU" for every row.
+ *
+ * ⚠️ Spread this at EVERY write that sets a product's name or variants. A
+ * write that sets the name without it leaves the keys describing the previous
+ * name, and the product becomes findable only by what it used to be called.
+ */
+export function productSearchFields(product: {
+  name: string
+  variants?: ProductVariant[]
+}): {
+  name: string
+  nameLower: string
+  nameTokens: string[]
+  nameReversed: string
+  skus?: string[]
+  barcodes?: string[]
+} {
+  const flatten = (read: (variant: ProductVariant) => string | undefined) => [
+    ...new Set(
+      (product.variants ?? [])
+        .map((variant) => (read(variant) ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ]
+  const skus = flatten((variant) => variant.sku)
+  const barcodes = flatten((variant) => variant.barcode)
+  return {
+    ...nameSearchFields(product.name),
+    ...(skus.length ? { skus } : {}),
+    ...(barcodes.length ? { barcodes } : {}),
+  }
 }
 
 /**

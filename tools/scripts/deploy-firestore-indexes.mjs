@@ -66,6 +66,10 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
+import {
+  ALLOW_DIRTY_FLAG,
+  parseDeployArgs,
+} from './lib/deploy-args.mjs'
 import { loadLocalEnv } from './lib/firebase-rules-api.mjs'
 import {
   createCompositeIndex,
@@ -87,28 +91,29 @@ loadLocalEnv()
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const DEFAULT_FILE = `${repoRoot}cloud/firebase-firestore.indexes.json`
 
-let filePath = DEFAULT_FILE
-let dryRun = false
-let allowDirty = false
-for (const arg of process.argv.slice(2).filter((a) => a !== '--')) {
-  if (arg.startsWith('--file=')) {
-    filePath = arg.slice('--file='.length)
-    continue
-  }
-  if (arg === '--dry-run') {
-    dryRun = true
-    continue
-  }
-  if (arg === '--allow-dirty') {
-    allowDirty = true
-    continue
-  }
-  console.error(
-    `Unknown argument '${arg}'. Usage: deploy-firestore-indexes ` +
-      `[--dry-run] [--file=<path>] [--allow-dirty]`,
-  )
-  process.exit(2)
-}
+// This script already refused an unknown argument; what it had no answer for
+// was `--help`, which it refused as unknown (exit 2) while the three rules
+// deploys beside it DEPLOYED on it. One parser now serves all four, so the
+// question "what does this do" has the same, safe answer everywhere.
+const args = parseDeployArgs({
+  command: 'deploy-firestore-indexes',
+  summary:
+    'Reconcile cloud/firebase-firestore.indexes.json with the live Firestore ' +
+    'index configuration.',
+  flags: [
+    { flag: '--dry-run', key: 'dryRun', describe: 'Show the plan and change nothing.' },
+    {
+      flag: '--file',
+      key: 'filePath',
+      value: 'string',
+      describe: 'Read the index config from this path instead of the default.',
+    },
+    ALLOW_DIRTY_FLAG,
+  ],
+})
+const filePath = args.filePath ?? DEFAULT_FILE
+const dryRun = args.dryRun
+const allowDirty = args.allowDirty
 
 const fileLabel =
   filePath === DEFAULT_FILE ? 'cloud/firebase-firestore.indexes.json' : filePath
@@ -144,6 +149,34 @@ if (
   process.exit(2)
 }
 
+/*
+ * WHAT AN OPERATOR HAS TO GRANT, in one place because it is needed twice.
+ *
+ * Reading the live index configuration and WRITING it need different
+ * permissions, and the deploy service account here had the first and not the
+ * second — so this script listed 65 indexes happily and then failed 403 on
+ * the first create. A raw `HTTP 403` with Google's body is not actionable:
+ * the operator cannot tell a missing role from a wrong project from a
+ * disabled API, and the self-hosting runbook sends them here.
+ *
+ * `datastore.indexes.*` are aliases the Firestore API surfaces; the predefined
+ * roles grant them under the Datastore-mode name `datastore.schemas.*`, which
+ * is why `roles/datastore.indexAdmin` is the minimal role that works and why
+ * looking for a role whose listed permissions contain `datastore.indexes.create`
+ * finds nothing — including on `roles/owner`.
+ */
+const ROLE_REMEDY = [
+  'The service account needs permission to WRITE index configuration. Reading',
+  'it needs less, which is why a listing can succeed and a create still 403.',
+  '',
+  '  gcloud projects add-iam-policy-binding <PROJECT_ID> \\',
+  '    --member="serviceAccount:<FIREBASE_CLIENT_EMAIL>" \\',
+  '    --role="roles/datastore.indexAdmin"',
+  '',
+  'roles/datastore.indexAdmin ("Cloud Datastore Index Admin") is the minimal',
+  'role; roles/datastore.owner also works and grants a great deal more.',
+].join('\n')
+
 const auth = await resolveWriteToken()
 if (auth.error) {
   console.error(
@@ -154,8 +187,7 @@ if (auth.error) {
       'configuration on YOUR project. The self-hosting runbook sets the same',
       'three variables the rules deploys use, in .env at the repo root:',
       '  FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY',
-      'The service account needs the Cloud Datastore Owner role (or',
-      'datastore.indexes.create + datastore.indexes.update).',
+      ROLE_REMEDY,
       '',
       'Exiting 2 (could not deploy). That is NOT the same as a clean run.',
     ].join('\n'),
@@ -251,6 +283,7 @@ if (dryRun) {
 }
 
 let failures = 0
+let forbidden = 0
 let created = 0
 let existed = 0
 
@@ -269,6 +302,7 @@ for (const create of plan.creates) {
   }
   if (!result.ok) {
     failures += 1
+    if (result.status === 403) forbidden += 1
     console.error(
       `  ✗ FAILED  ${create.key}\n      HTTP ${result.status}: ` +
         `${result.error ?? JSON.stringify(result.body?.error ?? result.body).slice(0, 300)}`,
@@ -290,6 +324,7 @@ for (const patch of plan.patches) {
   })
   if (!result.ok) {
     failures += 1
+    if (result.status === 403) forbidden += 1
     console.error(
       `  ✗ FAILED  ${patch.id}\n      HTTP ${result.status}: ` +
         `${result.error ?? JSON.stringify(result.body?.error ?? result.body).slice(0, 300)}`,
@@ -308,6 +343,14 @@ console.log(
 reportTtlOwed()
 
 if (failures > 0) {
+  // A 403 among the failures is a MISSING ROLE, not a bad index definition,
+  // and it is the one cause the operator cannot diagnose from the status line.
+  if (forbidden > 0) {
+    console.error(
+      `\n${forbidden} write(s) were refused with HTTP 403 — this is a ` +
+        `PERMISSIONS problem, not a problem with ${fileLabel}.\n\n${ROLE_REMEDY}`,
+    )
+  }
   console.error(
     `\n${failures} write(s) were refused. The project is PARTIALLY configured — ` +
       `re-run after fixing the cause; the accepted writes are idempotent and ` +

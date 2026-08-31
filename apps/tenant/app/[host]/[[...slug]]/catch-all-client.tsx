@@ -17,11 +17,43 @@
 
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
-// Deep import, NOT the barrel (AGL-2486): the plugin-manager barrel is
-// reachable from `@aglyn/aglyn/server`, and a client-only React hook on that
-// path 500s every server route. See `plugin-styles-ui.tsx`.
+// Every VALUE this file reads comes from the module that defines it, never
+// from the `@aglyn/aglyn` barrel. A named import off a barrel reads like it
+// costs only what it names, and it does not: `libs/aglyn/src/index.ts`
+// re-exports `./lib/aglyn`, whose singleton is constructed at import time, so
+// nothing downstream of it can be dropped as unused. Everything the barrel
+// reaches then lands in this page's first load — the console route table, the
+// plan and billing tables, the DMCA, webhook, dataset and marketplace helpers
+// — downloaded by every anonymous visitor to every customer site.
+//
+// The type-only namespace below is free: TypeScript erases it, so it is not a
+// runtime edge.
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, emitter } from '@aglyn/aglyn/aglyn'
+import { ATTRIBUTION_ATTRIBUTE } from '@aglyn/aglyn/app-utils/attribution-guard'
+import { formatCollectionEntryDate } from '@aglyn/aglyn/app-utils/collection-entries'
+import { ELEMENT_HIDDEN_STYLE_TEXT } from '@aglyn/aglyn/app-utils/element-ui'
+import {
+  HEADING_ANCHOR_SCROLL_MARGIN,
+  markdownHeadingSlugs,
+  parseMarkdownLite,
+} from '@aglyn/aglyn/app-utils/markdown-lite'
+import { renderedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+// `PLATFORM_BRANDING_PROFILE` is re-exported by `app-utils/plan-entitlements`,
+// which is the largest first-party module a published page can reach. The
+// badge needs the brand, not the plan table.
+import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
+import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context'
+import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
+import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
+import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
+import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+// The plugin-manager barrel is reachable from `@aglyn/aglyn/server`, and a
+// client-only React hook on that path 500s every server route. See
+// `plugin-styles-ui.tsx`.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
+import { listSiteRuntimes } from '@aglyn/aglyn/plugin-manager/site-runtime'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { observer } from 'mobx-react-lite'
 import {
@@ -93,7 +125,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // else has work to do on this page (AGL-1289); without it this is the org's
   // whole enabled list, which is what it always was.
   const enabledPlugins = props.enabledPlugins ?? [
-    ...Aglyn.DEFAULT_ENABLED_PLUGINS,
+    ...DEFAULT_ENABLED_PLUGINS,
   ]
   use(sitePluginLoader.ensure(props.blockingPlugins ?? enabledPlugins, ['site']))
 
@@ -184,7 +216,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       if (!response.ok) return setMemberDenied(true)
       const payload = await response.json()
       if (payload?.nodes) {
-        Aglyn.canvas.setNodes(payload.nodes)
+        canvas.setNodes(payload.nodes)
         setMemberNodes(payload.nodes)
       }
     })()
@@ -249,13 +281,13 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // first render fills synchronously (matching the server HTML); later prop
   // changes (client-side navigations) go through the effect below so
   // mounted observers aren't invalidated mid-render.
-  if (nodes && (typeof window === 'undefined' || !Aglyn.canvas.rootNode)) {
-    Aglyn.canvas.setNodes(nodes)
+  if (nodes && (typeof window === 'undefined' || !canvas.rootNode)) {
+    canvas.setNodes(nodes)
   }
 
   useEffect(() => {
     if (!nodes) return
-    Aglyn.emitter.emit(Aglyn.AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
+    emitter.emit(AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
   }, [nodes])
 
   // The pageview beacon, the GA mounts and the consent machinery used to live
@@ -351,8 +383,8 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // (the server renders the checking state), so the mid-render canvas fill
   // mirrors the first-fill pattern above.
   if (props.memberScreen && memberDenied && props.unauthorizedNodes) {
-    Aglyn.canvas.setNodes(props.unauthorizedNodes)
-    return <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
+    canvas.setNodes(props.unauthorizedNodes)
+    return <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
   }
 
   // Members-only screens (AGL-109): prompt for sign-in until the session
@@ -411,7 +443,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
             if (!response.ok) return setUnlockError(true)
             const payload = await response.json()
             if (payload?.nodes) {
-              Aglyn.canvas.setNodes(payload.nodes)
+              canvas.setNodes(payload.nodes)
               setUnlockedNodes(payload.nodes)
             } else {
               setUnlockError(true)
@@ -459,7 +491,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     // into `{{entry.date}}`, so the legacy surface and the composed one can
     // no longer print one entry two ways.
     const formatDate = (value?: { seconds: number } | null) =>
-      Aglyn.formatCollectionEntryDate(value)
+      formatCollectionEntryDate(value)
     // The cover through the ONE shared resolver (AGL-1407). A `media:`
     // reference becomes the CDN path for THIS site; a raw storage URL, an
     // AGL-175 relative CDN path and an author's own hotlinked URL all pass
@@ -470,15 +502,15 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     // URL to resolve it against. And a reference that does not parse resolves
     // to undefined, so the `<img>` is dropped rather than emitted with a
     // literal `src="media:…"`.
-    const entryCover = Aglyn.resolveMediaSrc((entry as any)?.coverImage, {
+    const entryCover = resolveMediaSrc((entry as any)?.coverImage, {
       hostId: host?.$id,
     })
     // Parsed once, so the heading anchors below are derived from the same
     // block list they are stamped onto (AGL-1162). Plain consts, not
     // `useMemo`: this branch sits after several early returns, so a hook here
     // would be conditional.
-    const entryBodyBlocks = Aglyn.parseMarkdownLite(entry?.body ?? '')
-    const entryBodySlugs = Aglyn.markdownHeadingSlugs(entryBodyBlocks)
+    const entryBodyBlocks = parseMarkdownLite(entry?.body ?? '')
+    const entryBodySlugs = markdownHeadingSlugs(entryBodyBlocks)
     return (
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
         {entry ? (
@@ -496,7 +528,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                 // and to nobody who opened the post. No fallback to the
                 // title: this sits directly beneath `<h1>{entry.title}</h1>`,
                 // so borrowing it would announce the same words twice.
-                alt={Aglyn.renderedMediaAlt((entry as any)?.coverImageAlt)}
+                alt={renderedMediaAlt((entry as any)?.coverImageAlt)}
                 style={{ maxWidth: '100%', borderRadius: 8 }}
               />
             ) : null}
@@ -522,7 +554,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                 // break exactly when a site falls back.
                 const id = entryBodySlugs[index]
                 const style = {
-                  scrollMarginTop: `${Aglyn.HEADING_ANCHOR_SCROLL_MARGIN}px`,
+                  scrollMarginTop: `${HEADING_ANCHOR_SCROLL_MARGIN}px`,
                 }
                 return block.level === 2 ? (
                   <h2 key={index} id={id} style={style}>
@@ -542,7 +574,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                     // Resolved on the same terms as the cover above
                     // (AGL-1686): body images are the same assets, and this
                     // fallback renderer has the same `host.$id` in hand.
-                    src={Aglyn.resolveMediaSrc(block.src, {
+                    src={resolveMediaSrc(block.src, {
                       hostId: host?.$id,
                     })}
                     alt={block.alt}
@@ -693,8 +725,8 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   }
 
   return (
-    <Aglyn.SiteContext.Provider value={site}>
-    <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+    <SiteContext.Provider value={site}>
+    <ScreenLinkContext.Provider value={screenLinks}>
       {/* The `next/head` <Head> blocks that used to render the title,
           canonical, og:/twitter: meta and the noindex rule here were inert
           under the App Router — `next/head` is a no-op inside `app/`, so none
@@ -712,7 +744,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           paint hidden from the first frame — no flash before the
           automations engine hydrates. The besigner canvas deliberately
           omits this rule so hidden elements stay editable. */}
-      <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
+      <style>{ELEMENT_HIDDEN_STYLE_TEXT}</style>
       {/* Plugin stylesheets (AGL-2486). The published page is the SOURCE of
           truth for where plugin CSS sits in the cascade — unlayered, so it
           beats every `@layer mui` rule regardless of specificity — and the
@@ -725,7 +757,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           engines, overlays — each registered from its plugin's site
           surface and reading back the page-props slices its own server
           enricher wrote. */}
-      {Aglyn.listSiteRuntimes().map(({ runtimeId, Component }) => (
+      {listSiteRuntimes().map(({ runtimeId, Component }) => (
         <Component
           key={runtimeId}
           hostId={props.data?.host?.$id}
@@ -733,7 +765,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           page={props as Record<string, any>}
         />
       ))}
-      <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
+      <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
       {props.showBranding ? (
         // White-label badge (White-Label Phase 2): the "Made with …" credit
         // reads the org's resolved brand — product name, support URL, logo,
@@ -744,12 +776,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         // can never drift or partly-render as Aglyn. `showBranding` still
         // decides whether the badge shows at all.
         (() => {
-          const brand = props.branding ?? Aglyn.PLATFORM_BRANDING_PROFILE
+          const brand = props.branding ?? PLATFORM_BRANDING_PROFILE
           // Same resolver as every other surface (AGL-1407). The org branding
           // card writes a typed URL today, which passes straight through; this
           // is what stops a picked `media:` reference reaching the badge as a
           // literal string once `logoUrl` is converted.
-          const brandLogo = Aglyn.resolveMediaSrc(brand.logoUrl, {
+          const brandLogo = resolveMediaSrc(brand.logoUrl, {
             hostId: host?.$id,
           })
           // `homeUrl`, NOT `supportUrl`.
@@ -812,7 +844,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
               {`Made with ${brand.productName}`}
             </>
           )
-          // Marked for the attribution guard (AGL-1477), which checks after
+          // Marked for the attribution guard, which checks after
           // load that the page still presents this and repairs it into a
           // closed shadow root if it does not.
           return brand.homeUrl ? (
@@ -821,14 +853,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
               target="_blank"
               rel="noreferrer"
               style={badgeStyle}
-              {...{ [Aglyn.ATTRIBUTION_ATTRIBUTE]: 'badge' }}
+              {...{ [ATTRIBUTION_ATTRIBUTE]: 'badge' }}
             >
               {badgeContent}
             </a>
           ) : (
             <span
               style={badgeStyle}
-              {...{ [Aglyn.ATTRIBUTION_ATTRIBUTE]: 'badge' }}
+              {...{ [ATTRIBUTION_ATTRIBUTE]: 'badge' }}
             >
               {badgeContent}
             </span>
@@ -871,7 +903,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         <a
           href="/api/report-abuse"
           rel="nofollow"
-          {...{ [Aglyn.ATTRIBUTION_ATTRIBUTE]: 'report' }}
+          {...{ [ATTRIBUTION_ATTRIBUTE]: 'report' }}
           style={{
             position: 'fixed',
             bottom: 12,
@@ -889,7 +921,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           Report abuse
         </a>
       ) : null}
-      {/* Keeps the two above ON the page (AGL-1477). Both are ordinary
+      {/* Keeps the two above ON the page. Both are ordinary
           elements in a document the site's own author controls, so three
           lines of theme CSS or one tag-manager container takes them off it —
           and the report control is precisely what a phishing site's author
@@ -900,8 +932,8 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       {props.showBranding ? (
         <AttributionGuard hostId={host?.$id} />
       ) : null}
-    </Aglyn.ScreenLinkContext.Provider>
-    </Aglyn.SiteContext.Provider>
+    </ScreenLinkContext.Provider>
+    </SiteContext.Provider>
   )
 })
 

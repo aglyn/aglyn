@@ -108,6 +108,36 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   backfillMemberIdentity: async () => undefined,
   lockdownRefusal: async () => null,
+  /*
+   * MODELED, NOT STUBBED (AGL-2068 on the manager key).
+   *
+   * The route branches on this helper's return — `const managerRefusal =
+   * managerSeatRefusalResponse(error); if (managerRefusal) return
+   * managerRefusal` — so a double that always answered `null` would make the
+   * refusal cases below pass while no refusal ever happened, converting a
+   * working guard into an untested one. One that always answered a 403 would
+   * turn every unrelated fault into a seat refusal and mask the 500.
+   *
+   * The real class cannot be reached with `requireActual`: it lives in
+   * `organizations.ts`, which imports `firebase-admin.ts` and initialises the
+   * admin app on load. So the discrimination is modeled on `name`, and
+   * `managerSeatLimitError` below mints the matching shape.
+   */
+  managerSeatRefusalResponse: (error: unknown) =>
+    (error as { name?: string } | null)?.name === 'ManagerSeatLimitError'
+      ? Response.json(
+          {
+            error: (error as Error).message,
+            code: 'manager_seat_limit',
+            limit: (error as { limit?: number }).limit,
+            upgradeRequired: (error as { upgradeRequired?: boolean })
+              .upgradeRequired,
+            retainedOverCap: (error as { retainedOverCap?: number })
+              .retainedOverCap,
+          },
+          { status: 403 },
+        )
+      : null,
   logOrgActivity: async () => undefined,
   resolveOrgMembership: (...args: unknown[]) => mockResolveOrgMembership(...args),
   seedUserProfile: async () => undefined,
@@ -152,6 +182,23 @@ const signIn = () =>
       method: 'POST',
       headers: { authorization: 'Bearer tok' },
     }),
+  )
+
+/**
+ * The refusal `upsertOrgMember` now throws, in the shape the real
+ * `ManagerSeatLimitError` carries. A stand-in because the real class is
+ * unreachable here; `name` is what the modeled translator discriminates on.
+ */
+const managerSeatLimitError = (limit: number) =>
+  Object.assign(
+    new Error(`Team seat limit reached (${limit}) — upgrade your plan to add more members`),
+    {
+      name: 'ManagerSeatLimitError',
+      limit,
+      upgradeRequired: true,
+      addonPriceUsd: null,
+      retainedOverCap: 0,
+    },
   )
 
 /** `n` org-wide managers on the roster. */
@@ -222,13 +269,37 @@ describe('NEGATIVE CONTROL: an org with room provisions', () => {
 })
 
 describe('the seat cap', () => {
-  it('refuses the NEXT sign-in and writes nothing', async () => {
-    mockOrg = ssoOrg(3)
-    mockMembers = managers(3)
+  /**
+   * The gate MOVED (AGL-2068 on the manager key). It used to read the roster
+   * here and refuse before calling `upsertOrgMember`, which is a read-then-
+   * write race — an IdP asserting N users at once had every one of them
+   * measure the same roster and every one pass. It now lives inside that
+   * function's transaction, so the refusal reaches this route as a throw and
+   * the route's job is to translate it rather than to decide it.
+   *
+   * The arithmetic itself is asserted against the real implementation in
+   * `libs/tenant/data/admin/src/lib/server/manager-seat-cap.spec.ts`, which
+   * drives the transaction under genuine concurrency. What is asserted here
+   * is the part that is this route's: the ceiling's own 403 survives, and an
+   * unrelated fault still does not.
+   */
+  it('refuses the NEXT sign-in with the ceiling\'s own 403', async () => {
+    mockUpsertOrgMember.mockRejectedValue(managerSeatLimitError(3))
     const response = await signIn()
     expect(response.status).toBe(403)
-    expect(String((await response.json()).error)).toContain('3')
-    expect(mockUpsertOrgMember).not.toHaveBeenCalled()
+    const body = await response.json()
+    expect(body.code).toBe('manager_seat_limit')
+    expect(String(body.error)).toContain('3')
+  })
+
+  it('CONTROL: an unrelated fault is still the generic 500', async () => {
+    // The discrimination, not just the happy refusal: a translator that
+    // answered 403 for everything would pass the case above and swallow every
+    // real failure in this route.
+    mockUpsertOrgMember.mockRejectedValue(new Error('firestore unavailable'))
+    const response = await signIn()
+    expect(response.status).toBe(500)
+    expect((await response.json()).code).toBeUndefined()
   })
 
   it('does NOT refuse an existing member of a full org', async () => {

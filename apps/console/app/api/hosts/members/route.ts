@@ -27,6 +27,7 @@ import {
   grantHostAccess,
   isImpersonationSession,
   lockdownRefusal,
+  logHostActivity,
   revokeHostAccess,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -102,6 +103,25 @@ async function handler(request: Request): Promise<Response> {
     if (locked) return locked
 
     const membersRef = hostRef.collection('members')
+    /*==========================================
+     * ONE WRITER FOR THE MEMBERSHIP EVENTS (AGL-118).
+     *
+     * The three entries below were appended by the members card in the
+     * browser, after this route answered. That put the audit trail on the
+     * wrong side of the boundary in two ways at once: the card wrote whatever
+     * uid its own session held rather than the one this route verified, and
+     * any other caller of this endpoint — a script, a second surface, a
+     * request that succeeded while the tab was closing — changed who can
+     * reach a site and recorded nothing. The card's calls are removed in the
+     * same change, so there is no de-duplication problem to solve.
+     *
+     * `actor` is bound once here because all three method branches want the
+     * same value and none of them may substitute anything else for it.
+     *=========================================*/
+    const actor = {
+      uid: decoded.uid,
+      email: decoded.email ? String(decoded.email) : null,
+    }
 
     if (method === 'POST') {
       const email = String(body?.email ?? '')
@@ -186,6 +206,24 @@ async function handler(request: Request): Promise<Response> {
         addedBy: decoded.uid,
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
+      // The roster write is the last one, so it is the event. Four earlier
+      // exits are refusals — a malformed address, an unknown role, an email
+      // already on the roster, and the collaborator seat cap — and the grant
+      // above can still raise a seat refusal from inside its own transaction,
+      // which leaves this line unreached and answers 403. Nothing before this
+      // point has admitted anybody.
+      //
+      // `Invited` and `Added` are different words because they are different
+      // facts: an address with no account yet holds a pending grant on an org
+      // invite and cannot reach the site until it is accepted. One action
+      // string for both would make the feed say somebody has access who does
+      // not.
+      await logHostActivity(
+        hostId,
+        actor,
+        authUser ? 'Added member' : 'Invited member',
+        { type: 'member', id: memberId, name: email },
+      )
       return Response.json({
         memberId,
         status: authUser ? 'active' : 'invited',
@@ -210,6 +248,20 @@ async function handler(request: Request): Promise<Response> {
           role: role as 'viewer' | 'editor' | 'admin',
         })
       }
+      // After the GRANT, not after the roster update. The roster is the
+      // display copy; `grantHostAccess` is what moves `memberRoles`, which is
+      // the projection the rules read — so it is the write that actually
+      // changes what this person can do. It can refuse a seat from inside its
+      // transaction, and a row written before it would record a role somebody
+      // was never given.
+      //
+      // The new role goes in the action text: an entry saying only that
+      // access changed cannot answer the question it is read for.
+      await logHostActivity(hostId, actor, `Changed member role to ${role}`, {
+        type: 'member',
+        id: memberId,
+        ...(member['email'] ? { name: String(member['email']) } : {}),
+      })
       return Response.json({ ok: true }, { status: 200 })
     }
 
@@ -227,6 +279,19 @@ async function handler(request: Request): Promise<Response> {
       if (member['uid']) {
         await revokeHostAccess(orgId, String(member['uid']), hostId)
       }
+      // After the revoke, mirroring PATCH: dropping the roster row alone
+      // removes the person from a list, and `revokeHostAccess` is what
+      // removes their access. The owner refusal above returns 400 having
+      // deleted nothing.
+      //
+      // The email is read off the snapshot taken BEFORE the delete, which is
+      // the only place it still exists — composing this entry afterwards
+      // would leave the feed naming an id nobody can resolve.
+      await logHostActivity(hostId, actor, 'Removed member', {
+        type: 'member',
+        id: memberId,
+        ...(member['email'] ? { name: String(member['email']) } : {}),
+      })
       return Response.json({ ok: true }, { status: 200 })
     }
 

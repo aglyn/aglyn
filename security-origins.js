@@ -168,6 +168,50 @@ function firstPartyDomains() {
  *
  * `isProduction` mirrors the config's own behaviour of also allowing the
  * `http://` forms off production, so local development keeps working.
+ *
+ * ## Two directives that are deliberately absent, and stay absent
+ *
+ * A Lighthouse "best practices" audit names both of these on every run, so the
+ * pressure to add them recurs. Neither is a header change on the tenant, and
+ * the reasons are properties of what a published customer site IS.
+ *
+ * ### `require-trusted-types-for 'script'` — unreachable, and not merely unbuilt
+ *
+ * Trusted Types turns every string-to-code sink into a call that must pass
+ * through a registered policy. The tenant render path has four kinds of sink,
+ * and the last one has no fix at all:
+ *
+ * 1. `new Function(step.code)()` in the marketing plugin's site runtime runs
+ *    the site owner's own JavaScript on their own page — a sold feature. TT
+ *    gates `new Function` exactly as it gates `eval`, so enforcing it deletes
+ *    the feature rather than hardening it.
+ * 2. `container.innerHTML = …` in that same runtime, plus seven
+ *    `dangerouslySetInnerHTML` sites across the tenant, typography rich text
+ *    and the Custom HTML block. Each would need a policy wrapper; React and
+ *    `next/script` (which injects `<script>` elements at `afterInteractive`)
+ *    have no Trusted Types support to hang one on.
+ * 3. The JSON-LD and animation `<script>` blocks the page emits inline.
+ * 4. Custom HTML's Embed mode is a `srcdoc` iframe carrying a RAW author
+ *    snippet. A `srcdoc` child inherits this policy — measured, and the same
+ *    inheritance the tenant relies on for `connect-src` and `frame-src`. The
+ *    snippet is third-party widget code we never see, so there is no call site
+ *    to route through a policy. This is the one an owner allowlist cannot
+ *    answer, and it is why the directive is not merely deferred.
+ *
+ * ### `script-src` — nonce and hash both fail, for recorded reasons
+ *
+ * Do not re-derive this. The tenant page is ISR at `revalidate = 600`, so its
+ * HTML is regenerated OUTSIDE any request: a per-request nonce lands in the
+ * header while the cached bytes carry `$undefined`, which was measured as two
+ * requests to one cached page returning byte-identical HTML under different
+ * nonces. Hashes cannot cover the JSON-LD (varies per page) or the RSC flight
+ * payload (varies per revalidation, and its content IS the serialized tree).
+ * The full history is in `apps/tenant/middleware.ts`, and
+ * `apps/tenant/specs/csp-no-script-src.spec.ts` fails if anyone re-adds it.
+ *
+ * The console is the opposite case and DOES carry `script-src` — it is
+ * request-rendered, so a nonce matches its bytes. Do not read the console's
+ * directive as evidence the tenant could have one.
  */
 function baseCspDirectives(isProduction) {
   const domains = firstPartyDomains()
@@ -493,6 +537,29 @@ const SCRIPT_ORIGINS = [
   // `img-src` report and is a question about ad-network beacons in a logged-in
   // console rather than an allowlist entry (see `imgSrcDirective`).
   'https://www.googletagmanager.com',
+  /*
+   * The console's own advertising tags
+   * (`apps/console/components/advertising-tags.component.tsx`).
+   *
+   * Scripts we deliberately ship, so they belong in the candidate policy for
+   * the same reason the gtag loader above does — and the distinction that
+   * comment draws still holds: a gtag *pixel* arrives as an `img-src` report
+   * and is a question about ad-network beacons in a logged-in console, not an
+   * allowlist entry here.
+   *
+   * Two of these are already covered by `www.googletagmanager.com`: the Google
+   * Ads tag rides the same `gtag/js` library, and a Tag Manager container is
+   * `gtm.js` on that host. Only the non-Google vendors need naming.
+   *
+   * Listed AHEAD of a violation report rather than after one, which is the
+   * exception to this file's rule that the browser names what belongs here.
+   * The rule exists so the list documents facts instead of guesses; a loader
+   * this repository mounts is a fact. Leaving them out would fill the
+   * report-only stream with violations for scripts we chose to ship, and would
+   * silently kill both tags on the day `script-src` is flipped to enforcing.
+   */
+  'https://connect.facebook.net',
+  'https://snap.licdn.com',
   // Google Sign-In. `signInWithPopup` loads gapi from here for the federated
   // flows, which is why the reports cluster on `/signin` — 37 of them in the
   // first fortnight of measurement, every one a script we deliberately ship.
@@ -937,9 +1004,46 @@ const GOOGLE_CCTLD_ORIGINS = GOOGLE_CCTLDS.map((tld) => `https://www.google.${tl
 const MEASUREMENT_IMAGE_ORIGINS = [
   // Google Tag Manager / gtag delivery.
   'https://www.googletagmanager.com',
-  // GA4 collection, including the regional endpoints (`region1.` … `region#.`).
+  /*
+   * GA4 collection, which lands on TWO SEPARATE DOMAINS (AGL-2486).
+   *
+   * `google-analytics.com` and `analytics.google.com` read as the same vendor
+   * and are not the same host, so no wildcard over one reaches the other:
+   * `https://*.google-analytics.com` matches `region1.google-analytics.com`
+   * and cannot match `analytics.google.com`, which is a subdomain of
+   * `google.com`. Listing only the first family is the shape that refused
+   * every GA4 hit on aglyn.com while the policy looked complete.
+   *
+   * Measured on production rather than inferred — four `fetch` probes from a
+   * live `https://aglyn.com/press` document under the enforcing policy:
+   *
+   * | host                            | verdict                        |
+   * | ------------------------------- | ------------------------------ |
+   * | `www.google-analytics.com`      | allowed                        |
+   * | `region1.google-analytics.com`  | allowed (the wildcard reaches) |
+   * | `analytics.google.com`          | **REFUSED**, connect-src       |
+   * | `region1.analytics.google.com`  | **REFUSED**, connect-src       |
+   *
+   * gtag's v2 transport uses both: the first hit goes to
+   * `www.google-analytics.com/g/collect`, and the Google Signals follow-up
+   * goes to `analytics.google.com/g/collect` so the ad-personalization cookie
+   * can be set on a `google.com` host. Regional data residency moves each
+   * onto a `region#.` prefix of its own domain, which is why both families
+   * carry a wildcard rather than only the bare host.
+   *
+   * ⛔ The fix is NOT `https://*.google.com`. That would admit every Google
+   * property on the internet to buy one endpoint, and this list exists to name
+   * what a page actually talks to.
+   *
+   * The cost of getting this wrong is the worst shape a measurement failure
+   * has: the tag loads, the site looks fine, and the reports go quiet with
+   * nothing saying why — pageviews AND Core Web Vitals, since web-vitals
+   * events ride the same transport.
+   */
   'https://www.google-analytics.com',
   'https://*.google-analytics.com',
+  'https://analytics.google.com',
+  'https://*.analytics.google.com',
   // Google Signals.
   'https://stats.g.doubleclick.net',
   // Google Ads conversion tracking.
@@ -948,6 +1052,15 @@ const MEASUREMENT_IMAGE_ORIGINS = [
   // Meta pixel: the beacon and the loader that installs it.
   'https://www.facebook.com',
   'https://connect.facebook.net',
+  /*
+   * LinkedIn Insight Tag (AGL-1152): the library host and the beacon it
+   * posts to. `px.ads.linkedin.com` is where the tracking pixel lands and
+   * `www.linkedin.com` is where the tag redirects it for logged-in members,
+   * so allowing only the first leaves that population reporting.
+   */
+  'https://snap.licdn.com',
+  'https://px.ads.linkedin.com',
+  'https://www.linkedin.com',
   // Every Google country domain, for the remarketing pixel. `www.google.com`
   // is the first entry of that list, so it is not repeated here.
   ...GOOGLE_CCTLD_ORIGINS,

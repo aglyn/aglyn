@@ -47,6 +47,42 @@ const mockState: {
 } = { store: {}, sent: [] }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
+  /*
+   * The unsubscribe-link signer and URL builder are the REAL ones. They need
+   * nothing but `crypto`, and a double would let a spec assert on a URL shape
+   * the product does not actually mint — which is the whole failure mode of a
+   * stubbed policy module.
+   */
+  ...jest.requireActual(
+    '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
+  ),
+  /*
+   * The marketing frequency window is a no-op here, and deliberately so: it
+   * is a durable counter whose behavior is proven against a Firestore double
+   * in `tenant-data-admin`, and the campaign sender's only contract with it
+   * is that it is called with the addresses that were reached and that it
+   * cannot fail a send.
+   */
+  recordMarketingSends: async (_hostId: string, emails: readonly string[]) =>
+    emails.length,
   firebaseAdmin: {
     app: () => ({ firestore: () => mockFirestore() }),
     firestore: {
@@ -54,11 +90,33 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         increment: (value: number) => ({ increment: value }),
         serverTimestamp: () => 'server-timestamp',
       },
+      FieldPath: { documentId: () => '__name__' },
     },
   },
-  // Free's `emailSendsPerMonth` is 0 by design and would refuse the send
-  // before any of this is reached.
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  // Nobody in this file is suppressed; the audience is what is under test.
+  // Nobody in these fixtures has left a topic, so the send's third filter is
+  // a pass-through. Modeled rather than omitted: an absent export reads as
+  // `undefined` and fails the send with a TypeError, which is a red that says
+  // nothing about the behavior under test.
+  filterTopicSendable: async (
+    _hostId: string,
+    _topicId: string,
+    emails: string[],
+  ) => emails,
+  filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
+  // Pro is the entry tier for campaign email. Free and Starter carry an
+  // `emailSendsPerMonth` of 0 and would refuse the send before any of this
+  // is reached.
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
+  // No site here selects a custom sending domain, so every send resolves to
+  // the platform identity — the behavior these suites were written against.
+  resolveHostSendingIdentity: async () =>
+    jest
+      .requireActual('@aglyn/shared-util-email')
+      .resolveSendingIdentity({
+        selection: null,
+        platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
+      }),
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),
   meterHostEmail: async () => undefined,
@@ -87,6 +145,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     updatedByEmail: null,
     note: '',
   }),
+  claimOrgEmailSendBudget: async (options: any = {}) => {
+    const ceiling = Math.max(1, Math.floor((options.platformPerHour ?? 100_000) * 0.25))
+    const count = Math.max(0, Math.floor(Number(options.count) || 0))
+    return {
+      allowed: true,
+      used: 0,
+      ceiling,
+      remaining: Math.max(0, ceiling - count),
+      retryAtMs: 3_600_000,
+      degraded: false,
+    }
+  },
   readEmailSendRateWindow: async () => ({
     windowStartMs: 0,
     resetMs: 3_600_000,
@@ -129,19 +199,30 @@ function mockFirestore(): any {
     },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
+  /** The ids directly under `path`, in the `__name__` order the sweep asks for. */
+  const childIds = (path: string) =>
+    Object.keys(store)
+      .filter(
+        (key) =>
+          key.startsWith(`${path}/`) &&
+          !key.slice(path.length + 1).includes('/'),
+      )
+      .map((key) => key.slice(path.length + 1))
+      .sort()
+  /** `orderBy` / `startAfter` / `limit`, and `limit` honors its argument. */
+  const queryRef = (path: string, after?: string): any => ({
+    orderBy: () => queryRef(path, after),
+    startAfter: (cursor: any) => queryRef(path, cursor?.id ?? String(cursor)),
+    limit: (max: number) => ({
+      get: async () => {
+        const ids = childIds(path).filter((id) => !after || id > after)
+        return { docs: ids.slice(0, max).map((id) => snapshot(`${path}/${id}`)) }
+      },
+    }),
+  })
   const collectionRef = (path: string): any => ({
     doc: (id: string) => docRef(`${path}/${id}`),
-    limit: () => ({
-      get: async () => ({
-        docs: Object.keys(store)
-          .filter(
-            (key) =>
-              key.startsWith(`${path}/`) &&
-              !key.slice(path.length + 1).includes('/'),
-          )
-          .map(snapshot),
-      }),
-    }),
+    ...queryRef(path),
     get parent() {
       return docRef(path.split('/').slice(0, -1).join('/'))
     },
@@ -179,6 +260,22 @@ afterAll(() => {
   else process.env['EMAIL_UNSUBSCRIBE_SECRET'] = previousSecret
 })
 
+/**
+ * A recorded opt-in, in the shape every capture path writes it.
+ *
+ * This suite is about which FIELD a merge tag reads a person's name from, and
+ * it can only assert that against a message that was actually sent. The
+ * consent join withholds a recipient with no recorded basis and refuses an
+ * audience where nobody has one, so each fixture below carries a basis in
+ * addition to whatever name field the case is really about.
+ */
+const CONSENT_GRANTED = {
+  // The basis belongs to the site sending, not to the org.
+  marketingConsentByHost: {
+    'host-1': { marketingConsent: true, marketingConsentAtMs: Date.UTC(2026, 7, 1) },
+  },
+}
+
 beforeEach(() => {
   mockState.store = { 'hosts/host-1': { subdomain: 'acme', memberRoles: {} } }
   mockState.sent = []
@@ -186,12 +283,14 @@ beforeEach(() => {
 
 describe('the members audience personalizes off the field members actually have', () => {
   it('resolves {{name}} from `displayName`', async () => {
-    // EXACTLY what `membership-register` writes: `email`, `displayName`,
-    // `passwordScrypt`, `createdAt`. No `name` — because production has none.
+    // EXACTLY what `membership-register` writes for a member who ticked the
+    // opt-in box: `email`, `displayName`, `passwordScrypt`, `createdAt` and
+    // the consent pair. No `name` — because production has none.
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
       displayName: 'Dana Reed',
       passwordScrypt: 'scrypt$x',
+      ...CONSENT_GRANTED,
     }
 
     await send('members')
@@ -206,10 +305,12 @@ describe('the members audience personalizes off the field members actually have'
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
       displayName: 'Dana Reed',
+      ...CONSENT_GRANTED,
     }
     mockState.store['hosts/host-1/siteMembers/m-2'] = {
       email: 'sam@example.com',
       displayName: 'Sam Okafor',
+      ...CONSENT_GRANTED,
     }
 
     await send('members')
@@ -233,6 +334,7 @@ describe('the members audience personalizes off the field members actually have'
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
       name: 'Dana Reed',
+      ...CONSENT_GRANTED,
     }
     await send('members')
     expect(mockState.sent[0].subject).toBe('Hello Dana, a note for Dana Reed')
@@ -243,6 +345,7 @@ describe('the members audience personalizes off the field members actually have'
     // recipient, not an error.
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
+      ...CONSENT_GRANTED,
     }
     await send('members')
     expect(mockState.sent).toHaveLength(1)
@@ -258,6 +361,7 @@ describe('the leads audience personalizes off `name`', () => {
       email: 'dana@example.com',
       name: 'Dana Reed',
       source: 'signup',
+      ...CONSENT_GRANTED,
     }
     await send('leads')
     expect(mockState.sent[0].subject).toBe('Hello Dana, a note for Dana Reed')
@@ -267,6 +371,7 @@ describe('the leads audience personalizes off `name`', () => {
     mockState.store['hosts/host-1/leads/l-1'] = {
       email: 'dana@example.com',
       source: 'signup',
+      ...CONSENT_GRANTED,
     }
     await send('leads')
     expect(mockState.sent).toHaveLength(1)

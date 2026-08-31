@@ -242,15 +242,15 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     expect(screen.queryByRole('button', { name: 'Allow all' })).not.toBeNull()
   })
 
-  it('offers advertising as its own checkbox, separate from analytics', async () => {
+  it('offers advertising as its own switch, separate from analytics', async () => {
     renderPreview()
     await simulateRegion('EU visitor')
     fireEvent.click(await screen.findByRole('button', { name: 'Preferences' }))
 
     // This is the surface in the screenshot: he saw the analytics row and
     // nothing else.
-    expect(screen.queryByText(/Analytics \(Google Analytics\)/)).not.toBeNull()
-    expect(screen.queryByText(/Advertising — personalized ads/)).not.toBeNull()
+    expect(screen.queryByRole('switch', { name: /Analytics/ })).not.toBeNull()
+    expect(screen.queryByRole('switch', { name: /Advertising/ })).not.toBeNull()
   })
 
   it('reports the advertising verdict in the panel, not analytics alone', async () => {
@@ -269,8 +269,8 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     await simulateRegion('EU visitor')
     fireEvent.click(await screen.findByRole('button', { name: 'Preferences' }))
 
-    const ads = screen.getByRole('checkbox', { name: /Advertising/ })
-    const analytics = screen.getByRole('checkbox', { name: /Analytics/ })
+    const ads = screen.getByRole('switch', { name: /Advertising/ })
+    const analytics = screen.getByRole('switch', { name: /Analytics/ })
     fireEvent.click(analytics)
     fireEvent.click(ads)
     fireEvent.click(screen.getByRole('button', { name: /Save|Confirm|Allow/ }))
@@ -296,8 +296,8 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     // "always show advertising". A banner offering a choice the site never
     // asked for would be its own legal defect — and this is the assertion
     // that would catch it.
-    expect(screen.queryByText(/Analytics \(Google Analytics\)/)).not.toBeNull()
-    expect(screen.queryByText(/Advertising — personalized ads/)).toBeNull()
+    expect(screen.queryByRole('switch', { name: /Analytics/ })).not.toBeNull()
+    expect(screen.queryByRole('switch', { name: /Advertising/ })).toBeNull()
     expect(consentPanel()?.textContent).toMatch(/Advertising: not asked/)
   })
 })

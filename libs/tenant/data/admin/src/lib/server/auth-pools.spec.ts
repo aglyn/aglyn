@@ -35,6 +35,22 @@ let tenantListError: Error | null = null
  */
 let poolsAsked: (string | null)[] = []
 
+/**
+ * Every `listUsers` the sweeps made, by pool, and how many were open at once.
+ *
+ * The count alone cannot tell a serial sweep from a concurrent one — both ask
+ * each pool exactly once, and both return the same users. Only the OVERLAP
+ * separates them, so the double holds each call open for a turn of the event
+ * loop and records the peak. A sweep that awaits each pool before starting the
+ * next can never push the peak above 1.
+ */
+let listUsersCalls: (string | null)[] = []
+let listUsersInFlight = 0
+let listUsersPeakInFlight = 0
+
+/** Yields the event loop, so calls that COULD overlap actually do. */
+const holdOpen = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 const userRecord = (uid: string, email: string, claims?: any) => ({
   uid,
   email,
@@ -90,16 +106,27 @@ const poolApi = (users: Map<string, any>, poolId: string | null = null) => ({
    * that cannot express the shape of the bug cannot guard against it.
    */
   listUsers: jest.fn(async (pageSize?: number, pageToken?: string) => {
-    const all = [...users.values()]
-    const start = pageToken ? Number(pageToken) : 0
-    const size = pageSize ?? all.length
-    const slice = all.slice(start, start + size)
-    const next = start + size
-    return {
-      users: slice,
-      // Firebase omits the token on the last page — that absence is the
-      // signal `listUsersAcrossPools` keys the tenant append off.
-      pageToken: next < all.length ? String(next) : undefined,
+    listUsersCalls.push(poolId)
+    listUsersInFlight += 1
+    listUsersPeakInFlight = Math.max(listUsersPeakInFlight, listUsersInFlight)
+    try {
+      // Held open deliberately: a call that returns synchronously never
+      // overlaps another, so a serial sweep would be indistinguishable from a
+      // concurrent one and the peak assertion could not fail.
+      await holdOpen()
+      const all = [...users.values()]
+      const start = pageToken ? Number(pageToken) : 0
+      const size = pageSize ?? all.length
+      const slice = all.slice(start, start + size)
+      const next = start + size
+      return {
+        users: slice,
+        // Firebase omits the token on the last page — that absence is the
+        // signal `listUsersAcrossPools` keys the tenant append off.
+        pageToken: next < all.length ? String(next) : undefined,
+      }
+    } finally {
+      listUsersInFlight -= 1
     }
   }),
 })
@@ -138,6 +165,7 @@ import {
   listUsersAcrossPools,
   markCrossPoolUidCollisions,
   resetAuthTenantCache,
+  scanUsersAcrossPools,
 } from './auth-pools'
 
 beforeEach(() => {
@@ -145,6 +173,9 @@ beforeEach(() => {
   tenantUsers.clear()
   tenantListError = null
   poolsAsked = []
+  listUsersCalls = []
+  listUsersInFlight = 0
+  listUsersPeakInFlight = 0
   resetAuthTenantCache()
 })
 
@@ -154,9 +185,9 @@ describe('findUserByEmailAcrossPools (AGL-1122)', () => {
     // project pool, present in the org's SSO tenant.
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([['u1', userRecord('u1', 'zach@aglyn.com')]]),
+      new Map([['u1', userRecord('u1', 'staff@aglyn.com')]]),
     )
-    const found = await findUserByEmailAcrossPools('zach@aglyn.com')
+    const found = await findUserByEmailAcrossPools('staff@aglyn.com')
     expect(found?.record.uid).toBe('u1')
     expect(found?.tenantId).toBe('aglyn-org-y5v14')
   })
@@ -214,9 +245,9 @@ describe('findUserByUidAcrossPools (AGL-1122)', () => {
    * still routes `grantStaff` / `disable` / `revokeRefreshTokens` to a ghost
    * is worse than two honest rows.
    *
-   * This is the production shape: uid `IHumyGGhGxZKjVV26qCRx5Okf573` in the
+   * This is the production shape: one uid present in the
    * project pool with nothing on it, and the same uid in `aglyn-org-y5v14`
-   * carrying `zach@aglyn.com` and the SAML provider. The old lookup returned
+   * carrying `staff@aglyn.com` and the SAML provider. The old lookup returned
    * the project pool's answer because it asked first, so every staff action
    * on that person mutated the forgery — a `revokeRefreshTokens` really did
    * land there on 2026-08-14 while the real account's sessions stayed live.
@@ -226,15 +257,15 @@ describe('findUserByUidAcrossPools (AGL-1122)', () => {
    * `tenantId` reads null and `record.email` undefined.
    */
   it('returns the IDENTIFIED record, not whichever pool answers first', async () => {
-    const uid = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+    const uid = 'SsoTenantUidFixture000000000'
     projectUsers.set(uid, shadowRecord(uid))
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([[uid, ssoRecord(uid, 'zach@aglyn.com')]]),
+      new Map([[uid, ssoRecord(uid, 'staff@aglyn.com')]]),
     )
     const found = await findUserByUidAcrossPools(uid)
     expect(found?.tenantId).toBe('aglyn-org-y5v14')
-    expect(found?.record.email).toBe('zach@aglyn.com')
+    expect(found?.record.email).toBe('staff@aglyn.com')
     // And it says the twin exists, so a caller is never silently redirected.
     expect(found?.uidAlsoInPools).toEqual([null])
   })
@@ -393,7 +424,7 @@ describe('listUsersAcrossPools (AGL-1122)', () => {
     projectUsers.set(uid, userRecord(uid, undefined as any))
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([[uid, userRecord(uid, 'zach@aglyn.com')]]),
+      new Map([[uid, userRecord(uid, 'staff@aglyn.com')]]),
     )
     const page = await listUsersAcrossPools(200)
 
@@ -454,7 +485,7 @@ describe('markCrossPoolUidCollisions (AGL-1962)', () => {
  * ever "simplifies" this to dedupe on address.
  */
 describe('collapseCrossPoolUidRows (AGL-2005)', () => {
-  const uid = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+  const uid = 'SsoTenantUidFixture000000000'
   const row = (record: any, tenantId: string | null) => ({ record, tenantId })
 
   /**
@@ -465,21 +496,21 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   it('collapses one uid in two pools to ONE row, and keeps the identified one', () => {
     const collapsed = collapseCrossPoolUidRows([
       row(shadowRecord(uid), null),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
     ])
     expect(collapsed).toHaveLength(1)
-    expect(collapsed[0].record.email).toBe('zach@aglyn.com')
+    expect(collapsed[0].record.email).toBe('staff@aglyn.com')
     expect(collapsed[0].tenantId).toBe('aglyn-org-y5v14')
   })
 
   /** Order of arrival must not decide it — the same pair, listed the other way. */
   it('picks the identified record whichever order the pools arrive in', () => {
     const collapsed = collapseCrossPoolUidRows([
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
       row(shadowRecord(uid), null),
     ])
     expect(collapsed).toHaveLength(1)
-    expect(collapsed[0].record.email).toBe('zach@aglyn.com')
+    expect(collapsed[0].record.email).toBe('staff@aglyn.com')
   })
 
   /**
@@ -494,7 +525,7 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
   it('leaves the collision visible on the row it keeps', () => {
     const collapsed = collapseCrossPoolUidRows([
       row(shadowRecord(uid), null),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
     ])
     expect(collapsed[0].uidAlsoInPools).toEqual([null])
   })
@@ -535,7 +566,7 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
       row(userRecord('a', 'a@x.com'), null),
       row(shadowRecord(uid), null),
       row(userRecord('z', 'z@x.com'), null),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 'aglyn-org-y5v14'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 'aglyn-org-y5v14'),
     ])
     expect(collapsed.map((entry) => entry.record.uid)).toEqual([
       'a',
@@ -543,14 +574,14 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
       'z',
     ])
     // Position of the first copy, content of the identified one.
-    expect(collapsed[1].record.email).toBe('zach@aglyn.com')
+    expect(collapsed[1].record.email).toBe('staff@aglyn.com')
   })
 
   it('reduces a uid found in three pools to one row and names both others', () => {
     const collapsed = collapseCrossPoolUidRows([
       row(shadowRecord(uid), null),
       row(shadowRecord(uid), 't1'),
-      row(ssoRecord(uid, 'zach@aglyn.com'), 't2'),
+      row(ssoRecord(uid, 'staff@aglyn.com'), 't2'),
     ])
     expect(collapsed).toHaveLength(1)
     expect(collapsed[0].tenantId).toBe('t2')
@@ -566,14 +597,14 @@ describe('collapseCrossPoolUidRows (AGL-2005)', () => {
     projectUsers.set(uid, shadowRecord(uid))
     tenantUsers.set(
       'aglyn-org-y5v14',
-      new Map([[uid, ssoRecord(uid, 'zach@aglyn.com')]]),
+      new Map([[uid, ssoRecord(uid, 'staff@aglyn.com')]]),
     )
     const page = await listUsersAcrossPools(200)
     // The data layer still reports both — nothing is destroyed upstream.
     expect(page.users).toHaveLength(2)
     const rows = collapseCrossPoolUidRows(page.users)
     expect(rows).toHaveLength(1)
-    expect(rows[0].record.email).toBe('zach@aglyn.com')
+    expect(rows[0].record.email).toBe('staff@aglyn.com')
     expect(rows[0].uidAlsoInPools).toEqual([null])
   })
 })
@@ -601,7 +632,7 @@ describe('isIdentifiedUserRecord / identityStrength (AGL-2005)', () => {
     expect(isIdentifiedUserRecord(dressed as any)).toBe(false)
     // And it still loses the merge to the record with the actual address.
     expect(identityStrength(dressed as any)).toBeLessThan(
-      identityStrength(ssoRecord('x', 'zach@aglyn.com') as any),
+      identityStrength(ssoRecord('x', 'staff@aglyn.com') as any),
     )
   })
 
@@ -629,5 +660,164 @@ describe('listStaffUidsAcrossPools (AGL-1122)', () => {
     projectUsers.set('p1', userRecord('p1', 'a@x.com', { staff: true }))
     tenantListError = new Error('boom')
     expect(await listStaffUidsAcrossPools()).toEqual(['p1'])
+  })
+})
+
+/**
+ * The cross-pool sweeps ask every GCIP tenant the same question, and each
+ * enterprise customer signed adds a pool. Asked in series that is `N` round
+ * trips, so the staff list degrades with exactly the thing the SSO feature is
+ * for; asked together it is one.
+ *
+ * These assert the NUMBER and the OVERLAP of the Auth calls, never the rows.
+ * A row assertion cannot see the difference — a serial sweep returns the same
+ * users — so a spec written against the output would pass on the shape it was
+ * written to kill.
+ *
+ * Nothing here relaxes completeness. Every case checks the users too: a sweep
+ * that got fast by asking fewer pools is a worse bug than a slow one, because
+ * a staff member is told an account does not exist when it does.
+ */
+describe('cross-pool sweeps are concurrent, and still complete', () => {
+  const seedTenants = (count: number) => {
+    for (let index = 1; index <= count; index += 1) {
+      const id = `t${index}`
+      tenantUsers.set(
+        id,
+        new Map([[`${id}u`, userRecord(`${id}u`, `${id}@example.com`)]]),
+      )
+    }
+  }
+
+  /**
+   * Forced red by restoring the serial `for (const tenantId of ...)` loop in
+   * `listUsersAcrossPools`: the peak assertion then reports 1, not 5.
+   */
+  it('asks all five tenant pools at once, once each', async () => {
+    projectUsers.set('p1', userRecord('p1', 'p@example.com'))
+    seedTenants(5)
+
+    const page = await listUsersAcrossPools(200)
+
+    // Completeness first: every pool's user is present and correctly labeled.
+    expect(page.users.map((entry) => entry.record.uid)).toEqual([
+      'p1', 't1u', 't2u', 't3u', 't4u', 't5u',
+    ])
+    expect(page.tenantsIncluded).toBe(true)
+    expect(page.tenantTruncated).toEqual([])
+
+    // One call per tenant pool — not fewer (a pool skipped) and not more
+    // (a pool asked twice, which is what a naive concurrency fix does when it
+    // re-reads the tenant id list per worker).
+    expect(listUsersCalls.filter((pool) => pool !== null)).toEqual([
+      't1', 't2', 't3', 't4', 't5',
+    ])
+    // The whole point: all five were open together.
+    expect(listUsersPeakInFlight).toBe(5)
+  })
+
+  /**
+   * Concurrency is bounded, not unbounded. Identity Platform rate limits
+   * `listUsers` per project, so one in-flight call per enterprise customer
+   * would trade a latency problem for a `RESOURCE_EXHAUSTED` one at the
+   * customer count where latency stopped being the issue.
+   *
+   * Forced red by replacing `mapPoolsConcurrently` with a bare
+   * `Promise.all(tenantIds.map(...))`: the peak then reports 20, not 8.
+   */
+  it('holds concurrency at the bound with twenty pools, and still reads them all', async () => {
+    seedTenants(20)
+
+    const page = await listUsersAcrossPools(200)
+
+    expect(page.users).toHaveLength(20)
+    expect(listUsersCalls.filter((pool) => pool !== null)).toHaveLength(20)
+    expect(listUsersPeakInFlight).toBeLessThanOrEqual(8)
+    // And it is actually concurrent rather than accidentally serial.
+    expect(listUsersPeakInFlight).toBeGreaterThan(1)
+  })
+
+  /**
+   * The filtered path, which is the one that runs per request rather than
+   * per last page. Forced red by restoring the serial loop in
+   * `scanUsersAcrossPools`: the peak reports 1.
+   */
+  it('sweeps the pools concurrently when a staff filter scans them', async () => {
+    projectUsers.set('p1', userRecord('p1', 'p@example.com'))
+    seedTenants(4)
+
+    const scan = await scanUsersAcrossPools(2000)
+
+    expect(scan.users.map((entry) => entry.record.uid)).toEqual([
+      'p1', 't1u', 't2u', 't3u', 't4u',
+    ])
+    expect(scan.truncated).toBe(false)
+    expect(scan.tenantTruncated).toEqual([])
+    expect(listUsersPeakInFlight).toBe(4)
+  })
+
+  /**
+   * The cap still binds, and a pool cut short still SAYS it was cut short.
+   * Sizing each pool's page from the running total is what forced the old
+   * sweep into a series; a fixed budget gives the same rows because a larger
+   * page can only be a superset of the shrinking one.
+   *
+   * Forced red by dropping the `rows.length > room` arm that pushes onto
+   * `tenantTruncated`: `tenantTruncated` then comes back empty while rows are
+   * silently discarded — a scan reporting "no such account" for people it
+   * fetched and threw away.
+   */
+  it('trims to the cap in pool order and names the pool it cut', async () => {
+    projectUsers.set('p1', userRecord('p1', 'p@example.com'))
+    tenantUsers.set(
+      't1',
+      new Map([
+        ['t1a', userRecord('t1a', 't1a@example.com')],
+        ['t1b', userRecord('t1b', 't1b@example.com')],
+      ]),
+    )
+    tenantUsers.set(
+      't2',
+      new Map([['t2a', userRecord('t2a', 't2a@example.com')]]),
+    )
+
+    // Room for the project user and both of t1's, and nothing for t2's.
+    const scan = await scanUsersAcrossPools(3)
+
+    expect(scan.users.map((entry) => entry.record.uid)).toEqual([
+      'p1', 't1a', 't1b',
+    ])
+    expect(scan.truncated).toBe(true)
+    // t2 was read and discarded, so the caller must be told its pool is not
+    // represented rather than being left to read the absence as "empty".
+    expect(scan.tenantTruncated).toContain('t2')
+  })
+
+  /**
+   * Staff notification fan-out. Within a pool the paging stays serial — each
+   * cursor comes from the page before it — so only the pools overlap.
+   *
+   * Forced red by restoring the serial `for (const tenantId of ...)` loop in
+   * `listStaffUidsAcrossPools`: the peak reports 1.
+   */
+  it('scans staff pools concurrently and returns them in pool order', async () => {
+    projectUsers.set('p1', userRecord('p1', 'a@x.com', { staff: true }))
+    for (const id of ['t1', 't2', 't3']) {
+      tenantUsers.set(
+        id,
+        new Map([[`${id}s`, userRecord(`${id}s`, `${id}@x.com`, { staff: true })]]),
+      )
+    }
+
+    const uids = await listStaffUidsAcrossPools()
+
+    // Ordered by POOL, not by which pool answered first. A caller diffing
+    // this against a stored copy would otherwise see a change every run.
+    expect(uids).toEqual(['p1', 't1s', 't2s', 't3s'])
+    // All four pools — the project one and all three tenants — open together.
+    // Deliberately not `> 1`: the project scan already runs alongside the
+    // tenant sweep, so a serial tenant loop still reaches 2 and an assertion
+    // written that way would pass on the shape it exists to reject.
+    expect(listUsersPeakInFlight).toBe(4)
   })
 })

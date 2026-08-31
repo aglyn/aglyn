@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import {
+  readRequestCity,
+  readRequestGeo,
+  readRequestRegionLabel,
+} from '@aglyn/aglyn/app-utils/request-geo'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
@@ -98,16 +105,18 @@ export const DEVICE_SCAN_LIMIT = 50
 /**
  * Where the alert's button lands (AGL-1959).
  *
- * This was a bare `/manage/user`, which opens on the ACCOUNT tab — so the
- * person who had just been told a stranger signed in landed on their email
- * address and had to go looking. The surface the mail is about now exists
- * (Recent sign-ins, AGL-2318, plus revoke) and lives on the Security tab, so
- * the link names it. The page ignores an unknown or hidden `tab`, so the link
- * degrades to today's behaviour rather than to a blank panel.
+ * A bare `/manage/user` opens the ACCOUNT section — so the person who had just
+ * been told a stranger signed in landed on their email address and had to go
+ * looking. The surface the mail is about (Recent sign-ins, AGL-2318, plus
+ * revoke) lives under Security, so the link names it.
+ *
+ * From the route table rather than assembled here (AGL-685/693): Security is a
+ * route, and a hand-written path is what goes dead without anything failing to
+ * compile.
  */
 function accountSecurityUrl(): string {
   const origin = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
-  return `${origin}/manage/user?tab=security`
+  return `${origin}${buildRoute(Route.MANAGE_USER_SECURITY)}`
 }
 
 /**
@@ -146,42 +155,52 @@ export function summarizeUserAgent(userAgent: string | null | undefined): string
 export interface SignInClient {
   deviceName: string
   userAgent: string
-  /** "City, Region, Country" from Vercel's geo headers, or a fallback. */
+  /** "City, Region, Country" from the edge geo headers, or a fallback. */
   location: string
   ip: string
 }
 
-function decodeHeaderPart(value: string | null): string {
-  if (!value) return ''
-  try {
-    // Vercel URI-encodes non-ASCII city names.
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
-
 /**
- * Reads device/location facts off the request headers. Location comes from
- * Vercel's `x-vercel-ip-*` geo headers, so it is approximate and absent in
- * local dev — the email copy treats every field as best-effort.
+ * Reads device/location facts off the request headers.
+ *
+ * Location comes from `readRequestGeo`/`readRequestCity`, the one geo reader
+ * the sanctions gate and the consent-region endpoint also use, so all three
+ * agree about where a request came from and all three follow the same
+ * `AGLYN_GEO_*_HEADER` configuration.
+ *
+ * These were bare `x-vercel-ip-*` reads, which no self-host container has: on
+ * a Docker install every sign-in alert said "Unknown location", and — because
+ * the same string is stored on `users/{uid}/devices` — the breach-notification
+ * report's widest bucket, the one built by reading a subject's country back
+ * off that string, silently counted nobody. Neither surface errors when the
+ * signal is missing, so an operator has nothing to notice.
+ *
+ * Still best-effort: an edge that sends no geo at all yields "Unknown
+ * location", and the email copy treats every field as approximate.
  */
 export function describeSignInClient(headers: {
   get(name: string): string | null
 }): SignInClient {
   const userAgent = headers.get('user-agent') ?? ''
+  // The LABEL reader for the subdivision, not `readRequestGeo().region`: that
+  // one is upper-cased for embargo-set matching, which renders a proxy's
+  // subdivision name as `CAPITAL` in a person's email.
   const location =
     [
-      decodeHeaderPart(headers.get('x-vercel-ip-city')),
-      headers.get('x-vercel-ip-country-region') ?? '',
-      headers.get('x-vercel-ip-country') ?? '',
+      readRequestCity(headers),
+      readRequestRegionLabel(headers),
+      // Widest last: `deviceLocationCountry` reads the filing country back off
+      // the final comma-separated token of this stored string.
+      readRequestGeo(headers).country,
     ]
       .filter(Boolean)
       .join(', ') || 'Unknown location'
-  const ip =
-    (headers.get('x-forwarded-for') ?? '').split(',')[0].trim() ||
-    headers.get('x-real-ip') ||
-    'Unknown'
+  // The one client-address reader, so the address in a person's alert email is
+  // the address the sanctions gate and every limiter saw. `'Unknown'` only
+  // when nothing readable arrived: this string is stored on the device record
+  // and read back by the breach-notification report, so a guess here becomes a
+  // durable claim about where somebody signed in from.
+  const ip = readClientIp(headers) ?? 'Unknown'
   return { deviceName: summarizeUserAgent(userAgent), userAgent, location, ip }
 }
 

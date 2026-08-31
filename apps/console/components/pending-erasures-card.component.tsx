@@ -20,6 +20,7 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -99,12 +100,10 @@ export function PendingErasuresCard() {
 
   const call = useCallback(
     async (method: 'GET' | 'POST', body?: unknown) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/run-erasures', {
+      const response = await authorizedFetch(user, '/api/admin/run-erasures', {
         method,
         headers: {
           ...(body ? { 'Content-Type': 'application/json' } : {}),
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
       })
@@ -155,8 +154,19 @@ export function PendingErasuresCard() {
 
   const dueCount = pending?.dueCount ?? 0
   const reasonTooShort = reason.trim().length < 8
+  /**
+   * "at least", or nothing at all.
+   *
+   * Both chips are counted over the window the route returns, so once the
+   * probe finds a request past it they are lower bounds — and a lower bound
+   * printed as a total is the defect on a queue whose whole purpose is saying
+   * how much statutory work is outstanding. Keyed on the probe rather than on
+   * the window's length, because a queue of exactly the ceiling is complete
+   * and its numbers are exact.
+   */
+  const countPrefix = pending?.truncated ? 'at least ' : ''
 
-  /* One row grammar, the console's (AGL-693). */
+  /* One row grammar, the console's (AGL-2501). */
   const erasureColumns: GridColDef[] = useMemo(
     () => [
       {
@@ -234,11 +244,11 @@ export function PendingErasuresCard() {
           <Chip
             size="small"
             color={dueCount > 0 ? 'warning' : 'default'}
-            label={`${dueCount} due now`}
+            label={`${countPrefix}${dueCount} due now`}
           />
           <Chip
             size="small"
-            label={`${pending?.pending.length ?? 0} in the queue`}
+            label={`${countPrefix}${pending?.pending.length ?? 0} in the queue`}
           />
           <Button size="small" disabled={busy} onClick={() => void refresh()}>
             {busy ? 'Working…' : 'Refresh'}
@@ -258,9 +268,19 @@ export function PendingErasuresCard() {
             rows={pending.pending}
             columns={erasureColumns}
             getRowId={(row: any) => row.orgId}
-            // A staff read-out, not a navigation surface: nothing here has a
-            // detail page of its own, so the row does not pretend to.
-            hideFooter
+            /*
+             * The grid's own footer, which is the console's one footer
+             * (AGL-2501). The rows are a WINDOW the route already read in
+             * full, so the page is a client slice and the count is exact for
+             * what this card holds — the alert above says when the window
+             * itself is short.
+             *
+             * A row here has no detail page of its own, which is why nothing
+             * navigates. That is a statement about the ROW and was never a
+             * reason to withhold the pager: this queue is longest exactly
+             * when a statutory deadline is being missed, and the rows past
+             * the tenth were drawn by nothing and reachable by nothing.
+             */
             rowHeight={TABLE_ROW_HEIGHT}
           />
         ) : (

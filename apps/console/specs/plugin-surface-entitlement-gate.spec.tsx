@@ -54,6 +54,13 @@ let mockOrg: Record<string, unknown> | undefined
 let mockOrgReady: boolean
 /** The entitlement flag the registered extension declares, if any. */
 let mockFeatureFlag: string | undefined
+/**
+ * The refusal copy the registered extension supplies, if any, plus whatever
+ * else it cares to put on its own registration — the point of several cases
+ * below is that none of it reaches the verdict.
+ */
+let mockUpgradeNotice: Record<string, unknown> | undefined
+let mockExtensionExtras: Record<string, unknown>
 /** Renders recorded per mount, so "did not render" is a positive assertion. */
 let pageRenders: number
 let widgetRenders: number
@@ -74,7 +81,12 @@ jest.mock('@aglyn/aglyn', () => ({
   // verdict under test, and faking them would leave this asserting that a
   // stub was consulted.
   resolveConsolePluginPage: () => ({
-    extension: { pluginId: 'demo', featureFlag: mockFeatureFlag },
+    extension: {
+      pluginId: 'demo',
+      featureFlag: mockFeatureFlag,
+      upgradeNotice: mockUpgradeNotice,
+      ...mockExtensionExtras,
+    },
     navItem: {
       label: 'Redirects',
       href: '/redirects',
@@ -110,8 +122,12 @@ jest.mock('firebase/remote-config', () => ({
 }))
 
 jest.mock('next/navigation', () => ({
-  useParams: () => ({ pluginSlug: 'redirects' }),
+  useParams: () => ({ pluginSlug: ['redirects'] }),
   useSearchParams: () => new URLSearchParams(),
+  // The shell redirects a bare hub URL to its landing section (AGL-2501).
+  // Neither surface here declares sections, so it never fires — but the
+  // hook is called unconditionally, as hooks must be.
+  useRouter: () => ({ replace: () => undefined, push: () => undefined }),
   // The refusal notice carries a real `AppLink` to Billing, which reads the
   // pathname to decide whether it is the active route.
   usePathname: () => '/acme/hosts/acme-site/redirects',
@@ -124,6 +140,17 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({ org: mockOrg, orgId: ORG_ID, ready: mockOrgReady }),
   useCurrentOrg: () => ({ org: mockOrg, orgId: ORG_ID, ready: mockOrgReady }),
 }))
+/*
+ * The site role the shell resolves and hands down (AGL-2334). It reads the
+ * viewer's org member document, which these specs stub nothing for — and what
+ * they are about is the gate in front of a surface, not who may publish on it.
+ */
+jest.mock('../hooks/use-host-role', () => ({
+  __esModule: true,
+  default: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
+  useHostRole: () => ({ hostRole: 'admin', canPublish: true, loaded: true }),
+}))
+
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ permissions: {}, can: () => true, loaded: true }),
@@ -152,7 +179,7 @@ jest.mock('../components/host-display-name.component', () => ({
   default: () => null,
 }))
 
-import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[pluginSlug]/page'
+import HostPluginPage from '../app/(app)/[orgSlug]/hosts/[host]/[...pluginSlug]/page'
 import PluginWidgetSlot from '../components/plugin-widget-slot.component'
 import { ReleaseFlagsProvider } from '../hooks/use-release-flags'
 
@@ -160,6 +187,8 @@ beforeEach(() => {
   mockOrg = { $id: ORG_ID, plan: 'free' }
   mockOrgReady = true
   mockFeatureFlag = 'redirects'
+  mockUpgradeNotice = undefined
+  mockExtensionExtras = {}
   pageRenders = 0
   widgetRenders = 0
 })
@@ -212,6 +241,129 @@ describe('a plugin PAGE behind an entitlement flag (AGL-2484)', () => {
     mountPage()
     await waitFor(() => expect(pageRenders).toBe(0))
     expect(notice()).toBeNull()
+  })
+})
+
+/**
+ * An extension may write the refusal; it may not overturn it (AGL-2484).
+ *
+ * The shell's own sentence can only talk about plan tiers, and the feature
+ * that prompted this — the Event Calendar — is false on every plan and sold
+ * only as a per-organization add-on, so "not included in your current plan"
+ * pointed refused readers at a comparison that would not have helped them.
+ * The extension therefore supplies the words and which billing card to
+ * scroll to.
+ *
+ * That is a value flowing from an extension into console chrome, which is
+ * the shape AGL-2484 existed to close: enforcement must not depend on an
+ * extension policing itself. What keeps this safe is WHEN it is read.
+ * `resolveExtensionEntitlement` answers from the org billing doc and the
+ * flag alone — it is not passed the extension — and the notice is consulted
+ * only inside the branch its `blocked` answer selected. So the cases below
+ * hand the gate an extension that says everything it can say in its own
+ * favor and assert the surface still never mounts.
+ */
+describe('extension-supplied refusal copy (AGL-2484)', () => {
+  const addonNotice = {
+    message: 'The Event Calendar is a paid add-on ($9/mo for your whole workspace).',
+    billingAnchor: 'addons',
+  }
+
+  it('is what a blocked org reads, in place of the generic sentence', async () => {
+    mockUpgradeNotice = addonNotice
+    mountPage()
+    await waitFor(() =>
+      expect(screen.getByText(/paid add-on \(\$9\/mo/i)).toBeTruthy(),
+    )
+    // The generic plan-tier claim is the thing being replaced, not merely
+    // supplemented — a refused reader must not be told both.
+    expect(notice()).toBeNull()
+    expect(pageRenders).toBe(0)
+  })
+
+  it('deep-links to the billing card that actually sells it', async () => {
+    mockUpgradeNotice = addonNotice
+    mountPage()
+    const link = await screen.findByRole('button', { name: /view add-ons/i })
+    expect(link.getAttribute('href')).toBe('/acme/billing#addons')
+  })
+
+  it('CONTROL: an extension that supplies none keeps the shell sentence', async () => {
+    mountPage()
+    await waitFor(() => expect(notice()).toBeTruthy())
+    const link = await screen.findByRole('button', { name: /view plans/i })
+    expect(link.getAttribute('href')).toBe('/acme/billing')
+  })
+
+  /**
+   * The derived sentence stays the floor.
+   *
+   * `blockedExtensionNotice` reads `PLAN_ENTITLEMENTS` and is therefore
+   * right about a feature no plan grants without being told — the whole
+   * reason it exists. Extension copy is an override layered on top of it,
+   * not a replacement for it, so a surface whose extension says nothing must
+   * still get the add-on wording rather than fall back to the plan-tier
+   * sentence this replaced. `eventCalendar` is the flag that is false on
+   * every plan, and no `upgradeNotice` is registered here.
+   */
+  it('falls back to the plan-derived add-on wording, not the old sentence', async () => {
+    mockFeatureFlag = 'eventCalendar'
+    mountPage()
+    await waitFor(() =>
+      expect(screen.getByText(/isn't included in any plan/i)).toBeTruthy(),
+    )
+    expect(screen.getByText(/paid add-on/i)).toBeTruthy()
+    expect(notice()).toBeNull()
+  })
+
+  /**
+   * The assertion this whole contract turns on. An extension that declares
+   * refusal copy has been handed a channel into the console's chrome; if any
+   * of it could reach the gate, the channel would be the bypass AGL-2484
+   * closed. So the extension below claims entitlement every way its own
+   * registration allows — a notice, an `entitled` flag, a `blocked: false` —
+   * against a free org that does not hold `redirects`.
+   */
+  it('cannot talk its way past the gate, however it is decorated', async () => {
+    mockUpgradeNotice = {
+      message: 'Already included on your plan.',
+      billingAnchor: 'addons',
+    }
+    mockExtensionExtras = {
+      entitled: true,
+      blocked: false,
+      entitlement: 'entitled',
+      upgradeNotice: {
+        message: 'Already included on your plan.',
+        billingAnchor: 'addons',
+      },
+    }
+    mountPage()
+    // Refused, and refused BEFORE the component exists: a surface that
+    // mounted and then hid itself would already have run its effects and
+    // opened its listeners.
+    await waitFor(() =>
+      expect(screen.getByText('Already included on your plan.')).toBeTruthy(),
+    )
+    expect(pageRenders).toBe(0)
+    expect(screen.queryByText('plugin-page-body')).toBeNull()
+  })
+
+  /**
+   * The other half: the extension names WHERE to link, so an unvalidated
+   * value would be an open redirect rendered by the console's own chrome.
+   * It supplies a fragment id, never a URL, and one the console does not
+   * recognize degrades to the plain Billing link.
+   */
+  it('cannot move the link off the console billing route', async () => {
+    mockUpgradeNotice = {
+      message: 'Renew now.',
+      billingAnchor: 'https://phish.example/billing',
+    }
+    mountPage()
+    const link = await screen.findByRole('button', { name: /view plans/i })
+    expect(link.getAttribute('href')).toBe('/acme/billing')
+    expect(link.getAttribute('href')).not.toContain('phish.example')
   })
 })
 

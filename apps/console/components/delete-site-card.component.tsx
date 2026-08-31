@@ -22,6 +22,7 @@ import { Button, Stack, TextField, Typography } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useHost, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -66,13 +67,9 @@ export function DeleteSiteCard(props: { hostId: string }) {
     if (!accepted) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/delete', {
+      const response = await authorizedFetch(user, '/api/hosts/delete', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId }),
       })
       if (!response.ok) {

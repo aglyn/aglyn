@@ -18,7 +18,10 @@
 
 import { mdiCheckDecagram } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
+  Alert,
   Chip,
   Tooltip,
   Grid,
@@ -28,7 +31,16 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  documentId,
+  getDoc,
+  limit,
+  orderBy,
+  query,
+  where,
+} from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildRoute,
@@ -46,6 +58,16 @@ import {
   useUser,
   useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
+/*
+ * The MODULE, not the barrel, for the two PURE helpers — the specs that render
+ * this grid mock `@aglyn/tenant-feature-instance` wholesale to stage their
+ * Firestore hooks, and a query builder imported through that barrel disappears
+ * under the mock. Neither of these is a hook.
+ */
+import {
+  ceilingedWindow,
+  collectionCeiling,
+} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import {
   isListingBrowsable,
   isListingDeleted,
@@ -59,6 +81,17 @@ import { ListingImage } from './listing-image.component'
 // The console route table is shared (AGL-685), so these go through
 // buildRoute rather than being reassembled from a base string — the shape
 // of `/[orgSlug]/hosts/[host]/marketplace/…` is not this plugin's to know.
+
+/**
+ * How many install records the shelf reads to decide what it already runs.
+ *
+ * One number for the five collections that answer that question, because the
+ * card reads them together and a reader comparing a plugin's chip to a
+ * dataset's should not have to know which window was twice the other. It
+ * bounds an install-state LOOKUP, not the shelf: the listings query has its
+ * own cap, and the grid pages what survives the filters.
+ */
+const INSTALL_STATE_CEILING = 100
 
 export interface MarketplaceBrowseProps {
   hostId: string
@@ -190,17 +223,73 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
    * already consume slots and get filtered below, so this is the same class of
    * consumption, nudged up to leave room for soft-deleted rows. Measured on
    * production 2026-08-03: 7 listings, 0 soft-deleted, 0 missing the field.
+   *
+   * ## The cap DOES take an `orderBy`, and it is not the same decision
+   *
+   * A `limit` with no ordering is answered in document-id order, and listing
+   * ids are random — so the ninety this loaded were an arbitrary ninety, and
+   * the client sort below then arranged that sample by date and called it
+   * "Newest". The window is now the newest ninety, which is what the default
+   * sort already claimed it was.
+   *
+   * `orderBy` carries the drop the `where` above was removed to avoid — it
+   * matches only documents that HAVE the field, so a listing without
+   * `createdAt` would not be mis-ordered, it would be invisible. That is safe
+   * here for a reason the `deletedAt` predicate could not offer: a listing is
+   * created by exactly two paths, `publish.ts` and `publish-plugin.ts`, and
+   * both stamp `createdAt` in the same `set` that brings the document into
+   * existence. Every other writer resolves an EXISTING listing by id and
+   * refuses when it is absent, so none of them can produce one without the
+   * field.
+   *
+   * It also cannot reproduce the tombstone (AGL-827/929) that made a mutable
+   * `where` unsafe: `createdAt` is written under `existing.empty` and never
+   * rewritten, so no document can stop matching mid-session and leave a
+   * `noDocument` cached at a path the detail page reads by id.
    */
   const { data: listings } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'marketplaceListings'), limit(90)),
+    () =>
+      query(
+        collection(firestore, 'marketplaceListings'),
+        orderBy('createdAt', 'desc'),
+        limit(90),
+      ),
     [firestore],
     { idField: '$id' },
   )
-  const { data: installedDocs } = useFirestoreCollection<any>(
+  /*
+   * ## The install-state lookups are ORDERED too, and they are not lists
+   *
+   * The five queries below (this one, the two pin collections, the org
+   * datasets and the site's email templates) answer one question per card:
+   * has this listing already been installed here. None of them is rendered —
+   * each is folded into a map keyed by listing id — so the fix that suits the
+   * shelf above does not suit them: there is no page to walk and no footer to
+   * put a control in.
+   *
+   * What they share with it is the defect. A bare `limit` is answered in
+   * DOCUMENT-ID order, so an unnamed window is an arbitrary slice of its
+   * collection, and a lookup MISS is indistinguishable from a genuine
+   * not-installed: a workspace past such a window is shown "Add to this site"
+   * beside something it already runs, and the detail page — which reads its
+   * own pins by id — disagrees with the grid it was reached from.
+   *
+   * `collectionCeiling` names the order and asks for one row past the
+   * ceiling, which is what turns "the window may have bitten" into a fact the
+   * shelf can state rather than a silence it cannot.
+   */
+  const { data: installedRead } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'components'),
+        INSTALL_STATE_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  const { rows: installedDocs, truncated: installedTruncated } = useMemo(
+    () => ceilingedWindow<any>(installedRead, INSTALL_STATE_CEILING),
+    [installedRead],
   )
 
   // listingId → installed component doc (deleted installs don't count).
@@ -218,21 +307,36 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   // at host or org scope — showed "Add to this site". These two pin
   // collections are what the loader honors (a host pin shadows an org pin).
   const orgId = useHostOrgId(hostId)
-  const { data: hostPinDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'installs'), limit(100)),
+  const { data: hostPinRead } = useFirestoreCollection<any>(
+    () =>
+      collectionCeiling(
+        collection(firestore, 'hosts', hostId, 'installs'),
+        INSTALL_STATE_CEILING,
+      ),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  const { rows: hostPinDocs, truncated: hostPinsTruncated } = useMemo(
+    () => ceilingedWindow<any>(hostPinRead, INSTALL_STATE_CEILING),
+    [hostPinRead],
   )
   // Held at null while `useHostOrgId` is in flight, never `orgs/-pending-`
   // (AGL-1440): the AGL-1047 comment seven lines below records the same
   // denial-every-mount shape for `useScopeTokens` — this listen had it too.
-  const { data: orgPinDocs } = useFirestoreCollection<any>(
+  const { data: orgPinRead } = useFirestoreCollection<any>(
     () =>
       orgId
-        ? query(collection(firestore, 'orgs', orgId, 'installs'), limit(100))
+        ? collectionCeiling(
+            collection(firestore, 'orgs', orgId, 'installs'),
+            INSTALL_STATE_CEILING,
+          )
         : null,
     [firestore, orgId],
     { idField: '$id' },
+  )
+  const { rows: orgPinDocs, truncated: orgPinsTruncated } = useMemo(
+    () => ceilingedWindow<any>(orgPinRead, INSTALL_STATE_CEILING),
+    [orgPinRead],
   )
   // Scoped (AGL-1044): an unfiltered list is REJECTED for a scoped member,
   // not filtered, so this would error without the constraint.
@@ -252,7 +356,19 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   // The AGL-657 types land in neither the components collection nor a pin
   // (AGL-789): a dataset schema becomes an org dataset, an email template a
   // draft version. Both installers stamp the source listing, so read those.
-  const { data: datasetDocs } = useFirestoreCollection<any>(
+  /*
+   * `documentId()` rather than a field, for the reason the audience sweep in
+   * `campaign-send.ts` gives: Firestore's automatic single-field index for an
+   * array member is keyed on the value and the document name, so
+   * `array-contains-any` plus `orderBy(__name__)` is served by it. Ordering on
+   * anything else would need a composite index per scope shape.
+   *
+   * The ceiling is the shared one. It is not sized for the dataset
+   * collection: it is sized for the number of LISTINGS whose install state a
+   * shelf of ninety cards can describe, which is the same question its four
+   * neighbours answer, so it is the same number.
+   */
+  const { data: datasetRead } = useFirestoreCollection<any>(
     () =>
       orgId && scopeLoaded
         ? query(
@@ -260,7 +376,8 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             ...(needsScope
               ? [where('visibleTo', 'array-contains-any', scopeTokens)]
               : []),
-            limit(200),
+            orderBy(documentId()),
+            limit(INSTALL_STATE_CEILING + 1),
           )
         : null,
     [firestore, orgId, scopeLoaded, needsScope, scopeTokens],
@@ -270,14 +387,22 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     // listings query above the predicate cannot simply be dropped (AGL-1196).
     { idField: '$id', confirmDisappearances: true },
   )
-  const { data: emailDocs } = useFirestoreCollection<any>(
+  const { rows: datasetDocs, truncated: datasetsTruncated } = useMemo(
+    () => ceilingedWindow<any>(datasetRead, INSTALL_STATE_CEILING),
+    [datasetRead],
+  )
+  const { data: emailRead } = useFirestoreCollection<any>(
     () =>
-      query(
+      collectionCeiling(
         collection(firestore, 'hosts', hostId, 'emailTemplates'),
-        limit(100),
+        INSTALL_STATE_CEILING,
       ),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  const { rows: emailDocs, truncated: emailsTruncated } = useMemo(
+    () => ceilingedWindow<any>(emailRead, INSTALL_STATE_CEILING),
+    [emailRead],
   )
   // A theme is not a document in a collection — it is a field on the site
   // (AGL-1020) — so its install is read from the host doc rather than from a
@@ -428,6 +553,50 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     })
   }, [listings, search, category, sort, publisherId, user?.uid])
 
+  /*
+   * The shelf PAGES (AGL-2501). It used to render every card the window held
+   * in one wall, so the only control over how much arrived at once was the
+   * cap in the query — a number the reader cannot see and cannot change.
+   *
+   * Client-side, deliberately, and this is the case `ListPagination`'s
+   * `count` prop exists for. The search box, the category chips and the
+   * owner/review gates are all resolved in memory, so a server page would be
+   * a page of CANDIDATES: a reader filtering to one category would get pages
+   * that were mostly empty and a count that meant nothing. Paging what is
+   * left after the filter is the only version whose numbers are about what is
+   * on screen.
+   */
+  /**
+   * The install-state lookups did not read everything they were asked about.
+   *
+   * Said on the SHELF rather than on the card that is wrong, because there is
+   * no way to know which card that is: a miss and a genuine not-installed are
+   * the same absence from the same map. What the reader can act on is that the
+   * chips are a floor — anything marked installed is installed, and something
+   * unmarked may still be.
+   */
+  const installStateTruncated =
+    installedTruncated ||
+    hostPinsTruncated ||
+    orgPinsTruncated ||
+    datasetsTruncated ||
+    emailsTruncated
+
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  /*
+   * A new query starts at page one. Page four of a category with two pages
+   * does not exist, and an out-of-range page renders as an empty grid with
+   * nothing saying why — which reads as the filter having broken.
+   */
+  useEffect(() => {
+    setPage(0)
+  }, [search, category, sort, pageSize])
+  const shown = useMemo(
+    () => items.slice(page * pageSize, (page + 1) * pageSize),
+    [items, page, pageSize],
+  )
+
   return (
     <CardDisplay
       header={'Marketplace components'}
@@ -470,14 +639,23 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
           <MenuItem value="rated">{'Highest rated'}</MenuItem>
         </TextField>
       </Stack>
+      {installStateTruncated ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {`Installed state is resolved from the first ${INSTALL_STATE_CEILING} ` +
+            'install records in this workspace, ordered by id. There are ' +
+            'more, so a card may not be marked installed even though it is. ' +
+            'Open a listing to see what this workspace actually runs.'}
+        </Alert>
+      ) : null}
       {items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {'No marketplace components published yet — publish one of your ' +
             'reusable components from the Setup page to be the first.'}
         </Typography>
       ) : (
+        <>
         <Grid container spacing={2}>
-          {items.map((listing: any) => {
+          {shown.map((listing: any) => {
             const artifactType = listingArtifactType(listing)
             const isPlugin = artifactType === 'plugin'
             const pluginState = resolvePluginInstallState(
@@ -488,6 +666,14 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             const componentInstall = installed[listing.$id]
             // datasetSchema/emailTemplate installs are tracked by the source
             // listing stamped on what they created (AGL-789).
+            //
+            // `emailStarter` is deliberately absent. Every other type has ONE
+            // install per site to point at — a pin, a dataset, a draft on a
+            // fixed catalog key, the site's theme — so "Installed" names
+            // something. A starter installs as a NEW email each time, and a
+            // site may keep five of them; there is no single copy for a chip
+            // to describe, and marking the listing installed would grey out
+            // the button that makes the sixth.
             const artifactInstall =
               artifactType === 'datasetSchema' ||
               artifactType === 'emailTemplate' ||
@@ -769,6 +955,18 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             )
           })}
         </Grid>
+        {/* `count` is the FILTERED total, which this list genuinely knows —
+            it is the array it just sliced. Handing MUI the window's size
+            instead would count listings the reader has filtered out. */}
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={shown.length}
+          count={items.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+        </>
       )}
     </CardDisplay>
   )

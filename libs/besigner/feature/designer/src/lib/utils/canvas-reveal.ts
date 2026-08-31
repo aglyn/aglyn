@@ -157,7 +157,7 @@ export function isAncestorHiddenOnSite(node: RevealNode): boolean {
 
 
 /**
- * Whether the AUTHOR has hidden this element (AGL-1479).
+ * Whether the AUTHOR has hidden this element.
  *
  * The plain switch behind the eye on the hierarchy row: `display: none` on
  * the canvas and on the published site, with nothing that reveals it.

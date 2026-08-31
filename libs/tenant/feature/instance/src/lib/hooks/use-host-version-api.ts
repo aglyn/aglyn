@@ -17,9 +17,20 @@
 
 import { useCallback } from 'react'
 import { useUser } from './firebase/firebase-services'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
-/** Parents that carry besigner version history (AGL-1369). */
-export type HostVersionParentKind = 'screen' | 'layout' | 'component'
+/**
+ * Parents that carry besigner version history (AGL-1369).
+ *
+ * `form` is here because a form is designed, not merely declared: it opens in
+ * the besigner, saves a draft per version, and publishes a snapshot onto its
+ * parent document, which is the component lifecycle exactly.
+ */
+export type HostVersionParentKind =
+  | 'screen'
+  | 'layout'
+  | 'component'
+  | 'form'
 
 /**
  * Options for {@link useHostVersionApi}. Either `data` (a version written from
@@ -59,13 +70,9 @@ export function useHostVersionApi(): (
   const { data: user } = useUser()
   return useCallback(
     async ({ hostId, kind, parentId, id, data, sourceVersionId }) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/versions', {
+      const response = await authorizedFetch(user, '/api/hosts/versions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           kind,

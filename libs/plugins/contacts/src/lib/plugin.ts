@@ -36,6 +36,40 @@ export function registerContactsConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Contacts',
+    /*
+     * WHO may open the CRM, declared so the shell enforces it.
+     *
+     * `navTabId` below is a release flag, not authorization: it says whether
+     * the surface has shipped, and `FeatureGate` reads it as
+     * `released || isStaff`. Nothing above this page decided who among a
+     * workspace's members may read it, and the page is a full editor over
+     * org-shared people data — names, addresses, order history, notes,
+     * consent, and a CSV export of all of it.
+     *
+     * `data.manage` rather than a key of this plugin's own, because it is
+     * the catalog key whose subject is exactly this data. The Firestore
+     * rules place contacts in the org-shared data block with datasets and
+     * gate writes on `canWriteOrgData()` — owner, admin, editor — which is
+     * the population `data.manage` defaults to, so the console gate and the
+     * rules agree on the built-in roles by construction. A custom role or a
+     * per-member override then narrows the console further, and the rules
+     * stay the boundary for the data itself.
+     *
+     * Minting a `contacts.*` key instead would advertise a control that does
+     * not exist. Console contact writes are client-direct against the rules,
+     * so a new key would have no server enforcement point to sit on, and a
+     * permission a customer can untick that changes nothing is worse than
+     * its absence.
+     *
+     * A SITE COLLABORATOR holding it reaches this page deliberately. They
+     * are a real org member document, so this gate is the first thing that
+     * has ever asked about them here — and the answer is yes, scoped: the
+     * listener filters on `visibleTo`, the rules prove the same predicate
+     * per document, and every field the page shows is read through the
+     * viewing group's own facet. Refusing them outright would delete a
+     * shipped capability rather than close a hole.
+     */
+    permission: 'data.manage',
     navItems: [
       {
         label: 'Contacts',

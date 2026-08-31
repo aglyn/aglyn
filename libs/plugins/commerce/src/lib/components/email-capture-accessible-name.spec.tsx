@@ -94,3 +94,42 @@ describe('the newsletter block names its email field (AGL-2392)', () => {
  *    popup's raw `<input>`. Asserted in that library's own spec, beside the
  *    popup harness that already exists there.
  */
+
+/**
+ * AND IT IS NOT A HEADING EITHER (AGL-2486).
+ *
+ * The same "Get product updates" line was reaching the page as an `<h6>` —
+ * not because anything asked for a heading, but because MUI's own
+ * `defaultVariantMapping` sends `subtitle1` there. On `aglyn.com/blog` the
+ * nearest heading above it is an `h3`, so the outline read `h3 -> h6`: a
+ * skipped level, and the `heading-order` audit failure. Six blog listing pages
+ * carried it, and eleven blog posts carried the `subtitle2` twin.
+ *
+ * The element is named at the call site, with `component="p"` on the
+ * Typography itself. A theme-wide `variantMapping` would fix this block and
+ * every other `subtitle1` at once, which is exactly why it is the wrong tool:
+ * it changes the element under call sites nobody audited, including ones where
+ * an `h6` is correct. A default is a guess applied everywhere; the prop is a
+ * statement about this block.
+ *
+ * Asserted on the RENDERED ELEMENT rather than on the source, so the prop is
+ * proven to survive Typography's own `component || variantMapping[variant] ||
+ * defaultVariantMapping[variant]` resolution.
+ */
+describe('the newsletter heading is styled text, not an outline entry (AGL-2486)', () => {
+  it('renders the subtitle as a paragraph, not an h6', () => {
+    render(<NewsletterSignup heading="Get product updates" />)
+    const line = screen.getByText('Get product updates')
+    expect(line.tagName).toBe('P')
+  })
+
+  it('CONTROL — it contributes no heading to the document outline at all', () => {
+    // The assertion that actually matches the audit: `heading-order` reads the
+    // sequence of heading ELEMENTS, so what matters is that this block adds
+    // none, not merely that one particular node changed tag.
+    const { container } = render(
+      <NewsletterSignup heading="Get product updates" />,
+    )
+    expect(container.querySelectorAll('h1,h2,h3,h4,h5,h6')).toHaveLength(0)
+  })
+})

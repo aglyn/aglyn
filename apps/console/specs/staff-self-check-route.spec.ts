@@ -110,7 +110,7 @@ describe('it diagnoses the caller, and only the caller', () => {
   it('tells an SSO staff member their claim is present and names the pool', async () => {
     mockTokens.set('t', { email_verified: true,
       uid: 'sso-uid',
-      email: 'zach@aglyn.com',
+      email: 'staff@aglyn.com',
       staff: true,
       staffRole: 'super',
       firebase: { tenant: AGLYN_TENANT },
@@ -118,7 +118,7 @@ describe('it diagnoses the caller, and only the caller', () => {
     mockTenantUsers.set(
       AGLYN_TENANT,
       new Map([
-        ['sso-uid', mockUserRecord('sso-uid', 'zach@aglyn.com', {
+        ['sso-uid', mockUserRecord('sso-uid', 'staff@aglyn.com', {
           staff: true,
           staffRole: 'super',
         })],
@@ -173,7 +173,7 @@ describe('it diagnoses the caller, and only the caller', () => {
     mockTenantUsers.set(
       AGLYN_TENANT,
       new Map([
-        ['zach', mockUserRecord('zach', 'zach@aglyn.com', { staff: true, staffRole: 'super' })],
+        ['staff-uid', mockUserRecord('staff-uid', 'staff@aglyn.com', { staff: true, staffRole: 'super' })],
       ]),
     )
     const body = await (await call('t')).json()
@@ -181,7 +181,7 @@ describe('it diagnoses the caller, and only the caller', () => {
     expect(body.hint).toBeNull()
     // The critical negative: somebody ELSE's staff grant is not disclosed.
     expect(body.identities).toHaveLength(1)
-    expect(JSON.stringify(body)).not.toContain('zach@aglyn.com')
+    expect(JSON.stringify(body)).not.toContain('staff@aglyn.com')
   })
 
   it('does not leak another address even when the caller asks about theirs', async () => {
@@ -211,20 +211,20 @@ describe('it diagnoses the caller, and only the caller', () => {
   it('discloses no other pool to a caller whose address is unverified', async () => {
     mockTokens.set('t', {
       uid: 'squatter',
-      email: 'zach@aglyn.com',
+      email: 'staff@aglyn.com',
       email_verified: false,
       firebase: {},
     })
     mockProjectUsers.set(
       'squatter',
-      mockUserRecord('squatter', 'zach@aglyn.com', {}),
+      mockUserRecord('squatter', 'staff@aglyn.com', {}),
     )
     mockTenantUsers.set(
       AGLYN_TENANT,
       new Map([
         [
-          'zach',
-          mockUserRecord('zach', 'zach@aglyn.com', {
+          'staff-uid',
+          mockUserRecord('staff-uid', 'staff@aglyn.com', {
             staff: true,
             staffRole: 'super',
           }),
@@ -261,8 +261,8 @@ describe('it diagnoses the caller, and only the caller', () => {
     // Without this case the fix would silently break support's diagnosis of
     // exactly the accounts they are called in to diagnose.
     mockTokens.set('t', {
-      uid: 'zach',
-      email: 'zach@aglyn.com',
+      uid: 'staff-uid',
+      email: 'staff@aglyn.com',
       email_verified: false,
       impersonatedBy: 'staff-uid',
       firebase: {},
@@ -271,8 +271,8 @@ describe('it diagnoses the caller, and only the caller', () => {
       AGLYN_TENANT,
       new Map([
         [
-          'zach',
-          mockUserRecord('zach', 'zach@aglyn.com', {
+          'staff-uid',
+          mockUserRecord('staff-uid', 'staff@aglyn.com', {
             staff: true,
             staffRole: 'super',
           }),

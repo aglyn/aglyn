@@ -91,6 +91,52 @@ function clamp(value: unknown, max: number): string {
 let installed = false
 
 /**
+ * The live beacon's `enqueue`, published for {@link reportHandledError}.
+ *
+ * Null until `installErrorBeacon` runs, and null forever on a surface that
+ * never installs one — so a caught error reported from a page with no beacon
+ * is silently dropped rather than throwing inside somebody's error handler.
+ */
+let publishEvent: ((event: ErrorBeaconEvent) => void) | null = null
+
+/**
+ * Report an error the code ALREADY CAUGHT.
+ *
+ * The two window handlers below see only what nothing caught. A `catch` that
+ * swallows its error is invisible to them by construction, which is the whole
+ * failure mode this exists for: a background write that can only fail
+ * silently is one that stays broken for as long as nobody thinks to look.
+ *
+ * It rides the same queue as an uncaught error, which is the point — the
+ * dedupe collapses a failure that repeats on every edit into one report, and
+ * `maxPerPage` bounds it, so a call site in a loop cannot turn a broken
+ * feature into a flood. Reporting is never worth an exception of its own, so
+ * every path here returns rather than throws.
+ */
+export function reportHandledError(
+  error: unknown,
+  options?: { kind?: string },
+): void {
+  try {
+    if (!publishEvent) return
+    const thrown = error as Error | undefined
+    const message = clamp(
+      thrown?.message ?? (typeof error === 'string' ? error : ''),
+      MAX_MESSAGE,
+    )
+    if (!message) return
+    publishEvent({
+      kind: clamp(options?.kind ?? 'handled', 32),
+      message,
+      stack: thrown?.stack ? clamp(thrown.stack, MAX_STACK) : undefined,
+      url: scrubUrl(window.location.href),
+    })
+  } catch {
+    // An observer that throws is worse than one that misses an event.
+  }
+}
+
+/**
  * Installs the handlers once per page. Safe to call from module scope of a
  * client bundle: it no-ops during SSR and on repeat calls.
  */
@@ -141,6 +187,10 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
     queued.push(event)
     if (!timer) timer = setTimeout(flush, FLUSH_DELAY_MS)
   }
+  // Published AFTER the sample-rate return above, so an unsampled pageview
+  // reports nothing by either door rather than one by one and none by the
+  // other.
+  publishEvent = enqueue
 
   window.addEventListener('error', (event) => {
     try {

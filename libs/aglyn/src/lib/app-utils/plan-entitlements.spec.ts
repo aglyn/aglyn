@@ -35,6 +35,9 @@ import {
   FORM_ABUSE_CEILING_FLOOR,
   FORM_ABUSE_CEILING_MULTIPLE,
   FORM_ABUSE_CEILING_UNLIMITED,
+  FORMS_PER_HOST_CEILING,
+  ENTERPRISE_EMAIL_SENDS_PER_MONTH,
+  ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
   planMetersInfraOverage,
   isBillingSubscription,
   isCustomPricedPlan,
@@ -248,7 +251,9 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: null,
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
       starter: {
@@ -258,9 +263,11 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 5,
         extraCollaboratorMonthlyUsd: 3,
         extraDatasetMonthlyUsd: 2,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: 1,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: true,
       },
       pro: {
@@ -270,9 +277,11 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 4,
         extraCollaboratorMonthlyUsd: 2,
         extraDatasetMonthlyUsd: 2,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: 3,
         extraContactsUsdPer1k: 0.75,
+        extraEmailSendsUsdPer1k: 2.25,
         meteredInfraPassThrough: true,
       },
       business: {
@@ -282,45 +291,53 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 3,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.5,
+        extraAssistCreditsUsdPer1k: 2.75,
         extraContactsUsdPer1k: 0.5,
+        extraEmailSendsUsdPer1k: 2,
         meteredInfraPassThrough: true,
       },
       scale: {
         basePriceMonthlyUsd: 249,
         basePriceAnnualMonthlyUsd: 179,
-        extraHostMonthlyUsd: 5,
+        extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.35,
+        extraAssistCreditsUsdPer1k: 2.5,
         extraContactsUsdPer1k: 0.4,
+        extraEmailSendsUsdPer1k: 1.9,
         meteredInfraPassThrough: true,
       },
       advanced: {
         basePriceMonthlyUsd: 399,
         basePriceAnnualMonthlyUsd: 299,
-        extraHostMonthlyUsd: 4,
+        extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.2,
-        extraContactsUsdPer1k: 0.25,
+        extraAssistCreditsUsdPer1k: 2.25,
+        extraContactsUsdPer1k: 0.4,
+        extraEmailSendsUsdPer1k: 1.85,
         meteredInfraPassThrough: true,
       },
       agency: {
-        basePriceMonthlyUsd: 799,
-        basePriceAnnualMonthlyUsd: 649,
-        extraHostMonthlyUsd: 3,
+        basePriceMonthlyUsd: 1299,
+        basePriceAnnualMonthlyUsd: 1049,
+        extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 2,
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.25,
+        extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.15,
-        extraContactsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: 2,
+        extraContactsUsdPer1k: 0.4,
+        extraEmailSendsUsdPer1k: 1.8,
         meteredInfraPassThrough: true,
       },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
@@ -335,7 +352,9 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: null,
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
+        extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
       },
     })
@@ -384,8 +403,38 @@ describe('plan entitlements', () => {
       if (key === 'transactionFeeDigitalPct') continue
       // A fee RATE is not a capacity — unbounded would mean an infinite cut.
       if (key === 'marketplaceFeePct') continue
+      // Nor is an abuse ceiling. `formsPerHost` is the same finite number on
+      // every plan that has forms, deliberately including this one: an
+      // unbounded catalog is a storage vector no price tier makes safe. A
+      // deal that needs a larger one takes a per-org override, which is the
+      // instrument for exactly this and leaves the ceiling alone.
+      if (key === 'formsPerHost') continue
+      // Nor is the email allowance, and for a related reason one axis over.
+      // Every other band here is infrastructure we already meter and price
+      // into the deal; email is a third party's per-message charge, so an
+      // unbounded band is an unbounded liability the negotiation never named.
+      // It is a DEFAULT — a contract raises it through the same per-org
+      // override `formsPerHost` uses — and it is FINITE, because
+      // `JSON.stringify(Infinity)` is `null` and reads back as a cap of zero
+      // on the most expensive plan on the price list.
+      if (key === 'emailSendsPerMonth') continue
+      // Nor is an assist band. Every other quota here is infrastructure the
+      // deal already meters and prices; assist is a per-token charge from a
+      // third party, and `UNLIMITED` is unrepresentable off-process —
+      // `JSON.stringify(Infinity)` is `null`, which reads back as a band of
+      // ZERO. An unbounded assist band would hand the only customers with a
+      // signed contract the one budget that refuses everything. A deal that
+      // needs more takes the per-org override, like `formsPerHost`.
+      if (key === 'assistCreditsPerMonth') continue
       expect([key, value]).toEqual([key, UNLIMITED])
     }
+    expect(resolved.assistCreditsPerMonth).toBe(
+      ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+    )
+    expect(Number.isFinite(resolved.assistCreditsPerMonth)).toBe(true)
+    expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+    expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
+    expect(Number.isFinite(resolved.emailSendsPerMonth)).toBe(true)
     expect(resolved.transactionFeePhysicalPct).toBe(0)
     expect(resolved.transactionFeeDigitalPct).toBe(0)
     expect(resolved.marketplaceFeePct).toBe(20)
@@ -736,12 +785,12 @@ describe('plan entitlements', () => {
   })
 
   it('checkDataStorageQuota meters overage on paid plans, blocks on free (AGL-240)', () => {
-    // Starter includes 1 GB; 1.5 GB used → 0.5 GB overage at $0.25/GB.
+    // Starter includes 1 GB; 1.5 GB used → 0.5 GB overage at $0.36/GB.
     const starter = checkDataStorageQuota({ plan: 'starter' } as any, 1536)
     expect(starter.allowed).toBe(true)
     expect(starter.includedMb).toBe(1024)
     expect(starter.overageGb).toBeCloseTo(0.5)
-    expect(starter.overageMonthlyUsd).toBeCloseTo(0.13)
+    expect(starter.overageMonthlyUsd).toBeCloseTo(0.18)
     // Within the included size there is no overage.
     const within = checkDataStorageQuota({ plan: 'pro' } as any, 1024)
     expect(within.overageGb).toBe(0)
@@ -790,8 +839,18 @@ describe('plan entitlements', () => {
     // Within the band there is no overage; remaining is tracked.
     const within = checkContactQuota({ plan: 'business' } as any, 40_000)
     expect(within.overageContacts).toBe(0)
-    expect(within.remaining).toBe(60_000)
+    expect(within.remaining).toBe(10_000)
     expect(within.allowed).toBe(true)
+    // Agency METERS now that its band is finite — a rate is what makes the
+    // bound bill rather than drop the CRM record, and the two only ever
+    // moved together.
+    const agency = checkContactQuota(
+      { plan: 'agency' } as any,
+      PLAN_ENTITLEMENTS.agency.contactsPerHost + 2_000,
+    )
+    expect(agency.allowed).toBe(true)
+    expect(agency.overageContacts).toBe(2_000)
+    expect(agency.overageMonthlyUsd).toBeCloseTo(0.8)
     // Free hard-bands at 100 — no rate, blocked at the band.
     const freeOver = checkContactQuota({ plan: 'free' } as any, 100)
     expect(freeOver.allowed).toBe(false)
@@ -891,9 +950,8 @@ describe('plan entitlements', () => {
       checkFormSubmissionAbuseCeiling({ plan: 'enterprise' } as any, 1e9).exceeded,
     ).toBe(true)
 
-    // The ladder never inverts: no plan's ceiling is below the one below it,
-    // and no plan's ceiling is below its OWN included band — either would
-    // turn containment into a capacity cut.
+    // No plan's ceiling is below its OWN included band — that would turn
+    // containment into a capacity cut, refusing submissions the plan sold.
     const ladder: OrgPlan[] = [
       'free',
       'starter',
@@ -904,18 +962,48 @@ describe('plan entitlements', () => {
       'agency',
       'enterprise',
     ]
-    let previous = 0
     for (const plan of ladder) {
       const { ceiling } = checkFormSubmissionAbuseCeiling({ plan } as any, 0)
-      expect(ceiling).toBeGreaterThanOrEqual(previous)
-      expect(ceiling).toBeGreaterThanOrEqual(
-        Math.min(
-          PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
-          FORM_ABUSE_CEILING_UNLIMITED,
-        ),
-      )
-      previous = ceiling
+      expect(`${plan}: ${ceiling >= Math.min(
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+        FORM_ABUSE_CEILING_UNLIMITED,
+      )}`).toBe(`${plan}: true`)
     }
+
+    /*
+     * ⚠️ THE PER-HOST LADDER INVERTS AT AGENCY, AND THE ORG-WIDE ONE DOES NOT.
+     *
+     * `formSubmissionsPerMonth` is a PER-HOST band and `hostLimit` expands it
+     * (`meteredIncludedAllowance`). Agency's per-host figure is 25,000 against
+     * Advanced's 40,000 — lower — while its org-wide allowance is 2,500,000
+     * against Advanced's 1,000,000, two and a half times larger. So a
+     * per-SITE ceiling really is smaller on the more expensive plan, and the
+     * plan a customer buys really does include far more.
+     *
+     * Asserted rather than smoothed over because both halves are visible to a
+     * customer: the comparison grid prints the per-host number, and the
+     * invoice bills against the org-wide one. Whether the per-host figure
+     * should be raised so the printed ladder reads correctly is a pricing
+     * decision, and this is where it will be noticed.
+     */
+    const perHost = ladder.map((plan) =>
+      Math.min(
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+        FORM_ABUSE_CEILING_UNLIMITED,
+      ),
+    )
+    const orgWide = ladder.map(
+      (plan) =>
+        PLAN_ENTITLEMENTS[plan].hostLimit *
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+    )
+    expect(orgWide).toEqual([...orgWide].sort((a, b) => a - b))
+    // The one inversion, named. A SECOND one appearing here is a regression.
+    expect(
+      ladder
+        .slice(1)
+        .filter((_plan, index) => perHost[index + 1] < perHost[index]),
+    ).toEqual(['agency'])
 
     // A negative count cannot manufacture headroom, and a plan-less org
     // resolves as free rather than as uncapped.
@@ -1424,7 +1512,7 @@ describe('plan entitlements', () => {
           ...base,
           subscription: { ...base.subscription, customMonthlyUsd: 0 },
         }),
-      ).toBe(799)
+      ).toBe(PLAN_PRICING.agency.basePriceMonthlyUsd)
     })
   })
 
@@ -2283,6 +2371,25 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
     }
   })
 
+  it('NO plan has an unbounded assist band, on any tier', () => {
+    // Assist is not in METERED_PAIRS above and cannot be: that rule forbids a
+    // rate on an uncapped band, and its premise guard requires some plan to
+    // be uncapped. Assist is finite EVERYWHERE, which is the stronger claim
+    // and the one worth pinning.
+    //
+    // `UNLIMITED` is `Number.POSITIVE_INFINITY`, `JSON.stringify(Infinity)`
+    // is `null`, and `Number(null)` is 0 — so an unbounded band reads back as
+    // a band of ZERO through any route that does not also send the explicit
+    // flag `restoreQuotaLimit` rebuilds from.
+    for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+      const band = PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth
+      expect(Number.isFinite(band)).toBe(true)
+      expect(band).toBeGreaterThanOrEqual(0)
+      const wire = JSON.parse(JSON.stringify({ band })) as { band: number }
+      expect(wire.band).toBe(band)
+    }
+  })
+
   it('a FINITE band still requires a rate, or usage past it is silently free', () => {
     // The counter-case. Dropping every rate would satisfy the rule above and
     // be the same defect pointed the other way.
@@ -2296,5 +2403,256 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
     for (const plan of paidWithFiniteContacts) {
       expect(PLAN_PRICING[plan].extraContactsUsdPer1k).not.toBeNull()
     }
+  })
+})
+
+describe('a first payment that never completed is not a paid workspace', () => {
+  // `incomplete_expired` is the terminal form of `incomplete`: Stripe stamps it
+  // roughly a day after a signup whose first payment never authenticated, and
+  // no charge has settled or ever will. Both readers of
+  // `DEAD_SUBSCRIPTION_STATUSES` have to agree with that, and each one costs
+  // real money on its own — entitlement grants the paid plan indefinitely for
+  // free, revenue books MRR that has never arrived.
+  const expired = (plan: OrgPlan) =>
+    ({ plan, subscription: { status: 'incomplete_expired' } }) as any
+  const pastDue = (plan: OrgPlan) =>
+    ({ plan, subscription: { status: 'past_due' } }) as any
+
+  it('resolves to free rather than granting the plan forever', () => {
+    expect(resolveEffectivePlan(expired('business'))).toBe('free')
+    expect(checkEntitlement(expired('business'), 'workflows')).toBe(false)
+    expect(resolveOrgEntitlements(expired('pro')).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.free.hostLimit,
+    )
+  })
+
+  it('is not counted as revenue', () => {
+    expect(isBillingSubscription(expired('business'))).toBe(false)
+    expect(orgListPriceMonthlyUsd(expired('business'))).toBe(0)
+  })
+
+  it('reaches both readers through the billingStatus mirror too', () => {
+    // The org doc's mirror is what `subscriptionStatusOf` reads FIRST, so a set
+    // that only matched the inline subscription would answer correctly in a
+    // test and wrongly in the console.
+    const mirrored = { plan: 'business', billingStatus: 'incomplete_expired' } as any
+    expect(resolveEffectivePlan(mirrored)).toBe('free')
+    expect(isBillingSubscription(mirrored)).toBe(false)
+  })
+
+  it('leaves a dunning subscription alone — the control', () => {
+    // Without this the fix could be satisfied by treating every non-active
+    // status as dead, which would cut off a workspace Stripe is still
+    // successfully retrying.
+    expect(resolveEffectivePlan(pastDue('business'))).toBe('business')
+    expect(checkEntitlement(pastDue('business'), 'workflows')).toBe(true)
+    expect(isBillingSubscription(pastDue('business'))).toBe(true)
+    expect(orgListPriceMonthlyUsd(pastDue('business'))).toBeGreaterThan(0)
+    // And a healthy one, so the control cannot pass on a stub that answers the
+    // paid plan for everything.
+    expect(resolveEffectivePlan({ plan: 'pro', subscription: { status: 'active' } } as any)).toBe('pro')
+  })
+
+  it('takes purchased add-ons with it', () => {
+    // Add-ons bill as items on the same subscription, so a subscription that
+    // never charged never bought them either.
+    const withAddons = {
+      plan: 'pro',
+      subscription: { status: 'incomplete_expired' },
+      seatAddons: { hosts: 3, posRegisters: 2, managers: 2 },
+    } as any
+    expect(resolveOrgEntitlements(withAddons).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.free.hostLimit,
+    )
+    expect(resolveOrgEntitlements(withAddons).posRegisters).toBe(0)
+    expect(checkSeatQuota(withAddons, 'managers', 0).purchased).toBe(0)
+  })
+})
+
+describe('the saved-form catalog is one ceiling, not a ladder', () => {
+  const FORM_PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
+  /** Every plan carrying the entitlement the form entity rides. */
+  const PLANS_WITH_FORMS = FORM_PLANS.filter(
+    (plan) => PLAN_ENTITLEMENTS[plan].features?.reusableComponents,
+  )
+
+  it('resolves to the same number on every plan that has forms at all', () => {
+    // Read as a list rather than a boolean so a failure prints the whole
+    // shape. Eight identical cells is the point: this axis is an abuse
+    // ceiling, and the field does not sell it.
+    expect(
+      PLANS_WITH_FORMS.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost),
+    ).toEqual(PLANS_WITH_FORMS.map(() => FORMS_PER_HOST_CEILING))
+  })
+
+  it('is the number the Decision Log publishes', () => {
+    /*
+     * Pinned to its value, not merely to itself. Every other row here reads
+     * `FORMS_PER_HOST_CEILING`, so they all move together when the constant
+     * moves and none of them would notice — and this number is a published
+     * packaging fact, generous by construction against Wix's 75 and
+     * Jotform's 100. Changing it is a decision that owes a Decision Log
+     * edit, which is what this row makes someone stop and do.
+     */
+    expect(FORMS_PER_HOST_CEILING).toBe(500)
+  })
+
+  it('has more than one plan to have found identical', () => {
+    // The control. A `map` over one entry — or none — matches itself, so the
+    // row above would go green on a plan model that lost seven tiers.
+    expect(PLANS_WITH_FORMS.length).toBeGreaterThan(5)
+  })
+
+  it('differs on Free alone, and the entitlement is why', () => {
+    // Free is not a cheaper rung of the same ladder: it has no form entity,
+    // so `/api/hosts/resources` refuses on `reusableComponents` before the
+    // count is consulted. Zero is the honest published consequence.
+    expect(PLAN_ENTITLEMENTS.free.features?.reusableComponents).toBeFalsy()
+    expect(PLAN_ENTITLEMENTS.free.formsPerHost).toBe(0)
+    expect(
+      FORM_PLANS.filter(
+        (plan) => PLAN_ENTITLEMENTS[plan].formsPerHost !== FORMS_PER_HOST_CEILING,
+      ),
+    ).toEqual(['free'])
+  })
+
+  it('is a different dimension from the submissions band', () => {
+    // The two are routinely confused, and the confusion is expensive in one
+    // direction: a catalog ceiling read as a submissions cap refuses metered
+    // revenue. The submissions band is tiered and this is flat, so they
+    // disagree nearly everywhere — which is why only one of them is a row on
+    // a price list.
+    const differing = FORM_PLANS.filter(
+      (plan) =>
+        PLAN_ENTITLEMENTS[plan].formsPerHost !==
+        PLAN_ENTITLEMENTS[plan].formSubmissionsPerMonth,
+    )
+    expect(differing.length).toBeGreaterThan(FORM_PLANS.length / 2)
+  })
+
+  it('caps even the most expensive plan, because it is an abuse ceiling', () => {
+    // Enterprise is uncapped on the dimensions it buys. This is not one of
+    // them, and an unbounded catalog is a storage vector on any tier. A
+    // contract that needs more takes the per-org override below.
+    expect(PLAN_ENTITLEMENTS.enterprise.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+    expect(isUnlimitedQuota(PLAN_ENTITLEMENTS.enterprise.formsPerHost)).toBe(false)
+  })
+
+  it('refuses the create only once the ceiling is spent', () => {
+    const pro = { plan: 'pro', subscription: { status: 'active' } } as any
+    // Under: another form is still creatable while one slot remains.
+    expect(checkQuota(pro, 'formsPerHost', FORMS_PER_HOST_CEILING - 1).allowed).toBe(
+      true,
+    )
+    // At: the next one is not.
+    expect(checkQuota(pro, 'formsPerHost', FORMS_PER_HOST_CEILING).allowed).toBe(false)
+    expect(checkQuota(pro, 'formsPerHost', FORMS_PER_HOST_CEILING).limit).toBe(
+      FORMS_PER_HOST_CEILING,
+    )
+  })
+
+  it('answers identically for every plan, in BOTH directions', () => {
+    /*
+     * The row that makes the refusal above mean something. A policy module
+     * that answered 0 for every ceiling would pass "the next one is refused"
+     * while refusing the first one too, so the same counts are walked across
+     * every plan and both verdicts are asserted.
+     */
+    for (const plan of PLANS_WITH_FORMS) {
+      const org = { plan, subscription: { status: 'active' } } as any
+      expect([plan, checkQuota(org, 'formsPerHost', 0).allowed]).toEqual([plan, true])
+      expect([
+        plan,
+        checkQuota(org, 'formsPerHost', FORMS_PER_HOST_CEILING - 1).allowed,
+      ]).toEqual([plan, true])
+      expect([
+        plan,
+        checkQuota(org, 'formsPerHost', FORMS_PER_HOST_CEILING).allowed,
+      ]).toEqual([plan, false])
+    }
+  })
+
+  it('refuses every form on Free, which has no catalog', () => {
+    // The lower control. Without it "every plan allows one" is satisfied by a
+    // comparison that allows everybody.
+    const free = { plan: 'free' } as any
+    expect(checkQuota(free, 'formsPerHost', 0).allowed).toBe(false)
+    expect(checkQuota(free, 'formsPerHost', 0).limit).toBe(0)
+  })
+
+  it('takes a per-org override, so a contract can raise or lower it', () => {
+    // Where a genuinely larger catalog comes from now that no plan is
+    // uncapped: one org, by contract, without moving the ceiling everyone
+    // else is measured against.
+    const raised = {
+      plan: 'starter',
+      subscription: { status: 'active' },
+      entitlements: { formsPerHost: 5_000 },
+    } as any
+    expect(resolveOrgEntitlements(raised).formsPerHost).toBe(5_000)
+    expect(checkQuota(raised, 'formsPerHost', FORMS_PER_HOST_CEILING).allowed).toBe(
+      true,
+    )
+
+    const capped = {
+      plan: 'enterprise',
+      subscription: { status: 'active' },
+      entitlements: { formsPerHost: 25 },
+    } as any
+    expect(resolveOrgEntitlements(capped).formsPerHost).toBe(25)
+    expect(checkQuota(capped, 'formsPerHost', 25).allowed).toBe(false)
+  })
+
+  it('crosses the wire as itself, carrying no sentinel to lose', () => {
+    /*
+     * `JSON.stringify(Infinity)` is `null` and `Number(null)` is `0`, so an
+     * uncapped quota needs the `unlimited` flag to survive a route boundary
+     * or it renders as "no forms at all". A finite ceiling on every plan
+     * needs none of that apparatus — asserted rather than assumed, because
+     * the day one plan goes uncapped here this row is what says the flag has
+     * to come with it.
+     */
+    const roundTrip = (value: number) => JSON.parse(JSON.stringify({ value })).value
+    for (const plan of FORM_PLANS) {
+      const allowance = PLAN_ENTITLEMENTS[plan].formsPerHost
+      expect(Number.isFinite(allowance)).toBe(true)
+      expect(roundTrip(allowance)).toBe(allowance)
+    }
+    // The hazard itself, so the claim above is a measurement and not a habit.
+    expect(roundTrip(UNLIMITED)).toBeNull()
+  })
+
+  describe('a ceiling reached takes nothing away', () => {
+    it('does not move when the plan does, so a downgrade strands nothing', () => {
+      // A capacity a customer is told to RELEASE is one a plan change can
+      // strand. This one cannot: the number is the same on both sides of the
+      // downgrade, which is why it is absent from `over-limit.ts`.
+      const before = resolveOrgEntitlements({ plan: 'advanced' } as any)
+      const after = resolveOrgEntitlements({ plan: 'starter' } as any)
+      expect(before.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+      expect(after.formsPerHost).toBe(before.formsPerHost)
+    })
+
+    it('refuses only the next one, and computes no excess to release', () => {
+      // A catalog can still sit above the ceiling — a contract override
+      // withdrawn, or a ceiling lowered under forms already built. The forms
+      // stay; only the create is refused.
+      const starter = { plan: 'starter', subscription: { status: 'active' } } as any
+      const held = checkQuota(starter, 'formsPerHost', FORMS_PER_HOST_CEILING + 30)
+      expect(held.allowed).toBe(false)
+      expect(held.remaining).toBe(0)
+    })
+
+    it('keeps accepting submissions on a site past its catalog ceiling', () => {
+      // The consequence that costs money if it is wrong. Submissions are
+      // metered revenue on their own band; a catalog ceiling that reached them
+      // would refuse the customer's leads AND our billing.
+      const starter = { plan: 'starter', subscription: { status: 'active' } } as any
+      expect(
+        checkQuota(starter, 'formsPerHost', FORMS_PER_HOST_CEILING + 30).allowed,
+      ).toBe(false)
+      expect(checkFormSubmissionQuota(starter, 0).allowed).toBe(true)
+      expect(checkFormSubmissionQuota(starter, 199).allowed).toBe(true)
+    })
   })
 })

@@ -90,26 +90,41 @@ test('a sender address is never an intake, but is not swept as one', () => {
   )
 })
 
-test('the internal delivery target and placeholders are exempt', () => {
-  assert.ok(isNonIntakeAddress('zach@aglyn.com'))
-  assert.ok(isNonIntakeAddress('zach+e2e-smoke@aglyn.com'))
+test('the documentation placeholder is exempt, plus-tagged or not', () => {
   assert.ok(isNonIntakeAddress('you@aglyn.com'))
-  // Not an address at all — a CloudStorage mount path segment.
-  assert.ok(isNonIntakeAddress('GoogleDrive-zach@aglyn.com'))
-  assert.deepEqual(
-    findUnprovisionedAddresses([
-      { path: 'tools/scripts/x.mjs', text: '/CloudStorage/GoogleDrive-zach@aglyn.com/Shared' },
-    ]),
-    [],
-  )
+  assert.ok(isNonIntakeAddress('you+tag@aglyn.com'))
+})
+
+test('a personal mailbox is a finding, not an exemption', () => {
+  // The repository is public, so an individual's mailbox is never a published
+  // intake — including the one every group forwards to. That local-part used
+  // to be exempt here, which is how it reached 60 tracked files with this
+  // guard green the whole time. The stand-in below is deliberate: a test
+  // asserting the real address would put the address back.
+  assert.equal(isNonIntakeAddress('a.person@aglyn.com'), false)
+  assert.equal(isNonIntakeAddress('a.person+e2e-smoke@aglyn.com'), false)
+  const found = findUnprovisionedAddresses([
+    { path: 'docs/RUNBOOK.md', text: 'every group delivers to a.person@aglyn.com' },
+  ])
+  assert.equal(found.length, 1)
+  assert.equal(found[0].address, 'a.person@aglyn.com')
+})
+
+test('a CloudStorage mount path is a finding too', () => {
+  // It reads as an address because it contains one. The mount belongs behind
+  // AGLYN_DRIVE_MOUNT (see lib/drive-mount.mjs), so flagging it is correct.
+  const found = findUnprovisionedAddresses([
+    { path: 'tools/scripts/x.mjs', text: '/CloudStorage/GoogleDrive-a.person@aglyn.com/Shared' },
+  ])
+  assert.equal(found.length, 1)
 })
 
 test('an exempt local-part does not exempt a different one', () => {
-  // `zach` is exempt; `zachary` is not the same local-part and must not
-  // inherit the exemption by prefix.
-  assert.equal(isNonIntakeAddress('zachary@aglyn.com'), false)
+  // `you` is exempt; `young` is not the same local-part and must not inherit
+  // the exemption by prefix.
+  assert.equal(isNonIntakeAddress('young@aglyn.com'), false)
   const found = findUnprovisionedAddresses([
-    { path: 'a.md', text: 'zachary@aglyn.com' },
+    { path: 'a.md', text: 'young@aglyn.com' },
   ])
   assert.equal(found.length, 1)
 })

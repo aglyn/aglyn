@@ -18,7 +18,7 @@
 import { accountPhotoProfilePatch } from './account-photo-payload'
 
 /**
- * AGL-2486 item 38. The SSO account `zach@aglyn.com` renders an initial
+ * AGL-2486 item 38. The SSO account `staff@aglyn.com` renders an initial
  * because its IdP asserts no `picture` attribute — measured, not assumed:
  * the tenant auth record, its `saml.aglyn-workspace` provider entry and
  * `users/{uid}` are all photo-less after a sign-in three weeks after the

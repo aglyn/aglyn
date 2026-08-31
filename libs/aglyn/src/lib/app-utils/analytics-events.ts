@@ -281,8 +281,32 @@ export interface AnalyticsEventParams {
    * per-product funnel.
    */
   view_item: { items: AnalyticsItem[] }
-  /** GA4 recommended. A storefront product was added to the cart. */
-  add_to_cart: { items: AnalyticsItem[] }
+  /**
+   * GA4 recommended. A storefront product was added to the cart.
+   *
+   * `currency`/`value` are optional because GA4 pairs them — a `value` with no
+   * `currency` is dropped by GA — so they travel together or not at all, and
+   * {@link buildAddToCartParams} is what keeps that true. They are populated
+   * wherever the surface holds a server-priced figure: the product detail
+   * block knows the resolved variant's price and the chosen quantity, so the
+   * merchant's "value added to cart" is a real number rather than the empty
+   * column an items-only hit produces.
+   */
+  add_to_cart: { currency?: string; value?: number; items: AnalyticsItem[] }
+  /**
+   * GA4 recommended. The shopper looked at their cart — the funnel step
+   * between {@link AnalyticsEventParams.add_to_cart} and
+   * {@link AnalyticsEventParams.begin_checkout}, and the one GA4's own
+   * shopping-behavior report reads to tell "never opened the cart" apart from
+   * "opened it and did not check out". Without it those two collapse into one
+   * drop, and the merchant cannot tell a discovery problem from a pricing one.
+   *
+   * Fired when the cart is actually ON SCREEN carrying lines — a drawer that
+   * opened, or an inline cart block that resolved — never on the badge render
+   * that every page of a storefront performs. An empty cart is not a view of
+   * anything and reports nothing.
+   */
+  view_cart: { currency: string; value: number; items: AnalyticsItem[] }
 
   // --- Engagement ---------------------------------------------------------
   /**
@@ -535,8 +559,15 @@ const DENIED_PARAM_KEYS: ReadonlySet<string> = new Set([
 /** Deliberately loose — this is a "does it smell like an address" test. */
 const EMAIL_SHAPED = /[^\s@]+@[^\s@]+\.[^\s@]+/
 
-/** GA4 truncates param values at 100 chars anyway; do it ourselves, visibly. */
-const MAX_PARAM_LENGTH = 100
+/**
+ * GA4 truncates param values at 100 chars anyway; do it ourselves, visibly.
+ *
+ * Exported because an AUTHOR types some of these (the `trackGaEvent` step's
+ * parameters), and the field they type into caps its input at the same number
+ * — the truncation point and the affordance that describes it have to be one
+ * value, or the editor promises a length the delivery quietly shortens.
+ */
+export const ANALYTICS_PARAM_MAX_LENGTH = 100
 
 function scrubValue(value: string): string | null {
   let candidate = value
@@ -557,7 +588,7 @@ function scrubValue(value: string): string | null {
   // something already protected. Testing the REDUCED value still catches an
   // address embedded in the path itself, which the reduction keeps.
   if (EMAIL_SHAPED.test(candidate)) return null
-  return candidate.slice(0, MAX_PARAM_LENGTH)
+  return candidate.slice(0, ANALYTICS_PARAM_MAX_LENGTH)
 }
 
 /**
@@ -718,6 +749,25 @@ export function buildBeginCheckoutParams(input: {
   /** `monthly` | `annual`. Subscriptions only — a storefront cart has none. */
   billingInterval?: string
 }): AnalyticsEventParams['begin_checkout'] {
+  return {
+    ...priceItems(input),
+    ...(input.billingInterval ? { billing_interval: input.billingInterval } : {}),
+  }
+}
+
+/**
+ * The `currency`/`value`/`items` triple every GA4 ecommerce step shares.
+ *
+ * Private, because a caller should reach for the named builder for the event
+ * it is about to send: the names differ in what they mean by `value` even
+ * though the arithmetic is identical, and the JSDoc on each is where that is
+ * written down.
+ */
+function priceItems(input: {
+  items: AnalyticsItem[]
+  value?: number
+  currency?: string
+}): { currency: string; value: number; items: AnalyticsItem[] } {
   const items = input.items ?? []
   const summed = items.reduce(
     (total, item) => total + (item.price ?? 0) * (item.quantity ?? 1),
@@ -729,8 +779,45 @@ export function buildBeginCheckoutParams(input: {
     // `59.99999999999999`, and GA would report that verbatim.
     value: Math.round((input.value ?? summed) * 100) / 100,
     items,
-    ...(input.billingInterval ? { billing_interval: input.billingInterval } : {}),
   }
+}
+
+/**
+ * Build `view_cart` — the shopper is looking at the cart's contents.
+ *
+ * `value` is the cart's subtotal as the SERVER priced it, which is what makes
+ * this comparable with the `begin_checkout` the same cart sends moments later:
+ * two steps of one funnel that disagreed about the size of the same cart would
+ * read as shoppers editing it between screens.
+ */
+export function buildViewCartParams(input: {
+  items: AnalyticsItem[]
+  value?: number
+  currency?: string
+}): AnalyticsEventParams['view_cart'] {
+  return priceItems(input)
+}
+
+/**
+ * Build `add_to_cart` — one product going in, not the cart's new total.
+ *
+ * `value` is what was JUST ADDED (`price * quantity`), which is GA4's
+ * definition and the only one that makes the metric additive: summing a
+ * running cart total over a session would count the first item once per
+ * subsequent add.
+ *
+ * Callers that cannot price the line — a quick-add with no resolved variant —
+ * pass items alone and the pair is omitted rather than reported as zero. A
+ * zero here would read as a free product in the merchant's report.
+ */
+export function buildAddToCartParams(input: {
+  items: AnalyticsItem[]
+  value?: number
+  currency?: string
+}): AnalyticsEventParams['add_to_cart'] {
+  const priced = priceItems(input)
+  if (!(priced.value > 0)) return { items: priced.items }
+  return priced
 }
 
 /**
@@ -830,6 +917,7 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   purchase: true,
   view_item: true,
   add_to_cart: true,
+  view_cart: true,
   aglyn_overlay: true,
   aglyn_experiment: true,
   click: true,

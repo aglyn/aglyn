@@ -1,0 +1,98 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import * as Aglyn from '@aglyn/aglyn'
+import { compress, decompress } from '@aglyn/aglyn'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
+import { DocumentReference } from '@firebase/firestore'
+import { Bytes, doc } from 'firebase/firestore'
+import {
+  useFirestore,
+  type FirestoreDocOptions,
+} from './firebase/firebase-services'
+import useDoc from './helpers/use-doc'
+
+/**
+ * A form's working version, at
+ * `hosts/{hostId}/forms/{formId}/versions/{versionId}`.
+ *
+ * Compressed at rest, and carrying the same asymmetry a component version
+ * does: the PUBLISHED tree lives on the parent `forms/{formId}` document,
+ * because a placed form has to resolve on the hot path of a page render and
+ * one collection query reaches every form on the site. These documents are
+ * editing history — the besigner's draft surface — and nothing renders from
+ * them.
+ */
+export const useFormVersionRef = ({
+  hostId,
+  formId,
+  versionId,
+}: {
+  hostId: string
+  formId: string
+  versionId: string
+}) => {
+  const firestore = useFirestore()
+  const ref = doc(
+    firestore,
+    'hosts',
+    hostId,
+    'forms',
+    formId,
+    'versions',
+    versionId,
+  )
+  return ref.withConverter({
+    toFirestore(data) {
+      const { $id, ...rest } = data
+      // Only emit `nodes` when the write carries them — see the note in
+      // use-screen-version (AGL-1250). A partial write that compressed
+      // `undefined` would replace the stored tree with an empty one.
+      if (rest?.nodes === undefined)
+        return { ...rest, updatedAt: Timestamp.now() }
+      const nodes =
+        rest.nodes instanceof Bytes
+          ? rest.nodes
+          : Bytes.fromUint8Array(compress(rest.nodes))
+      return { ...rest, nodes, updatedAt: Timestamp.now() }
+    },
+    fromFirestore(snapshot, options) {
+      if (!snapshot.exists()) return undefined
+      const data = snapshot.data(options)
+      if (data?.nodes instanceof Bytes) {
+        return {
+          ...data,
+          nodes: decompress(data.nodes),
+        } as Aglyn.FormVersion
+      }
+      return data as Aglyn.FormVersion
+    },
+  }) as DocumentReference<Aglyn.FormVersion>
+}
+
+export const useFormVersion = (
+  data: {
+    hostId: string
+    formId: string
+    versionId: string
+  },
+  options?: FirestoreDocOptions<Aglyn.FormVersion>,
+) => {
+  return useDoc(useFormVersionRef(data), options)
+}
+
+export default useFormVersion

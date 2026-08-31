@@ -64,12 +64,16 @@ import {
   changeControlVerdicts,
   driveCrossCheckVerdicts,
 } from './lib/decision-log.mjs'
+import { driveDocPath, driveMountSkipNote } from './lib/drive-mount.mjs'
 import { overallExitCode } from './lib/pricing-drift.mjs'
 
-/** The authoritative Pricing Decision Log, when Drive is mounted. */
-const DRIVE_DECISION_LOG =
-  `${process.env.HOME}/Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/` +
-  `Platform Docs/Pricing & Packaging/05-Pricing-Decision-Log/Pricing-Decision-Log.md`
+/** The authoritative Pricing Decision Log, when the shared drive is mounted. */
+const DRIVE_DECISION_LOG = driveDocPath(
+  'Platform Docs',
+  'Pricing & Packaging',
+  '05-Pricing-Decision-Log',
+  'Pricing-Decision-Log.md',
+)
 
 /**
  * Base refs, in preference order.
@@ -169,16 +173,16 @@ const verdicts = changeControlVerdicts({
 // not readability here. Same trap `check-pricing-drift.mjs` documents.
 let driveMd = null
 try {
-  if (existsSync(DRIVE_DECISION_LOG)) driveMd = readFileSync(DRIVE_DECISION_LOG, 'utf8')
+  if (DRIVE_DECISION_LOG && existsSync(DRIVE_DECISION_LOG)) {
+    driveMd = readFileSync(DRIVE_DECISION_LOG, 'utf8')
+  }
 } catch {
   driveMd = null
 }
 if (driveMd) {
   verdicts.push(...driveCrossCheckVerdicts(parseDecisionLog(readWorktree(DECISION_LOG_PATH)).entries, driveMd))
 } else {
-  console.log(
-    'note: the Drive Pricing Decision Log is not mounted; skipping that leg (it is not a gate — CI has no Drive).',
-  )
+  console.log(driveMountSkipNote('the Pricing Decision Log'))
 }
 
 const differs = verdicts.filter((v) => v.status === 'differs')

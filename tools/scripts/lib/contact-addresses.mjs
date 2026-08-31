@@ -119,19 +119,34 @@ export const PLATFORM_SENDER_ADDRESSES = Object.freeze(['noreply@aglyn.com'])
 /**
  * Local-parts that are not an intake and must not be read as one.
  *
- * `zach` is the delivery target every group forwards to — it appears all over
- * the runbooks as the ANSWER to "where does this land", never as a published
- * contact. `you` is a documentation placeholder. `GoogleDrive-zach` is not an
- * address at all: it is a path segment of the macOS CloudStorage mount
- * (`/Users/…/CloudStorage/GoogleDrive-zach@aglyn.com/…`) that appears in
- * scripts which read the shared drive.
+ * `you` is a documentation placeholder — "mail `you@aglyn.com`" in an example
+ * an operator is meant to substitute into, never an address we operate.
+ *
+ * ## Why a PERSON's mailbox is not on this list
+ *
+ * It used to be. The account owner's own address is the delivery target every
+ * group forwards to, so it read as an obvious exemption: it appeared in the
+ * runbooks as the ANSWER to "where does this land", not as a contact anyone
+ * was invited to write to.
+ *
+ * That reasoning is right about intent and wrong about consequence. This
+ * repository is PUBLIC. An exemption for a personal local-part is an exemption
+ * for publishing a named individual's mailbox in 60 files, which is what it
+ * became, and the guard sat green through all of it — the one check positioned
+ * to notice had been told not to look. Nothing else was watching either.
+ *
+ * So the rule is now uniform: an `@aglyn.com` address in tracked source is
+ * either provisioned to receive as a published intake, or it is a finding. A
+ * personal mailbox is neither, and the fix when this fires is to name the
+ * PROPERTY instead of the person — "the account owner's mailbox", "a single
+ * human recipient" — which is what the surrounding sentence almost always
+ * meant anyway.
+ *
+ * A mount path is not an exception either. `GoogleDrive-<account>` is a path
+ * segment of a per-workstation CloudStorage mount, and a mount path is not a
+ * repository constant; see `lib/drive-mount.mjs`.
  */
-export const NON_INTAKE_LOCALPARTS = Object.freeze([
-  'GoogleDrive-zach',
-  'you',
-  'zach',
-  'zachary.gover',
-])
+export const NON_INTAKE_LOCALPARTS = Object.freeze(['you'])
 
 /**
  * Addresses that are PUBLISHED to the public but whose provisioning has never
@@ -209,7 +224,8 @@ export function isNonIntakeAddress(addr) {
   if (typeof addr !== 'string' || !addr.trim()) return false
   const local = localPartOf(addr.trim())
   if (NON_INTAKE_LOCALPARTS.includes(local)) return true
-  // `zach+e2e-smoke@` and friends: a plus-tag on a non-intake local-part.
+  // `you+anything@`: a plus-tag does not change which mailbox an address
+  // names, so it cannot change whether that mailbox is an intake.
   const base = local.split('+')[0]
   return NON_INTAKE_LOCALPARTS.includes(base)
 }

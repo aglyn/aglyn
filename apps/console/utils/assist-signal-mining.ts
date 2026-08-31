@@ -114,6 +114,15 @@ export interface UngroundedRoute {
  */
 export interface ProseCandidate {
   orgId: string
+  /**
+   * That workspace by name, filled in by the route.
+   *
+   * Optional because this module is pure and Firestore-free: it can count a
+   * workspace's turns and it cannot know what the workspace is called. The
+   * route resolves the labels and the reader falls back to the id, so a
+   * workspace outside the lookup is still a lead somebody can search for.
+   */
+  orgLabel?: string | null
   exchangeId: string
   /** The console screen the question was asked from. */
   route: string
@@ -124,6 +133,8 @@ export interface ProseCandidate {
 
 export interface OrgCostRow {
   orgId: string
+  /** That workspace by name — see {@link ProseCandidate.orgLabel}. */
+  orgLabel?: string | null
   messages: number
   inputTokens: number
   outputTokens: number
@@ -205,6 +216,25 @@ export interface AssistMiningReport {
     feedback: { up: number; down: number; none: number }
   }
   docsGaps: DocsGapRow[]
+  /**
+   * How tall each ranking was BEFORE it was cut to `limit`.
+   *
+   * `truncated` reports only that the SCAN hit its ceiling. It says nothing
+   * about the rankings built from what was scanned, and those are cut too —
+   * every list below is sliced to `limit`. A table showing twenty-five of a
+   * hundred and thirty-seven cited pages looks exactly like one showing all
+   * twenty-five there are, which is the AGL-2220 shape the scan ceiling was
+   * given a banner to avoid, reproduced one layer down.
+   *
+   * Counted rather than inferred from `length === limit`: a ranking that is
+   * exactly `limit` rows tall is the case where the guess is wrong in both
+   * directions.
+   */
+  ranked: {
+    docsGaps: number
+    ungroundedRoutes: number
+    orgs: number
+  }
   /** Turns whose words are worth reading — see {@link ProseCandidate}. */
   proseCandidates: ProseCandidate[]
   ungrounded: {
@@ -432,21 +462,32 @@ export function mineAssistSignals(
     .sort((a, b) => b.down - a.down || b.questions - a.questions)
     .slice(0, limit)
 
+  const ungroundedRouteRows = [...ungroundedRoutes.values()].sort(
+    (a, b) => b.questions - a.questions || b.down - a.down,
+  )
+  const orgRows = [...orgs.values()].sort(
+    (a, b) => b.estCostUsd - a.estCostUsd || b.messages - a.messages,
+  )
+
   return {
     scanned: rows.length,
     truncated: Boolean(options.truncated),
     totals,
     docsGaps,
+    ranked: {
+      // `gaps` rather than `docsGaps`: the latter is already sliced, so
+      // measuring it would report the cap as the total and the disclosure
+      // would agree with itself forever.
+      docsGaps: gaps.size,
+      ungroundedRoutes: ungroundedRoutes.size,
+      orgs: orgs.size,
+    },
     proseCandidates: proseCandidates.slice(0, limit),
     ungrounded: {
       questions: ungroundedQuestions,
       down: ungroundedDown,
-      routes: [...ungroundedRoutes.values()]
-        .sort((a, b) => b.questions - a.questions || b.down - a.down)
-        .slice(0, limit),
+      routes: ungroundedRouteRows.slice(0, limit),
     },
-    orgs: [...orgs.values()]
-      .sort((a, b) => b.estCostUsd - a.estCostUsd || b.messages - a.messages)
-      .slice(0, limit),
+    orgs: orgRows.slice(0, limit),
   }
 }

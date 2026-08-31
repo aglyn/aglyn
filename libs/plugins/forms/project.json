@@ -1,0 +1,30 @@
+{
+  "name": "plugins-forms",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/forms/src",
+  "projectType": "library",
+  "tags": ["aglyn:addons"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/plugins/forms",
+        "main": "libs/plugins/forms/src/index.ts",
+        "tsConfig": "libs/plugins/forms/tsconfig.lib.json",
+        "assets": ["libs/plugins/forms/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/forms"],
+      "options": {
+        "jestConfig": "libs/plugins/forms/jest.config.ts"
+      }
+    }
+  }
+}

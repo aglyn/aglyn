@@ -28,8 +28,11 @@ export function registerMyPluginApi(): void {
   body) 404 when the target workspace has your plugin disabled or its
   release flag is off. Handlers still self-check entitlements
   (`checkEntitlement`/`checkQuota` with the org doc) for plan gating.
-- Per-org settings: `getPluginConfig(orgId, pluginId)` returns your
-  declared defaults merged with the workspace's overrides.
+- Settings: `getPluginConfig(orgId, pluginId, { hostId })` returns your
+  declared defaults merged with the workspace's values and then the site's
+  overrides. **Pass `hostId` whenever the request has one** — without it the
+  site's override is silently ignored while the console still shows it. See
+  [Plugin configuration](../reference/plugin-config.md).
 
 ## Webhooks with signature verification
 

@@ -427,7 +427,7 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
              'erasureRequestedAt',
-             // AGL-693. The SEARCH KEYS behind the staff organization list.
+             // AGL-2501. The SEARCH KEYS behind the staff organization list.
              // Derived from `name` by `nameSearchFields` on every writer, so
              // there is no state in which a client should set one — and a
              // client that could would decide which name its organization is
@@ -465,28 +465,22 @@ service cloud.firestore {
        * org block deliberately has no `{document=**}` catch-all (see the note
        * further down) — so there is no looser sibling to defeat it.
        *
-       * ⛔ STILL OPEN: the CUSTOM-ROLE layer. `member.roleId` points at
-       * `orgs/{orgId}/roles/{roleId}`, whose map can also revoke
-       * `billing.view`, and rules cannot resolve that faithfully without
-       * a second cross-document get() plus a correct three-layer precedence
-       * (per-member beats custom role beats role default) reimplemented in
-       * CEL. A naive OR of the two layers OVER-denies — an admin whose custom
-       * role revokes `billing.view` but whose per-member map re-grants it is
-       * permitted by the resolver and would be locked out by the rule — and a
-       * dangling `roleId` makes get() return null, which denies where the
-       * resolver falls back to the role defaults. Both failure modes lock out
-       * paying customers, so it is not being attempted during the freeze.
+       * ⚠️ THE CUSTOM-ROLE LAYER IS NOT READ HERE. `memberResolves` further
+       * down reads it, through denormalization rather than resolution:
+       * `syncOrgAuthProjections` writes the RESOLVED map
+       * (`resolvedPermissions`, all three layers applied) onto the member doc
+       * and the rules read the answer instead of chasing the inputs. Resolving
+       * it directly is not available at any price — it needs a second
+       * cross-document get(), a three-layer precedence expressed in CEL, and a
+       * dangling `roleId` whose null get() denies where the resolver falls
+       * back to the role defaults.
        *
-       * The fix that layer needs is DENORMALISATION, not a cleverer rule:
-       * `syncOrgAuthProjections` already writes `scopeTokens` onto the member
-       * doc for exactly this reason. Extend it to write the RESOLVED map —
-       *
-       *   orgs/{orgId}/members/{uid}.resolvedPermissions:
-       *     Record<string, boolean>   // all three layers already applied
-       *
-       * — recomputed whenever the member, their `roleId`, or that role doc
-       * changes, and then this rule becomes `memberGrants` against
-       * `resolvedPermissions` with the same default-true backfill semantics.
+       * This billing rule is deliberately NOT switched over to it. The gap it
+       * closes is a custom role revoking `billing.view` from a manager, and
+       * nothing has asked for that; changing a rule that guards the Stripe
+       * document to gain a case nobody has is how a lockout ships. The reader
+       * that needed it is `canWriteOrgDatasets`, where the rules and
+       * `/api/orgs/datasets` were already disagreeing about a live workspace.
        */
       match /billing/{billingDocId} {
         allow read: if isStaff() ||
@@ -602,6 +596,96 @@ service cloud.firestore {
           orgNotSuspended();
       }
       /**
+       * The RESOLVED permission verdict, denormalized (AGL-243 residual).
+       *
+       * `memberGrants` above reads the per-member override layer only, and
+       * the note under the `billing` match says why the custom-role layer was
+       * left open: rules cannot resolve `member.roleId` into
+       * `orgs/{orgId}/roles/{roleId}` and reimplement a three-layer
+       * precedence in CEL without a second get() and two lockout-shaped
+       * failure modes. That note also names the fix, which is this one —
+       * denormalize the ANSWER, exactly as `scopeTokens` denormalizes a reach
+       * the rules language cannot compute either.
+       *
+       * `resolvedPermissions` is `resolveOrgPermissions(member, customRole)`
+       * with all three layers already applied, written by
+       * `syncOrgAuthProjections` on every membership change and — the case
+       * that has no membership change at all — on every save or delete of a
+       * custom role.
+       *
+       * ## The default chain, which is the whole safety argument
+       *
+       * An absent map must not read as "everything allowed", and must not
+       * read as "nothing allowed" either. Both are wrong and one of them
+       * locks out every member of every org the moment this deploys, so the
+       * fallback is neither: it is the layer the rules CAN still read.
+       *
+       *   resolvedPermissions[key]         the resolved verdict, if stamped
+       *   -> permissions[key]              the per-member override, if any
+       *   -> true                          leaving the ROLE gate to decide
+       *
+       * That last step is only safe because every caller conjoins this with a
+       * role check it cannot influence. A member carrying no map — every
+       * member written before this field, and any written by a path that
+       * bypasses the projection — therefore gets the verdict the role gate
+       * alone produces, which is what this rule resolves to whenever the two
+       * denormalized layers are silent. A `true` here grants nothing on its
+       * own.
+       *
+       * Costs no document read. `orgMember()` is a get() every caller on this
+       * path already pays for, and identical get()s in one evaluation are
+       * billed once.
+       */
+      function memberResolves(permission) {
+        return orgMember()
+          .get('resolvedPermissions', orgMember().get('permissions', {}))
+          .get(permission, true) == true;
+      }
+      /**
+       * The same default chain as `memberResolves`, read with the OPPOSITE
+       * default: was this permission written down as granted?
+       *
+       * `memberResolves` answers "has this been taken away", which is why it
+       * defaults true and why every caller conjoins it with a role gate. This
+       * one answers "has it been given", so an absent key is `false` and it
+       * grants nothing on its own to a member the projection has not reached.
+       *
+       * It exists because `resolveOrgPermissions` WIDENS as well as narrows: a
+       * custom role or a per-member override can hand `data.manage` to a
+       * viewer, and the console surfaces that gate on the resolved map admit
+       * them. A rule that stopped at the role list would deny the read those
+       * pages are already granting, and the member would get a table that
+       * never loads.
+       */
+      function memberStamps(permission) {
+        return orgMember()
+          .get('resolvedPermissions', orgMember().get('permissions', {}))
+          .get(permission, false) == true;
+      }
+      /**
+       * Dataset and record writes: the role, AND the resolved `data.manage`.
+       *
+       * The two halves are not redundant. The role list is what an absent or
+       * unstamped permission map falls through to, and the permission is the
+       * only thing here that a custom role's revocation can reach. Without
+       * it the same principal is refused by `/api/orgs/datasets` and
+       * permitted by these rules — which matters most where there is no API
+       * to disagree with, because a dataset UPDATE and a record
+       * update/delete go client-direct: an editor whose `data.manage` a
+       * custom role revokes otherwise keeps full edit and delete access to
+       * everything already stored.
+       *
+       * NOT folded into `canWriteOrgData`, deliberately. That helper also
+       * gates contacts, segments, media and media folders, and `data.manage`
+       * is scoped to datasets — "Create, edit, and delete organization
+       * datasets". Applying it to the media library would refuse a member
+       * whom `media-scope.ts` permits, which is the same disagreement this
+       * closes, pointed the other way.
+       */
+      function canWriteOrgDatasets() {
+        return canWriteOrgData() && memberResolves('data.manage');
+      }
+      /**
        * Write access to the org-wide records a site collaborator cannot read
        * (AGL-1026). Without this, an org role of `editor` scoped to one site
        * could still WRITE the contacts and lists the read rules now deny
@@ -642,8 +726,58 @@ service cloud.firestore {
           (isOrgMember() &&
            resource.data.visibleTo.hasAny(orgMember().get('scopeTokens', ['org'])));
       }
+      /**
+       * WHO MAY READ THE PEOPLE: the reach, AND the authority. Both halves.
+       *
+       * `canReadScoped()` alone answers only "which documents is this member
+       * near", and nothing about what they may do once there. On `datasets`
+       * and `media` that is the whole question — a collaborator building a
+       * site has to read the rows their pages bind and the assets their pages
+       * place. On the CRM it is not: a contact is a person's name, address,
+       * order history, notes and consent, and an org VIEWER — the role whose
+       * entire definition is reading and changing nothing — was admitted to
+       * every one of them by membership alone.
+       *
+       * `data.manage` is the key, because it is the key the surfaces over this
+       * data already gate on. The Contacts console registers
+       * `permission: 'data.manage'` and the Emails console registers the same,
+       * so this is what makes those gates defense in depth rather than the
+       * only door: contact and segment writes are client-direct, so a browser
+       * that skips the console reaches Firestore and nothing else.
+       *
+       * THE SCOPED HALF SURVIVES, and that is deliberate. A site collaborator
+       * holding `data.manage` reads the contacts their own host captured —
+       * their listener filters on `visibleTo` and this predicate proves the
+       * same intersection per document. Dropping it in favor of
+       * `isOrgWideMember()` would take a shipped capability away from every
+       * agency to close a hole that is about the ROLE axis, not the scope one.
+       *
+       * The disjunction mirrors the resolver rather than approximating it. An
+       * explicit grant leads, so a viewer handed `data.manage` by a custom
+       * role or a per-member override is admitted exactly as the console
+       * admits them; a member the projection never reached falls through to
+       * the role that grants it by default, which is the only reading of an
+       * absent map that neither locks out every org nor admits every viewer.
+       */
+      function canReadScopedPeople() {
+        return canReadScoped() &&
+          (memberStamps('data.manage') ||
+           (orgMember().role in ['owner', 'admin', 'editor'] &&
+            memberResolves('data.manage')));
+      }
       function canWriteScopedOrgData() {
         return canWriteOrgData() && canReadScoped();
+      }
+      /**
+       * The dataset-only twin. Same scoping, plus `data.manage`.
+       *
+       * Separate from `canWriteScopedOrgData` because that helper also gates
+       * contacts, segments, media and media folders — surfaces no server
+       * route gates on `data.manage`, so requiring it there would refuse
+       * members the API permits and invent the disagreement this closes.
+       */
+      function canWriteScopedOrgDatasets() {
+        return canWriteOrgDatasets() && canReadScoped();
       }
       /**
        * Only an org-wide member may change who a resource is shared with.
@@ -685,7 +819,7 @@ service cloud.firestore {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff();
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgDatasets() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff();
         match /records/{recordId} {
           // A record has no `visibleTo` of its own; it inherits the
@@ -707,24 +841,91 @@ service cloud.firestore {
           allow read: if isStaff() || parentDatasetVisible();
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteOrgData() && parentDatasetVisible());
+            (canWriteOrgDatasets() && parentDatasetVisible());
         }
       }
-      // The CRM is org-wide-only (AGL-1026). Contacts and segments are people
-      // — names, emails, everything a form ever collected, across every site
-      // — and there is no per-site slice of them to hand a collaborator: a
-      // contact belongs to the org, not to the site whose form created it.
-      // Given the choice between showing a one-site contractor the whole
-      // customer list and showing them none of it, none is the only defensible
-      // one. A collaborator who genuinely needs their site's leads should get
-      // them through a server route that filters, not a widened rule.
+      /**
+       * The CRM, scoped like `datasets` and `media` rather than org-wide.
+       *
+       * A contact document is shared by every site that has captured the
+       * person — one human is one row, which is the dedupe the shared address
+       * book exists for and the reason an org is billed once for them. Who
+       * may READ that row is a different question, and it was not being
+       * asked: `isOrgWideMember()` admitted every site in the account to
+       * every contact in it, so an agency running twelve client brands had
+       * one address book with twelve readers.
+       *
+       * The scope half of `canReadScopedPeople()` is the same predicate the
+       * client's `array-contains-any` filter uses, which is what makes a
+       * filtered query provable per-document and an UNFILTERED one denied
+       * outright rather than quietly returning the collection. The authority
+       * half is `data.manage`, the key the Contacts console itself gates on.
+       *
+       * READ IS NARROWER THAN WRITE HERE, and the asymmetry is deliberate.
+       * The writes stay on `canWriteOrgData()`, whose role list already
+       * excludes the viewer this read is about; adding the capability to them
+       * as well would apply it to the media library through the shared
+       * helper, where no surface asks for it. Disclosure is the risk this
+       * collection carries, and disclosure is the read.
+       *
+       * DELETE IS SOLE-HOLDER ONLY, and that is the load-bearing clause.
+       * Removing a contact from one site's CRM is a DETACH — drop that
+       * holder's facet, its consent entries and its scope tokens — because
+       * another site that captured the same person keeps its own notes,
+       * order history and consent, none of which the deleting site ever had a
+       * claim on. `hasOnly` is the reference count: the document may only be
+       * destroyed by a caller who is the last thing holding it, and every
+       * other case has to be an update. A privacy ERASURE is not this path
+       * and goes through the Admin SDK, which these rules do not gate.
+       */
       match /contacts/{contactId} {
-        allow read: if isStaff() || isOrgWideMember();
-        allow write: if isStaff() || canWriteOrgWideData();
+        allow read: if isStaff() || canReadScopedPeople();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped());
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           resource.data.visibleTo.hasOnly(
+             orgMember().get('scopeTokens', ['org'])));
       }
+      // Segments are saved filters over the contacts above and are stamped
+      // org-wide at creation, so they follow the same predicate: a segment
+      // nobody may see is a campaign audience nobody may resolve, and a
+      // segment somebody may see is a description of the people it selects —
+      // the tags, capture sources, order thresholds and engagement windows
+      // that pick a slice of the CRM out. Reading it is reading about the
+      // contacts, so it answers to the same authority they do.
       match /contactSegments/{segmentId} {
+        allow read: if isStaff() || canReadScopedPeople();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped());
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if isStaff() || canWriteScopedOrgData();
+      }
+
+      // Email topics: the streams a recipient may leave one at a time.
+      // Scoped like `lists` and for the same reason — a topic is authored
+      // editorial content an agency writes once and points several sites at,
+      // so the definitions are org-shared while a recipient's OPT-OUT is
+      // per site, at `hosts/{hostId}/topicOptOuts`.
+      //
+      // Read is org-wide like the CRM it sits beside, and NOT public: the
+      // catalog names an org's internal mail streams. The unauthenticated
+      // preference page reads it on the Admin SDK behind a verified HMAC,
+      // which is a different question from whether a browser may.
+      //
+      // Delete is refused outright, matching the card, and that is the rule
+      // rather than a convenience. A topic id is signed into every
+      // unsubscribe link sent under it, and those links live in inboxes
+      // indefinitely — a deleted topic is a preference page that cannot name
+      // the message the recipient is holding. Retiring writes
+      // `archived: true`, which is an update.
+      match /emailTopics/{topicId} {
         allow read: if isStaff() || isOrgWideMember();
-        allow write: if isStaff() || canWriteOrgWideData();
+        allow create, update: if isStaff() || canWriteOrgWideData();
+        allow delete: if isStaff();
       }
 
       // Email lists (AGL-254): static audiences shared across the org's
@@ -735,14 +936,117 @@ service cloud.firestore {
       // with no list to reach them from. /api/resources/erase walks the
       // whole subtree; enrollments below stay individually deletable.
       match /lists/{listId} {
-        // Enrolled members are contacts, so the list follows the CRM
-        // (AGL-1026): org-wide readers only.
+        /**
+         * Org-wide reach AND the authority to manage the org's data — who may
+         * see the PEOPLE on an audience, as opposed to the audience's name.
+         *
+         * Three conjuncts, none redundant. `isOrgWideMember()` keeps the
+         * AGL-1026 boundary: an audience belongs to the org and every host in
+         * it may mail the same list, so a collaborator invited to one site is
+         * refused the whole thing. The role list is the population
+         * `data.manage` defaults to, and it is what an unstamped permission
+         * map falls through to. `memberResolves` is the only conjunct a
+         * custom role or a per-member override can reach, and it is what
+         * makes this agree with the Emails console rather than merely
+         * resemble it — that page gates on `data.manage` and this collection
+         * is the org-shared people data it opens onto.
+         *
+         * `orgNotSuspended()` is deliberately not folded in. Suspension stops
+         * a workspace writing; a workspace that may not read its own audience
+         * may not export it either, and winding down is exactly when that is
+         * asked for. The delete below adds the clause for itself.
+         */
+        function isOrgWideAudienceManager() {
+          return isOrgWideMember() &&
+            orgMember().role in ['owner', 'admin', 'editor'] &&
+            memberResolves('data.manage');
+        }
+        /**
+         * THE LIST DOCUMENT IS METADATA; ITS `members` ARE PEOPLE. The two
+         * reads answer different questions, and this is the looser half.
+         *
+         * A list document holds a name, a `kind`, and — for a dynamic one —
+         * the `rule` that selects its audience: tags, capture sources, form
+         * names, date windows, order and engagement thresholds, other list
+         * ids. Selection criteria, not people. Nothing on it names a human,
+         * which is why org-wide membership is the whole question for it and
+         * the predicate above is not applied here.
+         *
+         * It is also read well outside the Emails console, by surfaces that
+         * are not about audiences at all: the campaigns table and a
+         * campaign's detail name what a send was aimed at, the workflows card
+         * names the list an `enrollList` step enrolls into, and the
+         * reference-health card exists to notice when one of those ids stops
+         * resolving. All of them read `name` so the screen shows a name and
+         * not an id, and all of them are legitimately open to a reader who
+         * changes nothing. Narrowing this read would print ids where names
+         * belong and would hide the dangling reference the health card is
+         * for.
+         *
+         * NOT `canReadScoped()`, the predicate the CRM beside it uses. On a
+         * contact that is a NARROWING: a contact carries `visibleTo`, so a
+         * scoped member sees the sites that captured the person and no
+         * others. A list carries no `visibleTo` and has no per-site slice to
+         * put in one, and the enrollment route refuses a caller who is not
+         * org-wide. Applied here the same predicate would be a WIDENING,
+         * admitting scoped members and changing nothing else. The two
+         * collections share the principle — look at what the resource is,
+         * then decide — and differ in the answer because the resources
+         * differ.
+         */
         allow read: if isStaff() || isOrgWideMember();
         allow create, update: if isStaff() || canWriteOrgWideData();
         allow delete: if isStaff();
+        // ENROLLING is API-only; REMOVING is not, and the asymmetry is the
+        // point. A member document carries the consent basis that says why
+        // this person may be mailed — `marketingConsent`, its timestamp, the
+        // basis and the account answerable for it. A client that can write
+        // one can write `marketingConsent: true` beside an address nothing
+        // has checked, which is a consent record minted by pressing a button:
+        // no stored opt-in consulted, no suppression list consulted, and no
+        // way afterwards to tell it from one somebody actually gave. So the
+        // create and the update belong to the route
+        // (`plugins-email/server-console.ts` and the Inbox's assign-list),
+        // which runs the shared `list-assignment-policy` and writes through
+        // `enrollListMember`.
+        //
+        // `write` covered all three until AGL-254's console surface gained an
+        // add button; nothing had ever used the client create, so closing it
+        // takes nothing away. Removal stays a client delete because taking
+        // somebody OFF a list needs no basis and destroys no evidence anybody
+        // relies on — the refusal it must never be confused with lives on the
+        // suppression list, which this block does not touch.
         match /members/{memberId} {
-          allow read: if isStaff() || isOrgWideMember();
-          allow write: if isStaff() || canWriteOrgWideData();
+          /**
+           * WHO MAY READ AN ENROLLMENT: an org-wide member who manages data.
+           *
+           * A member document is an address, a name, and the consent record
+           * that says why this person may be mailed — the basis, the moment
+           * it was given, the console account that attested to it and the
+           * words they attested in. `isOrgWideMember()` alone asks only
+           * whether the caller is on the roster with org-wide reach, and
+           * nothing about what they may do once there, so it hands every
+           * audience the organization has and everybody on it to an org
+           * VIEWER — the role whose entire definition is reading and changing
+           * nothing.
+           *
+           * "They can read the contacts anyway" is not true of this
+           * collection, which is what makes the denial worth having. An
+           * enrollment is often an address that is not a contact and never
+           * was: the importer writes a supplied file straight onto the list,
+           * and a dynamic list materializes people out of `leads`,
+           * `siteMembers` and `formSubmissions`. Nor does a contact carry the
+           * attestation — that is a record about an EMPLOYEE, naming who
+           * asserted permission for this person and in what words, and it
+           * exists nowhere else.
+           */
+          allow read: if isStaff() || isOrgWideAudienceManager();
+          allow create, update: if isStaff();
+          // Removal follows the read: a caller who may not see who is on a
+          // list has no business taking them off it. Suspension belongs on
+          // this half, which is the write.
+          allow delete: if isStaff() ||
+            (isOrgWideAudienceManager() && orgNotSuspended());
         }
       }
 
@@ -887,6 +1191,23 @@ service cloud.firestore {
       match /ssoDomains/{domain} {
         allow read, write: if false;
       }
+
+      // Custom email sending domains. Admin SDK only, on the same reasoning as
+      // `ssoDomains` above and for a closely related security property.
+      //
+      // `status` is what decides whether mail may leave as this domain. A
+      // client that could write it would set `verified` on a domain whose DKIM
+      // record was never published — sending as a domain it does not control,
+      // which is the whole of what the DNS check exists to prevent. It would
+      // also defeat the refusal the send path is built around, since that
+      // refusal reads exactly this field.
+      //
+      // The read denial stands on its own: the document holds `dkimSelector`,
+      // and knowing which selector an org was issued is the first half of
+      // impersonating its sending setup.
+      match /sendingDomains/{domain} {
+        allow read, write: if false;
+      }
     }
 
     // Workspace-subdomain resolution ({slug}.aglyn.com): public read so
@@ -966,6 +1287,35 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Platform-wide operator settings written through audited staff routes
+    // (AGL-2021). Today: `taxFiling`, which holds the jurisdiction this
+    // deployment files in and the registration identifiers it files under.
+    //
+    // Deny ALL client access, staff included, and the identifiers are why. A
+    // filing credential such as a Texas Webfile number authenticates a profile
+    // at the Comptroller's eSystems; a rule that let a staff browser read this
+    // document would put that credential in any session holding a staff token,
+    // reachable without the audited route and without the masking the console
+    // applies. Every read is an Admin-SDK read behind the staff gate, and only
+    // the return itself is ever handed the whole value.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    match /platformSettings/{settingId} {
+      allow read, write: if false;
+    }
+
+    // Item 3 of the sales tax return — taxable purchases, one document per
+    // filing period, entered by hand from the expense records because no
+    // collection here holds the figure. Deny ALL client access: a client that
+    // could write one could put an arbitrary number onto a return signed
+    // under penalty of perjury, and the write is `super`-only and audited on
+    // /api/admin/tax-purchases precisely so that cannot happen off the record.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    match /platformTaxablePurchases/{period} {
+      allow read, write: if false;
+    }
+
     // Scheduled-job heartbeats (AGL-1955): one doc per cron job, stamped by
     // the run itself through the Admin SDK, read by /api/health/crons to
     // notice a job that STOPPED being scheduled. Deny ALL client access — a
@@ -1035,7 +1385,26 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/hosts/$(hostId))
         .data.get('memberRoles', {}).get(request.auth.uid, null);
     }
-    function isHostAdmin(hostId) {
+    /**
+     * Is this user a member of the host AT ALL — any role, including the
+     * narrowest?
+     *
+     * The loosest membership test in this file: `admin`, `editor`, `author`
+     * and `viewer` all pass. It answers "may this person LOOK at the site
+     * they were added to", and every role we sell was added to do exactly
+     * that. `memberRoles` carries no entry for a non-member, so a null role
+     * is the whole test.
+     *
+     * It is NOT an admin gate and must never be used as one. Rules that mean
+     * admin-only spell the comparison out inline —
+     * `hostMemberRole(hostId) == 'admin'`, as the `pluginSettings` write
+     * does — so that a rule restricting something to owners cannot be
+     * satisfied by a viewer. It says nothing about writing either: mutating
+     * content asks `canWriteHostContent`, making it live asks
+     * `canPublishHostContent`, and the documents carrying webhook secrets and
+     * shopper PII ask `canReadHostSensitive`.
+     */
+    function isHostMember(hostId) {
       return isSignedIn() && hostMemberRole(hostId) != null;
     }
     /**
@@ -1371,6 +1740,40 @@ service cloud.firestore {
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
                      'bandwidthCeiling',
+                     // `sendingDomain`/`sendingLocalPart` are this site's
+                     // half of the custom-sending-domain model: together they
+                     // are the `From:` address every recipient of this site's
+                     // marketing mail sees. They belong in the Admin-SDK-only
+                     // tier for a reason neither `cname` nor `enabledPlugins`
+                     // quite covers — a site `admin` need not be an org
+                     // member at all, since a site-scoped COLLABORATOR
+                     // carries a host role and no org standing, so the
+                     // admin-tier carve-out below would not hold them. An
+                     // editor able to write these could move one client's
+                     // mail onto another client's verified domain, or set a
+                     // mailbox of their choosing on a domain the org proved
+                     // and send as anyone at it. /api/email/sending-identity
+                     // owns both: it checks `org.settings`, and it refuses a
+                     // domain the org has not verified.
+                     'sendingDomain', 'sendingLocalPart',
+                     // `sendingLabel` is the PIN behind those two, and it was
+                     // missing here while they were listed. It is written once
+                     // and never rewritten, because it is what survives a site
+                     // rename and keeps a domain's accumulated sending
+                     // reputation attached to the site that earned it. An
+                     // editor able to write it could point this site at a
+                     // label another site holds, which the teardown path then
+                     // resolves to that site's DKIM record.
+                     //
+                     // `sendingDomainRequestedAtMs` and
+                     // `sendingDomainRequestedBy` are the record of who drew a
+                     // dedicated subdomain. That is a bounded resource — one
+                     // slot in the provider's account-wide allowance and three
+                     // records in our own zone — and at the ceiling the only
+                     // useful question is which slots somebody actually asked
+                     // for. An audit trail a client can write is not one.
+                     'sendingLabel', 'sendingDomainRequestedAtMs',
+                     'sendingDomainRequestedBy',
                      'projectId', 'projectNumber']) &&
           // The approved-host lists join the same admin tier (AGL-1152), and
           // for the sharper of the two reasons its siblings are here: they are
@@ -1389,9 +1792,28 @@ service cloud.firestore {
           // hurt most: `approvedConnectHosts` decides where a page may send
           // what a visitor typed, and `approvedFrameHosts` decides whose login
           // form it may embed.
+          //
+          // `authScreens` (AGL-553) belongs in this tier for the reason
+          // `enabledPlugins` is in it, one step further along. That key
+          // decides whether `/signin`, `/signup` and `/recover` EXIST; this
+          // one decides what they RENDER. A site member who can write it
+          // points the address a site's members type their password into at
+          // any screen they like — the credential-confusion hazard the
+          // capability exists to close, reached through the slot instead of
+          // the switch.
+          //
+          // It is also the one live-content surface that does not pass
+          // through `screens`. The tenant loader resolves the slot straight
+          // to a screen document and `screenClaimsToBeAPage` asks only
+          // whether it is deleted, so freezing the routing map for an
+          // `author` never reached it: the role sold as "edit content but
+          // not publish" could put a screen on the site's sign-in address
+          // while publishing nothing. The console card writes this key from
+          // the Admin -> Plugins page, which is already admin-only, so the
+          // tier matches the surface that sets it.
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['disabledPlugins', 'enabledPlugins',
+              .hasAny(['disabledPlugins', 'enabledPlugins', 'authScreens',
                        'approvedImageHosts', 'approvedMediaHosts',
                        'approvedFontHosts', 'approvedFormActions',
                        'approvedConnectHosts', 'approvedFrameHosts'])) &&
@@ -1479,7 +1901,7 @@ service cloud.firestore {
       // only proves the refusals would pass just as well for a role that can
       // do nothing at all.
       match /screens/{screenId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1515,13 +1937,13 @@ service cloud.firestore {
         // Frozen writes still freeze it. A draft is authoring, and a freeze
         // stops authoring.
         match /versions/{versionId}/draft/{draftId} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
 
         match /{sub}/{document=**} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create: if isStaff();
           // Saving the canvas is an UPDATE on a version document, and it is
           // the whole of what an author does — open to every content role.
@@ -1544,7 +1966,7 @@ service cloud.firestore {
       // but a layout wraps pages that ARE live, so moving that pointer
       // changes the live site exactly as a screen publish does (AGL-2334).
       match /layouts/{layoutId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1574,13 +1996,13 @@ service cloud.firestore {
         // Frozen writes still freeze it. A draft is authoring, and a freeze
         // stops authoring.
         match /versions/{versionId}/draft/{draftId} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
 
         match /{sub}/{document=**} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create: if isStaff();
           allow update: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
@@ -1609,7 +2031,7 @@ service cloud.firestore {
       // the freeze here alone would have been theatre. The dedicated block
       // re-grants what the exclusion takes, exactly as it does for `screens`.
       match /components/{componentId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1639,13 +2061,13 @@ service cloud.firestore {
         // Frozen writes still freeze it. A draft is authoring, and a freeze
         // stops authoring.
         match /versions/{versionId}/draft/{draftId} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create, update, delete: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
 
         match /{sub}/{document=**} {
-          allow read: if isStaff() || isHostAdmin(hostId);
+          allow read: if isStaff() || isHostMember(hostId);
           allow create: if isStaff();
           allow update: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
@@ -1664,7 +2086,7 @@ service cloud.firestore {
       // first-party starter, and the library shows that to the user. A client
       // able to rewrite it could stamp marketplace provenance on its own work.
       match /templates/{templateId} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
@@ -1672,6 +2094,73 @@ service cloud.firestore {
              .affectedKeys().hasAny(['source']));
         allow delete: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+      }
+      // The form entity (`docs/specs/reusable-forms.md` §2b):
+      // `hosts/{hostId}/forms/{formId}` — the declared field list, the
+      // consent field, and the dataset/lead routing a submission is stamped
+      // against.
+      //
+      // ⚠️ This block only decides anything because `forms` was added to the
+      // host catch-all's CREATE, UPDATE and DELETE exclusion lists in the same
+      // change. Sibling match blocks are OR'd and the looser allow wins, so a
+      // block written beside an un-excluded catch-all is theatre — the same
+      // trap the `components` block records one screen up.
+      //
+      // Reads are ordinary host membership. A form definition is authored
+      // content — labels, field names, a dataset id — and carries no visitor
+      // data and no secret; the submissions it identifies are governed
+      // separately and this change does not widen them.
+      //
+      // Creates are staff-only so they route through /api/hosts/resources,
+      // where the `reusableComponents` entitlement and the `formsPerHost`
+      // ceiling are enforced against a server-read count inside a
+      // transaction. A
+      // client-direct create is an unbounded host subcollection mintable from
+      // the browser.
+      //
+      // Delete takes the PUBLISH role, unlike update. Editing a form changes
+      // what a live page collects; deleting one is the publish act in the
+      // other direction, because every placed instance stops being bound the
+      // moment the definition goes. Submissions already written keep their
+      // `formId` and stay readable — nothing a visitor sent is deleted here.
+      //
+      // A form is DESIGNED as well as declared, so it carries versions like a
+      // screen, a layout and a component do. Without the two nested blocks
+      // below, `forms/{formId}/versions/{versionId}` matches only the host
+      // catch-all — which names `forms` in all three of its exclusion lists,
+      // so every client write to a form version is denied and the besigner
+      // cannot save. The blocks are the component ones one screen up, and
+      // deliberately identical: an authoring surface that diverged in what it
+      // may write would be a second rule to keep in sync.
+      match /forms/{formId} {
+        allow read: if isStaff() || isHostMember(hostId);
+        allow create: if isStaff();
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            !request.resource.data.diff(resource.data)
+              .affectedKeys().hasAny(['stats']));
+        allow delete: if isStaff() ||
+          (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+
+        // Clearing a draft is what publishing it does, and it is not a
+        // publish act — so delete rides the write role here, while the
+        // `versions` documents below keep theirs. A path must end in
+        // `/draft/{id}` to match.
+        match /versions/{versionId}/draft/{draftId} {
+          allow read: if isStaff() || isHostMember(hostId);
+          allow create, update, delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+        }
+
+        match /{sub}/{document=**} {
+          allow read: if isStaff() || isHostMember(hostId);
+          allow create: if isStaff();
+          allow update: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+          allow delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+              (canPublishHostContent(hostId) || sub != 'versions'));
+        }
       }
       // Secret-/PII-bearing subcollections are carved out of the viewer-
       // readable catch-all below (AGL-502): `webhooks` docs hold an HMAC
@@ -1764,6 +2253,42 @@ service cloud.firestore {
            request.resource.data.diff(resource.data)
              .affectedKeys().hasOnly(['timeline', 'restockCheck']));
       }
+      // Per-site plugin settings (AGL-428, AGL-1014): the keys ONE site
+      // answers for itself, inheriting every other key from the org's
+      // `pluginSettings/{pluginId}`. Same access class as that org document,
+      // at host scope — any member of the site reads it, and only a site
+      // ADMIN writes it.
+      //
+      // READ is what the org twin grants: a member of the scope. It is
+      // deliberately no wider than the host doc's own read, so a settings
+      // document can never be readable by someone who cannot already read the
+      // site it configures. Readers coerce types defensively (the doc is
+      // admin-writable), so junk here can misconfigure only that plugin.
+      //
+      // WRITE is admin-only, matching `disabledPlugins`/`enabledPlugins` on
+      // the host document above rather than the catch-all's
+      // `canWriteHostContent`. Those keys decide WHETHER a plugin runs on this
+      // site and are already frozen against an editor; this decides what it
+      // runs WITH, which is the same administrative act one level in. An
+      // editor who could write here could not turn a plugin on, but could
+      // change what it does on a live site — a booking horizon, a discount
+      // ceiling — with no publish step in front of it.
+      //
+      // `hostWritesFrozen` carries the suspension arm that `orgNotSuspended()`
+      // carries on the org twin, and takes the host and platform arms with it:
+      // a suspended site must not keep reconfiguring what it serves.
+      //
+      // THE EXCLUSION LIST IS THE MECHANISM, not this block. Sibling matches
+      // are OR'd and the LOOSER allow wins, so `pluginSettings` is named in
+      // the catch-all's create, update and delete exclusions below and this is
+      // the re-grant — exactly the `webhooks`/`orders` shape. Without the
+      // exclusions this block would narrow nothing and every editor and author
+      // on the site would keep the catch-all's write.
+      match /pluginSettings/{pluginId} {
+        allow read: if isStaff() || isHostMember(hostId);
+        allow write: if isStaff() ||
+          (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
+      }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc
       // itself too — which would let editors delete the host through
@@ -1781,7 +2306,7 @@ service cloud.firestore {
         // does not need one. No client read means no such surface can appear
         // by accident.
         allow read: if isStaff() ||
-          (isHostAdmin(hostId) &&
+          (isHostMember(hostId) &&
             !(subcollection in ['webhooks', 'orders', 'mediaTombstones']));
         // Quota-governed collections are created via /api/hosts/resources
         // ONLY (AGL-473) — the route enforces the per-plan quota (and the
@@ -2047,6 +2572,16 @@ service cloud.firestore {
         // exact question for `components` — taking live content down is the
         // publish act in the other direction. So the name is excluded here
         // and the block below re-grants delete on `canPublishHostContent`.
+        //
+        // `topicOptOuts` joins all THREE lists. It records which email streams
+        // a RECIPIENT has left — third-party PII captured by an
+        // unauthenticated endpoint behind a signed link, on the same footing
+        // as `restockAlerts`, and read by the send path to decide who a
+        // campaign skips. An editor who could write one would be forging a
+        // preference somebody else expressed; one who could delete one would
+        // be putting an address back into a stream it asked to leave, and
+        // destroying the record that the request was ever honored. The
+        // preference page is the only writer and it runs on the Admin SDK.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -2054,10 +2589,114 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'media', 'mediaTombstones', 'formSubmissions', 'actions',
-              'authors', 'carts', 'memberPosts',
+              'media', 'mediaTombstones', 'formSubmissions', 'forms', 'actions',
+              'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'emailAttributions', 'campaignAttributions',
+              'flowEnrollments']));
+        // `campaigns` joins all THREE lists. Each document is one email SEND,
+        // and every field on it is written server-side: `campaign-send.ts`
+        // stamps the audience, the consent and suppression populations and the
+        // delivery counters on the Admin SDK, and the Resend webhook
+        // (`email-events.ts`) and the unsubscribe handler increment the `stats`
+        // map from there. An editor who could write one would be authoring the
+        // campaign report itself — delivered, open, click, bounce, complaint
+        // and unsubscribe counts — and the send-time record of who the send
+        // was allowed to reach, which is the compliance evidence for that send
+        // rather than a vanity metric.
+        //
+        // `{document=**}` spans the nested `reports` documents, so the
+        // exclusion covers the per-link click breakdown the report screen
+        // renders beside those counters — written by the same webhook — and
+        // the `reports/revenue` rollup, which is the money a campaign was
+        // credited with. An editor who could write that one would be
+        // authoring their own sales figures.
+        //
+        // `emailAttributions` joins all THREE lists. One document per order,
+        // recording which campaign the sale was credited to and how much of
+        // it has since come back. It is written only by
+        // `email-revenue-attribution.ts` on the Admin SDK, and every field on
+        // it is evidence: the create is what makes crediting an order
+        // idempotent, so a client that could `set` one would credit a campaign
+        // twice, and one that could DELETE one would leave a refund with
+        // nothing to reverse — revenue that can only ever go up. READ is
+        // untouched; the record carries a campaign, an amount and a currency,
+        // and no address.
+        //
+        // `campaignAttributions` joins all THREE lists. One document per
+        // CONVERSION — a form submission, a lead, a contact or a booking —
+        // recording which campaign the visitor came from, through which
+        // channel, and under which model and window. It is written only by
+        // `campaign-conversion-attribution.ts` on the Admin SDK, and every
+        // operation is load-bearing for the same reasons `emailAttributions`
+        // states one paragraph up: the CREATE is what makes crediting a
+        // conversion idempotent, so a client that could `set` one would
+        // credit a campaign twice for one submission, and one that could
+        // DELETE one would remove the record an erasure is supposed to be the
+        // only thing that removes.
+        //
+        // It also carries `personKey` — the address hash the erasure sweep
+        // joins on — which is the same third-party PII footing `topicOptOuts`
+        // sits on. An editor who could write one would be forging a claim
+        // about where somebody else came from.
+        //
+        // READ is untouched: the site's own conversion reporting is a console
+        // surface reading this collection with the client SDK, and the record
+        // carries a campaign, a kind and a hash, never an address.
+        //
+        // NOT `emailCampaigns`, which is the campaign CONTAINER — a name, a
+        // date window and the lists it is aimed at — created client-side from
+        // the campaigns card's create drawer. It holds no counter and no
+        // entitlement input, since the monthly send cap is claimed against the
+        // ORG counter by the send route, so a container an editor writes
+        // cannot buy them a send. Denying it would break that drawer.
+        //
+        // READ is untouched, and the console depends on it: the campaign
+        // report, the emails list and the marketing summary card all read this
+        // collection with the client SDK.
+        //
+        // `emailFrequency` joins all THREE lists. It is the per-recipient
+        // marketing send window the `sendEmail` marketing gate reads and
+        // writes on the Admin SDK — the instants one site mailed one person,
+        // keyed by `sha256(address)` exactly as both suppression lists are.
+        // A client that could write one would be choosing how much mail a
+        // person may receive from the shared sending domain, which is a
+        // platform deliverability control rather than site content, and a
+        // client that could read one would be reading who a merchant mails
+        // and when.
+        //
+        // `themeHistory` joins all THREE lists (AGL-1302), and has no client
+        // writer of any kind. It holds the PREVIOUS theme verbatim so that
+        // "Go back to the previous theme" can restore it, written only by
+        // `install-theme.ts` on the Admin SDK. A client that could forge one
+        // would be choosing the CSS a publisher's revert restores — arbitrary
+        // styling pushed onto a live site from the narrowest role we sell,
+        // and it would arrive looking like the site's own history.
+        //
+        // `flowEnrollments` joins all THREE lists. Each document is one person
+        // suspended part-way through an automation: their address, the step
+        // list they entered with, the position inside it, and the instant the
+        // flow continues. Every field is written by the executor and the
+        // resume beat on the Admin SDK, and there is no client writer of any
+        // kind to break.
+        //
+        // A client that could forge one would be scheduling mail from the
+        // shared sending domain to an address of its choosing, at a time of
+        // its choosing, with a merchant-authored body attached — the send
+        // gates would still refuse a suppressed recipient, but the enrollment
+        // itself is an instruction to send. One that could rewrite one could
+        // move `nextStepIndex` into a different step of somebody else's
+        // sequence, or push `resumeAtMs` far enough out to silently cancel a
+        // sequence a merchant is relying on. One that could delete one would
+        // do the same by removing the row, and the person mid-flow is the
+        // party least able to notice either.
+        //
+        // READ is untouched, on the same footing as `checkouts` beside it: it
+        // is the state a console surface would show a merchant about their own
+        // site's automations.
+        //
         // `stockHolds` joins all THREE lists (AGL-2356). It is the release
         // index for the units a live checkout has reserved: written inside the
         // same transaction as the holds it names, read by id when the session
@@ -2162,12 +2801,15 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
-              'webhooks', 'memberPosts', 'redirects',
+              'webhooks', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'emailAttributions', 'campaignAttributions',
+              'flowEnrollments']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -2208,11 +2850,14 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
-              'counters', 'memberPosts', 'redirects',
+              'counters', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
-              'inventoryReconciliation', 'stockHolds']));
+              'inventoryReconciliation', 'stockHolds', 'themeHistory',
+              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'emailAttributions', 'campaignAttributions',
+              'flowEnrollments']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
@@ -2941,6 +3586,28 @@ service cloud.firestore {
     match /emailSuppressions/{emailKey} {
       allow read: if isStaff();
       allow write: if false;
+    }
+
+    // The per-recipient DELIVERY LOG: one document per message we sent an
+    // address, carrying its subject, its lifecycle timestamps and its open
+    // and click counts. Keyed by the same `sha256(address)` the suppression
+    // lists use, so the two can never describe different people under one id.
+    //
+    // Client reads are CLOSED, staff included, and that is the difference
+    // from the two lists above. Those answer "may we mail this person", a
+    // question with one document and one answer. This is a per-person message
+    // history whose read is a QUERY — and the staff console reads it through
+    // `/api/admin/users/detail`, which has already established a staff claim
+    // AND recorded who looked. An open rule here would be the same data with
+    // neither, reachable from any browser holding a staff token.
+    //
+    // Every writer is the Admin SDK behind a signed delivery webhook, and
+    // deletes happen on the erasure path — also Admin SDK.
+    match /emailDeliveries/{emailKey} {
+      allow read, write: if false;
+      match /messages/{messageId} {
+        allow read, write: if false;
+      }
     }
 
     // Designed templates for Aglyn's own outbound email — invites, usage

@@ -16,7 +16,13 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  buildAddToCartParams,
+  buildBeginCheckoutParams,
+  trackEvent,
+  trackEventBeforeNavigation,
+  type AnalyticsItem,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   isPaymentsNotConfigured,
   storefrontPaymentsNotConfiguredText,
@@ -65,6 +71,8 @@ export interface ProductDetailProps {
   buyLabel?: string
   /** Hide the description block (design it separately with tokens). */
   hideDescription?: boolean
+  /** Offer a discount/coupon code field before the buy button. */
+  showCoupon?: boolean
 }
 
 interface DetailVariant {
@@ -104,6 +112,31 @@ const SAMPLE: Detail = {
   ],
 }
 
+/**
+ * The GA4 `items` entry for one line of this product.
+ *
+ * `item_id` is the PRODUCT id and never the variant's, matching the
+ * `view_item` above and the cart's lines below: GA joins the funnel on that
+ * id, and a `begin_checkout` keyed on a variant would report a product nothing
+ * else on the storefront had ever mentioned.
+ *
+ * `price` is the resolved variant's, which arrived from the server's product
+ * payload — the same figure `checkout` prices the charge from, so the reported
+ * value and the amount Stripe collects come from one source.
+ */
+function buyItem(
+  product: Detail,
+  variant: DetailVariant | undefined,
+  quantity: number,
+): AnalyticsItem {
+  return {
+    item_id: product.id,
+    item_name: product.name,
+    price: variant?.priceUsd,
+    quantity,
+  }
+}
+
 function slugFromLocation(): string {
   if (typeof window === 'undefined') return ''
   const match = window.location.pathname.match(/\/products\/([^/?#]+)/)
@@ -119,7 +152,8 @@ function slugFromLocation(): string {
  */
 const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
   (props, ref) => {
-    const { slug: slugProp, buyLabel, hideDescription, ...rest } = props
+    const { slug: slugProp, buyLabel, hideDescription, showCoupon, ...rest } =
+      props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
@@ -144,6 +178,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     )
     const [selections, setSelections] = useState<Record<string, string>>({})
     const [quantity, setQuantity] = useState(1)
+    /** A discount or coupon code typed on the product page. */
+    const [coupon, setCoupon] = useState('')
     const [activeImage, setActiveImage] = useState(0)
     // `unconfigured` is not an `error` with softer words (AGL-2019). A store
     // with no Stripe key answers 501, and rendering that at `severity="error"`
@@ -261,9 +297,18 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       }).catch(() => null)
       if (response?.ok) {
         setAdded(true)
-        trackEvent('add_to_cart', {
-          items: [{ item_id: resolved.id, item_name: resolved.name }],
-        })
+        // Priced (AGL-1591's shape, completed): the resolved variant's price
+        // and the chosen quantity are both known here and both come from the
+        // server's product payload, so GA4's "value added to cart" is a real
+        // number rather than the empty column an items-only hit leaves. The
+        // `value` describes what was JUST ADDED, not the cart's new total —
+        // see `buildAddToCartParams`.
+        trackEvent(
+          'add_to_cart',
+          buildAddToCartParams({
+            items: [buyItem(resolved, variant, quantity)],
+          }),
+        )
         window.dispatchEvent(new Event(CART_UPDATED_EVENT))
       }
     }
@@ -281,7 +326,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const attemptKey = useRef('')
     useEffect(() => {
       attemptKey.current = ''
-    }, [resolved?.id, variant?.id, quantity, billing, shipTo])
+      // `coupon` is in here because it CHANGES THE PRICE. Without it a shopper
+      // who buys, comes back, types a code and buys again presents the same
+      // key, and the server replays the original full-price session — a quoted
+      // number that is not the number charged, which is the whole defect class
+      // this path has been cleared of.
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo, coupon])
 
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
@@ -311,6 +361,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // country's rates AND restricts the session to addresses in it,
             // so naming a cheap zone here cannot ship a parcel anywhere else.
             ...(shipTo ? { shippingCountry: shipTo } : {}),
+            // The server resolves this against the discounts hub first and the
+            // legacy coupons second, and refuses a code it cannot apply with a
+            // reason — never a silent full-price charge.
+            ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -320,6 +374,22 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         // Checked FIRST so a server that somehow sent both cannot silently
         // navigate the shopper away from the form we just decided to show.
         if (response.ok && payload?.clientSecret && payload?.publishableKey) {
+          // Buy-now's `begin_checkout`. The cart path has reported this since
+          // AGL-1591 and this one never did, so a storefront whose shoppers
+          // skip the cart showed `view_item` → `add_to_cart` → nothing →
+          // `purchase`: GA4's shopping funnel put every single-product sale in
+          // the "abandoned checkout" bucket, and the merchant's checkout rate
+          // read as a collapse rather than as an unmeasured path.
+          //
+          // Reported on BOTH branches, and from the same place, for the reason
+          // the cart states: a count that halved the day the in-page payment
+          // flag flipped would look like a conversion collapse.
+          trackEvent(
+            'begin_checkout',
+            buildBeginCheckoutParams({
+              items: [buyItem(resolved, variant, quantity)],
+            }),
+          )
           setNativeCheckout({
             clientSecret: String(payload.clientSecret),
             publishableKey: String(payload.publishableKey),
@@ -328,6 +398,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           return
         }
         if (response.ok && payload?.url) {
+          // Awaited before the redirect (AGL-1580), for the reason spelled out
+          // on the cart's matching branch: delivery here is a synchronous
+          // `window.gtag` call today and the await costs nothing, but the
+          // property that makes a bare call safe is invisible from this file.
+          await trackEventBeforeNavigation(
+            'begin_checkout',
+            buildBeginCheckoutParams({
+              items: [buyItem(resolved, variant, quantity)],
+            }),
+          )
           window.location.assign(payload.url)
           return
         }
@@ -606,6 +686,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               ))}
             </TextField>
           ))}
+          {showCoupon ? (
+            <TextField
+              label="Discount code"
+              value={coupon}
+              onChange={(event) => setCoupon(event.target.value)}
+              size="small"
+              sx={{ mb: 2, display: 'block' }}
+            />
+          ) : null}
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
             <TextField
               label="Qty"
@@ -793,6 +882,16 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
       name: 'hideDescription',
       label: 'Hide description',
       description: 'Design the description separately with tokens.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      // Off by default, so no existing page changes shape on deploy. The cart
+      // has carried this field all along and the product page had none, so a
+      // shopper buying the same goods through Buy now had nowhere to enter a
+      // code the merchant had advertised.
+      name: 'showCoupon',
+      label: 'Show discount code field',
+      description: 'Lets a buyer enter a discount or coupon code before buying.',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
   ],

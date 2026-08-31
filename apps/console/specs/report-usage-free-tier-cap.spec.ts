@@ -165,6 +165,10 @@ jest.mock('@aglyn/aglyn/server', () => {
     checkApiRequestQuota: actual.checkApiRequestQuota,
     checkContactQuota: actual.checkContactQuota,
     checkDataStorageQuota: actual.checkDataStorageQuota,
+    // Same allow-list hazard the note below records: omit this and the
+    // route's TypeError is swallowed per org and the sweep answers with no
+    // rollup at all rather than failing on the assertion under test.
+    priceEmailSendOverage: actual.priceEmailSendOverage,
     resolveOrgEntitlements: actual.resolveOrgEntitlements,
     // The org's effective tier, REAL (AGL-2486): the release-flag gates in
     // this route are evaluated against it, and an allow-list mock that omits
@@ -254,7 +258,7 @@ const MONTH = '2026-07'
 /**
  * One org, one host, every band blown by 100–1000×.
  *
- * Free includes 250 MB of media, ~8,948 page views (5 GB), 20 form
+ * Free includes 250 MB of media, ~3,495 page views (2 GB), 20 form
  * submissions, 0 MB of dataset storage, 0 API requests and 100 contacts.
  */
 function seedOrg(plan: string) {

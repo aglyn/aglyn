@@ -798,6 +798,15 @@ describe('the checker is wired (workflow + package.json)', () => {
       // replaces that silence is only worth anything if its INCONCLUSIVE
       // verdict still works, and this suite is the only thing that runs it.
       'test:ci-test-digest',
+      // AGL-1489 — the deploy scripts refuse an argument they cannot parse.
+      'test:deploy-args',
+      // AGL-2500 — refuses a Linear id that cannot exist, in a commit message
+      // or in source. Unlike `test:shipped-not-closed` and
+      // `test:external-facts` above, the CHECK half runs here too: it compares
+      // against a cached ceiling rather than the Linear API, so it needs no
+      // credential and is not one more guard that never executes.
+      'test:linear-ids',
+      'check:linear-ids',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -843,6 +852,9 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:lint-tools', // AGL-2480
       'test:week-one-preflight', // AGL-1617
       'test:ci-test-digest', // AGL-1617
+      'test:deploy-args', // AGL-1489
+      'test:linear-ids', // AGL-2500
+      'check:linear-ids', // AGL-2500
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

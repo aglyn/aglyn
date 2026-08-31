@@ -364,6 +364,13 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   settings:
     'Per-plugin settings documents — shipping, storefront, booking policy — ' +
     'each written by its own console settings card.',
+  pluginSettings:
+    'The keys ONE site answers for itself out of a plugin\'s declared config ' +
+    'schema (AGL-428, AGL-1014), written by the site plugin page\'s settings ' +
+    'form. All three lists exclude the name and the dedicated block re-grants ' +
+    'the write to a site ADMIN only — narrower than the catch-all\'s ' +
+    '`canWriteHostContent`, because this decides what a plugin does on a live ' +
+    'site with no publish step in front of it.',
   media: 'Host media library documents: alt text, tags and folder moves.',
   mediaFolders: 'Media library folders, created and renamed in the DAM.',
   activity: 'The site activity feed, appended by the tenant activity logger.',
@@ -407,13 +414,28 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   services: 'Bookable services, authored in the bookings console page.',
   bookings: 'Booking records, rescheduled and cancelled in the same page.',
   events: 'Calendar events, authored in the events console page.',
-  campaigns: 'Email campaigns, authored in the campaigns card.',
+  emailCampaigns:
+    'The campaign CONTAINER — a name, a date window and the lists it is ' +
+    'aimed at. Created and edited client-side from the campaigns card’s ' +
+    'create drawer. It holds no counter and no entitlement input: the ' +
+    'monthly send cap is claimed against the ORG counter by the send route, ' +
+    'so a container an editor writes cannot buy them a send. Distinct from ' +
+    '`campaigns`, the one-document-per-SEND sibling that carries the ' +
+    'delivery counters and the send-time consent record: that one is denied ' +
+    'outright by the rules, and conflating the two breaks this drawer.',
   emailTemplates: 'Transactional email templates, edited in the console.',
   leads: 'Captured leads, triaged and deleted in the inbox console page.',
   formSubmissions:
     'Create is denied (AGL-1668) because the row is what the meter counts; ' +
     'update and delete stay open because the inbox marks a submission read ' +
     'and deletes it client-side.',
+  forms:
+    'Form definitions, authored on the site Forms page and bound to a `Form` ' +
+    'node by id. Create is denied so it routes through /api/hosts/resources, ' +
+    'where the entitlement and the flat per-host cap are enforced against a ' +
+    'server-read count; update and delete are re-granted by a dedicated ' +
+    'block, with delete on `canPublishHostContent` because removing a form ' +
+    'unbinds every instance placed from it.',
   suppressions:
     'Unsubscribes, permanent bounces and spam complaints. CREATE and UPDATE ' +
     'are server-only in practice — the unsubscribe handler and the Resend ' +
@@ -497,11 +519,48 @@ const hostSubcollectionsInRepo = (() => {
     /\.collection\(\s*'hosts'\s*\)\s*\.doc\([^()]*\)\s*\.collection\(\s*'([A-Za-z][A-Za-z0-9]*)'\s*\)/g,
     /\b(?:hostRef|hostDoc|host\.ref)\s*\.\s*collection\(\s*'([A-Za-z][A-Za-z0-9]*)'\s*\)/g,
   ]
+
+  /*
+   * THE SAME THREE SHAPES, NAMED BY A CONSTANT INSTEAD OF A LITERAL.
+   *
+   * A literal-only sweep is blind to `.collection(SOME_SUBCOLLECTION)`, and a
+   * collection the sweep cannot see is one the classification guard silently
+   * excuses — which is the same failure as an unclassified name, arrived at
+   * from the other direction. `email-suppression.ts` has named its two host
+   * paths through constants since AGL-2407 and only stayed visible because
+   * other callers spell `'suppressions'` out; the next module to be tidier
+   * about it would disappear from this list entirely.
+   *
+   * Resolved from `export const NAME = 'literal'` declarations across the same
+   * file set, so a constant has to actually exist for its name to count. A
+   * `_SUBCOLLECTION` suffix is required rather than resolving every constant:
+   * this sweep must stay anchored on the host, and an unanchored resolution
+   * would drag in org- and root-level collection names.
+   */
+  const subcollectionConstants = new Map<string, string>()
+  const constantPattern =
+    /\bconst\s+([A-Za-z0-9_]*_SUBCOLLECTION)\s*(?::[^=]+)?=\s*'([A-Za-z][A-Za-z0-9]*)'/g
+  const constantUsePatterns = [
+    /\.collection\(\s*'hosts'\s*\)\s*\.doc\([^()]*\)\s*\.collection\(\s*([A-Za-z0-9_]*_SUBCOLLECTION)\s*\)/g,
+    /\b(?:hostRef|hostDoc|host\.ref)\s*\.\s*collection\(\s*([A-Za-z0-9_]*_SUBCOLLECTION)\s*\)/g,
+  ]
+
   const found = new Set<string>()
-  for (const path of files) {
-    const source = readFileSync(path, 'utf8')
+  const sources = files.map((path) => readFileSync(path, 'utf8'))
+  for (const source of sources) {
+    for (const hit of source.matchAll(constantPattern)) {
+      subcollectionConstants.set(hit[1], hit[2])
+    }
+  }
+  for (const source of sources) {
     for (const pattern of patterns) {
       for (const hit of source.matchAll(pattern)) found.add(hit[1])
+    }
+    for (const pattern of constantUsePatterns) {
+      for (const hit of source.matchAll(pattern)) {
+        const resolved = subcollectionConstants.get(hit[1])
+        if (resolved) found.add(resolved)
+      }
     }
   }
   return [...found].sort()
@@ -533,6 +592,23 @@ describe('every host subcollection is classified (AGL-2038)', () => {
         'screenAnalytics',
       ]),
     )
+  })
+
+  it('sees a collection named only through a constant', () => {
+    /*
+     * `topicOptOuts` is reached exclusively as
+     * `.collection(TOPIC_OPT_OUTS_SUBCOLLECTION)` — the literal appears
+     * nowhere outside the constant's own declaration and the rules file. A
+     * literal-only sweep therefore did not know it existed, which meant the
+     * classification test below excused it: the guard reported green on a
+     * collection nobody had classified, which is exactly the outcome it exists
+     * to prevent, reached from the other direction.
+     *
+     * Named explicitly rather than left to the floor above, because losing one
+     * name out of fifty does not breach a `>= 40` count. This is the assertion
+     * that fails if constant resolution ever stops working.
+     */
+    expect(hostSubcollectionsInRepo).toContain('topicOptOuts')
   })
 
   it('leaves no host subcollection unclassified', () => {

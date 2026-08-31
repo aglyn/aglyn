@@ -225,9 +225,9 @@ describe('the check is asked of the pool the account lives in (AGL-2005)', () =>
    * which accepts an SSO token and hands back its tenant claim.
    *
    * Against the pre-fix tree the lookup then went to the project pool, where
-   * an SSO uid does not exist. Measured on production 2026-08-22:
-   * `zach@aglyn.com` is `IHumyGGhGxZKjVV26qCRx5Okf573` in `aglyn-org-y5v14`,
-   * and a project-level `getUser` of that uid throws `auth/user-not-found`.
+   * an SSO uid does not exist. Measured on production 2026-08-22: for a staff
+   * account in `aglyn-org-y5v14`, a project-level `getUser` of the uid its
+   * token carries throws `auth/user-not-found`.
    * `assertIdTokenNotRevoked` reads a missing record as a deleted account and
    * refuses — correctly, given what it was told — so EVERY SSO user was
    * turned away from every Bearer door. On `/api/presence/token` that

@@ -101,8 +101,8 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   },
   {
     key: 'release_workflows',
-    label: 'Workflows',
-    description: 'Workflow builder and automation runs.',
+    label: 'Automation',
+    description: 'Workflows, actions, webhooks and their run history.',
     defaultEnabled: true,
     navTabId: 'nav-tab-workflows',
   },

@@ -42,6 +42,7 @@
 
 const mockVerifyIdToken = jest.fn()
 const mockCreate = jest.fn()
+const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 
 const state: {
   memberRoles: Record<string, string>
@@ -112,6 +113,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
     }),
   },
+  // CAPTURED, not stubbed away: the same count that gates the entitlement
+  // also decides whether this create is an EVENT (AGL-118), so the two
+  // questions are asked of one read and belong in one file. Named explicitly
+  // because this factory is a closed world — an absent export is `undefined`,
+  // the route throws past every assertion below, and its own catch answers
+  // 500, which reads exactly like the route regressing.
+  logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
   getOrgForHost: async () => ({ org: state.org }),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
@@ -315,6 +323,112 @@ describe('version creation is entitlement-gated server-side (AGL-1369)', () => {
       )
       expect(response.status).toBe(401)
       expect(mockCreate).not.toHaveBeenCalled()
+    })
+  })
+
+  /*
+   * The SAME count, answering the second question (AGL-118).
+   *
+   * This route creates version documents for two different acts, and only one
+   * of them is an event. Getting that wrong is silent in both directions: log
+   * on every create and a template that seeds a dozen screens doubles the
+   * feed it was supposed to be recording; log on none, and the one act on
+   * this route a person deliberately performs — naming a restore point — has
+   * no record anywhere, which is where it stood before this.
+   */
+  describe('a RETAINED version is an event; a resource\u2019s first is not', () => {
+    it('THE CONTROL — a retained version writes one entry naming the snapshot', async () => {
+      // First, because the "writes nothing" cases below also pass against a
+      // route that logs nothing at all, in any branch, forever.
+      state.org = { plan: 'pro' }
+      state.versions = ['v1']
+      state.versionData = { v1: { screenId: 'screen-1', nodes: {} } }
+
+      const response = await createVersion({
+        data: { screenId: 'screen-1', nodes: {}, displayName: 'Before the sale' },
+      })
+
+      expect(response.status).toBe(200)
+      // The version document really landed — otherwise this asserts the log of
+      // a create that did not happen.
+      expect(mockCreate).toHaveBeenCalledTimes(1)
+
+      expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+      const [hostId, actor, action, target] = mockLogHostActivity.mock
+        .calls[0] as unknown as [
+        string,
+        { uid: string; email: string | null },
+        string,
+        Record<string, unknown>,
+      ]
+      expect(hostId).toBe('host-1')
+      expect(actor).toEqual({ uid: 'user-1', email: null })
+      expect(action).toBe('Created a version of the screen')
+      // `versionId` is the NEW document, `id` the parent — the feed deep-links
+      // to the exact version, and an entry naming only the screen cannot.
+      expect(target).toEqual({
+        type: 'screen',
+        id: 'screen-1',
+        versionId: 'generated-id',
+        name: 'Before the sale',
+      })
+    })
+
+    it('writes NOTHING for a resource\u2019s FIRST version', async () => {
+      // A screen, its first version and its route are ONE act, and
+      // /api/hosts/resources already recorded it. A row here would be an
+      // invented second event on every create the product makes.
+      expect((await createVersion()).status).toBe(200)
+
+      expect(mockCreate).toHaveBeenCalledTimes(1)
+      expect(mockLogHostActivity).not.toHaveBeenCalled()
+    })
+
+    it('writes NOTHING when the plan refuses the retained version', async () => {
+      state.org = { plan: 'free' }
+      state.versions = ['v1']
+
+      expect((await createVersion()).status).toBe(403)
+
+      expect(mockCreate).not.toHaveBeenCalled()
+      expect(mockLogHostActivity).not.toHaveBeenCalled()
+    })
+
+    it('writes NOTHING when the id already exists', async () => {
+      // `create()` throws ALREADY_EXISTS into the 409 below. An entry written
+      // before it would claim a version that does not exist.
+      state.org = { plan: 'pro' }
+      state.versions = ['v1']
+      // `Once`, not a standing implementation: `clearAllMocks` forgets the
+      // CALLS and keeps the IMPLEMENTATION, so a rejection set here would
+      // leak into every later case and turn a working create into a 409.
+      mockCreate.mockRejectedValueOnce(
+        Object.assign(new Error('taken'), { code: 6 }),
+      )
+
+      expect((await createVersion({ id: 'v1' })).status).toBe(409)
+
+      expect(mockLogHostActivity).not.toHaveBeenCalled()
+    })
+
+    it('records a SNAPSHOT of an existing version too', async () => {
+      // The besigner's versions panel takes this path — `sourceVersionId`,
+      // no `nodes` on the wire. It is the surface that never called the
+      // client logger at all, so a discriminator keyed on the request body
+      // rather than on the stored count would drop exactly this case.
+      state.org = { plan: 'pro' }
+      state.versions = ['v1']
+      state.versionData = { v1: { screenId: 'screen-1', nodes: { root: {} } } }
+
+      await createVersion({
+        sourceVersionId: 'v1',
+        data: { displayName: 'Copy of v1' },
+      })
+
+      expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+      expect(
+        (mockLogHostActivity.mock.calls[0] as unknown as unknown[])[3],
+      ).toMatchObject({ name: 'Copy of v1', versionId: 'generated-id' })
     })
   })
 

@@ -73,6 +73,14 @@ const FORBIDDEN = [
     label: "Aglyn LLC's Texas taxpayer number",
     sha256: 'b7d59b89cdca102c2b879c9f16add3b9c8a87645abe10f8e801b6f9061bcd2fe',
   },
+  {
+    label: "Aglyn LLC's EIN, hyphenated",
+    sha256: "c99c9d2baaa021d596ce69c3e46c23fdb65ebcfd64ecec4b8fc0e9bead9b7b08",
+  },
+  {
+    label: "Aglyn LLC's EIN, digits only",
+    sha256: "826d07f9c2a2ec630aaa91a4c0f38acd4ed11dafa9cd10950dab37079f438905",
+  },
 ]
 
 /**
@@ -80,7 +88,7 @@ const FORBIDDEN = [
  * shape too narrow to match a reintroduction is the only way this guard can
  * silently pass.
  */
-const SHAPES = [/RT\d{6}/g, /\d{11}/g]
+const SHAPES = [/RT\d{6}/g, /\d{11}/g, /\d{2}-\d{7}/g, /\d{9}/g]
 
 /** This file names the digests, so it is the one legitimate exemption. */
 const SELF = 'tools/scripts/check-no-tax-identifiers.mjs'
@@ -149,9 +157,10 @@ function main() {
     [
       '',
       'This repository is PUBLIC. These identifiers are operator configuration',
-      'and belong in server-only env (TX_WEBFILE_NUMBER / TX_TAXPAYER_NUMBER),',
-      'never in source and never in a spec — a spec that pins the literal is how',
-      'they came back the first time (AGL-2021).',
+      'and belong in server-only env (AGLYN_TAX_REGISTRATION_ID /',
+      'AGLYN_TAX_FILING_ID, or the deprecated TX_TAXPAYER_NUMBER /',
+      'TX_WEBFILE_NUMBER), never in source and never in a spec — a spec that',
+      'pins the literal is how they came back the first time (AGL-2021).',
       '',
       'Assert the MECHANISM instead: that whatever is configured reaches the CSV.',
       '',

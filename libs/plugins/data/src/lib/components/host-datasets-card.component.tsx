@@ -23,6 +23,7 @@ import {
   checkEntitlement,
   checkQuota,
   coerceDocumentValues,
+  datasetIntegrityUpdate,
   datasetValueToInput,
   effectiveDatasetModel,
   formatDatasetValue,
@@ -32,11 +33,11 @@ import {
   parseDatasetFilter,
   parseDatasetSort,
   pluginDocsHelp,
-  sortDatasetRecords,
   validateDocument,
 } from '@aglyn/aglyn'
 import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -60,10 +61,13 @@ import {
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
+  documentId,
   getCountFromServer,
   getDocs,
   limit,
+  orderBy,
   query,
   where,
   setDoc,
@@ -75,10 +79,13 @@ import {
   useFirestoreCollection,
   useHostActivityLogger,
   useOrgDataScope,
+  usePagedCollection,
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
+import { DatasetRecordDialog } from './dataset-record-dialog.component'
 
 export interface HostDatasetsCardProps {
   /** Host context: resolves the owning org and logs host activity. */
@@ -96,6 +103,21 @@ export interface HostDatasetsCardProps {
    */
   org?: Partial<AglynOrgBilling>
 }
+
+/**
+ * How many existing records a keyed CSV import may consult.
+ *
+ * The upsert has to ask "does a record with this key already exist", which no
+ * page can answer — so it reads its own window, once, when a key field is
+ * chosen. The window is bounded because `recordsPerDataset` is unlimited on
+ * the agency plan and an unbounded client read is a browser hang behind a
+ * dialog button; it is the same ceiling the listener used to carry, moved from
+ * every mount of the card to the one moment it is needed.
+ *
+ * A dataset larger than this is not silently mis-imported: the import says
+ * which keys it could consult, measured against the server's exact count.
+ */
+const IMPORT_KEY_WINDOW = 500
 
 /**
  * Datasets editor (AGL-102): org-shared document collections at
@@ -151,13 +173,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // legacy host scope (no org resolved) keeps the old client writes.
   const callDatasetApi = useCallback(
     async (payload: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/datasets', {
+      const response = await authorizedFetch(user, '/api/orgs/datasets', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, ...payload }),
       })
       const result = await response.json().catch(() => ({}))
@@ -220,8 +238,59 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // an empty read for everyone — the AGL-1044 scoped-sharing rules deny it
   // outright for a scoped collaborator, and a permanently denied listen is
   // reopened forever by the refusal loop.
-  const { data: recordDocs } = useFirestoreCollection<any>(
-    () =>
+  /**
+   * The records table PAGES (AGL-2501). It used to be `limit(500)` with no
+   * `orderBy`, every row rendered at once and no control anywhere.
+   *
+   * That was wrong twice. Five hundred documents were read and billed on
+   * every mount of a card nobody had scrolled — and past five hundred the
+   * remaining rows were not merely unrendered, they were UNREACHABLE, because
+   * nothing showed them and nothing asked for more. Firestore answers an
+   * unordered limit in document-id order over auto-ids, so which five hundred
+   * a reader got was arbitrary and could differ between two loads of the same
+   * dataset; `sortDatasetRecords` then sorted that sample by `order`, which
+   * made the table look ordered while being a sample. The export leg
+   * (AGL-2335) fixed exactly this shape for the file and left the table.
+   *
+   * ## Why the walk orders on the document id, and not on a field
+   *
+   * The usual fix is `orderBy` on the field the rows are sorted by. It cannot
+   * be used here: `orderBy` matches only documents that HAVE the field, so
+   * ordering on one that any writer omits does not mis-order the list, it
+   * hides rows from it — a worse failure than the one being fixed, and a
+   * silent one. Every candidate on this collection is omitted by some writer:
+   *
+   *  * `order` — set by `/api/orgs/datasets` and by `POST /v1/datasets/{id}
+   *    /records`, and NOT by the tenant form-submit leg or by the workflow
+   *    `appendDataset`/`updateDataset` actions, which write `values` and
+   *    `createdAt` only. Ordering on it would drop every row a public form or
+   *    an automation ever produced — the rows a lead dataset is mostly made
+   *    of.
+   *  * `createdAt` — written by all four of those, and NOT by a site import:
+   *    `IMPORTABLE_FIELDS.records` is `['values', 'order']`, so a restored
+   *    record carries no `createdAt` at all.
+   *  * `updatedAt` — the mirror image: the import stamps it, the form and
+   *    automation legs do not.
+   *
+   * A document's NAME is not a field and cannot be absent, so ordering on it
+   * drops nothing and the walk is total: every record is reachable by paging,
+   * which is the property the old query lacked. It is not insertion order —
+   * ids are random — so the rows are not claimed to be in one. What they are
+   * is stable, complete, and the same on every load.
+   *
+   * `sortDatasetRecords` is deliberately NOT applied to the page. Re-sorting a
+   * window of an id-ordered walk by `order` is the same lie the old code told:
+   * rows would run in one order within a page and another across pages.
+   */
+  const {
+    rows: records,
+    hasMore: hasMoreRecords,
+    page: recordPage,
+    setPage: setRecordPage,
+    pageSize: recordPageSize,
+    setPageSize: setRecordPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) =>
       dataScope && selected?.$id
         ? query(
             collection(
@@ -232,15 +301,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               selected.$id,
               'records',
             ),
-            limit(500),
+            orderBy(documentId()),
+            limit(pageLimit),
           )
         : null,
     [firestore, dataScope, selected?.$id],
     { idField: '$id' },
-  )
-  const records = useMemo(
-    () => sortDatasetRecords([...(recordDocs ?? [])]),
-    [recordDocs],
   )
   /**
    * The two HEAD-COUNTS on this card are server aggregates, not the lengths
@@ -346,15 +412,20 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // Pending, denied, or answered about the PREVIOUS selection, the loaded
   // rows stand in. They can only UNDERSTATE (same collections, capped),
   // never overstate, so nothing these figures gate fires on a count larger
-  // than the truth.
+  // than the truth. Since AGL-2501 the record fallback is one PAGE, so it
+  // understates by more — which moves it further in the safe direction and
+  // changes nothing about which way it can be wrong.
   const datasetCount = serverDatasetCount ?? datasets.length
   const recordCount =
     serverRecordCount && serverRecordCount.datasetId === countedDatasetId
       ? serverRecordCount.count
       : records.length
-  // Query layer (AGL-181): the same evaluator the renderer uses, applied
-  // in memory over the loaded window (explicitly bounded, never silently
-  // unbounded — the helper text says so).
+  // Query layer (AGL-181): the same evaluator the renderer uses, applied in
+  // memory over the rows in front of the reader. That window is now one PAGE
+  // rather than a 500-row sample (AGL-2501), which is a smaller claim and a
+  // true one — the helper text says which, because a filter box that looks
+  // like it searches the collection and does not is worse than one that says
+  // so.
   const [filterText, setFilterText] = useState('')
   const [sortText, setSortText] = useState('')
   const visibleRecords = useMemo(() => {
@@ -516,13 +587,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     // `recursiveDelete`, so the delete goes through the erase route
     // (AGL-945). Single-record deletes below stay client-direct.
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/resources/erase', {
+      const response = await authorizedFetch(user, '/api/resources/erase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: dataScope[0],
           scopeId: dataScope[1],
@@ -618,17 +685,52 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       active = false
     }
   }, [model, datasets, firestore, dataScope])
+  /**
+   * One reference target's label, or `null` when this ID resolves to nothing.
+   *
+   * The distinction the grid cannot draw. `referenceLabel` below falls back to
+   * the raw ID, which is the only thing a cell has room for and is
+   * indistinguishable from a resolved label that happens to look like an ID.
+   * The record view has room to say which, so it asks the question that has a
+   * `null` answer.
+   *
+   * Unresolvable covers more than a deleted target: `refOptions` loads at most
+   * 200 rows per referenced collection, so a live target outside that window
+   * reports the same way. Either way the ID is shown and neither is claimed to
+   * be a working link.
+   */
+  const resolveReferenceLabel = useCallback(
+    (fieldId: string, id: string): string | null =>
+      refOptions[fieldId]?.find((option) => option.id === id)?.label ?? null,
+    [refOptions],
+  )
   const referenceLabel = useCallback(
     (fieldId: string, value: unknown): string => {
-      const options = refOptions[fieldId] ?? []
       const ids = Array.isArray(value) ? value : value != null ? [value] : []
       return ids
-        .map(
-          (id) => options.find((option) => option.id === id)?.label ?? String(id),
-        )
+        .map((id) => resolveReferenceLabel(fieldId, String(id)) ?? String(id))
         .join(', ')
     },
-    [refOptions],
+    [resolveReferenceLabel],
+  )
+  /**
+   * The record the viewer is showing, held as an ID and resolved against the
+   * page the table already has.
+   *
+   * Holding the ID rather than the row is what keeps the view live without
+   * costing a read: the same listener that draws the table re-resolves it, so
+   * an edit landing underneath updates the open dialog. When the row leaves
+   * the page — deleted, or paged past — this answers `null` and the dialog
+   * closes, which is the honest response to a record no longer in front of
+   * this reader. Nothing here queries: `records` is the page query's answer.
+   */
+  const [viewerId, setViewerId] = useState<string | null>(null)
+  const viewerRecord = useMemo(
+    () =>
+      viewerId
+        ? (records.find((record: any) => record.$id === viewerId) ?? null)
+        : null,
+    [viewerId, records],
   )
 
   // --- Document editor (null id = new; AGL-179 typed inputs) --------------
@@ -694,8 +796,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         )
         await setDoc(
           recordRef,
-          { values: coerced, updatedAt: Timestamp.now() },
-          { mergeFields: ['values', 'updatedAt'] },
+          {
+            values: coerced,
+            // The integrity index moves with the values it describes
+            // (`datasetIntegrityUpdate`); the merging form, because clearing
+            // the last reference has to REMOVE the field rather than omit it.
+            ...datasetIntegrityUpdate(model, coerced, deleteField()),
+            updatedAt: Timestamp.now(),
+          },
+          { mergeFields: ['values', 'referencedIds', 'updatedAt'] },
         )
       } else {
         // Creates go through the quota-enforcing API (AGL-473). The legacy
@@ -740,8 +849,36 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const handleDeleteRecord = useCallback(
     (record: any) => async () => {
       if (!selected || !dataScope) return
-      // Delete integrity (AGL-180): scan collections whose models
-      // reference this one; `restrict` blocks, `setNull` strips the FKey.
+      /**
+       * Delete integrity (AGL-180): every collection whose model references
+       * this one is asked whether it still points at this record. `restrict`
+       * blocks the delete; `setNull` strips the FKey from the holders.
+       *
+       * The question is a QUERY over the denormalized `referencedIds` index,
+       * not a page of records filtered in the browser. A page answers for the
+       * rows it happened to fetch — an unordered `limit` is answered in
+       * document-id order over auto-ids, so it is an arbitrary sample — and a
+       * reference held by a row outside it reads as no reference at all: the
+       * delete goes through and `restrict` silently fails to restrict, leaving
+       * a document pointing at something that no longer exists. `values`
+       * itself cannot be queried (it carries a deliberate index exemption —
+       * see `datasetIntegrityFields`), which is why the index exists.
+       *
+       * The query narrows to the candidates; the per-field test below keeps it
+       * EXACT, since `referencedIds` is the union across every reference field
+       * and one of them may point at a different collection entirely.
+       *
+       * ⚠️ FAILS CLOSED. A query that rejects — a missing index, a rules
+       * refusal on a collection this member cannot read — refuses the delete
+       * rather than treating silence as "nothing references it". A check that
+       * fails open is worse than no check, because the UI then tells the user
+       * the record is safe to remove.
+       *
+       * ⚠️ Reaches the collections in `datasets`, which is this viewer's
+       * scoped, capped picker window. A referencing collection shared with no
+       * site this member can see is one the client may not read at all, so it
+       * is not consulted; only a server route could close that.
+       */
       for (const other of datasets) {
         const otherModel = effectiveDatasetModel(other)
         const referencing = otherModel.order.filter(
@@ -750,20 +887,29 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             otherModel.fields[fieldId]?.reference?.datasetId === selected.$id,
         )
         if (!referencing.length) continue
-        const snapshot = await getDocs(
-          query(
-            collection(
-              firestore,
-              dataScope[0],
-              dataScope[1],
-              'datasets',
-              other.$id,
-              'records',
+        let snapshot
+        try {
+          snapshot = await getDocs(
+            query(
+              collection(
+                firestore,
+                dataScope[0],
+                dataScope[1],
+                'datasets',
+                other.$id,
+                'records',
+              ),
+              where('referencedIds', 'array-contains', record.$id),
             ),
-            limit(500),
-          ),
-        ).catch(() => null)
-        if (!snapshot) continue
+          )
+        } catch {
+          return void enqueueSnackbar(
+            `Cannot delete: "${other.displayName}" could not be checked for ` +
+              'references, so removing this record could break it. Nothing ' +
+              'was deleted.',
+            { variant: 'error' },
+          )
+        }
         const hits = snapshot.docs.filter((docSnapshot) =>
           referencing.some((fieldId) => {
             const stored = docSnapshot.get('values')?.[fieldId]
@@ -784,20 +930,30 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             { variant: 'warning', persist: false },
           )
         }
-        const batch = writeBatch(firestore)
-        for (const hit of hits) {
-          const values = { ...(hit.get('values') ?? {}) }
-          for (const fieldId of referencing) {
-            const stored = values[fieldId]
-            if (Array.isArray(stored)) {
-              values[fieldId] = stored.filter((id: string) => id !== record.$id)
-            } else if (stored === record.$id) {
-              delete values[fieldId]
+        // Chunked under Firestore's 500-writes-per-batch cap. The query is no
+        // longer bounded by a page size, so the number of holders is whatever
+        // the collection really holds.
+        for (let start = 0; start < hits.length; start += 400) {
+          const batch = writeBatch(firestore)
+          for (const hit of hits.slice(start, start + 400)) {
+            const values = { ...(hit.get('values') ?? {}) }
+            for (const fieldId of referencing) {
+              const stored = values[fieldId]
+              if (Array.isArray(stored)) {
+                values[fieldId] = stored.filter(
+                  (id: string) => id !== record.$id,
+                )
+              } else if (stored === record.$id) {
+                delete values[fieldId]
+              }
             }
+            batch.update(hit.ref, {
+              values,
+              ...datasetIntegrityUpdate(otherModel, values, deleteField()),
+            })
           }
-          batch.update(hit.ref, { values })
+          await batch.commit()
         }
-        await batch.commit()
       }
       await deleteDoc(
         doc(
@@ -853,12 +1009,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       if (!selected?.$id || !orgId || exporting) return
       setExporting(format)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/orgs/datasets/export?orgId=${encodeURIComponent(orgId)}` +
             `&datasetId=${encodeURIComponent(selected.$id)}` +
             `&format=${format}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}))
@@ -941,10 +1096,53 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     let updates: Array<{ id: string; values: Record<string, unknown> }> = []
     let creates = validRows
     if (keyField) {
+      /*
+       * The key index is its OWN read, not the table's window.
+       *
+       * It used to be built from the card's live listener, which is now a
+       * PAGE — and a page cannot answer "does this key already exist". An
+       * upsert that consults ten rows would turn nearly every update into a
+       * create: duplicate rows, and quota spent on them.
+       *
+       * So it is read here, once, at the moment a key field is actually
+       * chosen — which is also strictly cheaper than the listener it replaces,
+       * since that one paid for five hundred documents on every mount of a
+       * card nobody had scrolled.
+       *
+       * ⚠️ STILL BOUNDED, and the bound is honest rather than hidden. An
+       * unbounded client read is what AGL-2335 refused for the export, for the
+       * same reason: `recordsPerDataset` is unlimited on the agency plan, so
+       * "read them all" is a browser hang behind a dialog button. Past the
+       * ceiling the reader is TOLD which keys could be consulted instead of
+       * being handed silent duplicates — `recordCount` is the server
+       * aggregate, so that comparison is exact.
+       */
       const existingByKey = new Map<string, string>()
-      for (const record of records as any[]) {
-        const key = keyOf(record.values ?? {})
-        if (key) existingByKey.set(key, record.$id)
+      const keyWindow = await getDocs(
+        query(
+          collection(
+            firestore,
+            dataScope[0],
+            dataScope[1],
+            'datasets',
+            selected.$id,
+            'records',
+          ),
+          orderBy(documentId()),
+          limit(IMPORT_KEY_WINDOW),
+        ),
+      ).catch(() => null)
+      for (const snapshot of keyWindow?.docs ?? []) {
+        const key = keyOf((snapshot.get('values') as Record<string, unknown>) ?? {})
+        if (key) existingByKey.set(key, snapshot.id)
+      }
+      if (recordCount > IMPORT_KEY_WINDOW) {
+        enqueueSnackbar(
+          `Matching on "${keyField}" read the first ` +
+            `${IMPORT_KEY_WINDOW.toLocaleString()} of ${recordCount.toLocaleString()} ` +
+            'records — rows keyed beyond that will be added rather than updated.',
+          { variant: 'warning', persist: true },
+        )
       }
       const deduped = new Map<string, (typeof validRows)[number]>()
       const keyless: typeof validRows = []
@@ -996,7 +1194,13 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         )
         batch.set(
           ref,
-          { values: update.values, updatedAt: Timestamp.now() },
+          {
+            values: update.values,
+            // Every write that sets `values` moves the integrity index with
+            // them, or the index describes the values this row used to hold.
+            ...datasetIntegrityUpdate(model, update.values, deleteField()),
+            updatedAt: Timestamp.now(),
+          },
           { merge: true },
         )
       })
@@ -1044,8 +1248,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     importPreview,
     importer?.keyField,
     org,
+    model,
     recordCount,
-    records,
     firestore,
     dataScope,
     callDatasetApi,
@@ -1153,7 +1357,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               label="Filter"
               value={filterText}
               onChange={(event) => setFilterText(event.target.value)}
-              helperText={'e.g. price <= 20 · applies to loaded records'}
+              helperText={'e.g. price <= 20 · applies to this page'}
               sx={{ minWidth: 220 }}
             />
             <TextField
@@ -1166,7 +1370,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             />
           </Stack>
         ) : null}
-        {selected && records.length > 0 ? (
+        {selected && (records.length > 0 || recordPage > 0) ? (
+          <>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -1192,7 +1397,25 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             </TableHead>
             <TableBody>
               {visibleRecords.map((record: any) => (
-                <TableRow key={record.$id} hover>
+                /*
+                  The row OPENS the record, read-only. Reading a record and
+                  changing one used to be the same gesture: `Edit` was the only
+                  way to see a document's full contents, so every look opened a
+                  form whose primary button writes.
+
+                  The click is the mouse affordance and nothing else — a `<tr>`
+                  cannot be made into a real activatable control without
+                  overriding the `row` role a table depends on. The keyboard's
+                  affordance is the `View` button in the actions cluster: a
+                  genuine `<button>`, in the tab order, announced as one, with
+                  the theme's focus ring. Both reach the same handler.
+                */
+                <TableRow
+                  key={record.$id}
+                  hover
+                  onClick={() => setViewerId(record.$id)}
+                  sx={{ cursor: 'pointer' }}
+                >
                   {fields.map((fieldId) => (
                     <TableCell key={fieldId}>
                       {model.fields[fieldId]?.type === 'reference'
@@ -1206,7 +1429,25 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
                           : '--'}
                     </TableCell>
                   ))}
-                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                  <TableCell
+                    align="right"
+                    sx={{ whiteSpace: 'nowrap' }}
+                    /*
+                      Every control in this cell is its OWN action. Without
+                      this the row's handler fires too, so `Delete` would open
+                      the viewer behind its own destructive write and `Edit`
+                      would leave a read-only dialog stacked under the form —
+                      the kind of defect nobody reports and everybody works
+                      around.
+                    */
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Button
+                      size="small"
+                      onClick={() => setViewerId(record.$id)}
+                    >
+                      {'View'}
+                    </Button>
                     <Button size="small" onClick={handleOpenRecord(record)}>
                       {'Edit'}
                     </Button>
@@ -1222,6 +1463,22 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               ))}
             </TableBody>
           </Table>
+          {/* The count line is the PAGE's, deliberately. `recordCount` is the
+              dataset's real size and it already has its own readout above —
+              handing it to the footer as `count` would tell MUI the walk is
+              that long and leave Next live past the end of it whenever a rule
+              or a scope has narrowed what this reader may list. `hasMore` is
+              a fact from the probe row, so the footer answers for the walk it
+              is actually paging. */}
+          <ListPagination
+            page={recordPage}
+            pageSize={recordPageSize}
+            rowCount={records.length}
+            hasMore={hasMoreRecords}
+            onPageChange={setRecordPage}
+            onPageSizeChange={setRecordPageSize}
+          />
+          </>
         ) : selected ? (
           <Typography variant="body2" color="text.secondary">
             {'No records yet.'}
@@ -1300,6 +1557,25 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
+      {/*
+        ONE viewer for the table, not one per row. Its record is a prop out of
+        the page already in hand, so opening it reads nothing — and mounting
+        the table does not open a dialog per row to discover that.
+      */}
+      <DatasetRecordDialog
+        record={viewerRecord}
+        model={model}
+        resolveReference={resolveReferenceLabel}
+        onClose={() => setViewerId(null)}
+        // Explicitly separate, and a hand-off rather than a second editor:
+        // the viewer closes and the record opens in the dialog that has
+        // always owned writing.
+        onEdit={() => {
+          const record = viewerRecord
+          setViewerId(null)
+          if (record) handleOpenRecord(record)()
+        }}
+      />
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}

@@ -27,14 +27,19 @@ import {
   marketplaceTaxSummary,
   storefrontTaxSummary,
   taxPeriodRange,
+  taxReturnRowFindings,
   taxReturnSummary,
   type MarketplaceTaxReturnRowInput,
   type StorefrontTaxReturnRowInput,
   type TaxReturnRowInput,
+  type TaxReturnScope,
 } from '../../../../utils/server/tx-return'
+import { TX_JURISDICTION } from '../../../../utils/tax-jurisdictions'
+import { resolveTaxFilingSettings } from '../../../../utils/server/tax-filing-store'
+import { readTaxablePurchases } from '../../../../utils/server/taxable-purchases-store'
 
 /**
- * The Texas sales tax return for one filing period, summed from the
+ * The sales tax return for one filing period, summed from the
  * `platformRevenue` rows the billing webhook records (AGL-1811).
  *
  * `GET ?period=2026-Q4` (a calendar quarter — the expected filing frequency
@@ -60,31 +65,116 @@ import {
 const ROW_CAP = 2000
 
 /**
- * The filer's Texas registration identifiers (AGL-2021).
+ * The filer's registration identifiers, and the jurisdiction they belong to
+ * (AGL-2021).
  *
- * SERVER-ONLY env, on purpose, and the reason is the whole point of the issue:
- * the Webfile number is what the Comptroller's eSystems calls a "Personal
- * Identification Code" and uses to authenticate a profile claiming access to a
- * taxpayer account. A `NEXT_PUBLIC_*` var would be inlined into a client chunk
- * that Next serves without authentication — republishing the credential this
- * change exists to un-publish. Read here instead, behind the `staff` gate
- * below, so the only way to see it is to be allowed to see it.
+ * Resolved from the staff console's stored configuration first and
+ * server-only environment second — `utils/server/tax-filing-store.ts` reads
+ * both and `utils/tax-filing-config.ts` states the precedence. Neither layer
+ * is `NEXT_PUBLIC_*`, and the reason is the whole point of the issue: a filing
+ * credential such as the Texas Webfile number is what the Comptroller's
+ * eSystems calls a "Personal Identification Code" and uses to authenticate a
+ * profile claiming access to a taxpayer account. A `NEXT_PUBLIC_*` var would
+ * be inlined into a client chunk that Next serves without authentication —
+ * republishing the credential this change exists to un-publish.
  *
- * No defaults. An unconfigured deployment — every self-host operator, on day
- * one — reports absent and the surfaces say so; see `TX_REGISTRATION_UNSET`.
+ * This response is the ONE place the whole value is handed out, behind the
+ * `staff` gate below, because it is the one place it is needed: a filer
+ * transcribes it onto the return. `/api/admin/tax-filing`, which configures
+ * it, never returns it at all.
+ *
+ * No defaults for the numbers themselves. An unconfigured deployment — every
+ * self-host operator, on day one — reports absent and the surfaces say so; see
+ * `TAX_REGISTRATION_UNSET`.
  */
-function taxRegistrationFromEnv(): {
-  webfileNumber: string | null
-  taxpayerNumber: string | null
-} {
-  const read = (name: string): string | null => {
-    const value = process.env[name]
-    const text = typeof value === 'string' ? value.trim() : ''
-    return text.length ? text : null
-  }
+async function taxRegistrationInForce(): Promise<{
+  jurisdiction: string
+  registrationId: string | null
+  filingId: string | null
+  firstTaxablePeriod: string | null
+  webfileNumber?: string | null
+  taxpayerNumber?: string | null
+}> {
+  const resolved = await resolveTaxFilingSettings()
+  const { registrationId, filingId } = resolved
   return {
-    webfileNumber: read('TX_WEBFILE_NUMBER'),
-    taxpayerNumber: read('TX_TAXPAYER_NUMBER'),
+    jurisdiction: resolved.jurisdiction.code,
+    registrationId,
+    filingId,
+    /*
+     * WHEN THE OBLIGATION BEGAN — and only when an operator SAID so.
+     *
+     * `resolveTaxFilingSettings` always answers with a period, defaulting to
+     * this software's own first taxable month when nothing is configured.
+     * That default is fine for building a period menu and wrong for scoping a
+     * finding: scoping a row out asserts that no tax was owed on that sale,
+     * and the only party entitled to assert it is an operator who wrote their
+     * own start date down. A `source` of anything but `console` reports null,
+     * and null scopes nothing — every untaxed row stays flagged.
+     */
+    firstTaxablePeriod:
+      resolved.firstTaxablePeriodSource === 'console'
+        ? resolved.firstTaxablePeriod
+        : null,
+    // The Texas-named fields, mirrored for Texas alone. A client chunk cached
+    // from before the rename reads only these, and a deployment mid-rollout
+    // must not spend that window reporting a configured registration as
+    // missing. Mirroring them on any other jurisdiction would put a foreign
+    // identifier under a Comptroller label, which is the confusion this whole
+    // change removes.
+    ...(resolved.jurisdiction.code === TX_JURISDICTION
+      ? { webfileNumber: filingId, taxpayerNumber: registrationId }
+      : {}),
+  }
+}
+
+/**
+ * One row, as the working papers and the findings both need it.
+ *
+ * Carries `findings` — the SAME keys `taxReturnSummary` counted, from the same
+ * predicate — so the screen can answer "which rows?" for every count it
+ * renders. That could not be re-derived from the fields beside it and the
+ * attempt would quietly lie twice: `taxableSalesCents` is a sum, so a line
+ * stating a base of zero is indistinguishable here from a row stating no base
+ * at all, and `automaticTax` used to project as `row.automaticTax === true`,
+ * which reports a field that was never written as an explicit `false` and
+ * would name rows the count never included.
+ *
+ * Nothing is added to the projection that the screen does not need. These rows
+ * carry customer identifiers and amounts, and the page is `super`-gated staff
+ * only — widening them further to serve a maybe is how a filing surface turns
+ * into a data export.
+ */
+function projectRow(row: TaxReturnRowInput, scope: TaxReturnScope) {
+  return {
+    invoiceId: row.invoiceId,
+    orgId: row.orgId ?? null,
+    paidAt: asRowDate(row.paidAt)?.toISOString() ?? null,
+    grossCents: Number(row.grossCents ?? 0),
+    taxCents: Number(row.taxCents ?? 0),
+    taxableSalesCents: (Array.isArray(row.taxLines) ? row.taxLines : [])
+      .map((line) => Number(line?.taxableAmountCents ?? 0))
+      .reduce((sum, base) => sum + (Number.isFinite(base) ? base : 0), 0),
+    state:
+      typeof row.customerAddress?.state === 'string'
+        ? row.customerAddress.state
+        : null,
+    country:
+      typeof row.customerAddress?.country === 'string'
+        ? row.customerAddress.country
+        : null,
+    // Tri-state, because the field is: `true`, an explicit `false` that the
+    // untaxed finding is about, and never-written — which is not the same
+    // claim and must not print as one.
+    automaticTax:
+      row.automaticTax === true ? true : row.automaticTax === false ? false : null,
+    refundedCents: Number(row.refundedCents ?? 0),
+    // AGL-1582's flag, read with the revenue report's own `=== true`. An
+    // absent field projects as `false` here and IS filed as a sale, which is
+    // the direction that over-reports visibly rather than under-reporting a
+    // liability invisibly.
+    internalTraffic: row.internalTraffic === true,
+    findings: taxReturnRowFindings(row, scope),
   }
 }
 
@@ -147,6 +237,8 @@ async function handler(request: Request): Promise<Response> {
       storefrontInPeriod,
       storefrontUndated,
       marketplaceInPeriod,
+      registration,
+      taxablePurchases,
     ] = await Promise.all([
         revenue
           .where('paidAt', '>=', range.start)
@@ -166,6 +258,12 @@ async function handler(request: Request): Promise<Response> {
           .where('createdAt', '<', range.end)
           .limit(ROW_CAP + 1)
           .get(),
+        // Alongside the queries rather than before them: it is one cached
+        // document read and the return cannot be built without it either way.
+        taxRegistrationInForce(),
+        // Item 3, if anybody has entered one for this period. `null` when
+        // nobody has, which is what makes the line read `not computed`.
+        readTaxablePurchases(period),
       ])
     const truncated = inPeriod.size > ROW_CAP
     const docs = inPeriod.docs.slice(0, ROW_CAP)
@@ -174,7 +272,13 @@ async function handler(request: Request): Promise<Response> {
       ...(doc.data() as Omit<TaxReturnRowInput, 'invoiceId'>),
     }))
 
-    const summary = taxReturnSummary(rows, range)
+    // One scope, built once and used by BOTH the counting and the per-row
+    // projection below, so a row can never be scoped out of a count while
+    // still being named as needing attention.
+    const scope: TaxReturnScope = {
+      obligationStart: taxPeriodRange(registration.firstTaxablePeriod ?? '')?.start ?? null,
+    }
+    const summary = taxReturnSummary(rows, range, scope)
     const storefrontDocs = storefrontInPeriod.docs.slice(0, ROW_CAP)
     const storefrontRows: StorefrontTaxReturnRowInput[] = storefrontDocs.map(
       (doc) => ({
@@ -214,8 +318,12 @@ async function handler(request: Request): Promise<Response> {
           refundedCents: Number(row.refundedCents ?? 0),
         })),
       },
-      /** AGL-2021 — operator config, not source. Null when unconfigured. */
-      registration: taxRegistrationFromEnv(),
+      /**
+       * AGL-2021 — operator config, not source. Null identifiers when
+       * unconfigured, and the jurisdiction they belong to so the surfaces can
+       * name the authority instead of assuming one.
+       */
+      registration,
       /**
        * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three
        * buckets with no grand total, on purpose: `aglynLiable` is tax Stripe
@@ -251,28 +359,33 @@ async function handler(request: Request): Promise<Response> {
               : null,
         })),
       },
+      /**
+       * ITEM 3 — the figure this report cannot derive, as somebody entered it.
+       *
+       * `null` when nobody has entered one for this period, and the surfaces
+       * render null as `not computed`. A zero here would be the exact claim
+       * the line refuses to make.
+       */
+      taxablePurchases,
       /** Rows no period query can reach — must be zero before filing. */
       undatedRows: undatedProbe.size,
-      rows: rows.map((row) => ({
-        invoiceId: row.invoiceId,
-        orgId: row.orgId ?? null,
-        paidAt: asRowDate(row.paidAt)?.toISOString() ?? null,
-        grossCents: Number(row.grossCents ?? 0),
-        taxCents: Number(row.taxCents ?? 0),
-        taxableSalesCents: (Array.isArray(row.taxLines) ? row.taxLines : [])
-          .map((line) => Number(line?.taxableAmountCents ?? 0))
-          .reduce((sum, base) => sum + (Number.isFinite(base) ? base : 0), 0),
-        state:
-          typeof row.customerAddress?.state === 'string'
-            ? row.customerAddress.state
-            : null,
-        country:
-          typeof row.customerAddress?.country === 'string'
-            ? row.customerAddress.country
-            : null,
-        automaticTax: row.automaticTax === true,
-        refundedCents: Number(row.refundedCents ?? 0),
-      })),
+      /**
+       * …AND WHICH ONES.
+       *
+       * The count alone is a blocking finding an operator cannot begin on:
+       * these rows are in no period query, including this one, so they are
+       * not in `rows` either and no amount of filtering the listing would
+       * produce them. Bounded by the probe's own limit, which is also what
+       * bounds the count — so the list and the number are the same
+       * population, never a subset presented as the whole.
+       */
+      undated: {
+        rows: undatedProbe.docs.map((doc) => {
+          const data = doc.data() as Omit<TaxReturnRowInput, 'invoiceId'>
+          return projectRow({ invoiceId: doc.id, ...data }, scope)
+        }),
+      },
+      rows: rows.map((row) => projectRow(row, scope)),
     })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

@@ -182,9 +182,9 @@ export const layoutVersionConverter =
  *
  * The revocation check then ran `getUser(uid)` on that same project-level
  * handle. A tenant uid is not in the project pool: measured on production
- * 2026-08-22, `zach@aglyn.com` is `IHumyGGhGxZKjVV26qCRx5Okf573` in
- * `aglyn-org-y5v14` and a project-level `getUser` of that uid throws
- * `auth/user-not-found`. `assertIdTokenNotRevoked` reads "not found" as
+ * 2026-08-22, a staff account in `aglyn-org-y5v14` verified through the
+ * project handle, and a project-level `getUser` of the uid that token carries
+ * threw `auth/user-not-found`. `assertIdTokenNotRevoked` reads "not found" as
  * "account deleted" — correctly, and fail-CLOSED by design — and threw
  * `auth/id-token-revoked`. Every SSO user was therefore refused at every door
  * that verifies a Bearer token, with whatever the route's catch-all produced;

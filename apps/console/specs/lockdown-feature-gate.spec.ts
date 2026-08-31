@@ -160,9 +160,34 @@ beforeEach(() => {
     staff: false,
   })
   mockFeatureLockdownRefusal.mockResolvedValue(null)
-  mockStripeFetch.mockResolvedValue({
-    ok: true,
-    json: async () => ({ url: 'https://checkout.stripe.test/session' }),
+  // URL-aware: the purchase reads the customer first to confirm it has a
+  // stored payment method and address, then creates the subscription. Only
+  // the second is the money call this suite counts.
+  mockStripeFetch.mockImplementation(async (url: unknown) => {
+    if (/\/customers\//.test(String(url))) {
+      return {
+        ok: true,
+        json: async () => ({
+          invoice_settings: { default_payment_method: 'pm_saved_1' },
+          address: { country: 'US' },
+        }),
+      }
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        id: 'sub_1',
+        status: 'active',
+        latest_invoice: {
+          subtotal: 2500,
+          tax: 165,
+          total: 2665,
+          currency: 'usd',
+          automatic_tax: { status: 'complete' },
+          payment_intent: { status: 'succeeded', client_secret: 'pi_secret' },
+        },
+      }),
+    }
   })
   global.fetch = mockStripeFetch as unknown as typeof fetch
 })
@@ -218,15 +243,23 @@ describe('AGL-1510 · the checkout feature gate on billing/checkout', () => {
     const response = await post()
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
-      url: 'https://checkout.stripe.test/session',
+      subscriptionStatus: 'active',
     })
-    expect(mockStripeFetch).toHaveBeenCalledTimes(1)
+    expect(
+      mockStripeFetch.mock.calls.filter((call) =>
+        String(call[0]).includes('/subscriptions'),
+      ),
+    ).toHaveLength(1)
   })
 
   it('a null verdict changes nothing — checkout proceeds to Stripe', async () => {
     const response = await post()
     expect(response.status).toBe(200)
-    expect(mockStripeFetch).toHaveBeenCalledTimes(1)
+    expect(
+      mockStripeFetch.mock.calls.filter((call) =>
+        String(call[0]).includes('/subscriptions'),
+      ),
+    ).toHaveLength(1)
   })
 })
 

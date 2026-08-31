@@ -122,6 +122,7 @@ const REPO_WIDE = new Set([
   'check:hardcoded-colours',
   'check:no-tax-identifiers',
   'check:residential-address',
+  'check:personal-identifiers',
   'check:provider-key-exposure',
   'check:next-public-access',
   'check:contact-addresses',
@@ -136,6 +137,8 @@ const REPO_WIDE = new Set([
   'check:app-router-graph',
   'check:jsx-barrel',
   'check:aglyn-barrel',
+  'check:tenant-page-weight',
+  'check:page-view-rate',
   'check:monaco-dompurify',
   // Assert against the workflow files and the package.json script table,
   // which belong to no nx project.

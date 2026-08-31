@@ -43,6 +43,7 @@ import {
   documentId,
   getCountFromServer,
   limit,
+  orderBy,
   query,
   where,
 } from 'firebase/firestore'
@@ -52,6 +53,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
@@ -60,7 +62,6 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import useOrgPermissions from '../hooks/use-org-permissions'
 
 /**
@@ -108,7 +109,6 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
-  const logActivity = useHostActivityLogger(hostId)
   const { permissions } = useOrgPermissions()
   const canManage = permissions.manageMembers
   const [email, setEmail] = useState('')
@@ -121,15 +121,41 @@ export function HostMembersCard(props: HostMembersCardProps) {
     { idField: '$id' },
   )
   /*
-   * Paging (AGL-1124), now the console's shared one (AGL-693). This used to
+   * Paging (AGL-1124), now the console's shared one (AGL-2501). This used to
    * be a bare `limit(100)` with nothing saying so, which is the worst of
    * both: a site with 120 collaborators showed 100 and looked complete. Then
    * it grew a page at a time behind a "Load more", which is a third control
    * where the console already had too many — and one that can only ever go
    * forward.
+   *
+   * ## The window is ORDERED, and the page is not re-sorted
+   *
+   * The page carried no `orderBy` and was then sorted BY EMAIL in the
+   * browser. Firestore answers an unordered limit in document-id order and a
+   * member's id is a generated uid, so page one was ten arbitrary
+   * collaborators arranged alphabetically — which reads as the alphabetical
+   * first ten, and is not. Nobody was hidden (an id walk is total, so every
+   * member is reachable by paging) but the order the list appeared to be in
+   * was not the order it was in.
+   *
+   * `email` is safe to order on, which is the question `orderBy` always
+   * raises: it matches only documents that HAVE the field, so ordering on one
+   * a writer omits hides rows instead of arranging them. This collection has
+   * exactly one creator — `POST /api/hosts/members` — and it writes `email`
+   * unconditionally on the same `set` that brings the document into
+   * existence. There is no client write path (the rules make host
+   * subcollection membership server-only) and no import path (`members` is
+   * not in the site-bundle allow-list), so a member document without an email
+   * cannot be produced.
+   *
+   * The rows are handed on as they arrive. Sorting a server-ordered page in
+   * the browser is what produced the old illusion, and it would produce a
+   * subtler one here: Firestore collates by UTF-8 bytes, `localeCompare` does
+   * not, so the two disagree on case and accents and the page would be
+   * arranged differently from the walk it was cut from.
    */
   const {
-    rows: memberDocs,
+    rows: members,
     hasMore,
     page,
     setPage,
@@ -137,16 +163,13 @@ export function HostMembersCard(props: HostMembersCardProps) {
     setPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
-      query(collection(firestore, 'hosts', hostId, 'members'), limit(pageLimit)),
+      query(
+        collection(firestore, 'hosts', hostId, 'members'),
+        orderBy('email'),
+        limit(pageLimit),
+      ),
     [firestore, hostId],
     { idField: '$id' },
-  )
-  const members = useMemo(
-    () =>
-      [...memberDocs].sort((a, b) =>
-        String(a.email ?? '').localeCompare(String(b.email ?? '')),
-      ),
-    [memberDocs],
   )
   /**
    * SEATS USED is a server aggregate, not the length of the page window
@@ -293,13 +316,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
     async (method: string, body: Record<string, unknown>) => {
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/hosts/members', {
+        const response = await authorizedFetch(user, '/api/hosts/members', {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, ...body }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -339,9 +358,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
         : `Added ${value}`,
       { variant: 'success', persist: false },
     )
-    logActivity('Added member', { type: 'member', name: value })
     setEmail('')
-  }, [email, role, request, enqueueSnackbar, logActivity])
+  }, [email, role, request, enqueueSnackbar])
 
   const handleRoleChange = useCallback(
     (member: any) => async (event: { target: { value: string } }) => {
@@ -354,12 +372,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
         variant: 'success',
         persist: false,
       })
-      logActivity('Changed member site access', {
-        type: 'member',
-        name: member.email,
-      })
     },
-    [request, enqueueSnackbar, logActivity],
+    [request, enqueueSnackbar],
   )
 
   const handleRemove = useCallback(
@@ -376,9 +390,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
       const payload = await request('DELETE', { memberId: member.$id })
       if (!payload) return
       enqueueSnackbar('Member removed', { variant: 'success', persist: false })
-      logActivity('Removed member', { type: 'member', name: member.email })
     },
-    [confirm, request, enqueueSnackbar, logActivity],
+    [confirm, request, enqueueSnackbar],
   )
 
   return (

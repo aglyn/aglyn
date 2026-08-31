@@ -18,15 +18,17 @@
 import {
   centsToDollars,
   defaultTaxReturnPeriod,
+  storefrontPlatformLiableCents,
   taxReturnAttention,
   taxReturnCsv,
   taxReturnCsvFilename,
+  taxReturnFilingLines,
   taxReturnJurisdictionRows,
   taxReturnPeriodOptions,
   taxReturnRegistration,
   taxReturnWebfileLines,
+  TAX_REGISTRATION_UNSET,
   TX_JURISDICTION,
-  TX_REGISTRATION_UNSET,
   type TaxReturnPayload,
 } from './tx-return-webfile'
 
@@ -87,8 +89,17 @@ function cleanPayload(): TaxReturnPayload {
         chargedBackCents: 0,
         rowsChargedBack: 0,
       },
+      internal: {
+        transactionCount: 0,
+        totalSalesCents: 0,
+        taxableSalesCents: 0,
+        taxCollectedCents: 0,
+        byJurisdiction: {},
+      },
       attention: {
         untaxedRows: 0,
+        internalRows: 0,
+        untaxedRowsBeforeObligation: 0,
         rowsMissingTaxableBase: 0,
         rowsMissingAddress: 0,
         nonUsdRows: 0,
@@ -538,8 +549,8 @@ describe('taxReturnJurisdictionRows', () => {
       'US-NY',
       'US-CA',
     ])
-    expect(rows[0].isTexas).toBe(true)
-    expect(rows[1].isTexas).toBe(false)
+    expect(rows[0].isFilingJurisdiction).toBe(true)
+    expect(rows[1].isFilingJurisdiction).toBe(false)
   })
 })
 
@@ -609,8 +620,8 @@ describe('taxReturnRegistration / the CSV registration lines', () => {
     const payload = cleanPayload()
     payload.registration = null
     const csv = taxReturnCsv(payload)
-    expect(csv).toContain(`Webfile number,${TX_REGISTRATION_UNSET}`)
-    expect(csv).toContain(`Taxpayer number,${TX_REGISTRATION_UNSET}`)
+    expect(csv).toContain(`Webfile number,${TAX_REGISTRATION_UNSET}`)
+    expect(csv).toContain(`Taxpayer number,${TAX_REGISTRATION_UNSET}`)
     // The failure this exists to prevent: a trailing-comma blank cell that a
     // preparer reads as "not filled in yet" and types a number into by hand.
     expect(csv).not.toContain('Webfile number,\n')
@@ -620,13 +631,13 @@ describe('taxReturnRegistration / the CSV registration lines', () => {
   it('treats a whitespace-only value as absent, not as a blank number', () => {
     const payload = cleanPayload()
     payload.registration = { webfileNumber: '   ', taxpayerNumber: '' }
-    expect(taxReturnRegistration(payload)).toEqual({
-      webfileNumber: null,
-      taxpayerNumber: null,
+    expect(taxReturnRegistration(payload)).toMatchObject({
+      registrationId: null,
+      filingId: null,
       configured: false,
     })
     expect(taxReturnCsv(payload)).toContain(
-      `Webfile number,${TX_REGISTRATION_UNSET}`,
+      `Webfile number,${TAX_REGISTRATION_UNSET}`,
     )
   })
 
@@ -637,13 +648,13 @@ describe('taxReturnRegistration / the CSV registration lines', () => {
       taxpayerNumber: null,
     }
     const registration = taxReturnRegistration(payload)
-    expect(registration.webfileNumber).toBe('RT123456')
+    expect(registration.filingId).toBe('RT123456')
     expect(registration.configured).toBe(false)
     // The half that IS set still reaches the file; only the missing half
     // reports absent. Half a registration is not a licence to print nothing.
     const csv = taxReturnCsv(payload)
     expect(csv).toContain('Webfile number,RT123456')
-    expect(csv).toContain(`Taxpayer number,${TX_REGISTRATION_UNSET}`)
+    expect(csv).toContain(`Taxpayer number,${TAX_REGISTRATION_UNSET}`)
   })
 
   it('reports absent on a payload predating AGL-2021', () => {
@@ -722,5 +733,227 @@ describe('defaultTaxReturnPeriod', () => {
     expect(defaultTaxReturnPeriod(new Date('2026-09-15T00:00:00Z'))).toBe(
       '2026-Q3',
     )
+  })
+})
+
+/**
+ * A JURISDICTION WITH NO EXPORTER GETS A BREAKDOWN, NOT SOMEONE ELSE'S FORM.
+ *
+ * The platform computes tax against the PLATFORM's Stripe registrations on
+ * every `mode: 'stripe'` storefront sale, wherever it is deployed — so an
+ * operator running this software in California or the United Kingdom collects
+ * the same facilitator liability, and used to be handed Texas Comptroller
+ * lines to file it with. The figures were right and the document was for an
+ * authority they have never registered with.
+ *
+ * What this software knows is what it collected and where. What it does not
+ * know is any other authority's form. So the breakdown carries the first and
+ * says plainly that it is not the second — asserted here in both directions,
+ * because a breakdown quietly wearing a form's clothes is the failure mode.
+ */
+describe('the filing output is selected by jurisdiction', () => {
+  const californiaPayload = (): TaxReturnPayload => ({
+    ...cleanPayload(),
+    registration: {
+      jurisdiction: 'US-CA',
+      registrationId: 'CDTFA-000000',
+      filingId: null,
+    },
+  })
+
+  const byLabel = (payload: TaxReturnPayload) =>
+    Object.fromEntries(
+      taxReturnFilingLines(payload).map((line) => [line.label, line.dollars]),
+    )
+
+  it('still files Texas from the Webfile lines, unchanged', () => {
+    // The dispatcher must not be a rewrite of the Texas path wearing a new
+    // name: the same fixture through the new entry point produces exactly the
+    // lines the Texas exporter produces.
+    const payload = cleanPayload()
+    expect(taxReturnFilingLines(payload)).toEqual(taxReturnWebfileLines(payload))
+    expect(byLabel(payload)['Total Texas sales']).toBe('100.00')
+  })
+
+  it('gives another jurisdiction its OWN figures, from its own bucket', () => {
+    const lines = byLabel(californiaPayload())
+    // The US-CA bucket is 100.00/80.00/6.60 and Texas's is the same size on
+    // purpose in this fixture — so the label, not the number, is what proves
+    // which bucket was read.
+    expect(lines['Total sales in US-CA']).toBe('100.00')
+    expect(lines['Taxable sales']).toBe('80.00')
+    expect(lines['Tax collected']).toBe('6.60')
+    expect(lines['Transactions']).toBe('1')
+    // …and NOT Texas's lines, which is the whole defect.
+    expect(lines['Total Texas sales']).toBeUndefined()
+  })
+
+  it('claims no form line it cannot know', () => {
+    const lines = taxReturnFilingLines(californiaPayload())
+    // Every Texas item number is gone, and so is `Taxable purchases` — a Form
+    // 01-114 line, not a universal concept. Printing either would assert
+    // knowledge of a return this code has never seen.
+    expect(lines.every((line) => line.item === '—')).toBe(true)
+    expect(lines.some((line) => line.label === 'Taxable purchases')).toBe(false)
+  })
+
+  it('still separates the platform-liable storefront tax from the merchant’s', () => {
+    // The distinction that must survive generalization: one is money the
+    // platform holds under its own registration, the other never touched it.
+    const labels = taxReturnFilingLines(californiaPayload()).map(
+      (line) => line.label,
+    )
+    expect(labels).toContain(
+      'US-CA storefront tax under the platform’s registration (NOT in the figures above)',
+    )
+    expect(labels).toContain('US-CA storefront tax under the MERCHANT’s own rate')
+  })
+
+  it('reads the storefront liability from the CONFIGURED jurisdiction', () => {
+    const payload = californiaPayload()
+    payload.storefront = {
+      summary: {
+        aglynLiable: {
+          transactionCount: 1,
+          grossCents: 10660,
+          taxableSalesCents: 8000,
+          taxCollectedCents: 660,
+          byJurisdiction: {
+            'US-CA': {
+              transactionCount: 1,
+              totalSalesCents: 10000,
+              taxableSalesCents: 8000,
+              taxCollectedCents: 660,
+            },
+          },
+        },
+      },
+      truncated: false,
+      undatedRows: 0,
+      rows: [],
+    } as never
+    // A Texas-keyed read answers 0 here, and a 0 on this figure reads as
+    // "nothing to decide" on the finding that blocks filing.
+    expect(storefrontPlatformLiableCents(payload)).toBe(660)
+    const finding = taxReturnAttention(payload).items.find(
+      (item) => item.id === 'storefrontAglynLiableTax',
+    )
+    expect(finding).toMatchObject({ severity: 'blocking', count: 660 })
+    expect(finding?.label).toContain('US-CA')
+  })
+
+  it('puts the configured jurisdiction at the top of the table, not Texas', () => {
+    const rows = taxReturnJurisdictionRows(californiaPayload())
+    expect(rows[0].jurisdiction).toBe('US-CA')
+    expect(rows[0].isFilingJurisdiction).toBe(true)
+    expect(rows[1].isFilingJurisdiction).toBe(false)
+  })
+
+  it('exports a breakdown that says it is not a return', () => {
+    const csv = taxReturnCsv(californiaPayload())
+    expect(csv).toContain('FOR MANUAL FILING')
+    expect(csv).toContain('not a submittable return')
+    expect(csv).toContain('Filing jurisdiction,US-CA')
+    expect(csv).toContain('Return breakdown (US-CA only)')
+    expect(csv).toContain('Registration number,CDTFA-000000')
+    // The Texas document's own headings must be absent — an operator filing
+    // in California must not be able to find a Comptroller word in the file.
+    expect(csv).not.toContain('Webfile figures (Texas only)')
+    expect(csv).not.toContain('Total Texas sales')
+    // …while the raw material any return is assembled from is still there:
+    // the same figures split by the region the tax was computed for.
+    expect(csv).toContain('Aglyn’s own sales by jurisdiction')
+    expect(csv).toContain('US-CA,1,100.00,80.00,6.60')
+    expect(csv).toContain('US-TX,1,100.00,80.00,6.60')
+  })
+
+  it('keeps the Texas export byte-for-byte what it was', () => {
+    const csv = taxReturnCsv(cleanPayload())
+    expect(csv).toContain('Aglyn — Texas sales tax return working papers')
+    expect(csv).toContain('Webfile figures (Texas only)')
+    expect(csv).not.toContain('FOR MANUAL FILING')
+  })
+
+  it('names the jurisdiction in the exported filename', () => {
+    expect(taxReturnCsvFilename('2026-Q4', 'US-CA')).toBe(
+      'aglyn-us-ca-sales-tax-breakdown-2026-Q4.csv',
+    )
+    // Unqualified stays Texas's historical name: a caller predating the
+    // setting must not silently start writing a differently-named file.
+    expect(taxReturnCsvFilename('2026-Q4')).toBe(
+      'aglyn-tx-sales-tax-2026-Q4.csv',
+    )
+  })
+})
+
+/**
+ * AN UNCONFIGURED DEPLOYMENT SAYS SO, IN THE WORDS OF ITS OWN JURISDICTION.
+ *
+ * The blank cell is the failure: a filing document with nothing where a
+ * registration number goes reads as "not filled in yet" and gets one written
+ * in by hand. What changes with jurisdictions is only WHICH variables the
+ * message names — and whether a second identifier is required at all, since
+ * requiring a Texas-shaped pair everywhere would leave a correctly configured
+ * deployment reading "not configured" forever.
+ */
+describe('the unconfigured state, per jurisdiction', () => {
+  const gbPayload = (
+    registration: TaxReturnPayload['registration'],
+  ): TaxReturnPayload => ({ ...cleanPayload(), registration })
+
+  it('is configured on one identifier where no second one exists', () => {
+    const resolved = taxReturnRegistration(
+      gbPayload({ jurisdiction: 'GB', registrationId: 'GB-VAT-000000' }),
+    )
+    expect(resolved.configured).toBe(true)
+    expect(resolved.jurisdiction.code).toBe('GB')
+  })
+
+  it('still demands both halves of a Texas registration', () => {
+    const resolved = taxReturnRegistration(
+      gbPayload({ jurisdiction: 'US-TX', registrationId: '00000000000' }),
+    )
+    expect(resolved.configured).toBe(false)
+  })
+
+  it('writes what to set, not a blank, into the exported papers', () => {
+    const csv = taxReturnCsv(gbPayload({ jurisdiction: 'GB' }))
+    expect(csv).toContain(`Registration number,${TAX_REGISTRATION_UNSET}`)
+    expect(csv).toContain('AGLYN_TAX_REGISTRATION_ID')
+    // The optional identifier is reported as optional rather than as a fault:
+    // "not configured" on something there is nothing to configure sends a
+    // preparer hunting for a number that does not exist.
+    expect(csv).toContain('Filing ID,NOT SET — AGLYN_TAX_FILING_ID is optional for GB')
+    expect(csv).not.toContain('Registration number,\n')
+  })
+
+  it('BLOCKS on a jurisdiction key that can never match a bucket', () => {
+    // The silent-zero case: `AGLYN_TAX_JURISDICTION=Texas` matches no bucket,
+    // so every figure reads 0.00 on a page that otherwise looks clean. It is
+    // reported, never corrected to the default — guessing which authority an
+    // operator meant is not a thing a filing document may do.
+    const payload = gbPayload({ jurisdiction: 'TEXAS' })
+    const verdict = taxReturnAttention(payload)
+    expect(verdict.clean).toBe(false)
+    const finding = verdict.items.find(
+      (item) => item.id === 'jurisdictionUnrecognized',
+    )
+    expect(finding).toMatchObject({ severity: 'blocking', count: 1 })
+    expect(finding?.detail).toContain('AGLYN_TAX_JURISDICTION')
+    // …and the figures it would have printed really are zero, which is why
+    // the finding has to exist.
+    const lines = Object.fromEntries(
+      taxReturnFilingLines(payload).map((line) => [line.label, line.dollars]),
+    )
+    expect(lines['Total sales in TEXAS']).toBe('0.00')
+  })
+
+  it('does not raise the finding for a jurisdiction that simply had no sales', () => {
+    // A well-formed key with an empty bucket is an ordinary quarter, not a
+    // misconfiguration, and must not be dressed up as one.
+    const verdict = taxReturnAttention(gbPayload({ jurisdiction: 'DE' }))
+    expect(
+      verdict.items.some((item) => item.id === 'jurisdictionUnrecognized'),
+    ).toBe(false)
   })
 })

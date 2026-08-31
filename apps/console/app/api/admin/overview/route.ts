@@ -205,13 +205,45 @@ async function handler(request: Request): Promise<Response> {
       }
     })
 
+    /*
+     * A staff reader recognizes a customer by name, never by document id.
+     * Three lists below are keyed on `orgId` and rendered it raw — the two
+     * cards that exist to say "look at this organization" were the two that
+     * did not say which, and the recovery queue names the counterparty a
+     * staff member is about to go and collect money from.
+     *
+     * Built from `orgsSnapshot`, which is already loaded for the plan and MRR
+     * roll-ups, so naming these costs NO additional read. The fallback chain
+     * matches the recent-orgs list on the page (`name` → `slug` → id) so one
+     * org cannot appear under two different labels on the same screen.
+     *
+     * ⚠️ Declared HERE, above every caller. `const` bindings have a temporal
+     * dead zone and each of the three lists below is built eagerly, so a
+     * `orgLabel(...)` call that runs before this line throws
+     * `ReferenceError: Cannot access 'orgLabel' before initialization` — and
+     * the anomaly list only calls it on a row that actually spiked, so the
+     * failure would appear on the first abuse alert and never before it.
+     *
+     * ⚠️ The snapshot is capped at 500. An org outside it keeps its id rather
+     * than going blank — an unfamiliar id is still a lead a staff member can
+     * paste into the org search, and an empty cell is not.
+     */
+    const orgLabelById = new Map<string, string>()
+    for (const doc of orgsSnapshot.docs) {
+      const data = doc.data()
+      const label = (data['name'] ?? data['slug'] ?? '') as string
+      if (label) orgLabelById.set(doc.id, label)
+    }
+    const orgLabel = (orgId: string): string =>
+      orgLabelById.get(orgId) ?? orgId
+
     /**
      * The rows behind the recovery queue (AGL-2309).
      *
      * `owedCents` is projected from the document rather than recomputed here:
      * the webhook knew what it failed to reverse (`toReverseCents` at the
      * moment of the refusal) and the ledger cannot re-derive it afterwards,
-     * because `netPaidCents` deliberately subtracts only the reversal that
+     * because `sentToStripeCents` deliberately subtracts only the reversal that
      * ACTUALLY happened. Zero for a refusal whose amount was unknown — the
      * `no-charge-on-cause` and `no-transfer` branches settle without one —
      * and those rows still belong on the queue, because the reason is the
@@ -224,6 +256,13 @@ async function handler(request: Request): Promise<Response> {
           $id: doc.id,
           listingId: data['listingId'] ?? null,
           sellerOrgId: data['sellerOrgId'] ?? null,
+          // The seller by NAME. This queue exists to be worked — a row that
+          // says who owes what is actionable, and one that says a document
+          // id owes $240 is a lookup the reader has to do by hand before
+          // they can start.
+          sellerOrgLabel: data['sellerOrgId']
+            ? orgLabel(String(data['sellerOrgId']))
+            : null,
           buyerUid: data['buyerUid'] ?? null,
           owedCents: Number(data['reversalOwedCents'] ?? 0),
           reason: data['reversalFailedReason'] ?? null,
@@ -278,7 +317,7 @@ async function handler(request: Request): Promise<Response> {
             `metered cost $${priorCostUsd.toFixed(2)} → $${costUsd.toFixed(2)}`,
           )
         }
-        return spikes.length ? { orgId, spikes } : null
+        return spikes.length ? { orgId, orgLabel: orgLabel(orgId), spikes } : null
       })
       .filter(Boolean)
       .slice(0, 20)
@@ -287,6 +326,7 @@ async function handler(request: Request): Promise<Response> {
       .filter(({ current }) => current.exists)
       .map(({ orgId, current }) => ({
         orgId,
+        orgLabel: orgLabel(orgId),
         month: current.get('month'),
         storageGb: Number(current.get('storageGb') ?? 0),
         pageViews: Number(current.get('pageViews') ?? 0),

@@ -28,10 +28,12 @@ import {
   mdiAccountGroupOutline,
   mdiBookOpenVariant,
   mdiBugOutline,
+  mdiCookieCogOutline,
   mdiCreditCardOutline,
   mdiLifebuoy,
   mdiOpenInNew,
 } from '@aglyn/shared-data-mdi'
+import { CONSENT_OPT_OUT_TITLE } from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { isEnterpriseOrg, PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -56,6 +58,7 @@ import { useColorScheme } from '@mui/material/styles'
 import { type ReactNode, useState } from 'react'
 import MemberAvatar from './member-avatar.component'
 import ReportIssueDialog from './report-issue-dialog.component'
+import { openVisitorConsentPanel } from './visitor-consent.component'
 import { buildDocsUrl } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -126,13 +129,12 @@ export function UserMenu() {
   ) => (orgSlug ? buildRoute(route, { orgSlug }) : orgHome)
 
   // `useUserName`, not `user.displayName` (AGL-2486). That field is empty for
-  // every SSO account — `zach@aglyn.com` has no `displayName` on its auth
-  // record at all — so this menu was showing the EMAIL as the person's name,
-  // repeating it as the address on the line below, and handing
-  // `memberInitials` an address with no space in it, which yields the single
-  // letter `Z` while the presence stack two inches away showed `ZG`. The name
-  // was never missing: `users/{uid}` has held `firstName`/`lastName` for this
-  // account the whole time.
+  // every SSO account — a tenant auth record carries no `displayName` at all —
+  // so this menu was showing the EMAIL as the person's name, repeating it as
+  // the address on the line below, and handing `memberInitials` an address
+  // with no space in it, which yields ONE letter where the presence stack two
+  // inches away showed two. The name was never missing: `users/{uid}` has held
+  // `firstName`/`lastName` for these accounts the whole time.
   const resolvedName = useUserName()
   const name = resolvedName || 'Account'
   const email = user?.email ?? ''
@@ -277,7 +279,7 @@ export function UserMenu() {
             </Typography>
             {/* Only when it ADDS something (AGL-2486). With no profile name
                 the line above falls back to the address, and printing it
-                again underneath rendered `zach@aglyn.com` twice — which is
+                again underneath rendered the same address twice — which is
                 what a missing name looks like, and what sent this bug
                 hunting in the wrong place. */}
             {email && email !== name ? (
@@ -335,6 +337,34 @@ export function UserMenu() {
           },
           'Report an issue',
           mdiBugOutline.path,
+        )}
+
+        {/* The console's persistent privacy control (AGL-1498 posture applied
+            to this surface). A published customer site carries a fixed pill on
+            every page because it has no account menu to put this in; the
+            console has one, and a signed-in person looks for their own
+            settings here rather than in a floating widget.
+
+            Account-scoped like the two rows above, so no org gate and no
+            collaborator gate: the choice is the person's, on any page,
+            including the org-less ones.
+
+            The label is `CONSENT_OPT_OUT_TITLE`, imported rather than typed
+            out. Those exact words are what CCPA regs §7015 permit a single
+            combined opt-out control to be titled, and a second copy of a
+            regulated string is a second thing to keep correct.
+
+            An event rather than local state, for the AGL-2185 reason the
+            report dialog is mounted outside this Popover: the menu closes on
+            click, so a panel owned here would be torn down with it. The panel
+            lives in `VisitorConsent`, mounted beside the app. */}
+        {actionRow(
+          () => {
+            close()
+            openVisitorConsentPanel()
+          },
+          CONSENT_OPT_OUT_TITLE,
+          mdiCookieCogOutline.path,
         )}
 
         {/* Inline theme toggle (moved out of the top bar). */}

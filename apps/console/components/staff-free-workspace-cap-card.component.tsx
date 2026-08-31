@@ -30,8 +30,10 @@ import {
   Typography,
 } from '@mui/material'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useCallback, useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { COMPACT_FIELD_WIDTH } from '../constants/shared'
 
 interface FreeWorkspaceCapBody {
   role: string
@@ -81,11 +83,10 @@ export default function StaffFreeWorkspaceCapCard() {
 
   const load = useCallback(async () => {
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      if (!idToken) return
-      const response = await fetch('/api/admin/free-workspace-cap', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/free-workspace-cap',
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         setError(payload?.error ?? 'Could not load the free workspace limit')
@@ -108,19 +109,19 @@ export default function StaffFreeWorkspaceCapCard() {
     if (busy) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/free-workspace-cap', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/free-workspace-cap',
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            limit: Number(limit),
+            enabled,
+            ...(note.trim() ? { note: note.trim() } : {}),
+          }),
         },
-        body: JSON.stringify({
-          limit: Number(limit),
-          enabled,
-          ...(note.trim() ? { note: note.trim() } : {}),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         enqueueSnackbar(payload?.error ?? 'Could not set the free workspace limit', {
@@ -224,9 +225,13 @@ export default function StaffFreeWorkspaceCapCard() {
             <Stack spacing={2}>
               <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                 <TextField
-                  label="Free workspaces per account"
+                  // Short of the card header it sits under, which already
+                  // says "per account" — a field label repeating its card is
+                  // noise, and it was the length that collapsed to `Free w...`.
+                  label="Free workspaces"
                   size="small"
                   type="number"
+                  sx={{ width: COMPACT_FIELD_WIDTH }}
                   value={limit}
                   onChange={(event) => setLimit(event.target.value)}
                   slotProps={{

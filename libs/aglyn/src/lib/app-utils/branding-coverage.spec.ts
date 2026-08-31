@@ -442,11 +442,15 @@ describe('white-label branding coverage (Phase 2/3)', () => {
    * stayed green. A green check only proves what it reads.
    *
    * So every key of `ResolvedBrandingProfile` must have a consumer OUTSIDE
-   * the three places that would otherwise satisfy it — the resolver that
-   * produces it, the editor that collects it, and the route that stores it.
-   * A field with only those three is a field nothing renders.
+   * the places that would otherwise satisfy it — the module that declares the
+   * shape and the platform default, the resolver that produces it, the editor
+   * that collects it, and the route that stores it. A field named only there
+   * is a field nothing renders.
    */
   const BRANDING_PLUMBING = [
+    // The shape and the platform fallback. Every key appears here by
+    // definition, which is why naming a field here can never be its consumer.
+    'libs/aglyn/src/lib/app-utils/platform-brand.ts',
     'libs/aglyn/src/lib/app-utils/plan-entitlements.ts',
     'libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts',
     'apps/console/components/org-branding-card.component.tsx',

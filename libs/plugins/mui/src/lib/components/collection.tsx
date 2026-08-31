@@ -1428,7 +1428,17 @@ const CollectionShare = forwardRef<HTMLDivElement, CollectionShareProps>(
         sx={[{ alignItems: 'center' }, ...nodeSx]}
       >
         {title ? (
-          <Typography variant="subtitle2" sx={{ mr: 1 }}>
+          // `component="p"` because this labels a row of buttons; it is not a
+          // section heading (AGL-2486). MUI's `defaultVariantMapping` sends
+          // `subtitle2` to `<h6>`, so without this the Share Bar puts a level-6
+          // heading into the document outline of every page carrying it. On a
+          // blog post the nearest preceding heading is an `h2`, which makes it
+          // a skipped level and a `heading-order` failure.
+          //
+          // Said here rather than as a theme-wide `variantMapping` override: a
+          // default would silently change the element under every `subtitle2`
+          // in the codebase, including surfaces where an `h6` is correct.
+          <Typography component="p" variant="subtitle2" sx={{ mr: 1 }}>
             {title}
           </Typography>
         ) : null}

@@ -89,6 +89,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // the card passed it, which is the one thing this spec disproves.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // Real too: the card's read is built through them, and a stub returning a
+  // fixed window would decide what this spec's listener answers with.
+  collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionCeiling,
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
 }))
 
 jest.mock('firebase/firestore', () => ({

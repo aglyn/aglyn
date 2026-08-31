@@ -49,6 +49,7 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     serverTimestamp: () => 'NOW',
     increment: (by: number) => ({ __increment: by }),
+    arrayUnion: (...values: unknown[]) => ({ __arrayUnion: values }),
   },
 }))
 
@@ -91,7 +92,18 @@ function harness(existingLeads: number): Harness {
       state.countsOutsideTransaction += 1
       return { size: existingLeads + state.written.length }
     },
-    doc: () => ({ id: `lead-${state.written.length + 1}` }),
+    doc: (id?: string) => ({
+      id: id ?? `lead-${state.written.length + 1}`,
+      // Every address in this file is new to the collection, so the lead
+      // document read added by the personKey upsert always misses. The
+      // dedupe and merge semantics are owned by `host-lead-dedupe.spec.ts`;
+      // what THIS file pins is the ceiling and its bookkeeping.
+      get: async () => ({
+        exists: false,
+        get: () => undefined,
+        data: () => undefined,
+      }),
+    }),
   }
   const countersDocs: Record<string, any> = {}
   const countersCollection = {
@@ -111,13 +123,17 @@ function harness(existingLeads: number): Harness {
     runTransaction: async (body: (tx: any) => Promise<unknown>) =>
       body({
         get: async (target: any) => {
-          if (!target?.__count) throw new Error('unexpected transaction read')
+          // A document read is the upsert's existence probe and is NOT a
+          // count. Counting it here would make `countsInsideTransaction` say
+          // the aggregate ran when it did not, which is the one thing this
+          // double exists to tell apart.
+          if (!target?.__count) return target.get()
           state.countsInsideTransaction += 1
           return {
             data: () => ({ count: existingLeads + state.written.length }),
           }
         },
-        create: (_ref: unknown, data: Record<string, unknown>) => {
+        set: (_ref: unknown, data: Record<string, unknown>) => {
           state.written.push(data)
         },
       }),
@@ -153,11 +169,13 @@ describe('addHostLead is bounded by LEADS_MAX_PER_HOST (AGL-1529)', () => {
     const state = harness(LEADS_MAX_PER_HOST - 1)
     await expect(add(state)).resolves.toBe(true)
     expect(state.written).toHaveLength(1)
-    // The payload the callers depend on still arrives (AGL-2303).
+    // The payload the callers depend on still arrives (AGL-2303). The
+    // capture surface is now `sources`, an `arrayUnion` — one lead document
+    // per person accumulates the surfaces rather than one row per capture.
     expect(state.written[0]).toMatchObject({
       email: 'dana@example.com',
       name: 'Dana Reed',
-      source: 'signup',
+      sources: { __arrayUnion: ['signup'] },
     })
   })
 

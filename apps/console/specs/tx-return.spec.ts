@@ -175,6 +175,14 @@ describe('taxReturnSummary computes the figures the return asks for', () => {
     const summary = taxReturnSummary(rows, Q3_2026)
     expect(summary.attention).toEqual({
       untaxedRows: 1,
+      // Zero without a configured obligation start, which is this call: with
+      // no start date nothing is scoped out, so `in_untaxed` stays in
+      // `untaxedRows` above rather than moving here.
+      untaxedRowsBeforeObligation: 0,
+      // Zero because nothing in the fixture is marked as Aglyn's own
+      // purchase — the flag is read with `=== true`, so an absent one is a
+      // real sale.
+      internalRows: 0,
       rowsMissingTaxableBase: 1,
       rowsMissingAddress: 1,
       nonUsdRows: 1,

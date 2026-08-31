@@ -60,6 +60,7 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -238,10 +239,9 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
     setError(null)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/revenue?period=${encodeURIComponent(period)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const body = await response.json().catch(() => ({}))
         if (!active) return

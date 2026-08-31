@@ -54,6 +54,7 @@ import {
   rejectionInputError,
 } from '../../../../../constants/plugin-rejection-categories'
 import { PUBLISHER_ATTESTATION } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { reviewStatusMeaning } from '../../../../../constants/plugin-review-status'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -191,25 +192,18 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
   // one still awaiting a verdict, which is the work queue for this listing.
   const [selectedVersion, setSelectedVersion] = useState('')
 
-  const token = useCallback(
-    async () =>
-      (user as { getIdToken?: () => Promise<string> })?.getIdToken?.(),
-    [user],
-  )
-
   const refresh = useCallback(async () => {
-    const idToken = await token()
-    if (!idToken || !listingId) return
-    const response = await fetch(
+    if (!listingId) return
+    const response = await authorizedFetch(
+      user,
       `/api/admin/plugin-reviews?listingId=${encodeURIComponent(listingId)}` +
         (selectedVersion
           ? `&version=${encodeURIComponent(selectedVersion)}`
           : ''),
-      { headers: { Authorization: `Bearer ${idToken}` } },
     )
     if (response.ok) setDetail(await response.json())
     setLoaded(true)
-  }, [token, listingId, selectedVersion])
+  }, [user, listingId, selectedVersion])
 
   useEffect(() => {
     if (user) void refresh()
@@ -219,15 +213,15 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     async (payload: Record<string, unknown>, success: string) => {
       setBusy(true)
       try {
-        const idToken = await token()
-        const response = await fetch('/api/admin/plugin-reviews', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/plugin-reviews',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listingId, ...payload }),
           },
-          body: JSON.stringify({ listingId, ...payload }),
-        })
+        )
         const result = await response.json().catch(() => ({}))
         if (response.ok) {
           enqueueSnackbar(success, { variant: 'success' })
@@ -242,26 +236,26 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
         setBusy(false)
       }
     },
-    [token, listingId, enqueueSnackbar, refresh],
+    [user, listingId, enqueueSnackbar, refresh],
   )
 
   const signRealm = useCallback(
     async (version: string, action: 'grant' | 'revoke') => {
       setBusy(true)
       try {
-        const idToken = await token()
-        const response = await fetch('/api/admin/sign-plugin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/sign-plugin',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              listingId,
+              version,
+              ...(action === 'revoke' ? { action: 'revoke' } : {}),
+            }),
           },
-          body: JSON.stringify({
-            listingId,
-            version,
-            ...(action === 'revoke' ? { action: 'revoke' } : {}),
-          }),
-        })
+        )
         const result = await response.json().catch(() => ({}))
         if (response.ok) {
           enqueueSnackbar(
@@ -281,7 +275,7 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
         setBusy(false)
       }
     },
-    [token, listingId, enqueueSnackbar, refresh],
+    [user, listingId, enqueueSnackbar, refresh],
   )
 
   /**

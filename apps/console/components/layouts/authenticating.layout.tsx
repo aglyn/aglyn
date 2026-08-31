@@ -27,6 +27,8 @@ import { Stack } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { VisitorConsentPill } from '../visitor-consent.component'
 
 export interface AuthenticatingLayoutProps
   extends Partial<BackgroundImageComponentProps> {
@@ -99,11 +101,12 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
           return
         }
         try {
-          const idToken = await user.getIdToken(true)
-          const response = await fetch('/api/auth/session', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${idToken}` },
-          })
+          const response = await authorizedFetch(
+            user,
+            '/api/auth/session',
+            { method: 'POST' },
+            { forceRefresh: true },
+          )
           if (!response.ok) {
             console.error(
               '[auth] delegated mint failed before hand-off',
@@ -178,6 +181,21 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
         }}>
         {children}
       </Stack>
+      {/* The privacy control for a page with no account menu.
+
+          Mounted on the SHELL rather than on each page, which is what makes
+          the placement structural: every unauthenticated route — sign-in,
+          sign-up, account recovery, SSO, email verification, sign-out —
+          renders through here, so a new one inherits the control instead of
+          needing someone to remember it. The signed-in console puts the same
+          control in the account menu and floats nothing.
+
+          `/signin` is this surface's most-collected page and it is reachable
+          on more than one host: interactive sign-in is delegated to
+          `auth.<workspace domain>` for mobile and for workspace subdomains,
+          so the control has to exist wherever this shell renders rather than
+          wherever the console apex does. */}
+      <VisitorConsentPill />
     </BackgroundImageComponent>
   );
 }

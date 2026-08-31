@@ -29,6 +29,7 @@ import {
 import { doc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useBranding from '../hooks/use-branding'
@@ -141,10 +142,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     if (!connected) return void setStatus(null)
     setStatusLoading(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/domains/status?hostId=${encodeURIComponent(hostId)}`,
-        idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
       )
       // A failed status read leaves the card saying what it said before —
       // never "broken", which would be a claim this request did not earn.
@@ -173,12 +173,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     setChecking(true)
     const dequeue = queueLoading()
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const verifyResponse = await fetch(
+      const verifyResponse = await authorizedFetch(
+        user,
         `/api/domains/verify?domain=${encodeURIComponent(value)}`,
-        idToken
-          ? { headers: { Authorization: `Bearer ${idToken}` } }
-          : undefined,
       )
       const verify = await verifyResponse.json()
       if (!verifyResponse.ok) {
@@ -232,17 +229,18 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
       // or a losing 409 leaves this host still holding another org's domain.
       // Attachment also provisions SSL; 501 means the platform env isn't
       // configured yet, but the domain is saved either way.
-      const attachResponse = await fetch('/api/domains/attach', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const attachResponse = await authorizedFetch(
+        user,
+        '/api/domains/attach',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, domain: value }),
         },
-        body: JSON.stringify({ hostId, domain: value }),
-      })
+      )
       if (attachResponse.status === 501) {
         enqueueSnackbar(
-          'Domain saved — platform attachment pending (Vercel env not set)',
+          'Domain saved — platform attachment pending (no domain provider configured)',
           { variant: 'info', persist: false },
         )
       } else if (attachResponse.status === 409) {
@@ -305,13 +303,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     if (!connected) return
     setChecking(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/domains/attach', {
+      const response = await authorizedFetch(user, '/api/domains/attach', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, domain: connected }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -351,13 +345,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     // attached there indefinitely — still served, but resolving to no host.
     const dequeue = queueLoading()
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/domains/detach', {
+      const response = await authorizedFetch(user, '/api/domains/detach', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId }),
       })
       if (!response.ok) {

@@ -29,6 +29,8 @@ import ConsoleBrandingEffects from '../components/console-branding-effects.compo
 import EditHintBounce from '../components/edit-hint-bounce.component'
 import EditorHintCookie from '../components/editor-hint-cookie.component'
 import HostIdProvider from '../components/host-id-provider'
+import VisitorConsent from '../components/visitor-consent.component'
+import PlatformAdvertisingTags from '../components/advertising-tags.component'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
 // Dynamic plugin activation (AGL-417): the gate loads + registers the org's
 // enabled plugins (ConsoleExtension registry) before the shell renders —
@@ -58,6 +60,34 @@ const ThemeStack = withThemeCssVarProvider(
           on the OTHER registrable domain, where cookies set here cannot
           reach. Renders nothing. */}
       <EditHintBounce />
+      {/* The visitor-consent banner and the privacy-choices panel (AGL-1498
+          posture, applied to the console itself).
+
+          OUTSIDE `LoadingLayoutAppComponent` on purpose, beside the two
+          effects above: the banner has to reach a visitor who is not signed
+          in and never will be — `/signin` is this surface's most-collected
+          page — and it must not wait on an auth gate to say so. It needs no
+          Firebase context of its own, only the MUI theme, which this whole
+          subtree already has.
+
+          Renders nothing at all for a visitor whose posture is implied
+          consent and who has not opened the panel; the enforcement it
+          describes lives in the Firebase services provider and holds whether
+          or not this ever mounts. */}
+      <VisitorConsent />
+      {/* The console's consent-gated advertising tags (Meta, Google Ads,
+          LinkedIn, and a Google Tag Manager container).
+
+          Beside `VisitorConsent` and for the same reason: the advertising
+          grant belongs to a visitor who may never sign in, and `/signin` is
+          this surface's most-collected page — so the mount must not sit behind
+          the auth gate. It needs no Firebase context of its own.
+
+          It renders nothing at all until the visitor's record is resolved, and
+          nothing ever unless that record grants the category. The enforcement
+          is structural: an ungranted visitor gets no `<Script>`, so no request
+          reaches a vendor — not loaded and then suppressed. */}
+      <PlatformAdvertisingTags />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
           <SnackbarProvider>

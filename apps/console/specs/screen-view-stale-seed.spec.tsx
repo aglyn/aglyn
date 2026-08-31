@@ -94,6 +94,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useFirestore: () => ({}),
     useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
     useAuthPersistence: () => authPersistence,
+    // The site's campaigns, which fill the picker on the page's Campaigns
+    // card. Empty: what is under test is the rename's seed guard.
+    useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
     // The REAL guard, not a stub. A stub would let the write through whatever
     // the page passed it, which is the one thing this spec disproves.
     writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')

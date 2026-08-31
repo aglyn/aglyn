@@ -152,7 +152,10 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
     expect(String(options.text)).toContain('Denver, CO, US')
     expect(String(options.text)).toContain('203.0.113.7')
     expect(String(options.text)).toContain('2026-08-08 14:03 UTC')
-    expect(String(options.text)).toContain('/manage/user')
+    // The SECTION, not the page (AGL-2501). Landing someone who has just been
+    // told a stranger signed in on their email address, to go looking for
+    // Recent sign-ins themselves, is the thing this link exists to prevent.
+    expect(String(options.text)).toContain('/manage/user/security')
   })
 
   it('is silent for a known device, and only touches lastSeenAt', async () => {
@@ -240,7 +243,7 @@ describe('sendPasskeyAddedAlert (AGL-665, trigger awaits AGL-662)', () => {
     expect(options.context).toBe('security-passkey-added')
     expect(String(options.text)).toContain('MacBook Touch ID')
     expect(String(options.text)).toContain('2026-08-08 14:03 UTC')
-    expect(String(options.text)).toContain('/manage/user')
+    expect(String(options.text)).toContain('/manage/user/security')
   })
 })
 
@@ -256,12 +259,18 @@ describe('describeSignInClient', () => {
         'x-vercel-ip-city': 'Denver',
         'x-vercel-ip-country-region': 'CO',
         'x-vercel-ip-country': 'US',
-        'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+        // A caller-typed value in front of the address a proxy observed. The
+        // address in this email is stored on the device record and read back
+        // by the breach-notification report, so a forged hop reaching it is a
+        // durable false claim about where somebody signed in from — not just a
+        // rate-limit bypass.
+        'x-forwarded-for': '198.51.100.66, 203.0.113.7',
       }),
     )
     expect(client.deviceName).toBe('Chrome on macOS')
     expect(client.location).toBe('Denver, CO, US')
     expect(client.ip).toBe('203.0.113.7')
+    expect(client.ip).not.toBe('198.51.100.66')
   })
 
   it('decodes URI-encoded city names', () => {
@@ -276,6 +285,32 @@ describe('describeSignInClient', () => {
     expect(client.deviceName).toBe('Unknown device')
     expect(client.location).toBe('Unknown location')
     expect(client.ip).toBe('Unknown')
+  })
+
+  /**
+   * SELF-HOST: no container has an `x-vercel-*` header. Reading only those
+   * names put "Unknown location" in every alert email on every Docker install
+   * — and stored it, which is what the breach-notification report parses a
+   * data subject's country out of. Neither surface errors, so the whole
+   * failure was invisible to an operator.
+   */
+  it('reads geo from a non-Vercel edge', () => {
+    const client = describeSignInClient(
+      headers({
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Chrome/126.0 Safari/537.36',
+        'cf-ipcity': 'Dublin',
+        'cf-ipcountry': 'IE',
+      }),
+    )
+    expect(client.location).toBe('Dublin, IE')
+    // The country is the last comma-separated token, which is the contract
+    // `deviceLocationCountry` reads the filing country back on.
+    expect(client.location.split(', ').pop()).toBe('IE')
+  })
+
+  it('reports the country alone when the edge sends no city', () => {
+    const client = describeSignInClient(headers({ 'cloudfront-viewer-country': 'de' }))
+    expect(client.location).toBe('DE')
   })
 })
 

@@ -29,6 +29,21 @@ import {
   isRefusablePriority,
   resolveSendPriority,
 } from './send-rate'
+import { renderTextEmailHtml } from './text-email-html'
+import {
+  sendingIdentityRefusal,
+  sharedIdentityMarketingRefusal,
+  type SendingIdentityAudience,
+  type SendingIdentityVerdict,
+} from './sending-domain'
+import {
+  appendUnsubscribeHtml,
+  appendUnsubscribeText,
+  getMarketingSendGate,
+  isMarketingMessage,
+  unsubscribeHeaders,
+  type MarketingSendContext,
+} from './marketing-send'
 
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -44,27 +59,78 @@ export interface SendEmailOptions {
   subject: string
   /** Plain-text body. Supply at least one of `text` or `html`. */
   text?: string
-  /** HTML body. Supply at least one of `text` or `html`. */
+  /**
+   * HTML body. Supply at least one of `text` or `html`.
+   *
+   * Omitted, one is synthesized from `text` so the message always carries an
+   * HTML part — a text-only message has no anchors, so its links are inert in
+   * the inbox and Resend's click tracking has nothing to rewrite. See
+   * `text-email-html.ts`.
+   */
   html?: string
   /** Extra MIME headers, e.g. `List-Unsubscribe`. */
   headers?: Record<string, string>
   /** Delivery tags for the opens/clicks webhook. */
   tags?: EmailTag[]
   replyTo?: string | string[]
-  /**
-   * Overrides the configured sender. Almost nothing should set this — the
-   * whole point of `USAGE_EMAIL_FROM` is one verified sender identity.
+  /*
+   * THERE IS NO `from`.
+   *
+   * There was: a raw override of the configured sender, subordinate to a
+   * resolved identity but winning over everything else, verified against
+   * nothing. Every address this function can send from now comes from one of
+   * exactly two places — the deployment's own `USAGE_EMAIL_FROM`, or a
+   * {@link SendingIdentityVerdict} the server resolved from a document — and
+   * neither is reachable from a request body.
+   *
+   * Deleting it rather than guarding it is what makes that a property instead
+   * of a habit. A guard would have to be written correctly at each of the
+   * ninety-odd call sites, or once here and then trusted; an option that does
+   * not exist cannot be passed by the next sender, and `resolveSendingIdentity`
+   * becomes the whole of the answer to "as whom does this leave".
+   *
+   * The resolution below reads no `from` from `options` either, so this is not
+   * only a compile-time close. Marketplace plugin bundles reach `sendEmail` as
+   * JavaScript and are typechecked against nothing.
    */
-  from?: string
   /**
    * White-label display name for the sender (White-Label Phase 1). Replaces
-   * only the display name in front of the configured verified address — the
-   * address itself must stay on the verified domain, so this cannot forge a
-   * different sender. Ignored when `from` is set explicitly. Callers pass
-   * `resolveBrandingProfile(org).fromName` here so an agency's mail reads as
-   * their brand instead of "Aglyn".
+   * only the display name in front of the verified address — the address
+   * itself is never taken from the caller, so this cannot forge a different
+   * sender. Callers pass `resolveBrandingProfile(org).fromName` here so an
+   * agency's mail reads as their brand instead of "Aglyn".
    */
   fromName?: string
+  /**
+   * The server-resolved sending identity for this message, from
+   * `resolveSendingIdentity`.
+   *
+   * Supplied, it decides the address and it may refuse the send outright —
+   * `fromName` is subordinate to it, because a verdict is the answer to "may
+   * this leave, and as whom" and a display name is not. Omitted, every
+   * existing caller keeps the behavior it had: the configured platform
+   * identity with an optional display name.
+   *
+   * Callers resolve it from the ORG DOCUMENT, never from request input. An
+   * address assembled from a request body is a `From:` override wearing a new
+   * name, and the invariant `applyFromName` exists to hold is that the
+   * address cannot move off a verified identity.
+   */
+  sendingIdentity?: SendingIdentityVerdict | null
+  /**
+   * Whose mail this is — see {@link SendingIdentityAudience}.
+   *
+   * `tenant` says the message belongs to a SITE, and it makes the platform
+   * sender unreachable: a tenant message with no resolved identity is refused
+   * rather than sent from `aglyn.com`. Pair it with `sendingIdentity` from
+   * `hostSendingIdentity(hostId)` and the ordinary path is unchanged; the flag
+   * is what decides the behavior when that resolution is missing or refuses.
+   *
+   * Omitted, a send is platform mail and keeps the configured sender, because
+   * that is what the console's own senders are. `email-audience-coverage.spec`
+   * sweeps the tenant-owned trees so the omission cannot be an accident there.
+   */
+  audience?: SendingIdentityAudience
   /**
    * Short label for logs, e.g. `'invite'` or `'usage-summary'`. Makes a
    * failure in the runtime logs traceable to the feature that caused it.
@@ -85,6 +151,21 @@ export interface SendEmailOptions {
    * that into a message nobody ever gets.
    */
   priority?: EmailSendPriority
+  /**
+   * Declares this message as MARKETING mail for one site's audience — see
+   * `marketing-send.ts` for what that means and why it is one seam.
+   *
+   * Set it and the message gains, in one place, the three things marketing
+   * mail owes: the RFC 8058 unsubscribe header pair plus a visible opt-out
+   * link, a check against both suppression lists, and a ceiling on how much
+   * one person receives from one site.
+   *
+   * ONE RECIPIENT. An unsubscribe link is an HMAC over the address it belongs
+   * to, and a suppression verdict is about one person — so a marketing send
+   * addressed to a list would carry the wrong link for everybody after the
+   * first, and would ask the gate about one of them. Callers fan out.
+   */
+  marketing?: MarketingSendContext
 }
 
 /**
@@ -121,20 +202,99 @@ export function contextTag(context: string | undefined): EmailTag[] {
 }
 
 /**
- * Why a send did not happen. `unconfigured`, `no-recipient` and
- * `rate-limited` mean nothing was attempted; `rejected` and `network` mean
- * Resend was called and failed.
+ * Why a send did not happen. `unconfigured` and `no-recipient` mean nothing
+ * was attempted; `rejected` and `network` mean Resend was called and failed;
+ * `rate-limited` is either, and says so in `status`.
  *
- * `rate-limited` (AGL-2409) is the ONLY one of these that a caller may
- * reasonably retry unchanged, and the only one that can ever be produced for
- * a campaign or a bulk sweep and never for a transactional message.
+ * `rate-limited` (AGL-2409) and `frequency-capped` are the two a caller may
+ * reasonably retry unchanged — see {@link isDeferrableSendResult}, which is
+ * where that distinction is made once rather than at each sweep.
  */
 export type SendEmailFailureReason =
   | 'unconfigured'
   | 'no-recipient'
+  /**
+   * Resend answered and would not take this message.
+   *
+   * Per-message and terminal: a malformed payload, an address the provider
+   * will not accept, a tag it rejected. A caller that retries it unchanged
+   * gets the same answer, so a batch settles the recipient rather than
+   * holding a slot open for them.
+   *
+   * A 429 is deliberately NOT this. See `rate-limited`.
+   */
   | 'rejected'
   | 'network'
+  /**
+   * A refusal that is about the RATE, not about this message — so the message
+   * is intact and a later attempt sends it.
+   *
+   * Two sources, which is why it is one value. The platform hourly governor
+   * refuses before the network and nothing is attempted (AGL-2409). Resend
+   * answers `429` on the wire when requests arrive faster than it accepts
+   * them, and `status` is 429 in that case.
+   *
+   * The provider arm reports here rather than as `rejected` because of what
+   * the two mean to a batch. A `rejected` recipient is settled and never
+   * addressed again, which is right for an address the provider will not take
+   * and wrong for every recipient a 429 touches: nothing about them was
+   * refused, the request was simply too soon. Classified as `rejected` a
+   * single rate-limited burst silently deletes the rest of a campaign's
+   * audience while the campaign reports itself complete — and the `sent`
+   * figure stays honest throughout, so no rate on the report can show it.
+   *
+   * The provider's quota errors — `daily_quota_exceeded`,
+   * `monthly_quota_exceeded` — are also 429 and also land here. That is the
+   * right answer for the same reason: none of them is a statement about the
+   * recipient, and all of them clear with time.
+   */
   | 'rate-limited'
+  /**
+   * The org selected a custom sending domain and that domain is not verified.
+   *
+   * Distinct from `unconfigured` because the two need opposite responses: an
+   * unconfigured deployment is the operator's to fix, while this is a
+   * customer's DNS that is not finished, and the customer is the only person
+   * who can finish it. `detail` carries the sentence naming the domain.
+   *
+   * This is the LAST line of defence, not the visible one. A caller that
+   * reaches it has already skipped the check its route should have made, and
+   * a refusal seen only here is a log line — which is the shape of the
+   * `USAGE_EMAIL_FROM` outage. `performCampaignSend` refuses first, with a
+   * `409`, so a person finds out.
+   */
+  | 'unverified-domain'
+  /**
+   * A MARKETING send whose recipient is on a suppression list — they
+   * unsubscribed from this site, hard-bounced, or pressed "report spam".
+   *
+   * Terminal, and the only outcome here a caller must not retry: retrying is
+   * the behavior the suppression exists to stop. Distinct from `rejected`
+   * because nothing was attempted and nothing failed — this is the control
+   * working.
+   */
+  | 'suppressed'
+  /**
+   * A MARKETING send refused because this person has already received their
+   * ceiling from this site inside the window.
+   *
+   * Retryable, unlike `suppressed`: the window rolls. A resumable sweep does
+   * not need to do anything about it — its next run asks again.
+   */
+  | 'frequency-capped'
+  /**
+   * A MARKETING send refused because this site has been mailing this person
+   * for longer than the sunset window with nothing to show for it.
+   *
+   * TERMINAL for a sweep, and it sits with `suppressed` rather than with
+   * `frequency-capped` for a reason worth stating: the frequency window
+   * clears by the passage of time, so waiting works. A sunset clears when the
+   * PERSON engages, which more mail from us cannot cause — so a sweep that
+   * treated it as deferrable would re-read the same doomed row on every beat
+   * forever. Nothing about the recipient has been reduced; the next message
+   * after they open anything goes.
+   */
+  | 'unengaged'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -146,9 +306,10 @@ export type SendEmailResult =
       /** Resend's error body or the thrown message, trimmed for logs. */
       detail?: string
       /**
-       * `rate-limited` only: when the platform hourly window rolls and the
-       * caller may try again. A resumable sweep does not need to wait on it —
-       * its next scheduled run is the retry.
+       * `rate-limited` only: the earliest instant a caller may try again —
+       * when the platform hourly window rolls, or what the provider's own
+       * `retry-after` asked for. A resumable sweep does not need to wait on
+       * it; its next scheduled run is the retry.
        */
       retryAtMs?: number
     }
@@ -171,6 +332,106 @@ export function rateLimitedRetryAtMs(
   if (!failure || failure.reason !== 'rate-limited') return null
   const retryAtMs = Number(failure.retryAtMs)
   return Number.isFinite(retryAtMs) ? retryAtMs : 0
+}
+
+/**
+ * How long to wait when the provider names no interval of its own.
+ *
+ * One second, because Resend's rate limit is counted per second — so a wait
+ * of a whole window is the shortest one that is certain to have cleared it.
+ */
+const PROVIDER_RETRY_FALLBACK_MS = 1_000
+
+/**
+ * The longest wait a provider header may ask for.
+ *
+ * A `retry-after` is read off the network and reaches a scheduler, so it is
+ * clamped rather than trusted: a header of `86400` would park a campaign for
+ * a day on one response nobody saw. An hour is past every documented window
+ * and short enough that a wrong one costs a run rather than a day.
+ */
+const PROVIDER_RETRY_MAX_MS = 3_600_000
+
+/** One header as whole seconds, or null when it is absent or unreadable. */
+function headerSeconds(
+  headers: { get?: (name: string) => string | null } | null | undefined,
+  name: string,
+): number | null {
+  const raw = headers?.get?.(name)
+  // `Number(null)` and `Number('')` are both 0, which would read as "retry
+  // immediately" for a header that is not there at all.
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null
+  const seconds = Number(raw)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
+}
+
+/**
+ * When the provider says a refused request may be repeated.
+ *
+ * Read from the two headers Resend documents beside a 429, both in whole
+ * seconds: `retry-after` first because it is the direct answer to this
+ * question, then `ratelimit-reset`, which names when the window rolls. A
+ * response carrying neither falls back to one window.
+ */
+export function providerRetryAtMs(
+  headers: { get?: (name: string) => string | null } | null | undefined,
+  nowMs: number = Date.now(),
+): number {
+  const seconds =
+    headerSeconds(headers, 'retry-after') ??
+    headerSeconds(headers, 'ratelimit-reset')
+  const waitMs =
+    seconds === null
+      ? PROVIDER_RETRY_FALLBACK_MS
+      : Math.min(seconds * 1_000, PROVIDER_RETRY_MAX_MS)
+  return nowMs + waitMs
+}
+
+/**
+ * Why a send did not happen, or `null` when it did.
+ *
+ * The same accessor `rateLimitedRetryAtMs` is, generalized: `strictNullChecks`
+ * is OFF repo-wide, so TypeScript will not narrow the union on `result.sent`
+ * and reading `result.reason` at a call site does not compile.
+ */
+export function sendFailureReason(
+  result: SendEmailResult | null | undefined,
+): SendEmailFailureReason | null {
+  const failure = result as {
+    sent?: boolean
+    reason?: SendEmailFailureReason
+  } | null
+  if (!failure || failure.sent) return null
+  return failure.reason ?? null
+}
+
+/**
+ * Whether this outcome is worth coming back for.
+ *
+ * TRUE only for the two refusals a later attempt can pass: the platform hour
+ * rolls, and so does the marketing frequency window. Everything else is
+ * either a delivery that happened or a failure a retry repeats — a
+ * suppression most of all, since retrying is the exact behavior a suppression
+ * exists to stop, and a sunset for the same reason at one remove: it clears
+ * when the recipient engages, which no amount of further mail from us brings
+ * about.
+ *
+ * A resumable sweep uses this to decide whether to leave its subject
+ * unstamped. Stamping on a deferrable refusal discards a message; NOT
+ * stamping on a terminal one re-reads the same doomed row on every beat until
+ * it crowds out the work that could succeed. Both are silent, so the
+ * distinction lives here instead of at each sweep.
+ *
+ * A FUNCTION rather than `result.reason === …` at each call site, because
+ * `strictNullChecks` is OFF repo-wide and TypeScript will not narrow a
+ * boolean-literal discriminant without it — the same reason
+ * {@link rateLimitedRetryAtMs} beside it is one.
+ */
+export function isDeferrableSendResult(
+  result: SendEmailResult | null | undefined,
+): boolean {
+  const reason = sendFailureReason(result)
+  return reason === 'rate-limited' || reason === 'frequency-capped'
 }
 
 export interface EmailConfig {
@@ -232,6 +493,60 @@ function normalizeRecipients(to: string | string[]): string[] {
     .filter((address) => address.includes('@'))
 }
 
+/** A Resend send payload in the provider's own wire shape. */
+export interface ResendSendPayload {
+  to?: unknown
+  from?: unknown
+  subject?: unknown
+  [field: string]: unknown
+}
+
+/**
+ * The one place that POSTs to Resend's send endpoint, and the last thing
+ * standing between a payload and the network.
+ *
+ * A payload carrying no recipient cannot become a message. Resend answers it
+ * `422 missing_required_field`, which costs an API call and then shows up in
+ * the vendor dashboard as a red line indistinguishable from mail that
+ * genuinely failed to deliver — carrying no subject, no recipient and nothing
+ * naming the code that produced it. Diagnosing that means reading a log
+ * outside the deployment and guessing. So the refusal happens here, before
+ * the fetch, and names the caller's `context`.
+ *
+ * It throws rather than returning a `SendEmailResult`: this is a programming
+ * error, not a delivery outcome. `sendEmail` filters recipients well before
+ * it reaches this call, so nothing on the ordinary path can trip it. The
+ * guard exists because `RESEND_SEND_ENDPOINT` is exported and any module can
+ * therefore reach the send endpoint on its own, bypassing every check
+ * `sendEmail` owns.
+ */
+export async function postResendEmail(
+  apiKey: string,
+  payload: ResendSendPayload,
+  context?: string,
+): Promise<Response> {
+  const raw = payload?.to
+  const recipients = (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
+    .map((address) => String(address ?? '').trim())
+    .filter(Boolean)
+  if (!recipients.length) {
+    throw new Error(
+      `${context ? `${context} ` : ''}send refused before the network — a ` +
+        'Resend payload with no `to` field cannot become a message, and the ' +
+        'attempt would surface only as a 422 in the Resend dashboard',
+    )
+  }
+
+  return fetch(RESEND_SEND_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
 /**
  * Sends one email through Resend.
  *
@@ -249,11 +564,105 @@ export async function sendEmail(
   options: SendEmailOptions,
 ): Promise<SendEmailResult> {
   const { apiKey, from: configuredFrom } = getEmailConfig()
-  // Explicit `from` wins; otherwise apply any white-label display name to the
-  // configured verified sender (White-Label Phase 1).
-  const from =
-    options.from ?? applyFromName(configuredFrom, options.fromName)
   const label = options.context ? `${options.context} email` : 'email'
+
+  /*
+   * THE SENDING-IDENTITY REFUSAL.
+   *
+   * Enforced here AND at the campaign route, independently, for the reason
+   * the send-rate governor is enforced twice: the route's check is the one a
+   * person sees, and this one is what holds when a caller does not make it.
+   * A governor is injectable and a route is skippable, so neither may be the
+   * only thing standing between an unverified domain and a send.
+   *
+   * Placed above the `apiKey`/`from` gate so a refusal cannot be reported as
+   * `unconfigured` — the two have different owners and different fixes.
+   */
+  const identityRefusal = sendingIdentityRefusal(options.sendingIdentity)
+  if (identityRefusal) {
+    console.warn(`${label} refused — ${identityRefusal.message}`)
+    return {
+      sent: false,
+      reason: 'unverified-domain',
+      detail: identityRefusal.message,
+    }
+  }
+
+  /*
+   * MARKETING MAIL DOES NOT LEAVE ON THE POOLED IDENTITY.
+   *
+   * The identity above may have resolved perfectly well and still be the wrong
+   * one for THIS message. A shared address carries transactional mail for every
+   * site assigned to it, so admitting one merchant's campaign charges that
+   * campaign's complaint rate against every other site's receipts — the
+   * messages that have no alternative and whose recipients never opted into the
+   * consequence.
+   *
+   * Checked here rather than only where the identity is resolved, because those
+   * are different moments with different information. A verdict is resolved
+   * ONCE and reused across thousands of messages, sometimes by a batch sender
+   * that does not yet know what each one will be; the message is in hand only
+   * here. `resolveSendingIdentity` still refuses when a caller declares the
+   * purpose — that is what gives the campaign route a `409` a merchant can
+   * read — and this is what holds when nobody declared anything.
+   *
+   * The classification is DERIVED, never declared. See `isMarketingMessage`.
+   */
+  const marketingRefusal = isMarketingMessage(options)
+    ? sharedIdentityMarketingRefusal(options.sendingIdentity)
+    : null
+  if (marketingRefusal) {
+    console.warn(`${label} refused — ${marketingRefusal.message}`)
+    return {
+      sent: false,
+      reason: 'unverified-domain',
+      detail: marketingRefusal.message,
+    }
+  }
+
+  // A resolved identity outranks the configured sender: it is the server's
+  // answer to which verified address this message leaves on. Without one, the
+  // white-label display name is applied to the configured verified sender
+  // (White-Label Phase 1).
+  //
+  // Two sources, and `options` is neither of them. Nothing the caller passes
+  // reaches the address — only the display name in front of it.
+  const resolvedFrom = options.sendingIdentity?.from ?? null
+
+  /*
+   * THE PLATFORM DOMAIN IS NOT A FALLBACK FOR TENANT MAIL.
+   *
+   * `configuredFrom` is `USAGE_EMAIL_FROM` — an address on `aglyn.com`, where
+   * Aglyn's own billing, account and console mail leaves from. A site's mail
+   * reaching it means that site's list quality is charged against the domain
+   * every other customer's password reset depends on.
+   *
+   * `resolveHostSendingIdentity` already refuses above, so a tenant caller
+   * that resolved an identity never arrives here with `resolvedFrom` null.
+   * This is the arm for a tenant caller that resolved NOTHING — the shape a
+   * new send site takes when its author does not know an identity is owed —
+   * and it is checked here rather than left to the call sites because ninety
+   * of them cannot each be relied on to remember.
+   */
+  if (options.audience === 'tenant' && !resolvedFrom) {
+    console.warn(
+      `${label} refused — a site's mail cannot leave on the shared platform ` +
+        'domain, and no sending identity was resolved for it',
+    )
+    return {
+      sent: false,
+      reason: 'unverified-domain',
+      detail:
+        'This message belongs to a site and no sending identity was ' +
+        'resolved for it, so it was refused rather than sent from the ' +
+        'shared Aglyn address.',
+    }
+  }
+
+  const from = applyFromName(
+    resolvedFrom ?? configuredFrom,
+    options.fromName,
+  )
 
   if (!apiKey || !from) {
     console.warn(
@@ -267,6 +676,109 @@ export async function sendEmail(
   if (!to.length) {
     console.warn(`${label} skipped — no valid recipient address`)
     return { sent: false, reason: 'no-recipient' }
+  }
+
+  /*
+   * THE MARKETING GATE.
+   *
+   * Everything a marketing message owes, asked once, here — because the four
+   * merchant-triggered bulk paths that owed it discharged none of it, and
+   * asking four call sites to remember is the shape that produces the fifth
+   * that does not.
+   *
+   * Ahead of the send-rate governor deliberately. A refusal here is a message
+   * that must never leave, so spending platform hourly budget deciding that
+   * would be budget the rest of the hour's mail no longer has.
+   *
+   * Nothing installed is UNGATED. Same posture as the governor: the durable
+   * half lives in another library, and a deployment that never installs it
+   * must still send.
+   */
+  let unsubscribeUrl = options.marketing?.unsubscribeUrl ?? ''
+  if (options.marketing) {
+    if (to.length !== 1) {
+      // Not a delivery outcome — a caller error, and one that would put the
+      // first recipient's signed unsubscribe link in everybody else's copy.
+      console.error(
+        `${label} refused — a marketing send addresses exactly one ` +
+          `recipient, and this one names ${to.length}`,
+      )
+      return {
+        sent: false,
+        reason: 'no-recipient',
+        detail: 'A marketing send addresses exactly one recipient.',
+      }
+    }
+    const gate = getMarketingSendGate()
+    if (gate) {
+      let verdict: Awaited<ReturnType<typeof gate>> | null
+      try {
+        verdict = await gate({
+          hostId: options.marketing.hostId,
+          siteBase: options.marketing.siteBase,
+          email: to[0],
+          context: options.context,
+          capped: options.marketing.capped !== false,
+          // Passed through verbatim, INCLUDING absent. A default topic
+          // applied here would invent a stream for every caller that named
+          // none and let a topic opt-out refuse messages that belong to no
+          // stream — see `MarketingSendContext.topicId`.
+          ...(options.marketing.topicId
+            ? { topicId: options.marketing.topicId }
+            : {}),
+        })
+      } catch (error) {
+        /*
+         * FAILS OPEN, and the asymmetry with `filterSendableForHost` is
+         * deliberate rather than an oversight. That helper fails CLOSED
+         * because a suppression list it could not read is not a list that
+         * said an address is safe to mail — and it keeps doing so, inside
+         * the gate. What is being caught here is the gate itself being
+         * unreachable or throwing, which is an outage on the control; an
+         * outage on a control that becomes an outage on the product is the
+         * worse of the two bugs, and it is the posture `sendEmail` takes
+         * everywhere else.
+         */
+        console.error(`${label} marketing gate failed — allowing`, error)
+        verdict = null
+      }
+      if (verdict && !verdict.allowed) {
+        /*
+         * A cadence refusal reports as `frequency-capped` rather than earning
+         * a value of its own in {@link SendEmailFailureReason}.
+         *
+         * That union is what {@link isDeferrableSendResult} switches on, and
+         * the two are deferrable for exactly the same reason: a later attempt
+         * passes because time went by. A third value would have to be added
+         * to that predicate as well, and a sweep built against the older
+         * vocabulary would silently treat the recipient's own request as
+         * terminal and stamp the subject — discarding a message the recipient
+         * asked to receive later rather than never. Which of the two it was
+         * is in `detail`, where a person reading a log needs it.
+         */
+        const reason: SendEmailFailureReason =
+          verdict.refusal === 'frequency-capped' ||
+          verdict.refusal === 'cadence-limited'
+            ? 'frequency-capped'
+            : verdict.refusal === 'unengaged'
+              ? 'unengaged'
+              : 'suppressed'
+        console.warn(`${label} not sent — ${verdict.detail ?? reason}`)
+        return { sent: false, reason, detail: verdict.detail }
+      }
+      unsubscribeUrl = unsubscribeUrl || verdict?.unsubscribeUrl || ''
+    }
+    if (!unsubscribeUrl) {
+      // A marketing message with no way out is the defect this gate exists to
+      // close, so it is said out loud rather than shipped quietly. Not a
+      // refusal: the cause is a missing `EMAIL_UNSUBSCRIBE_SECRET` or a host
+      // with no public origin — an operator's configuration, not the
+      // recipient's problem — and refusing here would turn it into silence.
+      console.warn(
+        `${label} carries no unsubscribe link — set ` +
+          'EMAIL_UNSUBSCRIBE_SECRET and publish the site on a domain',
+      )
+    }
   }
 
   /*
@@ -298,7 +810,11 @@ export async function sendEmail(
   if (governor) {
     let verdict: Awaited<ReturnType<typeof governor>> | null
     try {
-      verdict = await governor({ priority, count: to.length, context: options.context })
+      verdict = await governor({
+        priority,
+        count: to.length,
+        context: options.context,
+      })
     } catch (error) {
       console.error(`${label} send-rate governor failed — allowing`, error)
       verdict = null
@@ -321,20 +837,57 @@ export async function sendEmail(
     }
   }
 
+  /*
+   * THE VISIBLE OPT-OUT, on both parts.
+   *
+   * The header pair below is for the mailbox provider; this is for the person
+   * — CAN-SPAM asks for a mechanism the recipient can see and use, and most
+   * clients render no control for the header at all. Both helpers are
+   * idempotent by URL, so a sender that placed its own link (a designed
+   * template rendering `{{unsubscribeUrl}}`, the campaign body's footer)
+   * keeps its own placement and does not get a second one.
+   *
+   * `text` first and `html` from the result, so the synthesized HTML part
+   * that stands in for a text-only message carries the link as an anchor
+   * rather than as characters.
+   */
+  const text = unsubscribeUrl
+    ? appendUnsubscribeText(options.text ?? '', unsubscribeUrl)
+    : options.text
+  const html = unsubscribeUrl
+    ? options.html
+      ? appendUnsubscribeHtml(options.html, unsubscribeUrl)
+      : renderTextEmailHtml(text ?? '', options.subject)
+    : options.html
+
   try {
-    const response = await fetch(RESEND_SEND_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const response = await postResendEmail(
+      apiKey,
+      {
         from,
         to,
         subject: options.subject,
-        ...(options.text ? { text: options.text } : {}),
-        ...(options.html ? { html: options.html } : {}),
-        ...(options.headers ? { headers: options.headers } : {}),
+        ...(text ? { text } : {}),
+        // The HTML part, from the caller when it has one and otherwise
+        // synthesized from `text`. A message with no HTML part carries no
+        // anchors, so its links are not links in the inbox AND Resend has
+        // nothing to rewrite for click tracking — see `text-email-html.ts`.
+        // The caller always wins: this can only fill a gap, never override a
+        // designed template.
+        ...(() => {
+          const body = html || renderTextEmailHtml(text ?? '', options.subject)
+          return body ? { html: body } : {}
+        })(),
+        // The caller's headers plus the RFC 8058 pair for a marketing send.
+        // Caller-first, so the campaign sender's own pair is the one that
+        // ships and a merchant-authored header is never silently replaced.
+        ...(() => {
+          const headers = {
+            ...unsubscribeHeaders(unsubscribeUrl),
+            ...(options.headers ?? {}),
+          }
+          return Object.keys(headers).length ? { headers } : {}
+        })(),
         // The caller's tags plus the `context` tag (AGL-2407). Caller-first
         // so a sender that stamps its own `context` keeps it: a tag list with
         // two entries of one name is not a shape worth discovering in
@@ -348,11 +901,38 @@ export async function sendEmail(
           return tags.length ? { tags } : {}
         })(),
         ...(options.replyTo ? { reply_to: options.replyTo } : {}),
-      }),
-    })
+      },
+      options.context,
+    )
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '')
+      /*
+       * A 429 IS NOT A STATEMENT ABOUT THIS RECIPIENT, so it does not report
+       * as one. See the `rate-limited` member of
+       * {@link SendEmailFailureReason} for why the distinction is load-bearing
+       * rather than cosmetic — every caller in the tree already has a branch
+       * for a deferral, and none of them has one for "rejected, but try this
+       * exact address again later".
+       *
+       * A warning rather than an error: the provider asking for a slower pace
+       * is a normal thing to be told, and logging it at the level a failed
+       * delivery uses is what teaches an operator to skim past both.
+       */
+      if (response.status === 429) {
+        const retryAtMs = providerRetryAtMs(response.headers)
+        console.warn(
+          `${label} deferred — the provider is rate limiting; retry in ` +
+            `${Math.max(0, Math.round((retryAtMs - Date.now()) / 1000))}s`,
+        )
+        return {
+          sent: false,
+          reason: 'rate-limited',
+          status: response.status,
+          retryAtMs,
+          detail: detail.slice(0, 500),
+        }
+      }
       console.error(`${label} failed`, response.status, detail)
       return {
         sent: false,

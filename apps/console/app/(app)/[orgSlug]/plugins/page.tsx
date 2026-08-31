@@ -17,17 +17,13 @@
 'use client'
 
 import {
-  canManageOrg,
   FIRST_PARTY_PLUGINS,
-  resolveDisableCascade,
-  resolveEnabledPlugins,
   resolveUpdateState,
   updateStateLabel,
 } from '@aglyn/aglyn'
 import { mdiChevronRight, mdiPuzzleOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Switch, Tooltip, Typography } from '@mui/material'
 import { collection, documentId, getDocs, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
@@ -38,12 +34,10 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import useBranding from '../../../../hooks/use-branding'
-import useCurrentOrg from '../../../../hooks/use-current-org'
-import PluginDisableCascadeDialog, {
-  type CascadeEntry,
-} from '../../../../components/plugin-disable-cascade-dialog.component'
+import PluginDisableCascadeDialog from '../../../../components/plugin-disable-cascade-dialog.component'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
+import { useOrgPluginSwitchboard } from '../../../../hooks/use-plugin-switchboard'
 
 /**
  * Plugins, as its own console section (AGL-1011).
@@ -64,12 +58,19 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
   const { branding } = useBranding()
   const { currentOrg } = useOrgScope()
-  const { org, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const { enqueueSnackbar } = useSnackbar()
   const orgId = currentOrg?.$id ?? ''
-  const canManage = canManageOrg(currentOrg?.role)
+
+  /**
+   * The switchboard, shared with the plugin DETAIL page (AGL-2486).
+   *
+   * This page and that one are two views of one piece of state, and the state
+   * has a dependency cascade attached — so the write, the loading guard and
+   * the cascade check live in one hook both call, rather than being spelled
+   * out here and re-derived there.
+   */
+  const switchboard = useOrgPluginSwitchboard()
 
   // Held at null while the org scope loads, never `orgs/-pending-`
   // (AGL-1440): installs are member-gated, so the sentinel was a
@@ -222,106 +223,6 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [firestore, listingIdsKey])
-
-  // The ORG DOCUMENT, not `org.enabledPlugins` (AGL-2486). This passed the
-  // array, and an array has no `enabledPlugins` property — so the resolver
-  // saw `undefined` and returned DEFAULT_ENABLED_PLUGINS every time. The
-  // page reported every plugin as enabled whatever the workspace had stored,
-  // and `toggle` below read-modify-WRITES off this value into an API that
-  // REPLACES the array, so flipping any one plugin silently switched every
-  // plugin this workspace had turned off back on, for every site in it. The
-  // `as any` is what kept the compiler from saying so, which is why it is
-  // gone rather than merely corrected.
-  const enabled = useMemo(() => new Set(resolveEnabledPlugins(org)), [org])
-
-  /**
-   * The pending cascade (AGL-2486). This switchboard SAVES on change, so the
-   * dialog has to stand between the toggle and the write — held here, applied
-   * only on confirm. Cancel drops it and writes nothing, and because the
-   * switch is controlled by `enabled` (which comes from the org doc, and has
-   * not moved) it springs back to ON by itself.
-   */
-  const [pending, setPending] = useState<{
-    id: string
-    label: string
-    cascade: CascadeEntry[]
-  } | null>(null)
-
-  const labelFor = (pluginId: string) =>
-    FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.label ??
-    pluginId
-
-  const saveEnabledPlugins = async (pluginIds: string[]) => {
-    const idToken = await (
-      user as { getIdToken?: () => Promise<string> }
-    )?.getIdToken?.()
-    const response = await fetch('/api/orgs/settings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
-      body: JSON.stringify({
-        orgId,
-        action: 'set-enabled-plugins',
-        enabledPlugins: pluginIds,
-      }),
-    })
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}))
-      return void enqueueSnackbar(payload?.error ?? 'Request failed', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    }
-    enqueueSnackbar('Plugins updated', { variant: 'success', persist: false })
-  }
-
-  const toggle = (pluginId: string, on: boolean) => {
-    // AGL-1422, and the worst shape in this sweep: not a refusal but a
-    // read-modify-WRITE off a value that has not loaded. `enabled` is
-    // `resolveEnabledPlugins(org)`, and an undefined `org` resolves to the
-    // DEFAULT set — so a toggle inside the loading window saves the defaults
-    // plus this one id, silently switching every plugin the workspace had
-    // turned off back ON for every site in it. `set-enabled-plugins`
-    // replaces the array, so there is no merge to soften it.
-    if (!orgReady) {
-      return void enqueueSnackbar(
-        'Still loading this workspace’s plugins — try again in a moment',
-        { variant: 'info', persist: false },
-      )
-    }
-    if (on) {
-      const next = new Set(enabled)
-      next.add(pluginId)
-      return void saveEnabledPlugins([...next])
-    }
-    // AGL-2486. Only a DISABLE can strand a dependent, and the org level
-    // cascades further than the site level: a site can never turn back on
-    // what the workspace has switched off, so this lands on every site.
-    const cascade = resolveDisableCascade(pluginId, [...enabled])
-    if (!cascade.length) return void disableWithCascade(pluginId, [])
-    setPending({
-      id: pluginId,
-      label: labelFor(pluginId),
-      cascade: cascade.map((one) => ({ id: one, label: labelFor(one) })),
-    })
-  }
-
-  /**
-   * ONE write for the whole cascade (AGL-2486). `set-enabled-plugins`
-   * REPLACES the array, so the plugin and everything depending on it are
-   * removed in a single request — there is no window in which A is off while
-   * B still believes it can use A, and no half-applied cascade to recover
-   * from. Nothing records that these were cascaded, so re-enabling the
-   * plugin does NOT bring them back; the dialog says so before you agree.
-   */
-  const disableWithCascade = (pluginId: string, cascade: readonly string[]) => {
-    const next = new Set(enabled)
-    next.delete(pluginId)
-    for (const id of cascade) next.delete(id)
-    void saveEnabledPlugins([...next])
-  }
 
   /**
    * One row per plugin. The chevron and the whole-row link are the point of
@@ -489,11 +390,17 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                     slotProps={{
                       input: { 'aria-label': `Toggle ${plugin.label}` },
                     }}
-                    checked={plugin.alwaysOn || enabled.has(plugin.id)}
+                    checked={
+                      plugin.alwaysOn || switchboard.isOn(plugin.id)
+                    }
                     // Unready means these switch positions are the defaults,
                     // not this workspace's (AGL-1422) — so they are not
                     // something to act on yet.
-                    disabled={plugin.alwaysOn || !canManage || !orgReady}
+                    disabled={
+                      plugin.alwaysOn ||
+                      !switchboard.canWrite ||
+                      !switchboard.ready
+                    }
                     /*
                      * The toggle is driven from the CLICK, not from `onChange`
                      * — and that is a fix, not a style choice (AGL-2486).
@@ -515,7 +422,10 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                     onClick={(event) => {
                       event.preventDefault()
                       event.stopPropagation()
-                      toggle(plugin.id, !enabled.has(plugin.id))
+                      switchboard.requestToggle(
+                        plugin.id,
+                        !switchboard.isOn(plugin.id),
+                      )
                     }}
                   />,
                 ),
@@ -523,22 +433,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
             </Stack>
           </CardDisplay>
         </Stack>
-        <PluginDisableCascadeDialog
-          open={Boolean(pending)}
-          pluginId={pending?.id ?? ''}
-          pluginLabel={pending?.label ?? ''}
-          cascade={pending?.cascade ?? []}
-          scope="org"
-          onCancel={() => setPending(null)}
-          onConfirm={() => {
-            if (!pending) return
-            disableWithCascade(
-              pending.id,
-              pending.cascade.map((entry) => entry.id),
-            )
-            setPending(null)
-          }}
-        />
+        <PluginDisableCascadeDialog {...switchboard.dialogProps} />
       </Container>
     </DashboardLayout>
   )

@@ -584,9 +584,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'accountSecurityUrl',
           description:
-            'Manage-account Security tab — Recent sign-ins, where the device ' +
-            'can be signed out, plus password and passkeys',
-          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user?tab=security`,
+            'Manage-account Security section — Recent sign-ins, where the ' +
+            'device can be signed out, plus password and passkeys',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user/security`,
         },
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.

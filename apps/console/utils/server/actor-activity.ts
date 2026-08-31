@@ -23,7 +23,7 @@ import {
 import { ACTIVITY_LIST_FILTER_FIELDS } from '../list-filters'
 
 /**
- * One person's activity, wherever it happened (AGL-1488).
+ * One person's activity, wherever it happened.
  *
  * Activity is written per subject — `hosts/{hostId}/activity` and
  * `orgs/{orgId}/activity` — which answers "what happened to this site" and
@@ -239,7 +239,7 @@ export async function orgActivityScopePaths(
 
 /**
  * Everything that happened in one organization, its SITES included
- * (AGL-1490).
+ *.
  *
  * `orgs/{orgId}/activity` holds only what happened at ORG level — an invite,
  * a role change, a billing edit. Nearly everything a team actually does

@@ -38,6 +38,16 @@ const orgPlan: { org: unknown; ready: boolean } = { org: {}, ready: true }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  /*
+   * The card asks for its windows through the shared builders. Both carry the
+   * collection reference straight through, so a ceilinged read still routes to
+   * its fixture by path.
+   */
+  collectionCeiling: (ref: string) => ref,
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: jest.fn() } }),
   useOrgPlan: () => orgPlan,
   useFirestoreCollection: (build: () => { __collection?: string }) => ({
@@ -50,6 +60,8 @@ jest.mock('firebase/firestore', () => ({
     __collection: path[path.length - 1],
   }),
   limit: () => ({}),
+  orderBy: () => ({}),
+  documentId: () => '__name__',
   query: (ref: unknown) => ref,
 }))
 

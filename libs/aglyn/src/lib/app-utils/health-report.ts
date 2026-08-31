@@ -1771,11 +1771,12 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Eleven GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
- * the daily and weekly jobs, for which an hour of drift is nothing — and
- * three rows driven by Cloud Scheduler out of `cloud/functions/src/index.ts`:
- * `pluginJobsBeat` (every minute) and the two the `consoleFastCrons` job
- * carries every fifteen (AGL-1617).
+ * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) — the
+ * weekly jobs plus the month-boundary usage-email sweep, for which an hour of
+ * drift is nothing — and eleven rows driven by Cloud Scheduler out of
+ * `cloud/functions/src/index.ts`: `pluginJobsBeat` (every minute), the four
+ * the `consoleFastCrons` job carries every fifteen (AGL-1617), and one
+ * `consoleDailyCron` export per daily job.
  *
  * `scheduled-crons-wiring.spec.ts` holds BOTH runners against their source —
  * the workflow for the `github-actions` rows, the functions file for the
@@ -1853,6 +1854,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 90,
     drives:
       'Evaluates usage budgets and notifies. If it stops, an org sails past its budget with no warning and finds out on the invoice.',
+  },
+  {
+    id: 'reap-sending-domains',
+    label: 'Orphaned sending-domain reaper',
+    // An hour after `run-erasures`, which is what produces most of its work:
+    // an erasure records what it could not release rather than waiting on a
+    // vendor, and this is the only thing that settles that debt.
+    cron: '0 5 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/reap-sending-domains',
+    graceMinutes: 90,
+    drives:
+      'Releases the provider domain object and the zone records of every sending domain whose site or workspace is gone. If it stops, each deleted site keeps one of a bounded number of provider domain slots forever — until the ceiling is reached and a site that asks for a domain of its own is refused one, which leaves it on the shared pool rather than stopping its mail — and leaves a live DKIM key in our zone under a label a future site can claim and inherit a stranger’s signature from.',
   },
   {
     id: 'usage-email',
@@ -1934,6 +1948,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Claims and sends due campaigns. If it stops, a campaign the composer showed as Scheduled sits there and never sends — the AGL-2134 shape, which is sold on /product/marketing.',
   },
   {
+    id: 'lists-materialize',
+    label: 'Dynamic email lists',
+    // Shares the `consoleFastCrons` job with the two rows around it — one
+    // Cloud Scheduler job driving three routes, which is why adding this cost
+    // no scheduler quota.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons \u2192 console /api/lists/materialize',
+    graceMinutes: 45,
+    drives:
+      'Re-evaluates every dynamic list against its rule. If it stops, a list keeps whatever membership it last had, and a campaign sent to it reaches an audience that silently stopped tracking the rule the merchant wrote — which looks exactly like a rule that matched nobody new.',
+  },
+  {
     id: 'finish-domain-attachments',
     label: 'Custom domain re-check',
     // Every fifteen minutes rather than twenty since AGL-1617: it shares one
@@ -1945,6 +1972,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 45,
     drives:
       'Re-checks pending custom domains after the certificate or DNS settles (AGL-2010). If it stops, a correctly-configured domain stays dark until a human presses Re-attach.',
+  },
+  {
+    id: 'provision-sending-domains',
+    label: 'Sending domain provisioning',
+    // The fourth route on the `consoleFastCrons` job, sharing its schedule
+    // with the three rows above. It is a console route rather than a job on
+    // the platform beat because issuing a DKIM key needs a full-access
+    // provider credential the tenant runtime must never hold.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons → console /api/admin/provision-sending-domains',
+    graceMinutes: 45,
+    drives:
+      'Turns a site’s sending-domain claim into a DKIM key and the DNS records that carry it. If it stops, every site that has ASKED for a domain of its own waits on a claim with no records to publish, so campaigns from those sites are refused. Receipts and account email keep leaving on the shared pool throughout, which makes this a stall in reputation isolation rather than stopped mail — and it is invisible to the merchant, who sees only a domain that never finishes.',
   },
   {
     id: 'plugin-jobs-beat',

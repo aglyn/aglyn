@@ -90,6 +90,28 @@ describe('the analytics instance gate (AGL-1979)', () => {
     expect(ungated).not.toMatch(/configureAnalyticsTransport\s*\(/)
   })
 
+  it('mounts a refusing transport on the other branch, when consent is withheld', () => {
+    // The gate has two sides and only one of them is "render nothing".
+    //
+    // With no instance the bindings unmount and their transport registration
+    // goes with them — after which `deliver()` falls back to `window.gtag`.
+    // The Firebase SDK has already injected that global and a page cannot
+    // unload a script, so on this surface an absent transport is a REROUTE,
+    // not a refusal, for exactly the visitor who just said no.
+    //
+    // Pinned as source rather than behaviour because
+    // `console-visitor-consent-enforcement.spec.tsx` drives the behaviour
+    // against a small mirror of this component — this is what stops the mirror
+    // from being the only thing that has the branch.
+    expect(gateSource(source)).toMatch(
+      /\{\s*!analytics\s*&&\s*!platformAnalyticsAllowed\(\)\s*\?\s*<AnalyticsRefusal\s*\/>\s*:\s*null\s*\}/,
+    )
+    // …and the registration itself stays OUT of the parent, like every other
+    // analytics call: the case above refuses `configureAnalyticsTransport(` in
+    // this same body, so the branch can only be a mount.
+    expect(source).toMatch(/function AnalyticsRefusal\(\)/)
+  })
+
   it('every analytics import is actually used inside the gated child', () => {
     // Guards the inverse mistake: deleting the bindings component and
     // leaving the imports, or re-adding a call site to the parent under a

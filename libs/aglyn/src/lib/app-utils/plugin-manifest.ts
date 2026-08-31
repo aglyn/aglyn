@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginConfigField } from '../plugin-manager/plugin-config'
+
 /**
  * Executable-plugin manifest, artifact-path, CSP, and revocation helpers
  * (AGL-45), per the accepted AGL-43 design. Plugins — unlike declarative
@@ -168,6 +170,26 @@ export interface PluginManifest {
   restrictParent?: string[]
   restrictChildren?: string[]
   description?: string
+  /**
+   * Settings this plugin takes, declared in the manifest (AGL-428).
+   *
+   * First-party plugins call `registerPluginConfigSchema` at module scope,
+   * which a sandboxed third-party bundle cannot do: it does not run in the
+   * console process at all, so nothing it executes can reach the registry the
+   * settings form reads. The manifest is the one declaration of a marketplace
+   * plugin that IS present in the console — denormalized onto every install
+   * pin, and part of the reviewed bytes — so it is where a publisher's fields
+   * come from.
+   *
+   * Read through `pluginConfigSchemaFromManifest`, never directly: this is
+   * publisher-authored data on a document the console renders a form from, so
+   * every field is re-validated on the way in rather than trusted for having
+   * been reviewed once.
+   */
+  config?: {
+    fields: PluginConfigField[]
+    defaults?: Record<string, unknown>
+  }
 }
 
 /** A published, content-addressed version of a plugin listing. */

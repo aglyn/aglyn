@@ -39,8 +39,10 @@
  * variant-level labels multiply cardinality without answering a question
  * anyone asks of a signup, and a keyword string is the most likely of the
  * five to carry something a person typed. `gclid` and bare `ref` are out for
- * the same reason plus a stronger one — `gclid` is an ads-click identifier,
- * and this property runs with ads personalization off in all 307 regions.
+ * that same cardinality reason. Not for a privacy one: the property runs ads
+ * personalization ON in every region, and Google's own auto-tagging already
+ * carries the click identifier into it, so re-collecting `gclid` here would
+ * duplicate a field the platform owns rather than withhold anything.
  *
  * The allowlist is the privacy mechanism, not a convenience. A parser that
  * copied "the campaign-ish parameters" would be one marketing link away from

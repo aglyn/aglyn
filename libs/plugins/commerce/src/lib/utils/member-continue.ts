@@ -45,3 +45,17 @@ export function continuePathFromLocation(fallback = '/'): string {
     fallback,
   )
 }
+
+/**
+ * Navigation seam for the member account doors.
+ *
+ * jsdom's `window.location` is not patchable, so a test that drives one of
+ * these forms cannot stub the redirect — it gets "Not implemented" thrown out
+ * of the handler instead, which aborts it partway and takes the analytics
+ * call above it with it. Every member block navigates through here so the
+ * destination stays assertable, and so the one place that leaves the site is
+ * the one place that resolves where to.
+ */
+export const memberNavigation = {
+  assign: (url: string) => window.location.assign(url),
+}

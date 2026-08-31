@@ -70,7 +70,7 @@
 #   When another process cleared it mid-run, nx died reaching for a file it had
 #   just written:
 #       ENOENT: no such file or directory, open
-#       '/Users/zgover/Documents/VCS/aglyn/.nx/cache/terminalOutputs/5760910…'
+#       '<checkout>/.nx/cache/terminalOutputs/5760910…'
 #   The test phase aborted after 18 of 40 projects and `console:test` never ran
 #   at all — while the run still reported an exit code that read like a verdict.
 #   NX_CACHE_DIRECTORY (set below) is the only thing that actually moves it.

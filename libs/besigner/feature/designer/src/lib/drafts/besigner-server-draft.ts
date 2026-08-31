@@ -96,6 +96,7 @@ const COLLECTION_OF: Partial<Record<BesignerDraftIds['kind'], string>> = {
   screen: 'screens',
   layout: 'layouts',
   component: 'components',
+  form: 'forms',
 }
 
 /**

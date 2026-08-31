@@ -30,7 +30,7 @@ export {}
  * list that still routes `grantStaff` / `disable` / `setPassword` to a ghost is
  * worse than two honest rows: it looks like it worked. AGL-1962 measured the
  * consequence on production — a `revokeRefreshTokens` dated 2026-08-14 sitting
- * on the forged project-pool twin while `zach@aglyn.com`'s own
+ * on the forged project-pool twin while `staff@aglyn.com`'s own
  * `tokensValidAfterTime` never moved, so "sign out everywhere" did nothing.
  *
  * `findUserByUidAcrossPools` now returns the identified record (guarded in
@@ -47,7 +47,7 @@ export {}
  */
 
 const SSO_TENANT = 'aglyn-org-y5v14'
-const TARGET_UID = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+const TARGET_UID = 'SsoTenantUidFixture000000000'
 
 /**
  * Every mutation attempted, tagged with the pool it was attempted on.
@@ -85,8 +85,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     }
   }
   const targetRecord = {
-    uid: 'IHumyGGhGxZKjVV26qCRx5Okf573',
-    email: 'zach@aglyn.com',
+    uid: 'SsoTenantUidFixture000000000',
+    email: 'staff@aglyn.com',
     displayName: null,
     photoURL: null,
     disabled: false,

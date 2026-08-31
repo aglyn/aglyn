@@ -22,8 +22,12 @@ import {
   actionTriggerLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
+  Alert,
   Chip,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -32,8 +36,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { collection, limit, orderBy, query, where } from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -44,11 +48,28 @@ export interface HostRunHistoryCardProps {
   hostId: string
   /** Show only runs of this action/workflow. */
   targetId?: string
-  max?: number
   header?: string
   /** Overrides the default help affordance on the card header. */
   help?: HelpTipContent
 }
+
+/**
+ * Activity rows read before the run filter.
+ *
+ * A CEILING rather than a page, and the difference is the client-side filter
+ * below. `activity` holds publishes, media saves and member changes as well as
+ * runs, and only a document carrying a run verdict is a row here — so a
+ * server page of ten activity entries might contain two runs, one, or none,
+ * and paging the QUERY would hand the reader pages of wildly different
+ * heights with no way to tell a short page from the end of the history.
+ *
+ * The filter cannot move to the server either: `actionRunResult` falls back to
+ * reading the prose `action` for entries written before AGL-2171, which have
+ * no `result` field, and `where('result','in',…)` excludes exactly those. That
+ * is the same field-presence trap as ordering on an optional field, and it
+ * would silently drop every historic run.
+ */
+const WINDOW = 200
 
 const RESULT_COLOR = {
   succeeded: 'success',
@@ -82,7 +103,6 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
   const {
     hostId,
     targetId,
-    max = 25,
     header = 'Run history',
     help = pluginDocsHelp('buildAWorkflow', {
       anchor: '#4-save-and-test',
@@ -92,15 +112,54 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
     }),
   } = props
   const firestore = useFirestore()
+  /*
+   * The window is NARROWED BY THE SERVER, not by the client (AGL-2292).
+   *
+   * A bare `limit(200)` with no ordering is not "the most recent 200 runs" —
+   * Firestore answers an unordered limit in `__name__` order, so it is an
+   * arbitrary slice of the host's whole activity feed. `activity` also holds
+   * publishes, media saves and member changes, and only entries carrying a
+   * run result survive the filter below, so a busy site could fill all 200
+   * places with rows this card discards and report "No runs yet" for a
+   * workflow that had run all day.
+   *
+   * `target.id` equality is what makes the read proportional to the card:
+   * it asks for this workflow's rows rather than the site's. It carries no
+   * `orderBy` deliberately — an equality plus an ordering on a second field
+   * needs a composite index, and the client sort below already puts the
+   * newest first. The untargeted case has no equality to pair, so it orders
+   * server-side instead.
+   */
   const { data: entries } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'activity'), limit(200)),
-    [firestore, hostId],
+    () => {
+      if (!hostId) return null
+      const base = collection(firestore, 'hosts', hostId, 'activity')
+      /*
+       * `WINDOW + 1` is a PROBE, not an off-by-one (AGL-2501).
+       *
+       * The card used to say "showing what we read" by saying nothing at all.
+       * Reading one document more than the ceiling turns "there is older
+       * history than this" into a fact for the price of a single read;
+       * comparing `length === WINDOW` cannot, because it is wrong in both
+       * directions at exactly the count that equals the ceiling. The probe row
+       * is dropped below and never rendered.
+       */
+      return targetId
+        ? query(base, where('target.id', '==', targetId), limit(WINDOW + 1))
+        : query(base, orderBy('createdAt', 'desc'), limit(WINDOW + 1))
+    },
+    // `targetId` belongs here: it now shapes the query, so a card that
+    // switched workflows without it would go on showing the first one's runs.
+    [firestore, hostId, targetId],
     { idField: '$id' },
   )
+  /** The activity ceiling bit — there are older entries than were read. */
+  const truncated = (entries?.length ?? 0) > WINDOW
 
   const runs = useMemo(
     () =>
       [...(entries ?? [])]
+        .slice(0, WINDOW)
         .filter((entry) => !targetId || entry.target?.id === targetId)
         .map((entry) => ({ entry, result: actionRunResult(entry) }))
         .filter(
@@ -111,9 +170,29 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
           (a, b) =>
             (b.entry.createdAt?.seconds ?? 0) -
             (a.entry.createdAt?.seconds ?? 0),
-        )
-        .slice(0, max),
-    [entries, targetId, max],
+        ),
+    [entries, targetId],
+  )
+
+  /*
+   * The page is a SLICE, because the rows are already in hand.
+   *
+   * Every run in the window has been read and paid for by the query above, so
+   * a second query per page would buy nothing and cost a read. What the card
+   * lacked was not a cheaper read but a control: it sliced the newest
+   * twenty-five off the window and rendered them in one wall, so run
+   * twenty-six was read, discarded, and unreachable — on the surface a reader
+   * opens precisely to ask "why did it not fire the time before last?".
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  // A different workflow is a different history: page three of the last one
+  // is not a position in this one, and an out-of-range page renders empty
+  // with no explanation, which reads as the runs having gone.
+  useEffect(() => setPage(0), [targetId, hostId])
+  const shown = useMemo(
+    () => runs.slice(page * pageSize, page * pageSize + pageSize),
+    [runs, page, pageSize],
   )
 
   return (
@@ -130,6 +209,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
             'including the ones a condition skipped.'}
         </Typography>
       ) : (
+        <Stack spacing={1.5}>
         <Table size="small" aria-label="Run history">
           <TableHead>
             <TableRow>
@@ -140,7 +220,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {runs.map(({ entry, result }) => {
+            {shown.map(({ entry, result }) => {
               const at = entry.createdAt?.toDate?.()
               return (
                 <TableRow key={entry.$id}>
@@ -176,6 +256,26 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
             })}
           </TableBody>
         </Table>
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={shown.length}
+          // The runs in the window, which is a number this card genuinely
+          // holds. What it does not know is how many runs are OLDER than the
+          // window, and the notice below says so rather than letting the
+          // count line imply a total it cannot see.
+          count={runs.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+        {truncated ? (
+          <Alert severity="info">
+            {`Runs found in the ${WINDOW} most recent activity entries for ` +
+              'this site. Older runs than that are recorded and are not ' +
+              'listed here.'}
+          </Alert>
+        ) : null}
+        </Stack>
       )}
     </CardDisplay>
   )

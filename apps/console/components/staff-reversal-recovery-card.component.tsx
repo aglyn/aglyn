@@ -26,6 +26,13 @@ export interface ReversalRecoveryRow {
   $id: string
   listingId: string | null
   sellerOrgId: string | null
+  /**
+   * The seller's workspace by NAME, resolved by `/api/admin/overview` from
+   * the org snapshot it already holds. Null when the route could not name it
+   * — an org outside the capped snapshot, or one since deleted — and the row
+   * then falls back to the id, which is still a lead somebody can search.
+   */
+  sellerOrgLabel?: string | null
   buyerUid: string | null
   /** What the webhook failed to pull back. 0 when it never learned the amount. */
   owedCents: number
@@ -48,7 +55,7 @@ export interface ReversalRecoveryRow {
  * That writer's own comment named the queue —
  * `where('reversalFailedAt', '!=', null)` — and the query did not exist
  * anywhere in the repo. Every refusal was therefore recorded precisely so a
- * human could chase it, and unreachable by any human. `netPaidCents` in
+ * human could chase it, and unreachable by any human. `sentToStripeCents` in
  * `seller-ledger-totals.ts` deliberately does not count the owed amount
  * either (it sums the reversal that ACTUALLY happened, which is the honest
  * reading there), so the publisher panel could not surface it as a side
@@ -123,7 +130,9 @@ export default function StaffReversalRecoveryCard({
                   : 'amount unknown') +
                   ` · ${row.reason ?? 'unknown reason'}` +
                   ` · ${row.cause ?? 'unknown cause'}` +
-                  ` · seller ${row.sellerOrgId ?? 'unknown'}` +
+                  ` · seller ${
+                    row.sellerOrgLabel ?? row.sellerOrgId ?? 'unknown'
+                  }` +
                   ` · ${
                     row.failedAt
                       ? new Date(row.failedAt).toLocaleDateString()

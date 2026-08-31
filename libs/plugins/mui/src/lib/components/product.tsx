@@ -16,6 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  buildBeginCheckoutParams,
+  trackEventBeforeNavigation,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import { mdiCartOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
@@ -91,6 +95,37 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
       })
       const payload = await response.json().catch(() => ({}))
       if (response.ok && payload?.url) {
+        // The Starter block's `begin_checkout`. It takes real money through
+        // Stripe and reported nothing, so a site built from this block alone
+        // showed GA4 a `purchase` with no checkout step in front of it — which
+        // reads as a 0% checkout rate rather than as an unmeasured path.
+        //
+        // Fired only after the server has ACCEPTED the request and returned a
+        // session url, never on the click: a count inflated by sold-out
+        // products and rejected coupons describes attempts, not checkouts.
+        //
+        // `value` is the price the SHOPPER SAW, which is the block's own prop.
+        // The charge is priced server-side from the product doc — an author
+        // who edits one without the other has a storefront that lies to
+        // shoppers before it lies to GA — and an unparseable or absent price
+        // reports no event at all, because a `value: 0` on a real sale is a
+        // worse number than a missing one.
+        const shownPrice = Number(priceUsd)
+        if (Number.isFinite(shownPrice) && shownPrice > 0) {
+          await trackEventBeforeNavigation(
+            'begin_checkout',
+            buildBeginCheckoutParams({
+              items: [
+                {
+                  item_id: productId,
+                  item_name: name || 'Product',
+                  price: shownPrice,
+                  quantity: 1,
+                },
+              ],
+            }),
+          )
+        }
         window.location.assign(payload.url)
         return
       }

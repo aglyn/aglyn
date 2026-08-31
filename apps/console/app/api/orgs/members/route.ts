@@ -18,7 +18,6 @@
 import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
-  checkSeatQuota,
   countManagerSeats,
   type HostAccessRole,
   isOrgRole,
@@ -30,6 +29,7 @@ import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   collaboratorSeatRefusalResponse,
+  managerSeatRefusalResponse,
   emailUnverifiedResponse,
   findUserByEmailAcrossPools,
   findUserByUidAcrossPools,
@@ -247,8 +247,9 @@ async function handler(request: Request): Promise<Response> {
         // This block also runs for an EXISTING member — `upsert` is the
         // role-change path — and `upsertOrgMember` documents `null` as "clear
         // the stored value" while `undefined` leaves it alone. An SSO member's
-        // tenant auth record holds neither name nor photo (measured on
-        // `zach@aglyn.com`: `displayName: null`, `photoURL: undefined`), so
+        // tenant auth record holds neither name nor photo (measured on an
+        // SSO account in the `aglyn-org-y5v14` tenant: `displayName: null`,
+        // `photoURL: undefined`), so
         // `?? null` meant changing someone's role silently erased the roster
         // identity `backfillMemberIdentity` had put there for them (AGL-1131)
         // — the only copy any member surface can read (AGL-1122).
@@ -282,36 +283,16 @@ async function handler(request: Request): Promise<Response> {
       // Manager-seat quota (AGL-471): adding a NEW org member consumes a
       // seat; role changes don't. A plan-less org resolves as `free`
       // (1 seat — the owner), not unmetered.
-      // …and only a MANAGER consumes one (AGL-1113). Adding a site-scoped
-      // collaborator writes an org member doc too, but that seat is metered
-      // per host against `membersPerHost` at hosts/{id}/members — gating it
-      // here billed and blocked it twice.
-      const addingManager = isOrgWideMember({
-        role,
-        allHosts: body?.allHosts === true,
-        hostAccess: sanitizeHostAccess(body?.hostAccess),
-      })
-      if (!existedAlready && addingManager) {
-        const members = await firestore
-          .collection('orgs')
-          .doc(orgId)
-          .collection('members')
-          .get()
-        const quota = checkSeatQuota(
-          orgSnapshot.data() as any,
-          'managers',
-          countManagerSeats(members.docs.map((doc) => doc.data() as never)),
-        )
-        if (!quota.allowed) {
-          return Response.json({
-            error: quota.upgradeRequired
-              ? `Team seat limit reached (${quota.limit}) — upgrade your ` +
-                'plan to add more members'
-              : `Team seats full (${quota.limit}) — add seats for ` +
-                `$${quota.addonPriceUsd}/mo each from Billing`,
-          }, { status: 403 })
-        }
-      }
+      // The manager seat is charged INSIDE `upsertOrgMember`'s transaction
+      // (AGL-2068 on the manager key), which also decides whether this write
+      // is an admission at all — only a MANAGER consumes one (AGL-1113), and
+      // a site-scoped collaborator writes an org member doc too but is
+      // metered per host against `membersPerHost`.
+      //
+      // What stood here read the roster, decided, and then wrote through a
+      // separate call, so concurrent adds all measured the same roster and
+      // all passed; and it counted members only, never the pending invites
+      // already holding seats.
       await upsertOrgMember({
         orgId,
         uid: targetUid,
@@ -452,6 +433,9 @@ async function handler(request: Request): Promise<Response> {
     // call's transaction and arrives here as an error to translate.
     const seatRefusal = collaboratorSeatRefusalResponse(error)
     if (seatRefusal) return seatRefusal
+    // The manager half of the same question, refused in the same transaction.
+    const managerRefusal = managerSeatRefusalResponse(error)
+    if (managerRefusal) return managerRefusal
     console.error(error)
     return Response.json({ error: 'Membership operation failed' }, { status: 500 })
   }

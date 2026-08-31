@@ -25,14 +25,28 @@
 // ("useState only works in a client component"), not silently.
 
 import {
-  type CSSProperties,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  Paper,
+  Stack,
+  Switch,
+  Typography,
+} from '@mui/material'
+import {
   type ReactElement,
+  type ReactNode,
   useEffect,
   useRef,
   useState,
 } from 'react'
 import {
   readStoredVisitorConsent,
+  refusalStatusFor,
   type StoredVisitorConsent,
   storeVisitorConsent,
   VISITOR_CONSENT_OPEN_EVENT,
@@ -60,9 +74,29 @@ import {
  * - **The preferences panel**: change the state in EITHER direction at any
  *   time — accept after declining, opt out after being defaulted in.
  *
- * Lives in the shared lib because the console preview renders the SAME
- * component under its region simulator — a preview that renders an
- * approximation would prove nothing about the real banner.
+ * ## EVERY surface renders this component
+ *
+ * Published customer sites, the console — signed in and signed out — and the
+ * console preview's region simulator. There were two implementations of these
+ * three surfaces and they had already drifted into two different designs: a
+ * plain card with bare checkboxes on one side, a MUI dialog with switches and
+ * descriptions on the other. The dialog is the design that survived, and the
+ * differences that were real turned out to be STRINGS — "this site" against
+ * "this console", carts against signing in — which is what {@link ConsentCopy}
+ * is for. A string is not a reason for a second component.
+ *
+ * MUI is available on both: the tenant runtime renders it through
+ * `HostThemeProvider`, under the same `AppRouterCacheProvider` emotion cache
+ * the console uses, and `membership-page.tsx` already draws MUI components a
+ * folder away from the call site here. The unlayered-cache hazard is the
+ * BESIGNER canvas, which no published page and no consent surface goes
+ * through.
+ *
+ * Palette and type come from whichever theme is in scope, which on a customer
+ * site is the site's own — the control belongs to the page it is asked on. The
+ * two things that must NOT follow a theme are the §7015 mark, which is
+ * transcribed artwork, and {@link CONSENT_OVERLAY_Z_INDEX}, which has to
+ * outrank a popup backdrop no theme knows about.
  */
 
 /**
@@ -169,7 +203,14 @@ const OPT_OUT_ICON_WHITE = '#FFFFFF'
  * exactly the surface this artwork was published against — so it needs no
  * light/dark variant and must not be given one.
  */
-function CcpaOptOutIcon(): ReactElement {
+/**
+ * Exported so a surface that renders its own opt-out control gets the
+ * REGULATOR'S artwork rather than an approximation of it. §7015(f) points at
+ * published artwork, and the console's unauthenticated pages need the same
+ * mark this overlay draws — a second, hand-drawn toggle would be a different
+ * mark wearing the same name.
+ */
+export function CcpaOptOutIcon(): ReactElement {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -198,102 +239,23 @@ function CcpaOptOutIcon(): ReactElement {
     </svg>
   )
 }
-
-const OVERLAY_FONT =
-  'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
-
-const CARD_STYLE: CSSProperties = {
-  position: 'fixed',
-  left: '50%',
-  bottom: 16,
-  transform: 'translateX(-50%)',
-  // Above the popup backdrop (2147483200): the consent question outranks a
-  // promotional popup, and the popup's own GA mirrors wait on the answer.
-  zIndex: 2147483400,
-  width: 'min(680px, calc(100vw - 24px))',
-  boxSizing: 'border-box',
-  padding: 16,
-  borderRadius: 12,
-  border: '1px solid rgba(0, 0, 0, 0.12)',
-  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.18)',
-  background: '#fff',
-  color: '#111',
-  fontFamily: OVERLAY_FONT,
-  fontSize: 14,
-  lineHeight: 1.5,
-  textAlign: 'left',
-}
-
-const BUTTON_BASE: CSSProperties = {
-  boxSizing: 'border-box',
-  minWidth: 104,
-  padding: '8px 16px',
-  borderRadius: 8,
-  fontSize: 14,
-  fontFamily: 'inherit',
-  cursor: 'pointer',
-}
-
-// Allow and Decline are the SAME control at the same level — no dark
-// patterns, no click-deep refusal.
-const PRIMARY_BUTTON: CSSProperties = {
-  ...BUTTON_BASE,
-  border: '1px solid #111',
-  background: '#111',
-  color: '#fff',
-}
-
-const SECONDARY_BUTTON: CSSProperties = {
-  ...BUTTON_BASE,
-  border: '1px solid #111',
-  background: '#fff',
-  color: '#111',
-}
-
-const LINK_BUTTON: CSSProperties = {
-  border: 'none',
-  background: 'none',
-  padding: '8px 4px',
-  fontSize: 14,
-  fontFamily: 'inherit',
-  color: 'inherit',
-  textDecoration: 'underline',
-  cursor: 'pointer',
-}
-
 /**
- * The persistent entry point. Deliberately quiet — a small bottom-left pill
- * — but always present and always the same, page after page.
+ * The stacking context the consent surfaces must win, and why it is a number
+ * rather than a theme token.
  *
- * `inline-flex` rather than the button default, so the §7015 icon and the
- * §7015 title share one baseline-centred row. The 6px gap keeps them read as
- * one control — the regulation wants the icon *with* the link, not near it —
- * while `flexWrap` lets the label drop under the icon in a narrow viewport
- * instead of forcing the pill wider than the screen. The clearance the pill
- * reserves at the foot of the page is MEASURED, so it absorbs both the extra
- * width and a wrapped second line without any constant here changing.
+ * `theme.zIndex.modal` is 1300, and on a published site the consent card has
+ * to sit above the popup backdrop at 2147483200 — the consent question
+ * outranks a promotional popup, and the popup's own GA mirrors are waiting on
+ * the answer. Exported so the console preview's own panel can be raised
+ * against the real value instead of a copy of it.
  */
-const PILL_STYLE: CSSProperties = {
-  position: 'fixed',
-  left: 12,
-  bottom: 12,
-  zIndex: 2147483390,
-  boxSizing: 'border-box',
-  display: 'inline-flex',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  gap: 6,
-  maxWidth: 'calc(100vw - 24px)',
-  padding: '6px 12px',
-  borderRadius: 999,
-  border: '1px solid rgba(0, 0, 0, 0.24)',
-  background: 'rgba(255, 255, 255, 0.92)',
-  color: '#333',
-  fontFamily: OVERLAY_FONT,
-  fontSize: 12,
-  lineHeight: 1.4,
-  cursor: 'pointer',
-}
+export const CONSENT_OVERLAY_Z_INDEX = 2147483400
+
+/** The persistent control sits just below the card it can be replaced by. */
+export const CONSENT_PILL_Z_INDEX = 2147483390
+
+/** The card both the banner and the preferences panel are drawn on. */
+const CARD_WIDTH = 'min(680px, calc(100vw - 24px))'
 
 /** Breathing room kept between the pill and the last row it must not cover. */
 const PILL_CLEARANCE = 8
@@ -414,6 +376,54 @@ function useConsentPillClearance(
   }, [pillRef, active])
 }
 
+/**
+ * The words each surface uses, so one component serves them all.
+ *
+ * A console says "this console" and a published site says "this site"; the
+ * strictly-necessary sentence names shopping carts on a customer site and
+ * signing in on the console. Those are STRINGS, and a string is not a reason
+ * for a second component — which is what the two implementations this replaces
+ * had become. Every field defaults to the published-site wording, so a caller
+ * that has nothing to say differently passes nothing.
+ */
+export interface ConsentCopy {
+  /** Opens the preferences panel. */
+  panelIntro?: string
+  /** Names what runs regardless, and why it is not being asked about. */
+  strictlyNecessary?: string
+  /** The ask, on a site that runs analytics only. */
+  bannerAnalyticsOnly?: string
+  /** The ask, on a site that also asks about advertising. */
+  bannerWithAdvertising?: string
+  /** The analytics control's label and the line under it. */
+  analyticsLabel?: string
+  analyticsDetail?: string
+  /** The advertising control's, where the surface asks about it. */
+  advertisingLabel?: string
+  advertisingDetail?: string
+}
+
+const DEFAULT_COPY: Required<ConsentCopy> = {
+  panelIntro: 'Choose what this site may use.',
+  strictlyNecessary:
+    'Strictly necessary features — like shopping carts, sign-in, and ' +
+    'remembering this choice — are always on because the site cannot work ' +
+    'without them.',
+  bannerAnalyticsOnly:
+    'This site would like to use analytics (Google Analytics) to understand ' +
+    'how it is used. Analytics only runs if you allow it — everything else ' +
+    'works either way.',
+  bannerWithAdvertising:
+    'This site would like to use analytics (Google Analytics) to understand ' +
+    'how it is used, and advertising cookies to personalize ads and measure ' +
+    'how they perform. Neither runs unless you allow it — everything else ' +
+    'works either way. Use Preferences to choose them separately.',
+  analyticsLabel: 'Analytics',
+  analyticsDetail: 'Google Analytics — how the site is used.',
+  advertisingLabel: 'Advertising',
+  advertisingDetail: 'Personalized ads and measuring how they perform.',
+}
+
 export interface ConsentBannerUiProps {
   hostId: string
   /** The visitor's recorded state; null means undecided. */
@@ -423,24 +433,80 @@ export interface ConsentBannerUiProps {
   /** Region at decision time, recorded onto explicit choices. */
   country?: string | null
   /**
-   * Whether this site asks about advertising storage (AGL-1649). Resolved by
-   * the caller from the host document, because this component is also
-   * mounted by the console preview against a simulated host.
-   *
-   * `false` — the default and the state of every existing site — renders
-   * exactly the single-question surface AGL-1498 shipped.
+   * Whether this surface asks about advertising storage. Resolved by the
+   * caller — from the host document on a published site, from the platform's
+   * own consent declaration on the console.
    */
   advertising?: boolean
+  /** Per-surface wording; see {@link ConsentCopy}. */
+  copy?: ConsentCopy
   /**
-   * Simulator seam (console preview): when set, decisions are reported here
-   * INSTEAD of being persisted, so previewing as-if-from-the-EU never
-   * writes a real consent record. Production leaves it unset.
+   * Links to the policies behind the choice, rendered under the copy on both
+   * the banner and the panel.
+   *
+   * A node rather than a pair of URLs: the console links its own published
+   * Privacy and Cookie policies through its route constants, and a published
+   * site links whatever its owner has. A choice offered with no way to read
+   * what is being chosen is not an informed one, but neither surface's links
+   * are this component's to know.
+   */
+  policyLinks?: ReactNode
+  /**
+   * Whether the persistent "Your Privacy Choices" control may render here.
+   *
+   * `true` — the default, and every published site — draws the pill whenever
+   * no other surface is up. It is the ONLY opt-out surface a visitor in the
+   * implied posture ever sees, so it is platform-mounted rather than left to
+   * a template that could drop it.
+   *
+   * `false` for a page that already carries the control somewhere better. The
+   * console's signed-in pages put it in the account menu, where a person looks
+   * for their own settings; floating a second copy over the page would be the
+   * same control drawn twice.
+   */
+  showPill?: boolean
+  /**
+   * The caller owns what a decision DOES.
+   *
+   * Unset — a published site — persists through `storeVisitorConsent`, which
+   * is where the withdrawal behaviour lives: it re-derives both grants from
+   * the status, silences any resident tag, sweeps the analytics and
+   * advertising cookies and dispatches the change event.
+   *
+   * Set, and the caller writes instead. The console writes through
+   * `storePlatformConsent` so the record also mirrors across its hostnames;
+   * the console's region simulator writes nothing at all, which is what keeps
+   * previewing as-if-from-the-EU from recording a real consent record.
    */
   onDecision?: (status: VisitorConsentStatus, advertising?: boolean) => void
 }
 
+/** The card both overlays are drawn on — fixed, centred, above everything. */
+const overlayCardSx = {
+  position: 'fixed',
+  left: '50%',
+  bottom: 16,
+  transform: 'translateX(-50%)',
+  zIndex: CONSENT_OVERLAY_Z_INDEX,
+  width: CARD_WIDTH,
+  p: 2,
+  borderRadius: 3,
+  textAlign: 'left',
+} as const
+
 export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | null {
-  const { hostId, stored, posture, country, advertising, onDecision } = props
+  const {
+    hostId,
+    stored,
+    posture,
+    country,
+    advertising,
+    copy,
+    policyLinks,
+    showPill = true,
+    onDecision,
+  } = props
+  const words = { ...DEFAULT_COPY, ...copy }
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [analyticsChecked, setAnalyticsChecked] = useState(
     stored?.analytics === true,
@@ -492,13 +558,8 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
     setPreferencesOpen(false)
   }
 
-  // "No" from the preferences panel means `opted-out` when the visitor was
-  // defaulted in (implied posture) and `declined` when they were asked
-  // first — same gate either way, distinct record.
-  const refusalStatus: VisitorConsentStatus =
-    stored?.status === 'implied' || posture === 'opt-out'
-      ? 'opted-out'
-      : 'declined'
+  // Same gate either way, distinct record — see `refusalStatusFor`.
+  const refusalStatus = refusalStatusFor(stored, posture)
 
   const askBanner = !stored && posture === 'opt-in' && !preferencesOpen
 
@@ -506,71 +567,76 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
   // of the three surfaces is up. The banner and the panel are centred cards
   // that reserve nothing — only the pill parks itself on the footer.
   const pillRef = useRef<HTMLButtonElement | null>(null)
-  useConsentPillClearance(pillRef, !preferencesOpen && !askBanner)
+  useConsentPillClearance(pillRef, showPill && !preferencesOpen && !askBanner)
+
+  /** One control per category, label and detail on two lines. */
+  const categorySwitch = (
+    label: string,
+    detail: string,
+    checked: boolean,
+    onChange: (next: boolean) => void,
+  ): ReactElement => (
+    <FormControlLabel
+      control={
+        <Switch
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          slotProps={{ input: { 'aria-label': label } }}
+        />
+      }
+      label={
+        <Box>
+          <Typography variant="body2">{label}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {detail}
+          </Typography>
+        </Box>
+      }
+    />
+  )
 
   if (preferencesOpen) {
     return (
-      <section
-        role="region"
+      <Dialog
+        open
+        onClose={() => setPreferencesOpen(false)}
+        maxWidth="sm"
+        fullWidth
         aria-label={CONSENT_OPT_OUT_TITLE}
         data-aglyn-consent-preferences=""
-        style={CARD_STYLE}
+        sx={{ zIndex: CONSENT_OVERLAY_Z_INDEX }}
       >
-        <p style={{ margin: '0 0 12px' }}>
-          {'Choose what this site may use. Strictly necessary features — ' +
-            'like shopping carts, sign-in, and remembering this choice — ' +
-            'are always on because the site cannot work without them.'}
-        </p>
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            margin: '0 0 12px',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={analyticsChecked}
-            onChange={(event) => setAnalyticsChecked(event.target.checked)}
-          />
-          {'Analytics (Google Analytics) — how the site is used'}
-        </label>
-        {advertising ? (
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              margin: '0 0 12px',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={adsChecked}
-              onChange={(event) => setAdsChecked(event.target.checked)}
-            />
-            {'Advertising — personalized ads and measuring ad performance'}
-          </label>
-        ) : null}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            flexWrap: 'wrap',
-            gap: 8,
-          }}
-        >
-          <button
-            type="button"
-            style={SECONDARY_BUTTON}
-            onClick={() => decide(refusalStatus)}
-          >
-            {'Decline all'}
-          </button>
-          <button
-            type="button"
-            style={PRIMARY_BUTTON}
+        {/* The exact words are fixed by CCPA regs §7015 for a combined
+            opt-out control — see `CONSENT_OPT_OUT_TITLE`. */}
+        <DialogTitle>{CONSENT_OPT_OUT_TITLE}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Typography variant="body2">
+              {`${words.panelIntro} ${words.strictlyNecessary}`}
+            </Typography>
+            {categorySwitch(
+              words.analyticsLabel,
+              words.analyticsDetail,
+              analyticsChecked,
+              setAnalyticsChecked,
+            )}
+            {advertising
+              ? categorySwitch(
+                  words.advertisingLabel,
+                  words.advertisingDetail,
+                  adsChecked,
+                  setAdsChecked,
+                )
+              : null}
+            {policyLinks}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          {/* Refuse and accept are the SAME control at the same level — no
+              dark patterns, no click-deep refusal. */}
+          <Button onClick={() => decide(refusalStatus)}>{'Decline all'}</Button>
+          <Button
+            variant="contained"
             onClick={() =>
               decide(
                 analyticsChecked ? 'accepted' : refusalStatus,
@@ -582,50 +648,41 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
             }
           >
             {'Save choices'}
-          </button>
-        </div>
-      </section>
+          </Button>
+        </DialogActions>
+      </Dialog>
     )
   }
 
   if (askBanner) {
     return (
-      <section
+      <Paper
+        elevation={8}
         role="region"
         aria-label="Privacy choices"
         data-aglyn-consent-banner=""
-        style={CARD_STYLE}
+        sx={overlayCardSx}
       >
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: 12,
-          }}
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1.5}
+          sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}
         >
-          <p style={{ margin: 0, flex: '1 1 260px' }}>
-            {advertising
-              ? 'This site would like to use analytics (Google Analytics) ' +
-                'to understand how it is used, and advertising cookies to ' +
-                'personalize ads and measure how they perform. Neither runs ' +
-                'unless you allow it — everything else works either way. ' +
-                'Use Preferences to choose them separately.'
-              : 'This site would like to use analytics (Google Analytics) to ' +
-                'understand how it is used. Analytics only runs if you allow ' +
-                'it — everything else works either way.'}
-          </p>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: 8,
-            }}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2">
+              {advertising
+                ? words.bannerWithAdvertising
+                : words.bannerAnalyticsOnly}
+            </Typography>
+            {policyLinks ? <Box sx={{ mt: 0.5 }}>{policyLinks}</Box> : null}
+          </Box>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ flexShrink: 0, flexWrap: 'wrap' }}
           >
-            <button
-              type="button"
-              style={LINK_BUTTON}
+            <Button
+              size="small"
               onClick={() => {
                 setAnalyticsChecked(stored != null && stored.analytics)
                 setAdsChecked(stored != null && stored.advertising === true)
@@ -633,41 +690,63 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
               }}
             >
               {'Preferences'}
-            </button>
-            <button
-              type="button"
-              style={SECONDARY_BUTTON}
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
               onClick={() => decide('declined')}
             >
               {'Decline'}
-            </button>
-            <button
-              type="button"
-              style={PRIMARY_BUTTON}
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
               onClick={() => decide('accepted', advertising === true)}
             >
               {advertising ? 'Allow all' : 'Allow'}
-            </button>
-          </div>
-        </div>
-      </section>
+            </Button>
+          </Stack>
+        </Stack>
+      </Paper>
     )
   }
+
+  if (!showPill) return null
 
   // The pill renders whenever no other surface is up — INCLUDING the
   // implied posture, where it is the only opt-out surface there is.
   return (
-    <button
+    <Button
       ref={pillRef}
       type="button"
+      // No ripple, and it is not cosmetic: `consent-opt-out-title.spec.tsx`
+      // reads the control's LAST child to prove the §7015 title is the text
+      // immediately right of the §7015 mark, and a ripple span would be the
+      // last child instead.
+      disableRipple
       data-aglyn-consent-pill=""
       aria-label={CONSENT_OPT_OUT_TITLE}
-      style={PILL_STYLE}
+      variant="outlined"
+      size="small"
       onClick={() => {
         const current = onDecision ? stored : readStoredVisitorConsent(hostId)
         setAnalyticsChecked(current?.analytics === true)
         setAdsChecked(current?.advertising === true)
         setPreferencesOpen(true)
+      }}
+      sx={{
+        position: 'fixed',
+        left: 12,
+        bottom: 12,
+        zIndex: CONSENT_PILL_Z_INDEX,
+        gap: 0.75,
+        flexWrap: 'wrap',
+        maxWidth: 'calc(100vw - 24px)',
+        borderRadius: 999,
+        textTransform: 'none',
+        color: 'text.secondary',
+        borderColor: 'divider',
+        backgroundColor: 'background.paper',
       }}
     >
       {/*
@@ -680,7 +759,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
       */}
       <CcpaOptOutIcon />
       {CONSENT_OPT_OUT_TITLE}
-    </button>
+    </Button>
   )
 }
 

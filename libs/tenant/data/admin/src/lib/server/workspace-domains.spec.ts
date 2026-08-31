@@ -35,6 +35,10 @@
  * A workspace must not fail to be created because a DNS API was slow.
  */
 
+// A module, not a script — without this the `load` helper below collides with
+// the identically named global in `domain-provider.spec.ts` under `tsc`.
+export {}
+
 const ENV = {
   VERCEL_TOKEN: 'tok_test',
   VERCEL_CONSOLE_PROJECT_ID: 'prj_test',
@@ -524,13 +528,16 @@ describe('projectDomainStatus (AGL-1913)', () => {
     })
   })
 
-  it('queries the project it is GIVEN, not the console one', async () => {
-    // The tenant custom-domain routes attach to a different project; a status
-    // that always asked about the console project would report every customer
-    // domain as not-attached.
+  it('queries the SCOPE it is given, not always the console one', async () => {
+    // The tenant custom-domain routes serve a different app; a status that
+    // always asked about the console would report every customer domain as
+    // not-attached. The scope names the app rather than a project id, which
+    // only ever meant anything to one vendor.
     fetchMock.mockImplementation(route({}) as never)
-    const { projectDomainStatus } = await load()
-    await projectDomainStatus('demo.example.com', { projectId: 'prj_tenant' })
+    const { projectDomainStatus } = await load({
+      VERCEL_TENANT_PROJECT_ID: 'prj_tenant',
+    })
+    await projectDomainStatus('demo.example.com', { scope: 'tenant' })
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://api.vercel.com/v9/projects/prj_tenant/domains/demo.example.com?teamId=team_test',
     )

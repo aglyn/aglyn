@@ -444,10 +444,19 @@ describe('memberCanSee (AGL-1037/1038)', () => {
     expect(memberCanSee(collaborator, ['host:h9'])).toBe(false)
   })
 
-  it('treats an absent or empty scope as org-wide', () => {
-    // An unbackfilled resource must not vanish (AGL-1040 ordering hazard).
-    expect(memberCanSee(collaborator, undefined)).toBe(true)
-    expect(memberCanSee(collaborator, null)).toBe(true)
+  /**
+   * An UNSCOPED resource is seen by nobody, including a collaborator.
+   *
+   * The permissive reading was one helper disagreeing with both enforcement
+   * layers, which have always answered false for a document carrying no
+   * `visibleTo`; the migration stamps `['org']` on the documents that should
+   * carry it. The org token still admits, so this is the missing field being
+   * refused rather than the predicate refusing everything.
+   */
+  it('treats an absent or empty scope as visible to nobody', () => {
+    expect(memberCanSee(collaborator, undefined)).toBe(false)
+    expect(memberCanSee(collaborator, null)).toBe(false)
+    expect(memberCanSee(collaborator, [])).toBe(false)
     expect(memberCanSee(collaborator, ['org'])).toBe(true)
   })
 

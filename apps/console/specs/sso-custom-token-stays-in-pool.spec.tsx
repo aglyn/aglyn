@@ -16,10 +16,10 @@
  */
 
 /**
- * AGL-1993 — the staff console 404 for `zach@aglyn.com`.
+ * AGL-1993 — the staff console 404 for `staff@aglyn.com`.
  *
  * The claim was never missing. Verified against BOTH pools on 2026-08-19:
- * `zach@aglyn.com` lives in GCIP tenant `aglyn-org-y5v14` (provider
+ * `staff@aglyn.com` lives in GCIP tenant `aglyn-org-y5v14` (provider
  * `saml.aglyn-workspace`) carrying `{"staff":true,"staffRole":"super"}`, and
  * there is no project-pool twin. The break is on the READ side: the silent
  * cross-subdomain restore exchanged the tenant-minted custom token on an auth
@@ -345,18 +345,19 @@ describe('a project-pool credential is aimed at the project pool', () => {
       .map((file) => file.slice(ROOT.length + 1))
       .sort()
     expect(sites).toEqual([
-      // Re-authenticates the CURRENT user to change their password, so the
-      // right pool is the one that user is already in — inherited, never
-      // guessed.
-      'app/(app)/manage/user/page.tsx',
       // Aims at the project pool (this block).
       'app/(auth)/signin/page.tsx',
       'app/(auth)/signup/page.tsx',
       // Sets the tenant itself, from the domain lookup — the one site that
       // legitimately aims AWAY from the project pool.
       'app/(auth)/sso/page.tsx',
-      // Same inheritance as manage/user: it re-signs the identity that was
-      // just signed in, on an instance already in that identity's pool.
+      // Re-authenticates the CURRENT user to change their password, so the
+      // right pool is the one that user is already in — inherited, never
+      // guessed. (Manage Account → Security, a component of its own since
+      // that page's panels became routes.)
+      'components/account/account-security-card.component.tsx',
+      // Same inheritance: it re-signs the identity that was just signed in,
+      // on an instance already in that identity's pool.
       'components/session-reauth-dialog.component.tsx',
     ])
   })

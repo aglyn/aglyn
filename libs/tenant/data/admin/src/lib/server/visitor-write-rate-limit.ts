@@ -23,6 +23,10 @@ import {
   visitorWriteRateLimitKey,
 } from '@aglyn/aglyn/server'
 import { consumeRateLimit } from './rate-limit-store'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 /**
  * The rate-limit refusal a visitor-facing plugin write returns, or null to
@@ -37,11 +41,21 @@ import { consumeRateLimit } from './rate-limit-store'
  * only the durable half, which needs Firestore.
  */
 
-/** Client IP, first `x-forwarded-for` hop. Matches the sibling tenant routes. */
+/**
+ * The visitor's address, through the shared reader, or the no-address bucket.
+ *
+ * Kept counting rather than skipped when nothing readable arrives: this is a
+ * cost control over unauthenticated writes, and one that stops counting is an
+ * open write endpoint. The key already carries the site, so an unreadable
+ * address shares one budget per SITE and not one across the deployment.
+ */
 function clientIp(request: { headers?: { get?: (name: string) => unknown } }): string {
-  const raw = request?.headers?.get?.('x-forwarded-for')
-  const first = String(raw ?? '').split(',')[0]?.trim()
-  return first || 'unknown'
+  const headers = request?.headers
+  if (typeof headers?.get !== 'function') return NO_CLIENT_ADDRESS_BUCKET
+  return (
+    readClientIp(headers as { get(name: string): string | null }) ??
+    NO_CLIENT_ADDRESS_BUCKET
+  )
 }
 
 export interface VisitorWriteRateLimitOptions {
@@ -49,7 +63,7 @@ export interface VisitorWriteRateLimitOptions {
   path: string
   /** The site the write targets; `''` when none resolved (still limited). */
   hostId: string
-  /** Read for its method and `x-forwarded-for`. */
+  /** Read for its method and its client-address headers. */
   request: { method?: string; headers?: { get?: (name: string) => unknown } }
   limit?: number
   windowMs?: number

@@ -100,8 +100,9 @@ Installing never changes a running site. What that means per type:
 | Plugin | An org or per-site version pin | Yes |
 | Dataset schema | A **new, empty** dataset in the org | Yes (it's new) |
 | Email template | A **draft version** of that email | No |
+| Email starter | A **new email** in the site's Email templates list | No |
 
-Two details worth knowing before you publish one:
+Three details worth knowing before you publish one:
 
 - A **dataset schema** installs as a brand-new dataset every time; it never
   merges into an existing one, since a schema change over existing rows would
@@ -112,6 +113,37 @@ Two details worth knowing before you publish one:
   email it was designed for. The site owner activates it in the email
   designer, so installing can't silently replace an email a site is already
   sending its customers. `emailHtml` blocks can't be published at all.
+- An **email starter** is a campaign email, not a catalog one. It belongs to no
+  key, so it installs as a brand-new email the buyer owns outright — install it
+  twice and the site has two. It is a copy: nothing you publish afterwards
+  reaches a site that already installed it, and nothing they edit reaches you.
+
+### Rules an email starter has to meet
+
+A campaign email you publish is loaded inside somebody else's recipients' mail
+clients and sent from a domain every Aglyn site shares. Three rules follow, and
+publishing **refuses** rather than quietly stripping what breaks them, so you
+find out at publish time rather than never:
+
+- **Images** must come from your media library, be a site-relative path, or be
+  inline `data:` images. An image loaded from any other host tells that host who
+  opened the email, when, and from where — a read receipt for you, on the
+  buyer's customers, with no consent basis. That rule catches a tracking pixel
+  and an ordinary hero image alike, because they disclose the same thing.
+- **Links** must be `https:`, `mailto:`, or a path on the sending site, and no
+  link or image address may contain a merge tag — recipient data does not go in
+  a URL. Every outbound domain your design points at is recorded on the listing
+  and shown to the buyer before they install.
+- **Rich text blocks are not published.** Their content is raw markup, which is
+  why `emailHtml` is excluded too. Build the design from the other email blocks
+  and it renders through our own renderer on the way out.
+
+Email starters are auto-listed like every other non-plugin artifact, so a
+version is **not reviewed** unless a person at Aglyn reviewed *that version* —
+an earlier approval and a Verified badge on the listing say nothing about it.
+Buyers are told which they are getting. If a design turns out to be harmful,
+taking the listing down also stops every site that already installed it from
+**sending** it; their copy stays where it is and stays editable.
 
 **Plugins are different**: a plugin is a code bundle, not a site artifact, so
 it's published from your built bundle (below) rather than the source-site
@@ -568,8 +600,8 @@ down when someone uninstalls. A big gap between the two is churn worth
 investigating.
 
 Every listing shows its **artifact type** as a chip — Plugin, Component,
-Site template, Layout, Dataset schema, or Email template — so buyers know
-what they're getting before they open it. Dataset schemas and email
+Site template, Layout, Dataset schema, Email template or Email starter — so
+buyers know what they're getting before they open it. Dataset schemas and email
 templates read **"Added (v1) · add again"** rather than "Installed",
 because adding one creates a *new* dataset or a *new* draft email each
 time; re-adding is a legitimate action, not a no-op.

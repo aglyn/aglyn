@@ -323,6 +323,44 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
     note: 'Consent engine. It only ever CLEARS cookies (expires them) — the analytics prefixes, and any prefix set an advertising vendor is registered with; it sets none of its own, the consent record itself lives in web storage.',
     cookies: [],
   },
+  'apps/docs/src/advertising-tags.ts': {
+    note:
+      "The docs site's advertising gate. It only ever CLEARS cookies " +
+      '(expires them) — each mounted vendor\'s registered prefixes, on the ' +
+      'domain ladder from the exact hostname up to the registrable one. It ' +
+      'SETS none of its own: the tags it mounts write their vendors\' ' +
+      'identifiers, which are declared as third-party cookies below, and the ' +
+      'consent record it reads is written by the console rather than here. A ' +
+      'standalone copy of the shared teardown because this app cannot import ' +
+      '`libs/`; `apps/console/specs/docs-advertising-tags.spec.ts` fails if ' +
+      'the cookie lists ever drift from the vendor descriptors.',
+    cookies: [],
+  },
+  'libs/aglyn/src/lib/app-utils/platform-visitor-consent.ts': {
+    note:
+      "Mirrors the console visitor's own consent record between the hostnames " +
+      'the console is served on. `app.` and `auth.` are one application on two ' +
+      'origins — interactive sign-in is delegated to the auth host — and web ' +
+      'storage is per origin, so without this an explicit opt-out on one is ' +
+      'invisible to the other, which then writes an implied default from the ' +
+      'posture. STRICTLY NECESSARY: it is how a "no" is remembered, so it is ' +
+      'exempt from the consent it records. Written only where the whole ' +
+      'registrable domain is ours; a custom console domain gets none.',
+    cookies: [
+      {
+        name: 'aglyn_consent',
+        token: 'PLATFORM_CONSENT_COOKIE',
+        surface: `${CONSOLE_HOST} and the auth host, at .${WORKSPACE_DOMAIN}`,
+        purpose:
+          'Remembers your privacy choice across the console hostnames, so an ' +
+          'answer given while signing in still applies once you are inside',
+        duration: '13 months',
+        // Readable by the page, and it has to be: the analytics gate consults
+        // the record synchronously in the browser, before any request goes out.
+        httpOnly: false,
+      },
+    ],
+  },
   'libs/shared/util/http/src/lib/cookie-set-user-id-token.ts': {
     note: 'A pre-Firebase-session-cookie helper.',
     dead: 'No call site outside its own module and reader — grep `cookieSetUserIdToken`. Nothing reaches a browser, so `aglyn-user-token` must NOT appear in the Cookie Policy.',
@@ -372,12 +410,19 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
    * Policy (2026-08-20) already names Google and Meta, so the inventory is the
    * half that was behind.
    *
-   * Both entries are reached only where a visitor has explicitly allowed
-   * advertising on a site whose owner turned the question on. Nothing here is
-   * set under implied consent alone in any region, and nothing is set at all
-   * on a site that never asked. That matches what the published Cookie Policy
+   * Every entry is reached only where the visitor's recorded state grants the
+   * advertising category on a surface that asks about it. Outside the
+   * prior-consent regions that state can be `implied` — recorded on the first
+   * visit, with the persistent opt-out control as the withdrawal path — and
+   * inside them it can only ever be an explicit yes. Nothing is set at all on
+   * a site that never asked. That matches what the published Cookie Policy
    * tells visitors about `_gac`, `_gcl_au`, `_fbp` and `_fbc` — "set only
    * where you have allowed advertising cookies".
+   *
+   * ⚠️ The SURFACES widened when the console and the docs site grew
+   * advertising mounts of their own. Both rows below name them, because the
+   * question a reader of the Cookie Policy asks is "where", and an inventory
+   * that answered it for one surface only would be accurate and misleading.
    */
   'Google advertising (ad_storage)': {
     // Set by gtag's conversion linker once `ad_storage` is granted. Distinct
@@ -387,16 +432,30 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
     names: ['_gcl_au'],
     loaderToken: 'consentModeSignals',
     surface:
-      `${WORKSPACE_DOMAIN} and customer sites whose owner enabled the advertising question and configured a Google Analytics id`,
+      `${WORKSPACE_DOMAIN}, ${CONSOLE_HOST} and the docs site, and customer sites whose owner enabled the advertising question and configured a Google Analytics id. A Google Tag Manager container writes the same cookies through whatever advertising tags it carries, which is why the sweep for these does not wait to find a script element of ours`,
     purpose:
       'Attributes an ad click to what you did on the site, and measures whether an ad worked',
   },
   'Meta Pixel': {
     names: ['_fbp', '_fbc'],
     loaderToken: 'META_PIXEL_VENDOR',
-    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site only, gated by \`isPlatformMarketingHost\`; a Host operator may enable their own tag on their site`,
+    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site, gated by \`isPlatformMarketingHost\`; ${CONSOLE_HOST} and the docs site, each gated on that surface's own advertising grant; a Host operator may enable their own tag on their site`,
     purpose:
       'Shows you our ads on other sites, and measures whether they worked',
+  },
+  'LinkedIn Insight Tag': {
+    names: [
+      'li_sugr',
+      'UserMatchHistory',
+      'AnalyticsSyncHistory',
+      'bcookie',
+      'lidc',
+      'li_gc',
+    ],
+    loaderToken: 'LINKEDIN_INSIGHT_VENDOR',
+    surface: `${WORKSPACE_DOMAIN}, ${CONSOLE_HOST} and the docs site — each gated on that surface's own advertising grant — and customer sites whose owner configured a LinkedIn partner id and enabled the advertising question`,
+    purpose:
+      'Shows you our ads on LinkedIn, and measures whether they worked',
   },
   Stripe: {
     names: ['__stripe_mid', '__stripe_sid'],

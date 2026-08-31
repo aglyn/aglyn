@@ -71,7 +71,19 @@ cp .env.selfhost.example .env.selfhost
 ```
 
 Fill it in following the comments — the Firebase blocks from step 1 first,
-since the setup scripts in step 3 read them. These rules matter:
+since the setup scripts in step 3 read them.
+
+**The complete per-variable reference is the published page**,
+[Environment variables](../apps/docs/docs/developers/self-hosting-environment.md)
+(`https://docs.aglyn.com/developers/self-hosting-environment`): every variable
+the product reads, grouped by concern, with where to get the value, its shape,
+its default, whether it is fixed at image-build time, and — for the optional ones
+— which feature degrades and how you would notice. It is held to the whole set
+by `libs/aglyn/src/lib/app-utils/selfhost-env-reference.spec.ts`, so it covers
+variables this template has never carried as well as the ones it has. Keep it
+open beside the template rather than re-deriving any of it here.
+
+These rules matter:
 
 - `NEXT_PUBLIC_*` values are **baked into the client bundles at image build
   time**. Changing one means rebuilding the images, not just restarting.
@@ -221,8 +233,23 @@ node tools/scripts/deploy-firestore-indexes.mjs --dry-run   # show the plan
 node tools/scripts/deploy-firestore-indexes.mjs
 ```
 
-The service account needs the **Cloud Datastore Owner** role (or
-`datastore.indexes.create` + `datastore.indexes.update`).
+The service account needs permission to **write** index configuration. Reading
+it needs less, so a run that lists your existing indexes and then fails `403`
+on the first create is a missing role, not a bad index file:
+
+```bash
+gcloud projects add-iam-policy-binding <PROJECT_ID> \
+  --member="serviceAccount:<FIREBASE_CLIENT_EMAIL>" \
+  --role="roles/datastore.indexAdmin"
+```
+
+`roles/datastore.indexAdmin` ("Cloud Datastore Index Admin") is the minimal
+role; `roles/datastore.owner` also works and grants a great deal more.
+
+> Do not go looking for a role that lists `datastore.indexes.create`. Those
+> permission names are aliases the Firestore API surfaces, and the predefined
+> roles grant them under the Datastore-mode name `datastore.schemas.*` — no
+> role lists them, including `roles/owner`.
 
 **This script only ever adds.** If your project has an index the file does not
 list, it is reported and left alone. That is the deliberate difference from
@@ -376,19 +403,30 @@ console.example.com {
 Custom domains for individual sites work the same way: point the customer
 domain at your proxy and route it to `tenant:4500`.
 
+**Say how many proxies you run.** `AGLYN_TRUSTED_PROXY_COUNT` defaults to `1`,
+which is right for a single reverse proxy. The client address is read that many
+hops from the right of `X-Forwarded-For`, so an appending proxy — nginx's usual
+`$proxy_add_x_forwarded_for` — is fine: a client-supplied value lands to the
+left of the real address and is discarded. Set `2` when a CDN sits in front of
+your own proxy, or every visitor behind the CDN shares one rate-limit bucket.
+For Traefik, set `trustedIPs` and leave `forwardedHeaders.insecure` off.
+
+`docker-compose.yml` publishes both containers on `127.0.0.1` so that the only
+route in is this proxy. If you run the proxy on a different host, do not simply
+widen the binding — firewall the port to the proxy. A directly reachable
+container is a chain of zero trusted hops, and no header reading survives that.
+
 ## Optional keys
 
-Every key here is optional and independent. A missing key disables its feature
-— the server answers `501` and the UI says so — rather than breaking the stack.
-
-| Feature | Keys |
-| --- | --- |
-| Commerce checkout on a storefront | `STRIPE_SECRET_KEY` |
-| Selling platform plans to your own users | the above **plus** `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, and the `STRIPE_PRICE_*` ids from your own catalogue — the secret key alone is not enough |
-| Transactional & campaign email | `RESEND_API_KEY`, `USAGE_EMAIL_FROM` |
-| Aglyn Assist + "Rewrite with AI" | `ANTHROPIC_API_KEY` (your own key; the console panel is additionally behind the `release_assist` flag, off by default) |
-| Scheduled jobs (audit archival, erasure, retention sweeps) | `CRON_SECRET` — the job routes stay dormant without it |
-| Customer issue reports → your tracker | `LINEAR_API_KEY`, `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required; unset, the console's "Report an issue" dialog answers 501 and files nowhere |
+Every optional key disables its feature when missing — the server answers `501`
+and the UI says so — rather than breaking the stack. Which key, which feature,
+and which symptom are all in
+[Environment variables](../apps/docs/docs/developers/self-hosting-environment.md).
+Four that catch people out, because each one fails in complete silence:
+`REVALIDATE_SECRET` (publishing reports success and the live page stays stale),
+`EMAIL_UNSUBSCRIBE_SECRET` (campaign sends refuse), `PLUGIN_JOBS_SECRET` (no
+scheduled plugin job ever runs) and `AGLYN_TENANT_APEX_ADDRESSES` (the
+custom-domain wizard hands your customers a hosting vendor's IP addresses).
 
 ## Troubleshooting the first build
 
@@ -420,7 +458,7 @@ stay in the file — `set -a && source .env` in step 3 would otherwise eat the
 `docker compose up`, which strips them (AGL-2443).
 
 **`Ports are not available: … bind: address already in use`** — the compose
-file publishes 4200 and 4500 on the host. Something else on your machine has
+file publishes 4200 and 4500 on this host's loopback interface. Something else on your machine has
 one of them (a local dev server, most often). Stop it, or add a
 `docker-compose.override.yml` that maps different host ports.
 
@@ -429,12 +467,12 @@ one of them (a local dev server, most often). Stop it, or add a
 | Area | Self-hosted behavior |
 | --- | --- |
 | Firebase | **Required.** Auth, Firestore, Storage, RTDB, Remote Config run in *your* project (free tier is fine to start). |
-| Custom-domain self-service | The in-console attach flow is Vercel-specific and returns 501 without Vercel credentials. Attach domains at your reverse proxy instead (above). |
+| Custom-domain self-service | Behind the domain driver (AGL-2436): `/api/domains/attach` asks `domainProvider().configured('tenant')` and then `attachProjectDomain`, so a `webhook` driver registers a customer's domain through the operator's own proxy API. `wildcard` cannot — no wildcard covers somebody else's apex — so the driver returns `skipped` and the route answers the same 501 it gives a deployment with no provider, naming `AGLYN_DOMAIN_PROVIDER`. Serving is unaffected either way: the Firestore `cname` claim is written inside the transaction ABOVE the refusal, and the tenant middleware turns an unrecognized hostname into the `cname--<host>` lookup key. What the refusal costs is the canonical redirect — it sets `cnameAttachmentPending`, `liveCustomDomain` returns undefined while that is set, so `{sub}.<tenant domain>` never 307s to the custom domain and both addresses serve the same pages. |
 | Stripe | Optional. Without `STRIPE_SECRET_KEY`, commerce checkout and paid platform plans are unavailable; the rest of the platform runs. |
 | Resend | Optional. Without `RESEND_API_KEY`, app email (invites, receipts, campaigns) is an inert no-op. |
-| AI assist | Degrades gracefully without an Anthropic key. |
+| AI assist | Optional, and off unless you bring your own key. `ANTHROPIC_API_KEY` is what makes Anthropic a live subprocessor of *your* deployment — both Assist surfaces answer 501 without it, and the console panel is additionally behind `release_assist`, off by default. Setting it is the point at which your own subprocessor disclosure and privacy notice have to name Anthropic; nothing about Aglyn's disclosure covers your install. The per-workspace message and cost ceilings that bound the bill are in the reference. |
 | Issue reporting | Optional, and **off by default**. The console's "Report an issue" dialog needs a tracker of your own: set `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` to *your* Linear workspace and a team dedicated to inbound reports. Nothing about Aglyn's workspace is compiled in — unset, the route answers 501 and says so, and your customers' reports are never sent to Aglyn (AGL-2185). Both are **server-only**; never prefix either with `NEXT_PUBLIC_`, which would inline a key that can read and write your whole workspace into the browser bundle. Scope the key when you create it — Linear can restrict a personal API key to **Create issues** and to **specific teams**; do both, so the separation is enforced by the credential rather than only by the variable, and a leaked key cannot read your backlog. |
-| Texas sales-tax report | Optional, and blank by default. The staff `/admin/tax-return` report is built around a single US-TX registration. Set `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` to *your own* Comptroller identifiers to have them appear on the page and in the exported working papers; leave them unset and both surfaces say "not configured" rather than printing anything. They are **server-only** — never prefix either with `NEXT_PUBLIC_`, which would inline them into a client bundle served without authentication. Aglyn LLC's own values are not in this repository (AGL-2021). |
+| Sales tax | Two different things, and only one is portable. **Collection** is a real feature and is jurisdiction-neutral: per-country and per-state rates keyed on ISO codes, tax-inclusive pricing for VAT/GST-style stores, or `stripe` mode where Stripe Tax computes against the operator's own registrations and the tax lands in the operator's balance; an unset mode refuses the sale rather than zero-rating it. **Filing** is configurable but thin. Where the deployment files, the registration number it files under, the filing-portal credential and the earliest filable period are set in **Staff → Platform settings → Sales tax filing** — `super` role, audited, no redeploy — with `AGLYN_TAX_JURISDICTION` / `AGLYN_TAX_REGISTRATION_ID` / `AGLYN_TAX_FILING_ID` as the bootstrap layer a stored value outranks. What is still compiled in is the FORM: Texas gets Form 01-114's own lines and a Webfile-shaped export, and every other jurisdiction gets a return breakdown labeled as raw material for filing by hand. There is no second state's form, no VAT/GST return and no tax engine beyond Stripe Tax, and the liability prose is Aglyn LLC's reading of its own position. The identifiers are **server-only** and are never shown back in the console: the Webfile number is what the Comptroller's eSystems authenticates a profile with, and `NEXT_PUBLIC_` would inline it into a bundle served without authentication. Aglyn LLC's own values are not in this repository (AGL-2021). |
 | Operator identity | **Set it.** `NEXT_PUBLIC_OPERATOR_NAME` / `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` name you on the public abuse and §512 counter-notice intakes, the lockdown 503, the quarantine notice and the sanctions 451. No fallback to Aglyn's addresses exists; unset renders an explicit "not configured" state. Baked in at image **build** time. |
 | DMCA designated agent | Not configured, and not inherited. Aglyn's Copyright Office registration does not cover your deployment; §512(c)(2) makes your own filing a precondition of the safe harbour. `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true` is the only thing that makes the product state one, and nothing infers it. |
 | Legal documents / clickwrap | **Still Aglyn's.** Signup clickwraps your users to Aglyn LLC's Terms, hash-pinned to snapshots committed in this repository, and writes the acceptance into your Firestore. `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` records your legal origin for the surfaces that need one but does **not** yet retarget the acceptance flow — the document hashes pin Aglyn's bytes. Tracked as AGL-2017. |
@@ -445,12 +483,19 @@ one of them (a local dev server, most often). Stop it, or add a
 | Your own docs build | `apps/docs` is a standalone Docusaurus package you may publish as your own documentation. Its analytics, error beacon and status probes are all **off unless configured** — see the `DOCS_*` block in `.env.selfhost.example`. They previously defaulted to Aglyn's GA4 property, Aglyn's error collector and Aglyn's production health endpoints, so a published build reported your readers to us and told them our uptime was yours (AGL-2124). Set `DOCS_GA_TRACKING_ID`, `DOCS_ERROR_BEACON_ENDPOINT`, `DOCS_STATUS_TARGETS`, `DOCS_URL` and `DOCS_ORGANIZATION_NAME` before `docusaurus build`, not after — Docusaurus bakes them into the static output. |
 | Updates | `git pull && docker compose up --build`. The release notes are [`CHANGELOG.md`](../CHANGELOG.md), where each release is a `v<semver>` git tag on the commit that shipped; a rules change appears there as a `fix(rules)`/`feat(rules)` entry. Re-run the deploy scripts when they change. Check what you are running with `git describe --tags --match 'v*'`. |
 | Marketplace | Visible by default and backed by Aglyn's Stripe Connect platform, which you do not have. Browsing works; Buy and payout-onboarding explain themselves only after being clicked. Turn `release_marketplace` off in Remote Config if you do not want it. |
-| Staff / admin surfaces | Built for Aglyn's own operations — the tax-return page in particular carries Aglyn LLC's Texas registration identifiers and is meaningless elsewhere. |
+| Staff / admin surfaces | Built for Aglyn's own operations, and reached by the `staff` custom claim — which on a self-host deployment the operator grants themselves, so these pages are visible rather than hidden. The tax-return page is the sharpest example; see the sales-tax row above. |
 | Docs site (`apps/docs`) | Not part of `docker compose` — build and publish it separately if you want it. Its configuration is the "Your own docs build" row above. |
 | Deployment shape | **Nothing to set — the images set it.** `AGLYN_STANDALONE=1` is what tells the software this is a real deployment rather than a laptop; `isDeployedRuntime()` and the tenant middleware's local copy of it gate the whole host-resolution switch plus the canonical custom-domain redirect. Both Dockerfiles now set it in the `runner` stage (AGL-2221), and it is kept out of `.env.selfhost.example` on purpose: compose `env_file` overrides image `ENV`, so a line there would be a way to delete it and silently break serving, whereas image `ENV` survives an env file that never mentions it. It was previously set only in the **build** stage, which does not carry across, so every image built before AGL-2221 ran with it unset and 307'd every visitor to the configured console (AGL-2177). **Rebuild if you are running one.** |
-| Request geo (sanctions + consent region) | `readRequestGeo` reads two headers whose names are now `AGLYN_GEO_COUNTRY_HEADER` / `AGLYN_GEO_REGION_HEADER`, defaulting to Vercel's `x-vercel-ip-country` / `x-vercel-ip-country-region`. On a container nothing sets those, so before AGL-2436 every request had no country and the **embargo gate failed open on all of them** — it logged `[sanctions-geo] FAILING OPEN` once per instance and blocked nothing — while the storefront consent-region endpoint had no region to answer with. Point them at what your proxy sets (`cf-ipcountry` behind Cloudflare; a GeoIP module's header behind Caddy/nginx/Traefik). Baked in at **build** time, because the console's middleware is an edge bundle with no request-time environment. Leave them blank only if you accept that sanctions screening is not running. |
+| Request geo (sanctions + consent region) | `readRequestGeo` reads two headers whose names are now `AGLYN_GEO_COUNTRY_HEADER` / `AGLYN_GEO_REGION_HEADER`, defaulting to Vercel's `x-vercel-ip-country` / `x-vercel-ip-country-region`. On a container nothing sets those, so before AGL-2436 every request had no country and the **embargo gate failed open on all of them** — it logged `[sanctions-geo] FAILING OPEN` once per instance and blocked nothing — while the storefront consent-region endpoint had no region to answer with. Point them at what your proxy sets (`cf-ipcountry` behind Cloudflare; a GeoIP module's header behind Caddy/nginx/Traefik). A third name, `AGLYN_GEO_CITY_HEADER`, feeds the sign-in alert row below. All three now fall back to the names the common edges use — `cf-ipcountry`, `cloudfront-viewer-country`, `x-appengine-country`, `x-geo-city`, `cloudfront-viewer-country-region` and the rest — so a deployment behind Cloudflare or an AWS/GCP load balancer usually works with none of them set; a name you configure always wins over the fallbacks. The **subdivision** matters on its own: the sub-country half of the embargo list (Crimea, Sevastopol, Donetsk, Luhansk) matches on it and nothing else, so a country header with no region header leaves a Donetsk request reading `UA`, which is not embargoed, and passing. Baked in at **build** time, because the console's middleware is an edge bundle with no request-time environment. Leave them blank only if you accept that sanctions screening is not running. |
 | Health report `environment` | Was `VERCEL_ENV ?? 'development'`, so `/api/health` on a production container told you — and your monitoring — that it was `development`. It now derives from the deployment shape and reads `production` on a container with `NODE_ENV=production` (AGL-2436). |
 | Security headers | On a container (`AGLYN_STANDALONE=1`) the `frame-ancestors` allowlist is **yours alone** — the 26 Aglyn hostnames that feed Aglyn's own policy are dropped, so your published pages do not tell browsers that our domains may frame them (AGL-2446). It is built from `NEXT_PUBLIC_CONSOLE_URL`, `NEXT_PUBLIC_WORKSPACE_DOMAIN`, `NEXT_PUBLIC_TENANT_DOMAIN` and `NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME`; configure none of them and it falls to `'self'` rather than to an empty list, which browsers would drop entirely. `img-src` still carries both sets, deliberately — an unused entry there names a host a page may load *from* and costs nothing. |
+| Client IP and `x-forwarded-for` | **Read this if a CDN fronts your proxy.** Every rate limiter in the product — passkey sign-in, password reset, org and host creation, form submission, membership login and recovery — keys on one reader, `readClientIp`, configured by `AGLYN_TRUSTED_PROXY_COUNT`. It takes the hop that many places from the RIGHT of `x-forwarded-for`, so a proxy that appends is correct at the default of `1`: nginx's usual `$proxy_add_x_forwarded_for` turns a client-sent `X-Forwarded-For: 1.2.3.4` into `1.2.3.4, <real ip>`, and the forged half is to the left of the trusted hop and never read. Before this the product took hop *one* and rate-limited the attacker's chosen string — one fresh bucket per request, silently. Set `2` when a CDN sits in front, or the reader names your own proxy and every visitor behind the CDN shares one bucket; too high is safer than too low, because a chain shorter than the configured depth clamps to its leftmost entry, still written by a proxy you trust. `x-real-ip` and RFC 7239 `Forwarded` are read below it, so a proxy that sets one of those instead needs nothing configured. When nothing readable arrives the reader returns **no address** rather than a placeholder, and address-keyed limits are skipped rather than collapsing every anonymous caller into one shared bucket. `docker-compose.yml` publishes both containers on `127.0.0.1` so nothing can reach them without passing your proxy; if you move the proxy to another host, firewall the published port to it. |
+| Sign-in location and the breach report | The new-device sign-in alert reads the geo headers above. It used to read only `x-vercel-ip-*`, so on a container every alert email said "Unknown location" and — because the same string is stored on `users/{uid}/devices` — the staff breach-notification report, which reads a data subject's country back off that string, counted nobody in its widest bucket. Neither surface errors, so there was nothing to notice. It now goes through the same reader and the same `AGLYN_GEO_*_HEADER` configuration as the sanctions gate. |
+| Workspace subdomains | Behind the domain driver now (AGL-2436), so a container can finally register one. `AGLYN_DOMAIN_PROVIDER=wildcard` is the ordinary Docker shape: one wildcard DNS record at your proxy plus one wildcard certificate, and `{slug}.<NEXT_PUBLIC_WORKSPACE_DOMAIN>` resolves the moment it is created — the driver reports `attached` without calling anything, which is why it is never inferred and has to be set explicitly. `webhook` POSTs attach/detach/status to an endpoint of yours instead. With neither set and no `VERCEL_TOKEN` the driver is `none`: nothing is registered, org creation still succeeds, and the console still advertises the workspace URL — so that name has to resolve some other way. A wildcard covers ONE label, so `*.example.com` serves `a.example.com` and not `a.b.example.com`. |
+| Which build reported an error | Client and server error reports, and the staff server-config report, stamp the build the way `/api/health` does — `BUILD_ID`, then `COMMIT_REF`, then Vercel's own. They previously read `VERCEL_GIT_COMMIT_SHA` alone, so every error a container reported arrived with no version while the health endpoint beside it named the commit correctly. Set `COMMIT_REF` (see the block at the end of `.env.selfhost.example`) and it appears in all of them. `AGLYN_REGION` is optional and, where set, labels which replica answered — useful only if you run more than one. |
+| More than one replica | **Single-container is the supported shape today.** Published pages are ISR-cached (`revalidate = 600`) and site documents sit behind a one-hour render cache, and no shared `cacheHandler` is configured, so each container keeps its own on-disk cache. Publishing POSTs `/api/revalidate`, which busts **the one replica that answered**; the console reports an instant publish while every other replica serves the old page for up to 10 minutes and the old documents for up to an hour. Scale out only behind a sticky-session proxy, or fan the revalidate POST out to every replica yourself. Nothing errors in either case. |
+| Edge caching (`s-maxage`) | The manifest, robots, sitemap, RSS, screen-node and commerce endpoints send `s-maxage` with little or no browser `max-age`, on the assumption that a shared cache honours it. Behind a plain reverse proxy that caches nothing, they are simply recomputed per request — correct, slower, and several of them hit Firestore each time. Enable proxy caching if you want the saving. One consequence is not just performance: `docs/` states the media takedown window as one hour because that is Vercel's `s-maxage` on `/api/media/cdn/`. **Your cache's rules set your real takedown window**, so if you cache media longer, that is how long a removed asset can still be served. |
+| `next/image` remote hosts | `images.domains` in `with-aglyn.nextjs.config.js` lists Aglyn's own hostnames and does not merge your `NEXT_PUBLIC_*` origins the way the CSP builder in `security-origins.js` does. No shipped surface renders a remote `<Image>` today — published-site images are plain `<img>` — so this is latent; if you add one pointed at a host of your own, the optimizer throws `hostname is not configured under images` until you add it there. The tenant image optimizer also has no `sharp` file-tracing entry, so `/_next/image` on a container may hit the same missing-libvips failure the console's config documents. |
 | Custom-domain verification | `/api/domains/verify` has a DEV soft pass that accepts any CNAME, because a laptop has no DNS pointing at a tenant edge. It used to key on `!process.env.VERCEL` — never set on a container — so it was **on in production on every self-host install**, and any domain carrying any CNAME to anywhere verified: the AGL-733 defect, reinstated. It now keys on `isDevelopmentRuntime()` / `NODE_ENV`, which both Dockerfiles set to `production` in the runner stage (AGL-2180). A relaxation must key on the variable that means "not production", never on the absence of a vendor's. **Upgrade if you run an image built before this.** |
 | Edit-hint bounce | `apps/tenant/app/api/edit-hint/set/route.ts` validates the `return` origin against an allowlist. Aglyn's two console origins are seeded **only when `NEXT_PUBLIC_CONSOLE_URL` is unset**; they used to be unconditional with yours merely added, so an operator could not narrow the list and their tenant runtime kept an open redirect target at a console they do not run (AGL-2176). Name your console and it is the only permitted target. The same variable is the tenant middleware's fallback redirect, so leaving it unset also sends a visitor who lands on an unresolvable host to `app.aglyn.com`. |
 

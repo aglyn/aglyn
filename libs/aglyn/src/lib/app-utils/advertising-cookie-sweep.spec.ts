@@ -259,9 +259,59 @@ describe('Google is a registered sweep-only vendor (AGL-2486)', () => {
     }
   })
 
-  it('CONTROL — at least one vendor of each shape exists', () => {
-    // Otherwise the loop above passes by iterating nothing meaningful.
-    expect(ADVERTISING_VENDORS.some((v) => v.sweepOnly)).toBe(true)
-    expect(ADVERTISING_VENDORS.some((v) => !v.sweepOnly)).toBe(true)
+  it('CONTROL — the loop above iterates something meaningful', () => {
+    // It used to assert one vendor of EACH shape, which stopped being true
+    // when Google gained a loader (AGL-1152): a site wanting Google Ads and
+    // no analytics had no route, so `sweepOnly` was the wrong answer for it.
+    // No vendor is sweep-only today; the shape stays supported because a
+    // vendor we can tear down but not load is a real thing to be.
+    expect(ADVERTISING_VENDORS.length).toBeGreaterThanOrEqual(3)
+    expect(ADVERTISING_VENDORS.every((v) => !v.sweepOnly)).toBe(true)
+  })
+
+  it('only an alwaysSweep vendor clears cookies with NO element present', () => {
+    /*
+     * I got this wrong once and the guards caught it, so the reasoning is
+     * written down rather than left in the diff.
+     *
+     * The element check is an OWNERSHIP test, not a liveness one. A pixel we
+     * did not load is running on a basis that is not ours to withdraw — a
+     * customer's own Custom HTML, on their own site, under their own notice —
+     * so its cookies are not ours to clear either. `advertising-tag-gate`
+     * case (e) pins that from the other side.
+     *
+     * `alwaysSweep` is the narrow exception, and it is a property of the
+     * COOKIE: `_gcl_*` is written by any Google tag, including a GTM
+     * container we never marked, which is exactly why it survived every
+     * withdrawal until AGL-2486. Google gaining a loader must not quietly
+     * take that back.
+     */
+    plantCookies()
+    for (const vendor of ADVERTISING_VENDORS) {
+      for (const prefix of vendor.cookiePrefixes) {
+        document.cookie = `${prefix}=1; path=/`
+      }
+    }
+    revokeAdvertisingTags('example.com')
+    const after = cookieNames()
+
+    for (const vendor of ADVERTISING_VENDORS) {
+      for (const prefix of vendor.cookiePrefixes) {
+        if (vendor.alwaysSweep || vendor.sweepOnly) {
+          expect([vendor.label, prefix, after.includes(prefix)]).toEqual([
+            vendor.label,
+            prefix,
+            false,
+          ])
+        } else {
+          // Untouched: nothing of ours loaded it.
+          expect([vendor.label, prefix, after.includes(prefix)]).toEqual([
+            vendor.label,
+            prefix,
+            true,
+          ])
+        }
+      }
+    }
   })
 })

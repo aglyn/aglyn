@@ -26,7 +26,11 @@ import {
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { PLATFORM_BRANDING_PROFILE, brandMergeTokens } from '@aglyn/aglyn/server'
+import {
+  PLATFORM_BRANDING_PROFILE,
+  brandMergeTokens,
+  sanitizeAuthorHtml,
+} from '@aglyn/aglyn/server'
 
 /**
  * `brand.*` tokens every system email resolves, UNDER whatever the caller
@@ -187,6 +191,11 @@ export function renderLoadedSystemEmail(
     subject: substituteMergeTokens(loaded.subjectTemplate, merged),
     preheader: substituteMergeTokens(loaded.preheaderTemplate, merged),
     merge: merged,
+    // The same policy the console's own preview of these nodes applies —
+    // `sanitizeCustomHtml` in the email plugin delegates to this exact
+    // function, so what staff review and what the recipient receives are one
+    // function of one string rather than two that have to be kept in step.
+    sanitize: sanitizeAuthorHtml,
     // Without this a staff-picked image resolves to a site-relative CDN path,
     // which is a broken-image box in the recipient's inbox (AGL-1224).
     mediaOrigin: CONSOLE_ORIGIN,
@@ -263,6 +272,7 @@ export async function renderEffectiveSystemEmail(
     rootId: EMAIL_NODE_ROOT_ID,
     subject: substituteMergeTokens(definition.defaultSubject, merged),
     merge: merged,
+    sanitize: sanitizeAuthorHtml,
     mediaOrigin: CONSOLE_ORIGIN,
     brandLogoUrl: options.brandLogoUrl ?? undefined,
   })

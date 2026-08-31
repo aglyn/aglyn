@@ -23,6 +23,7 @@ import {
   checkEntitlement,
   checkQuota,
   COLLECTIONS_MAX_PER_HOST,
+  datasetIntegrityFields,
   decodeStoredNodes,
   effectiveDatasetModel,
   hostScopeToken,
@@ -1192,7 +1193,17 @@ async function handler(request: Request): Promise<Response> {
           }
           await write(
             docRef.collection('records').doc(String(record.$id)),
-            cleanDoc('records', record),
+            {
+              ...cleanDoc('records', record),
+              // DERIVED here rather than allow-listed off the bundle. The
+              // integrity index the delete check queries must describe the
+              // values that were just restored, and a bundle written before
+              // the field existed carries none — accepting the bundle's copy
+              // would restore records the check cannot reach. Records are
+              // re-keyed by their original id, so the ids it holds still
+              // resolve.
+              ...datasetIntegrityFields(model, record.values ?? {}),
+            },
           )
         }
       }

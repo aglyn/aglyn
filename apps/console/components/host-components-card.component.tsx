@@ -22,8 +22,7 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import {
-} from '@aglyn/shared-ui-jsx/components/data-table.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { type GridColDef } from '@mui/x-data-grid'
 import {
   mdiBookmarkOutline,
@@ -58,14 +57,7 @@ import {
   marketplacePriceCostNote,
   marketplacePriceFloorHint,
 } from '@aglyn/aglyn'
-import {
-  collection,
-  doc,
-  limit,
-  query,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore'
+import { doc, setDoc, updateDoc } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
 import ListTable, {
@@ -82,6 +74,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useHostVersionApi,
+  usePagedCollection,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -89,12 +82,14 @@ import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useCurrentOrg from '../hooks/use-current-org'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
+import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { hostArtifactQuery } from '../utils/host-artifact-queries'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from './templates/save-as-template-dialog.component'
 
-/** The count and cap a components readout renders (AGL-693). */
+/** The count and cap a components readout renders (AGL-2501). */
 export interface ComponentQuotaReadout {
   ready: boolean
   used: number
@@ -140,8 +135,27 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
+  /**
+   * The list PAGES, over an ordered walk (AGL-2501).
+   *
+   * It was `limit(100)` with no `orderBy`, sorted by `displayName` in the
+   * browser. That is the shape this repo has now hit eight times: Firestore
+   * answers an unordered limit in document-id order and these ids are
+   * generated, so the hundred rows were a pseudo-random sample of the
+   * collection — arranged alphabetically, which is what made it invisible.
+   * The list looked like the first hundred components by name; it was not,
+   * and past a hundred a component could not be reached at all.
+   *
+   * `hostArtifactQuery` holds the ordering decision and the reason it is the
+   * document id rather than `displayName` — briefly, `orderBy` matches only
+   * documents that HAVE the field, and the resources route stores an
+   * allow-list it never checks for presence. The walk it produces is total,
+   * so every component is reachable by paging.
+   *
+   * The page is NOT re-sorted. Sorting a server-ordered window in the browser
+   * is exactly what produced the old illusion.
+   */
   const {
-    data: componentDocs,
     status: componentsStatus,
     /**
      * The rows the rename dialog is seeded from are unconfirmed by the server
@@ -154,20 +168,36 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
      * drawer and in its marketplace listing.
      */
     fromCache: componentsFromCache,
-  } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+    rows: componentWindow,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) => hostArtifactQuery(firestore, hostId, 'components', pageLimit),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const components = [...(componentDocs ?? [])]
-    .filter((definition: any) => !definition.deletedAt)
-    .sort((a: any, b: any) =>
-      String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
-    )
+  /*
+   * A deleted component is a TOMBSTONE, not a row: delete stamps `deletedAt`
+   * and leaves the document so already-published tenant pages keep grafting
+   * until their next revalidate.
+   *
+   * Client-side because it has to be. Firestore cannot ask for the ABSENCE of
+   * a field, and the two live shapes are not one value — a component created
+   * through the resources route carries no `deletedAt`, one installed from the
+   * marketplace carries an explicit `null`, so `where('deletedAt', '==', null)`
+   * would return the marketplace copies alone. The cost is that a tombstone
+   * spends a slot in whichever page it falls in, so a page can render fewer
+   * rows than its size; the walk and `hasMore` are unaffected.
+   */
+  const components = componentWindow.filter(
+    (definition: any) => !definition.deletedAt,
+  )
 
   /**
-   * The readout the page header renders (AGL-693).
+   * The readout the page header renders (AGL-2501).
    *
    * `reusableComponents` is a BOOLEAN entitlement, which looks like a reason
    * to print no denominator at all. It is not: the denominator is exactly what
@@ -183,13 +213,25 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
    */
   const componentsEntitled =
     orgReady && Aglyn.checkEntitlement(org as never, 'reusableComponents')
+  /*
+   * The COUNT is a server aggregate, not the length of a page (AGL-1716).
+   *
+   * `components` is one page — ten rows — and it was being published as the
+   * site's component count, so the readout in the page header would have read
+   * `10/∞ components` on a site with two hundred of them the moment the list
+   * started paging. The list and the count are different questions.
+   */
+  const liveComponentCount = useLiveArtifactCount(hostId, 'components')
+  // Pending or refused, the page window stands in: a LOWER bound, and this
+  // card's behaviour before the aggregate existed.
+  const componentsUsed = liveComponentCount ?? components.length
   useEffect(() => {
     onQuota?.({
       ready: orgReady,
-      used: components.length,
+      used: componentsUsed,
       limit: componentsEntitled ? Aglyn.UNLIMITED : 0,
     })
-  }, [onQuota, orgReady, components.length, componentsEntitled])
+  }, [onQuota, orgReady, componentsUsed, componentsEntitled])
 
   const [editor, setEditor] = useState<{
     id: string
@@ -220,13 +262,9 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     if (!publisher || !publisher.name.trim() || publisher.busy) return
     setPublisher((prev) => (prev ? { ...prev, busy: true } : prev))
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publish', {
+      const response = await authorizedFetch(user, '/api/marketplace/publish', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           hostId,
           componentId: publisher.id,
@@ -395,7 +433,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           hostId,
           kind: 'component',
           id: definition.$id,
-          idToken: await (user as any)?.getIdToken?.(),
+          user,
         }))()
       const confirmed = await confirm({
         title: 'Delete this component?',
@@ -497,7 +535,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
     /*
-      ONE quick action, then the overflow (AGL-693). This list had five inline
+      ONE quick action, then the overflow (AGL-2501). This list had five inline
       icons — besigner, rename, and three behind MUI's own `showInMenu` — which
       is the arrangement the other three lists each varied in their own way.
       Everything except Preview now lives in the menu.
@@ -642,7 +680,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           ) : null
         }
         rows={components}
-        // The whole row opens the detail page (AGL-693); the action cluster
+        // The whole row opens the detail page (AGL-2501); the action cluster
         // stops propagation so a menu click never navigates underneath it.
         onOpen={(id) =>
           router.push(
@@ -657,8 +695,18 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         // this one did not, so the four lists that render the SAME table
         // disagreed about whether a fetch is worth mentioning — components
         // showed an empty table until the rows arrived, which reads as "you
-        // have none" rather than "these are on their way" (AGL-693).
+        // have none" rather than "these are on their way" (AGL-2501).
         loading={componentsStatus === 'loading'}
+        // Paged by the footer below, so the grid must not also slice.
+        hideFooter
+      />
+      <ListPagination
+        page={page}
+        pageSize={pageSize}
+        rowCount={components.length}
+        hasMore={hasMore}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
       />
       <Dialog
         open={Boolean(editor)}

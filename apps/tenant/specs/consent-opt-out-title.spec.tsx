@@ -116,9 +116,13 @@ function pill(): HTMLElement | null {
 }
 
 describe('the persistent opt-out control carries the CPRA title', () => {
-  afterEach(() => {
-    document.body.innerHTML = ''
-  })
+  // NO manual `document.body.innerHTML = ''`. The preferences panel is a
+  // portal, so wiping the body removes nodes React still tracks and the NEXT
+  // unmount throws `NotFoundError: The node to be removed is not a child of
+  // this node` — a failure in a test that did nothing wrong. Testing Library's
+  // own cleanup unmounts the tree and removes its container already; the only
+  // stray node any case here adds is the anchor below, and it takes it back.
+
 
   describe('the pill itself', () => {
     it('renders the exact regulatory title as its visible label', () => {
@@ -286,6 +290,7 @@ describe('the persistent opt-out control carries the CPRA title', () => {
       expect(
         document.querySelector('[data-aglyn-consent-preferences]'),
       ).not.toBeNull()
+      anchor.remove()
     })
 
     it('names the panel the pill opens with the same exact title', () => {

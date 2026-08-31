@@ -147,3 +147,74 @@ describe('ListPagination', () => {
     expect(pages).toEqual([0])
   })
 })
+
+/**
+ * A MENU OVER STATE THIS FOOTER DOES NOT OWN (AGL-2501).
+ *
+ * Without `onPageSizeChange` the size menu was still drawn and did nothing.
+ * On a list whose page size is dictated elsewhere it was worse than inert:
+ * the staff Users list pages at the width Firebase Auth is asked for, which
+ * is not one of the shared options, so MUI held a value with no matching item
+ * and rendered the select EMPTY. A blank control beside a row count reads as
+ * a page that failed to load, and the one thing it could not do was be used.
+ */
+describe('the size menu is offered only where it can be honored', () => {
+  it('renders no size control when the caller owns the page size', () => {
+    render(
+      <ListPagination
+        page={0}
+        pageSize={200}
+        rowCount={12}
+        onPageChange={() => undefined}
+      />,
+    )
+    // Absent, not present and dead. A blank select is the state the reader
+    // cannot distinguish from a broken page.
+    expect(screen.queryByText('Rows per page:')).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
+    // The count line still does its job — this is a real page of 12 rows.
+    expect(screen.getByText('1–12 of 12')).toBeTruthy()
+  })
+
+  it('renders the menu with the CURRENT size selected when it is offerable', () => {
+    render(
+      <ListPagination
+        page={0}
+        pageSize={TABLE_PAGE_SIZE_DEFAULT}
+        rowCount={TABLE_PAGE_SIZE_DEFAULT}
+        hasMore
+        onPageChange={() => undefined}
+        onPageSizeChange={() => undefined}
+      />,
+    )
+    expect(screen.getByText('Rows per page:')).toBeTruthy()
+    // Shown as SELECTED, not merely listed. The symptom that started this
+    // was a control that offered choices and displayed none of them.
+    expect(screen.getByRole('combobox').textContent).toBe(
+      String(TABLE_PAGE_SIZE_DEFAULT),
+    )
+  })
+
+  it('THE CONTROL: an off-menu size is what drew the control blank', () => {
+    // The mechanism itself, so the fix above is not merely a rule nobody can
+    // check. A caller that insists on the menu while holding a size the menu
+    // does not contain still gets an empty select — which is why the honest
+    // answer for such a list is no menu at all.
+    render(
+      <ListPagination
+        page={0}
+        pageSize={200}
+        rowCount={12}
+        onPageChange={() => undefined}
+        onPageSizeChange={() => undefined}
+      />,
+    )
+    expect(TABLE_PAGE_SIZE_OPTIONS).not.toContain(200)
+    // MUI fills an empty select with a zero-width space, so the blank has to
+    // be stripped rather than compared to `''` — asserting the raw string
+    // would pass for a select that had gone back to rendering nothing at all.
+    const shown = screen.getByRole('combobox').textContent ?? ''
+    expect(shown).not.toContain('200')
+    expect(shown.replace(/\u200b/g, '')).toBe('')
+  })
+})

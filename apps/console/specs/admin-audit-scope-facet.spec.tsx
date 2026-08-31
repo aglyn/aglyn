@@ -105,13 +105,36 @@ jest.mock('../constants/route-links', () => ({
   Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_AUDIT: 'ADMIN_AUDIT' },
 }))
 
+/**
+ * The rows the page is handed. Modelled as the paging hook's real return
+ * shape, because a double thinner than the thing it stands in for hides the
+ * change it is meant to catch.
+ *
+ * These fixtures are all smaller than one page, so `rows` is the whole set
+ * and the facets under test see every row. `audit-window-and-archive.spec`
+ * owns the paging itself and models the window arithmetic in full; splitting
+ * it that way keeps this file about scope and actorEmail.
+ */
+let mockRows: any[] = []
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),
   // AGL-2324's archive card reads the staff id token off the user. A
   // wholesale module mock is a CLOSED WORLD — an export the tree reaches and
-  // the mock omits is a TypeError, not a missing feature.
+  // the mock omits is a TypeError, not a missing feature. AGL-2501 added a
+  // second export the page reaches, and omitting it renders the whole page
+  // as "Element type is invalid" against this file's assertions.
   useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
+  usePagedCollection: () => ({
+    data: mockRows,
+    rows: mockRows,
+    hasMore: false,
+    page: 0,
+    setPage: () => undefined,
+    pageSize: 10,
+    setPageSize: () => undefined,
+  }),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -123,18 +146,13 @@ jest.mock('firebase/firestore', () => ({
   // The date-range constraints AGL-2324 added. Same closed-world rule: the
   // page calls both, so both must exist here or the render throws.
   where: () => ({}),
+  // The compliance export reads the range for itself (AGL-2501) instead of
+  // serializing the page, so the closed world needs a one-shot get too.
+  getDocs: async () => ({
+    size: mockRows.length,
+    docs: mockRows.map((row: any) => ({ id: row.$id, data: () => row })),
+  }),
   Timestamp: { fromDate: (date: Date) => ({ seconds: date.getTime() / 1000 }) },
-}))
-
-/**
- * The rows the page is handed. Modelled as the collection hook's real return
- * shape — `{ data }` with an `$id` per row — because a double thinner than the
- * thing it stands in for hides the change it is meant to catch.
- */
-let mockRows: any[] = []
-jest.mock('../hooks/use-firestore-collection', () => ({
-  __esModule: true,
-  default: () => ({ data: mockRows }),
 }))
 
 import AdminAudit from '../app/(app)/admin/audit/page'
@@ -222,7 +240,10 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
     if (select) {
       fireEvent.change(select, { target: { value: 'host' } })
     } else {
-      fireEvent.mouseDown(screen.getByRole('combobox'))
+      // BY LABEL, not by role alone. The shared footer (AGL-2501) puts a
+      // second combobox on the card — the rows-per-page menu — and a bare
+      // `getByRole('combobox')` stops being a question with one answer.
+      fireEvent.mouseDown(screen.getByLabelText('Scope'))
       fireEvent.click(screen.getByRole('option', { name: 'host' }))
     }
 
@@ -238,7 +259,7 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
     // options that match nothing, which is a filter that lies about coverage.
     mockRows = [{ ...ROWS[0] }]
     render(<AdminAudit />)
-    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.mouseDown(screen.getByLabelText('Scope'))
     expect(screen.getByRole('option', { name: 'platform' })).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'host' })).toBeNull()
     expect(screen.queryByRole('option', { name: 'asset' })).toBeNull()
@@ -247,7 +268,7 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
   it('the free-text filter matches an actor’s email address', () => {
     render(<AdminAudit />)
     fireEvent.change(
-      screen.getByLabelText(/Filter \(actor, email, action, target\)/),
+      screen.getByLabelText(/Filter this page \(actor, email, action, target\)/),
       { target: { value: 'carol@aglyn.com' } },
     )
     expect(screen.getByText('mediaQuarantines/index')).toBeTruthy()

@@ -116,8 +116,25 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  /*
+   * The real translator, not a stub. It is a pure function of the shared
+   * declaration, and a mock that omits a barrel export does not fail as
+   * "missing" — it fails as the component being broken.
+   */
+  listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
+    .listFilterConstraints,
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useFirestore: () => FIRESTORE,
+  /*
+   * The product editor asks for its pickers through the shared builders, and
+   * skips them entirely while it is closed. Both carry the collection
+   * reference through unchanged.
+   */
+  collectionCeiling: (ref: unknown) => ref,
+  ceilingedWindow: (read: unknown[] | undefined, ceiling: number) => ({
+    rows: (read ?? []).slice(0, ceiling),
+    truncated: (read ?? []).length > ceiling,
+  }),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: 'success',

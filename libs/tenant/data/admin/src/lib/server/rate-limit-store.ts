@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { deploymentRegion } from '@aglyn/aglyn/app-utils/deployment-shape'
 import { createHash } from 'crypto'
 // The atomic counter primitive for the AGL-1921 server-error markers below.
 // Commutative server-side, so instances converging on one minute's document
@@ -192,7 +193,7 @@ function flushDegradation(firestore: any, nowMs: number): void {
           firstAtMs: Math.min(priorFirst ?? ended.firstAtMs, ended.firstAtMs),
           lastAtMs: Math.max(priorLast ?? ended.lastAtMs, ended.lastAtMs),
           code: ended.code,
-          region: process.env['VERCEL_REGION'] ?? null,
+          region: deploymentRegion(),
           // Same TTL field the counters use, so the policy already configured
           // on this collection sweeps these too — just far later.
           expiresAt: new Date(nowMs + DEGRADATION_RETENTION_MS),

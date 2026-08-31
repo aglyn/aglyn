@@ -59,6 +59,7 @@ import { useRouter } from 'next/navigation'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { docsHelp } from '../constants/docs-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -86,11 +87,11 @@ export interface OrgSellerPanelProps {
 /**
  * Seller area (AGL-44/798/801): the org's marketplace identity and its
  * published listings, folded out of the retired `/[orgSlug]/marketplace` page.
- * Each section (profile, listings, payouts, sales) is its own Marketplace tab
- * (AGL-801), so this renders exactly one card per the `section` prop. The
- * shared Firestore hooks run regardless of section — Firebase dedupes
- * identical listeners, and the marketplace HubTabs mounts tabs lazily, so only
- * the visited sections ever subscribe.
+ * Each section (profile, listings, payouts, sales) is its own Marketplace
+ * ROUTE (AGL-801/693), so this renders exactly one card per the `section`
+ * prop. The shared Firestore hooks run regardless of which section is asked
+ * for — Firebase dedupes identical listeners, and only the section the reader
+ * navigated to is mounted at all, so the others never subscribe.
  */
 export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const { orgId, section } = props
@@ -184,16 +185,18 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const totals = summarizeSellerLedger(sales as SellerLedgerSale[] | undefined)
 
   const [payoutsBusy, setPayoutsBusy] = useState(false)
+  /**
+   * A one-time Stripe Express dashboard link from the connect route. Not
+   * persisted: login links are single-use and short-lived, so a stored one is
+   * a button that fails the second time it is pressed.
+   */
+  const [dashboardUrl, setDashboardUrl] = useState<string | null>(null)
   const handlePayouts = useCallback(async () => {
     setPayoutsBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/connect', {
+      const response = await authorizedFetch(user, '/api/marketplace/connect', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         // The acting org from the URL (AGL-861) — never let the server guess
         // which of the user's orgs is being set up for payouts.
         body: JSON.stringify({ orgId }),
@@ -219,6 +222,27 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         // about CONNECTING (AGL-1997 split the two flags; payout readiness
         // can arrive days later and is not a second activation).
         if (!chargesEnabled) trackEvent('stripe_connected', {})
+        // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX.
+        //
+        // "Finish payout setup in Stripe" is the label this button carries in
+        // exactly this state, and it could not open Stripe: the route returned
+        // here with a status and no link, and this branch answered before the
+        // `payload.url` check below ever ran. An Express account has no
+        // password and no direct login, so a link minted by the platform is
+        // the publisher's only way in — without one their share accumulates in
+        // an account that cannot release it and nothing says why.
+        if (payload.payoutsEnabled === false && payload.url) {
+          return void window.location.assign(payload.url)
+        }
+        // Payouts are flowing, so the route answers with the Express dashboard
+        // instead: balance, payout schedule, and the reason a payout failed.
+        // Held rather than followed — this click was a status check.
+        if (
+          payload.payoutsEnabled !== false &&
+          typeof payload.dashboardUrl === 'string'
+        ) {
+          setDashboardUrl(payload.dashboardUrl)
+        }
         // The same split the card renders (AGL-1997): the route answers both
         // flags, so the toast must not announce payouts off the charges one.
         return void enqueueSnackbar(
@@ -290,29 +314,29 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       // publisherHandles, which a client write cannot do — two orgs racing
       // for one handle would both succeed and one would silently lose its
       // marketplace URL. The rules reject a client handle write outright.
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publisher-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/publisher-profile',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId,
+            handle,
+            displayName: displayName.trim(),
+            bio: bio.trim(),
+            // AGL-1009: validated server-side (https-only, fixed social
+            // hosts) — an empty string explicitly clears the stored field.
+            avatarUrl: avatarUrl.trim(),
+            website: website.trim(),
+            supportEmail: supportEmail.trim(),
+            supportUrl: supportUrl.trim(),
+            githubUrl: githubUrl.trim(),
+            xUrl: xUrl.trim(),
+            linkedinUrl: linkedinUrl.trim(),
+          }),
         },
-        body: JSON.stringify({
-          orgId,
-          handle,
-          displayName: displayName.trim(),
-          bio: bio.trim(),
-          // AGL-1009: validated server-side (https-only, fixed social
-          // hosts) — an empty string explicitly clears the stored field.
-          avatarUrl: avatarUrl.trim(),
-          website: website.trim(),
-          supportEmail: supportEmail.trim(),
-          supportUrl: supportUrl.trim(),
-          githubUrl: githubUrl.trim(),
-          xUrl: xUrl.trim(),
-          linkedinUrl: linkedinUrl.trim(),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         return enqueueSnackbar(payload?.error ?? 'Could not save the profile', {
@@ -368,22 +392,22 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       // Server-owned, like the handle: an acceptance the accepting party can
       // write itself is not evidence of anything, and the rules block the
       // field outright.
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publisher-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/publisher-profile',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'accept-agreement',
+            orgId,
+            // Echoed back so the server can refuse an acceptance of anything
+            // other than the version in force — including one made against a
+            // page left open across a change.
+            version: PUBLISHER_AGREEMENT_VERSION,
+          }),
         },
-        body: JSON.stringify({
-          action: 'accept-agreement',
-          orgId,
-          // Echoed back so the server can refuse an acceptance of anything
-          // other than the version in force — including one made against a
-          // page left open across a change.
-          version: PUBLISHER_AGREEMENT_VERSION,
-        }),
-      })
+      )
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         return void enqueueSnackbar(
@@ -438,19 +462,19 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       const next = listing.visibility === 'private' ? 'public' : 'private'
       setVisibilityBusy(listing.$id)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/publish-plugin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/publish-plugin',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'set-visibility',
+              listingId: listing.$id,
+              visibility: next,
+            }),
           },
-          body: JSON.stringify({
-            action: 'set-visibility',
-            listingId: listing.$id,
-            visibility: next,
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(
@@ -1023,6 +1047,24 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                           ? 'Recheck payout status'
                           : 'Set up payouts'}
               </Button>
+              {/*
+                Where the money actually is. Aglyn records no
+                balance, no payout schedule, and handles no `payout.failed`
+                event, so a publisher whose payout bounced cannot learn that
+                here. An Express account has no direct login, which leaves a
+                platform-minted link as the only route in.
+              */}
+              {dashboardUrl ? (
+                <Button
+                  variant="text"
+                  color="primary"
+                  href={dashboardUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {'View payouts in Stripe'}
+                </Button>
+              ) : null}
             </>
           )}
         </Stack>
@@ -1034,9 +1076,9 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         help={docsHelp('publishAPlugin', {
           anchor: '#paid-listings',
           excerpt:
-            'Net paid out is your share after the platform fee — sales tax ' +
-            `is collected on ${PLATFORM_BRAND_LEGAL_NAME}’s registration and ` +
-            'is never yours.',
+            'Sent to your Stripe account is your share after the platform ' +
+            `fee — sales tax is collected on ${PLATFORM_BRAND_LEGAL_NAME}’s ` +
+            'registration and is never yours.',
         })}
         contentGutterX
         contentGutterY
@@ -1058,10 +1100,36 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               The payout FIRST, and named for what it is. It is the number a
               publisher reconciles against their Stripe account, and it is the
               one this card used to get wrong.
+
+              "Sent to your Stripe account", not "net paid out".
+              The figure sums `transferCents` — the instruction given at charge
+              time — so it says the money was DISPATCHED and knows nothing
+              about whether the payout from that balance to a bank succeeded.
+              A publisher reading "net paid out" during a failed payout was
+              told their money had landed by the one surface that should have
+              warned them. The notice below carries the arrival.
             */}
             <Typography variant="body2">
-              {`Net paid out $${(totals.netPaidCents / 100).toFixed(2)}`}
+              {`Sent to your Stripe account $${(
+                totals.sentToStripeCents / 100
+              ).toFixed(2)}`}
             </Typography>
+            {/*
+              WHERE IT STOPPED, when it stopped. Mirrored onto the publisher
+              profile by the `payout.failed` handler, and retired by the next
+              successful payout — so this is a live problem, not a scar.
+            */}
+            {profile?.lastPayoutFailureAtMs ? (
+              <Alert severity="warning" variant="outlined">
+                {`A payout of $${(
+                  Number(profile.lastPayoutFailureCents ?? 0) / 100
+                ).toFixed(2)} did not reach your bank on ${new Date(
+                  Number(profile.lastPayoutFailureAtMs),
+                ).toLocaleDateString()} — ${String(
+                  profile.lastPayoutFailureReason ?? 'Stripe did not say why',
+                )} The money is still in your Stripe account. Open Stripe to fix your payout details.`}
+              </Alert>
+            ) : null}
             <Typography variant="body2" color="text.secondary">
               {`Buyers paid $${(totals.buyersPaidCents / 100).toFixed(2)} · ` +
                 `sales tax $${(totals.salesTaxCents / 100).toFixed(2)} · ` +
@@ -1079,11 +1147,12 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
               today is owed the reason on the same card, not in a changelog.
             */}
             <Typography variant="caption" color="text.secondary">
-              {'Net paid out is what reached your Stripe account: the ' +
-                'pre-tax price less the platform fee. Sales tax is collected ' +
-                `and remitted by ${PLATFORM_BRAND_LEGAL_NAME} under its ` +
-                'marketplace-provider registration and was never part of ' +
-                'your share.'}
+              {'Sent to your Stripe account is the pre-tax price less the ' +
+                'platform fee. Sales tax is collected and remitted by ' +
+                `${PLATFORM_BRAND_LEGAL_NAME} under its marketplace-provider ` +
+                'registration and was never part of your share. Reaching ' +
+                'your Stripe balance is not the same as reaching your bank — ' +
+                'a failed payout is called out above.'}
             </Typography>
           </Stack>
         )}

@@ -16,12 +16,10 @@
  */
 
 import {
-  buildRoute,
   claimAttempt,
   isCustomPricedPlan,
   isOrgSubscriptionLive,
   pluginRequestFromWeb,
-  Route,
   type AttemptClaim,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
@@ -30,7 +28,6 @@ import {
   featureLockdownRefusal,
   firebaseAdmin,
   isImpersonationSession,
-  isServerReleaseFlagOnForOrg,
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
@@ -40,7 +37,6 @@ import {
   INTERNAL_TRAFFIC_VALUE,
 } from '../../../../utils/internal-traffic'
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
-import { checkoutCustomerParams } from '../../../../utils/stripe-customer-identity'
 import { meteredPriceId } from '../../../../utils/server/billing-addons'
 
 // lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
@@ -70,6 +66,96 @@ const YEARLY_PRICE_ENV: Record<string, string | undefined> = {
 }
 
 
+
+/**
+ * Pinned so the preview and the subscription are priced by the SAME Stripe
+ * version. `invoices/upcoming` and the shape of an invoice's tax fields have
+ * both moved between versions; letting the account default decide would mean
+ * the number shown and the number charged could come from different rules.
+ */
+const STRIPE_API_VERSION = '2024-06-20'
+
+/** The amounts a customer is shown, in one shape for the preview and the invoice. */
+export interface InvoiceAmounts {
+  subtotalCents: number
+  taxCents: number
+  totalCents: number
+  currency: string
+  /** True when Stripe actually finished computing tax for this address. */
+  taxComplete: boolean
+  /**
+   * Stripe's own `taxability_reason` for the first tax line, when there is
+   * one — `reverse_charge`, `customer_exempt`, `standard_rated`,
+   * `taxable_basis_reduced` and so on.
+   *
+   * Carried because a ZERO has four meanings and the customer who cares most
+   * cannot tell them apart without it. Reported, never inferred: this is
+   * Stripe's verdict, and inventing one of our own would put OUR number in
+   * front of a tax authority.
+   */
+  taxReason: string | null
+}
+
+/**
+ * Flatten a Stripe invoice (real or previewed) into the figures the plan card
+ * renders.
+ *
+ * `taxComplete` is separate from the tax amount on purpose. `automatic_tax`
+ * answers `requires_location_inputs` when it cannot resolve an address, and in
+ * that state the tax is legitimately `0` — indistinguishable from a genuinely
+ * untaxed sale unless the status is carried alongside. A total that quietly
+ * omits tax is the one number this whole flow exists to get right, so the
+ * caller is told whether it is trustworthy rather than left to infer it.
+ */
+export function describeInvoiceAmounts(invoice: any): InvoiceAmounts {
+  // Both spellings: `total_tax_amounts` on the pinned 2024-06-20 version,
+  // `total_taxes` on newer ones. Read defensively so a version bump degrades
+  // to "no reason given" rather than to a wrong one.
+  const taxLines = Array.isArray(invoice?.total_tax_amounts)
+    ? invoice.total_tax_amounts
+    : Array.isArray(invoice?.total_taxes)
+      ? invoice.total_taxes
+      : []
+  return {
+    subtotalCents: Number(invoice?.subtotal ?? 0),
+    taxCents: Number(invoice?.tax ?? 0),
+    totalCents: Number(invoice?.total ?? 0),
+    currency: String(invoice?.currency ?? 'usd'),
+    taxComplete: invoice?.automatic_tax?.status === 'complete',
+    taxReason: taxLines[0]?.taxability_reason ?? null,
+  }
+}
+
+/**
+ * Look up a customer-typed promotion code.
+ *
+ * Stripe's `discounts[0][promotion_code]` takes the code's ID, not the string
+ * a customer types, so this is a lookup and not a pass-through. `active=true`
+ * means an expired or exhausted code is reported as unknown rather than
+ * silently ignored — a discount that vanishes between the preview and the
+ * charge is the worst version of this feature.
+ *
+ * Returns `{}` for an empty input so the common path costs no API call.
+ */
+export async function resolvePromotionCode(
+  secretKey: string,
+  code: string,
+): Promise<{ id?: string; code?: string; error?: string }> {
+  const wanted = String(code ?? '').trim()
+  if (!wanted) return {}
+  const response = await fetch(
+    `https://api.stripe.com/v1/promotion_codes?code=${encodeURIComponent(
+      wanted,
+    )}&active=true&limit=1`,
+    { headers: { Authorization: `Bearer ${secretKey}` } },
+  )
+  const payload = await response.json()
+  const found = Array.isArray(payload?.data) ? payload.data[0] : null
+  if (!response.ok || !found?.id) {
+    return { error: `We do not recognize the code “${wanted.slice(0, 40)}”.` }
+  }
+  return { id: String(found.id), code: String(found.code ?? wanted) }
+}
 
 /**
  * Creates a Stripe Checkout session for a plan upgrade. Uses Stripe's REST
@@ -209,212 +295,167 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    const origin = headers.origin ?? `https://${headers.host}`
-    // Stripe sends the browser back to these, so they have to be real console
-    // paths. Billing moved under the org slug (AGL-621), leaving `/org/billing`
-    // a dead route — every post-checkout return landed on a 404. Falling back
-    // to the org jump page keeps that true even if the slug is missing.
-    const orgSlug = (await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .get()).get('slug') as string | undefined
-    const billingPath = orgSlug
-      ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
-      : '/'
+    // ── The purchase, built out of the pieces the customer already has ──
+    //
+    // There is no checkout step here and no checkout surface. A workspace
+    // reaches this point with a payment method and a billing address already
+    // on file — both collected by the Billing page's own cards, in our own
+    // design — so subscribing is a server-side call against a stored
+    // `default_payment_method` rather than a page that collects anything.
+    //
+    // That is what removed the last Stripe-branded screen. Embedded Checkout
+    // put Link and Amazon Pay buttons, a TEST MODE badge and Stripe's own
+    // typography in front of a customer mid-upgrade; moving it inline did not
+    // help, because the objection was arriving somewhere else, not the
+    // container it arrived in. Every payment method it offered is still
+    // available — the `PaymentElement` on the Billing page renders Link, bank
+    // debits, Cash App and Klarna — they are simply collected before the plan
+    // is chosen instead of during it.
+    //
+    // WHAT IS DELIBERATELY UNCHANGED ABOVE THIS LINE: the checkout feature
+    // lockdown, the membership and `billing.manage` checks, the
+    // `isOrgSubscriptionLive` duplicate-subscription guard, and the
+    // `claimAttempt` below. None of them moved.
 
-    // In-page checkout (AGL-1132), behind `release_native_checkout` and OFF by
-    // default. Embedded mode was chosen for the console over the Payment
-    // Element deliberately: this is our own chrome, so nobody expects the form
-    // branded, and keeping Stripe's own form means tax, wallets and 3DS do not
-    // have to be rebuilt and re-verified. The storefront is the opposite case
-    // and wants the Payment Element — tracked separately, not folded in here.
+    // The PREVIEW, deliberately above the claim: it is read-only and re-run
+    // whenever the plan or the promotion code changes, so it must not burn the
+    // idempotency key — a customer who compares two plans would otherwise be
+    // unable to buy either.
     //
-    // The redirect stays the default until a real card has been through this,
-    // which is not something a test suite can do for us.
-    // BOTH conditions, not just the flag. An embedded session returns a client
-    // secret and no `url`, so if the browser cannot mount it — which needs a
-    // publishable key that is currently set nowhere — flipping the flag would
-    // strand a paying customer with a dead Upgrade button. Requiring the key
-    // here means the worst case of a premature flag flip is the redirect we
-    // already ship.
-    //
-    // Resolved through `isServerReleaseFlagOnForOrg` (AGL-2486), NOT by reading
-    // `getServerReleaseFlagValues()` and calling `isReleaseFlagOn` here. That
-    // two-step is what this route used to do, and it made the per-org overrides
-    // unreachable on the one code path that takes money: a staff grant on
-    // `orgs/{orgId}.releaseFlags` was written, cached and then ignored, so
-    // native checkout was all-or-nothing platform-wide and there was no way to
-    // pilot it with a single customer. Which is precisely what the note above
-    // asks for — the redirect stays the default until a real card has been
-    // through this, and a per-org grant is how that first card gets there.
-    //
-    // The org is the subject for both halves: it selects the override AND it is
-    // the rollout bucket, so a rollout moves a whole workspace together rather
-    // than showing one owner a different checkout from their colleague, and the
-    // console cannot land on the opposite side of a percentage from the
-    // storefront's `resolveNativeCheckoutMode` for the same org (AGL-1656).
-    const embedded =
-      Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) &&
-      (await isServerReleaseFlagOnForOrg('release_native_checkout', orgId))
-    const params = new URLSearchParams({
-      mode: 'subscription',
-      'line_items[0][price]': priceId,
-      'line_items[0][quantity]': '1',
-      // Embedded sessions take a single `return_url` and REJECT
-      // success_url/cancel_url; the hosted redirect requires the pair. The
-      // session id rides the return so the page can show a result without
-      // being told the outcome by the client — see the fulfilment note below.
-      ...(embedded
-        ? {
-            ui_mode: 'embedded',
-            return_url: `${origin}${billingPath}?status=success&session_id={CHECKOUT_SESSION_ID}`,
-          }
-        : {
-            success_url: `${origin}${billingPath}?status=success`,
-            cancel_url: `${origin}${billingPath}?status=canceled`,
-          }),
-      client_reference_id: orgId,
-      'subscription_data[metadata][orgId]': orgId,
-      'subscription_data[metadata][plan]': plan,
-      // The buyer's GA client id, so the server-side `purchase` the webhook
-      // sends can join the browser session that produced it (AGL-1561).
-      // Carried on the SUBSCRIPTION rather than the session so renewals can
-      // find it too. Validated to GA's `<digits>.<digits>` shape and dropped
-      // otherwise: this string is client-supplied and ends up in Stripe
-      // metadata, so it is not accepted on trust.
-      ...(/^\d+\.\d+$/.test(String(body?.gaClientId ?? ''))
-        ? { 'subscription_data[metadata][ga_client_id]': String(body.gaClientId) }
-        : {}),
-      // A browser we have declared ours (AGL-1582), carried on the
-      // SUBSCRIPTION so the renewal, the refund and the cancellation months
-      // later are stamped too — not just the first invoice.
+    // This is what shows the tax-inclusive total on the plan card BEFORE
+    // anything is clicked. It is reliable here in a way it could never be
+    // inside a payment form, because the address is already known rather than
+    // being typed as the number recalculates.
+    if (String(body?.action ?? '') === 'preview') {
+      if (!existingCustomerId) {
+        return Response.json({ needsBillingDetails: true }, { status: 200 })
+      }
+      // The ADDRESS is a prerequisite of the QUOTE, not only of the purchase.
       //
-      // Written only for the true case and only ever as the one constant
-      // value: this is client-supplied, so it is not accepted on trust, and
-      // an absent key must stay indistinguishable from a real customer. The
-      // asymmetry is deliberate — the cost of a missed stamp is one polluted
-      // row, the cost of a wrong one is a paying customer erased from every
-      // report by a filter that cannot be un-applied.
-      ...(body?.internalTraffic === true
-        ? {
-            [`subscription_data[metadata][${INTERNAL_TRAFFIC_PARAM}]`]:
-              INTERNAL_TRAFFIC_VALUE,
-          }
-        : {}),
-      // Self-serve promo codes (AGL-1105): show the "Add promotion code" field
-      // so a customer can redeem a staff-created code (Coupons page) at
-      // checkout. Stripe validates the code and the discount rides the
-      // resulting subscription; the webhook mirrors it onto org.discount.
-      allow_promotion_codes: 'true',
-      // Pinned, not defaulted (AGL-2486). Stripe's default for `mode:
-      // subscription` IS `always` — measured against the live API on
-      // 2026-08-23: a session carrying a 100%-off `duration: forever` coupon
-      // came back `payment_method_collection=always` with `amount_total=0`,
-      // so a discounted signup still saves a card. We state it anyway because
-      // the failure mode is silent and delayed: if this ever resolved to
-      // `if_required`, every $0-today signup — an enterprise first month
-      // free, a full-discount promo code — would complete with NO payment
-      // method on file, and we would not find out until the first renewal
-      // failed across all of them at once. The word `always` here is what a
-      // reviewer checks; an unstated default is not.
-      payment_method_collection: 'always',
-      // Billing identity on the customer (AGL-1133). An invoice that has to
-      // satisfy a tax authority needs an address on it, and a B2B one needs
-      // the buyer's tax id.
-      //
-      // The address was NOT simply absent, contrary to the issue: Stripe's
-      // default `billing_address_collection` is `auto`, so it collects one
-      // when the payment method requires it. The live customer for the one
-      // paying org does carry a full US address — measured, not assumed.
-      // `required` makes that a guarantee rather than a side effect of which
-      // card someone used, which is what an invoice needs.
-      //
-      // Phone and tax id were genuinely never collected: neither is ever
-      // required by a card, so `auto` never asks for them.
-      billing_address_collection: 'required',
-      'phone_number_collection[enabled]': 'true',
-      'tax_id_collection[enabled]': 'true',
-      // Stripe computes and charges tax (AGL-1133). This changes what
-      // customers pay, so the flag is a pricing decision, not a config tidy.
-      //
-      // The address collection above is its PREREQUISITE, not decoration:
-      // automatic tax on a session with no address reports
-      // `requires_location_inputs` and charges nothing, so enabling this
-      // without `billing_address_collection: required` would look enabled
-      // and quietly collect no tax at all.
-      //
-      // The prices all carry `tax_behavior: unspecified`, which sounds fatal
-      // and is not — the account's Tax default is `inferred_by_currency`,
-      // which covers them. Measured before shipping, not assumed: a live
-      // session created with this flag was accepted.
-      'automatic_tax[enabled]': 'true',
-      // The org's own Stripe customer, reused for life (AGL-941).
-      //
-      // `customer_email` does NOT reuse anything — it mints a fresh Customer
-      // on every checkout. An org that subscribed, cancelled and resubscribed
-      // therefore accumulated duplicates, while `stripeCustomerId` only ever
-      // pointed at the most recent one, so earlier invoices scattered onto
-      // customers the Billing page never queries. That is a plausible cause
-      // of invoices appearing "missing".
-      //
-      // The two are mutually exclusive — Stripe rejects a session carrying
-      // both — which is why the choice is a tested function rather than an
-      // inline ternary: getting it wrong breaks every upgrade.
-      ...checkoutCustomerParams(existingCustomerId, decoded.email),
-      // Also on the SESSION, not only the subscription: `client_reference_id`
-      // is a single opaque string, and session metadata is what the Payments
-      // view can be filtered by.
-      'metadata[orgId]': orgId,
-    })
-
-    // Attach the shared metered price (AGL-635) as a second subscription
-    // item so usage overage — storage AND API requests, both reported to
-    // the aglyn_metered_usage Billing Meter by the report-usage cron —
-    // actually lands on the invoice. Metered prices carry no quantity in
-    // Checkout, and the item bills $0 until usage is reported, so it is safe
-    // on every paid plan. Absent env (Stripe unprovisioned) → plan-only.
-    //
-    // INTERVAL-MATCHED (AGL-1340, completed in AGL-1280). Stripe forbids
-    // mixed `recurring.interval` on one subscription — proved read-only
-    // against live Stripe with `GET /v1/invoices/upcoming`: Starter monthly +
-    // monthly metered previews at $25.00, Starter yearly alone at $192.00,
-    // and Starter yearly + MONTHLY metered hard-errors.
-    //
-    // AGL-1340 handled that by attaching the metered item to monthly
-    // checkouts only, which left annual subscriptions carrying no metered
-    // item at all — metered on paper, billed $0 in fact. Now each interval
-    // has its own price on the same meter, so the item follows the plan and
-    // the mixed-interval crash is structurally impossible: the yearly
-    // subscription can only ever be handed the yearly id.
-    const metered = meteredPriceId(interval)
-    if (metered) {
-      params.set('line_items[1][price]', metered)
-    } else if (meteredPriceId(interval === 'year' ? 'month' : 'year')) {
-      // Skipped, and SAID so — but only when the OTHER interval is configured.
-      // That asymmetry is the actual fault: it means one interval's customers
-      // are billed for overage and the other's silently are not, which is
-      // invisible from every screen. Both unset is Stripe simply being
-      // unprovisioned (local dev, a fresh environment) and warning on it
-      // would train everyone to ignore the warning.
-      console.warn('[billing/checkout] metered usage item not attached', {
-        orgId,
-        plan,
-        interval,
-        reason: `${
-          interval === 'year'
-            ? 'STRIPE_PRICE_METERED_YEARLY'
-            : 'STRIPE_PRICE_METERED'
-        } is unset while the other interval's metered price IS set, so ${interval}ly subscriptions accrue usage that reaches no invoice`,
+      // Subscribe already refused without one. The preview needed only a
+      // customer id, so a quote could be produced for an addressless customer
+      // — `automatic_tax` then answers `requires_location_inputs`, the tax is
+      // `0`, and the total silently excludes it. Stated as its own check so a
+      // future reordering cannot reintroduce an addressless quote by
+      // accident.
+      const quoteCustomer = await fetch(
+        // `tax_ids` expanded on the SAME read the address check already
+        // makes. A business tax ID is an input to what Stripe charges — it is
+        // what makes reverse charge apply — and it has to be known BEFORE the
+        // quote, not discovered on the invoice.
+        `https://api.stripe.com/v1/customers/${encodeURIComponent(existingCustomerId)}?expand[]=tax_ids`,
+        { headers: { Authorization: `Bearer ${secretKey}` } },
+      )
+      const quoteCustomerRecord = await quoteCustomer.json()
+      if (!quoteCustomerRecord?.address?.country) {
+        return Response.json({ needsBillingAddress: true }, { status: 200 })
+      }
+      const preview = new URLSearchParams({
+        customer: existingCustomerId,
+        'subscription_details[items][0][price]': priceId,
+        'automatic_tax[enabled]': 'true',
       })
+      const meteredPreview = meteredPriceId(interval)
+      if (meteredPreview) {
+        preview.set('subscription_details[items][1][price]', meteredPreview)
+      }
+      const promo = await resolvePromotionCode(
+        secretKey,
+        String(body?.promotionCode ?? ''),
+      )
+      if (promo.error) return Response.json({ error: promo.error }, { status: 400 })
+      if (promo.id) preview.set('discounts[0][promotion_code]', promo.id)
+      const upcoming = await fetch(
+        `https://api.stripe.com/v1/invoices/upcoming?${preview.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            'Stripe-Version': STRIPE_API_VERSION,
+          },
+        },
+      )
+      const invoice = await upcoming.json()
+      if (!upcoming.ok) {
+        console.error('[billing/checkout] preview failed', invoice?.error?.code)
+        return Response.json(
+          { error: 'We could not price that plan just now.' },
+          { status: 502 },
+        )
+      }
+      return Response.json(
+        {
+          preview: describeInvoiceAmounts(invoice),
+          // Never read anywhere before this. `exempt` and `reverse` are why a
+          // legitimately zero tax is zero, and without them the customer who
+          // is specifically checking cannot tell it from a bug.
+          customerTaxExempt: quoteCustomerRecord?.tax_exempt ?? null,
+          // Whether a business tax ID is on file. NOT a claim that one would
+          // change this quote — that is Stripe's determination and depends on
+          // jurisdiction. It is the fact needed to ask the question at the
+          // right moment: before the charge, while the answer can still
+          // affect it.
+          hasTaxId: Array.isArray(quoteCustomerRecord?.tax_ids?.data)
+            ? quoteCustomerRecord.tax_ids.data.length > 0
+            : false,
+          promotionCodeApplied: promo.id ? promo.code : null,
+        },
+        { status: 200 },
+      )
     }
 
-    // Point of no return (AGL-1697): the only thing left is the session
+    // The two things the new flow requires, refused SEPARATELY so the page can
+    // say which one is missing. Neither is a payment failure and neither is a
+    // dead end: both are cards on the same page, above the plan grid.
+    if (!existingCustomerId) {
+      return Response.json(
+        {
+          error:
+            'Add a payment method and a billing address before subscribing.',
+          code: 'billing_details_required',
+        },
+        { status: 409 },
+      )
+    }
+    const customerRead = await fetch(
+      `https://api.stripe.com/v1/customers/${encodeURIComponent(existingCustomerId)}`,
+      { headers: { Authorization: `Bearer ${secretKey}` } },
+    )
+    const customerRecord = await customerRead.json()
+    const defaultPaymentMethod =
+      typeof customerRecord?.invoice_settings?.default_payment_method === 'string'
+        ? customerRecord.invoice_settings.default_payment_method
+        : (customerRecord?.invoice_settings?.default_payment_method?.id ?? null)
+    if (!defaultPaymentMethod) {
+      return Response.json(
+        {
+          error:
+            'Add a payment method before subscribing — it is charged for the ' +
+            'first invoice and every renewal.',
+          code: 'payment_method_required',
+        },
+        { status: 409 },
+      )
+    }
+    if (!customerRecord?.address?.country) {
+      // Without an address `automatic_tax` reports `requires_location_inputs`
+      // and charges no tax at all — which looks like it worked and puts an
+      // untaxed invoice in front of a tax authority.
+      return Response.json(
+        {
+          error:
+            'Add a billing address before subscribing — sales tax is ' +
+            'calculated from it.',
+          code: 'billing_address_required',
+        },
+        { status: 409 },
+      )
+    }
+
+    // Point of no return (AGL-1697): the only thing left is the subscription
     // itself. Every refusal — lockdown, membership, permission, the
-    // subscription_exists guard — sits above this line, so none of them burns
-    // the key; a churned org that is refused today pays with the same button
-    // tomorrow.
+    // subscription_exists guard, and the two above — sits above this line, so
+    // none of them burns the key; a churned org that is refused today pays
+    // with the same button tomorrow.
     const claimed = await claimAttempt(firebaseAdmin.app().firestore(), {
       kind: 'console-checkout',
       scopeId: orgId,
@@ -429,53 +470,208 @@ async function handler(request: Request): Promise<Response> {
     }
     claim = claimed.claim
 
-    const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    const subParams = new URLSearchParams({
+      customer: existingCustomerId,
+      'items[0][price]': priceId,
+      default_payment_method: defaultPaymentMethod,
+      // A property of the SUBSCRIPTION, never of Checkout — which is why
+      // dropping Checkout costs no tax behaviour at all.
+      'automatic_tax[enabled]': 'true',
+      // Stripe opens the first invoice and its PaymentIntent but charges
+      // nothing until it is confirmed. On a saved card Stripe confirms it
+      // itself; the status only stays open when an ISSUER demands
+      // authentication, which is the one case the page still has to handle.
+      payment_behavior: 'default_incomplete',
+      'payment_settings[save_default_payment_method]': 'on_subscription',
+      'expand[]': 'latest_invoice.payment_intent',
+      'metadata[orgId]': orgId,
+      'metadata[plan]': plan,
+      /*==========================================
+       * WHO CLICKED (AGL-118), carried to the only writer that logs.
+       *
+       * The subscription lifecycle is logged FROM THE WEBHOOK, because the
+       * webhook reports what HAPPENED and this route reports what was
+       * ATTEMPTED — and because Stripe ends subscriptions on its own, which
+       * this route never hears about at all. The cost of that choice is that
+       * the webhook has no session and no idea who a person is, so the actor
+       * has to travel with the object.
+       *
+       * `actorAction` travels WITH the uid and is not decoration. Stripe
+       * metadata persists on the subscription forever, so a bare `actorUid`
+       * stamped here would still be sitting on the object a year later when
+       * dunning cancels it — and the webhook would name this person as having
+       * cancelled a subscription they did nothing to. Pairing the uid with
+       * the act it authorized means a stamp can only ever sign the kind of
+       * event it was written for; see the reader in the webhook.
+       *=========================================*/
+      'metadata[actorUid]': decoded.uid,
+      'metadata[actorAction]': 'subscribe',
+    })
+    // The SAME metered item the session attached, resolved the same way, so
+    // the interval-matching rule (AGL-1340) holds identically: Stripe rejects
+    // mixed `recurring.interval` on one subscription, and each interval has
+    // its own metered price.
+    const meteredNative = meteredPriceId(interval)
+    if (meteredNative) {
+      subParams.set('items[1][price]', meteredNative)
+    } else if (meteredPriceId(interval === 'year' ? 'month' : 'year')) {
+      // Skipped, and SAID so — but only when the OTHER interval is
+      // configured. That asymmetry is the actual fault: it means one
+      // interval's customers are billed for overage and the other's silently
+      // are not, which is invisible from every screen. Both unset is Stripe
+      // simply being unprovisioned and warning on it would train everyone to
+      // ignore the warning.
+      console.warn('[billing/checkout] metered usage item not attached', {
+        orgId,
+        plan,
+        interval,
+        reason: `${
+          interval === 'year'
+            ? 'STRIPE_PRICE_METERED_YEARLY'
+            : 'STRIPE_PRICE_METERED'
+        } is unset while the other interval's metered price IS set, so ${interval}ly subscriptions accrue usage that reaches no invoice`,
+      })
+    }
+    // The attribution metadata the session put on `subscription_data`, now set
+    // directly on the subscription — same destination, one hop fewer. Both are
+    // client-supplied and neither is accepted on trust.
+    if (/^\d+\.\d+$/.test(String(body?.gaClientId ?? ''))) {
+      subParams.set('metadata[ga_client_id]', String(body.gaClientId))
+    }
+    if (body?.internalTraffic === true) {
+      subParams.set(`metadata[${INTERNAL_TRAFFIC_PARAM}]`, INTERNAL_TRAFFIC_VALUE)
+    }
+    const promo = await resolvePromotionCode(
+      secretKey,
+      String(body?.promotionCode ?? ''),
+    )
+    if (promo.id) subParams.set('discounts[0][promotion_code]', promo.id)
+
+    const created = await fetch('https://api.stripe.com/v1/subscriptions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${secretKey}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        // The half that is a recurring charge (AGL-1697): Stripe replays the
-        // existing session for a repeated key instead of opening a second
-        // subscription checkout, covering the window where the claim is
-        // written but the response never arrives.
+        'Stripe-Version': STRIPE_API_VERSION,
+        // The same Stripe-side replay protection the session had, on the same
+        // claim key: a lost response cannot open a second subscription.
         ...(claim.stripeKey ? { 'Idempotency-Key': claim.stripeKey } : {}),
       },
-      body: params.toString(),
+      body: subParams.toString(),
     })
-    const session = (await response.json()) as {
-      url?: string
-      client_secret?: string
-      error?: any
-    }
-    // An embedded session has NO `url` — mounting its client secret is the
-    // whole point — so the old `!session.url` guard would have rejected every
-    // successful embedded session as a Stripe failure.
-    const token = embedded ? session.client_secret : session.url
-    if (!response.ok || !token) {
-      console.error('Stripe checkout error', session.error)
+    const subscription = await created.json()
+    if (!created.ok) {
+      console.error('[billing/checkout] subscription failed', subscription?.error)
       // Stripe answered, so nothing needs reconciling — hand the key back and
-      // let the same button work once the config or the network does. The
-      // retry re-derives the same digest, so a session that DID get created
-      // replays rather than doubling.
+      // let the same button work once the config or the network does.
       await claim.release()
-      // A price id that is SET but does not exist in this Stripe mode is a
-      // configuration fault, not a Stripe outage, and it used to read as
-      // "Stripe checkout failed" (AGL-1137). The guard above only catches an
-      // ABSENT env var; a stale id — the shape you get when the secret key is
-      // switched from test to live and the price ids are not — sails past it
-      // and dies here, indistinguishable from a network blip.
-      //
-      // Stripe names the offending parameter, so map it back to the env var
-      // that supplied it rather than making someone guess which of ~60 it was.
-      const missing = configuredPriceFault(session.error, plan, interval)
-      if (missing) {
-        return Response.json({ error: missing }, { status: 501 })
-      }
-      return Response.json({ error: 'Stripe checkout failed' }, { status: 502 })
+      claim = null
+      const missing = configuredPriceFault(subscription?.error, plan, interval)
+      if (missing) return Response.json({ error: missing }, { status: 501 })
+      return Response.json(
+        { error: 'Could not start the subscription. Nothing has been charged.' },
+        { status: 502 },
+      )
     }
-    // Never both: the client picks its path by which key is present, so
-    // returning one shape per mode keeps that unambiguous.
-    const payload = embedded ? { clientSecret: token } : { url: token }
+    const invoice = subscription?.latest_invoice ?? null
+    let intent = invoice?.payment_intent ?? null
+
+    // ── The confirm, SERVER-SIDE, and nothing works without it ──
+    //
+    // `payment_behavior: default_incomplete` deliberately leaves the first
+    // invoice's PaymentIntent unconfirmed: Stripe opens it and charges
+    // nothing. On a stored payment method there is no form to submit and no
+    // data to gather, so the confirm is ours to make — and until it is made
+    // the intent sits at `requires_confirmation`, the subscription sits at
+    // `incomplete`, and no money moves.
+    //
+    // It has to happen HERE rather than in the browser. `handleNextAction` —
+    // the one method this flow can use, because a server-confirmed intent has
+    // no Payment Element behind it — is defined for `requires_action` alone
+    // and THROWS an `IntegrationError` on anything else. Driven against a
+    // real test-mode subscription, `requires_confirmation` produced
+    // "The PaymentIntent supplied is not in the requires_action state", which
+    // the page catches as a generic failure: an ordinary card never activated
+    // and a 3DS card never reached its challenge.
+    //
+    // Confirming here also produces the ONLY status from which SCA makes
+    // sense. An ordinary card goes straight to `succeeded` and the
+    // subscription is active; a card whose issuer wants authentication moves
+    // to `requires_action` with a next action attached, which is exactly what
+    // the browser is handed below.
+    //
+    // ⚠️ This still grants nothing. `succeeded` here means Stripe accepted the
+    // charge, and the plan is mirrored onto the org by the webhook and by
+    // nothing in this handler.
+    if (intent?.id && intent?.status === 'requires_confirmation') {
+      const confirmed = await fetch(
+        `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(
+          String(intent.id),
+        )}/confirm`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Stripe-Version': STRIPE_API_VERSION,
+            // Same claim, distinct operation. Without its own suffix a retry
+            // would present the subscription's key to a different endpoint,
+            // which Stripe rejects outright.
+            ...(claim.stripeKey
+              ? { 'Idempotency-Key': `${claim.stripeKey}-confirm` }
+              : {}),
+          },
+          body: new URLSearchParams({ 'expand[]': 'payment_method' }).toString(),
+        },
+      )
+      const confirmedIntent = await confirmed.json()
+      if (confirmed.ok) {
+        intent = confirmedIntent
+      } else {
+        // Stripe refused the confirm outright — a hard decline, a method that
+        // vanished between the two calls. Reported through the SAME
+        // `declined` branch a failed charge uses rather than as a server
+        // fault, because from the customer's side it is the same event and
+        // the subscription is `incomplete` either way.
+        console.error(
+          '[billing/checkout] intent confirm failed',
+          confirmedIntent?.error?.code,
+        )
+        intent = { ...intent, status: 'requires_payment_method' }
+      }
+    }
+
+    // An issuer demanding authentication is the ONE Stripe-rendered thing the
+    // customer may still see, and it is the bank's, not a checkout page.
+    //
+    // Handled explicitly rather than left to the webhook: a subscription that
+    // stays `incomplete` because nobody dealt with this status is a customer
+    // who believes they subscribed and did not. The client secret goes back so
+    // the page can run `handleNextAction`; the plan itself is still granted by
+    // the webhook and by nothing here.
+    //
+    // `requires_action` ALONE, now that the confirm above has run.
+    // `requires_confirmation` used to be treated as the same thing, which is
+    // what sent an unconfirmable intent to a method that refuses them.
+    const requiresAction = intent?.status === 'requires_action'
+    const payload = {
+      // The status AT CREATION, which the confirm above may already have moved
+      // past. Left as Stripe first reported it rather than re-read, because
+      // nothing may act on it: what the org is entitled to is decided by the
+      // webhook, and a fresher number here would only be a more convincing
+      // reason for some future caller to trust the wrong source.
+      subscriptionStatus: String(subscription?.status ?? ''),
+      invoice: describeInvoiceAmounts(invoice),
+      ...(requiresAction && intent?.client_secret
+        ? { requiresAction: true, paymentClientSecret: intent.client_secret }
+        : {}),
+      // A first invoice that failed outright — a declined saved card. Named so
+      // the page can say "your card was declined" rather than "checkout
+      // failed", which is the opposite of what happened.
+      ...(intent?.status === 'requires_payment_method'
+        ? { declined: true }
+        : {}),
+    }
     await claim.record(200, payload)
     return Response.json(payload, { status: 200 })
   } catch (error) {

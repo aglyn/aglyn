@@ -22,6 +22,7 @@ import {
   findUserByUidAcrossPools,
 } from '@aglyn/tenant-data-admin'
 import { normalizeAccountEmail } from '@aglyn/aglyn/app-utils/account-emails'
+import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 // lockdown-423: exempt — pre-auth sign-in routing, like `sso-lookup`. No
 // session, no org action, and it grants nothing: whatever it returns still
@@ -70,12 +71,6 @@ import { normalizeAccountEmail } from '@aglyn/aglyn/app-utils/account-emails'
  *    the password form it sits behind already is.
  */
 
-function callerIp(headers: Partial<Record<string, string>>): string {
-  const forwarded = headers['x-forwarded-for'] ?? ''
-  const first = forwarded.split(',')[0]?.trim()
-  return first || headers['x-real-ip'] || 'unknown'
-}
-
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -99,11 +94,19 @@ async function handler(request: Request): Promise<Response> {
       windowMs: 60 * 60 * 1000,
     })
     if (!perAddress.allowed) return echo(identifier)
-    const perIp = await consumeRateLimit(`resolve-identifier-ip:${callerIp(headers)}`, {
-      limit: 30,
-      windowMs: 60 * 60 * 1000,
-    })
-    if (!perIp.allowed) return echo(identifier)
+    // No address, no per-IP budget. The per-identifier cap above is the
+    // half that stops one host walking a list, and it still applies; keying
+    // an unreadable address under a placeholder would instead put every
+    // caller in one 30-per-hour bucket and make the alias lookup answer
+    // nobody.
+    const callerIp = readClientIp(headers)
+    const perIp = callerIp
+      ? await consumeRateLimit(`resolve-identifier-ip:${callerIp}`, {
+          limit: 30,
+          windowMs: 60 * 60 * 1000,
+        })
+      : null
+    if (perIp && !perIp.allowed) return echo(identifier)
 
     const alias = await findAccountByVerifiedAlias(identifier)
     if (alias === null) return echo(identifier)

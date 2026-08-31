@@ -17,7 +17,7 @@ design: the surface is small and curated, and each entry needs semantics
 | API | What it does |
 | --- | --- |
 | `registerConsoleExtension(extension)` | Declares everything a plugin adds to the console shell. Idempotent by `pluginId` (re-registration replaces). |
-| `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[hostId]/[pluginSlug]`. |
+| `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[orgSlug]/hosts/[host]/[...pluginSlug]`. The resolver matches an exact `href`, or a declared section beneath one — longest href wins, prefixes match on a segment boundary, and a tie between two enabled plugins refuses. It answers `{ extension, navItem, section?, segments }`. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
@@ -25,9 +25,40 @@ design: the surface is small and curated, and each entry needs semantics
 
 `ConsoleExtension` fields: `pluginId`, `displayName`, `featureFlag?`
 (plan-entitlement gate the shell applies — extensions cannot bypass plans),
-`navItems?` (a nav item with a `Component` becomes a full page and receives
-`ConsolePluginPageProps { hostId, entitled, org?, permissions? }`),
-`dashboardCards?`, `settingsSections?`, `widgets?`, `providers?`.
+`permission?` (authorization gate the shell applies — see below), `navItems?`
+(a nav item with a `Component` becomes a full page and receives
+`ConsolePluginPageProps { hostId, entitled, org?, permissions?, releaseFlag?,
+basePath?, sections?, section?, segments? }`), `dashboardCards?`,
+`settingsSections?`, `widgets?`, `providers?`.
+
+`ConsoleExtension.permission?` (and `ConsoleNavItem.permission?`, which
+narrows one surface) name a permission the reader must hold. `featureFlag`
+answers what the **organization** bought; `permission` answers what the
+**person** may open, and both are resolved by the shell before the surface is
+constructed — an extension declares a requirement and cannot supply an answer
+to one. Requirements compose by AND, so a nav item's key is applied on top of
+its extension's rather than instead of it.
+
+The key belongs to one of two vocabularies and they are **not**
+interchangeable: a dotted `OrgPermission` from the built-in catalog
+(`'data.manage'`), answered from the member's granular map; or a key some
+plugin declared through `registerPluginPermissions` (`'managePos'`), answered
+from the resolved permission map that carries those keys. A key in neither is
+**refused**, so a typo takes the surface offline rather than opening it.
+Declare a key that is already enforced somewhere real — a permission a
+customer can untick that changes nothing is worse than its absence. A surface
+that omits both fields is open to every member of the workspace.
+
+Reference adopter: `libs/plugins/contacts` gates the CRM on `data.manage`.
+
+`ConsoleNavItem.sections?` turns one surface into a hub of routes — each
+`{ id, label, navTabId? }` becomes a URL at `${href}/${id}`, and the shell
+hands the page `section`, `sections` (hrefs + release verdict), `basePath` and
+`segments`. An id nobody declared is a 404, never a fallback to the first
+section; a section's own `navTabId` ANDs with its nav item's, so a section is
+never reachable when its surface is not. Omitting `sections` keeps the nav
+item matched exactly as before — a path beneath it does not resolve. See
+[Building feature plugins → Routed sections](../building-feature-plugins.md).
 
 ## Loading — `plugin-loader`
 
@@ -147,7 +178,7 @@ claim) is one this route can safely re-run.
 | --- | --- |
 | `resolveEnabledPlugins(org)` | The org switchboard: absent field → all first-party; always-on unioned in; unknown (marketplace) ids kept. |
 | `filterPluginsByReleaseFlags(ids, isFlagOn, {staffBypass})` | Subtracts release-flagged-off first-party plugins (AGL-422). |
-| `registerPluginConfigSchema(schema)` / `mergePluginConfig` / `validatePluginConfigValues` | Per-plugin settings: declared once, generic form + typed defaults-merged reads everywhere (AGL-428). |
+| `registerPluginConfigSchema(schema)` / `mergePluginConfig` / `resolvePluginConfig` / `pluginConfigOverrides` / `validatePluginConfigValues` | Per-plugin settings: declared once, generic form + typed reads everywhere, resolved across schema defaults → workspace → per-site override (AGL-428). Full contract: [Plugin configuration](./plugin-config.md). |
 | `registerCustomFieldType(fieldType)` / `validateCustomFieldValue` | Dataset field types riding existing storage types (AGL-434). |
 | `registerPluginPermissions(list)` | Role-resolved permission keys with per-tier defaults (AGL-435). |
 | `registerPluginJob(job)` / `runPluginJobs(due?)` | Scheduled jobs run by the guarded `/api/plugins/run-jobs` route (AGL-435). `job.lockdown` is required; the runner injects a `PluginJobHostGate` into every handler (AGL-2495). |

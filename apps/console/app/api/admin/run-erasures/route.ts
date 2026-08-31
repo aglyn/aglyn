@@ -31,6 +31,7 @@ import {
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion
@@ -129,12 +130,24 @@ async function handler(request: Request): Promise<Response> {
       // and a missing index fails this query at runtime, in production only,
       // which is the one place this surface has to work.
       // Oldest first, which is also the order the runner takes them in.
+      /*
+       * ONE document more than the ceiling, which is what makes "there is
+       * more than this" a fact rather than a comparison.
+       *
+       * `size >= MAX_PENDING_LISTED` is wrong in exactly the case the flag
+       * exists for: a queue holding precisely the ceiling is COMPLETE, and
+       * reporting it as truncated puts "at least" on a number that is exact.
+       * The probe row is never handed on — a response listing `ceiling + 1`
+       * rows would be describing a window it did not draw.
+       */
       const pending = await firestore
         .collection('orgs')
         .orderBy('erasureRequestedAt', 'asc')
-        .limit(MAX_PENDING_LISTED)
+        .limit(MAX_PENDING_LISTED + 1)
         .get()
+      const truncated = pending.size > MAX_PENDING_LISTED
       const rows = pending.docs
+        .slice(0, MAX_PENDING_LISTED)
         .map((org) => {
           const requestedAt = org.get('erasureRequestedAt')
           const requestedMs =
@@ -159,7 +172,7 @@ async function handler(request: Request): Promise<Response> {
           maxPerRun: MAX_PER_RUN,
           // A lower bound, and said so: the query is capped, so a longer
           // queue reads identically to a complete one from the length alone.
-          truncated: pending.size >= MAX_PENDING_LISTED,
+          truncated,
         },
         { status: 200 },
       )
@@ -232,7 +245,24 @@ async function handler(request: Request): Promise<Response> {
       // the next run and starved them again: one broken erasure indefinitely
       // blocking everyone else's. `eraseOrg` has already written the durable
       // `org.erase-failed` audit row by the time this catches.
-      const result = await eraseOrg(org.id).catch((error) => {
+      /*
+       * The sending-domain teardown travels WITH the erasure.
+       *
+       * It is passed in rather than imported by `eraseOrg` because releasing
+       * a provider domain needs a full-access mail credential and removing
+       * the zone records needs a DNS token, and neither may be reachable from
+       * a library the tenant runtime imports. This route runs in the console,
+       * which is where those keys live.
+       *
+       * A vendor failure cannot stop the erasure and does not: the debt is
+       * recorded on the surviving label claim and the daily reap sweep
+       * settles it. An erasure has a legal clock on it; a Resend outage does
+       * not get to pause that clock, and does not get to silently keep the
+       * slot either.
+       */
+      const result = await eraseOrg(org.id, {
+        tearDownSendingDomain: teardownSendingDomain,
+      }).catch((error) => {
         console.error(`run-erasures: erasure failed for ${org.id}`, error)
         return { ok: false, skippedReason: 'erase-failed' }
       })

@@ -436,8 +436,8 @@ incident.
 - **`abuse@aglyn.com` and `dmca@aglyn.com` deliver** — confirmed 2026-08-19
   (AGL-1911) by reading Google Workspace group configuration, *not* by a test
   send. Both are Google Groups ("Legal - Abuse", "Legal - DMCA") with
-  *Who can post* = **Anyone on the web**, no moderation, and one member,
-  `zach@aglyn.com`, subscribed **Each email**. A test send could not have
+  *Who can post* = **Anyone on the web**, no moderation, and a single member
+  subscribed **Each email**. A test send could not have
   established this: AGL-1577's default routing accepts mail for *non-existent*
   `@aglyn.com` addresses too and suppresses the bounce, so "it didn't bounce" is
   equally true of an address that was never created. The check that can fail is

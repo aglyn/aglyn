@@ -24,7 +24,31 @@
  * Merge tokens ({{contact.firstName}}, {{unsubscribeUrl}}, …) substitute
  * from the provided map; unknown tokens are left in place so a missing
  * field is visible in test sends instead of silently blank.
+ *
+ * ## The safety contract, in one place
+ *
+ * Everything this emits is author-controlled, and it is emitted into mail
+ * that has left the building. Three rules, all applied here rather than
+ * left to a caller:
+ *
+ * 1. Block HTML goes through {@link EmailRenderOptions.sanitize}, which is
+ *    REQUIRED. There is no identity default to fall back into.
+ * 2. Every URL is scheme-checked against `@aglyn/shared-util-http` before it
+ *    is escaped into an attribute — escaping stops an attribute breakout and
+ *    says nothing at all about `javascript:`.
+ * 3. Merge substitution into a URL cannot draw from the `contact.` namespace,
+ *    so no template can route a recipient's own address into a query string.
+ *
+ * Mail clients strip most of this themselves, so none of the three is the
+ * last line of defense in an inbox. They are the only line the moment one of
+ * these documents renders outside one — a "view this email in your browser"
+ * page is the ordinary way that happens.
  */
+
+import {
+  hasSafeLinkScheme,
+  hasSafeMediaScheme,
+} from '@aglyn/shared-util-http/safe-url-scheme'
 
 import { resolveEmailMediaSrc } from './email-media-src'
 
@@ -53,9 +77,24 @@ export interface EmailRenderOptions {
   merge?: Record<string, string>
   /** Product data by id for emailProduct blocks. */
   products?: Record<string, EmailRenderProduct | undefined>
-  /** Sanitizer applied to richtext/custom HTML (defaults to identity —
-   * pass the custom-html policy in app code). */
-  sanitize?: (html: string) => string
+  /**
+   * The HTML policy applied to every `emailRichtext` / `emailHtml` block.
+   *
+   * REQUIRED, and required is the point. A policy a caller may omit is a
+   * policy that gets omitted, and an omitted one here is not a rendering
+   * bug: the console renders these same nodes through `sanitizeCustomHtml`
+   * before an author ever sees them, so an unpoliced mail render means two
+   * renderers of one document disagreeing about safety, with the unsafe one
+   * being the one that sends.
+   *
+   * This module cannot pick the policy for itself — it is `scope:shared` and
+   * the sanitizer is aglyn-scoped, which nx forbids it to import — so the
+   * choice belongs to the caller, and the type is what makes the caller make
+   * it. Every send path passes `sanitizeAuthorHtml`, which is exactly what
+   * `sanitizeCustomHtml` delegates to, so the mailed copy and the previewed
+   * copy are the same function of the same string.
+   */
+  sanitize: (html: string) => string
   /**
    * Absolute origin serving this email's media, e.g. `https://acme.com`
    * (AGL-1224).
@@ -152,7 +191,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     preheader = '',
     merge,
     products,
-    sanitize = (html: string) => html,
+    sanitize,
     mediaOrigin,
     mediaHostId,
     brandLogoUrl,
@@ -161,6 +200,55 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
   const textParts: string[] = []
   const sub = (value: unknown): string =>
     substituteMergeTokens(String(value ?? ''), merge)
+
+  /**
+   * The merge map as it applies inside a URL: everything except the
+   * `contact.` namespace.
+   *
+   * That namespace is the recipient — `contact.email`, `contact.name`,
+   * `contact.firstName` are what campaign-send puts in the map. Substituting
+   * them into an `href` or a `src` is how a template like
+   * `https://example.test/?e={{contact.email}}` turns every send into the
+   * recipient's own address on somebody's query string, and putting personal
+   * data in a URL is a line this codebase does not cross. The refusal has to
+   * live here because it is the SUBSTITUTION that creates the value: no
+   * scheme check and no sanitizer can see the address, since the template
+   * the author wrote and the editor reviewed contains only the token.
+   *
+   * Nothing else narrows: `{{unsubscribeUrl}}` and `{{site.url}}` ARE URLs
+   * and are the reason a token appears in this position at all.
+   *
+   * A refused token is left standing rather than blanked, which is this
+   * module's existing convention for a token it will not fill — a test send
+   * shows `?e={{contact.email}}` in the link, which names the problem to the
+   * author instead of silently shipping a subtly different URL.
+   */
+  const urlMerge = merge
+    ? Object.fromEntries(
+        Object.entries(merge).filter(
+          ([token]) => !token.startsWith('contact.'),
+        ),
+      )
+    : undefined
+
+  /** {@link sub} for a value that lands in a URL — see {@link urlMerge}. */
+  const subUrl = (value: unknown): string =>
+    substituteMergeTokens(String(value ?? ''), urlMerge)
+
+  /**
+   * A link target safe to emit, or undefined.
+   *
+   * Escaping the value into the attribute stops a breakout and says nothing
+   * about the scheme, so `escapeEmailHtml` on its own passes a stored
+   * `javascript:` or `data:` href through verbatim. The check runs on the
+   * SUBSTITUTED string, because a merge value is part of the final URL and a
+   * template that reads clean can resolve to one that does not.
+   */
+  const linkHref = (value: unknown): string | undefined => {
+    const href = subUrl(value)
+    if (!href) return undefined
+    return hasSafeLinkScheme(href) ? href : undefined
+  }
 
   const origin = mediaOrigin?.replace(/\/+$/, '')
 
@@ -191,10 +279,18 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
    * A protocol-relative `//host/x.png` is passed through untouched: it is
    * already absolute enough to name a host, and prefixing an origin would
    * corrupt it.
+   *
+   * The scheme is checked on the way out. `resolveEmailMediaSrc` recognizes
+   * the two stored reference forms and passes anything else through as an
+   * author-typed URL, so it is this check and nothing else that stands
+   * between what an author types and the `src` attribute. A refusal drops
+   * the image on the same reasoning as everything else here that cannot be
+   * made fetchable: a gap reads as a plain email, and a `src` we would not
+   * stand behind is not made safer by shipping it.
    */
   const imageSrc = (value: unknown): string | undefined => {
-    const resolved = resolveEmailMediaSrc(sub(value), mediaHostId)
-    if (!resolved) return undefined
+    const resolved = resolveEmailMediaSrc(subUrl(value), mediaHostId)
+    if (!resolved || !hasSafeMediaScheme(resolved)) return undefined
     if (!resolved.startsWith('/') || resolved.startsWith('//')) return resolved
     return origin ? `${origin}${resolved}` : undefined
   }
@@ -260,7 +356,9 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         const img =
           `<img src="${escapeEmailHtml(src)}" alt="${alt}" width="${Math.min(width, 600)}" ` +
           `style="display:inline-block;max-width:100%;height:auto;border:0;" />`
-        const href = sub(props.href)
+        // A refused href drops the WRAPPER, not the picture: the image is the
+        // content and the link is decoration on it.
+        const href = linkHref(props.href)
         return row(
           href
             ? `<a href="${escapeEmailHtml(href)}" target="_blank">${img}</a>`
@@ -270,7 +368,14 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
       }
       case 'emailButton': {
         const label = sub(props.children ?? 'Call to action')
-        const href = sub(props.href ?? '#')
+        // A refused href falls back to the placeholder the empty case already
+        // uses, so the button keeps its place in the layout and goes nowhere.
+        // Dropping the row instead would take the author's copy with it, and
+        // an inert button reads as an unfinished email rather than a broken
+        // one. The plain-text alternative gets the same value the anchor
+        // does — a text/plain body is inert, but it is still delivered mail
+        // and a refused URL does not belong in it either.
+        const href = linkHref(props.href ?? '#') ?? '#'
         const background = props.backgroundColor || '#1a73e8'
         const color = props.color || '#ffffff'
         const align = props.align || 'center'
@@ -305,9 +410,18 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
           : undefined
         if (!product) return ''
         const label = sub(props.buttonLabel ?? 'Shop now')
+        // Catalog data rather than author markup, and the caller absolutizes
+        // it before it arrives — but "it came from a trusted table" is a
+        // claim about every writer of that table, so the same rule applies
+        // here as to an author-typed href. Refused means no button and no
+        // line in the text part; the product card itself still renders.
+        const productUrl =
+          product.url && hasSafeLinkScheme(product.url)
+            ? product.url
+            : undefined
         textParts.push(
           `${product.name}${product.priceLabel ? ` — ${product.priceLabel}` : ''}` +
-            (product.url ? `: ${product.url}` : ''),
+            (productUrl ? `: ${productUrl}` : ''),
         )
         // Same treatment as emailImage: a catalog image can be a picked
         // asset, so it carries the same reference/relative forms (AGL-1224).
@@ -315,8 +429,8 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         const image = productImage
           ? `<img src="${escapeEmailHtml(productImage)}" alt="${escapeEmailHtml(product.name)}" width="280" style="max-width:100%;height:auto;border:0;border-radius:6px;" /><br />`
           : ''
-        const button = product.url
-          ? `<a href="${escapeEmailHtml(product.url)}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 24px;border-radius:6px;background-color:#1a73e8;color:#ffffff;font-family:${FONT};font-size:14px;font-weight:600;text-decoration:none;">${escapeEmailHtml(label)}</a>`
+        const button = productUrl
+          ? `<a href="${escapeEmailHtml(productUrl)}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 24px;border-radius:6px;background-color:#1a73e8;color:#ffffff;font-family:${FONT};font-size:14px;font-weight:600;text-decoration:none;">${escapeEmailHtml(label)}</a>`
           : ''
         return row(
           `<div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;text-align:center;font-family:${FONT};">` +

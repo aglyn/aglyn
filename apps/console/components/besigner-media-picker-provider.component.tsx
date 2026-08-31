@@ -41,12 +41,17 @@ export function BesignerMediaPickerProvider(
   const { hostId, children } = props
   const firestore = useFirestore()
   const [open, setOpen] = useState(false)
+  // Restates `MediaPickerContextValue['onPickMedia']` from the designer
+  // rather than importing it: this provider is the console's side of that
+  // contract, and the two must widen together — a metadata field the designer
+  // accepts but this never sends is a copy that silently does not happen.
+  type PickedAsset = { alt?: string; width?: number; height?: number }
   const pendingPick = useRef<
-    ((value: string, asset?: { alt?: string }) => void) | null
+    ((value: string, asset?: PickedAsset) => void) | null
   >(null)
 
   const onPickMedia = useCallback(
-    (onPick: (value: string, asset?: { alt?: string }) => void) => {
+    (onPick: (value: string, asset?: PickedAsset) => void) => {
       pendingPick.current = onPick
       setOpen(true)
     },
@@ -106,7 +111,19 @@ export function BesignerMediaPickerProvider(
           // raw — `inheritedMediaAlt` at the call site owns the precedence,
           // because only the call site can see the placement's current alt
           // and its `decorative` switch.
-          if (src) pendingPick.current?.(src, { alt: media.alt })
+          // The pixel dimensions ride along too (AGL-2486), for the same
+          // reason and by the same route: the tenant renderer never reads a
+          // media document, so the only way an `<img>` can carry intrinsic
+          // `width`/`height` — and reserve its box before the bytes land — is
+          // for the pick to copy them onto the node. Handed over raw; the
+          // call site decides which prop names they land under, because only
+          // it knows what the element declares.
+          if (src)
+            pendingPick.current?.(src, {
+              alt: media.alt,
+              width: media.width,
+              height: media.height,
+            })
           pendingPick.current = null
           setOpen(false)
         }}

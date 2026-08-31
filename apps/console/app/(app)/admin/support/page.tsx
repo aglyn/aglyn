@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -82,15 +83,9 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
       body?: Record<string, unknown>,
     ): Promise<any | null> => {
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch(path, {
+        const response = await authorizedFetch(user, path, {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           ...(body ? { body: JSON.stringify(body) } : {}),
         })
         const payload = await response.json().catch(() => ({}))

@@ -61,7 +61,7 @@ export const SIGNED_UPLOAD_THRESHOLD_BYTES = 3 * MB
  *
  * Images are enumerated too, in `@aglyn/aglyn`'s `IMAGE_UPLOAD_TYPES` rather
  * than here — the same module the byte-signature table keys off, so a format
- * cannot be accepted by one and unrecognised by the other (AGL-1476). They
+ * cannot be accepted by one and unrecognised by the other. They
  * carry one shared ceiling, which is why they are not rows in this table.
  */
 export interface UploadTypeSpec {

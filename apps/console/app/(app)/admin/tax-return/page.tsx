@@ -17,7 +17,7 @@
 'use client'
 
 /**
- * SALES TAX — the Texas return for one filing period (AGL-1900 / AGL-1811).
+ * SALES TAX — the return for one filing period (AGL-1900 / AGL-1811).
  *
  * AGL-1811 built the mechanism and stopped there: `GET /api/admin/tax-return`
  * computed a filable return that only a curl could reach. This page is the
@@ -34,10 +34,18 @@
  * whole reason `attention` exists is that an undercount presented as a total
  * is the one failure this record cannot have.
  *
- * **Never show platform totals where the return wants Texas.** Items 1 and 2
- * come from `byJurisdiction['US-TX']`. The "Aglyn's own sales by jurisdiction"
- * table below is the audit trail for why the rest of the quarter is not on the
- * return.
+ * **Never show platform totals where the return wants one jurisdiction.** The
+ * filing figures come from `byJurisdiction[configured code]`. The "Aglyn's own
+ * sales by jurisdiction" table below is the audit trail for why the rest of
+ * the quarter is not on the return.
+ *
+ * **Never leave the jurisdiction unsaid.** The same quarter filed in two
+ * jurisdictions is two different returns, and this page named neither — it
+ * read Texas everywhere and said so nowhere, so a self-host operator filing in
+ * California or the United Kingdom was handed Texas Comptroller lines with
+ * their own figures in them. The heading, the figures card and the export all
+ * name the configured jurisdiction, and a jurisdiction with no exporter of its
+ * own gets a breakdown that says out loud it is not a return.
  *
  * **Never let one taxpayer's table answer for another's** (AGL-1956). That
  * table used to call itself the economic-nexus early warning, and it reads
@@ -61,8 +69,9 @@
  * them is the mistake the three-way split exists to prevent.
  *
  * Read-only, like the route: this page files nothing and writes nothing. The
- * filing happens at the Comptroller's Webfile keyboard, which is why the
- * export is a spreadsheet of working papers and the credentials ride along.
+ * filing happens at the authority's own keyboard — the Comptroller's Webfile,
+ * for Texas — which is why the export is a spreadsheet of working papers and
+ * the credentials ride along.
  */
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
@@ -70,6 +79,7 @@ import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -90,10 +100,14 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import StaffTaxFindingsCard from '../../../../components/staff-tax-findings-card.component'
+import StaffTaxablePurchasesCard from '../../../../components/staff-taxable-purchases-card.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { DEFAULT_FIRST_TAXABLE_PERIOD } from '../../../../utils/tax-filing-config'
+import { taxRegistrationSetupHint } from '../../../../utils/tax-jurisdictions'
 import {
   centsToDollars,
   defaultTaxReturnPeriod,
@@ -101,12 +115,12 @@ import {
   taxReturnCsv,
   taxReturnCsvFilename,
   taxReturnFacilitatedJurisdictionRows,
+  taxReturnFilingLines,
   taxReturnJurisdictionRows,
   taxReturnMarketplaceLines,
   taxReturnPeriodOptions,
   taxReturnRegistration,
   taxReturnStorefrontRows,
-  taxReturnWebfileLines,
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
 
@@ -119,12 +133,67 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
   // and the default selection must not shift under a page left open across
   // a quarter boundary while someone is reading it.
   const [now] = useState(() => new Date())
-  const periodOptions = useMemo(() => taxReturnPeriodOptions(now), [now])
-  const [period, setPeriod] = useState(() => defaultTaxReturnPeriod(now))
+  /**
+   * The earliest filable period, from Platform settings.
+   *
+   * `null` means the answer has not settled yet, and NOTHING below builds a
+   * menu or fetches a return until it has. The floor used to be a compiled-in
+   * constant precisely because the menu had to exist before the first request
+   * and the configuration arrived on the response to it; a separate,
+   * identifier-free settings read breaks that circle, so an operator whose
+   * obligation began before this deployment's own is offered their own
+   * periods instead of having to reach them by hand.
+   *
+   * Degrade-safe: any failure settles on the built-in floor rather than
+   * leaving the page without a menu.
+   */
+  const [floor, setFloor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isStaff || !user) return
+    let active = true
+    void (async () => {
+      let configured: string | null = null
+      try {
+        const response = await authorizedFetch(user, '/api/admin/tax-filing')
+        const body = await response.json().catch(() => ({}))
+        const value = body?.config?.firstTaxablePeriod
+        if (response.ok && typeof value === 'string') configured = value
+      } catch {
+        configured = null
+      }
+      if (active) setFloor(configured ?? DEFAULT_FIRST_TAXABLE_PERIOD)
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, user])
+  const periodOptions = useMemo(
+    () => (floor ? taxReturnPeriodOptions(now, floor) : []),
+    [now, floor],
+  )
+  const [period, setPeriod] = useState('')
+  useEffect(() => {
+    if (!floor) return
+    // Re-selects only when the current choice is not on the menu the floor
+    // produced — which is the case on first paint, and again if an operator
+    // moves the floor past the period a reader had open.
+    setPeriod((current) =>
+      periodOptions.some((option) => option.value === current)
+        ? current
+        : defaultTaxReturnPeriod(now, floor),
+    )
+  }, [floor, now, periodOptions])
 
   const [payload, setPayload] = useState<TaxReturnPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  /*
+   * Bumped when Item 3 is entered, so the figures card shows the entry
+   * immediately rather than on the next period change. The return is the
+   * document; the entry card only edits one line of it, and a line that
+   * updates in one place and not the other is two answers for one figure.
+   */
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     if (!isStaff || !user || !period) return
@@ -138,10 +207,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     setError(null)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/tax-return?period=${encodeURIComponent(period)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const body = await response.json().catch(() => ({}))
         if (!active) return
@@ -159,11 +227,20 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     return () => {
       active = false
     }
-  }, [isStaff, user, period])
+  }, [isStaff, user, period, reloadToken])
 
   const verdict = useMemo(() => taxReturnAttention(payload), [payload])
   const registration = useMemo(() => taxReturnRegistration(payload), [payload])
-  const webfileLines = useMemo(() => taxReturnWebfileLines(payload), [payload])
+  // WHICH AUTHORITY THIS IS FOR. It rides on the payload, so nothing names a
+  // jurisdiction until the response has said which one — a heading that
+  // defaults to Texas while the request is in flight is a Texas return in the
+  // only glance most readers give it.
+  const filing = registration.jurisdiction
+  // Named only once the response has said which jurisdiction it is. Copy that
+  // reads "US-TX" for the second before a GB deployment's figures land is the
+  // same wrong-jurisdiction glance the heading is guarded against.
+  const filingName = payload ? filing.code : 'The filing jurisdiction'
+  const filingLines = useMemo(() => taxReturnFilingLines(payload), [payload])
   const jurisdictions = useMemo(
     () => taxReturnJurisdictionRows(payload),
     [payload],
@@ -185,13 +262,50 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     [payload],
   )
 
+  /**
+   * The rows that were REMOVED to reach the figures, in one sentence.
+   *
+   * Two rules take rows off this return and both are new: Aglyn's own tagged
+   * purchases are not sales to a state, and an untaxed row paid before the
+   * configured obligation began could not have under-collected. Either can
+   * turn a finding into no finding, and a count that quietly becomes zero
+   * looks exactly like a rule that broke. Null when neither removed anything,
+   * so a genuinely clean period says nothing extra.
+   */
+  const excludedNote = useMemo(() => {
+    const internal = Number(payload?.summary?.internal?.transactionCount ?? 0)
+    const beforeObligation = Number(
+      payload?.summary?.attention?.untaxedRowsBeforeObligation ?? 0,
+    )
+    const parts: string[] = []
+    if (internal) {
+      parts.push(
+        `${internal} ${internal === 1 ? 'row is' : 'rows are'} Aglyn’s own ` +
+          'purchases and are excluded from every figure below',
+      )
+    }
+    if (beforeObligation) {
+      parts.push(
+        `${beforeObligation} untaxed ${
+          beforeObligation === 1 ? 'row was' : 'rows were'
+        } paid before the obligation began, so nothing was under-collected on ` +
+          'them',
+      )
+    }
+    if (!parts.length) return null
+    return `${parts.join('; ')}. Both are listed on the findings card below.`
+  }, [payload])
+
   const handleExport = useCallback(() => {
     const csv = taxReturnCsv(payload)
     if (!csv) return
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = taxReturnCsvFilename(payload?.period ?? period)
+    anchor.download = taxReturnCsvFilename(
+      payload?.period ?? period,
+      payload?.registration?.jurisdiction,
+    )
     anchor.click()
     URL.revokeObjectURL(url)
     enqueueSnackbar('Working papers exported', {
@@ -210,7 +324,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
       ]}
       help="salesTaxReturn"
       header={{
-        children: 'Texas Sales Tax Return',
+        children: payload
+          ? `${filing.label} Sales Tax Return`
+          : 'Sales Tax Return',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
     >
@@ -222,7 +338,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('salesTaxReturn', {
                 anchor: '#choosing-the-period',
                 excerpt:
-                  'Pick the quarter (or month) to file. Periods start at the registration’s first taxable sales date — 2026-09-01 — because nothing earlier can be filed.',
+                  'Pick the quarter (or month) to file. The menu starts at the earliest filable period configured in Platform settings — September 2026 by default — because nothing earlier can be filed.',
               })}
               contentGutterX
               contentGutterY
@@ -255,27 +371,43 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   {'Export working papers (CSV)'}
                 </Button>
                 {/*
+                  WHICH JURISDICTION EVERY FIGURE BELOW IS FOR. Beside the
+                  period, because the two together are the only thing that
+                  identifies what is on this screen: the same quarter filed in
+                  two jurisdictions is two different returns, and the page used
+                  to name neither out loud.
+                */}
+                {payload ? (
+                  <Chip
+                    size="small"
+                    color={filing.recognized ? 'default' : 'error'}
+                    variant="outlined"
+                    label={`Jurisdiction ${filing.code}`}
+                  />
+                ) : null}
+                {/*
                   AGL-2021. The registration comes from server-only env via the
                   staff-gated route, so it is absent on any deployment that has
-                  not configured one. Says so in words rather than rendering
-                  "Webfile number " with nothing after it — a filer copying a
-                  number off this corner must never be handed a blank.
+                  not configured one. Says so in words — and names the
+                  variables to set — rather than rendering a label with nothing
+                  after it, because a filer copying a number off this corner
+                  must never be handed a blank.
                 */}
                 <Stack sx={{ ml: { sm: 'auto' } }}>
-                  {registration.configured ? (
+                  {!payload ? null : registration.configured ? (
                     <>
                       <Typography variant="caption" color="text.secondary">
-                        {`Webfile number ${registration.webfileNumber}`}
+                        {`${filing.registrationIdLabel} ${registration.registrationId}`}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {`Taxpayer number ${registration.taxpayerNumber}`}
-                      </Typography>
+                      {registration.filingId ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {`${filing.filingIdLabel} ${registration.filingId}`}
+                        </Typography>
+                      ) : null}
                     </>
                   ) : (
                     <Typography variant="caption" color="warning.main">
-                      {
-                        'Registration not configured — set TX_WEBFILE_NUMBER and TX_TAXPAYER_NUMBER'
-                      }
+                      {taxRegistrationSetupHint(filing)}
                     </Typography>
                   )}
                 </Stack>
@@ -298,6 +430,19 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                   {`All ${payload.summary?.transactionCount ?? 0} invoices in ` +
                     'this period were fully readable — no row was dropped, ' +
                     'and no figure below is a lower bound.'}
+                  {/*
+                    …AND WHAT WAS TAKEN OUT TO GET HERE. A clean verdict
+                    reached by removing rows is not the same as a clean
+                    verdict over all of them, and an operator who watched a
+                    count fall to zero is owed the reason rather than left to
+                    wonder whether the rule broke. The rows themselves are on
+                    the findings card below.
+                  */}
+                  {excludedNote ? (
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      {excludedNote}
+                    </Typography>
+                  ) : null}
                 </Alert>
               ) : (
                 <Alert severity={verdict.blocking ? 'error' : 'warning'}>
@@ -337,20 +482,55 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                       </Stack>
                     ))}
                   </Stack>
+                  {excludedNote ? (
+                    <Typography variant="body2" sx={{ mt: 1.5 }}>
+                      {excludedNote}
+                    </Typography>
+                  ) : null}
                 </Alert>
               )
             ) : null}
 
+            {/*
+              WHICH ROWS. The banner above states the counts; this states the
+              invoices behind them. A finding that names a count and cannot
+              name a row is a finding nobody can begin on — and the one this
+              page raised most often says that if the row is a sale here, tax
+              was under-collected and the platform pays it from the receipt.
+            */}
+            <StaffTaxFindingsCard payload={payload} loading={loading} />
+
             <CardDisplay
-              header={'Form 01-114 figures — Texas only'}
+              header={payload ? filing.figuresHeader : 'Return figures'}
               help={docsHelp('salesTaxReturn', {
                 anchor: '#the-figures',
                 excerpt:
-                  'The lines to type into Webfile, in dollars, for Texas receipts only. Everything sold outside Texas is on the jurisdiction table instead.',
+                  'The filing figures, in dollars, for the configured jurisdiction only. Everything sold elsewhere is on the jurisdiction table instead.',
               })}
               contentGutterX
               contentGutterY
             >
+              {/*
+                THE DOCUMENT SAYS WHAT IT IS. Texas has an exporter that knows
+                Form 01-114's own lines; every other jurisdiction gets what was
+                collected there and nothing about the form, because nothing
+                here knows the form. A breakdown read as a return is the
+                failure this banner exists to prevent, and it is stated on the
+                screen as well as in the export because only one of those gets
+                looked at twice.
+              */}
+              {payload && filing.form !== 'tx-webfile' ? (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <AlertTitle>
+                    {`A breakdown for manual filing — not a ${filing.code} return`}
+                  </AlertTitle>
+                  {'These are the figures a return is assembled from: what ' +
+                    'was collected in this jurisdiction, and on what base. ' +
+                    'No form for this jurisdiction is known here, so nothing ' +
+                    'below is a form line — transcribe them onto the return ' +
+                    'the authority asks for.'}
+                </Alert>
+              ) : null}
               {/*
                 Dimmed, not hidden, while a blocking finding stands: the
                 preparer still needs to see the figures to investigate the
@@ -371,13 +551,34 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {webfileLines.map((line) => (
+                    {filingLines.map((line) => (
                       <TableRow key={line.label}>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {line.item}
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2">{line.label}</Typography>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                          >
+                            <Typography variant="body2">{line.label}</Typography>
+                            {/*
+                              PROVENANCE TRAVELS WITH THE FIGURE. Every other
+                              line here is summed from platformRevenue; this
+                              one was typed. Same column, same font, same
+                              authority — so without the mark it is a figure
+                              somebody will later defend as computed.
+                            */}
+                            {line.entered ? (
+                              <Chip
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                label="Entered, not computed"
+                              />
+                            ) : null}
+                          </Stack>
                           <Typography variant="caption" color="text.secondary">
                             {line.note}
                           </Typography>
@@ -407,10 +608,27 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               {payload && verdict.blocking ? (
                 <Typography variant="body2" color="error" sx={{ mt: 2 }}>
                   {'These figures are incomplete — see the findings above. ' +
-                    'Do not type them into Webfile.'}
+                    (filing.form === 'tx-webfile'
+                      ? 'Do not type them into Webfile.'
+                      : 'Do not file from them.')}
                 </Typography>
               ) : null}
             </CardDisplay>
+
+            {/*
+              ITEM 3, which no query here can answer. Only where the form is
+              known: `taxReturnBreakdownLines` deliberately omits taxable
+              purchases for every other jurisdiction, because it is a Form
+              01-114 line rather than a universal concept, and offering a box
+              to fill a line that is not on the document would invent the form
+              this report declines to guess at.
+            */}
+            {payload && filing.form === 'tx-webfile' ? (
+              <StaffTaxablePurchasesCard
+                period={payload.period ?? period}
+                onSaved={() => setReloadToken((token) => token + 1)}
+              />
+            ) : null}
 
             <GridItems
               spacing={3}
@@ -546,7 +764,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('salesTaxReturn', {
                 anchor: '#the-figures',
                 excerpt:
-                  'Tax charged to shoppers on merchants’ storefronts, split by who owes it. None of it is in the Webfile figures above.',
+                  'Tax charged to shoppers on merchants’ storefronts, split by who owes it. None of it is in the filing figures above.',
               })}
               contentGutterX
               contentGutterY
@@ -556,7 +774,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 color="text.secondary"
                 sx={{ mb: 1.5 }}
               >
-                {'None of this is in the Webfile figures above, which sum ' +
+                {`None of this is in the ${
+                  filing.form === 'tx-webfile' ? 'Webfile' : 'breakdown'
+                } figures above, which sum ` +
                   'Aglyn’s OWN sales only. The first row is the one that ' +
                   'needs a decision: those sessions are created on Aglyn’s ' +
                   'platform account, so Stripe computed that tax against ' +
@@ -673,9 +893,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               >
                 {'What Aglyn facilitated into each state, whoever remits the ' +
                   'tax — the figure an economic-nexus threshold is measured ' +
-                  'against. Texas needs no threshold: a Texas LLC has nexus ' +
-                  'there unconditionally. A state showing sales and no tax is ' +
-                  'the one to watch.'}
+                  `against. ${filingName} needs no threshold: the filer is ` +
+                  'established there, so the obligation is unconditional. A ' +
+                  'region showing sales and no tax is the one to watch.'}
               </Typography>
               <Table size="small">
                 <TableHead>
@@ -714,7 +934,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                                 ? 'Not stated'
                                 : row.jurisdiction}
                             </Typography>
-                            {row.isTexas ? (
+                            {row.isFilingJurisdiction ? (
                               <Chip
                                 size="small"
                                 color="warning"
@@ -774,16 +994,18 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               THE THIRD BUCKET (AGL-2137/2163). One liability arm, not three:
               marketplace checkout adds the tax EXCLUSIVE on the platform's own
               charge and pays the publisher from the pre-tax price, so all of
-              it is Aglyn's. Stated as a platform figure with no jurisdiction
-              breakdown because purchase rows store no buyer address — a
-              "Texas" slice here would be a guess printed as a total.
+              it is Aglyn's. The platform total leads and the per-state split
+              follows it, including the part that has no state: purchases
+              recorded before the webhook stored a jurisdiction have none and
+              are not given one, so a "Texas" slice presented as the whole
+              answer would be a guess printed as a total.
             */}
             <CardDisplay
               header={'Marketplace tax — plugin and theme purchases'}
               help={docsHelp('salesTaxReturn', {
                 anchor: '#the-figures',
                 excerpt:
-                  'Tax on marketplace purchases. Charged on the platform’s own charge, kept platform-side, and in no Webfile line above.',
+                  'Tax on marketplace purchases. Charged on the platform’s own charge, kept platform-side, and in no filing line above.',
               })}
               contentGutterX
               contentGutterY
@@ -795,10 +1017,11 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               >
                 {'All of this tax is Aglyn’s: it is added on top of the ' +
                   'listing price on Aglyn’s own charge, and the publisher’s ' +
-                  'transfer is computed from the pre-tax price. No buyer ' +
-                  'address is stored on a purchase row, so none of it can be ' +
-                  'placed in a state — which is why it is absent from the ' +
-                  'jurisdiction table below.'}
+                  'transfer is computed from the pre-tax price. Each purchase ' +
+                  'records the jurisdiction Stripe computed its tax for, so ' +
+                  'the total below breaks down by state. Purchases recorded ' +
+                  'before that carry no jurisdiction and are counted as ' +
+                  'such rather than placed — read those in Stripe.'}
               </Typography>
               <Stack spacing={1}>
                 {marketplaceLines.length === 0 ? (
@@ -859,7 +1082,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('salesTaxReturn', {
                 anchor: '#aglyns-own-sales-by-jurisdiction',
                 excerpt:
-                  'Every buyer state for Aglyn’s OWN subscription and add-on revenue in the period. Texas is the return; the rest is the audit trail for why that revenue is not on it. NOT the nexus list — see “Facilitated sales by buyer state”.',
+                  'Every buyer state for Aglyn’s OWN subscription and add-on revenue in the period. The configured jurisdiction is the return; the rest is the audit trail for why that revenue is not on it. NOT the nexus list — see “Facilitated sales by buyer state”.',
               })}
               contentGutterX
               contentGutterY
@@ -870,8 +1093,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 sx={{ mb: 1.5 }}
               >
                 {'Aglyn’s own subscription and add-on revenue, by the ' +
-                  'customer’s state. Texas is the return; the other rows are ' +
-                  'the record of why the rest of the period is not on it. ' +
+                  `customer’s state. ${filingName} is the return; the other ` +
+                  'rows are the record of why the rest of the period is not ' +
+                  'on it. ' +
                   'For nexus from MERCHANTS’ sales, read “Facilitated sales ' +
                   'by buyer state” above — a different taxpayer’s money, and ' +
                   'never summed with this.'}
@@ -884,12 +1108,20 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     <TableCell align="right">{'Total sales'}</TableCell>
                     <TableCell align="right">{'Taxable sales'}</TableCell>
                     <TableCell align="right">{'Tax collected'}</TableCell>
+                    {/*
+                      WHAT WAS REMOVED (AGL-1582). Aglyn's own purchases are
+                      not sales to a state, so they are out of every column to
+                      the left — and a return that drops rows without saying
+                      which cannot be checked by the person signing it. Stated
+                      here so the two can be added back.
+                    */}
+                    <TableCell align="right">{'Excluded (internal)'}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {jurisdictions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={6}>
                         <Typography variant="body2" color="text.secondary">
                           {payload
                             ? 'No invoices in this period.'
@@ -912,12 +1144,12 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                               variant="body2"
                               sx={{
                                 fontFamily: 'monospace',
-                                fontWeight: row.isTexas ? 600 : 400,
+                                fontWeight: row.isFilingJurisdiction ? 600 : 400,
                               }}
                             >
                               {row.jurisdiction}
                             </Typography>
-                            {row.isTexas ? (
+                            {row.isFilingJurisdiction ? (
                               <Chip
                                 size="small"
                                 color="primary"
@@ -929,6 +1161,19 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                                 size="small"
                                 color="warning"
                                 label="No address"
+                              />
+                            ) : null}
+                            {/*
+                              A jurisdiction whose ONLY rows were Aglyn's own
+                              purchases is in no filed figure at all. Without
+                              this the period reads as having no invoices while
+                              rows sit behind it, excluded.
+                            */}
+                            {row.internalOnly ? (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label="Nothing filed — all internal"
                               />
                             ) : null}
                           </Stack>
@@ -1002,11 +1247,58 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                         >
                           {`$${row.taxCollectedDollars}`}
                         </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {row.internalTransactionCount ? (
+                            <Stack spacing={0.25}>
+                              <Typography
+                                variant="body2"
+                                sx={{ fontFamily: 'monospace' }}
+                                color="text.secondary"
+                              >
+                                {`$${row.internalTotalSalesDollars}`}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {`${row.internalTransactionCount} ${
+                                  row.internalTransactionCount === 1
+                                    ? 'invoice'
+                                    : 'invoices'
+                                }, $${row.internalTaxCollectedDollars} tax`}
+                              </Typography>
+                            </Stack>
+                          ) : (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ fontFamily: 'monospace' }}
+                            >
+                              {'—'}
+                            </Typography>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mt: 1.5 }}
+              >
+                {'“Excluded (internal)” is Aglyn’s own purchases (AGL-1582) — ' +
+                  'marked at checkout, kept out of every other column here and ' +
+                  'out of the filing figures above, because a purchase the ' +
+                  'platform made from itself is not a sale to a state. It is ' +
+                  'stated rather than subtracted quietly so the figures can be ' +
+                  'checked. The mark is written when the purchase is made and ' +
+                  'cannot be added afterwards.'}
+              </Typography>
             </CardDisplay>
           </Stack>
         </StaffOnly>

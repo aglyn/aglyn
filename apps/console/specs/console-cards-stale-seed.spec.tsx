@@ -95,7 +95,33 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
   useHostVersionApi: () => jest.fn(),
   useHostResourceApi: () => jest.fn(),
+  /*
+   * The catalog's head-count, which reaches the card through the barrel now
+   * that a plugin surface needs it too. Answered rather than left to the real
+   * hook so the card's quota arithmetic stays real without a network read.
+   */
+  useLiveArtifactCount: () => 0,
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
+  /*
+   * The components card reads a PAGE now (AGL-2501), so its rows and — the
+   * part these cases turn on — its `fromCache` flag arrive through the window
+   * hook rather than the collection hook.
+   *
+   * The window arithmetic is not what is under test here; `fromCache` is. So
+   * the page is the fixture verbatim, and the flag is the one the listener
+   * mock is set to, which is what the seed guard reads.
+   */
+  usePagedCollection: () => ({
+    data: mockComponentDocs,
+    rows: mockComponentDocs,
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: mockListener.status,
+    fromCache: mockListener.fromCache,
+  }),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the card passed it, which is the one thing these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -159,6 +185,13 @@ jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
+  // The components card's head-count (AGL-1716) is two server aggregates on
+  // mount. Left real they receive this file's stand-in collection — a bare
+  // string — and throw before the card renders at all.
+  where: (field: string, op: string, value: unknown) => ({ field, op, value }),
+  getCountFromServer: jest
+    .fn()
+    .mockResolvedValue({ data: () => ({ count: 0 }) }),
 }))
 
 const mockEnqueueSnackbar = jest.fn()
@@ -169,7 +202,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   MdiIcon: () => null,
   // The shared row cluster renders its quick action as an `AppLink` when the
-  // destination is a route rather than a handler (AGL-693).
+  // destination is a route rather than a handler (AGL-2501).
   AppLink: ({ children, href }: { children?: ReactNode; href?: string }) => (
     <a href={href}>{children}</a>
   ),
@@ -183,7 +216,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
  * so the REAL menu, the REAL dialog and the REAL save handler are still what
  * the spec drives — only the grid chrome is replaced.
  *
- * `renderCell`, not `getActions` (AGL-693). Every artifact list now shares one
+ * `renderCell`, not `getActions` (AGL-2501). Every artifact list now shares one
  * trailing cluster — a quick action plus an overflow menu — rendered by a
  * normal column, rather than MUI's `type: 'actions'` splitting icons between
  * the row and a menu it owns. Rendering the cell is also what keeps this stand-in
@@ -308,7 +341,7 @@ describe('LanguagesCard (AGL-1358)', () => {
 
 describe('HostComponentsCard (AGL-1358)', () => {
   /**
-   * Rename lives behind the row's OVERFLOW MENU (AGL-693).
+   * Rename lives behind the row's OVERFLOW MENU (AGL-2501).
    *
    * It was an inline icon until every artifact list was given the same row
    * grammar — one quick action, then the menu — so reaching it now takes the

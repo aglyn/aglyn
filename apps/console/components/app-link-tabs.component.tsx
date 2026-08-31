@@ -78,7 +78,7 @@ export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
 
     const tabValue = useMemo(() => {
       /*
-       * A tab stays active on its own SUB-ROUTES (AGL-693).
+       * A tab stays active on its own SUB-ROUTES (AGL-2501).
        *
        * This matched the pathname exactly, which is correct only while every
        * tab is a leaf. It is not: a tabbed section that becomes real routes —

@@ -78,7 +78,7 @@ true:
 - it is **unsaved work until you save**, like any other edit, rather than
   going live the moment the dialog closes.
 
-**Workflows → Actions is a different list.** Actions are things the *site*
+**Automation → Actions is a different list.** Actions are things the *site*
 does — an order was placed, a form was submitted — so they are site-wide and
 live outside any one page. Interactions are things an *element* does, and
 they are edited only here, on the element.
@@ -144,6 +144,69 @@ yourself).
   `visible`* with a CSS transition, frequency *once per visitor*.
 - **Announcement click-through**: *When clicked → Track analytics event*
   plus *Go to a URL*.
+
+## Track an analytics event {#analytics-event-step}
+
+*When clicked → **Track an analytics event*** sends an event of your own naming
+to your site's Google Analytics property, alongside the events Aglyn already
+sends. It is a Pro+ step, and it is the only way to measure something the
+built-in events do not already cover — a click on one particular button, a tab
+someone opened, a video they started.
+
+The step takes an **event name** and up to **10 parameters**, each a name and a
+value. See [Google Analytics events](../../marketing-and-automation/analytics/google-analytics.md)
+for everything your property receives without you doing anything.
+
+### Naming the event {#analytics-event-name}
+
+Type a readable name; Aglyn normalizes it into the shape GA4 accepts. `CTA
+Click!` is stored and sent as `cta_click` — lowercased, anything that is not a
+letter, digit or underscore becomes an underscore, runs of underscores collapse,
+a trailing one is dropped, and the result is cut to **40 characters**.
+
+Two names are refused outright rather than rewritten, with the reason shown as
+you save:
+
+- **A name GA4 reserves for itself**, or one starting `firebase_`, `google_` or
+  `ga_`. GA4 would silently discard the event.
+- **A name Aglyn already uses**, such as `purchase` or `generate_lead`. Reusing
+  one would mix your events into a report built on a different shape.
+
+A name that does not start with a letter is refused too.
+
+### Parameters {#analytics-event-parameters}
+
+| Limit | Value |
+| --- | --- |
+| Parameters per event | 10 |
+| Parameter name length | 40 characters — GA4 drops anything longer |
+| Parameter value length | 100 characters — longer values are truncated |
+
+Every parameter needs both a name and a value; a row with either half blank is
+not saved.
+
+:::warning Parameters carry labels, never a visitor's details
+A parameter must not carry anything about the person — no email address, name,
+phone number, postal address or IP. Those parameter names are refused, and so is
+any value that looks like an email address. A URL you pass is reduced to its
+origin and path, so a query string cannot smuggle one in.
+
+This is checked **when you save**, not silently at run time: if a parameter
+would be stripped on delivery, the step refuses to save and names the parameter,
+because an event that runs, reports success and arrives missing the dimension it
+was created for is worse than one that will not save.
+
+The practical rule is that a parameter should be a **fixed label you chose** —
+`plan: pro`, `location: footer` — and never a form field's contents.
+:::
+
+### Where it goes, and when it does not {#analytics-event-delivery}
+
+The event reaches **your own** Google Analytics property, not Aglyn's. It is
+subject to the same [consent gate](../../marketing-and-automation/analytics/cookie-consent.md)
+as everything else: with no analytics grant there is no tag on the page, and the
+event is dropped where it is raised rather than held and sent later. Nothing
+about the interaction otherwise changes — the rest of its steps still run.
 
 ## Custom HTML block
 

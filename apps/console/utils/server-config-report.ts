@@ -268,11 +268,35 @@ export function readDeploymentIdentity(
     const raw = env[key]
     return isAbsent(raw) ? null : String(raw)
   }
+  /**
+   * Read out of `env` rather than through `deploymentCommitRef()`, so this
+   * module keeps the purity the docstring above promises — the route supplies
+   * the environment and nothing here reads `process.env`.
+   *
+   * That costs nothing an operator cares about. `BUILD_ID` and `COMMIT_REF`
+   * are build-time defines the bundler substitutes, so they are absent from a
+   * container's `process.env` unless the operator ALSO passes them as runtime
+   * env — which `docker-compose.yml` does, because it feeds `.env.selfhost`
+   * to the running container as well as to the build.
+   *
+   * Precedence matches `deploymentCommitRef()` deliberately: two orderings for
+   * "which build is this" is how the admin report and `/api/health` end up
+   * naming different commits for the same process.
+   */
+  const firstOf = (...keys: readonly string[]): string | null => {
+    for (const key of keys) {
+      const value = pick(key)
+      if (value !== null) return value
+    }
+    return null
+  }
   return {
+    // No agnostic equivalent: a container has no per-deployment id, and the
+    // commit below is what attributes the reading instead.
     id: pick('VERCEL_DEPLOYMENT_ID'),
-    commit: pick('VERCEL_GIT_COMMIT_SHA'),
+    commit: firstOf('BUILD_ID', 'COMMIT_REF', 'VERCEL_GIT_COMMIT_SHA'),
     env: pick('VERCEL_ENV'),
-    region: pick('VERCEL_REGION'),
+    region: firstOf('AGLYN_REGION', 'VERCEL_REGION', 'FLY_REGION', 'AWS_REGION'),
   }
 }
 

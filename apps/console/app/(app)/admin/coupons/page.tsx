@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -43,11 +44,15 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+} from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 
 interface CouponRow {
@@ -100,6 +105,18 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   const isStaff = useIsStaff()
 
   const [coupons, setCoupons] = useState<CouponRow[]>([])
+  /*
+   * The list PAGES (AGL-2501). Every Stripe coupon the platform has ever
+   * created rendered in one wall, and a coupon row is tall — a name, an id, a
+   * chip per promotion code — so a few dozen of them is a page a reader
+   * scrolls past rather than reads.
+   *
+   * The rows are already in memory (one `/api/admin/coupons` fetch), so the
+   * footer is handed a real total rather than the "more than 10" a cursor
+   * feed has to settle for.
+   */
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
 
@@ -117,13 +134,9 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   })
 
   const refresh = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setLoading(true)
     try {
-      const response = await fetch('/api/admin/coupons', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
+      const response = await authorizedFetch(user, '/api/admin/coupons')
       if (response.status === 501) {
         setCoupons([])
         return
@@ -161,16 +174,11 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     setForm((previous) => ({ ...previous, ...patch }))
 
   const create = async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    if (!idToken) return
     setBusy(true)
     try {
-      const response = await fetch('/api/admin/coupons', {
+      const response = await authorizedFetch(user, '/api/admin/coupons', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim() || undefined,
           percentOff: form.kind === 'percent' ? Number(form.percentOff) : undefined,
@@ -201,6 +209,17 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       setBusy(false)
     }
   }
+
+  const pagedCoupons = useMemo(
+    () => coupons.slice(page * pageSize, page * pageSize + pageSize),
+    [coupons, page, pageSize],
+  )
+  // A refresh that returns fewer coupons can strand a reader past the last
+  // page, which MUI renders as an empty table with no explanation.
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(coupons.length / pageSize) - 1)
+    if (page > lastPage) setPage(lastPage)
+  }, [coupons.length, page, pageSize])
 
   const discountLabel = (row: CouponRow) =>
     row.percentOff != null
@@ -452,6 +471,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                   {'No coupons yet.'}
                 </Typography>
               ) : (
+                <>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -464,7 +484,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {coupons.map((row) => (
+                    {pagedCoupons.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell>
                           <Stack spacing={0.25}>
@@ -525,6 +545,15 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     ))}
                   </TableBody>
                 </Table>
+                <ListPagination
+                  page={page}
+                  pageSize={pageSize}
+                  rowCount={pagedCoupons.length}
+                  count={coupons.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
+                </>
               )}
             </CardDisplay>
           </Stack>

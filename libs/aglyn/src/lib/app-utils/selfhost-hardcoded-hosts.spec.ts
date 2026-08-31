@@ -23,9 +23,9 @@ import { resolve } from 'path'
  * Self-host ratchet: Aglyn's own hostnames may not appear in runtime code
  * except where it is written down WHY (AGL-2195).
  *
- * the rule: *"the self hosted owner should not have to edit the source to
- * update aglyn branded items urls or personal identification items, should
- * move these to env vars"*. `NEXT_PUBLIC_TENANT_DOMAIN` and
+ * The rule: a self-host operator changes Aglyn-branded URLs and identifying
+ * values by setting an environment variable, never by editing the source.
+ * `NEXT_PUBLIC_TENANT_DOMAIN` and
  * `NEXT_PUBLIC_WORKSPACE_DOMAIN` exist and are honoured by `TENANT_APEX` and
  * `WORKSPACE_DOMAIN` — and were then ignored by four surfaces that re-derived
  * the apex by hand, including the JSON-LD a published site emits. A
@@ -312,6 +312,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "The email mirror of TENANT_APEX. `shared-util-email` is tagged scope:shared and cannot import @aglyn/aglyn, so the copy is structural; apps/console/specs/email-media-src-drift.spec.ts holds the two to the same answer, including under a configured apex.",
   },
   {
+    file: 'libs/shared/util/email/src/lib/platform-sending-domain.ts',
+    count: 1,
+    reason:
+      "`tenantWebApex()` — the mail layer's reader of NEXT_PUBLIC_TENANT_DOMAIN, and the literal is only its `||` default. The same structural copy as email-media-src.ts above and for the same reason: `shared-util-email` is tagged scope:shared and cannot import TENANT_APEX from @aglyn/aglyn. The mail apex built on it is separately configurable through AGLYN_TENANT_MAIL_APEX and defaults to `mail.{web apex}`, so an operator who sets the tenant domain gets a sending namespace inside their own zone rather than inside ours; platform-sending-domain.spec.ts holds this function to the configured value, so the default cannot become the answer for a deployment that set one.",
+  },
+  {
     file: 'libs/aglyn/src/lib/app-utils/host-naming.ts',
     count: 1,
     reason:
@@ -423,22 +429,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'this ratchet red on main.',
   },
   {
-    file: 'tools/scripts/check-decision-log.mjs',
-    count: 1,
-    reason:
-      'AGL-1908. The pricing change-control guard. The single literal is the ' +
-      "Google Drive MOUNT PATH of Aglyn's own Pricing Decision Log — a local " +
-      'filesystem path, not a network host, and the same shape already ' +
-      'allowed for check-pricing-drift.mjs and legal-doc-diff.mjs. The ' +
-      'script makes no network call: its only subprocess is `git`, against ' +
-      'the local repo. Internal CI guard, run from package.json and imported ' +
-      'by no app; the Drive leg is explicitly NOT a gate and is skipped with ' +
-      'a note when the drive is unmounted, because CI has no Drive — so a ' +
-      "self-hoster who ran it would simply skip that leg. Landed unlisted in " +
-      '5265ca437, which left this ratchet red on main — the SIXTH such red ' +
-      'on 2026-08-24, and the one that landed while AGL-1533 was being fixed.',
-  },
-  {
     file: 'tools/scripts/check-legal-index-dates.mjs',
     count: 1,
     reason:
@@ -447,30 +437,20 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'origin.',
   },
   {
-    file: 'tools/scripts/check-runbook-commands.mjs',
+    file: 'tools/scripts/check-personal-identifiers.mjs',
     count: 1,
     reason:
-      'AGL-1533. The launch-day runbook checker. The single literal is the ' +
-      "Google Drive MOUNT PATH of Aglyn's own Platform Docs shared drive, " +
-      'where LAUNCH_DAY_RUNBOOK.md lives — a local filesystem path, not a ' +
-      'network host. The script makes NO network call of any kind (its only ' +
-      '`http` string is the Apache-2.0 licence header), so it cannot reach ' +
-      "our infrastructure from anyone's deployment, which is the AGL-2124 " +
-      'failure this ratchet exists to prevent. It is also ALREADY ' +
-      'configurable, which is why the literal is only a default: ' +
-      'AGLYN_RUNBOOK points at a copy of the document, AGLYN_LAUNCH_DOCS at ' +
-      'a different folder. Internal CI guard — run from ' +
-      '.github/workflows/tools-guards.yml, imported by no app, never ' +
-      'shipped. A self-hoster has no Aglyn launch runbook for it to read and ' +
-      'never runs it; were they to, an unmounted drive is exit 2 ' +
-      '(INCONCLUSIVE), not a false pass. Landed unlisted in b8dfe7f04, which ' +
-      'left this ratchet red on main.',
+      "The personal-identifier guard's own remediation advice: one string " +
+      'telling a developer to keep the domain on a fixture address while ' +
+      'changing the local-part to a role account. Never a constructed URL, ' +
+      'and a build tool that is never shipped — a self-hoster runs it ' +
+      'against their own tree.',
   },
   {
     file: 'tools/scripts/check-week-one-preflight.mjs',
-    count: 12,
+    count: 11,
     reason:
-      "Aglyn's own launch-week pre-flight (AGL-1617). Never shipped and never imported by an app: it reads OUR Drive folder, OUR five live legal pages and the five demo hosts by name, because the thing it checks IS our launch. A self-hoster has no use for it, so there is nothing here to make configurable. Landed unlisted in 3247f379b, which left this ratchet red on main until AGL-1617 added this entry.",
+      "Aglyn's own launch-week pre-flight (AGL-1617). Never shipped and never imported by an app: it reads OUR five live legal pages and the five demo hosts by name, because the thing it checks IS our launch. A self-hoster has no use for it, so there is nothing here to make configurable. The twelfth occurrence was the shared drive's mount path, which named a workstation account rather than a host and now comes from AGLYN_DRIVE_MOUNT.",
   },
   {
     file: 'tools/scripts/check-retired-colours.mjs',
@@ -483,18 +463,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       'Renders Aglyn own marketing blog covers. Internal tool.',
-  },
-  {
-    file: 'tools/scripts/legal-doc-diff.mjs',
-    count: 1,
-    reason:
-      'A path inside Aglyn own Google shared drive, plus our legal origin. Internal tool.',
-  },
-  {
-    file: 'tools/scripts/check-pricing-drift.mjs',
-    count: 1,
-    reason:
-      'The mount path of Aglyn own Google shared drive, where the pricing source-of-truth doc lives. Internal tool, and the leg that reads it is skipped entirely when the drive is not mounted (AGL-1885).',
   },
   {
     file: 'tools/scripts/lib/contact-addresses.mjs',

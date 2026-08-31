@@ -444,3 +444,98 @@ export function coerceDocumentValues(
   }
   return values
 }
+
+/**
+ * Every reference id a record holds, flattened out of its `reference` fields
+ * into one de-duplicated list.
+ *
+ * A reference field stores either a single target id or — when
+ * `reference.multiple` is set — an array of them, and a model may declare
+ * several. Both shapes flatten into the same list because the question asked
+ * of it is never "which field", it is "does this record still point at that
+ * document".
+ *
+ * Fields are read from `order` UNIONED with the keys of `fields`. Every other
+ * pass over a model walks `order` alone, which is right for anything the user
+ * sees — but a reference declared without a display slot still holds a real
+ * FKey, and an integrity index that skipped it would under-report.
+ */
+export function datasetReferencedIds(
+  model: DatasetModel,
+  values: Record<string, unknown> | undefined,
+): string[] {
+  const ids = new Set<string>()
+  const fieldIds = new Set([
+    ...(model.order ?? []),
+    ...Object.keys(model.fields ?? {}),
+  ])
+  for (const fieldId of fieldIds) {
+    if (model.fields?.[fieldId]?.type !== 'reference') continue
+    const stored = values?.[fieldId]
+    for (const entry of Array.isArray(stored) ? stored : [stored]) {
+      const id = typeof entry === 'string' ? entry.trim() : ''
+      if (id) ids.add(id)
+    }
+  }
+  return [...ids]
+}
+
+/**
+ * The integrity index a record write carries, so referential integrity can be
+ * decided by a QUERY rather than by the rows a listener happened to fetch.
+ *
+ * Deleting a record has to answer "is anything still pointing at this?", and
+ * `restrict` refuses the delete on a yes while `setNull` strips the FKey. That
+ * question cannot be asked where the answer is stored: dataset fields are
+ * user-defined, so `records.values` carries a deliberate index exemption in
+ * `cloud/firebase-firestore.indexes.json` — auto-indexing an unbounded map
+ * blows Firestore's per-document index-entry limit — and
+ * `where('values.<fieldId>', '==', id)` is therefore FAILED_PRECONDITION.
+ * Reading a page of records and filtering them in the browser answers only for
+ * the rows in that page, which is a browse window standing in for a
+ * correctness check: a reference held outside it reads as no reference at all,
+ * the delete proceeds, and `restrict` silently fails to restrict.
+ *
+ * `referencedIds` is that same reference, denormalized to a top-level array
+ * Firestore will index, so one `array-contains` reaches every record.
+ *
+ * ⚠️ OMITTED when a record references nothing, rather than written as `[]`.
+ * `isNotEmpty` is served as `!= null` and an empty array is not null, so a
+ * record stamped `[]` answers "holds a reference" for a dataset that holds
+ * none.
+ *
+ * ⚠️ Spread this at EVERY write that sets a record's `values`. A write that
+ * sets values without it leaves the index describing the PREVIOUS values, and
+ * a stale integrity index is the exact failure it exists to prevent — with the
+ * UI reporting the record as safe to delete. On a merging write use
+ * `datasetIntegrityUpdate` instead: omission leaves a stale array in place
+ * where clearing the last reference has to remove the field.
+ */
+export function datasetIntegrityFields(
+  model: DatasetModel,
+  values: Record<string, unknown> | undefined,
+): { referencedIds?: string[] } {
+  const referencedIds = datasetReferencedIds(model, values)
+  return referencedIds.length ? { referencedIds } : {}
+}
+
+/**
+ * `datasetIntegrityFields` for a MERGING write (`update`, `set` with `merge`
+ * or `mergeFields`), where leaving the field out preserves what is stored
+ * rather than clearing it.
+ *
+ * A record whose last reference is cleared has to have the field REMOVED, or
+ * it goes on answering the `array-contains` for a document it no longer points
+ * at — a `restrict` that refuses a delete nothing is holding. `clear` is the
+ * caller's delete sentinel: `deleteField()` in the web SDK,
+ * `FieldValue.delete()` in the Admin SDK. It is passed in rather than imported
+ * because this module is shared by both and must stay SDK-free.
+ */
+export function datasetIntegrityUpdate<TClear>(
+  model: DatasetModel,
+  values: Record<string, unknown> | undefined,
+  clear: TClear,
+): { referencedIds: string[] | TClear } {
+  const referencedIds = datasetReferencedIds(model, values)
+  return { referencedIds: referencedIds.length ? referencedIds : clear }
+}

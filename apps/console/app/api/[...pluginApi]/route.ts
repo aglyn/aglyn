@@ -23,6 +23,7 @@ import {
   runLegacyHandler,
 } from '@aglyn/aglyn/server'
 import {
+  consoleApiRateLimitRefusal,
   featureLockdownRefusal,
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
@@ -174,6 +175,30 @@ async function dispatch(
 
   const route = resolvePluginApiRoute(path)
   if (!route) return Response.json({ error: 'Not found' }, { status: 404 })
+
+  // Console-write rate limit. This dispatcher is the single chokepoint for
+  // every plugin's console handler — marketplace installs and publishes,
+  // `ai/assist`, gift cards, POS orders, refunds, the email list previews and
+  // the suppression writes — and it applied no rate limit of any kind. Its
+  // other gates each refuse something narrower: per-site enablement needs a
+  // resolvable hostId, the release gate only asks whether the plugin is on,
+  // and lockdown only refuses during an incident. None of them bounds volume
+  // from an ordinary signed-in operator, which is every request this surface
+  // serves.
+  //
+  // Placed AFTER route resolution, exactly as the tenant dispatcher places
+  // its own: limiting earlier would make an unregistered path — which 404s
+  // for free — cost a Firestore transaction, which is a cheaper amplification
+  // than the one being closed. After the lockdown gates for the same reason.
+  //
+  // `uid` is the one the lockdown gate above already verified, so keying on
+  // the authenticated subject costs no second token decode. A request whose
+  // bearer token did not decode has none and is counted by client address
+  // instead; the key, the ceiling and the machine-path exemptions are argued
+  // at the policy module.
+  const limited = await consoleApiRateLimitRefusal({ path, uid, request })
+  if (limited) return limited
+
   return runLegacyHandler(route, request, { pluginApi: pluginApi ?? [] })
 }
 

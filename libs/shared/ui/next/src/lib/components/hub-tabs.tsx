@@ -19,17 +19,18 @@
 import { AppLink, CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { Tab, Tabs, useMediaQuery, useTheme } from '@mui/material'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import {
   type ReactNode,
-  type SyntheticEvent,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from 'react'
+import { useTabParam } from '../hooks/use-tab-param'
 
 /**
- * The rail's own shape, shared by BOTH modes below (AGL-693).
+ * The rail's own shape, shared by BOTH modes below (AGL-2501).
  *
  * `HubTabs` and `HubSections` are two ways of choosing a section and one way
  * of DRAWING that choice. Duplicating the card, the orientation switch and the
@@ -93,38 +94,51 @@ export interface HubTabsProps {
  */
 export function HubTabs(props: HubTabsProps) {
   const { tabs, navHeader = 'Navigation', lazy = false } = props
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
   const { tabsProps } = useRailLayout()
-  const requestedTab = searchParams?.get('tab')
-  const initialTab = tabs.some((item) => item.id === requestedTab)
-    ? (requestedTab as string)
-    : (tabs[0]?.id ?? '')
-  const [tab, setTab] = useState(initialTab)
+  /*
+   * The SHARED resolver, not a second reading of the same parameter
+   * (AGL-2486). This rail used to hold the incoming id in `useState`, which
+   * reads it once and then stops: back and forward are navigations between
+   * two states of one mounted page, and a link into another section of a page
+   * already open changes the parameter without remounting anything. Either
+   * one left the rail on the old tab while the URL named a different one.
+   *
+   * `ids` is the tabs that exist right now, so an id naming a tab this hub
+   * does not render falls back to the first rather than selecting a panel
+   * nothing draws — which matters because several hubs build their tab list
+   * from entitlements and render a different set per org.
+   */
+  const tabIds = useMemo(() => tabs.map((item) => item.id), [tabs])
+  const { tab, onTabChange } = useTabParam({ ids: tabIds })
   // Which tabs have ever been active — the mount set when `lazy`. Seeded with
-  // the initial tab so it (and only it) mounts on first paint.
+  // the tab resolved for first paint so it (and only it) mounts.
   const [activated, setActivated] = useState<Set<string>>(
-    () => new Set(initialTab ? [initialTab] : []),
+    () => new Set(tab ? [tab] : []),
   )
 
   const handleChange = useCallback(
-    (event: SyntheticEvent, value: string) => {
-      setTab(value)
-      setActivated((prev) =>
-        prev.has(value) ? prev : new Set(prev).add(value),
-      )
-      // App Router has no shallow `router.replace({ query })`: rebuild the
-      // query string off the current params, set `tab`, and replace without
-      // scrolling so the hub view still deep-links and survives back/forward.
-      const nextParams = new URLSearchParams(searchParams?.toString())
-      nextParams.set('tab', value)
-      void router.replace(`${pathname}?${nextParams.toString()}`, {
-        scroll: false,
-      })
+    (event: unknown, value: string) => {
+      setActivated((prev) => (prev.has(value) ? prev : new Set(prev).add(value)))
+      onTabChange(event, value)
     },
-    [router, pathname, searchParams],
+    [onTabChange],
   )
+
+  /*
+   * A panel reached by URL rather than by click has to stay in the mount set
+   * too. `handleChange` is the only thing that grows the set, and it does not
+   * fire when back/forward or an in-app link moves the parameter — so without
+   * this, a `lazy` hub would drop such a panel again the moment the reader
+   * moved on, and every return to it would remount and re-subscribe.
+   *
+   * The panel itself does not wait for this effect: the render below mounts
+   * the ACTIVE tab unconditionally, so there is no frame in which the rail
+   * shows a selected tab over an empty panel.
+   */
+  useEffect(() => {
+    if (!lazy || !tab) return
+    setActivated((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)))
+  }, [lazy, tab])
 
   return (
     <TabContext value={tab}>
@@ -154,7 +168,9 @@ export function HubTabs(props: HubTabsProps) {
                     keepMounted
                     sx={{ padding: 'unset' }}
                   >
-                    {!lazy || activated.has(item.id) ? item.content : null}
+                    {!lazy || item.id === tab || activated.has(item.id)
+                      ? item.content
+                      : null}
                   </TabPanel>
                 ))}
               </>
@@ -187,7 +203,7 @@ export interface HubSectionsProps {
 }
 
 /**
- * The same rail, choosing a section by ROUTE rather than by panel (AGL-693).
+ * The same rail, choosing a section by ROUTE rather than by panel (AGL-2501).
  *
  * ## Why this exists beside `HubTabs`
  *
@@ -214,23 +230,43 @@ export interface HubSectionsProps {
  * match first so a nested section beats its parent. The separator boundary is
  * what stops `/settings` claiming `/settings-export`.
  */
+/**
+ * The section the current URL is inside, or `null` when none matches.
+ *
+ * Exported because the RAIL is not the only thing that has to know. A hub's
+ * breadcrumb ends at the hub — "Site / Admin" — while the reader is looking at
+ * Plugins, so the trail names every level except the one they are on. Feeding
+ * both from one resolver is what stops the two disagreeing: a section added to
+ * the rail is in the breadcrumb by construction, rather than by somebody
+ * remembering a second list.
+ *
+ * Matching is by PREFIX so a section stays selected on its own deeper routes,
+ * longest match first so a nested section beats its parent, and on a separator
+ * boundary so `/settings` cannot claim `/settings-export`.
+ */
+export function useActiveSection(
+  sections: readonly HubSection[],
+): HubSection | null {
+  const pathname = usePathname()
+  return useMemo(() => {
+    const onPath = (href: string) =>
+      pathname === href || pathname.startsWith(`${href}/`)
+    return (
+      [...sections]
+        .filter((section) => section.visible !== false && onPath(section.href))
+        .sort((a, b) => b.href.length - a.href.length)[0] ?? null
+    )
+  }, [pathname, sections])
+}
+
 export function HubSections(props: HubSectionsProps) {
   const { sections, children, navHeader = 'Navigation' } = props
   const { tabsProps } = useRailLayout()
-  const pathname = usePathname()
   const shown = useMemo(
     () => sections.filter((section) => section.visible !== false),
     [sections],
   )
-  const activeHref = useMemo(() => {
-    const onPath = (href: string) =>
-      pathname === href || pathname.startsWith(`${href}/`)
-    return (
-      [...shown]
-        .filter((section) => onPath(section.href))
-        .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null
-    )
-  }, [pathname, shown])
+  const activeHref = useActiveSection(sections)?.href ?? null
 
   return (
     <GridItems

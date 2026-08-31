@@ -141,7 +141,15 @@ function makeDocRef(path: string): any {
 }
 
 function makeCollectionRef(path: string): any {
-  return { doc: (id: string) => makeDocRef(`${path}/${id}`) }
+  return {
+    doc: (id: string) => makeDocRef(`${path}/${id}`),
+    // `limit()` is chainable and `get()` answers an empty collection: buy-now
+    // reads `hosts/{id}/discounts` on every checkout since and a
+    // double without these throws where Firestore would simply return nothing.
+    // This suite seeds no discounts, so empty IS the faithful answer.
+    limit: () => makeCollectionRef(path),
+    get: async () => ({ docs: [] as unknown[] }),
+  }
 }
 
 const fakeFirestore = {
@@ -160,6 +168,19 @@ const mockOrg: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
     firestore: {

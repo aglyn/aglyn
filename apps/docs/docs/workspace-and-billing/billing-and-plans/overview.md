@@ -195,8 +195,8 @@ what will apply once Contacts opens.
 Your **contacts CRM** — form fills, member sign-ups, buyers, and bookings unified into
 one people list — is priced as an **audience band**, not a hard cap:
 
-- Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 100,000,
-  Scale 500,000, Advanced 1,000,000 contacts. Agency and Enterprise are unlimited.
+- Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 50,000,
+  Scale 100,000, Advanced 150,000, Agency 500,000 contacts. Enterprise is unlimited.
 - On **paid tiers**, growing past the band never blocks or drops anything — extra
   contacts are **metered overage** on your monthly invoice, at a per-1,000 rate that
   falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
@@ -251,6 +251,105 @@ organization**:
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the
 same Stripe integration.
 
+Your billing details live on the **Billing** page in the console, one card per thing you
+might want to change. Each card saves on its own, so editing your address never touches
+your tax ID and vice versa.
+
+### Paying an outstanding invoice {#outstanding}
+
+If a payment fails, the invoice stays **open** and the Billing page shows it with a
+**Pay now** button.
+
+- **It works even if the subscription has already been cancelled.** Dunning cancels
+  subscriptions after enough failed retries; the invoice is still owed and still
+  payable, and paying it does not require a plan.
+- **Your bank may ask you to confirm the payment.** That step is your bank's, not
+  ours, and it appears for the same reason it does anywhere else.
+- **We do not mark it paid because the button worked.** The invoice updates when
+  Stripe confirms the money arrived, so what you see is the settled state rather
+  than an optimistic one.
+- The amount is the amount the invoice was issued for. Tax on an invoice is fixed
+  when it is issued and is never recalculated later.
+
+### What a plan will cost {#plan-total}
+
+Before you subscribe, the Billing page quotes the plan you are looking at with tax
+included, taken from Stripe's own invoice preview rather than worked out here.
+
+- **A total is only shown as final once tax has been calculated**, which needs your
+  billing address. Until then the page says so rather than showing a total that
+  quietly leaves tax out.
+- **A zero tax is explained**, because a zero has several meanings: reverse charge
+  applies and you account for the tax under your own registration; your account is
+  registered as tax-exempt; or nothing is charged in your location.
+- **Promotion codes are applied here.** An invalid or expired code is refused
+  immediately, with the reason — not at the moment you are charged.
+
+### Billing email {#billing-email}
+
+**Invoices are sent to the billing email**, along with receipts and — the one that
+matters most — the notices we send when a card fails and a subscription is about to
+lapse.
+
+- It is **not the same field as your organization's contact email**. The contact email is
+  the workspace's public-facing address; it appears on your marketplace profile. The
+  billing email is where the money mail goes, and most teams want that to be an
+  accounting inbox rather than a published one.
+- Until you subscribe, invoices go to the address on the account that signed up. Once
+  you are on a paid plan you can send them somewhere else.
+
+### Payment methods {#payment-methods}
+
+The cards your subscription and any usage overage are charged to.
+
+- **Add new card** opens **Stripe's own form**. Card numbers are typed into Stripe and
+  go to Stripe — they never reach Aglyn's servers or logs, which is also why the form
+  looks like Stripe's rather than ours.
+- The **default** method is the one your next renewal charges. Changing it here updates
+  the subscription as well as the customer record, so the change applies to the next
+  invoice rather than only to one-off charges.
+- **You cannot remove the last card while a subscription renews against it.** Doing so
+  would not cancel anything — it would make the renewal fail weeks later, with a dunning
+  email as the first sign. Add a replacement first, or cancel the subscription if that
+  is what you meant.
+- Wallets and Link appear here too, identified by email rather than by a card number.
+
+### Billing address {#billing-address}
+
+The address Aglyn issues **your** invoices to, and the address sales tax on your Aglyn
+subscription is calculated from.
+
+- **This page is where you edit it.** It also appears, read-only, on **Settings →
+  Profile**, which links back here. One address, one place to change it.
+- **It is not your payout address.** Money that flows *out* to you from marketplace or
+  storefront sales is keyed by the identity Stripe holds for your connected account,
+  which you set up under **Marketplace → Payouts**.
+- **It is not your storefront's tax origin either.** Sales tax on orders *your* buyers
+  place is calculated from the origin set per site in **Commerce → Settings → Taxes**.
+- **It can be replaced but not emptied.** A workspace with no billing address cannot have
+  tax calculated at all, so clearing the form is refused rather than obeyed; an
+  addressless invoice in front of a tax authority is a worse outcome than a stale one.
+- Changing it affects your **next** invoice. Invoices already issued are never re-rated.
+
+### Tax IDs {#tax-ids}
+
+A business tax ID — VAT, ABN, GST, EIN and the rest — printed on the invoices we issue
+you.
+
+- Choose the **type** and enter the value. The type is country-specific and decides how
+  the number is printed and how a tax authority reads it, so the picker is searchable:
+  type your country, the abbreviation, or the code your accountant gave you.
+- The list of types is **Stripe's own** and is refreshed with the Stripe library, so a
+  jurisdiction Stripe adds shows up without waiting on us.
+- **Stripe validates the number** against the rules for the type you picked, and if it
+  refuses you will see Stripe's own explanation of the format it expected. We do not
+  second-guess it — a check of ours would eventually refuse a number that is perfectly
+  valid.
+- Some types are verified asynchronously; a number still being checked, or one that came
+  back unverified, says so beside itself rather than looking accepted.
+- Removing a tax ID stops it appearing on **future** invoices. Invoices already issued
+  are unchanged — a finalized invoice is a record, not a document that gets edited.
+
 ### Sales tax {#sales-tax}
 
 **Plan prices are quoted before tax.** Where Aglyn has a tax collection obligation,
@@ -263,10 +362,11 @@ line on the invoice.
   your *next* invoice rather than re-rating past ones.
 - **A workspace with no billing address cannot have tax calculated at all**, which is
   why the address can be replaced but not emptied — see the address bullets below.
-- **Adding a business tax ID** (VAT, ABN, EIN and the like) at checkout or in the
-  Billing Portal puts it on the invoice. That's what makes an invoice usable for
-  reclaiming tax or handing to an accountant, and in some jurisdictions it changes
-  who accounts for the tax.
+- **Adding a business tax ID** (VAT, ABN, EIN and the like) puts it on the invoice.
+  That's what makes an invoice usable for reclaiming tax or handing to an accountant,
+  and in some jurisdictions it changes who accounts for the tax. Checkout collects one
+  at purchase; the [Tax IDs](#tax-ids) card is where you add, change or remove one
+  afterwards.
 - **Every invoice states the tax separately** from the amount charged, so the figure
   you reclaim is never one you have to back out of a total yourself. Invoice PDFs and
   receipts are on the Billing page's **Billing history** table.
@@ -331,19 +431,22 @@ monthly invoice as a usage line. See
   invoice** (View), a **PDF download** of the invoice, and the payment **Receipt** once
   it's paid — everything you need for expense reports and bookkeeping. Older invoices
   load on demand.
-- **Changing your billing address** — edit it under **Settings → Profile**. It is
+- **Changing your billing address** — edit it under **Billing → Settings**. It is
   the workspace's address, kept separate from the personal address on your own
   Manage Account page: the workspace's is what appears on invoices, and yours is
   visible only to you and to Aglyn staff. Saving pushes the change to the payment
   processor, so a workspace that moves gets the new address on its *next*
-  invoice rather than keeping the one captured at signup.
+  invoice rather than keeping the one captured at signup. **Settings → Profile**
+  shows the same address without letting you edit it there — a tax input with
+  two forms behind it is a form that silently undoes the other one.
 - **Clearing the address does not remove it from your invoices.** An invoice with
   no address on it cannot have tax calculated, so emptying those fields is not
   treated as an instruction to strip the address from your billing account — the
   one already on file keeps being used. When the two differ, **Settings → Profile**
   says so, and the same warning appears if a change ever fails to reach the
-  payment processor. To *replace* the address, enter the new one and save; there
-  is no supported way to leave a paying workspace with no billing address at all.
+  payment processor. To *replace* the address, enter the new one under
+  **Billing → Settings** and save; there is no supported way to leave a paying
+  workspace with no billing address at all.
 - **Billing details at checkout** — checkout asks for a **billing address**, a
   **phone number**, and optionally a **business tax ID** (VAT, ABN, EIN and the like).
   The address and tax ID appear on the invoice, which is what makes it usable for

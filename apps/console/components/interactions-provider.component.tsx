@@ -72,7 +72,7 @@ export interface InteractionsProviderProps {
  * save enabled. Section experiments still draft to the Marketing page.
  */
 /**
- * Observed (AGL-1478): an interaction now lives on the node, which is a MobX
+ * Observed: an interaction now lives on the node, which is a MobX
  * observable in the editor's canvas. Without this the list would refresh only
  * when the legacy `actions` listener happened to fire.
  */
@@ -109,7 +109,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
   )
 
   /**
-   * Write one interaction onto the node that owns it (AGL-1478).
+   * Write one interaction onto the node that owns it.
    *
    * The canvas node IS the document, so this needs no Firestore call and no
    * id allocation from the server: the interaction rides the editor's next
@@ -138,7 +138,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
     // never renders the Interactions section (it gates on the creators).
     if (disabled) return {}
     /**
-     * The document's own interactions, listed first (AGL-1478).
+     * The document's own interactions, listed first.
      *
      * Read straight off the canvas, which is the editor's live copy — so a
      * new interaction appears the moment it is written, with no round trip
@@ -159,7 +159,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
       enabled: entry.action.enabled !== false,
     }))
     /**
-     * The legacy host actions, still listed (AGL-1478).
+     * The legacy host actions, still listed.
      *
      * Every element interaction authored before this change is a row in
      * `hosts/{hostId}/actions`, and it keeps working and keeps being editable
@@ -201,7 +201,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
       // Manage in place (wave v7): flip or retire an element automation
       // without leaving the canvas.
       onToggleInteraction: ({ id, enabled }) => {
-        // Two stores until the backfill, so the id says which one (AGL-1478).
+        // Two stores until the backfill, so the id says which one.
         const owned = parseNodeInteractionId(id)
         if (owned) {
           const node = canvas.getNode(owned.nodeId)
@@ -280,7 +280,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
             continue
           }
           /**
-           * Onto the node the template resolved against (AGL-1478).
+           * Onto the node the template resolved against.
            *
            * The draft's selector is the only place that node is named — the
            * preset resolver minted it — so it is read back out and then
@@ -379,7 +379,7 @@ export const InteractionsProvider = observer(function InteractionsProvider(
   ])
 
   /**
-   * What the dialog is editing, from whichever store holds it (AGL-1478).
+   * What the dialog is editing, from whichever store holds it.
    *
    * A node interaction is reshaped into the action the dialog understands —
    * the selector derived, exactly as the runtime derives it — so the dialog

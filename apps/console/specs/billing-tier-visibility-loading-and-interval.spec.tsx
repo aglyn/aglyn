@@ -68,7 +68,7 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_SUPPORT_URL,
 } from '@aglyn/aglyn'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /**
@@ -82,6 +82,16 @@ import type { ReactNode } from 'react'
 let mockOrg: Record<string, any> | undefined
 let mockReady: boolean
 let mockSearch: string
+/**
+ * The `orgs/{orgId}/billing/stripe` read, and whether it has SETTLED.
+ *
+ * A separate document from the org (AGL-1028) and a separate `ready`, which is
+ * the whole point of the third block below: the page holds its render on the
+ * ORG doc, so before this one lands `org.subscription` is undefined and every
+ * paying workspace on the platform looks like a staff override.
+ */
+let mockOrgBilling: Record<string, any> | undefined
+let mockOrgBillingReady: boolean
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   ...jest.requireActual('@aglyn/shared-ui-jsx'),
@@ -153,7 +163,7 @@ jest.mock('../hooks/use-current-org', () => ({
 }))
 jest.mock('../hooks/use-confirmed-doc', () => ({
   __esModule: true,
-  default: () => ({ data: undefined }),
+  default: () => ({ data: mockOrgBilling, ready: mockOrgBillingReady }),
 }))
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
@@ -207,13 +217,12 @@ jest.mock(
   '../components/billing/billing-register-allocations-card.component',
   () => nullCard,
 )
-jest.mock('../components/embedded-checkout-dialog.component', () => nullCard)
 jest.mock('../components/billing/retention-funnel.dialog', () => ({
   __esModule: true,
   RetentionFunnelDialog: () => null,
 }))
 
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
 
 /** A paying Pro org on ANNUAL billing — the shape both halves need. */
 const ANNUAL_PRO = {
@@ -232,6 +241,12 @@ beforeEach(() => {
   mockOrg = ANNUAL_PRO
   mockReady = true
   mockSearch = ''
+  // The org doc carries the subscription in these fixtures, so the billing
+  // subdoc is empty and settled — the shape of an org the AGL-1028 backfill
+  // has not moved yet, and the one that keeps every existing case reading the
+  // way it did.
+  mockOrgBilling = undefined
+  mockOrgBillingReady = true
   global.fetch = jest.fn(async () => ({
     ok: true,
     status: 200,
@@ -300,14 +315,210 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
     expect(currentPlanLabel()).toBe(PLAN_LABELS.pro)
   })
 
-  it('NEGATIVE CONTROL: once ready, the AGL-1864 collapse is engaged', () => {
+  it('NEGATIVE CONTROL: once ready, the focused view is engaged', () => {
     render(<BillingPage />)
-    // The tiers under Pro are folded away, and the disclosure that reveals
-    // them is on screen — the behaviour the hold above exists to protect.
+    // The page opens on the decision, not the catalogue: the current plan and
+    // the one step up, with everything else behind a named control. Starter
+    // is neither of those, so its absence here means the focused view
+    // rendered — not that the hold above is still swallowing the page.
     expect(cardFor(PLAN_LABELS.starter)).toBeNull()
     expect(
-      screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
+      screen.getByRole('button', { name: /Compare all/ }),
     ).toBeTruthy()
+  })
+
+  it('NEGATIVE CONTROL: and the collapse is still there behind it', () => {
+    render(<BillingPage />)
+    // One click further in, the AGL-1864 behaviour the hold protects is
+    // unchanged — the lower tiers are folded, not deleted, and one more click
+    // has them. Asserted through the real buttons rather than by rendering the
+    // grid directly, because "reachable" is the property that matters.
+    fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
+    expect(cardFor(PLAN_LABELS.free)).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
+    )
+    expect(cardFor(PLAN_LABELS.free)).not.toBeNull()
+    expect(screen.getByRole('button', { name: /Hide lower plans/ })).toBeTruthy()
+  })
+
+  it('counts the plans it draws, and accounts for every one it counted', () => {
+    /*
+     * The count has to include Enterprise, which the grid renders outside
+     * `PLAN_ORDER`. Counting only that array said seven while the grid drew
+     * seven cards — six self-serve tiers plus Enterprise — so the arithmetic
+     * came out even and Free, folded behind the lower-tier disclosure, was
+     * invisible in it: a reader counted the cards, got the promised number,
+     * and had no reason to look for an eighth.
+     *
+     * An org on Pro has Free and Starter below it, so the grid draws six of
+     * the eight and the disclosure names the other two. THE INVARIANT IS THE
+     * SUM: every plan the button promised is either on screen or counted by
+     * the fold. That is what the original defect broke — a promise of seven
+     * against seven cards, with Free in neither number and nothing anywhere
+     * naming it — and it is what "the billing tiers are missing the free
+     * tier" was a reader hitting.
+     */
+    render(<BillingPage />)
+    const compare = screen.getByRole('button', { name: /Compare all/ })
+    expect(compare.textContent).toBe('Compare all 8 plans')
+
+    fireEvent.click(compare)
+    const drawn = Object.values(PLAN_LABELS).filter((label) =>
+      Boolean(cardFor(label)),
+    ).length
+    const folded = Number(
+      /Show (\d+) lower plans?/.exec(
+        screen.getByRole('button', { name: /Show \d+ lower plans?/ })
+          .textContent ?? '',
+      )?.[1] ?? 0,
+    )
+    // Every plan the button promises is either on screen or named by the
+    // disclosure. Nothing is unaccounted for.
+    expect(folded).toBeGreaterThan(0)
+    expect(drawn + folded).toBe(8)
+    // And the fold really does deliver what it counted, so the sum above is
+    // an accounting of real cards rather than of a number in a label.
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
+    )
+    expect(
+      Object.values(PLAN_LABELS).filter((label) => Boolean(cardFor(label)))
+        .length,
+    ).toBe(8)
+  })
+
+  it('and the ones the fold was holding are quiet, not promoted', () => {
+    /*
+     * The counter-property. "Reachable" and "equally weighted" are different
+     * things, and a grid that answered "there is no way down" by giving Free a
+     * contained primary button beside the recommended upgrade would satisfy
+     * the case above while presenting a downgrade as a peer of an upgrade —
+     * the dark pattern pointed the other way, and the thing AGL-1859 §2
+     * forbids.
+     */
+    render(<BillingPage />)
+    fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
+    )
+    const free = cardFor(PLAN_LABELS.free) as HTMLElement
+    const business = cardFor(PLAN_LABELS.business) as HTMLElement
+    expect(
+      within(business).getByRole('button').className,
+    ).toMatch(/MuiButton-contained/)
+    expect(within(free).getByRole('button').className).toMatch(/MuiButton-text/)
+    expect(
+      within(free).getByRole('button').className,
+    ).not.toMatch(/MuiButton-contained/)
+    // The recommendation still points UP the ladder, and only there.
+    expect(within(free).queryByText('Recommended')).toBeNull()
+    expect(within(business).getByText('Recommended')).toBeTruthy()
+  })
+})
+
+/**
+ * A PAID PLAN WITH NO SUBSCRIPTION BEHIND IT, DRIVEN ON THE REAL PAGE.
+ *
+ * The component spec pins what the grid does with the flag; only the page can
+ * say whether the flag is DERIVED correctly, and the derivation is the risky
+ * half. It reads two documents: `plan` from the org doc, `subscription` from
+ * `orgs/{orgId}/billing/stripe` (AGL-1028), merged over it a few lines later.
+ * The page holds its render on the ORG read alone — which says nothing about
+ * the second one.
+ *
+ * So the claim has to wait for BOTH, and the case that proves it is the one
+ * where the org really is paying and the billing document simply has not
+ * landed yet.
+ */
+describe('a plan with no subscription is named, but only once it is known', () => {
+  const NOTICE = /no subscription behind it/i
+
+  /** An org whose `plan` is paid and which Stripe has never heard of. */
+  const STAFF_SET_PRO = { $id: 'org-1', plan: 'pro' as const }
+
+  it('says so on the current plan card', () => {
+    mockOrg = STAFF_SET_PRO
+    render(<BillingPage />)
+    const said = screen.getByText(NOTICE)
+    expect(said.textContent).toMatch(new RegExp(PLAN_LABELS.pro))
+    expect(said.textContent).toMatch(/Reach out/i)
+  })
+
+  /**
+   * ⚠️ THE CONTROL THIS BLOCK EXISTS FOR — the loading-default shape, on a
+   * claim about the customer's own billing.
+   *
+   * `subscription` is not on the org doc for a backfilled org, so until the
+   * billing subdocument settles `org.subscription` is undefined and
+   * `isLiveSubscriptionStatus(undefined)` is false. Without the second `ready`
+   * this page would tell every paying customer on the platform, for the length
+   * of one read, that they have no subscription — and would do it in the
+   * sentence that explains why their controls are dead.
+   */
+  it('and says NOTHING while the subscription read is still in flight', () => {
+    mockOrg = STAFF_SET_PRO
+    mockOrgBillingReady = false
+    render(<BillingPage />)
+    expect(screen.queryByText(NOTICE)).toBeNull()
+    // NEGATIVE CONTROL, the AGL-2233 pairing: the page is not merely blank.
+    // The grid rendered — the org read settled — and only this one claim is
+    // being withheld.
+    expect(grid()).not.toBeNull()
+    expect(currentPlanLabel()).toBe(PLAN_LABELS.pro)
+  })
+
+  it('and the same org WITH the subscription on the billing doc is silent', () => {
+    // The other half of the instrument. A backfilled paying org keeps its
+    // subscription in the subcollection, and once that read lands the claim
+    // must go away rather than merely have been deferred.
+    mockOrg = STAFF_SET_PRO
+    mockOrgBilling = { subscription: { status: 'active', interval: 'month' } }
+    render(<BillingPage />)
+    expect(screen.queryByText(NOTICE)).toBeNull()
+  })
+
+  /**
+   * A DUNNING ORG IS NOT THIS STATE, and must never be given a way around an
+   * unpaid balance.
+   *
+   * `past_due` is deliberately IN `LIVE_SUBSCRIPTION_STATUSES` (AGL-1715), so
+   * an org with money owed keeps every route a subscriber has — including the
+   * retention funnel, which is where leaving actually happens and where the
+   * balance is still owed afterwards. If this ever goes red because `past_due`
+   * fell out of the live set, the plan grid has become an exit that skips the
+   * invoice.
+   */
+  it('a PAST_DUE org keeps the cancel route and is told none of this', () => {
+    mockOrg = {
+      $id: 'org-1',
+      plan: 'pro' as const,
+      subscription: { status: 'past_due', interval: 'month' },
+    }
+    render(<BillingPage />)
+    expect(screen.queryByText(NOTICE)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Compare all/ }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show \d+ lower plans?/ }),
+    )
+    // The subscriber's route, unchanged: a cancel, not a plain plan switch.
+    expect(
+      screen.getByRole('button', { name: 'Cancel & move to Free' }),
+    ).toBeTruthy()
+    expect(
+      screen.queryByRole('button', { name: 'Contact us to change' }),
+    ).toBeNull()
+    // And the lower paid tier still offers the confirm-gated downgrade.
+    expect(
+      screen.getAllByRole('button', { name: 'Downgrade' }).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('NEGATIVE CONTROL: an org on FREE is told nothing — nothing to leave', () => {
+    mockOrg = { $id: 'org-1', plan: 'free' as const }
+    render(<BillingPage />)
+    expect(screen.queryByText(NOTICE)).toBeNull()
   })
 })
 

@@ -1,0 +1,14 @@
+# Canonical author identity.
+#
+# Ninety-one early commits were authored from personal mailboxes before the
+# repository was public. `user.email` is the GitHub noreply address now, so
+# nothing new arrives under any other name — this maps what already landed.
+#
+# ⚠️ A mailmap changes what git DISPLAYS, not what the commits contain. Every
+# tool that reads it — `git log`, `git shortlog`, `git blame`, most CI and
+# release tooling — shows the canonical address. The GitHub web UI does not
+# read it, so the original addresses stay visible on those commits there.
+# Removing them from a public repository means rewriting history and
+# force-pushing 5,800+ commits, which was considered and declined.
+Zach Gover <9044773+zgover@users.noreply.github.com> <zachary.w.gover@gmail.com>
+Zach Gover <9044773+zgover@users.noreply.github.com> <zachary1748@gmail.com>

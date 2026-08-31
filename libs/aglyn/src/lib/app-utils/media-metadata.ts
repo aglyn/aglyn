@@ -101,6 +101,73 @@ export function inheritedMediaAlt(options: {
 }
 
 /**
+ * Component ids whose renderer reads intrinsic pixel dimensions off the node.
+ *
+ * Component ids are persisted in screen documents and never renamed, which is
+ * what makes matching on them safe. The list is the gate rather than a
+ * decoration: a prop written onto an element that does not destructure it
+ * reaches `...rest` and is spread onto the DOM, so an unlisted element would
+ * gain an invalid `intrinsicwidth` attribute in its published HTML.
+ */
+const INTRINSIC_SIZE_COMPONENT_IDS = new Set(['image'])
+
+/**
+ * The intrinsic `width`/`height` to copy onto a node when an author picks a
+ * library asset for it (AGL-2486).
+ *
+ * ## Why the copy happens at pick time
+ *
+ * No tenant render path reads a media document — the loaders walk screens,
+ * versions, components, layouts and datasets, and the only server-side media
+ * read runs on the ASSET request, long after the HTML is emitted. So the
+ * dimensions can reach an `<img>` in one of two ways: a Firestore read per
+ * image added to the hottest ISR-cached path, or two numbers carried on the
+ * node like every other prop. This is the second.
+ *
+ * ## Why it matters
+ *
+ * `image.tsx` lays images out with `width: 100%; height: auto`, under which an
+ * `<img>` has NO height until its bytes decode. Without an intrinsic pair the
+ * browser has no ratio to reserve a box from, so every image on the page
+ * shifts the content below it as it lands.
+ *
+ * ## The rules
+ *
+ * * **Both or neither.** A browser derives an aspect-ratio only from the
+ *   pair; a lone `width` is read as a real dimension and reserves a box of
+ *   the wrong shape, which is worse than reserving none.
+ * * **Only for renderers that read them**, see
+ *   `INTRINSIC_SIZE_COMPONENT_IDS` — otherwise the prop lands on the DOM.
+ * * **Finite and positive.** Upload capture is best-effort, so a media
+ *   document may carry `0`, a partial capture, or nothing at all; `width="0"`
+ *   collapses the element.
+ * * **`{}` when anything is unknown**, never `{ intrinsicWidth: undefined }`.
+ *   Callers spread the result into a props object that `updateNodeProps`
+ *   REPLACES wholesale, so a key present with an undefined value would strip
+ *   a pair a previous pick had correctly stored.
+ *
+ * @returns the props to spread, or `{}` when the caller should write nothing.
+ */
+export function intrinsicMediaSize(options: {
+  /** The element being written to — its persisted component id. */
+  componentId?: unknown
+  /** The attribute the picker was opened for; only `src` carries an image. */
+  propName?: unknown
+  /** The chosen asset's stored pixel width. */
+  assetWidth?: unknown
+  /** The chosen asset's stored pixel height. */
+  assetHeight?: unknown
+}): { intrinsicWidth?: number; intrinsicHeight?: number } {
+  const { componentId, propName, assetWidth, assetHeight } = options ?? {}
+  if (propName !== 'src') return {}
+  if (!INTRINSIC_SIZE_COMPONENT_IDS.has(String(componentId ?? ''))) return {}
+  const usable = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+  if (!usable(assetWidth) || !usable(assetHeight)) return {}
+  return { intrinsicWidth: assetWidth, intrinsicHeight: assetHeight }
+}
+
+/**
  * The `alt` to put on a rendered `<img>` (AGL-2418).
  *
  * The render-time counterpart to `inheritedMediaAlt`, which decides what to

@@ -46,6 +46,10 @@ import {
   parseClientErrorEvents,
   reportClientErrors,
 } from '@aglyn/tenant-data-admin'
+import {
+  NO_CLIENT_ADDRESS_BUCKET,
+  readClientIp,
+} from '@aglyn/aglyn/app-utils/request-ip'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,8 +98,12 @@ export function OPTIONS(): Response {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+    // A cost control with no second key, so it keeps counting under the
+    // no-address bucket rather than being skipped: this endpoint writes to
+    // Firestore for anyone who can reach it, and a deployment that cannot name
+    // its callers is the one place an unbounded beacon would hurt most. The
+    // collapse costs telemetry and not service — every path here answers 204.
+    const ip = readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET
     // 30 events/min/IP is generous for a browser and nothing for a flood;
     // over-limit posts are ACCEPTED and dropped — a beacon endpoint that
     // returns 429 teaches retry loops.

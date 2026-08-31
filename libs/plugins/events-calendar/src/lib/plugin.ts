@@ -57,6 +57,19 @@ export function registerEventsCalendarConsole(): void {
     pluginId: BUNDLE_ID,
     displayName: 'Events Calendar',
     featureFlag: 'eventCalendar',
+    // `eventCalendar` is false on every plan — it is sold as a per-org
+    // add-on and nothing else — so the shell's generic "not included in your
+    // current plan" would send a reader to compare tiers that all say no.
+    // The price comes from the constant the invoice is built from, so this
+    // sentence cannot drift away from what a purchase actually charges.
+    upgradeNotice: {
+      message:
+        'The Event Calendar is a paid add-on ' +
+        `($${Aglyn.EVENT_CALENDAR_ADDON_MONTHLY_USD}/mo for your whole ` +
+        `workspace, supported directly by ${Aglyn.PLATFORM_BRAND_NAME}). ` +
+        'Enable it from Billing → Add-ons.',
+      billingAnchor: 'addons',
+    },
     navItems: [
       {
         label: 'Events',

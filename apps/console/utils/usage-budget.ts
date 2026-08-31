@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+// The ONE unit conversion between our provider bill and what a customer is
+// shown. Imported here so `publicOrgMonthlySpend` cannot grow a second copy of
+// it — see that function, and the module header of `assist-credits.ts`.
+import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+
 /**
  * Per-org USAGE BUDGETS, modelled on a Google Cloud billing budget (AGL-1528).
  *
@@ -337,6 +342,58 @@ export function orgMonthlySpend(input: {
     assistBilled,
     totalUsd: meteredUsd + (assistBilled ? assistUsd : 0),
     meteredFresh,
+  }
+}
+
+/**
+ * The customer-facing half of {@link OrgSpendBreakdown} — dollars the customer
+ * is charged, and Assist consumption in CREDITS.
+ */
+export interface PublicOrgSpend {
+  /** Metered infrastructure and plan overages, from the invoice's own figure. */
+  meteredUsd: number
+  /**
+   * Assist consumption this month, in credits. The stored figure is
+   * `estCostUsd` — our provider bill — and a credit is the unit that expresses
+   * it without publishing it.
+   */
+  assistCredits: number
+  /** What counts against the budget. */
+  totalUsd: number
+  /** Whether Assist consumption entered `totalUsd`. */
+  assistBilled: boolean
+  meteredFresh: boolean
+}
+
+/**
+ * The projection that crosses the boundary to a customer's browser.
+ *
+ * `OrgSpendBreakdown.assistUsd` is `orgs/{id}/assistUsage/{month}.estCostUsd`
+ * verbatim — our provider bill at the serving model's list rates, not a price
+ * and not a rate the platform publishes. Serving it to an org-scoped caller
+ * puts our model choice, our per-token rates and our margin on a billing page,
+ * which is the boundary `publicAssistCredits` and `publicAssistQuota` already
+ * exist to hold on the assist routes. This is the same boundary, one route
+ * over, and it was the last place the dollar figure still crossed it.
+ *
+ * `assistCreditsFromUsd` is the ONE conversion between the two units, so this
+ * cannot come to disagree with the credits meter about the same month's
+ * consumption.
+ *
+ * `meteredUsd` and `totalUsd` stay dollars: `billedCents` is what an invoice
+ * charges, which is the customer's own money and the whole subject of a budget.
+ *
+ * The two units are deliberately not summed. A budget is a dollar rule, credits
+ * are not dollars, and folding one into the other would republish the cost the
+ * conversion just removed.
+ */
+export function publicOrgMonthlySpend(spend: OrgSpendBreakdown): PublicOrgSpend {
+  return {
+    meteredUsd: spend.meteredUsd,
+    assistCredits: assistCreditsFromUsd(spend.assistUsd),
+    totalUsd: spend.totalUsd,
+    assistBilled: spend.assistBilled,
+    meteredFresh: spend.meteredFresh,
   }
 }
 

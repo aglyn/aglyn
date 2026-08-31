@@ -28,6 +28,7 @@ import {
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  logHostActivity,
   syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
 
@@ -142,6 +143,39 @@ async function handler(request: Request): Promise<Response> {
         suggestions: suggestSubdomains(subdomain),
       }, { status: 409 })
     }
+
+    /*==========================================
+     * THE EVENT IS THE CLAIM (AGL-118).
+     *
+     * Five earlier returns could each have carried a log line and every one
+     * of them would have been a lie: a malformed or reserved name, a caller
+     * who is not a site admin, a lockdown, and a slug another site holds are
+     * all requests where the address did not move. The `previous ===
+     * subdomain` return is the subtler one — it answers 200, so a log placed
+     * on success alone would record an address change on a request that
+     * changed nothing, once per double-click.
+     *
+     * What is left is the transaction, and it is the right line for a reason
+     * beyond elimination: it is the write. Once it commits the site answers
+     * on a different address, and everything after it — the membership
+     * projection, the admin audit row, the alias bust — is best-effort
+     * cleanup that cannot un-rename the site if it fails. So an entry here
+     * describes a state the world is already in.
+     *
+     * `name` carries the OLD address as well as the new one because the log
+     * is read to answer "where did this site used to live", and an entry
+     * naming only the destination cannot answer it.
+     *=========================================*/
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      'Changed the site address',
+      {
+        type: 'host',
+        id: hostId,
+        name: previous ? `${previous} -> ${subdomain}` : subdomain,
+      },
+    )
 
     // Propagate the new subdomain into every member's hostMemberships row
     // (AGL-844) so switcher navigation targets the current address. Best-

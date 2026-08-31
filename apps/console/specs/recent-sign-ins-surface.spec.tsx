@@ -334,7 +334,9 @@ describe('the card is mounted where the email sends people', () => {
     const page = require('node:fs').readFileSync(
       require('node:path').join(
         __dirname,
-        '../app/(app)/manage/user/page.tsx',
+        // The Security section, a component since Manage Account's panels
+        // became routes (AGL-2501).
+        '../components/account/account-security-card.component.tsx',
       ),
       'utf8',
     )

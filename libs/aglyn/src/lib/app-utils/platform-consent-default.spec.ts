@@ -115,22 +115,43 @@ describe('the platform analytics consent default (AGL-1597)', () => {
       expect(signals.ad_personalization).toBe('denied')
     })
 
-    it('are denied in the implied-consent branch TOO', () => {
-      // These surfaces run analytics and only analytics. A default-on
-      // analytics posture that quietly widened to ads would be a decision
-      // nobody made, on the surface where nothing gates it.
+    it('are GRANTED in the implied-consent branch, with analytics', () => {
+      /*
+       * Aglyn advertises, remarkets and retargets on its own surfaces, and the
+       * Privacy Policy names the console among them. Outside the prior-consent
+       * regions the posture is implied consent and all four signals follow it
+       * together — a declaration that granted analytics while denying ads
+       * would describe a surface that does not exist.
+       */
       const signals = resolvePlatformConsentDefault('US')
+      expect(signals.ad_storage).toBe('granted')
+      expect(signals.ad_user_data).toBe('granted')
+      expect(signals.ad_personalization).toBe('granted')
+    })
+
+    it('are denied in a prior-consent region until the visitor accepts', () => {
+      // The half that must never move. A grant here would be pre-consent
+      // advertising for exactly the population the law asks first.
+      const signals = resolvePlatformConsentDefault('DE')
       expect(signals.ad_storage).toBe('denied')
       expect(signals.ad_user_data).toBe('denied')
       expect(signals.ad_personalization).toBe('denied')
+      expect(signals.analytics_storage).toBe('denied')
     })
 
-    it('are denied in every EMITTED command, not merely in the resolver', () => {
-      // The resolver hard-codes them; the snippet is what actually ships.
-      for (const command of PLATFORM_CONSENT_DEFAULT_COMMANDS) {
+    it('the EMITTED region-scoped command denies all four, not just analytics', () => {
+      // The resolver is derived; the snippet is what actually ships, and a
+      // region-scoped command that forgot the ad signals would leave them at
+      // the granted global default for European visitors.
+      const scoped = PLATFORM_CONSENT_DEFAULT_COMMANDS.filter(
+        (command) => command.region,
+      )
+      expect(scoped.length).toBe(1)
+      for (const command of scoped) {
         expect(command.ad_storage).toBe('denied')
         expect(command.ad_user_data).toBe('denied')
         expect(command.ad_personalization).toBe('denied')
+        expect(command.analytics_storage).toBe('denied')
       }
     })
   })

@@ -155,7 +155,7 @@ const SAVE_PATHS: Array<{
     mustNotContain: "{ error: 'Photo URLs must be https://' }",
   },
   {
-    file: 'apps/console/app/(app)/manage/user/page.tsx',
+    file: 'apps/console/components/account/profile-image-card.component.tsx',
     field: 'Manage Account → Profile image (the client courtesy check)',
     reaches: 'isMediaCdnPath(cleaned)',
     mustNotContain: "'Image URLs must be https://'",

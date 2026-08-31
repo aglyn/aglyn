@@ -18,11 +18,15 @@
 'use client'
 
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { HubSections } from '@aglyn/shared-ui-next/components/hub-tabs'
+import {
+  HubSections,
+  useActiveSection,
+} from '@aglyn/shared-ui-next/components/hub-tabs'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
+import { HostSettingsScopeProvider } from '../../host-settings-scope'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
@@ -35,7 +39,7 @@ import {
 } from '../../../../../../../components/host-id-provider'
 
 /**
- * Site Admin (AGL-1014), section by section (AGL-693).
+ * Site Admin (AGL-1014), section by section (AGL-2501).
  *
  * Owner/admin-only site controls, kept out of the Setup page a collaborator
  * legitimately visits. The refusal below is a NOTICE, not the boundary — the
@@ -56,6 +60,22 @@ export default function HostAdminSectionsLayout({
     href: buildRoute(route as never, { orgSlug, host } as never),
     label,
   })
+  /*
+   * One list, read twice — by the rail and by the breadcrumb below. Built here
+   * rather than inline in the JSX so `useActiveSection` can resolve against
+   * the same array the rail highlights: a section added here is named in the
+   * trail by construction, instead of by somebody remembering a second copy.
+   */
+  const sections = [
+    section(Route.HOST_ADMIN_GENERAL, 'General'),
+    section(Route.HOST_ADMIN_PLUGINS, 'Plugins'),
+    section(Route.HOST_ADMIN_DOMAIN, 'Custom Domain'),
+    section(Route.HOST_ADMIN_SECURITY, 'Security'),
+    section(Route.HOST_ADMIN_ACTIVITY, 'Activity'),
+    section(Route.HOST_ADMIN_BACKUP, 'Backup & template'),
+    section(Route.HOST_ADMIN_DANGER, 'Danger zone'),
+  ]
+  const active = useActiveSection(sections)
 
   return (
     <DashboardLayout
@@ -68,6 +88,10 @@ export default function HostAdminSectionsLayout({
           children: 'Admin',
           href: buildRoute(Route.HOST_ADMIN, { orgSlug, host }),
         },
+        // The section the reader is actually on. Without it the trail names
+        // every level except theirs, which is the one they might click to
+        // leave and the one that tells them where they are.
+        ...(active ? [{ children: active.label, href: active.href }] : []),
       ]}
       help={{ topic: 'plugins', anchor: '#how-plugins-run' }}
       header={{
@@ -77,17 +101,21 @@ export default function HostAdminSectionsLayout({
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {isAdmin ? (
-          <HubSections
-            sections={[
-              section(Route.HOST_ADMIN_PLUGINS, 'Plugins'),
-              section(Route.HOST_ADMIN_DOMAIN, 'Custom Domain'),
-              section(Route.HOST_ADMIN_SECURITY, 'Security'),
-              section(Route.HOST_ADMIN_ACTIVITY, 'Activity'),
-              section(Route.HOST_ADMIN_DANGER, 'Danger zone'),
-            ]}
-          >
-            {children}
-          </HubSections>
+          /*
+           * The scope the General section's form saves through — the host
+           * listener, the drafts and the unconfirmed-seed guard, shared with
+           * the Setup hub rather than copied into this one.
+           *
+           * Mounted at the LAYOUT so a half-typed name survives a trip to
+           * another section and back: sections are routes, so the page being
+           * left is unmounted and a ref held inside it goes with it.
+           *
+           * Inside the admin branch, so a reader who is refused the area
+           * opens no host listener on their way to being told so.
+           */
+          <HostSettingsScopeProvider>
+            <HubSections sections={sections}>{children}</HubSections>
+          </HostSettingsScopeProvider>
         ) : (
           <CardDisplay
             header="Admin"

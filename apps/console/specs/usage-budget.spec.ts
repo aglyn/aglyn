@@ -36,6 +36,7 @@ import {
   DEFAULT_BUDGET_THRESHOLD_PCTS,
   normalizeBudgetThresholds,
   orgMonthlySpend,
+  publicOrgMonthlySpend,
   resolveUsageBudget,
 } from '../utils/usage-budget'
 
@@ -271,6 +272,59 @@ describe('orgMonthlySpend', () => {
     })
     expect(spend.assistBilled).toBe(true)
     expect(spend.totalUsd).toBeCloseTo(16.5, 5)
+  })
+})
+
+/*===========================================================================
+ * THE CUSTOMER BOUNDARY.
+ *
+ * `OrgSpendBreakdown` is the internal shape. `assistUsd` on it is
+ * `assistUsage/{month}.estCostUsd` verbatim — our provider bill — and the
+ * cron reads it to mail staff a margin alert, which is the right audience for
+ * a cost. `publicOrgMonthlySpend` is what a customer's browser gets, and the
+ * unit change from dollars to credits is the whole of it.
+ *==========================================================================*/
+describe('publicOrgMonthlySpend', () => {
+  const breakdown = (assistUsd: number) =>
+    orgMonthlySpend({
+      month: '2026-08',
+      rollupBilledCents: 1_000,
+      rollupMonth: '2026-08',
+      assistEstCostUsd: assistUsd,
+    })
+
+  it('converts Assist cost to credits and drops the dollar figure', () => {
+    const projected = publicOrgMonthlySpend(breakdown(6.5))
+    // $0.001 a credit, rounded up — the same conversion the credits meter uses,
+    // so the two cannot disagree about the same month.
+    expect(projected.assistCredits).toBe(6_500)
+    expect('assistUsd' in projected).toBe(false)
+  })
+
+  it('CONTROL: the breakdown it projects DOES carry the dollars', () => {
+    // Anti-vacuity. Without this the assertion above is satisfied by a source
+    // object that never had the field, and the projection would be proving
+    // nothing about a boundary it was not crossing.
+    expect(breakdown(6.5).assistUsd).toBe(6.5)
+  })
+
+  it('keeps the BILLED dollars, which are the customer’s own money', () => {
+    const projected = publicOrgMonthlySpend(breakdown(6.5))
+    expect(projected.meteredUsd).toBe(10)
+    expect(projected.totalUsd).toBe(10)
+    expect(projected.meteredFresh).toBe(true)
+  })
+
+  it('reports zero credits rather than omitting the field', () => {
+    // A missing field and a zero one read differently to a client that has to
+    // decide whether to render a line at all.
+    expect(publicOrgMonthlySpend(breakdown(0)).assistCredits).toBe(0)
+  })
+
+  it('rounds a sub-credit exchange UP, never down to nothing', () => {
+    // A long tail of fractional exchanges must not cost real money and draw
+    // zero — the direction a meter may not err in.
+    expect(publicOrgMonthlySpend(breakdown(0.0004)).assistCredits).toBe(1)
   })
 })
 

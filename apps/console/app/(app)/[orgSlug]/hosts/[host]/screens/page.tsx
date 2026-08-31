@@ -66,18 +66,16 @@ import {
   DialogTitle,
   IconButton,
   MenuItem,
+  Alert,
   Stack,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
 import {
-  collection,
   deleteField,
   doc,
   getDoc,
-  limit,
-  query,
   setDoc,
   updateDoc,
   writeBatch,
@@ -127,6 +125,10 @@ import {
   unpublishScreenRoute,
 } from '../../../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import {
+  ceilingedWindow,
+  hostArtifactQuery,
+} from '../../../../../../utils/host-artifact-queries'
 import useCollectionTemplates from '../../../../../../hooks/use-collection-templates'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
@@ -139,6 +141,18 @@ const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   },
 )
 CellItemLinkComponent.displayName = 'CellItemLinkComponent'
+
+/**
+ * How many screen documents one open of this page reads.
+ *
+ * A ceiling rather than a page: the tree, the route composition and the
+ * billable-screen count all need the WHOLE collection, so this bounds the
+ * read instead of windowing it. Sized well above `screensPerHost` on every
+ * capped plan (100 on Pro) with room for the documents that plan does not
+ * count — error screens, email screens and the tombstones a delete leaves
+ * behind.
+ */
+const SCREEN_WINDOW = 200
 
 function Screens(props) {
   const params = useParams<{ hostId: string }>()
@@ -161,13 +175,42 @@ function Screens(props) {
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
-  // The hierarchy table renders the whole tree, so no page-sized query: a
-  // paginated slice could orphan children whose parent fell off the page.
-  const { status, data } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+  /**
+   * THE WHOLE TREE, ordered, with the ceiling made visible (AGL-2501).
+   *
+   * This list is the deliberate exception to the console's server-paged
+   * lists, and it has to be: a hierarchy sliced by row puts a child on a
+   * different page from its parent, so the indentation would describe a
+   * parent the reader cannot see, `composeScreenRoutePath` would compose a
+   * path from a chain with a hole in it, and `billableScreenIds` would count
+   * a fraction of the site against its plan. The PAGING happens in
+   * `ScreensHierarchyTableComponent`, which pages top-level screens and
+   * carries each one's whole subtree with it.
+   *
+   * What the read owes is the other half: an ORDER, and honesty about its
+   * ceiling.
+   *
+   *  * The order was absent — `limit(200)` alone — so a site over the ceiling
+   *    got a pseudo-random two hundred in document-id order, which
+   *    `compareScreenSiblings` then arranged into a believable tree.
+   *    `hostArtifactQuery` orders on the document id: not insertion order,
+   *    but stable, complete and the same on every load, and it drops nothing
+   *    (a document's name cannot be absent, which no field here can promise).
+   *
+   *  * The ceiling was silent. `screensPerHost` is unlimited from Business up
+   *    and error screens, email screens and tombstones are all documents in
+   *    here, so a real site can hold more than this window. One PROBE
+   *    document past the ceiling is what turns "we may be truncated" into a
+   *    fact worth rendering; it is never handed to the tree.
+   */
+  const { status, data: screenWindow } = useFirestoreCollection<any>(
+    () => hostArtifactQuery(firestore, hostId, 'screens', SCREEN_WINDOW + 1),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  const { rows: data, truncated } = useMemo(
+    () => ceilingedWindow<any>(screenWindow, SCREEN_WINDOW),
+    [screenWindow],
   )
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const screens: ScreenHierarchyRow[] = useMemo(
@@ -352,13 +395,6 @@ function Screens(props) {
             ? publishScreenRoute(firestore, { hostId, screenId: newId }, path)
             : undefined,
         )
-        .then(() =>
-          logActivity('Created screen', {
-            type: 'screen',
-            id: newId,
-            name: newValues.displayName,
-          }),
-        )
         .catch((error) => {
           console.error(error)
           setError({ ...error })
@@ -405,7 +441,7 @@ function Screens(props) {
           hostId,
           kind: 'screen',
           id,
-          idToken: await (user as any)?.getIdToken?.(),
+          user,
         }))()
       await confirm({
         title: 'Delete this screen?',
@@ -626,7 +662,7 @@ function Screens(props) {
 
   /*
     The row's LEFT is the drag handle and the expand chevron, and nothing else
-    (AGL-693). The screens should only have the drag or expand icon to
+    (AGL-2501). The screens should only have the drag or expand icon to
     the left.
 
     A "Details" icon used to sit there, on the argument that it is navigation
@@ -672,7 +708,7 @@ function Screens(props) {
   )
 
   /**
-   * The name column's link target (AGL-693).
+   * The name column's link target (AGL-2501).
    *
    * The same route `handleRowOpen` pushes, as an href — so the name is a real
    * link like it is on every other artifact list: middle-clickable, copyable,
@@ -932,6 +968,21 @@ function Screens(props) {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/*
+            The ceiling, said out loud. Every other consequence on this page
+            is computed from the window — the tree, the route each screen
+            composes from its parents, and the plan count in the header — so a
+            site above it is being shown a partial site with no sign of it.
+            Naming the number and the order is what lets a reader tell "I have
+            no such screen" from "this page did not read it".
+          */}
+          {truncated ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {`This site holds more than ${SCREEN_WINDOW} screens. The tree ` +
+                `below shows the first ${SCREEN_WINDOW} in document order, and ` +
+                'the screen count beside Create is counted from those.'}
+            </Alert>
+          ) : null}
           <CardDisplay>
             {/*<AccordionListComponent*/}
             {/*  unique*/}

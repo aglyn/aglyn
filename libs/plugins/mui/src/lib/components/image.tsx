@@ -108,6 +108,32 @@ export interface ImageProps {
   width?: string
   /** CSS height (e.g. "240px"); defaults to auto. */
   height?: string
+  /**
+   * The asset's own pixel dimensions, copied off the media document when the
+   * image was picked (AGL-2486).
+   *
+   * NOT author controls, which is why neither appears in the schema below:
+   * they describe the file, and the CSS `width`/`height` above describe the
+   * placement. The pair becomes the `<img>`'s intrinsic `width`/`height`
+   * attributes, which is the only thing that lets the browser reserve the
+   * right box before the bytes arrive — with `width: 100%; height: auto` the
+   * element is otherwise zero-height until the image decodes, and every image
+   * on the page shifts the layout as it lands.
+   *
+   * An attribute pair is a RATIO here, not a size: CSS wins for the used
+   * dimensions either way, so a stale value costs nothing but a reservation
+   * of the wrong shape. Both must be present and positive or neither is
+   * emitted — one alone gives the browser no ratio and would be read as a
+   * real dimension.
+   *
+   * Written by the media picker, and read from the node like any other prop,
+   * so nothing on the render path has to fetch a media document. `srcSet`
+   * still selects which variant is downloaded; these only say what shape it
+   * will be.
+   */
+  intrinsicWidth?: number
+  /** See `intrinsicWidth` — the two are only ever used as a pair. */
+  intrinsicHeight?: number
   /** Border radius in px. */
   radius?: number
   /** Target screen id — resolved rename-safe like Screen Link (AGL-339). */
@@ -143,6 +169,8 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     objectFit,
     width,
     height,
+    intrinsicWidth,
+    intrinsicHeight,
     radius,
     screenId,
     href: externalHref,
@@ -248,6 +276,22 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   const pinnedWidth = /^\d+(?:\.\d+)?px$/.test(String(width ?? '').trim())
     ? String(width).trim()
     : undefined
+  /**
+   * The intrinsic attribute pair, or nothing.
+   *
+   * Both-or-neither: the browser derives an aspect-ratio only from the pair,
+   * and a lone `width` is read as a real dimension instead — which would
+   * reserve a box of the wrong shape rather than no box at all. Finite and
+   * positive because a media document may carry `0` or a partial capture
+   * (dimensions are best-effort at upload), and `width="0"` collapses the
+   * element.
+   */
+  const usable = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+  const intrinsicAttributes =
+    usable(intrinsicWidth) && usable(intrinsicHeight)
+      ? { width: intrinsicWidth, height: intrinsicHeight }
+      : undefined
   return wrapLink(
     <Box
       ref={ref}
@@ -369,6 +413,13 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       {...(eager
         ? { loading: 'eager' as const }
         : Aglyn.DEFERRED_IMAGE_ATTRIBUTES)}
+      // Ahead of `{...rest}` so an author who has typed a literal width or
+      // height attribute onto the node still wins, and ahead of `sx` because
+      // these are ATTRIBUTES: the CSS block below sets the used size, and
+      // these only supply the ratio it is laid out against. `Box` in this
+      // version applies `styleFunctionSx` alone — it has no system-props
+      // layer — so both forward to the `<img>` rather than becoming CSS.
+      {...intrinsicAttributes}
       {...rest}
       sx={[
         {

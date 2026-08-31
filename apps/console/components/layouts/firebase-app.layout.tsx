@@ -20,11 +20,18 @@ import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
   FirebaseServicesProvider,
+  setAnalyticsConsentGate,
   setFirestoreSessionReporters,
   setStaleSessionCheck,
   useAnalytics,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import {
+  hydratePlatformConsentFromMirror,
+  platformAnalyticsAllowed,
+  primePlatformConsent,
+  setPlatformConsentSharesAcrossSubdomains,
+} from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import { configureAnalyticsTransport } from '@aglyn/aglyn/app-utils/analytics-events'
 import { analyticsEnvironmentForcesInternal } from '@aglyn/aglyn/app-utils/analytics-environment'
 import { NoSsr } from '@mui/material'
@@ -37,6 +44,7 @@ import {
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { currentOriginPersistenceClass } from '../../constants/workspace-domain'
+import { OrgPermissionsProvider } from '../../hooks/use-org-permissions'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '../../hooks/use-org-plans'
@@ -109,6 +117,81 @@ setStaleSessionCheck(() => getSessionHealth().staleSession)
  */
 watchSessionHeal()
 
+/**
+ * The visitor-consent gate for this surface, and the reason the console's
+ * asymmetry with the tenant runtime is now closed.
+ *
+ * The tenant registers no transport at all: its events fall through to
+ * `window.gtag`, which only exists once the visitor has granted consent
+ * (AGL-1498), so the gate is structural there for free. Firebase owns this
+ * surface's GA state instead, and it used to initialize unconditionally — so
+ * `app.aglyn.com` collected from every visitor, including the sign-in page,
+ * regardless of whether they had ever been asked anything. The region-scoped
+ * consent-mode default (AGL-1597) narrowed what the tag could STORE and never
+ * stopped it loading, which is the specific thing prior-consent law prohibits.
+ *
+ * Registering a gate here makes it structural on this surface too: the
+ * provider does not create the Analytics instance while this answers no, so
+ * gtag.js is never fetched and the fallback in `deliver()` finds no
+ * `window.gtag` to hand a hit to.
+ *
+ * Module scope, and that is not a style choice — the provider consults this
+ * during its FIRST render, so a gate installed from an effect would arrive
+ * after the decision it exists to make. Same reason as the three
+ * registrations above.
+ *
+ * The verdict itself is a synchronous storage read, because it has to be
+ * answerable at that instant. A visitor with no record yet is undecided and
+ * gets no tag; `primePlatformConsent` below starts the region lookup that
+ * resolves them, and outside the prior-consent regions it records implied
+ * consent and the provider boots the tag a moment later, in the same document.
+ */
+/**
+ * One console, several hostnames — so a visitor's answer has to travel between
+ * them.
+ *
+ * `app.<workspace domain>` and `auth.<workspace domain>` are the same
+ * application: `auth` is a reserved label served by this deployment, and
+ * interactive sign-in is DELEGATED there for mobile visitors and for every
+ * workspace subdomain, so a person can answer the consent question on one and
+ * arrive on the other a moment later. `localStorage` is per origin, which
+ * makes those two answers invisible to each other — harmless for an accept
+ * (they are asked twice), and not harmless at all for a refusal: outside the
+ * prior-consent regions the sibling host finds no record and writes `implied`
+ * from the posture, quietly overturning an opt-out the visitor did make.
+ *
+ * `currentOriginPersistenceClass()` is the right question already answered
+ * elsewhere: `durable` means the whole registrable domain is ours, which is
+ * exactly the condition under which a `.<domain>` cookie is ours to write. A
+ * CUSTOM console domain answers `ephemeral` and gets no mirror — it has no
+ * sibling console origin to carry to, and its registrable domain belongs to
+ * the customer.
+ *
+ * Hydrated at module scope, before the gate below reads storage for the first
+ * time. The reader itself stays a pure read for the reason the gate is
+ * synchronous at all: it is consulted from inside the services provider's
+ * render, and a read with a storage write in it would repeat that write on
+ * every consent change forever.
+ */
+setPlatformConsentSharesAcrossSubdomains(
+  currentOriginPersistenceClass() === 'durable',
+)
+hydratePlatformConsentFromMirror()
+
+setAnalyticsConsentGate(platformAnalyticsAllowed)
+
+/**
+ * Start resolving this visitor before React commits anything.
+ *
+ * The consent component's effect does this too and is the normal path. It is
+ * not enough on its own for the same reason `ErrorBeacon` installs at module
+ * scope: an effect only runs if React commits, and a console wedged above this
+ * tree would leave a rest-of-world visitor permanently undecided — which reads
+ * as "we stopped measuring" rather than as the fault it is. Idempotent per
+ * pageview and fire-and-forget.
+ */
+primePlatformConsent()
+
 function AnalyticsGlobalEvents({ children }) {
   // Cross-subdomain session cookie sync (AGL-236). NOT analytics, and it must
   // run whether or not Firebase Analytics came up — so it stays out here.
@@ -139,11 +222,36 @@ function AnalyticsGlobalEvents({ children }) {
   // A gate on the MOUNT cannot be half-applied — every binding lives in the
   // child, so a new one is guarded by construction rather than by remembering.
   //
-  // Not a hook-order hazard: the provider builds its services exactly once per
-  // document, so this condition is a constant for the lifetime of the tree.
+  // Not a hook-order hazard, though it is no longer a constant either: the
+  // instance now comes and goes with the visitor's consent, and mounting or
+  // unmounting a CHILD is the one form of conditional rendering that costs
+  // nothing to reason about. Every hook stays in this component.
   return (
     <>
       {analytics ? <AnalyticsBindings analytics={analytics} /> : null}
+      {/*
+        The other side of the same gate, and it is not the same as rendering
+        nothing.
+
+        With no instance the bindings unmount and their transport
+        registration is torn down — after which `deliver()` in
+        `analytics-events.ts` falls back to `window.gtag`. On this surface
+        that global is REAL: the Firebase SDK injects gtag.js, and unloading
+        a script is not something a page can do, so a visitor who withdraws
+        mid-session leaves a live tag behind and our own `trackEvent` call
+        sites would keep feeding it. `storeVisitorConsent` sets
+        `ga-disable-<id>` and sends a denied `consent update` on that tag,
+        which is the half that reaches Google's own code — this is the half
+        that stops the hits leaving ours, and neither one covers the other.
+
+        Mounted only when consent is actually WITHHELD, never merely because
+        there is no instance. Unregistered is the honest state for a surface
+        whose tag failed to initialize or whose build may not emit
+        (AGL-1516); swallowing events there would be a silent total loss with
+        nothing to show for it. Withheld consent is the one case where
+        dropping is the correct delivery.
+      */}
+      {!analytics && !platformAnalyticsAllowed() ? <AnalyticsRefusal /> : null}
       {children}
     </>
   )
@@ -456,6 +564,41 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
 }
 AnalyticsBindings.displayName = 'AnalyticsBindings'
 
+/**
+ * The transport a visitor who has NOT granted analytics gets: one that drops
+ * the event.
+ *
+ * Registered rather than left absent, which inverts the AGL-1516 rule on
+ * purpose and only here. That rule — "registering a transport that cannot
+ * deliver is worse than registering none" — is about a surface whose Firebase
+ * tag failed to come up, where the `window.gtag` fallback underneath is a
+ * legitimate destination and swallowing events is a silent total loss. For a
+ * visitor who has refused, or has not yet been asked, that fallback is not a
+ * destination at all: it is the leak.
+ *
+ * The leak is real rather than theoretical on this surface. gtag.js cannot be
+ * unloaded once the SDK has injected it, so a mid-session withdrawal leaves
+ * `window.gtag` live and every `trackEvent` call site in the console keeps
+ * finding it.
+ *
+ * Declared BELOW `AnalyticsBindings` so it stays outside the parent's body:
+ * `analytics-instance-gate.spec.ts` reads that body and fails on any
+ * firebase-analytics or transport call it finds there, which is the property
+ * that stops a new binding from landing ungated.
+ */
+function AnalyticsRefusal(): null {
+  useEffect(() => {
+    // No instance is captured, so there is nothing to fail with. The event is
+    // dropped permanently — never queued for a later grant, which is the
+    // shared module's stated posture and the only honest one: a hit replayed
+    // after consent describes a pageview the visitor had not consented to.
+    configureAnalyticsTransport(() => undefined)
+    return () => configureAnalyticsTransport(null)
+  }, [])
+  return null
+}
+AnalyticsRefusal.displayName = 'AnalyticsRefusal'
+
 export interface FirebaseAppLayoutProps {
   children?: JSX.Children
 }
@@ -491,9 +634,17 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
             gives no signal for that: the console simply resolved every flag
             against a null subject and silently ignored every override. */}
         <OrgScopeProvider>
-          <ReleaseFlagsProvider>
-            <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
-          </ReleaseFlagsProvider>
+          {/* Inside the org scope for the same reason the flags provider is:
+              it resolves the reader's membership in `useOrgScope().currentOrg`
+              and would read the context DEFAULT — no org, forever — mounted
+              above it. Above the route groups so the two member reads happen
+              ONCE for a page however many surfaces gate on them; the host
+              dashboard alone has five consumers. */}
+          <OrgPermissionsProvider>
+            <ReleaseFlagsProvider>
+              <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+            </ReleaseFlagsProvider>
+          </OrgPermissionsProvider>
         </OrgScopeProvider>
       </FirebaseServicesProvider>
     </NoSsr>

@@ -214,9 +214,8 @@ jest.mock(
   '../components/billing/billing-usage-budget-card.component',
   () => nullCard,
 )
-jest.mock('../components/embedded-checkout-dialog.component', () => nullCard)
 
-import BillingPage from '../app/(app)/[orgSlug]/billing/page'
+import BillingPage from '../app/(app)/[orgSlug]/billing/(sections)/page'
 
 /**
  * The 423 body a chokepoint actually emits, mirroring `lockdownJsonResponse`
@@ -275,6 +274,29 @@ beforeEach(() => {
   checkoutCalls = []
   global.fetch = jest.fn(async (input: any, init?: any) => {
     const url = String(input)
+    // The billing profile the plan grid gates on (AGL-2501 follow-up): a paid
+    // upgrade needs a stored card AND a billing address, because subscribing
+    // charges the one against the other. Without this the grid correctly
+    // DISABLES every Upgrade button and no confirm can ever open — which is
+    // the gate working, not the page failing.
+    if (url.startsWith('/api/billing/profile')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          configured: true,
+          customer: {
+            email: 'owner@example.com',
+            name: 'Acme',
+            address: { line1: '1 Example St', line2: '', city: 'Austin', state: 'TX', postalCode: '78701', country: 'US' },
+          },
+          taxIds: [],
+          paymentMethods: [
+            { id: 'pm_1', type: 'card', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2030, email: null, isDefault: true },
+          ],
+        }),
+      }
+    }
     if (url.startsWith('/api/billing/checkout')) {
       checkoutCalls.push(JSON.parse(String(init?.body ?? '{}')))
       const answer = checkoutAnswers.shift()
@@ -301,7 +323,7 @@ const TARGET_PLAN = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')[0]
 
 async function clickUpgrade() {
   render(<BillingPage />)
-  const upgrades = await screen.findAllByRole('button', { name: 'Upgrade' })
+  const upgrades = await screen.findAllByRole('button', { name: /^Upgrade/ })
   fireEvent.click(upgrades[0])
   await waitFor(() => {
     expect(checkoutCalls.length).toBeGreaterThan(0)
@@ -444,7 +466,7 @@ describe('AGL-1557 · the notice appears only when the server refuses', () => {
     await clickUpgrade()
     expect(await screen.findByRole('alert')).toBeTruthy()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Upgrade' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /^Upgrade/ })[0])
     await waitFor(() => {
       expect(checkoutCalls.length).toBe(2)
     })

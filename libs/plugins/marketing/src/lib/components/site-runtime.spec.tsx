@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { resetAuthoredEventWarnings } from '@aglyn/aglyn/app-utils/analytics-events'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ClientAutomation, PopupData } from '../model/site-contract'
 import { MarketingSiteRuntime } from './site-runtime'
@@ -492,5 +493,105 @@ describe('showHtml sanitization on the real render path (AGL-2486)', () => {
     showHtml('<div style="background-image:url(https://cdn.example/p.png)">x</div>')
     const div = injected().querySelector('div') as HTMLElement
     expect(div.getAttribute('style')).toContain('https://cdn.example/p.png')
+  })
+})
+
+/**
+ * Authored analytics events on the real render path (AGL-1587).
+ *
+ * The sanitizer and the reserved-name refusal have their own unit suite in
+ * `analytics-events.spec.ts`. What is untested there — and what actually
+ * broke in the shipped feature — is the WIRE: whether this step hands the
+ * authored name AND the authored params to `trackAuthoredEvent` at all. So
+ * nothing is mocked here. `trackAuthoredEvent` is the real one, and the
+ * assertion reads `window.gtag`, which is the same delivery a consenting
+ * visitor's browser gives it. A step that dropped `params` on the floor, or
+ * called `gtag` directly and skipped the sanitizer, fails every case below;
+ * mocking the tracker would let both regressions through.
+ */
+describe('authored analytics events on the real render path (AGL-1587)', () => {
+  let unmount: (() => void) | undefined
+  let calls: unknown[][]
+  let warn: jest.SpyInstance
+
+  beforeEach(() => {
+    calls = []
+    ;(window as unknown as { gtag: unknown }).gtag = (...args: unknown[]) => {
+      calls.push(args)
+    }
+    // The tracker warns once per refused name FOR THE LIFE OF THE MODULE, so
+    // a refusal case would go quiet after the first spec that provoked it.
+    resetAuthoredEventWarnings()
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    document.body.innerHTML = '<button id="cta">Buy</button>'
+  })
+
+  afterEach(() => {
+    unmount?.()
+    unmount = undefined
+    warn.mockRestore()
+    delete (window as unknown as { gtag?: unknown }).gtag
+    document.body.innerHTML = ''
+  })
+
+  const clickTracks = (step: Record<string, unknown>) => {
+    const utils = runEngine([
+      { event: 'elementClick', selector: '#cta', everyTime: true, steps: [step as never] },
+    ])
+    unmount = utils.unmount
+    fireEvent.click(document.getElementById('cta') as HTMLElement)
+  }
+
+  it('delivers the authored name and the authored parameters', () => {
+    clickTracks({
+      type: 'trackGaEvent',
+      eventName: 'cta_click',
+      params: { plan: 'starter', placement: 'hero' },
+    })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0][0]).toBe('event')
+    expect(calls[0][1]).toBe('cta_click')
+    expect(calls[0][2]).toEqual({ plan: 'starter', placement: 'hero' })
+  })
+
+  it('runs the params through the shared sanitizer, not raw gtag', () => {
+    // The step reached the page with a form field bound into a parameter,
+    // which is how a visitor's address gets into a site's analytics property.
+    clickTracks({
+      type: 'trackGaEvent',
+      eventName: 'quote_requested',
+      params: { plan: 'pro', email: 'buyer@example.com', contact: 'buyer@example.com' },
+    })
+
+    // The denied KEY and the address-shaped VALUE under an innocent key are
+    // both gone — a step calling gtag directly would deliver all three.
+    expect(calls[0][2]).toEqual({ plan: 'pro' })
+  })
+
+  it('refuses a reserved name, dropping the hit rather than polluting a real metric', () => {
+    clickTracks({
+      type: 'trackGaEvent',
+      eventName: 'purchase',
+      params: { plan: 'starter', placement: 'hero' },
+    })
+
+    expect(calls).toHaveLength(0)
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/reserved/)
+  })
+
+  it('sends the SAME parameters under a name that is not reserved', () => {
+    // The control for the refusal above. Without it, a step that silently
+    // failed for every name — a broken selector, a params shape the executor
+    // throws on — would pass the reserved-name case for the wrong reason.
+    clickTracks({
+      type: 'trackGaEvent',
+      eventName: 'purchase_intent',
+      params: { plan: 'starter', placement: 'hero' },
+    })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0][1]).toBe('purchase_intent')
+    expect(calls[0][2]).toEqual({ plan: 'starter', placement: 'hero' })
   })
 })

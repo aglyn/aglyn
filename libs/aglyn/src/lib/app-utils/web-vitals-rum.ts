@@ -116,12 +116,42 @@ export interface WebVitalsReportingOptions {
    * listener's `surface`.
    */
   surface: string
+  /**
+   * Whether this visitor's consent currently permits analytics.
+   *
+   * Optional, and ABSENT MEANS ALLOWED — on a tenant page the absence of
+   * `window.gtag` is already the gate, because the tag only loads for a
+   * visitor who granted (AGL-1498), and a self-hosted surface answers to its
+   * operator's own configuration.
+   *
+   * The console needs it because its gate has a different shape. Firebase
+   * injects gtag.js and a page cannot unload a script, so a visitor who
+   * WITHDRAWS mid-session leaves `window.gtag` resident — and this module
+   * calls it directly rather than through `deliver()`, so the console's
+   * refusing transport does not cover it. Re-read on every delivery rather
+   * than captured at install, since the whole point is that the answer
+   * changes within one document.
+   */
+  allowed?: () => boolean
 }
 
 let installed = false
+let consentGate: (() => boolean) | null = null
 let pending: Array<{ name: string; params: Record<string, unknown> }> = []
 let watcher: ReturnType<typeof setInterval> | null = null
 let watcherTries = 0
+
+/** The consent verdict, with no gate registered reading as "allowed". */
+function consentAllows(): boolean {
+  if (consentGate === null) return true
+  try {
+    return consentGate() === true
+  } catch {
+    // A gate that throws cannot be read as consent — storage can throw in
+    // private mode, and "we could not tell" resolves to no.
+    return false
+  }
+}
 
 function residentGtag(): ((...args: unknown[]) => void) | null {
   if (typeof window === 'undefined') return null
@@ -159,6 +189,15 @@ function deliverMetricEvent(
   name: string,
   params: Record<string, unknown>,
 ): void {
+  // Checked HERE rather than at install, and before anything is held: a
+  // withdrawal mid-session has to drop what is already waiting as well as what
+  // comes next, or the held metrics simply arrive later against a visitor who
+  // has said no.
+  if (!consentAllows()) {
+    pending = []
+    stopWatcher()
+    return
+  }
   const gtag = residentGtag()
   if (gtag) {
     // Anything held arrived before this one; keep GA's receive order honest.
@@ -176,6 +215,14 @@ function deliverMetricEvent(
   watcherTries = 0
   watcher = setInterval(() => {
     watcherTries += 1
+    // The visitor can refuse while the tag is still being waited for, which is
+    // exactly the prior-consent case: no tag yet, metrics held, and a Decline
+    // click that must empty the hold rather than let it flush later.
+    if (!consentAllows()) {
+      pending = []
+      stopWatcher()
+      return
+    }
     const resident = residentGtag()
     if (resident) {
       flushPending(resident)
@@ -224,6 +271,7 @@ export function installWebVitalsReporting(
   if (typeof window === 'undefined') return
   if (installed) return
   installed = true
+  consentGate = options.allowed ?? null
   const surface = options.surface
   import('web-vitals')
     .then((vitals) => {
@@ -250,6 +298,7 @@ export function installWebVitalsReporting(
 /** Test seam — forgets the install, the held metrics and the tag watcher. */
 export function resetWebVitalsReporting(): void {
   installed = false
+  consentGate = null
   pending = []
   stopWatcher()
 }

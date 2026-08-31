@@ -25,7 +25,21 @@ import { generatePresetId } from '../utils/generate-preset-id'
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'section'
 
-/** W3C sectioning/grouping elements the component may render as (AGL-336). */
+/**
+ * W3C sectioning/grouping elements the component may render as (AGL-336).
+ *
+ * ⛔ `main` IS NOT ONE OF THEM (AGL-2486). The tenant root layout renders the
+ * document's single `main` landmark, so an author-selectable `main` here could
+ * only ever produce a SECOND one — and two `main` elements is a worse
+ * accessibility outcome than none, because the landmark stops naming anything
+ * in particular. It was offered in this select, with field help recommending
+ * it, which made the duplicate the documented choice rather than a mistake.
+ *
+ * Removing it degrades rather than breaks: the resolver below falls back to
+ * `section` for any value not in this list, so a stored `element: 'main'` on a
+ * published screen renders as `<section>` — still a grouping element, still
+ * where the author put it, and no longer competing with the layout's landmark.
+ */
 export const SECTION_ELEMENTS = [
   'section',
   'div',
@@ -34,7 +48,6 @@ export const SECTION_ELEMENTS = [
   'nav',
   'header',
   'footer',
-  'main',
 ] as const
 export type SectionElement = (typeof SECTION_ELEMENTS)[number]
 
@@ -85,7 +98,7 @@ export const schema: Aglyn.ComponentSchema<SectionProps> = {
       label: 'HTML element',
       description:
         'The DOM element this section renders as, per W3C semantics. ' +
-        'Use section/article/aside/nav/header/footer/main for meaningful ' +
+        'Use section/article/aside/nav/header/footer for meaningful ' +
         'structure; div for purely visual grouping.',
       component: Aglyn.FieldComponentType.SELECT,
       options: SECTION_ELEMENTS.map((value) => ({ value, label: value })),

@@ -111,6 +111,11 @@ the console, and your site hostnames routed to the tenant runtime.
 
 ## The full runbook
 
+Every variable this deployment reads — what it drives, where to get its value,
+what shape it takes, and whether changing it needs a rebuild — is in
+[Environment variables](./self-hosting-environment.md). Keep it open beside this
+page while you fill in `.env.selfhost`.
+
 The complete, always-current runbook lives in the repository:
 [`docs/SELF_HOSTING.md`](https://github.com/aglyn/aglyn/blob/main/docs/SELF_HOSTING.md).
 It covers:
@@ -282,6 +287,29 @@ A customer's own custom domain works the same way — point it at your proxy and
 route it to the tenant container. The runtime treats any hostname it does not
 recognize as a candidate custom domain and looks it up.
 
+[Domain providers](./domain-providers.md) has the whole picture: the DNS
+records, the wildcard certificates, worked Caddy and nginx configurations, and
+what to do instead when you want customers' own domains registered
+automatically.
+
+:::warning Tell the product how many proxies you run
+Every rate limiter in the product — passkey sign-in, password reset, org
+creation, form submission — keys on the client address, and the address is read
+from `X-Forwarded-For` at the hop `AGLYN_TRUSTED_PROXY_COUNT` names. It defaults
+to `1`, which is right for a single reverse proxy whether that proxy appends to
+the header or overwrites it: a caller-supplied value ends up to the left of the
+real address and is discarded.
+
+Set it to `2` if a CDN sits in front of your own proxy, or the reader names your
+proxy instead of the visitor and several visitors share one bucket. Traefik still
+wants `trustedIPs` set and `forwardedHeaders.insecure` left off, so its own chain
+is one you can count.
+
+The compose file publishes both containers on `127.0.0.1`, so your proxy is the
+only way in. If you move the proxy to another host, firewall the port to it
+instead of widening the binding.
+:::
+
 ## Renaming the product {#platform-brand}
 
 `NEXT_PUBLIC_PLATFORM_BRAND_NAME` renames the product everywhere it names
@@ -317,16 +345,20 @@ brand, not Aglyn's.
 
 ## Optional keys
 
-The example env file carries the required Firebase blocks plus a handful of
-optional integrations. The related features degrade gracefully — a missing key
-disables its feature rather than breaking the stack:
+Beyond the Firebase blocks and the addresses above, most of what is left is
+optional, and a missing key disables its feature rather than breaking the stack.
+This is the index; [Environment variables](./self-hosting-environment.md) has the
+value shape, the default and the symptom for each one.
 
 | Feature | Keys |
 | --- | --- |
-| Billing & commerce checkout | `STRIPE_SECRET_KEY`, plus `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, and the `STRIPE_PRICE_*` price ids if you want working plan checkout — the secret key alone is not enough |
-| Transactional & campaign email | `RESEND_API_KEY`, `USAGE_EMAIL_FROM` |
-| AI assist | `ANTHROPIC_API_KEY` |
+| Billing & commerce checkout | [`STRIPE_*`](./self-hosting-environment.md#stripe) — the secret key alone covers storefront checkout; plan checkout also needs the publishable key, the webhook secret and the `STRIPE_PRICE_*` ids |
+| Transactional & campaign email | [`RESEND_API_KEY`, `USAGE_EMAIL_FROM`](./self-hosting-environment.md#email) — the sender address gates *all* outbound mail, not just usage mail |
+| One-click unsubscribe | [`EMAIL_UNSUBSCRIBE_SECRET`](./self-hosting-environment.md#secrets), which falls back to `CRON_SECRET` |
+| Publishing that takes effect immediately | [`REVALIDATE_SECRET`](./self-hosting-environment.md#secrets) — without it a publish reports success and the live page stays stale for up to ten minutes |
+| AI assist | [`ANTHROPIC_API_KEY`](./self-hosting-environment.md#assist), plus the spend caps beside it |
 | Scheduled jobs | `CRON_SECRET` — the job routes stay dormant without it. See [below](#scheduled-jobs) for what that silently switches off |
+| Scheduled plugin jobs | [`PLUGIN_JOBS_SECRET`](./self-hosting-environment.md#secrets) — without it no scheduled publishing and no booking-hold expiry ever runs |
 | Customer issue reports | `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required. See [below](#issue-reports) |
 | The every-minute job beat | `AGLYN_JOB_RUNNER_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
 | The fifteen-minute console sweeps | `AGLYN_CONSOLE_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
@@ -516,21 +548,29 @@ the collector's CORS allowlist reads it.
 | Area | Self-hosted behavior |
 | --- | --- |
 | Firebase | Required — Auth, Firestore, Storage, RTDB, and Remote Config run in your project. |
-| Custom-domain self-service | The in-console attach flow is Vercel-specific and answers `501` without Vercel credentials; self-hosters attach domains at their reverse proxy instead. DNS **verification** works everywhere — see the row below. |
+| Custom-domain self-service | Behind the [domain driver](./domain-providers.md). `webhook` registers a customer's domain automatically through your own proxy's API. `wildcard` cannot — nobody's wildcard covers somebody else's apex — so it answers `501` and you route the name by hand; the site still serves, because the domain claim is written before the refusal. DNS **verification** works everywhere. [Per-driver detail](./self-hosting-environment.md#domains-custom). |
 | Custom-domain verification | The verify step requires an exact CNAME match, or an apex address match when the name carries no CNAME at all. There is a soft pass that accepts *any* CNAME, for local development where no DNS points at a tenant edge. It used to be enabled by the absence of a hosting vendor's environment variable — which a container never sets — so it was **on in production on every self-host install**, and any domain carrying any CNAME to anywhere verified. A user of your platform could claim a domain they do not control. It now keys on `NODE_ENV`, which both Dockerfiles set to `production` in the image that actually runs. **If you run an image built before this fix, upgrade.** |
 | Legal pages & clickwrap | The signup checkbox links **Aglyn LLC's** Terms and Privacy and records acceptance against Aglyn's document hashes. Nothing breaks, but the agreement is ours, not yours, and is not yet configurable. Replace it before running this for anyone but yourself. |
 | Marketplace | Visible by default, but backed by Aglyn's Stripe Connect platform. Browsing works; purchase and payout onboarding explain themselves only after a click. Turn `release_marketplace` off in Remote Config if you don't want it. |
 | Wildcard published-site domains | Supported. The tenant runtime resolves the `Host` header itself, so a single `*.sites.example.com` rule at your proxy serves every site — see [Reverse proxy](#reverse-proxy). It needs `AGLYN_TENANT_HOST_CNAME` set and `AGLYN_STANDALONE=1` present **at runtime**; without the latter the runtime reads itself as a developer's machine, matches nothing, and redirects every visitor to the configured console. |
+| Client IP | One reader, configured by `AGLYN_TRUSTED_PROXY_COUNT` — how many proxies sit in front, default `1`. It takes the hop that many places from the right of `X-Forwarded-For` and ignores everything the caller may have put to its left, so an appending proxy is fine and needs nothing set. Falls back to `x-real-ip` and RFC 7239 `Forwarded`; where nothing readable arrives it returns no address rather than a placeholder, and address-keyed limits are skipped rather than collapsing every anonymous caller into one bucket. Set `2` when a CDN fronts your proxy — see [Reverse proxy](#reverse-proxy). |
+| Request geo | Sanctions screening and the consent-region default read the visitor's country from a request header, and the sign-in alert reads the city too. The defaults are Vercel's names, with fallbacks for Cloudflare, CloudFront, App Engine and the usual GeoIP-module names; set `AGLYN_GEO_COUNTRY_HEADER`, `AGLYN_GEO_REGION_HEADER` and `AGLYN_GEO_CITY_HEADER` if your proxy uses names of its own. Baked in at **build** time. With no country signal the embargo gate fails open and logs that it did, once per instance. The region header matters separately: the sub-country embargo entries match on it alone. |
+| More than one replica | Single-container is the supported shape. Published pages are ISR-cached and site data sits behind a one-hour cache, with no shared cache handler, so a publish busts only the replica that received it — other replicas keep serving the old page for up to 10 minutes. Scale out only behind a sticky-session proxy, or fan the revalidate request out yourself. |
+| Edge caching | Several endpoints send `s-maxage` and rely on a shared cache honouring it. Behind a proxy that caches nothing they are just recomputed per request. Note this also sets your real media takedown window: an asset stays reachable for as long as your cache holds it. |
+| Workspace subdomains | Managed by whichever [domain driver](./domain-providers.md) you choose. `AGLYN_DOMAIN_PROVIDER=wildcard` is the ordinary Docker answer: point one wildcard DNS record for `*.<workspace domain>` at your console, hold one wildcard certificate, and every workspace URL resolves the moment it is created with nothing to register. `webhook` drives your own proxy's API instead. Left unset with no Vercel token the driver is `none`, which registers nothing — the console still advertises `{slug}.<workspace domain>`, so that name has to resolve some other way. |
 | Stripe / Resend / AI assist | Optional keys (see above); the related features degrade gracefully when absent. |
 | Operator identity | Set `NEXT_PUBLIC_OPERATOR_NAME` and `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — the public abuse and §512 intakes, the lockdown 503, the quarantine notice and the sanctions 451 all name them, there is no Aglyn fallback, and unset renders "not configured". Baked in at image build time. |
 | DMCA designated agent | Not inherited from Aglyn. Register your own with the U.S. Copyright Office; the product asserts a registration only when you set `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true`. |
 | Legal documents | Signup still clickwraps your users to Aglyn LLC's Terms, hash-pinned to snapshots in the repository. `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` records your own legal origin but does not yet retarget the acceptance flow. |
 | Documentation links | `NEXT_PUBLIC_DOCS_ORIGIN` retargets **every** docs link — Assist citations, console help, besigner help, and the `documentation` URL your own REST API returns. Unset, they all point at `https://docs.aglyn.com`. It previously governed the citations alone while the console and besigner read a separate, undocumented variable, so following the runbook exactly retargeted about a third of the links and left the rest citing ours inside your product. |
-| Staff / admin surfaces | Built for Aglyn's own operations. The `/admin/tax-return` report in particular is built around a single US-TX registration; set `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` to your own identifiers or leave both unset for an explicit "not configured". |
+| Sales tax | Tax **collection** is a real feature and works anywhere: per-country and per-state rates, tax-inclusive pricing, or Stripe Tax against your own registrations, configured per store. Tax **filing** is not: `/admin/tax-return` is Aglyn LLC's own Texas return — one hardcoded jurisdiction, one hardcoded form, a period floor set by Aglyn's registration date, and liability prose about Aglyn. It reads *your* data but puts it on lines you cannot file. Leave `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` unset and file from Stripe's reporting or the per-host tax summary instead — [the full answer](./self-hosting-environment.md#tax). |
+| Staff / admin surfaces | Built for Aglyn's own operations, and reached by the `staff` custom claim — which on your deployment you grant yourself. Grant it deliberately. |
 | Updates | `git pull && docker compose up --build`, re-running the rules deploy when `CHANGELOG.md` records a rules change. Releases are `v<semver>` git tags; `git describe --tags --match 'v*'` tells you which one you are on. |
 
 ## Related
 
+- [Environment variables](./self-hosting-environment.md) — the complete per-variable reference
+- [Domain providers](./domain-providers.md) — choosing a driver, the wildcard path end to end, and the webhook contract
 - [White-label](../workspace-and-billing/white-label.md)
 - [Report an issue](../workspace-and-billing/report-an-issue.md)
 - [Billing & plans](../workspace-and-billing/billing-and-plans/overview.md)

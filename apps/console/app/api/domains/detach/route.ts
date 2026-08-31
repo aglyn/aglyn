@@ -18,29 +18,32 @@
 import { pluginRequestFromWeb, TENANT_APEX } from '@aglyn/aglyn/server'
 import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import {
+  attachProjectDomain,
+  detachProjectDomain,
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  logHostActivity,
 } from '@aglyn/tenant-data-admin'
 
 /**
- * Releases a custom domain: removes it from the tenant Vercel project and
- * clears `host.cname` (AGL-742).
+ * Releases a custom domain: removes it from the tenant deployment and clears
+ * `host.cname` (AGL-742).
  *
  * Disconnect used to clear `host.cname` client-side only, leaving the hostname
- * attached to the Vercel project forever. Vercel kept serving it, so with no
- * host holding that cname `get-host.ts` resolved nothing and the domain 404'd
- * instead of being released — while certificates kept renewing and the domain
- * counted against the project's limit.
+ * registered forever. The platform kept serving it, so with no host holding
+ * that cname `get-host.ts` resolved nothing and the domain 404'd instead of
+ * being released — while certificates kept renewing and the domain counted
+ * against the deployment's limit.
  *
  * Deliberately does NOT touch DNS. A real custom domain's CNAME lives in the
  * customer's own zone; we have no access to it and must not imply otherwise.
  *
- * Vercel 404 on removal is treated as success — the domain was already gone,
- * which is the desired end state (mirrors how attach tolerates
- * `domain_already_in_use`). Auth: Firebase ID token; caller must be a host admin.
+ * A name that was never registered (`not-found`) is treated as success — it is
+ * the desired end state already, mirroring how attach tolerates a name that is
+ * already registered. Auth: Firebase ID token; caller must be a host admin.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -48,9 +51,6 @@ async function handler(request: Request): Promise<Response> {
   if (method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
-  const token = process.env.VERCEL_TOKEN
-  const projectId = process.env.VERCEL_TENANT_PROJECT_ID
-  const teamId = process.env.VERCEL_TEAM_ID
   const hostId = String(body?.hostId ?? '')
   if (!hostId) {
     return Response.json({ error: 'Missing hostId' }, { status: 400 })
@@ -104,50 +104,65 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ detached: true, alreadyClear: true }, { status: 200 })
     }
 
-    if (token && projectId) {
-      const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
-      const response = await fetch(
-        `https://api.vercel.com/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}${query}`,
-        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+    // `not-found` is success (the name is already gone) and `skipped` is a
+    // deployment that does not register names at all — neither is a failure to
+    // report, and neither leaves an orphan behind.
+    const released = await detachProjectDomain(domain, 'tenant')
+    if (released.outcome === 'failed') {
+      // Record that the platform still holds it, so the orphan is visible
+      // rather than silent, and keep `cname` so a retry has something to act
+      // on. Same honesty as attach's `cnameAttachmentPending`.
+      await hostSnapshot.ref
+        .set({ cnameDetachmentPending: true }, { merge: true })
+        .catch(() => undefined)
+      return Response.json(
+        { error: released.detail ?? 'Detach failed at the platform' },
+        { status: 502 },
       )
-      // 404 = already detached, which is the end state we want.
-      if (!response.ok && response.status !== 404) {
-        const payload = await response.json().catch(() => undefined)
-        console.error(payload)
-        // Record that the platform still holds it, so the orphan is visible
-        // rather than silent, and keep `cname` so a retry has something to act
-        // on. Same honesty as attach's `cnameAttachmentPending`.
-        await hostSnapshot.ref
-          .set({ cnameDetachmentPending: true }, { merge: true })
-          .catch(() => undefined)
-        return Response.json(
-          { error: payload?.error?.message ?? 'Vercel detach failed' },
-          { status: 502 },
-        )
-      }
     }
 
     // Undo the platform-subdomain edge redirect (AGL-1273): once no custom
-    // domain is connected, `{subdomain}.aglyn.app` must serve again rather
-    // than redirect to a domain the customer just released. Best-effort —
-    // a 404 means no explicit entry existed (wildcard-served), which is the
-    // end state we want either way.
+    // domain is connected, `{subdomain}.aglyn.app` must SERVE again rather
+    // than redirect to a domain the customer just released.
+    //
+    // Two calls because a redirect is a property of the registration, so the
+    // way to drop it is to drop the entry and put a plain one back. Only when
+    // there WAS an entry: `not-found` means the name is served by a wildcard
+    // and never had a redirect of its own, and registering one there would
+    // invent an entry this route never removed.
+    //
+    // Best-effort, in the order that fails safe. If the re-register loses, the
+    // name is left unregistered rather than redirecting to a domain that is
+    // gone — a wildcard still serves it, and the site keeps an address either
+    // way; a stale redirect would leave it with none.
+    //
+    // ⛔ Do NOT collapse these back into one call. This was a single
+    // `PATCH {redirect: null}` against the hosting vendor's API, and that is
+    // precisely what the provider seam exists to not have. The contract in
+    // `domain-provider.ts` is three operations — attach, detach, status — and
+    // an in-place mutate is a fourth that every driver would owe: the wildcard
+    // driver registers nothing and has no entry to patch, and the webhook
+    // driver would need a new verb in an operator's already-deployed endpoint.
+    // A fourth operation across three drivers is a real cost, and it is not
+    // worth what it buys here.
+    //
+    // What it would buy is closing a window whose worst case is already
+    // covered. The entry being dropped exists ONLY because a custom domain was
+    // connected — `upsertSubdomainRedirect` is what created it — so the state
+    // this restores is the one every site without a custom domain is already
+    // in: unregistered, and served by the wildcard on the tenant apex. The
+    // re-register is belt-and-braces for a name that resolves without it. A
+    // lost one costs nothing a visitor can see, which is why this may stay two
+    // calls and stay best-effort.
     const subdomain = String(hostSnapshot.get('subdomain') ?? '')
       .trim()
       .toLowerCase()
-    if (token && projectId && subdomain) {
-      const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
-      await fetch(
-        `https://api.vercel.com/v9/projects/${projectId}/domains/${encodeURIComponent(`${subdomain}.${TENANT_APEX}`)}${query}`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ redirect: null }),
-        },
-      ).catch(() => undefined)
+    if (subdomain) {
+      const platformName = `${subdomain}.${TENANT_APEX}`
+      const removed = await detachProjectDomain(platformName, 'tenant')
+      if (removed.outcome === 'detached') {
+        await attachProjectDomain(platformName, {}, 'tenant')
+      }
     }
 
     await hostSnapshot.ref.set(
@@ -158,6 +173,37 @@ async function handler(request: Request): Promise<Response> {
         subdomainRedirectPending: firebaseAdmin.firestore.FieldValue.delete(),
       },
       { merge: true },
+    )
+
+    /*==========================================
+     * THE EVENT IS `cname` LEAVING THE DOCUMENT (AGL-118), which is the
+     * write directly above — the mirror image of where attach logs, and
+     * chosen the same way.
+     *
+     * Two of this route's exits answer 200 and neither is this event:
+     *
+     *  - `alreadyClear`, on a site with no domain to release. It is a 200
+     *    because the caller's desired end state already holds, not because
+     *    anything moved — and an entry there would put "released
+     *    example.com" in the feed of a site that has never had a domain,
+     *    with no domain name to even put in it.
+     *  - `outcome === 'failed'` is a 502, but it is the branch most likely
+     *    to attract a log line, because it is where the platform is
+     *    genuinely doing something. It stamps `cnameDetachmentPending` and
+     *    KEEPS `cname`: the domain is still attached, still certifying,
+     *    still counting against the deployment. A row there would say the
+     *    customer released a domain we are in fact still holding — the exact
+     *    orphan this route exists to make visible, made invisible again by
+     *    the audit trail agreeing with the mistake.
+     *
+     * Everything after this write is best-effort cache work that cannot
+     * re-attach the domain, so the state the entry describes is settled.
+     *=========================================*/
+    await logHostActivity(
+      hostId,
+      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+      'Released the custom domain',
+      { type: 'host', id: hostId, name: domain },
     )
 
     // AFTER the write, never before: the tenant re-reads on the next request,

@@ -87,6 +87,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // exactly the case this bug fires on.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+  // Real too. It is a pure function, and the rows these tests assert on are
+  // exactly what it returns — a stub free to slice differently would put the
+  // thing under test inside the fixture.
+  ceilingedWindow: jest.requireActual('@aglyn/tenant-feature-instance')
+    .ceilingedWindow,
+  collectionCeiling: jest.requireActual('@aglyn/tenant-feature-instance')
+    .collectionCeiling,
 }))
 
 jest.mock('firebase/firestore', () => ({

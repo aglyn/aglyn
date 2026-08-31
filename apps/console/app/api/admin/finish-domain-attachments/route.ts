@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  domainProvider,
   domainStateServes,
   firebaseAdmin,
   projectDomainStatus,
@@ -25,7 +26,7 @@ import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
 
-/** Hosts examined per run — a ceiling on time and Vercel API calls. */
+/** Hosts examined per run — a ceiling on time and domain-provider calls. */
 const MAX_HOSTS = 200
 
 /**
@@ -75,18 +76,15 @@ async function handler(request: Request): Promise<Response> {
   // nothing to do still proves the schedule is alive; POST only, because a
   // human's GET is not the scheduler and must not stand in for it.
   if (method === 'POST') await recordCronBeat('finish-domain-attachments')
-  const token = process.env.VERCEL_TOKEN
-  const projectId = process.env.VERCEL_TENANT_PROJECT_ID
-  const teamId = process.env.VERCEL_TEAM_ID
-  if (!token || !projectId) {
-    // The same 501 the attach route gives, for the same reason: on a
-    // self-hosted deployment there is no Vercel API to ask, and the
+  if (!domainProvider().configured('tenant')) {
+    // The same 501 the attach route gives, for the same reason: a deployment
+    // that registers no names has nothing to probe or complete, and the
     // app-level canonical redirect is the fallback there.
     return Response.json(
       {
         error:
-          'Domain attachment is not configured (missing VERCEL_TOKEN / ' +
-          'VERCEL_TENANT_PROJECT_ID).',
+          'Domain attachment is not configured on this deployment ' +
+          '(no domain provider — set AGLYN_DOMAIN_PROVIDER).',
       },
       { status: 501 },
     )
@@ -116,7 +114,7 @@ async function handler(request: Request): Promise<Response> {
       // visitors to a domain the host no longer has.
       if (!domain) continue
 
-      const status = await projectDomainStatus(domain, { projectId })
+      const status = await projectDomainStatus(domain, { scope: 'tenant' })
       // Deliberately the SAME predicate as the attach route, including
       // `certificate-pending` (AGL-1996). A sweeper that used a looser
       // definition of "serving" than the door it is completing for would
@@ -146,9 +144,6 @@ async function handler(request: Request): Promise<Response> {
         .toLowerCase()
       if (!subdomain) continue
       const redirected = await upsertSubdomainRedirect({
-        token,
-        projectId,
-        teamId,
         subdomain,
         target: domain,
       }).catch(() => false)
@@ -190,9 +185,6 @@ async function handler(request: Request): Promise<Response> {
         continue
       }
       const redirected = await upsertSubdomainRedirect({
-        token,
-        projectId,
-        teamId,
         subdomain,
         target: domain,
       }).catch(() => false)

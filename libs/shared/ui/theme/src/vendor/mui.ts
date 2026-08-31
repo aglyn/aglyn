@@ -156,11 +156,30 @@ declare module '@mui/material/styles' {
    * END EXAMPLE – MODULE AUGMENTATION ↑
    */
 
+  /**
+   * The resting border of an outlined input.
+   *
+   * A token because MUI has none: `OutlinedInput` hardcodes
+   * `rgba(0, 0, 0, 0.23)` / `rgba(255, 255, 255, 0.23)` inside its own
+   * styles, so there is nothing on the theme to read. Anything that has to
+   * draw an input BESIDE a MUI one — Stripe Elements, which paints its fields
+   * inside a cross-origin iframe from an `appearance` object we hand it — can
+   * otherwise only match by copying those literals, and the copy silently
+   * stops matching the first time the scheme moves.
+   *
+   * Deliberately NOT `divider` (`rgba(0, 0, 0, 0.12)`): half the weight, so a
+   * field drawn with it reads as a different, lighter control sitting next to
+   * ours — which is precisely the mismatch this token exists to prevent.
+   *
+   * A string leaf like `background` and `text`, not a `PaletteColor`: there is
+   * no ramp and no `contrastText`, because nothing is ever drawn ON it.
+   */
   interface PaletteOptions {
     background?: PaletteOptions['background']
     tertiary?: ExtraColorOptions
     surface?: ExtraColorOptions
     tint?: Partial<PaletteTint>
+    inputOutline?: string
     svgBackground?: IActionStates
     svgFilled?: IActionStates
     svgStroke?: IActionStates
@@ -173,6 +192,7 @@ declare module '@mui/material/styles' {
     background: Palette['background']
     tertiary: ExtraColor
     surface: ExtraColor
+    inputOutline: string
     tint: PaletteTint
     svgBackground: IActionStates
     svgFilled: IActionStates

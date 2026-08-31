@@ -72,9 +72,9 @@ export interface PooledUserRecord {
  * An address or a provider entry is the evidence. `signInWithCustomToken`
  * mints an account out of nothing when the uid is absent from the pool the
  * token was minted in, and the record it manufactures has neither: measured
- * on production, the `IHumyGGhGxZKjVV26qCRx5Okf573` project-pool twin had
- * `email: null` and `providerData: []` while the real SSO record carried
- * `zach@aglyn.com` and `saml.aglyn-workspace`.
+ * on production, a project-pool twin of a tenant uid had `email: null` and
+ * `providerData: []` while the real SSO record carried both an address and
+ * `saml.aglyn-workspace`.
  *
  * `displayName` and custom claims deliberately do NOT count. Both can be
  * written onto any record after the fact — `updateProfile` and `grantStaff`
@@ -339,6 +339,53 @@ export interface PooledUserPage {
 const TENANT_USER_CAP = 500
 
 /**
+ * How many pools may have a call in flight at once.
+ *
+ * Every sweep below asks each GCIP tenant pool the same question, and the
+ * pools are independent: one tenant's answer never informs another's. Asked in
+ * series that costs `N` round trips for `N` enterprise customers, so the staff
+ * list gets slower every time one is signed — the wrong direction for the
+ * feature that adds them. Asked together it costs one.
+ *
+ * The number of CALLS is identical either way, so this buys latency and the
+ * Cloud Run seconds spent waiting on it, not Auth quota. That is also why it
+ * is bounded rather than an unbounded `Promise.all`: Identity Platform rate
+ * limits `listUsers` per project, and firing one call per tenant simultaneously
+ * would convert a latency problem into a `RESOURCE_EXHAUSTED` one at exactly
+ * the customer count where the latency stopped mattering.
+ */
+const POOL_FETCH_CONCURRENCY = 8
+
+/**
+ * Run `work` over every pool id, at most {@link POOL_FETCH_CONCURRENCY} at a
+ * time, and return the results **in the order the ids were given**.
+ *
+ * Order is not cosmetic here. Callers concatenate these results into a user
+ * list and then trim it to a cap, so a result order that varied with which
+ * pool answered first would make the rows a staff member sees depend on
+ * network timing — the same query returning different people on a refresh.
+ */
+async function mapPoolsConcurrently<T>(
+  tenantIds: string[],
+  work: (tenantId: string) => Promise<T>,
+): Promise<T[]> {
+  const results = new Array<T>(tenantIds.length)
+  let next = 0
+  const workers = Array.from(
+    { length: Math.min(POOL_FETCH_CONCURRENCY, tenantIds.length) },
+    async () => {
+      for (;;) {
+        const index = next++
+        if (index >= tenantIds.length) return
+        results[index] = await work(tenantIds[index])
+      }
+    },
+  )
+  await Promise.all(workers)
+  return results
+}
+
+/**
  * One page of users across every pool: the project pool paginates as before,
  * and tenant users are appended on the LAST page so they can never be lost
  * between cursors. Callers render `tenantId` so an SSO account is
@@ -362,17 +409,29 @@ export async function listUsersAcrossPools(
     }
   }
   const tenantTruncated: string[] = []
-  for (const tenantId of await listAuthTenantIds()) {
+  // Every tenant asks for the same fixed page, so no pool's request depends on
+  // another's answer and they can all be in flight at once. A failed pool
+  // contributes no rows and does not stop the others: one enterprise tenant
+  // being unreachable must not blank the whole staff list.
+  //
+  // The id list is read ONCE and reused. It is cached on a 60s TTL, so asking
+  // twice can hand back two different lists, and pairing a page from one list
+  // with an id from the other would label a user with the wrong tenant.
+  const tenantIds = await listAuthTenantIds()
+  const tenantPages = await mapPoolsConcurrently(tenantIds, async (tenantId) => {
     try {
-      const tenantPage = await authForPool(tenantId).listUsers(TENANT_USER_CAP)
-      users.push(
-        ...tenantPage.users.map((record) => ({ record, tenantId })),
-      )
-      if (tenantPage.pageToken) tenantTruncated.push(tenantId)
+      return await authForPool(tenantId).listUsers(TENANT_USER_CAP)
     } catch (error) {
       console.error(`listing users for tenant ${tenantId} failed`, error)
+      return null
     }
-  }
+  })
+  tenantPages.forEach((tenantPage, index) => {
+    if (!tenantPage) return
+    const tenantId = tenantIds[index]
+    users.push(...tenantPage.users.map((record) => ({ record, tenantId })))
+    if (tenantPage.pageToken) tenantTruncated.push(tenantId)
+  })
   return {
     // Marked only here, where every pool's rows are in hand (AGL-1962). The
     // earlier return above carries project rows alone, and a uid cannot
@@ -425,20 +484,51 @@ export async function scanUsersAcrossPools(
   } while (pageToken && users.length < cap)
 
   const tenantTruncated: string[] = []
-  for (const tenantId of await listAuthTenantIds()) {
-    if (users.length >= cap) {
-      truncated = true
-      break
-    }
-    try {
-      const page = await authForPool(tenantId).listUsers(
-        Math.min(cap - users.length, TENANT_USER_CAP),
-      )
-      users.push(...page.users.map((record) => ({ record, tenantId })))
-      if (page.pageToken) tenantTruncated.push(tenantId)
-    } catch (error) {
-      console.error(`listing users for tenant ${tenantId} failed`, error)
-    }
+  const tenantIds = await listAuthTenantIds()
+  /*
+   * The remaining budget is fixed BEFORE any pool is asked.
+   *
+   * Sizing each pool's page from the running total is what forced these calls
+   * into a series — pool `k`'s page size could not be known until pool `k-1`
+   * had answered. Nothing needs that: a page sized to the whole remaining
+   * budget is always at least as large as the shrinking one, so the first
+   * `cap` rows in tenant order are the same users either way, and the pools
+   * can be asked together.
+   *
+   * The trade is bandwidth, not quota: `listUsers` is billed per CALL, and the
+   * call count is unchanged. Only when the cap actually binds does this carry
+   * rows that are then trimmed.
+   */
+  const budget = cap - users.length
+  if (budget <= 0) {
+    truncated = true
+  } else {
+    const pageSize = Math.min(budget, TENANT_USER_CAP)
+    const pages = await mapPoolsConcurrently(tenantIds, async (tenantId) => {
+      try {
+        return await authForPool(tenantId).listUsers(pageSize)
+      } catch (error) {
+        console.error(`listing users for tenant ${tenantId} failed`, error)
+        return null
+      }
+    })
+    pages.forEach((page, index) => {
+      if (!page) return
+      const tenantId = tenantIds[index]
+      const room = cap - users.length
+      const rows = page.users.map((record) => ({ record, tenantId }))
+      // A pool whose rows will not fit is still a pool that was cut short, and
+      // it has to say so. A scan that silently dropped one would answer "no
+      // such account" for everyone in it — the exact failure this module
+      // exists to prevent, wearing the shape of a complete result.
+      if (rows.length > room) {
+        truncated = true
+        tenantTruncated.push(tenantId)
+      } else if (page.pageToken) {
+        tenantTruncated.push(tenantId)
+      }
+      if (room > 0) users.push(...rows.slice(0, room))
+    })
   }
 
   return {
@@ -464,8 +554,8 @@ export interface StaffClaimWrite {
  * grant aimed at the wrong pool does not error — on the project pool it
  * either throws `user-not-found` (loud, fine) or, when a phantom shadow record
  * shares the uid, silently succeeds against the WRONG record. That is not
- * hypothetical: on 2026-08-18 uid `IHumyGGhGxZKjVV26qCRx5Okf573` existed in
- * both the project pool and `aglyn-org-y5v14`. That phantom won every lookup
+ * hypothetical: on 2026-08-18 a staff account's uid existed in both the
+ * project pool and `aglyn-org-y5v14` at once. That phantom won every lookup
  * until AGL-2005 made {@link findUserByUidAcrossPools} rank an IDENTIFIED
  * record above an unidentified one rather than taking the first pool to
  * answer.
@@ -499,24 +589,40 @@ export async function setClaimsInOwningPool(
  * claim, which is not queryable, so this scans — the caller caches it.
  */
 export async function listStaffUidsAcrossPools(): Promise<string[]> {
-  const uids: string[] = []
-  const scan = async (pool: BaseAuth) => {
+  /*
+   * Paging WITHIN a pool stays serial — each page's cursor comes out of the
+   * one before it, so there is nothing to overlap. Across pools there is: the
+   * pools are independent, and a staff notification waiting on them one after
+   * another gets slower with every enterprise customer signed.
+   *
+   * Each scan collects into its own array rather than a shared one, so the
+   * result is ordered by POOL rather than by which pool happened to answer
+   * first. A caller diffing this list against a stored copy would otherwise
+   * see phantom changes on every run.
+   */
+  const scan = async (pool: BaseAuth): Promise<string[]> => {
+    const found: string[] = []
     let pageToken: string | undefined
     do {
       const page = await pool.listUsers(1000, pageToken)
       for (const record of page.users) {
-        if (record.customClaims?.['staff']) uids.push(record.uid)
+        if (record.customClaims?.['staff']) found.push(record.uid)
       }
       pageToken = page.pageToken
     } while (pageToken)
+    return found
   }
-  await scan(auth())
-  for (const tenantId of await listAuthTenantIds()) {
-    try {
-      await scan(authForPool(tenantId))
-    } catch (error) {
-      console.error(`staff scan for tenant ${tenantId} failed`, error)
-    }
-  }
-  return uids
+  const tenantIds = await listAuthTenantIds()
+  const [projectUids, tenantUidLists] = await Promise.all([
+    scan(auth()),
+    mapPoolsConcurrently(tenantIds, async (tenantId) => {
+      try {
+        return await scan(authForPool(tenantId))
+      } catch (error) {
+        console.error(`staff scan for tenant ${tenantId} failed`, error)
+        return [] as string[]
+      }
+    }),
+  ])
+  return [...projectUids, ...tenantUidLists.flat()]
 }

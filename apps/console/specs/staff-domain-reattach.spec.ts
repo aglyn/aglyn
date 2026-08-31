@@ -94,6 +94,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
   ),
+  // The REAL provider seam, reached the same way and for the same reason: it
+  // is what turns a name into an outbound call, and the `fetch` double below
+  // is the only thing standing in for the network.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/domain-provider',
+  ),
   // The REAL blocklist, for the same reason (AGL-1430) — a stub would make the
   // legacy-name test below a test of the stub.
   ...jest.requireActual(

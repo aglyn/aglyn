@@ -199,7 +199,7 @@ carrying **zero** `data-status-target` nodes is the unconfigured failure above.
 ### The external monitors (UptimeRobot, free tier)
 
 **Ten** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
-interval, email to zach@aglyn.com. Read from the status page's own monitor-list
+interval, email to the operator's mailbox. Read from the status page's own monitor-list
 API on 2026-08-24 rather than transcribed from memory — this list said *five*
 for most of that day, because five more were created after it was written:
 
@@ -225,11 +225,78 @@ curl -s https://stats.uptimerobot.com/api/getMonitorList/7NGEl81zvD |
     console.log(j.psp.totalMonitors); for (const m of j.psp.monitors) console.log(m.name)'
 ```
 
-🔴 **`server-errors` has no monitor, and it is the one gap that matters
-(AGL-1921).** Measured by the command above, not assumed: the endpoint has been
-live and green since this morning's promotion, the 15-minute GitHub probe reads
-it, and **nothing emails anyone when it goes red**. The GitHub probe only
-records. Runbook step 1 below is the whole fix and it is two minutes.
+✅ **`server-errors` now has a monitor.** Uptime check
+`server-errors-app-aglyn-com-api-health-server-errors-status-ok-u6GLENjkYKg`
+(900s, three regions, `$.status == "ok"`, `validateSsl: true`) and policy
+`alertPolicies/16393806930883434684` on the one channel. Before this the
+endpoint was live and graded, the 15-minute GitHub probe read it, and nothing
+emailed anyone when it went red — the GitHub probe only records.
+
+🔴 **The one gap that matters now is the notification channel itself.** See
+[The channel is unverified](#the-channel-is-unverified) below. Every policy
+counted in this document points at it.
+
+✅ **All thirteen checks send the firewall bypass header, and none of them
+depends on an accident any more.**
+
+`marketing-home` and `customer-site` read 0% from 2026-08-21 to 2026-08-28
+while both sites were healthy. They request a bare `/` on `aglyn.com` and
+`demo.aglyn.app` and received a **429 Vercel Security Checkpoint**:
+`bot_protection` is `active` with action `challenge` on **both** Vercel projects
+— `aglyn-tenant` from 2026-08-21T06:23Z, `aglyn-console` from 06:48Z, which is
+the hour the two checks went to zero — and an uptime checker cannot answer a
+challenge.
+
+`tools/scripts/probe-uptime.mjs` had already hit this and already solved it: it
+sends an `x-aglyn-probe` header carrying `AGLYN_PROBE_TOKEN`, matching the
+Vercel rule named **"CI and uptime probe bypass"** (same header, same token, on
+both projects). The GitHub probe was given that header; the GCP checks never
+were.
+
+Proven rather than inferred, against the live sites:
+
+| request | `aglyn.com/` | `demo.aglyn.app/` |
+| --- | --- | --- |
+| without `x-aglyn-probe` | 429 | 429 |
+| with `x-aglyn-probe` | 200 | 200 |
+
+**Why all thirteen carry it now, not just the two that were failing.** The
+other eleven were green only because every one of them requests an
+`/api/health*` path that a rule written for a *different* purpose happens to
+exempt — "Health endpoint bypass" (`path` prefix `/api/health`) on
+`aglyn-tenant`, "Machine traffic bypass" on `aglyn-console`. That is luck, not
+coverage: narrowing either rule would have taken all eleven dark at once, and
+the resulting silence would have read as health.
+
+**If you are editing those two firewall rules, these are the checks standing on
+them** — all eleven now hold a second, independent bypass, so the blast radius
+of such an edit is zero rather than total:
+
+- `aglyn-tenant`, "Health endpoint bypass": `tenant-health`,
+  `beacon-heartbeat tenant`
+- `aglyn-console`, "Machine traffic bypass": `console-health`,
+  `console-imaging`, `backup-state`, `billing-webhook`, `rate-limits health`,
+  `scheduled-jobs`, `signup-volume`, `server-errors`,
+  `beacon-heartbeat console`
+
+**The fix belongs on the GCP side, never the firewall side.** Do not add a path
+bypass for `/` — that exempts the homepage from bot protection to make a
+monitor green, trading a real control for a green dashboard. Uptime configs
+take the header directly, and `maskHeaders` makes the value write-only (it
+reads back as `******`):
+
+```jsonc
+// PATCH each config, updateMask=httpCheck.headers,httpCheck.maskHeaders
+{ "httpCheck": { "headers": { "x-aglyn-probe": "<AGLYN_PROBE_TOKEN>" },
+                 "maskHeaders": true } }
+```
+
+⚠️ **The two policies fired once each when this started and were silent for the
+next seven days.** A log-match or threshold policy reports the *transition*, so
+a monitor that has been red since last week is indistinguishable from one that
+has been green, unless you read the pass rate. That is what
+[Verifying the monitor yourself](#verifying-the-monitor-yourself) is for, and it
+is why "no alerts lately" is not a status report.
 
 ⚠️ **The monitor set and the card set are still not identical**, in both
 directions now. `Site delivery` (`aglyn.com/api/health`) is a card with no
@@ -376,8 +443,8 @@ is something concrete to point a paid external monitor at when one is chosen.
 The external monitor AGL-1148 called for. Lives in **GCP Cloud Monitoring on
 `aglyn-main`** — already paid for (free tier: 1M uptime-check executions/month;
 current usage ≈ 300k), alerting built in, and not hosted on anything it
-monitors. **Every alert emails zach@aglyn.com** (notification channel
-`7043898327231541746`).
+monitors. **Every alert emails one mailbox** — notification channel
+`7043898327231541746`, the only one configured on the project.
 
 Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 
@@ -581,7 +648,15 @@ Notes that keep these honest:
   Every other log-match policy here can report only the *presence* of an
   entry: the `Client error beacon` policy fires when a browser error appears,
   so if the beacon stops writing, that policy goes quiet — and quiet is the
-  reading it also gives on a healthy day. **A dead beacon is
+  reading it also gives on a healthy day. That policy's filter excludes
+  `localhost` and `127.0.0.1` in `jsonPayload.context.httpRequest.url`,
+  because `/api/errors` on a developer's machine writes to the same production
+  log through the same credential, and those reports outnumbered the deployed
+  ones 219 to 17 over a week — 87 of the last 100 alert-violation events in
+  the project. The exclusion is on the URL rather than on the absence of
+  `serviceContext.version`, which separates the two just as cleanly today but
+  fails the wrong way: a deployment that stopped stamping a commit ref would
+  go silently unwatched, whereas a dev report with no URL merely stays noisy. **A dead beacon is
   indistinguishable from zero errors**, and all three failure paths in
   `reportClientErrors` end in a `console.warn` to a log that retains an hour
   and drains nowhere. The endpoint writes one INFO entry to the separate
@@ -765,11 +840,57 @@ client, and the four checks return to 100% within two check periods (10
 minutes). Re-run the pass-rate query in
 [Verifying the monitor yourself](#verifying-the-monitor-yourself).
 
+### The channel is unverified {#the-channel-is-unverified}
+
+🔴 **`notificationChannels/7043898327231541746` is UNVERIFIED, and every alert
+policy in this project points at it.** Establish this from the API, which will
+not tell you directly — `verificationStatus` is a valid field path on the
+resource and comes back unset, and the unfiltered `GET` does not return the key
+at all. The surface that does answer is `getVerificationCode`, which sends no
+mail and succeeds only on a verified channel:
+
+```bash
+TOK=$(gcloud auth print-access-token); echo "${#TOK}"   # never 2>/dev/null
+curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' --data '{}' \
+  'https://monitoring.googleapis.com/v3/projects/aglyn-main/notificationChannels/7043898327231541746:getVerificationCode'
+```
+
+It returns `FAILED_PRECONDITION: Cannot generate a verification code from an
+unverified channel.` A `200` with a code means the channel is verified and this
+section is stale.
+
+**What it does and does not prove.** It proves the channel never completed
+verification. It does not prove mail is being dropped — Cloud Monitoring
+exposes no delivery metric or audit record (`monitoring.googleapis.com/*` has
+no notification descriptor in this project, and there is no delivery log), so
+whether the ~100 violations since 2026-08-14 produced email is not answerable
+from any API here. **The one check that settles it takes a human ten seconds:
+search the inbox for mail from `alerting-noreply@google.com`.** Nothing found
+means the estate has been alerting into a void.
+
+To fix, send the code and complete the round trip — this one *does* mail the
+channel's real address, which is why it is not run unattended:
+
+```bash
+CH='projects/aglyn-main/notificationChannels/7043898327231541746'
+curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' --data '{}' \
+  "https://monitoring.googleapis.com/v3/$CH:sendVerificationCode"
+# then, with the code from that email:
+curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  --data '{"code":"<code>"}' "https://monitoring.googleapis.com/v3/$CH:verify"
+```
+
 ### Verifying the monitor yourself {#verifying-the-monitor-yourself}
 
 The lesson of the fifty-one hours is that a documented monitor is not a
 monitor. **Confirm the sink exists before trusting the report.** Both of these
-are read-only and need only an authenticated `gcloud` session:
+are read-only and need only an authenticated `gcloud` session.
+
+⚠️ **`entries:list` with no `timestamp` in the filter silently returns a recent
+window, not everything.** A query for a whole log's history came back with zero
+entries and then returned 180 for the same filter with an explicit
+`timestamp>=`. Always bound the range, and treat a zero from an unbounded query
+as unanswered rather than as an answer:
 
 ```bash
 # Which checks actually exist? Compare against the table above.
@@ -847,11 +968,11 @@ gcloud monitoring uptime list-configs --project=aglyn-main \
 ```
 
 :::caution `--validate-ssl` defaults to FALSE on the CLI
-All eleven existing checks have `validateSsl: true`, because the console
+All thirteen existing checks have `validateSsl: true`, because the console
 checkbox is on by default — the CLI's is not. Omitting the flag creates the
 one check in the set that would keep reporting green through an expired or
 invalid certificate on `app.aglyn.com`. Verified against the live configs on
-2026-08-23 (AGL-2486): 11 of 11 `true`.
+2026-08-28: 13 of 13 `true`.
 :::
 
 Then create the policy, substituting the id from step 2:
@@ -910,8 +1031,8 @@ curl -s -X POST \
    Content `"ok"` (with the quotes). Accepted status codes: **2xx**. **Next.**
 4. Alert & notification: create an alert, name it
    `Uptime failure: scheduled-jobs (app.aglyn.com/api/health/crons)`,
-   duration **10 minutes**, notification channel the existing
-   **zach@aglyn.com** email channel. **Next.**
+   duration **10 minutes**, notification channel the existing email channel
+   `7043898327231541746`. **Next.**
 5. Title `scheduled-jobs — app.aglyn.com/api/health/crons status=ok`,
    frequency **15 minutes**. **Test** — it should come back green — then
    **Create**.
@@ -1109,7 +1230,7 @@ is the platform demonstration site the middleware falls back to for
 
   ⚠️ **One reader watches it, and it is the one that cannot email you.** The
   15-minute GitHub probe reads the endpoint and fails its run; the UptimeRobot
-  monitor that would mail zach@aglyn.com **does not exist yet** (measured
+  monitor that would mail the operator **does not exist yet** (measured
   2026-08-24 — ten monitors, none of them this one), and it is deliberately not
   a status-page card. So a spike today reddens a workflow and pages nobody.
   Runbook step 1 below closes it in two minutes.
@@ -1285,7 +1406,7 @@ step 5 onward costs money and is a decision, not a task.
    logName="projects/aglyn-main/logs/server-errors" AND severity>=ERROR
    ```
 
-   Notify the existing `zach@aglyn.com` channel. Start it as a *log-match*
+   Notify the existing email channel `7043898327231541746`. Start it as a *log-match*
    (pages on the first entry) for the beta window — volume is near zero today,
    so a first-error page is informative rather than noisy — and convert it to a
    counter with a threshold once a baseline exists. Log-based metrics and alert
@@ -1445,41 +1566,104 @@ step 5 onward costs money and is a decision, not a task.
      agent or referer. The route *pattern*, status, host, region, project and
      a 1 KB-clamped message — the last is where `Task timed out after 10.01
      seconds` lives, which is the entire triage value of the platform-5xx case.
-6. **After the drain, the policy this issue originally specified.** A log-based
-   counter metric on
-
-   ```
-   resource.type="global" AND logName=~"vercel" AND httpRequest.status>=500
-   ```
-
-   with a threshold policy — proposed `> 5` in 5 minutes, `ALIGN_DELTA` /
-   `REDUCE_SUM`, grouped by project. Re-tune against the beta baseline; the
-   point of the beta window is to get one.
-
-   The receiver populates `httpRequest.status` and writes under
-   `resource.type="global"` to a log id containing `vercel` precisely so this
-   filter works as written. **One caveat:** a crashed lambda (`statusCode:
-   -1`) and a `fatal` entry have no HTTP status to report, so they land with
-   `httpRequest.status` absent and this filter misses them — which is the
-   subset the other two arms are worst at seeing. Prefer
+6. **The policy this issue originally specified — LIVE.**
+   `projects/aglyn-main/alertPolicies/14031689508473384486`, "Server errors:
+   Vercel runtime 5xx via log drain (AGL-1921)", a `conditionMatchedLog` on
 
    ```
    resource.type="global" AND logName=~"vercel" AND severity>=ERROR
    ```
 
-   unless the 5xx-only volume turns out to need the narrower form; every entry
-   in this log is already a server error by construction, so `severity>=ERROR`
-   is not the blunt instrument it would be on a raw log.
+   notifying `.../notificationChannels/7043898327231541746`, rate-limited to
+   one notification an hour with a seven-day auto-close — the same strategy
+   the two sibling log-match policies use. It extracts `route`, `status`,
+   `vercel_project` and `environment` as labels so the mail names the failing
+   route without a console round trip.
+
+   **`severity>=ERROR` and not `httpRequest.status>=500`, deliberately.** A
+   crashed lambda (`statusCode: -1`) and a `fatal` entry have no HTTP status
+   to report, so they land with `httpRequest.status` absent and the narrower
+   filter misses them — the subset the other two arms are worst at seeing.
+   Every entry in this log is already a server error by construction (the
+   receiver's gate discards the rest before writing), so `severity>=ERROR` is
+   not the blunt instrument it would be on a raw log. Both forms were measured
+   against the live log before the policy was created and matched the same 180
+   entries; the severity form is the one that also covers the crash class.
+
+   A threshold policy over a log-based counter metric was the original
+   proposal. The match form was taken instead because it needs no derived
+   metric to exist first, and because the volume does not warrant a rate
+   threshold: 180 entries in seven days, against ~20K drain deliveries a day.
+   If that ratio changes, a counter metric grouped by project is the next
+   step, not a tighter match filter.
 7. **Then reconcile the three.** With the drain live it sees a superset of what
    the hook sees, and keeping every arm at page level would triple-page. Keep
    them all — the hook and its endpoint survive a Vercel outage and a plan
    downgrade — but let the drain's policy be the one that pages, and demote the
    other two to the counter form.
 
-Until the two drains in step 5 are actually created, AGL-1921's platform-5xx
-blind spot stays open and this section is the honest statement of how much of
-the server tier is watched. The receiver being deployed changes nothing on its
-own: an endpoint nobody is delivering to is a monitor that reports silence.
+All three arms are live. Both drains exist and are enabled —
+`aglyn-console-runtime-5xx` and `aglyn-tenant-runtime-5xx`, on team
+`team_JFfQodGE8VhCAZM6usYTu54M`, both delivering to the Cloud Run receiver —
+and step 6's policy pages on what they deliver. Verify the drains by their
+`delivery.endpoint` and `status`, never by assuming: an endpoint nobody is
+delivering to is a monitor that reports silence.
+
+8. **The watcher-of-the-watcher.** `alertPolicies/15663465441534996183`, "Log-drain
+   receiver is not receiving", a **`conditionAbsent`** on
+
+   ```
+   metric.type="run.googleapis.com/request_count" AND resource.type="cloud_run_revision"
+     AND resource.label.service_name="log-drain-receiver"
+   ```
+
+   summed across response classes and revisions, firing after **3600s** with no
+   data. **Do not remove this as redundant with step 6** — it is the only thing
+   that can report that step 6 has gone deaf.
+
+   **Absence, not error rate, and that is the whole point.** A policy on the
+   receiver's error rate cannot fire when the receiver is down: no requests
+   means no 5xx responses means no data means no threshold is ever crossed. The
+   failure worth catching emits *no signal at all*, so the condition has to be
+   about missing data. `request_count` is the right series because it is written
+   on every delivery whatever the outcome, and goes absent exactly when the
+   service stops being reached — deleted, failing to start, or drains disabled
+   by Vercel after repeated delivery failures.
+
+   Summing across revisions matters: a routine deploy retires one revision and
+   starts another, and a per-revision condition would read that as an absence.
+
+   **Sized against measurement, not guesswork:** floor 568 requests/hour over 24
+   hours, median 666, no empty hours. One hour of true silence is far outside
+   normal quiet.
+
+**The tenant drain has delivered nothing, and that is not yet proof of
+anything.** `aglyn-tenant-runtime-5xx` has produced zero entries since it was
+created. It is correctly configured — project id `QmVstR8xiYtabTkVo2t9NNsiYY72nSTbNr1MGDLffzZeLn`
+confirmed against the project list as `aglyn-tenant` (an old-format id, not a
+typo), `status: enabled`, no `disabledAt`, sources `lambda`+`edge`,
+environments `production`, same endpoint the console drain uses successfully —
+and the receiver has logged zero warnings across ~45K deliveries, so nothing is
+being dropped on our side.
+
+It cannot be settled from here, and these were tried:
+
+- **Vercel exposes no per-drain delivery counter.** `/v1/drains/{id}/deliveries`
+  and `/events` both 404; the drain object carries no delivery fields.
+- **Deliveries are not attributable at the receiver.** Every request carries the
+  same `VercelDrain/1.0` user agent, from 177 distinct ephemeral source IPs
+  across 200 consecutive deliveries.
+- **The gate writes nothing per delivery** — by design, for cost — so a
+  non-5xx tenant delivery leaves no trace in Cloud Logging.
+- **The 9.4-hour window when only the tenant drain existed** (2026-08-25T16:37
+  → 2026-08-26T02:00) predates the Cloud Run receiver's first boot at
+  2026-08-26T03:55, so it cannot serve as an isolation test.
+
+**To settle it:** read per-drain delivery status on the Vercel Drains page,
+which the API does not expose; or compare `aglyn-console`'s own production
+request volume in Vercel observability against the receiver's ~16K
+deliveries/day — if console alone accounts for all of it, the tenant drain is
+delivering nothing.
 
 **What stays blind even with all three arms live**, so nobody reads this
 section as "the server tier is covered":
@@ -1488,11 +1672,12 @@ section as "the server tier is covered":
   cannot deliver a drain; the external uptime monitors are the only arm that
   survives that, which is why steps 1–4 stay in place rather than being
   replaced by the drain.
-- **The console being down.** The receiver lives on `aglyn-console`, so a
-  console outage silences the *tenant's* drain too. Vercel retries and then
-  disables a drain that keeps failing, so a long console outage can require
+- **The receiver being down.** Both drains deliver to the one Cloud Run
+  service, so an outage there silences both at once. Vercel retries and then
+  disables a drain that keeps failing, so a long receiver outage can require
   re-enabling the drains by hand afterwards — check the Drains page after any
-  console incident.
+  receiver incident. Nothing watches the receiver itself; it is the one arm
+  with no monitor of its own.
 - **Anything below 500.** A route answering 200 with a broken body, a 403 storm
   from a bad rule, a 404 spike from a lost route: none is a server error and
   none of the three arms sees it.
@@ -1530,13 +1715,22 @@ they are not the same quantity:
   a 30-day window, i.e. this project ingests nothing chargeable.
 - **Executions are the billable dimension** — 1M free per project per month —
   and the point count above does **not** settle how many there are. Read one
-  way (one request per location per period) the eleven checks come to roughly
+  way (one request per location per period) the checks come to roughly
   430k/month, about 43% of the allowance; read the other (one request per
   sample) they come to ~2.1M and we would be 1.1M over, which at $0.30/1,000
   is roughly $330/month. **The bill decides between those, and the bill says
   the first one.** A $330 line would have been shouting through the
   `aglyn-main monthly spend` $20 budget alert every month; it has not. Treat
   the headroom as real but not precisely known.
+- **Re-read 2026-08-28, and the config had moved underneath the numbers
+  above.** There are now **thirteen** checks, not eleven, and every one is
+  pinned to three regions (`USA_VIRGINIA`, `EUROPE`, `ASIA_PACIFIC`) rather
+  than the six the sample-density figure assumes. On the low reading that is
+  summing `regions × (30d / period)` per check = **233,280 executions/month,
+  ~23% of the allowance** — roughly half the 43% above, because halving the regions
+  halved the executions. Count the regions from `selectedRegions` on the live
+  configs before re-deriving any of this; the default is all of them and the
+  flag that narrows it is `--set-regions`.
 - Consequently the proposed `marketing-home` / `customer-site` 300s → 600s
   relaxation is **not worth making for cost reasons**. If we are on the low
   reading it saves nothing billable at all; if we are on the high reading it

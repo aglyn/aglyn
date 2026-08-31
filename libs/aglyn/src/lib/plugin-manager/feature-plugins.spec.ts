@@ -217,3 +217,323 @@ describe('console extension registry', () => {
     })
   })
 })
+
+/**
+ * Routed sections on a plugin console page (AGL-2501).
+ *
+ * Every assertion here is about the RESOLVED nav item and section — the
+ * objects the shell mounts and gates from — rather than about anything
+ * rendered. A resolver is exactly the layer where "which page opens for this
+ * URL" is decided, and a spec that rendered instead would pass on a page that
+ * merely looked right.
+ */
+describe('resolveConsolePluginPage sections', () => {
+  const Products = (): null => null
+  const Events = (): null => null
+
+  afterEach(() => {
+    for (const extension of listConsoleExtensions()) {
+      unregisterConsoleExtension(extension.pluginId)
+    }
+  })
+
+  /** Commerce-shaped: one surface with declared sections beneath it. */
+  function registerSectioned() {
+    registerConsoleExtension({
+      pluginId: 'commerce',
+      displayName: 'Commerce',
+      navItems: [
+        {
+          label: 'Products',
+          href: '/products',
+          Component: Products,
+          sections: [
+            { id: 'catalog', label: 'Catalog' },
+            { id: 'orders', label: 'Orders' },
+          ],
+        },
+      ],
+    })
+  }
+
+  /**
+   * The CONTROL for the refusals below.
+   *
+   * Every other assertion in this block is of the form "this URL resolves to
+   * nothing", and a resolver that answered `undefined` for everything would
+   * satisfy all of them. This is the reading that proves it resolves at all —
+   * and resolves to the section named, not merely to the page.
+   */
+  it('CONTROL: a section URL resolves to that section of that page', () => {
+    registerSectioned()
+    const resolved = resolveConsolePluginPage('/products/orders')
+    expect(resolved?.navItem.Component).toBe(Products)
+    expect(resolved?.section?.id).toBe('orders')
+    expect(resolved?.segments).toEqual(['orders'])
+  })
+
+  it("the surface's own href still resolves, with no section", () => {
+    registerSectioned()
+    const resolved = resolveConsolePluginPage('/products')
+    expect(resolved?.navItem.Component).toBe(Products)
+    expect(resolved?.section).toBeUndefined()
+    expect(resolved?.segments).toEqual([])
+  })
+
+  /*
+   * A typo'd section is nothing, not the page's first section. The failure
+   * this prevents is not a crash — it is the dashboard opening under a URL
+   * that names Orders, which gets reported as "it opened the wrong page".
+   */
+  it('an undeclared section id resolves to nothing', () => {
+    registerSectioned()
+    expect(resolveConsolePluginPage('/products/ordrs')).toBeUndefined()
+    expect(resolveConsolePluginPage('/products/settings')).toBeUndefined()
+  })
+
+  /** A section may own deeper routes; the first segment still names it. */
+  it('keeps the segments beneath a section', () => {
+    registerSectioned()
+    const resolved = resolveConsolePluginPage('/products/orders/ord_123')
+    expect(resolved?.section?.id).toBe('orders')
+    expect(resolved?.segments).toEqual(['orders', 'ord_123'])
+  })
+
+  /*
+   * The whole "existing plugins keep working untouched" claim, as an
+   * assertion rather than an inspection. A nav item that declares no sections
+   * matches its own href and nothing beneath it — so prefix matching did not
+   * quietly widen every surface written before AGL-2501 into a catch-all.
+   */
+  it('a plugin that declares no sections is matched exactly, as before', () => {
+    registerConsoleExtension({
+      pluginId: 'events-calendar',
+      displayName: 'Events',
+      navItems: [{ label: 'Events', href: '/events', Component: Events }],
+    })
+    expect(resolveConsolePluginPage('/events')?.navItem.Component).toBe(Events)
+    expect(resolveConsolePluginPage('/events/anything')).toBeUndefined()
+    expect(resolveConsolePluginPage('/events/2026/june')).toBeUndefined()
+  })
+
+  /**
+   * A surface whose deeper URLs are ENTITIES rather than sections.
+   *
+   * `/forms` is a list and `/forms/{formId}` is one of its rows, and the set of
+   * ids is a property of the workspace's data — so there is no `sections` list
+   * that could name them, and without `ownsSubtree` every row's page is a 404.
+   * What the flag buys is exactly one thing: the segments reach the page. It
+   * does not widen anything else, and it is opt-in so that no surface acquires
+   * a catch-all by accident.
+   */
+  describe('a nav item that owns its subtree', () => {
+    const Forms = (): null => null
+
+    function registerOwnsSubtree() {
+      registerConsoleExtension({
+        pluginId: 'forms',
+        displayName: 'Forms',
+        navItems: [
+          {
+            label: 'Forms',
+            href: '/forms',
+            Component: Forms,
+            ownsSubtree: true,
+          },
+        ],
+      })
+    }
+
+    it('hands an entity id down as a segment', () => {
+      registerOwnsSubtree()
+      const resolved = resolveConsolePluginPage('/forms/form-abc')
+      expect(resolved?.navItem.Component).toBe(Forms)
+      expect(resolved?.section).toBeUndefined()
+      expect(resolved?.segments).toEqual(['form-abc'])
+    })
+
+    it("still resolves the surface's own href with no segments", () => {
+      registerOwnsSubtree()
+      const resolved = resolveConsolePluginPage('/forms')
+      expect(resolved?.navItem.Component).toBe(Forms)
+      expect(resolved?.segments).toEqual([])
+    })
+
+    it('claims only a SEPARATOR boundary, never a sibling path', () => {
+      // The property `/products` has against `/products-archive`, kept: a flag
+      // that widened matching to any prefix would let this surface swallow a
+      // differently-named one registered by another plugin.
+      registerOwnsSubtree()
+      expect(resolveConsolePluginPage('/forms-archive')).toBeUndefined()
+      expect(resolveConsolePluginPage('/formsy/thing')).toBeUndefined()
+    })
+
+    it('THE CONTROL: the same nav item WITHOUT the flag refuses the id', () => {
+      // Otherwise every assertion above is satisfied by a resolver that
+      // prefix-matches unconditionally, which is the behaviour AGL-2501
+      // deliberately did not have.
+      registerConsoleExtension({
+        pluginId: 'forms',
+        displayName: 'Forms',
+        navItems: [{ label: 'Forms', href: '/forms', Component: Forms }],
+      })
+      expect(resolveConsolePluginPage('/forms')?.navItem.Component).toBe(Forms)
+      expect(resolveConsolePluginPage('/forms/form-abc')).toBeUndefined()
+    })
+
+    it('lets a DECLARED section still win over the subtree claim', () => {
+      // Both may be declared, and then the section is the more specific
+      // answer — a surface that owns its subtree must not lose its rail.
+      registerConsoleExtension({
+        pluginId: 'forms',
+        displayName: 'Forms',
+        navItems: [
+          {
+            label: 'Forms',
+            href: '/forms',
+            Component: Forms,
+            ownsSubtree: true,
+            sections: [{ id: 'settings', label: 'Settings' }],
+          },
+        ],
+      })
+      expect(resolveConsolePluginPage('/forms/settings')?.section?.id).toBe(
+        'settings',
+      )
+      expect(
+        resolveConsolePluginPage('/forms/form-abc')?.section,
+      ).toBeUndefined()
+      expect(resolveConsolePluginPage('/forms/form-abc')?.segments).toEqual([
+        'form-abc',
+      ])
+    })
+  })
+
+  /**
+   * Which registration owns a path when two could (AGL-2501).
+   *
+   * The registry is a session-wide union across plugins from different
+   * authors (AGL-758), so this is a cross-tenant correctness question: the
+   * same URL must resolve to the same page in every workspace that has both
+   * plugins, or to nothing at all.
+   */
+  describe('overlap', () => {
+    it('an exact registration beats a section of a shorter one', () => {
+      registerSectioned()
+      registerConsoleExtension({
+        pluginId: 'orders-pro',
+        displayName: 'Orders Pro',
+        navItems: [
+          { label: 'Orders', href: '/products/orders', Component: Events },
+        ],
+      })
+      // `/products/orders` is `orders-pro`'s whole href and only a section of
+      // commerce's — longest wins, so the exact registration takes it.
+      const resolved = resolveConsolePluginPage('/products/orders')
+      expect(resolved?.extension.pluginId).toBe('orders-pro')
+      expect(resolved?.section).toBeUndefined()
+      // …and commerce keeps everything the longer href does not claim.
+      expect(
+        resolveConsolePluginPage('/products/catalog')?.extension.pluginId,
+      ).toBe('commerce')
+    })
+
+    it('matches only on a segment boundary', () => {
+      registerSectioned()
+      /*
+       * `/products-orders` is the case a plain `startsWith` gets wrong, and
+       * the only one that discriminates. Dropping the separator makes the
+       * remainder-after-the-prefix land exactly on `orders`, so `/products`
+       * would claim a DIFFERENT surface with a similar name and serve its own
+       * Orders section there. `/products-archive` looks like the same test and
+       * is not: its remainder is `archive`, which no section declares, so it
+       * is refused either way.
+       */
+      expect(resolveConsolePluginPage('/products-orders')).toBeUndefined()
+      expect(resolveConsolePluginPage('/products-archive')).toBeUndefined()
+      expect(
+        resolveConsolePluginPage('/products-archive/orders'),
+      ).toBeUndefined()
+    })
+
+    /*
+     * A tie REFUSES. Registry insertion order is an accident of which chunk
+     * loaded first, so resolving by it means one workspace serves plugin A's
+     * page where another serves plugin B's — silently, and differently per
+     * session. Nobody can debug that from the symptom.
+     */
+    it('two plugins claiming one path resolve to nothing, loudly', () => {
+      const error = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined)
+      registerConsoleExtension({
+        pluginId: 'commerce',
+        displayName: 'Commerce',
+        navItems: [{ label: 'Shop', href: '/shop', Component: Products }],
+      })
+      registerConsoleExtension({
+        pluginId: 'store-plus',
+        displayName: 'Store Plus',
+        navItems: [{ label: 'Shop', href: '/shop', Component: Events }],
+      })
+      expect(resolveConsolePluginPage('/shop')).toBeUndefined()
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('/shop'))
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('commerce'))
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('store-plus'))
+      error.mockRestore()
+    })
+
+    /*
+     * Two nav items of ONE extension are not a collision: that order is
+     * authored by one person in one file, not an accident of load order.
+     */
+    it('does not refuse two nav items of the same extension', () => {
+      registerConsoleExtension({
+        pluginId: 'commerce',
+        displayName: 'Commerce',
+        navItems: [
+          { label: 'Shop', href: '/shop', Component: Products },
+          { label: 'Shop (old)', href: '/shop', Component: Events },
+        ],
+      })
+      expect(resolveConsolePluginPage('/shop')?.navItem.Component).toBe(
+        Products,
+      )
+    })
+
+    /*
+     * The collision is between the plugins this WORKSPACE has enabled — the
+     * scoping AGL-758 added, still load-bearing. Two plugins that never run
+     * in the same org must not refuse each other, or one workspace's install
+     * would 404 a page in another's.
+     */
+    it('a disabled plugin neither wins a path nor collides on one', () => {
+      registerConsoleExtension({
+        pluginId: 'commerce',
+        displayName: 'Commerce',
+        navItems: [{ label: 'Shop', href: '/shop', Component: Products }],
+      })
+      registerConsoleExtension({
+        pluginId: 'store-plus',
+        displayName: 'Store Plus',
+        navItems: [{ label: 'Shop', href: '/shop', Component: Events }],
+      })
+      expect(
+        resolveConsolePluginPage('/shop', ['commerce'])?.navItem.Component,
+      ).toBe(Products)
+      expect(
+        resolveConsolePluginPage('/shop', ['store-plus'])?.navItem.Component,
+      ).toBe(Events)
+    })
+
+    it('scoping applies to section URLs too', () => {
+      registerSectioned()
+      expect(
+        resolveConsolePluginPage('/products/orders', ['events-calendar']),
+      ).toBeUndefined()
+      expect(
+        resolveConsolePluginPage('/products/orders', ['commerce'])?.section?.id,
+      ).toBe('orders')
+    })
+  })
+})

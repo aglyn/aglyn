@@ -67,6 +67,19 @@ const NOT_ENFORCEMENT = [
 ]
 
 /**
+ * A plugin's console REGISTRATION module — see the sibling guard for the full
+ * reasoning.
+ *
+ * `ConsoleExtension.permission` writes a dotted key as a quoted literal into
+ * `libs/plugins/<name>/src/lib/plugin.ts`, which sits inside the roots above.
+ * Counting it would let the shell's browser-side gate stand in for the server
+ * check this file exists to demand, and `data.manage` is already declared by
+ * two such registrations — so without this the key would look enforced even
+ * if `/api/orgs/datasets` stopped checking it.
+ */
+const REGISTRATION_MODULE = /^libs\/plugins\/[^/]+\/src\/lib\/plugin\.tsx?$/
+
+/**
  * Where each key actually bites, as a string a server file contains.
  *
  * The legacy aliases are the camelCase names `toLegacyPermissions` emits —
@@ -118,6 +131,7 @@ function serverFilesContaining(needle: string): string[] {
     .filter(Boolean)
     .filter((path) => !/\.spec\./.test(path))
     .filter((path) => !NOT_ENFORCEMENT.includes(path))
+    .filter((path) => !REGISTRATION_MODULE.test(path))
 }
 
 describe('every advertised org permission is enforced server-side (AGL-2444)', () => {

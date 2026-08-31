@@ -145,6 +145,19 @@ const mockOrg: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   getOrgForHost: async () => mockOrg,
 }))
@@ -155,6 +168,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 let sessionBody: URLSearchParams | null = null
 
+/** `amount_off` on every coupon the handler minted, in call order. */
+const couponAmounts: string[] = []
 const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   const target = String(url)
   if (!target.startsWith('https://api.stripe.com')) {
@@ -174,6 +189,11 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   // object on the merchant's account. Modelled so the ordering assertion
   // below — that a refused checkout creates none — can be made at all.
   if (target.endsWith('/v1/coupons')) {
+    // The MONEY on a discount: `amount_off` is what Stripe takes off the
+    // session, so it is the assertion surface for any pricing question.
+    couponAmounts.push(
+      String(new URLSearchParams(String(init?.body ?? '')).get('amount_off')),
+    )
     return { ok: true, json: async () => ({ id: 'co_test_1' }) }
   }
   throw new Error(`Unexpected Stripe endpoint ${target}`)
@@ -222,6 +242,19 @@ interface Scenario {
   couponCode?: string
   /** Overrides on the single cart product. */
   product?: Record<string, any>
+  /**
+   * `hosts/{hostId}/discounts` docs. When present the legacy AGL-96 coupon is
+   * NOT seeded, so a scenario testing a discount cannot accidentally be
+   * carried by a 50%-off coupon of the same code if the discount fails to
+   * resolve — which would hide the very failure under test.
+   */
+  discounts?: Array<Record<string, any> & { id: string }>
+  /**
+   * A SECOND product in the cart, so a scoped discount has something to NOT
+   * cover. With one product the scoped and unscoped answers coincide and the
+   * assertion proves nothing.
+   */
+  extraProduct?: { id: string; priceUsd: number; quantity: number }
 }
 
 function makeRequest(scenario: Scenario): PluginApiRequest {
@@ -268,7 +301,27 @@ function seedStore(
     tax: { mode: 'none' },
     ...(storeSettings ?? {}),
   })
-  if (scenario.couponCode) {
+  if (scenario.extraProduct) {
+    const extra = scenario.extraProduct
+    const cart = docs.get('hosts/host-1/carts/cart-1') as any
+    cart.lines = [
+      ...cart.lines,
+      { productId: extra.id, variantId: `${extra.id}-v1`, quantity: extra.quantity },
+    ]
+    docs.set(`hosts/host-1/products/${extra.id}`, {
+      name: extra.id,
+      status: 'active',
+      type: 'physical',
+      variants: [
+        { id: `${extra.id}-v1`, priceUsd: extra.priceUsd, weightGrams: 10, inventory: 10 },
+      ],
+    })
+  }
+  for (const discount of scenario.discounts ?? []) {
+    const { id, ...fields } = discount
+    docs.set(`hosts/host-1/discounts/${id}`, fields)
+  }
+  if (scenario.couponCode && !scenario.discounts) {
     docs.set(`hosts/host-1/coupons/${scenario.couponCode}`, {
       percentOff: 50,
       enabled: true,
@@ -354,6 +407,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
 
   beforeEach(() => {
     fetchMock.mockClear()
+    couponAmounts.length = 0
   })
 
   it('declares the destination’s rate, and only that destination (AGL-1721)', async () => {
@@ -649,6 +703,192 @@ describe('cart checkout shipping options (AGL-1707)', () => {
       expect(shippingOptions(body).map((option) => option.amount)).toEqual([
         '1299',
       ])
+    })
+  })
+  /**
+   * A FREE-SHIPPING DISCOUNT REACHES THE TOTAL.
+   *
+   * The defect was a silent wrong charge, and silent is the operative word.
+   * `valueCents` answered `0` for every kind it did not understand, so a
+   * `free_shipping` discount resolved successfully worth nothing: the apply
+   * block gates on `discountCents > 0` and skipped it, and the invalid-code
+   * 400 beside it only fires when NOTHING resolved, so that skipped it too.
+   * The shopper typed a valid code, saw no error, and paid full shipping.
+   *
+   * Asserted on the CHARGED AMOUNT — the `fixed_amount` on the session's
+   * shipping options, which is the number Stripe will bill — never on any
+   * rendered output. Stripe is mocked absolutely and the key is a fake test
+   * key, exactly as the rest of this suite.
+   */
+  describe('a free-shipping discount', () => {
+    const freeShip = {
+      id: 'ship-free',
+      code: 'FREESHIP',
+      kind: 'free_shipping',
+      enabled: true,
+    }
+
+    it('zeroes the rate the shopper will be charged', async () => {
+      const { result, body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'FREESHIP',
+          discounts: [freeShip],
+        },
+      )
+
+      expect(result.status).toBe(200)
+      expect(shippingOptions(body)).toEqual([
+        { name: 'Standard', amount: '0', currency: 'usd', type: 'fixed_amount' },
+      ])
+    })
+
+    it('CONTROL: the same cart without the code still pays $7.99', async () => {
+      // Without this the assertion above would pass just as well against a
+      // handler that had stopped charging shipping altogether.
+      const { result, body } = await runCheckout(
+        { shipping },
+        { shippingCountry: 'US' },
+      )
+
+      expect(result.status).toBe(200)
+      expect(shippingOptions(body)).toEqual([
+        {
+          name: 'Standard',
+          amount: '799',
+          currency: 'usd',
+          type: 'fixed_amount',
+        },
+      ])
+    })
+
+    it('CONTROL: a percentage discount leaves shipping alone', async () => {
+      // The other direction: free shipping must not become what every discount
+      // does. A percent code reduces the goods and the parcel still costs
+      // $7.99.
+      const { result, body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'TENOFF',
+          discounts: [
+            {
+              id: 'ten-off',
+              code: 'TENOFF',
+              kind: 'percent',
+              valuePct: 10,
+              enabled: true,
+            },
+          ],
+        },
+      )
+
+      expect(result.status).toBe(200)
+      expect(shippingOptions(body)).toEqual([
+        {
+          name: 'Standard',
+          amount: '799',
+          currency: 'usd',
+          type: 'fixed_amount',
+        },
+      ])
+      // It did apply, rather than being skipped the way free shipping was.
+      expect(body?.get('metadata[discountId]')).toBe('ten-off')
+    })
+
+    it('records the redemption it just spent', async () => {
+      // Free shipping now takes the same hold every other discount takes. It
+      // was skipped entirely before, so a capped free-shipping promotion was
+      // unlimited in practice.
+      const { body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'FREESHIP',
+          discounts: [freeShip],
+        },
+      )
+
+      expect(body?.get('metadata[discountId]')).toBe('ship-free')
+    })
+
+    it('refuses a discount kind it cannot apply, rather than charging in full', async () => {
+      // The guard that keeps the next `free_shipping` from being a silent
+      // undercharge: a code that resolves but confers nothing this build
+      // understands is a refusal the shopper can see, not a full-price sale.
+      const { result, body } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'WAT',
+          discounts: [
+            { id: 'mystery', code: 'WAT', kind: 'mystery-kind', enabled: true },
+          ],
+        },
+      )
+
+      expect(result.status).toBe(400)
+      // Nothing was opened, so nothing can be charged.
+      expect(body).toBeNull()
+    })
+  })
+
+  /**
+   * A SCOPED DISCOUNT CHARGES FOR WHAT IT DOES NOT COVER.
+   *
+   * `applies` refused a cart holding NONE of the scoped products, so the scope
+   * was never entirely dead — but the amount was computed against the whole
+   * subtotal, so one in-scope item discounted the entire basket. The merchant
+   * chose a scope and checkout charged as though they had not.
+   *
+   * Asserted on `amount_off` — the cents Stripe actually takes off the session
+   * — with a second, out-of-scope product in the cart so the scoped and
+   * unscoped answers cannot coincide.
+   */
+  describe('a product-scoped discount', () => {
+    // The seeded cart is 2 x $30 of `p1`; `extra` adds 1 x $50 of `p2`.
+    const extraProduct = { id: 'p2', priceUsd: 50, quantity: 1 }
+    const scoped = {
+      id: 'scoped-ten',
+      code: 'TEN',
+      kind: 'percent',
+      valuePct: 10,
+      enabled: true,
+      productIds: ['p1'],
+    }
+
+    it('takes its percentage off the scoped lines only', async () => {
+      const { result } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'TEN',
+          discounts: [scoped],
+          extraProduct,
+        },
+      )
+
+      expect(result.status).toBe(200)
+      // 10% of the $60 of `p1`, never 10% of the $110 basket.
+      expect(couponAmounts).toEqual(['600'])
+    })
+
+    it('CONTROL: the same discount unscoped still covers the basket', async () => {
+      // Without this the change would look correct while shrinking every
+      // ordinary store-wide discount.
+      const { result } = await runCheckout(
+        { shipping },
+        {
+          shippingCountry: 'US',
+          couponCode: 'TEN',
+          discounts: [{ ...scoped, productIds: [] }],
+          extraProduct,
+        },
+      )
+
+      expect(result.status).toBe(200)
+      expect(couponAmounts).toEqual(['1100'])
     })
   })
 })

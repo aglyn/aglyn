@@ -1,0 +1,26 @@
+{
+  "team": "AGL",
+  "highest": 2502,
+  "verifiedAt": "2026-08-30",
+  "verifiedBy": "Linear list_issues, team AGL, orderBy createdAt, includeArchived true. AGL-2499 (2026-08-24) was the newest issue in the workspace; AGL-2500 and AGL-2501 were then created deliberately under a bounded exception to the issue-creation freeze, which is why the ceiling moved by exactly two. AGL-2502 (2026-08-30) was then created under a further bounded exception for the email/sending-domain work, moving it by one more.",
+  "note": "The highest issue identifier that EXISTS. Any citation above this was never assigned, because Linear numbers issues sequentially per team. Raise it only after reading the workspace \u2014 never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
+  "historicalCitations": {
+    "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",
+    "commits": [
+      "327f8a2c532295d5727bc1dfadf7bb397ae30baa",
+      "363d03156675df2de5f7e46f93ca86c30d832c31",
+      "74cb3d6163111792c267062a1dd62243997027ae",
+      "7a17032e1cde196c444c127bde459201cff78011",
+      "7e7cf933198eae7fe03a005c4e93f9920018ad82",
+      "808ce9acd433e679b940bd9abc4333bb38e67d3e",
+      "8c50465d264577b8e7c71ce1146f0577f92a3970",
+      "8e15c08db142f02c4594fd525740c06031d4faf9",
+      "9efc8a9d959f0c505b09c7e8ec7fff7eeeb1a83f",
+      "b14b3c3b31d4b9f684bc47f8a4d1da98c780af66",
+      "c46876789c041c91ad4bc29b2a10a566504895c3",
+      "cbfb7913923d168dff7b0c090c6abad6f79534a1",
+      "eeb33f651db4f93b4ee718e61c1f1971262b3192",
+      "ffd0c530d01c65c2f739db57b7a4773676591080"
+    ]
+  }
+}

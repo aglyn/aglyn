@@ -123,7 +123,7 @@ export interface ScreensHierarchyTableProps {
   /** Row click target — the whole row opens the screen's detail page. */
   onRowOpen?: (row: ScreenHierarchyRow) => void
   /**
-   * The detail-page address for a row, so the NAME is a real link (AGL-693).
+   * The detail-page address for a row, so the NAME is a real link (AGL-2501).
    *
    * The row already opens on click, and that is not the same affordance: a
    * link is what you can middle-click into a new tab, copy the address of,
@@ -512,9 +512,10 @@ export function ScreensHierarchyTableComponent(
    * honest: ten roots on the page is ten rows until a reader asks for more.
    *
    * NOTE this bounds what is RENDERED, not what is read. The page still
-   * fetches the whole collection in one query (`limit(200)` in screens/page),
-   * so the children were already on the client either way — closing them by
-   * default costs no extra fetch when a reader opens one.
+   * fetches the whole collection in one ordered, ceilinged query
+   * (`SCREEN_WINDOW` in screens/page), so the children were already on the
+   * client either way — closing them by default costs no extra fetch when a
+   * reader opens one.
    *
    * A closed parent renders its children's `Collapse` and nothing inside it:
    * `unmountOnExit` keeps a closed subtree out of the DOM, out of React, and
@@ -611,7 +612,7 @@ export function ScreensHierarchyTableComponent(
   }
 
   /**
-   * Pagination that pages ROOTS, never rows (AGL-693).
+   * Pagination that pages ROOTS, never rows (AGL-2501).
    *
    * The layouts list pages rows. A tree cannot take that literally: slicing
    * by row would put a child on a different page from its parent, and a
@@ -853,7 +854,7 @@ export function ScreensHierarchyTableComponent(
                     illustration, while layouts/components/templates had the
                     illustration and no way out. Both halves were the same
                     omission seen from opposite sides, and `EmptyStateComponent`
-                    has drawn label + description + action since AGL-693 — the
+                    has drawn label + description + action since AGL-2501 — the
                     grid simply never passed the last two, and this table never
                     called it at all.
 
@@ -895,7 +896,7 @@ export function ScreensHierarchyTableComponent(
       </TableContainer>
       {/*
         The console's shared footer, with the tree's one honest difference in
-        the COUNT rather than the label (AGL-693): a page holds top-level
+        the COUNT rather than the label (AGL-2501): a page holds top-level
         screens and each one's subtree travels with it, so "22 of 22" is
         counted in top-level screens and says so. Labelling the size menu
         differently from every other list made the same control read as a

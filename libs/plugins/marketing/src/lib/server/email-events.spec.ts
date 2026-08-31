@@ -220,6 +220,25 @@ function makeDocRef(path: string): any {
       }
       docs.set(path, next)
     },
+    /*
+     * `create` REJECTS when the document already exists, which is the whole
+     * reason the replay guard can be atomic — it is the claim primitive, not
+     * a convenience for `set`. A double that let a second create succeed
+     * would report a guard that dedupes nothing as working.
+     */
+    create: async (value: Record<string, unknown>) => {
+      if (docs.has(path)) {
+        const error: Error & { code?: number } = new Error(
+          `ALREADY_EXISTS: Document already exists: ${path}`,
+        )
+        error.code = 6
+        throw error
+      }
+      docs.set(path, { ...value })
+    },
+    delete: async () => {
+      docs.delete(path)
+    },
     collection: (name: string) => makeCollectionRef(`${path}/${name}`),
   }
 }
@@ -296,14 +315,141 @@ const fakeFirestore = {
 // intercept, so the handler always gets the real predicate. That is the point
 // of importing it from the leaf rather than the barrel — a permissive stub
 // would turn every path-shaped tag below into a false green.
+/*
+ * The delivery log, mocked at its LEAF so the write is observable.
+ *
+ * The real module reaches the admin SDK and swallows its own failures by
+ * design — so left unmocked it would no-op here and the assertions below
+ * would pass over a handler that never called it.
+ */
+const recordedDeliveryEvents: unknown[][] = []
+/**
+ * Whether the mocked log reports each event as the FIRST of its type for its
+ * message.
+ *
+ * The real log derives this inside the transaction it already runs, and the
+ * handler leans on it for every distinct-recipient counter — unique opens,
+ * unique clicks, delivered, bounced, complained. A stub that hard-coded
+ * `true` would make those counters look idempotent while proving nothing
+ * about the mechanism, and one that hard-coded `false` would silence them
+ * entirely and let every assertion about them pass by asserting zero. So it
+ * is settable per test, and both readings are exercised below.
+ */
+let mockFirstOfType = true
+/**
+ * What the handler handed the PERSON ROLLUP, per call.
+ *
+ * The rollup's own idempotency is proven against a Firestore double in
+ * `tenant-data-admin`; what only this file can prove is that the handler
+ * feeds it the delivery log's own verdict rather than re-deriving one — which
+ * is the entire reason a replay costs nothing.
+ */
+const recordedEngagement: unknown[][] = []
+const recordedTouches: unknown[] = []
+jest.mock(
+  '@aglyn/tenant-data-admin/server/email-delivery-log',
+  () => ({
+    recordEmailDeliveryEvents: jest.fn(async (events: unknown[]) => {
+      recordedDeliveryEvents.push(events)
+      return events.map((event: any) => ({
+        firstOfType: mockFirstOfType,
+        providerMessageId: String(event?.providerMessageId ?? ''),
+        to: String(event?.to ?? ''),
+        type: String(event?.type ?? ''),
+        at: Number(event?.at ?? 0),
+      }))
+    }),
+    recordPersonEngagement: jest.fn(async (outcomes: unknown[]) => {
+      recordedEngagement.push(outcomes)
+      return 0
+    }),
+    /*
+     * The campaign touch revenue attribution is taken over. Recorded rather
+     * than asserted-on-storage here for the same reason the engagement rollup
+     * is: this file's subject is what the WEBHOOK does, and the touch's own
+     * storage rules — forward-only, per host, capped — are proved against a
+     * real double in `email-revenue-attribution.spec.ts`.
+     */
+    recordEmailCampaignTouch: jest.fn(async (touch: unknown) => {
+      recordedTouches.push(touch)
+      return true
+    }),
+  }),
+)
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The literal three call sites compare against — the unsubscribe writes
+  // it, the resubscribe link refuses to reverse anything else, and the
+  // preference page reads it. A mock that omitted it would write `undefined`
+  // and every one of those comparisons would silently stop matching.
+  UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  /*
+   * The real resolution's shape: an org that declared no pooling resolves
+   * every site to a group of ONE. Faked rather than imported because this
+   * file mocks the whole module — but faked to the NARROW answer, which is
+   * the direction a wrong group may fail in.
+   */
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
+  /*
+   * The unsubscribe-link signer and URL builder are the REAL ones. They need
+   * nothing but `crypto`, and a double would let a spec assert on a URL shape
+   * the product does not actually mint — which is the whole failure mode of a
+   * stubbed policy module.
+   */
+  ...jest.requireActual(
+    '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
+  ),
+  /*
+   * The marketing frequency window is a no-op here, and deliberately so: it
+   * is a durable counter whose behavior is proven against a Firestore double
+   * in `tenant-data-admin`, and the campaign sender's only contract with it
+   * is that it is called with the addresses that were reached and that it
+   * cannot fail a send.
+   */
+  recordMarketingSends: async (_hostId: string, emails: readonly string[]) =>
+    emails.length,
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   updateExisting: jest.requireActual(
     '@aglyn/tenant-data-admin/server/update-existing',
   ).updateExisting,
 }))
 
+/**
+ * The per-tenant reputation counter, doubled at its LEAF so the attribution
+ * is observable.
+ *
+ * The counter's own behavior is proven against a Firestore double in
+ * `tenant-data-admin`; what this file owns is the question that module cannot
+ * answer — which workspace a delivery event belongs to, and whether one that
+ * belongs to nobody is counted against somebody.
+ */
+const reputationFailures: Array<{ orgId: string; kind: string }> = []
+jest.mock('@aglyn/tenant-data-admin/server/email-sender-reputation', () => ({
+  recordEmailReputationFailure: async (orgId: string, kind: string) => {
+    reputationFailures.push({ orgId, kind })
+  },
+}))
+jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/organizations'),
+  getOrgForHost: async (hostId: string) => ({
+    orgId: `org-of-${hostId}`,
+    org: {},
+  }),
+}))
+
 import { emailEventsHandler } from './email-events'
+// The REAL cap, not a local copy: a spec that retyped it would go on passing
+// after the value it asserts moved. (`suppressionId` is imported further
+// down, beside the block that explains why it is not recomputed here.)
+import {
+  CAMPAIGN_LINK_ROLLUP_MAX,
+} from '@aglyn/shared-ui-email-campaigns/model'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -355,9 +501,24 @@ function makeResponse() {
 }
 
 /** Delivers a genuinely Svix-signed event, as Resend does. */
-async function deliver(event: Record<string, unknown>) {
+/*
+ * Every delivery gets its OWN message id, because every delivery in
+ * production does. Re-using one id across calls made this suite assert that
+ * the same event counts twice, which is the behaviour the replay guard
+ * exists to prevent — so a shared id here would have read as the guard
+ * being broken.
+ *
+ * `replayOf` is how a test asks for the other case on purpose: the SAME id
+ * delivered again, which is what a provider retry and a dashboard replay
+ * both look like on the wire.
+ */
+let deliveryCounter = 0
+async function deliver(
+  event: Record<string, unknown>,
+  options: { replayOf?: string } = {},
+) {
   const rawBody = JSON.stringify(event)
-  const id = 'msg_1'
+  const id = options.replayOf ?? `msg_${(deliveryCounter += 1)}`
   const timestamp = '1799000000'
   const signature = createHmac(
     'sha256',
@@ -382,14 +543,49 @@ async function deliver(event: Record<string, unknown>) {
     } as any,
     res,
   )
-  return result
+  return Object.assign(result, { messageId: id })
 }
 
-/** An `email.opened`/`email.clicked` payload with the tags Aglyn stamps. */
+/**
+ * Every path the handler wrote, EXCEPT the replay guard's own claim.
+ *
+ * The claim is bookkeeping rather than an outcome — it records that an event
+ * was counted, and it is written on every counted event by construction. A
+ * whole-store equality that included it would assert the guard's mechanics in
+ * cases that are about something else entirely, so it is excluded once here
+ * rather than tolerated case by case. The exclusion is exact: anything
+ * outside `apiIdempotency/` still has to be accounted for, so a stray write
+ * is still a failure.
+ */
+const writtenPaths = () =>
+  [...docs.keys()].filter((key) => !key.startsWith('apiIdempotency/'))
+
+/**
+ * An `email.opened`/`email.clicked` payload with the tags Aglyn stamps.
+ *
+ * `email_id` is on every real Resend payload and the fixture now carries one,
+ * because the handler's distinct-recipient counters are derived from the
+ * delivery log — which keys on that id and records nothing without it. A
+ * fixture missing it exercised a path where those counters never fire, which
+ * would have let them pass by never running.
+ *
+ * A FRESH id per call, so two `deliver()`s in one test are two messages
+ * unless a test deliberately says otherwise. `messageId` on the delivered
+ * payload is separate: that is the Svix id, and it is what the replay guard
+ * keys on.
+ */
+let fixtureMessageCounter = 0
 const event = (
   type: 'email.opened' | 'email.clicked',
   tags: Record<string, string>,
-) => ({ type, data: { to: [RECIPIENT], tags } })
+) => ({
+  type,
+  data: {
+    email_id: `email_${(fixtureMessageCounter += 1)}`,
+    to: [RECIPIENT],
+    tags,
+  },
+})
 
 const TAGS = { hostId: HOST, campaignId: CAMPAIGN }
 
@@ -397,7 +593,13 @@ let errors: unknown[][] = []
 
 beforeEach(() => {
   docs.clear()
+  recordedDeliveryEvents.length = 0
+  recordedEngagement.length = 0
+  recordedTouches.length = 0
+  fixtureMessageCounter = 0
+  mockFirstOfType = true
   updateFailure = null
+  reputationFailures.length = 0
   errors = []
   jest.spyOn(console, 'error').mockImplementation((...args) => {
     errors.push(args)
@@ -449,7 +651,11 @@ describe('the counter the event does not touch', () => {
 
     await deliver(event('email.opened', TAGS))
 
-    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 3,
+      clicks: 5,
+      uniqueOpens: 1,
+    })
   })
 
   it('keeps `opens` when a click lands', async () => {
@@ -457,7 +663,11 @@ describe('the counter the event does not touch', () => {
 
     await deliver(event('email.clicked', TAGS))
 
-    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 2, clicks: 6 })
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 2,
+      clicks: 6,
+      uniqueClicks: 1,
+    })
   })
 
   it('leaves every other field of the campaign alone', async () => {
@@ -481,7 +691,10 @@ describe('the counter the event does not touch', () => {
 
     await deliver(event('email.clicked', TAGS))
 
-    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ clicks: 1 })
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      clicks: 1,
+      uniqueClicks: 1,
+    })
   })
 })
 
@@ -495,7 +708,7 @@ describe('a tag that names a path rather than an id', () => {
       event('email.opened', { hostId: 'a/b/c', campaignId: CAMPAIGN }),
     )
 
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
     expect(result.body).toEqual({ ignored: true })
   })
 
@@ -504,7 +717,7 @@ describe('a tag that names a path rather than an id', () => {
       event('email.opened', { hostId: HOST, campaignId: 'a/b/c' }),
     )
 
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
     expect(result.body).toEqual({ ignored: true })
   })
 
@@ -538,7 +751,7 @@ describe('a tag that names a path rather than an id', () => {
       event('email.opened', { hostId: HOST, campaignId }),
     )
 
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
     expect(result.body).toEqual({ ignored: true })
   })
 })
@@ -614,7 +827,7 @@ describe('experiment conversion', () => {
 
     await deliver(event('email.clicked', { ...TAGS, experimentId: EXPERIMENT }))
 
-    expect([...docs.keys()].filter((key) => key.includes('/stats/'))).toEqual(
+    expect(writtenPaths().filter((key) => key.includes('/stats/'))).toEqual(
       [],
     )
   })
@@ -624,7 +837,10 @@ describe('experiment conversion', () => {
 
     await deliver(event('email.clicked', { ...TAGS, experimentId: 'a/b/c' }))
 
-    expect([...docs.keys()]).toEqual([CAMPAIGN_PATH])
+    // The campaign counters and the link rollup — the two writes a click
+    // against a live campaign always makes. Named in full rather than
+    // filtered, so a NEW write appearing here fails as itself.
+    expect(writtenPaths()).toEqual([CAMPAIGN_PATH, `${CAMPAIGN_PATH}/reports/links`])
   })
 
   it('does not convert on an open', async () => {
@@ -665,10 +881,15 @@ describe('the pre-existing gates', () => {
     expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 2, clicks: 5 })
   })
 
-  it('ignores an event type that is neither an open nor a click', async () => {
+  it('ignores an event type no campaign counter is kept for', async () => {
     docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
 
-    const result = await deliver(event('email.delivered' as never, TAGS))
+    // `email.sent`, not `email.delivered`: delivered IS counted now — it is
+    // the denominator every campaign rate is taken over. `sent` is the
+    // provider acknowledging the handoff, which the send itself already
+    // recorded, so counting it here would be a second opinion on a number
+    // that is not in question.
+    const result = await deliver(event('email.sent' as never, TAGS))
 
     expect(result.body).toEqual({ ignored: true })
     expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 2, clicks: 5 })
@@ -678,7 +899,7 @@ describe('the pre-existing gates', () => {
     const result = await deliver(event('email.opened', { hostId: HOST }))
 
     expect(result.body).toEqual({ ignored: true })
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
   })
 })
 
@@ -739,6 +960,50 @@ describe('a complaint', () => {
     await deliver(failure('email.complained', {}, { hostId: HOST }))
 
     expect(docs.get(SUPPRESSION_PATH)?.reason).toBe('complaint')
+  })
+})
+
+describe('the workspace a failure belongs to', () => {
+  it('counts a complaint against the workspace that sent it', async () => {
+    await deliver(failure('email.complained'))
+    // The rate that decides whether this workspace may keep sending on the
+    // shared domain. Without it one merchant's bad list is invisible until a
+    // mailbox provider acts on the whole domain.
+    expect(reputationFailures).toEqual([
+      { orgId: `org-of-${HOST}`, kind: 'complaint' },
+    ])
+  })
+
+  it('counts a permanent bounce, and not a transient one', async () => {
+    await deliver(
+      failure('email.bounced', {
+        bounce: { type: 'Permanent', subType: 'General', message: 'no such user' },
+      }),
+    )
+    expect(reputationFailures).toEqual([
+      { orgId: `org-of-${HOST}`, kind: 'bounce' },
+    ])
+
+    reputationFailures.length = 0
+    await deliver(
+      failure('email.bounced', {
+        bounce: { type: 'Transient', subType: 'MailboxFull', message: 'full' },
+      }),
+    )
+    // A full mailbox is not a list-quality signal, and it does not suppress
+    // either — counting it would put somebody's holiday auto-reply into a
+    // rate that stops a merchant sending.
+    expect(reputationFailures).toEqual([])
+  })
+
+  it('counts NOTHING against a workspace when the send named none', async () => {
+    // A bounce on a password reset, an invite or a usage summary carries no
+    // `hostId` tag. It still suppresses the address — that is address-level
+    // truth — but it may not enter a rate that only campaigns are judged on,
+    // in either direction: it can neither inflate one nor dilute one.
+    await deliver(failure('email.complained', {}, { context: 'password-reset' }))
+    expect(docs.get(PLATFORM_PATH)?.reason).toBe('complaint')
+    expect(reputationFailures).toEqual([])
   })
 })
 
@@ -816,7 +1081,7 @@ describe('a delivery failure with no site to attribute it to', () => {
       releasedAt: null,
     })
     // And no per-host document was invented for a site that was never named.
-    expect([...docs.keys()]).toEqual([PLATFORM_PATH])
+    expect(writtenPaths()).toEqual([PLATFORM_PATH])
   })
 
   it('files a platform complaint too', async () => {
@@ -835,7 +1100,7 @@ describe('a delivery failure with no site to attribute it to', () => {
     )
 
     expect(result.body).toEqual({ ok: true, suppressed: false })
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
   })
 
   it('ignores an event with no recipient', async () => {
@@ -848,7 +1113,7 @@ describe('a delivery failure with no site to attribute it to', () => {
     })
 
     expect(result.body).toEqual({ ignored: true })
-    expect([...docs.keys()]).toEqual([])
+    expect(writtenPaths()).toEqual([])
   })
 
   it('writes NO platform record for a hostId that names a path', async () => {
@@ -863,7 +1128,7 @@ describe('a delivery failure with no site to attribute it to', () => {
       ),
     )
 
-    expect([...docs.keys()]).toEqual([PLATFORM_PATH])
+    expect(writtenPaths()).toEqual([PLATFORM_PATH])
     expect(docs.get(PLATFORM_PATH)?.['hostId']).toBeNull()
   })
 })
@@ -914,7 +1179,770 @@ describe('the open and click path is unchanged', () => {
 
     await deliver(event('email.opened', TAGS))
 
-    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 3,
+      clicks: 5,
+      uniqueOpens: 1,
+    })
     expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+  })
+})
+
+/*==========================================
+ * THE REPLAY GUARD.
+ *
+ * Delivery is at least once and the counters are `increment(1)`, so the same
+ * event arriving twice used to mean two opens. A provider retry, a retry
+ * after a non-2xx, and a human pressing Replay in the dashboard all put the
+ * SAME message id back on the wire — which is what these deliver.
+ *=========================================*/
+describe('the same delivery event arriving twice', () => {
+  it('counts it once, however many times it is replayed', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    const first = await deliver(event('email.opened', TAGS))
+    await deliver(event('email.opened', TAGS), { replayOf: first.messageId })
+    await deliver(event('email.opened', TAGS), { replayOf: first.messageId })
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 3,
+      clicks: 5,
+      uniqueOpens: 1,
+    })
+  })
+
+  it('says so rather than reporting a count it did not make', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    const first = await deliver(event('email.opened', TAGS))
+    const again = await deliver(event('email.opened', TAGS), {
+      replayOf: first.messageId,
+    })
+
+    // 200, because a replay is not an error and must not provoke a retry.
+    expect(again.status).toBe(200)
+    expect(again.body).toMatchObject({ counted: false })
+  })
+
+  /**
+   * ANTI-VACUITY. Without this, a guard that refused EVERY event would pass
+   * both cases above — two distinct events are exactly what must still count
+   * twice, and they are the common case.
+   */
+  it('CONTROL — two DIFFERENT events still count twice', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+    await deliver(event('email.opened', TAGS))
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 4,
+      clicks: 5,
+      uniqueOpens: 2,
+    })
+  })
+
+  /**
+   * THE CLAIM IS THE MESSAGE ID, and nothing else about the payload.
+   *
+   * So a redelivery whose body has been changed — a different event type in
+   * this case — is still refused, because the id says it is the same
+   * delivery. That is the right direction for a counter: the provider mints
+   * one id per event, two types can never legitimately share one, and if they
+   * ever did, believing the id over the body under-counts rather than
+   * inflates.
+   *
+   * Stated as a test because it is genuinely surprising if you assume the
+   * digest covers the payload, and someone widening the guard later needs to
+   * know the payload was never in it.
+   */
+  it('refuses a redelivery on the message id alone, not the payload', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    const first = await deliver(event('email.opened', TAGS))
+    await deliver(event('email.clicked', TAGS), { replayOf: first.messageId })
+
+    // The click did NOT count: same id, therefore the same delivery.
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 3,
+      clicks: 5,
+      uniqueOpens: 1,
+    })
+  })
+
+  /**
+   * THE RELEASE PATH. A counter write that fails must hand the key back, or
+   * the event becomes permanently uncountable: the handler answers 200
+   * whatever happens, so the provider never retries, and a settled claim
+   * would then refuse the manual replay that is the only way left to recover
+   * it. Failing and then refusing the retry is worse than either alone.
+   */
+  it('lets a replay count an event whose first attempt failed', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const outage: Error & { code?: number } = new Error('INTERNAL')
+    outage.code = 13
+    updateFailure = outage
+
+    const first = await deliver(event('email.opened', TAGS))
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 2, clicks: 5 })
+
+    updateFailure = undefined
+    await deliver(event('email.opened', TAGS), { replayOf: first.messageId })
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 3,
+      clicks: 5,
+      uniqueOpens: 1,
+    })
+  })
+
+  /**
+   * The experiment conversion is the SECOND `increment(1)` behind the same
+   * claim, and it would double just as quietly.
+   */
+  it('does not double an experiment conversion on a replay', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    docs.set(EXPERIMENT_PATH, experimentDoc('variant-a'))
+
+    const first = await deliver(
+      event('email.clicked', { ...TAGS, experimentId: EXPERIMENT }),
+    )
+    await deliver(event('email.clicked', { ...TAGS, experimentId: EXPERIMENT }), {
+      replayOf: first.messageId,
+    })
+
+    expect(docs.get(`${EXPERIMENT_PATH}/stats/variant-a`)).toEqual({
+      conversions: 1,
+      updatedAt: SERVER_TIME,
+    })
+  })
+
+  /**
+   * The delivery log is deliberately OUTSIDE the guard: it keys by the
+   * provider's message id and merges, so replaying refreshes a row rather
+   * than adding one — and a row whose first write failed should get another
+   * chance. A guard that covered it would make that unrecoverable.
+   */
+  it('still runs the delivery log on a replay', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const payload = {
+      type: 'email.opened',
+      data: { email_id: 'msg_log', to: [RECIPIENT], tags: TAGS },
+    }
+
+    const first = await deliver(payload)
+    await deliver(payload, { replayOf: first.messageId })
+
+    // TWICE for the log — it keys by the provider's message id and merges, so
+    // the second pass refreshes the row rather than adding one, and a row
+    // whose first write failed gets another chance.
+    expect(recordedDeliveryEvents.flat()).toHaveLength(2)
+    // ONCE for each counter, in the same pair of deliveries. `uniqueOpens`
+    // rides the same replay guard as `opens` and is asserted beside it,
+    // because a distinct-reader count that double-counted a replay would be
+    // the same defect one field over.
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 3,
+      clicks: 5,
+      uniqueOpens: 1,
+    })
+  })
+})
+
+/*==========================================
+ * THE PER-RECIPIENT DELIVERY LOG.
+ *
+ * A different audience from everything above. The campaign statistics answer
+ * "how did this send perform"; the log answers "did THIS person get their
+ * invite" — which is a support question, and the events it needs are exactly
+ * the ones the campaign path has no use for and returns `ignored: true` on.
+ *=========================================*/
+describe('the delivery log', () => {
+  it('records a send that carries no campaign at all', async () => {
+    const result = await deliver({
+      type: 'email.sent',
+      data: {
+        email_id: 'msg_sent_1',
+        to: [RECIPIENT],
+        subject: 'Confirm your email address',
+        tags: [{ name: 'context', value: 'email-verification' }],
+      },
+    })
+
+    // `ignored: true` is about the CAMPAIGN stats. The log took it anyway,
+    // which is the whole point — a verification email has no campaign and is
+    // the mail support is most often asked about.
+    expect(result.status).toBe(200)
+    expect(result.body).toEqual({ ignored: true })
+    expect(recordedDeliveryEvents).toHaveLength(1)
+    expect(recordedDeliveryEvents[0]).toEqual([
+      expect.objectContaining({
+        type: 'sent',
+        to: RECIPIENT,
+        subject: 'Confirm your email address',
+        context: 'email-verification',
+        providerMessageId: 'msg_sent_1',
+      }),
+    ])
+  })
+
+  it('records the lifecycle states the campaign path never sees', async () => {
+    for (const type of ['email.delivered', 'email.delivery_delayed', 'email.failed']) {
+      await deliver({
+        type,
+        data: { email_id: 'msg_2', to: [RECIPIENT], subject: 'Receipt' },
+      })
+    }
+
+    expect(recordedDeliveryEvents.flat().map((e: any) => e.type)).toEqual([
+      'delivered',
+      'delayed',
+      'failed',
+    ])
+  })
+
+  it('records an open alongside the campaign stats rather than instead of them', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver({
+      type: 'email.opened',
+      data: { email_id: 'msg_3', to: [RECIPIENT], tags: TAGS },
+    })
+
+    // Both, not either: the campaign counter and the per-person row are
+    // different questions and a regression in one must not look like the
+    // other still working.
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({
+      opens: 3,
+      clicks: 5,
+      uniqueOpens: 1,
+    })
+    expect(recordedDeliveryEvents.flat()).toHaveLength(1)
+  })
+
+  it('records nothing for an event that is not about a message', async () => {
+    await deliver({ type: 'contact.created', data: { id: 'contact_1' } })
+    expect(recordedDeliveryEvents.flat()).toHaveLength(0)
+  })
+
+  it('is never consulted on an unsigned request', async () => {
+    const { res, result } = makeResponse()
+    await emailEventsHandler(
+      {
+        method: 'POST',
+        query: {},
+        body: {},
+        rawBody: JSON.stringify({ type: 'email.sent' }),
+        cookies: {},
+        headers: { 'svix-id': 'x', 'svix-timestamp': '1', 'svix-signature': 'v1,bad' },
+      } as any,
+      res,
+    )
+
+    // The signature check stands in front of the log, so a forged payload
+    // cannot write a row into a person's support history.
+    expect(result.status).toBe(401)
+    expect(recordedDeliveryEvents).toHaveLength(0)
+  })
+})
+
+/*==========================================
+ * THE DENOMINATOR, AND THE COUNTERS THE REPORT DIVIDES.
+ *
+ * Every rate on the campaign report is taken over `delivered` or `sent`, and
+ * `delivered` did not exist: `email.delivered` was answered
+ * `200 {ignored:true}`. These are the writes that produce it, and the
+ * property each of them has to have is that a REPLAY contributes nothing —
+ * a webhook is at-least-once, and a counter that inflates is worse than one
+ * that is absent, because the absent one is visibly absent.
+ *
+ * The idempotency here is NOT the `apiIdempotency` claim. It is `firstOfType`
+ * off the delivery log's own transaction: a second `delivered` for the same
+ * MESSAGE finds the state recorded and reports false. That is why
+ * `mockFirstOfType` is set explicitly in each of these rather than left at
+ * its default — a stub that always said `true` would let a broken counter
+ * pass, and one that always said `false` would let a counter that never fired
+ * pass.
+ *=========================================*/
+
+/** A payload for any delivery event type, with the tags a campaign stamps. */
+const deliveryEvent = (
+  type: string,
+  extra: Record<string, unknown> = {},
+  tags: Record<string, string> = TAGS,
+) => ({
+  type,
+  data: {
+    email_id: `email_${(fixtureMessageCounter += 1)}`,
+    to: [RECIPIENT],
+    tags,
+    ...extra,
+  },
+})
+
+describe('the delivered counter — the denominator every rate needs', () => {
+  it('counts a delivery against the campaign', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.delivered'))
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).delivered).toBe(1)
+  })
+
+  it('does NOT count a second delivery event for the same message', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.delivered'))
+    // The delivery log has already recorded a `delivered` for this message,
+    // so it reports the second one as not-first — which is exactly what a
+    // provider retry or a dashboard replay looks like from here.
+    mockFirstOfType = false
+    await deliver(deliveryEvent('email.delivered'))
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).delivered).toBe(1)
+  })
+
+  it('CONTROL: two deliveries to two DIFFERENT recipients both count', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.delivered'))
+    await deliver(deliveryEvent('email.delivered'))
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).delivered).toBe(2)
+  })
+
+  it('does not re-create a campaign the merchant deleted', async () => {
+    await deliver(deliveryEvent('email.delivered'))
+
+    expect(docs.has(CAMPAIGN_PATH)).toBe(false)
+  })
+
+  it('ignores a delivery that names no campaign', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.delivered', {}, { hostId: HOST }))
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 2, clicks: 5 })
+  })
+
+  it('still records the per-recipient delivery row either way', async () => {
+    await deliver(deliveryEvent('email.delivered', {}, { hostId: HOST }))
+
+    expect(recordedDeliveryEvents.flat()).toHaveLength(1)
+  })
+})
+
+describe('the bounce and complaint counters', () => {
+  it('counts a bounce against the campaign AND still suppresses', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(
+      deliveryEvent('email.bounced', { bounce: { type: 'Permanent' } }),
+    )
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).bounced).toBe(1)
+    expect(
+      docs.get(`hosts/${HOST}/suppressions/${suppressionId(RECIPIENT)}`),
+    ).toMatchObject({ reason: 'bounce' })
+  })
+
+  /*
+   * A TRANSIENT bounce is counted and deliberately not suppressed. The
+   * campaign's bounce rate is a fact about the send — a full mailbox really
+   * did refuse the message — while suppression is a decision about whether to
+   * mail the person again, and those are different questions. Counting only
+   * the suppressing half would under-report a bounce rate on exactly the
+   * campaigns where it matters.
+   */
+  it('counts a transient bounce without suppressing the address', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(
+      deliveryEvent('email.bounced', { bounce: { type: 'Transient' } }),
+    )
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).bounced).toBe(1)
+    expect(
+      docs.has(`hosts/${HOST}/suppressions/${suppressionId(RECIPIENT)}`),
+    ).toBe(false)
+  })
+
+  it('counts a complaint against the campaign', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.complained'))
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).complained).toBe(1)
+  })
+
+  it('does not count the same bounce twice', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(
+      deliveryEvent('email.bounced', { bounce: { type: 'Permanent' } }),
+    )
+    mockFirstOfType = false
+    await deliver(
+      deliveryEvent('email.bounced', { bounce: { type: 'Permanent' } }),
+    )
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).bounced).toBe(1)
+  })
+
+  /*
+   * THE ORDERING THAT MATTERS. A statistic must never be able to cost a
+   * suppression: the suppression is what stops us mailing a dead or hostile
+   * address again, and the counter is a number on a report.
+   */
+  it('suppresses even when the campaign counter fails', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    updateFailure = new Error('firestore is unavailable')
+
+    await deliver(
+      deliveryEvent('email.bounced', { bounce: { type: 'Permanent' } }),
+    )
+
+    expect(
+      docs.get(`hosts/${HOST}/suppressions/${suppressionId(RECIPIENT)}`),
+    ).toMatchObject({ reason: 'bounce' })
+    expect(docs.get('emailSuppressions/' + suppressionId(RECIPIENT))).toBeDefined()
+  })
+})
+
+describe('unique opens and clicks — the numerator a rate can use', () => {
+  it('counts a distinct reader beside the raw event count', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+
+    const stats = docs.get(CAMPAIGN_PATH)?.stats as any
+    expect(stats.opens).toBe(3)
+    expect(stats.uniqueOpens).toBe(1)
+  })
+
+  /*
+   * The two counters diverging is the whole point of having both: a second
+   * open by the SAME reader is another open event and not another reader, and
+   * an open rate built on the event count would exceed 100% on any campaign
+   * whose audience re-reads it.
+   */
+  it('counts a second open by the same reader as an event, not a reader', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+    mockFirstOfType = false
+    await deliver(event('email.opened', TAGS))
+
+    const stats = docs.get(CAMPAIGN_PATH)?.stats as any
+    expect(stats.opens).toBe(4)
+    expect(stats.uniqueOpens).toBe(1)
+  })
+
+  it('does the same for clicks', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.clicked', TAGS))
+    mockFirstOfType = false
+    await deliver(event('email.clicked', TAGS))
+
+    const stats = docs.get(CAMPAIGN_PATH)?.stats as any
+    expect(stats.clicks).toBe(7)
+    expect(stats.uniqueClicks).toBe(1)
+  })
+})
+
+/*==========================================
+ * LINK-LEVEL CLICKS.
+ *
+ * `data.click.link` IS on Resend's payload and has been normalized for a
+ * while; what did not exist was a per-campaign aggregate. These assert the
+ * rollup document the report reads — one document, whatever the campaign's
+ * size, because the alternative is querying every recipient's delivery row.
+ *=========================================*/
+
+const LINKS_PATH = `${CAMPAIGN_PATH}/reports/links`
+
+const clickOn = (link: string | undefined) =>
+  deliveryEvent('email.clicked', link === undefined ? {} : { click: { link } })
+
+const linkRows = () =>
+  Object.values(((docs.get(LINKS_PATH) as any)?.links ?? {}) as Record<
+    string,
+    { url: string; clicks: number }
+  >)
+
+/*==========================================
+ * THE TOUCH REVENUE ATTRIBUTION IS TAKEN OVER.
+ *
+ * The webhook's half of the commerce↔email join: a click, and only a click,
+ * writes down which campaign this person last engaged with, so an order
+ * placed later can find it with one keyed read instead of a scan over every
+ * message ever sent to them.
+ *=========================================*/
+describe('the campaign touch', () => {
+  it('records a click against the campaign and the site that sent it', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(clickOn('https://shop.example/sale'))
+
+    expect(recordedTouches).toEqual([
+      expect.objectContaining({
+        email: RECIPIENT,
+        hostId: HOST,
+        campaignId: CAMPAIGN,
+      }),
+    ])
+  })
+
+  it('does NOT record an open as a touch', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.opened'))
+
+    // Since Mail Privacy Protection an open is substantially a statement
+    // about the recipient's mail client. Crediting money to one would hand a
+    // campaign the orders of people who never read it.
+    expect(recordedTouches).toEqual([])
+  })
+
+  it('does not record a bounce, a complaint or a delivery as a touch', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(deliveryEvent('email.delivered'))
+    await deliver(deliveryEvent('email.bounced'))
+    await deliver(deliveryEvent('email.complained'))
+
+    expect(recordedTouches).toEqual([])
+  })
+
+  it('takes the provider’s instant for the click, not the moment we heard', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    // A payload that is DATED, and dated in the past. Without one the
+    // provider's instant and ours are the same millisecond and the assertion
+    // below cannot tell them apart — which is how a webhook that credits a
+    // click at the time it was PROCESSED passes a test about the time it
+    // HAPPENED. For a click near the edge of the attribution window that is
+    // the difference between inside it and outside it.
+    const clickedAtMs = Date.parse('2026-08-01T12:00:00.000Z')
+    await deliver({
+      ...clickOn('https://shop.example/sale'),
+      created_at: '2026-08-01T12:00:00.000Z',
+    })
+
+    const outcomes = recordedDeliveryEvents.at(-1) as any[]
+    expect(outcomes[0].at).toBe(clickedAtMs)
+    expect((recordedTouches[0] as any).atMs).toBe(clickedAtMs)
+    expect((recordedTouches[0] as any).atMs).toBeLessThan(Date.now())
+  })
+
+  it('records nothing for a click that names no campaign', async () => {
+    // A receipt or a password reset carries no campaign tag. There is nothing
+    // to credit, and a touch naming no campaign would sit in the map blocking
+    // one that does.
+    await deliver(
+      deliveryEvent('email.clicked', { click: { link: 'https://x.example' } }, {}),
+    )
+
+    expect(recordedTouches).toEqual([])
+  })
+})
+
+describe('the per-campaign link rollup', () => {
+  it('counts a click against its destination', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(clickOn('https://shop.example/sale'))
+
+    expect(linkRows()).toEqual([
+      { url: 'https://shop.example/sale', clicks: 1 },
+    ])
+  })
+
+  it('keeps two destinations apart and adds up repeats', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(clickOn('https://shop.example/sale'))
+    await deliver(clickOn('https://shop.example/sale'))
+    await deliver(clickOn('https://shop.example/new'))
+
+    expect(
+      linkRows().sort((a, b) => b.clicks - a.clicks),
+    ).toEqual([
+      { url: 'https://shop.example/sale', clicks: 2 },
+      { url: 'https://shop.example/new', clicks: 1 },
+    ])
+  })
+
+  /*
+   * The normalisation, proven at the write rather than only in the pure
+   * model: a campaign body is merge-tagged per recipient, so a personalised
+   * query would otherwise mint one row per RECIPIENT — an aggregate that is
+   * no longer an aggregate, and a document that grows without bound.
+   */
+  it('folds a per-recipient query string onto one row', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(clickOn('https://shop.example/sale?u=alice@example.com'))
+    await deliver(clickOn('https://shop.example/sale?u=bob@example.com'))
+
+    expect(linkRows()).toEqual([
+      { url: 'https://shop.example/sale', clicks: 2 },
+    ])
+  })
+
+  it('records a click with no destination as unattributed, not as a row', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(clickOn(undefined))
+
+    expect(linkRows()).toEqual([])
+    expect((docs.get(LINKS_PATH) as any).unattributedClicks).toBe(1)
+  })
+
+  /*
+   * Past the cap the click is COUNTED, not dropped. The table's own total
+   * plus the overflow reconciles with `stats.clicks`, so a merchant reading
+   * both can see where the difference went — a silently dropped click leaves
+   * two numbers that disagree with no explanation.
+   */
+  it('counts a click past the cap as overflow rather than dropping it', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    for (let index = 0; index < CAMPAIGN_LINK_ROLLUP_MAX; index += 1) {
+      await deliver(clickOn(`https://shop.example/p/${index}`))
+    }
+
+    await deliver(clickOn('https://shop.example/one-too-many'))
+
+    expect(linkRows()).toHaveLength(CAMPAIGN_LINK_ROLLUP_MAX)
+    expect((docs.get(LINKS_PATH) as any).overflowClicks).toBe(1)
+  })
+
+  it('still counts a repeat of a link already in the map once the cap is full', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    for (let index = 0; index < CAMPAIGN_LINK_ROLLUP_MAX; index += 1) {
+      await deliver(clickOn(`https://shop.example/p/${index}`))
+    }
+
+    await deliver(clickOn('https://shop.example/p/0'))
+
+    expect(
+      linkRows().find((row) => row.url === 'https://shop.example/p/0'),
+    ).toEqual({ url: 'https://shop.example/p/0', clicks: 2 })
+    expect((docs.get(LINKS_PATH) as any).overflowClicks).toBeUndefined()
+  })
+
+  it('does not count a replayed click twice', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const payload = clickOn('https://shop.example/sale')
+
+    const first = await deliver(payload)
+    await deliver(payload, { replayOf: first.messageId })
+
+    expect(linkRows()).toEqual([
+      { url: 'https://shop.example/sale', clicks: 1 },
+    ])
+  })
+
+  it('writes no rollup for a campaign the merchant deleted', async () => {
+    await deliver(clickOn('https://shop.example/sale'))
+
+    expect(docs.has(LINKS_PATH)).toBe(false)
+  })
+
+  it('does not build a rollup out of an open', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+
+    expect(docs.has(LINKS_PATH)).toBe(false)
+  })
+})
+
+/*==========================================
+ * THE PER-PERSON ENGAGEMENT ROLLUP.
+ *
+ * What only this file can prove is WHERE the handler asks for it and WHAT it
+ * hands over. The rollup's own arithmetic — that it moves forward only, and
+ * that a `firstOfType: false` outcome writes nothing — is asserted against a
+ * Firestore double in `tenant-data-admin`.
+ *=========================================*/
+
+describe('the person rollup', () => {
+  /**
+   * ⚠️ THE PROPERTY THAT MAKES A REPLAY FREE.
+   *
+   * The handler passes the delivery log's OWN verdict through untouched. A
+   * handler that re-derived `firstOfType`, or that passed a hard-coded
+   * `true`, would advance a person's stamp on every redelivered event — and
+   * for a counted rollup it would inflate one.
+   */
+  it('is handed the delivery log’s verdict rather than a re-derived one', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.clicked', TAGS))
+
+    expect(recordedEngagement).toHaveLength(1)
+    expect(recordedEngagement[0]).toEqual([
+      expect.objectContaining({
+        firstOfType: true,
+        to: RECIPIENT,
+        type: 'clicked',
+      }),
+    ])
+  })
+
+  it('passes a repeat event through as not-first, not as first', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    mockFirstOfType = false
+
+    await deliver(event('email.opened', TAGS))
+
+    expect(recordedEngagement[0]).toEqual([
+      expect.objectContaining({ firstOfType: false }),
+    ])
+  })
+
+  /**
+   * ABOVE THE CAMPAIGN GATES.
+   *
+   * Engagement is a fact about the PERSON, and the message they engaged with
+   * does not have to be a campaign for it to be one — somebody who clicks a
+   * receipt is reading our mail. A rollup below the `hostId`/`campaignId`
+   * gate would record engagement for campaign mail only, and then let a
+   * sunset refuse people on the strength of a fraction of the evidence.
+   */
+  it('records an open on mail that carries no campaign tag at all', async () => {
+    const result = await deliver(event('email.opened', {}))
+
+    expect(result.body).toMatchObject({ ignored: true })
+    expect(recordedEngagement[0]).toEqual([
+      expect.objectContaining({ to: RECIPIENT, type: 'opened' }),
+    ])
+  })
+
+  /*
+   * And above the type gate: a `sent` or `delivered` event reaches the rollup
+   * too, which is what lets the rollup rather than the handler decide which
+   * event types count as engagement. One list of engagement types, in the
+   * module that owns the store.
+   */
+  it('is asked about every event type, and decides nothing itself', async () => {
+    await deliver({ type: 'email.sent', data: { email_id: 'e1', to: [RECIPIENT] } })
+
+    expect(recordedEngagement).toHaveLength(1)
+  })
+
+  it('cannot cost the campaign counters anything when it fails', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+    const rollup = jest.requireMock(
+      '@aglyn/tenant-data-admin/server/email-delivery-log',
+    ).recordPersonEngagement as jest.Mock
+    rollup.mockRejectedValueOnce(new Error('rollup is down'))
+
+    const result = await deliver(event('email.opened', TAGS))
+
+    expect(result.body).toMatchObject({ ok: true })
+    expect((docs.get(CAMPAIGN_PATH) as any).stats.opens).toBe(3)
   })
 })

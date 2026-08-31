@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Email Campaigns
-description: Send email to audiences built from your contacts, with tiered send caps and unsubscribe handling.
+description: Campaigns to audiences built from your contacts. Campaign email starts at Pro and needs a sending domain of the site's own; receipts and account email send on every plan.
 ---
 
 # Email Campaigns
@@ -19,36 +19,350 @@ flowchart LR
 ```
 
 :::info Plan availability
-**Paid**, with **tiered send caps** — how many emails you can send per period depends on
-your plan.
+**Campaign email starts at Pro.** Free and Starter include a monthly campaign allowance
+of zero, so a campaign of any size is refused before it sends. From Pro up the allowance
+rises with the plan.
+
+**Account email is not part of that.** Order receipts, password resets, booking
+confirmations and replies to form submissions send on **every** plan, Free included, and
+are never refused by a campaign cap. See [sending domains](#sending-domains) for why the
+two are treated differently.
 :::
 
 ![The email campaigns page with sent and scheduled sends](/img/email-campaigns/campaigns-tab.png)
 
 ## Send a campaign
 
-1. Build an **audience** — leads, site members, [segments](../../content-and-data/contacts/overview.md#segments),
-   or an **email list**.
-2. Compose the campaign from the **Marketing** page.
+1. **Create a campaign** on **Marketing → Campaigns** — a name, the dates it runs
+   between, and the lists it is aimed at.
+2. Open it and **write an email** inside it. Pick the audience for that email — leads,
+   site members, [segments](../../content-and-data/contacts/overview.md#segments), or an
+   email list.
 3. Send — subject to your plan's **send cap**.
+
+A campaign lives under **Marketing** because that is what it is: a window of dates, a
+set of lists, a topic and the revenue it earned, which happens to reach people by
+email. The individual **messages** it sent, the **templates** they are built from, the
+**audiences**, the **topics**, the **sending domains** and the **suppression list** are
+all on the **Emails** page, and each message links back to the campaign it belongs to.
+
+### A campaign holds many emails {#campaigns-group-emails}
+
+A campaign is a **container**, not a single message. It carries a name, a start and end
+date, and the lists it is aimed at; the emails you send inside it are its contents, and
+the campaign's page adds their figures up.
+
+- **The campaigns list** shows one row per campaign: its window, its lists, how many
+  emails it has sent, and the totals across them.
+- **Opening a campaign** shows the lists it is aimed at, every email inside it, the
+  delivery and engagement figures summed across those emails, and a composer for writing
+  the next one.
+- **Each email keeps its own report**, reached from the campaign page. Nothing about an
+  individual send's report or its link changed.
+
+**Campaigns you sent before this existed are still there**, each listed as a campaign of
+one and marked **Single send**. Their reports open at the same address they always did,
+and the unsubscribe links in mail already delivered are untouched.
+
+### What belongs to a campaign {#what-belongs-to-a-campaign}
+
+A push is rarely only its mail. A campaign can also hold the **landing pages**, the
+**forms** those pages place, and the **contacts** you have filed under it — so the
+campaign's page shows the whole coordinated push rather than a folder of emails.
+
+You set it from the record itself, never from the campaign:
+
+- **A screen** — open it from Screens and pick its campaigns on the **Campaigns** card.
+- **A form** — open it from Forms and pick its campaigns under **Details**.
+- **A contact** — open the contact from Contacts and pick its campaigns in the profile
+  panel.
+
+Each of them can be in **more than one campaign**, because the same landing page and the
+same signup form are usually re-run for the next push. Clearing every campaign takes the
+record out of all of them; nothing else about it changes.
+
+The campaign's own page then lists the screens and forms assigned to it, so you can see
+the association from either end.
+
+**This is grouping, not crediting.** Filing a page under a campaign does not decide who
+that campaign mails, and it does not credit a visit, a signup or a sale to it. Those
+figures come from the links a campaign's emails actually carried — see
+[Revenue from a campaign](#revenue-from-a-campaign) — and they read the same whatever is
+assigned here. A contact's campaigns are likewise a label on your CRM record: they never
+add anybody to a send.
+
+**Deleting a campaign** clears it off everything assigned to it. The screens, forms and
+contacts stay exactly where they are, minus that one campaign; nothing is deleted with
+the campaign except the campaign.
+
+### Who the email comes from {#who-the-email-comes-from}
+
+These fields sit under the audience picker. The first picks from a list the site was set
+up with; the rest are yours to change for this one email:
+
+- **From** — which of the site's **senders** this email goes out as. A sender is a
+  mailbox on the site's sending domain, with a display name and a reply address stored
+  beside it. The picker appears when the site holds more than one; with a single sender
+  there is nothing to choose, so the composer names it instead of asking. **Add a
+  sender…** at the bottom of the list opens the same drawer the Sending page uses. See
+  [the addresses this site may send as](#senders).
+- **From address** — which verified domain this email leaves on. It is offered only when
+  your site has more than one verified domain to choose between. See
+  [sending domains](#sending-domains) below.
+- **From name** — the display name in front of your sending address. Picking a sender
+  fills this from that sender's own name, and editing it here changes this email only —
+  the sender itself is untouched, and the helper text under the field says which of the
+  two you are looking at. The address itself is always a verified sending identity; a from
+  name changes what a recipient reads, never which domain the mail leaves on.
+- **Reply-to** — where replies land, when that is not the sending address. Picking a
+  sender fills this too, and editing it is per email in the same way.
+- **Preheader** — the preview line an inbox shows after the subject.
+
+Under the picker the composer states the result in one line — the name, the address the
+email will leave on, and the reply address when one is set — so you are never assembling
+the `From:` line in your head.
+
+Left empty, the from name falls back to your workspace's branding and no reply-to or
+preheader is set.
+
+**There is no box to type a sending address into**, and that is deliberate. A `From:`
+address is a real mailbox: bounces come back to it, and mail clients that ignore
+`Reply-To:` answer to it. An address invented for one campaign is an address nobody
+serves. So addresses are set up once, on **Emails → Sending**, and a campaign picks among
+them.
+
+### Which domain your mail leaves on {#sending-domains}
+
+**Emails → Sending** is where you see what this site sends as, and where a workspace
+proves it owns a domain of its own.
+
+#### Account email sends on every plan {#account-email-always-sends}
+
+Order receipts, password resets, booking confirmations and replies to form submissions
+leave on every plan, Free included, with nothing to set up first. A site that has no
+domain of its own sends them from a shared Aglyn address — `notifications@shared1.mail.aglyn.app`
+and three siblings. Which of the four a site uses is fixed, so the address recipients see
+is the same one every time.
+
+That works, and it means the delivery reputation on that address is **pooled** with the
+other sites using it rather than being yours.
+
+#### Marketing email needs a domain of this site's own {#marketing-needs-a-domain}
+
+Campaigns, members posts, cart reminders and back-in-stock alerts are not sent from the
+shared address. It carries every other site's receipts and password resets — mail with no
+alternative and no way to opt out of the consequence — and one campaign's complaint rate
+there would be charged against all of it.
+
+That is a deliverability rule rather than a billing one. It lines up with the plans
+because a site entitled to send campaigns is a site entitled to a domain of its own — to
+**ask** for one, at least, which is not quite the same thing and is the subject of
+[a domain we set up is asked for, not included](#a-domain-we-set-up-is-a-request).
+
+#### The two ways to get a domain of this site's own {#two-ways-to-get-a-domain}
+
+A site's mail can leave from three places, and only the first is guaranteed. **The shared
+address** above needs nothing, is there on every plan, and carries account email at any
+tier — it is where a site sits until one of the two below is in place, and it is where it
+goes back to if one is removed. The two below both need **Pro** or above, and what
+separates them is not the price:
+
+|  | A domain we set up | A domain you own |
+| --- | --- | --- |
+| **Looks like** | `hello@yoursite.mail.aglyn.app` | `hello@yoursite.com` |
+| **How you get it** | Ask for it on the Sending page. A request, which we may not be able to fill straight away | Add it yourself, then publish three records |
+| **Needs** | Pro and above, **and room in our provider allowance** | Pro and above |
+| **DNS work** | None — we publish the records | Three records, published in your zone |
+| **Reputation** | This site's alone | Entirely yours |
+| **Recipients see** | An Aglyn address | Your own name |
+
+**A domain you already own is the better of the two.** Your brand in the `From:` line,
+and a sending history that belongs to you rather than to a name inside `aglyn.app`. The
+trade is the DNS work: the records go in your zone, and we never write to it. It is also
+the one we can always say yes to — see the next section for why that is not true of the
+other.
+
+**The domain we set up** costs you no DNS work at all. Its name is **pinned** the moment
+it is claimed, taken from the site's address as it reads then, and renaming the site
+afterwards does not move it. That is deliberate: a sending domain's value is its age with
+the mailbox providers, and a new name starts at zero. Ask support if you want the sending
+name changed anyway.
+
+**Nothing stops while a domain is being set up, and the two kinds differ here.** A domain
+*we* set up is our work, so while it is still coming up your account email carries on
+going out on the shared address as before. A domain *you* own is your instruction about
+what recipients will see, so until its records verify this site does not send at all
+rather than quietly sending as something else. Campaigns wait for either to finish.
+
+The Sending card offers both:
+
+- **Add a domain you already own** — `news.yourshop.com`, or `yourshop.com` itself. Your
+  recipients see your name, and the reputation you build belongs to you wherever you go
+  next. It needs three DNS records published at your registrar.
+- **Ask us to set this site up with one** — press **Ask for yoursite.mail.aglyn.app** and
+  there is nothing for you to publish. It unblocks campaigns and gives this site a sending
+  reputation of its own, separate from the shared pool. The trade is the name: recipients
+  see an Aglyn address rather than yours.
+
+Pick the first if you can publish DNS records. Pick the second if you cannot — an agency
+client whose domain somebody else administers, or a registrar you do not have access to.
+Neither is issued automatically, and a site with neither keeps sending account email on
+the shared address in the meantime.
+
+#### A domain we set up is asked for, not included {#a-domain-we-set-up-is-a-request}
+
+This is the part worth reading before you plan around it.
+
+**Nothing is provisioned automatically.** Creating a site does not claim a sending domain,
+and neither does upgrading. A site gets one only when somebody presses the button on
+**Emails → Sending**. If you upgraded and went looking for a domain you expected to find
+waiting, that is why it is not there: it is one press away, and it was never going to
+arrive on its own.
+
+**Your plan admits the request. It does not guarantee the domain.** Every domain we set up
+takes a slot in the allowance our mail provider gives us for the whole platform, three
+records in our own DNS, and a permanent place in the checks we re-run against it. That
+allowance is bought rather than conjured, so a request made while we are at the ceiling is
+held rather than filled, and the domain reads **Waiting for room** on the Sending page
+until we have some. We would rather tell you that than show you a set of records that is
+not coming.
+
+**Being held is not stopped mail.** A site waiting on a domain keeps sending its receipts,
+password resets and booking confirmations on the shared address exactly as before, and
+nothing you have set up is lost. What is waiting is the reputation of its own — and, with
+it, campaigns.
+
+**If you would rather not wait, add a domain you own.** A domain you publish records for
+is never held this way, and it gives you the better `From:` line as well. It is the option
+this page recommends first for both reasons.
+
+You will not find "a dedicated sending domain" ticked on the plan comparison, and that is
+on purpose: a tick in a checklist reads as an inclusion, and this is a request we answer
+rather than something your plan hands you.
+
+#### The states a domain can be in {#domain-states}
+
+Add a domain and you are given the exact DNS records to publish — an authorization
+record, a signing key and a bounce-routing record. Publish them wherever your DNS is
+hosted, then press **Check DNS**. A domain has six things it can be telling you:
+
+| State | What it means | What to do |
+| --- | --- | --- |
+| **Waiting on a signing key** | The domain is claimed, but no key has been issued for it yet, so there is nothing to publish. | Nothing at your registrar will help. Press **Request records**. |
+| **Waiting for room** | We are at our mail provider's limit on sending domains, so this one — which is a domain we set up, inside our own namespace — has not been created yet. | Nothing, and nothing at your registrar is involved. This site keeps sending account email on the shared address. A domain you own instead of this one is never held this way. |
+| **Key request failed** | The mail provider refused to issue a key. | Press **Request records** again; it creates no second domain. If it persists, this is ours to fix. |
+| **Publish the records** | The records are issued and waiting for you. | Add them at your DNS host, then **Check DNS**. |
+| **Verified** | Every required record is live and we can see it. | Nothing — this domain can send. |
+| **Records not found** | We looked, and one or more records are not published. | Compare them against what is shown and check again. |
+
+**"DNS unreachable" is none of the six.** It means our lookup did not complete — a
+resolver outage, a timeout — so nothing changed, including the domain's state. Your zone
+is not the problem and there is nothing to edit. Try again in a few minutes.
+
+A domain is proved once for the whole workspace; which site sends as it is a separate
+choice, made with **Send this site's email as this domain** on the domain's own page.
+Removing a domain **you own** does not move a site sending as it onto any other address.
+That site stops sending altogether, receipts included, until you choose another identity
+— deliberately, because quietly changing the address your recipients see is not a safe
+way to fail. Removing the domain **we set up** is the gentler case: receipts go back to
+the shared address and only marketing stops.
+
+Adding a domain and choosing what a site sends as need the organization admin role.
+
+#### The addresses this site may send as {#senders}
+
+Under the domain, the same page lists this site's **senders**. Each one is a mailbox on
+the site's sending domain with a display name and a reply address stored beside it, and
+every email you compose goes out as one of them.
+
+| Column | What it is |
+| --- | --- |
+| **Sends as** | The part before the `@`. The domain after it is the site's verified sending domain and is not editable here — the `From:` domain has to be exactly the domain whose key signed the message. |
+| **Name** | What a recipient reads in front of the address. A person's name, or your brand. |
+| **Replies to** | Where a reply goes. This one may be any mailbox at all, including a personal address on a domain you have never verified. |
+
+One sender is the **default** — what an email that names no other goes out as. **Make
+default** on any row moves it. The default cannot be removed until another one has taken
+over, because every site sends as something and picking the replacement for you would
+decide what your mail looks like from an ordering you never saw. A site can hold up to 25.
+
+**Send as a person**, at the top of the add drawer, fills all three fields from somebody
+who works on this site — anyone on the workspace team who can reach it, and anyone
+invited to the site directly. It proposes their mailbox name for the address, their
+display name for the name, and their real address as the **reply** target. Their own
+address cannot be the sending address: mail we sign cannot claim to come from their mail
+provider's domain, and a receiving server refuses that rather than delivering it.
+
+**A site on the shared address has exactly one sender.** The mailbox on a shared address
+is where every site using it gets its bounces back, so it is not one site's to rename, and
+a second sender that could not differ in the mailbox would be the same address offered
+twice. The **name** and the **reply address** are not restricted this way — both are
+honored on the shared address exactly as they are on a domain of your own. A mailbox you
+set before this site has its own domain is kept and takes effect the day it does, and the
+Sending page says as much rather than showing you a setting that is quietly doing nothing.
+
+Adding, editing and removing senders needs the organization admin role. Picking one for a
+particular email does not — anyone who can write a campaign can choose among them.
+
+### Send a test {#send-a-test}
+
+**Send test** proofs one copy of the email you are writing. It asks three things, and
+only one of them decides who receives mail:
+
+- **Fill the merge tags with** — a contact, lead or site user whose stored data the
+  merge tags resolve against, so you see real personalization instead of the
+  `{{firstName|there}}` fallbacks. **Choosing somebody here sends them nothing.**
+- **Deliver it to** — the only address the test goes to. You can pick yourself or
+  anyone with an account on the workspace. You cannot send a test to a contact: a test
+  is exempt from the consent rules a campaign obeys, and that exemption is not something
+  to spend on somebody who never agreed to hear from you.
+- **From address** — the identity it leaves on, taken from the composer.
+
+A test writes nothing. No recipient count, no report figures, and nobody is recorded as
+having received it, so proofing an email six times does not make its report say seven.
+It is not a way around the other rules either: an address that has unsubscribed, bounced
+or been marked as spam is still refused, and so is one with a recorded marketing opt-out.
+
+### Preview the email {#preview-the-email}
+
+**Preview email** renders the message as it will be mailed — the same renderer, the same
+merge-tag resolution, and the same HTML part that reaches the inbox — personalized for
+your own account so you can see what a merge tag actually resolves to. It re-renders as
+you type and it resolves no audience, so previewing costs nothing against your caps and
+sends nothing to anybody.
+
+**Send test** is the other half: it delivers one real message to an inbox you can open,
+which is the way to check how a mail client renders it. See [Send a test](#send-a-test).
 
 ### Your monthly send cap {#monthly-send-cap}
 
-Every plan includes a number of **campaign** emails per calendar month. The count resets
-on the 1st; it does not roll over.
+From **Pro** up, a plan includes a number of **campaign** emails per calendar month. The
+count resets on the 1st; it does not roll over.
+
+**On Free and Starter that number is zero**, which is a refusal rather than a formality:
+campaign email starts at Pro, so a campaign of any size is refused before a message
+leaves. Everything else on this page — audiences, topics, suppressions, the preference
+page — still works, and a Starter site builds the list it will mail after it upgrades.
 
 **Only campaigns count against it.** Transactional mail — order confirmations, booking
 reminders, password resets, teammate invites, workflow notifications — is never refused
-by this cap on any plan. A busy month of orders cannot use up your campaign allowance,
-and reaching the cap never stops a receipt from reaching a buyer.
+by this cap on any plan, Free and Starter included. A busy month of orders cannot use up
+your campaign allowance, and reaching the cap never stops a receipt from reaching a
+buyer.
 
 You can see where you stand in two places, without having to be refused first:
 
 - **In the composer**, under the recipient count: `340/500 campaign emails this month`.
-- **On the Billing page**, as the **Campaign emails (this month)** meter, per site.
+- **On the Billing page**, as the **Campaign emails (this month)** meter.
 
-The cap is counted **per site**, so each site in your organization has its own allowance.
-One recipient is one email: a campaign to 200 people spends 200.
+The cap is counted **per workspace**, not per site — every site in your organization draws
+on one shared monthly allowance. One recipient is one email: a campaign to 200 people
+spends 200, whichever site sent it.
+
+Campaigns are also **paced**: a workspace can send a set number per hour, so a very large
+send is spread out rather than refused. The Billing page shows that hourly ceiling beside
+the monthly one. Transactional mail — receipts, invites, password resets — is not paced by
+it and is not counted against the monthly cap.
 
 When a send would take you past the cap, the composer says so while you are still writing
 rather than after you press Send. [Upgrade your plan](../../workspace-and-billing/billing-and-plans/overview.md)
@@ -65,28 +379,72 @@ with a pipe for recipients without a stored name: `Hi {{firstName|there}}!`.
 As soon as you pick an audience the composer counts it, and shows the count under the
 audience picker:
 
-> Recipients 1,240 · 12 unsubscribed
+> Recipients 1,240 · 12 unsubscribed or suppressed
 
 The number is not an estimate. It is produced by running the real send path with nothing
-written — the same audience resolution, the same de-duplication, the same suppression list,
-and the same monthly cap — and stopping immediately before the first write. Nothing is
-created, no counter moves, and no campaign appears in your history.
+written — the same audience resolution, the same de-duplication, the same suppression
+lists, and the same monthly cap — and stopping immediately before the first write. Nothing
+is created, no counter moves, and no campaign appears in your history.
 
 That means the count already reflects things you would otherwise only discover afterwards:
 
 - **Duplicates are removed.** One person on two lists is one recipient.
-- **Unsubscribes are removed**, and reported separately as `· 12 unsubscribed`, so a
-  smaller-than-expected number has a visible reason.
-- **A single send is capped at 500 recipients.** A larger audience is counted at the cap.
-- **A refusal appears here rather than at send time.** An empty audience, an audience where
-  everyone has unsubscribed, or a month already at your plan's send cap all say so while
-  you are still writing.
+- **People with no marketing consent on record are removed**, before anything else — see
+  [Who a campaign is allowed to reach](#who-a-campaign-is-allowed-to-reach). The second
+  caption line breaks the audience down by basis.
+- **Unsubscribed and undeliverable addresses are removed**, and reported separately as
+  `· 12 unsubscribed or suppressed`, so a smaller-than-expected number has a visible
+  reason.
+- **A single send is capped at 500 recipients**, and when your audience is larger the
+  readout says so: `Recipients 500 of 3,200 in this audience`. The send takes the first
+  500, in a fixed order, so sending the same campaign again reaches the same people.
+- **A very large audience is reported as a floor**, with a `+`: `500 of 5,000+ in this
+  audience` means there are at least 5,000 and the count stopped there.
+- **A refusal appears here rather than at send time.** An empty audience, an audience
+  nobody in which has a consent record, an audience where everyone is unsubscribed or
+  suppressed, or a month already at your plan's send cap all say so while you are still
+  writing.
 
 While it works it reads `Counting recipients…`. It re-counts whenever you change the
-audience.
+audience. It does **not** re-count while you write: counting resolves your whole audience,
+and nothing about the subject or the body can change how many people are in it.
+
+**The confirmation dialog states the number.** Pressing Send asks you to confirm a send to
+`342 list subscribers`, or `500 of 3,200 in this audience` when the audience is larger
+than one send carries, and names what is not counted — the people withheld for having no
+consent on record, and the ones already unsubscribed or suppressed. If the count could not
+be read, the dialog says so rather than implying the send reaches everyone.
 
 Counting an audience needs the same permission as sending to it — the size of someone
 else's site's audience is not public information.
+
+### Who a campaign is allowed to reach
+
+A marketing campaign goes only to people whose consent you have a record of, or who were
+already in your audience before consent was required. The composer's second caption line
+tells you which is which:
+
+```
+1,240 with a recorded consent basis · 310 grandfathered (captured before consent was
+required) · 44 withheld — no consent on record
+```
+
+- **Recorded consent basis** — this person ticked an opt-in box on a form, a sign-up, or a
+  newsletter subscription, and the date they did it is stored on their record.
+- **Grandfathered** — this person was captured before the opt-in checkbox existed, so
+  there is no record either way. They still receive campaigns. Nothing you already had was
+  taken away.
+- **Withheld** — this person is not mailed. Either they explicitly declined, or they were
+  captured after consent became required and no opt-in was recorded for them.
+
+Consent is never assumed from an action. Submitting a form, placing an order, booking, or
+creating an account are not opt-ins on their own — a person is only counted as consenting
+when they ticked a box that says so. To grow the consented number, add a marketing opt-in
+checkbox to your forms and sign-up: a form field named `marketingConsent`, `emailOptIn`,
+`newsletterOptIn` or `subscribe` is recorded as consent when it is ticked.
+
+Withheld recipients cost you nothing — they are removed before your monthly send
+allowance is claimed.
 
 ### Schedule a send
 
@@ -110,9 +468,138 @@ The statuses a scheduled campaign moves through are **Scheduled** → sending �
 
 ## Email lists
 
-**Lists** are static audiences shared across your organization's sites. Create them on
-the Marketing page, then grow them with the **"Enroll in a list"** automation step (e.g.
-on form completion) or popup email capture. Target any list from the campaign composer.
+**Lists** are audiences shared across your organization's sites. Create them on the
+Marketing page and target any of them from the campaign composer. A list is one of two
+kinds, chosen when you create it.
+
+### Manual lists
+
+A manual list holds the people you put in it. Grow it with the **"Enroll in a list"**
+automation step (e.g. on form completion), popup email capture, the **Add to a list**
+card in the Inbox, or by hand from the list itself. Members stay until they are
+removed.
+
+### See and manage who is on a list {#list-members}
+
+Press **Members** on any list row to open it. You get the membership a page at a time —
+address, name, when they joined, how they got there, and what their consent record
+says — plus the controls to change it. Press **Close** to collapse it again; nothing is
+read until you open a list.
+
+**How** tells a rule match apart from somebody who was added. A person a rule enrolled
+leaves when they stop matching; a person who was added stays.
+
+**Consent** is the basis the membership carries, read for the site you are on. The
+kinds are not the same fact and the column keeps them apart:
+
+- **Opted in** — this person ticked a box, on the date shown. Their own decision.
+- **Attested by your team** — somebody on your team stated they had this person's
+  permission. That statement is the basis, and it is recorded against their account
+  with the date.
+- **Opted out** — a recorded refusal. Nothing makes this person mailable again except
+  their own opt-in.
+- **Opted in to another site** — they agreed to hear from a different site in your
+  account, and permission given to one brand is not permission for another. Ask them
+  yourself, or attest that you have it.
+- **Opted in — no site recorded** — a grant from before consent named the site it was
+  given to. It names no brand, so it grants to none.
+- **No basis on record** — nothing either way. Not a refusal; see
+  [who a campaign is allowed to reach](#who-a-campaign-is-allowed-to-reach).
+
+To record a basis for somebody who has none, put their address in the add box and
+state that you have their permission. It merges onto the membership already there —
+they are not added twice, and the date they joined is kept.
+
+**Rename** the list from the same panel. The name is what the campaign composer's
+audience picker shows, so renaming it is safe at any time — the list, its members and
+any campaign already sent are untouched.
+
+### Add someone by hand {#add-to-a-list}
+
+Type an address (or paste a whole column of them) and press **Check**. Every address is
+checked against that person's consent record and both suppression lists before anything
+is written, and you are told what would happen to each one:
+
+- Somebody with a **stored opt-in** is added carrying that opt-in — including the
+  original date they gave it, not today's.
+- Somebody with **no opt-in on record** can only be added if you state that you have
+  their permission. That statement is recorded against your account, with the date.
+  Adding them does not create an opt-in for them, and nothing else here does either.
+- Somebody who **declined**, or whose address is **suppressed**, is not added, and
+  there is no override. This is deliberate: if asserting permission could reach past a
+  recorded refusal, recording one would mean nothing.
+
+Pasting many addresses works the same way. You see the counts — how many already have
+an opt-in, how many need your say-so, how many cannot be added at all — before you
+confirm, and one statement covers the batch. Addresses that are not valid are listed
+back to you rather than quietly dropped. Up to 100 at a time.
+
+### Import a list you already have {#import-a-list}
+
+**Import**, on an audience's own page, takes a CSV or a pasted column of addresses.
+Every one of them goes through the checks above — the same ones, not similar ones — so
+nothing an import brings in could not have been added by hand.
+
+Three steps, and the middle one is the point:
+
+1. **Choose the file.** A CSV with an email column, or one address per line. Columns
+   named `Name`, `Opt-in source` and `Opt-in date` are read when they are there.
+2. **Read what is in it.** How many addresses, how many repeats were collapsed, how many
+   lines are not addresses, and what the consent check says about a sample of them. Two
+   warnings appear here when they apply: addresses at **shared mailboxes** (`sales@`,
+   `info@`) and **column names that suggest a bought or appended list**. Neither refuses
+   anything — they are shown before you state you have permission, because that
+   statement is the part with weight.
+3. **Import.** Large files are added in batches, with a progress bar. You can close the
+   drawer: the import picks up where it stopped when you come back.
+
+What is recorded: an address with a stored opt-in keeps that opt-in and its original
+date; an address with none is added on your statement, which is stored against your
+account together with whatever the file declared about where the address came from. It
+is never recorded as though the person opted in themselves. Addresses that unsubscribed,
+bounced or declined are refused, and no file can override that.
+
+Up to 50,000 addresses per file. A larger list is split and imported in pieces —
+nothing already on the audience is affected either way.
+
+:::note
+Importing does not send a confirmation email, even on a site that
+[requires one](#double-opt-in) for signups. An import is your statement that you already
+have these people's permission.
+:::
+
+### Removing someone is not an unsubscribe {#remove-from-a-list}
+
+**Remove** takes a person off that one list. It is not a suppression: it does not stop
+any other list reaching them, and it does not record that they asked you to stop. If
+somebody has asked to stop hearing from you, [suppress the address](#suppressions)
+instead — that is the record that holds across every list and every campaign.
+
+### Lists built from a rule
+
+A **dynamic** list holds everyone matching a rule, re-checked about every fifteen
+minutes. Pick **From a rule** when you create the list, then say who it draws from:
+
+- **People from** — contacts, leads, site members, form submissions, or any combination.
+- **Tagged** — one or more contact tags, comma separated. Contacts only.
+- **Submitted form** — one or more form names, comma separated. Form submissions only.
+- **Created after** — only people whose record was created on or after that date.
+
+So "everyone who submitted our Contact us form", "contacts tagged `vip`", and "site
+members who joined since March" are each one rule.
+
+The list row shows when the rule last ran. If it says **not yet evaluated**, the next
+sweep has not reached it — a list created a moment ago is normal; hours is not.
+
+Three things worth knowing:
+
+- **People leave when they stop matching**, but only the ones the rule enrolled. Anyone
+  you added by hand stays until you remove them.
+- **A rule is never trimmed to fit a limit.** If it matches more people than a single
+  send allows, every one of them is still on the list and it is the *send* that is
+  refused, telling you the number it found.
+- **Matching a rule is not consent.** A dynamic list decides who is in the audience;
+  [the consent rules](#who-a-campaign-is-allowed-to-reach) still decide who is mailed.
 
 ## Experiments
 
@@ -143,15 +630,215 @@ With the Resend webhook configured, campaign history shows **opens and clicks** 
 campaign, and clicks on A/B sends count as that variant's **conversions** — so the
 experiment results table fills in by itself.
 
+### The campaign report
+
+**Report**, beside any campaign that has been sent, opens the full picture for
+that one send.
+
+It leads with what the campaign did — what it caused, what it earned, and where
+it sent people — and the mail's own figures come under that: delivery,
+engagement, rates and the audience it was taken from. A campaign holding
+several emails is laid out the same way, with the list of its emails last, so
+the two read alike.
+
+Every rate names the population it is taken over, right next to the number,
+because the same label means different things in different tools:
+
+| Rate | Taken over |
+| --- | --- |
+| **Delivery rate** | Sent — what the provider accepted |
+| **Open rate** | Delivered, and counting *readers*, not opens |
+| **Click rate** | Delivered |
+| **Click-to-open rate** | The readers who opened — a different question from the click rate, and usually three or four times larger |
+| **Bounce rate** | Sent |
+| **Complaint rate** | Delivered |
+| **Unsubscribe rate** | Delivered |
+
+Two things the report will refuse to show you, and says so on screen:
+
+- **A rate with no denominator.** Delivery events are recorded by the webhook,
+  so a campaign sent before it was connected has no delivered count. The
+  report leaves those rates blank rather than dividing by *sent*, which would
+  read higher than the same campaign measured anywhere else.
+- **A click rate for a send whose links were not trackable.** Click tracking
+  rewrites links in the HTML part of a message, so a send that carried none
+  reports zero clicks whatever recipients did. The click count is still shown;
+  no rate is computed from it.
+
+**Opens** and **readers who opened** are both shown and are different numbers:
+one person opening an email four times is four opens and one reader. Rates use
+the reader count.
+
+### Which links were clicked
+
+The report breaks clicks down by destination. Links are counted by address and
+path — the query string is dropped — so two links to the same page that differ
+only in their tracking parameters count as one row.
+
+### Revenue from a campaign {#revenue-from-a-campaign}
+
+If your site sells something, the report also shows what the campaign earned.
+
+Because your store and your email live in the same product, this is a lookup
+rather than an estimate — there is no tracking script to install, no store to
+connect, and nothing is guessed from a cookie.
+
+**The rule, in one sentence:** an order is credited to the last campaign whose
+link the buyer clicked, if they clicked it within **7 days** before ordering.
+
+Four things follow from that rule, and the report says all four on screen:
+
+- **Clicks only.** An open is not treated as evidence that anybody read the
+  email — Apple's Mail Privacy Protection opens mail on the recipient's behalf,
+  so a large share of recorded opens have no person behind them.
+- **One campaign gets the whole order.** If two campaigns reached the buyer, the
+  more recent click takes the credit. Nothing is split between them.
+- **Refunds come back off.** The report shows gross, refunded and net, and leads
+  with net. A chargeback is treated the same way as a refund.
+- **It is a floor, not a total.** An order from somebody who never clicked, or
+  who checked out without giving an email address, is credited to no campaign at
+  all. Campaigns sent before your store existed will show nothing here.
+
+**Net revenue per delivered message** is the figure to compare between
+campaigns, and like every rate above it names what it is divided by. A campaign
+with no recorded delivery count shows amounts but no per-message figure.
+
+If a campaign earned in more than one currency, each is reported on its own.
+Nothing converts between currencies, so there is deliberately no combined total.
+
 ## Compliance
 
 - Every send includes an **unsubscribe** link, and the header mailbox
   providers look for — Gmail and Yahoo's one-click `List-Unsubscribe`.
-- Clicking it opens a confirmation page; only confirming actually
-  unsubscribes. That matters because corporate mail scanners open every link
-  in a message before the recipient sees it, and a link that unsubscribed on
-  open would quietly shrink your list.
+- Clicking it opens a page; only submitting that page actually changes
+  anything. That matters because corporate mail scanners open every link in a
+  message before the recipient sees it, and a link that unsubscribed on open
+  would quietly shrink your list.
 - Unsubscribes are honored automatically so you stay compliant.
+
+### Topics {#topics}
+
+A **topic** is a stream of email somebody can leave on its own. Every campaign
+belongs to one, picked in the composer, and the link in that email offers to
+stop *that* stream rather than all of them.
+
+Four topics come with every organization — Promotions and offers, Newsletter,
+Product updates, and Sales outreach. Rename them, change what recipients are
+told they get, or add your own under **Emails ▸ Topics**. Topics are shared
+across every site in your organization, the same way your lists are.
+
+You cannot delete a topic, only **retire** it. A retired topic disappears from
+the composer and from the preference page, and campaigns already sent under it
+keep working — their unsubscribe links still name it. Restore it at any time.
+
+### The preference page {#preference-page}
+
+The link at the bottom of every campaign opens a page where the recipient sees
+your topics, ticks the ones they want to keep, and saves. Whatever they untick
+stops; everything else carries on. "Unsubscribe from everything" is on the same
+page, one button away, for anyone who wants it.
+
+This is why an unsubscribe is no longer all-or-nothing: somebody who only
+wanted the sales mail to stop can stop it and keep your newsletter, instead of
+leaving your list entirely — or reaching for "report spam", which costs you
+far more.
+
+One exception, and it is deliberate: **the one-click unsubscribe in the mail
+client's own header still unsubscribes from everything.** That button is
+pressed with no page in front of it, and a mailbox provider expects it to mean
+"stop". Narrowing it would be a promise the recipient did not make.
+
+Somebody who unsubscribed can also **resubscribe** from the same link — except
+when the address was suppressed by a bounce or a spam complaint. Those protect
+your sending reputation rather than expressing a preference, so no link can
+clear them.
+
+### Letting someone ask for less, instead of none {#frequency-opt-down}
+
+The same page carries a **How often** choice: as they come, at most one a day,
+at most one a week, or at most one a month. It applies to everything the
+recipient is still subscribed to.
+
+This is the option that is missing almost everywhere, and it is worth having
+for a plain reason: the alternative to letting somebody choose "monthly" is
+letting them choose "report spam", and a complaint costs you far more than a
+slower cadence does. Campaigns leave on a sending domain of this site's own, so
+that complaint lands on your reputation and nobody else's.
+
+Nothing is cancelled. A message that arrives too soon **waits** — the person
+stays on every audience they were on, and the next one due reaches them. A
+reminder or an alert that was held is retried once enough time has passed.
+
+Unlike the [daily limit](#frequency-cap), this one **does** apply to campaigns.
+It is a request the recipient made rather than a ceiling you did not choose, so
+a campaign honors it — and the recipient count you see before you send has
+already had these people subtracted, so the number on screen is still the
+number that will be reached.
+
+### Ask new subscribers to confirm {#double-opt-in}
+
+Off unless you turn it on. On a topic's own page, **Confirmation** has three
+settings: use the site setting, require a confirmation click, or never confirm
+this stream.
+
+With it on, somebody who signs up gets an email asking them to confirm, and
+**nothing else reaches them on that topic until they do**. They stay on your
+audiences and keep every record you hold about them — what is held is the
+sending, not the person. The link is good for three days; after that they need
+to sign up again.
+
+They can also confirm by ticking the topic on the [preference
+page](#preference-page) — that link arrives at the same mailbox, so acting on
+it says the same thing.
+
+Somebody who unsubscribed from a topic is never sent a confirmation for it. A
+signup form must not become a way to email somebody who told you to stop by
+asking them again.
+
+:::note
+No law requires a confirmation click. What the law requires is consent you can
+prove, and a confirmation is the proof that has so far been accepted —
+particularly in Germany. If you mail people in the EU or the UK, turning this
+on is worth considering for that reason and not because a rule forces it.
+:::
+
+### Which mail this applies to {#marketing-mail}
+
+The unsubscribe link, the suppression list and the daily limit below apply to
+every message your site sends its own audience, not only to campaigns:
+
+| Message | Sent when |
+| --- | --- |
+| A campaign | You press Send, or a scheduled send comes due |
+| A **members post** | You publish one with "Email subscribers" ticked |
+| An **abandoned-cart reminder** | A shopper leaves a cart behind |
+| A **back-in-stock alert** | A product a shopper asked about returns |
+| A **workflow email** | An automation's *Send email* step runs |
+
+Transactional mail is deliberately **not** in this list and never carries an
+unsubscribe link: order confirmations, booking reminders, password resets and
+teammate invites answer something the person just did, and somebody who
+unsubscribed from your newsletter still gets their receipt.
+
+Somebody who unsubscribes, hard-bounces or reports a message as spam is
+skipped by **all five** of the message types above, from that point on.
+
+### The daily limit {#frequency-cap}
+
+One person receives at most **five marketing messages from one site per
+24 hours**. It is the same number on every plan, because it protects your
+sending reputation with the mailbox providers rather than anything you buy.
+
+In practice it cannot reach a normal week: a campaign plus a cart reminder
+plus a restock alert plus a members post is four. What it stops is a loop — a
+workflow that fires on every form submission, or a members post published
+repeatedly.
+
+When the limit is reached, the **message is skipped and the person is left
+exactly where they were**. Nobody is unsubscribed, nothing is removed from an
+audience, and no contact is deleted. A reminder or alert that was skipped is
+retried on the next sweep once the window rolls; a campaign is never refused
+by this limit, though it does count toward it.
 
 ### Suppressions
 
@@ -163,10 +850,49 @@ reason and the date:
 | **Unsubscribed** | They clicked the unsubscribe link. |
 | **Bounced** | The mailbox does not exist. Recorded only for a *permanent* bounce — a full mailbox or a temporary server problem never suppresses anybody. |
 | **Marked as spam** | They reported a message. |
+| **Added by hand** | You added the address yourself — see below. |
 
 This is where the gap between a campaign's recipient count and what it
 actually sent comes from, and a rising **Bounced** count is the earliest sign
 a list is going stale.
+
+An unsubscribe now records **which campaign** the link was in, so the campaign
+report can show an unsubscribe rate for that send. Links in mail sent before
+this keep working exactly as they did; they simply carry no campaign.
+
+#### Add an address yourself {#add-a-suppression}
+
+**Add**, at the top of the card, opens a drawer where you can type or paste
+addresses — one per line or separated by commas, up to 50 at a time — with an
+optional note recording how the request reached you.
+
+Use it when somebody asks you to stop emailing them by reply, by phone, or in
+person. US law requires an opt-out received *by any means* to be honored, and
+the person who asks in words rather than by clicking has asked just as clearly.
+
+Two things it does not do, both on purpose:
+
+- **It does not remove anybody.** The person stays on every audience and keeps
+  every record you hold about them. Only this site's marketing email stops.
+- **It does not stop transactional mail.** Order confirmations, booking
+  reminders and password resets still reach them, because those answer
+  something the person just did.
+
+An address that is already on the list is left exactly as it is, with the
+reason and date it already had — so adding one by hand can never overwrite the
+record of a bounce or a spam report.
+
+#### An address Aglyn is blocking too {#platform-suppressions}
+
+Some addresses are suppressed **platform-wide** as well as on your list —
+because they bounced permanently, or reported a message as spam, on a send
+from anywhere in Aglyn including mail we send you ourselves.
+
+When you remove such an address, the confirmation says so: removing your entry
+will not start mail reaching them, because the platform entry is still there
+and only Aglyn can lift it. Contact support and we will look at it. This is
+the usual explanation for an address that keeps being skipped after you have
+already taken it off your own list.
 
 **Remove** puts an address back on your list — use it when somebody asks to
 be re-added, or when a suppression was recorded by mistake. Removing a

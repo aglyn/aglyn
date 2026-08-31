@@ -47,6 +47,26 @@ const mockEnforceSanctions = jest.fn()
 const mockConsumeRateLimit = jest.fn()
 const mockRecordSignupRefusal = jest.fn()
 
+/**
+ * Stands in for `FreeWorkspaceCapError` — the class the route's catch arm
+ * discriminates on (AGL-2265).
+ *
+ * Declared here rather than reached through `jest.requireActual`, because the
+ * defining file imports `firebase-admin.ts`, which initializes the admin app
+ * on load. Prefixed `Mock` so the hoisted `jest.mock` factory below may close
+ * over it.
+ */
+class MockFreeWorkspaceCapError extends Error {
+  limit: number
+  held: number
+  constructor(limit: number, held: number) {
+    super(`Free workspace ceiling reached: ${held} of ${limit}`)
+    this.name = 'FreeWorkspaceCapError'
+    this.limit = limit
+    this.held = held
+  }
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -76,6 +96,34 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   meterOrgEmail: jest.fn(async () => undefined),
   recordSignupRefusal: (...args: unknown[]) => mockRecordSignupRefusal(...args),
   OrgSlugTakenError: class OrgSlugTakenError extends Error {},
+  /**
+   * The AGL-2265 ceiling refusal, MODELED rather than stubbed.
+   *
+   * The route's catch arm BRANCHES on this return value — `const capped =
+   * freeWorkspaceCapRefusalResponse(error); if (capped) return capped` — and
+   * both lazy stubs read green while removing a guard. A constant `null`
+   * sends a real ceiling refusal into the generic "Organization creation
+   * failed" 500. A constant `Response` is worse: every unrelated fault in the
+   * handler would answer 403, reporting a working ceiling over a crashing
+   * route.
+   *
+   * So it discriminates on what the real one discriminates on — that error
+   * class and nothing else — and answers with the same status and `code`.
+   */
+  freeWorkspaceCapRefusalResponse: (error: unknown) =>
+    error instanceof MockFreeWorkspaceCapError
+      ? Response.json(
+          {
+            error:
+              `You already have ${error.held} free workspaces, which is the ` +
+              `limit of ${error.limit}.`,
+            code: 'free_workspace_limit',
+            limit: error.limit,
+            held: error.held,
+          },
+          { status: 403 },
+        )
+      : null,
   signupProvisioningGraceAllows: (...args: unknown[]) =>
     mockGraceAllows(...args),
 }))
@@ -140,7 +188,7 @@ const post = () =>
       method: 'POST',
       headers: {
         authorization: 'Bearer tok',
-        'x-forwarded-for': '203.0.113.9, 10.0.0.1',
+        'x-forwarded-for': '198.51.100.66, 203.0.113.9',
       },
       body: JSON.stringify({ name: 'E2E Smoke Workspace' }),
     }),
@@ -171,8 +219,10 @@ describe('AGL-1534 · /api/orgs/create is rate limited', () => {
       limit: 3,
       windowMs: HOUR_MS,
     })
-    // First hop of x-forwarded-for only — the rest is appended by our own
-    // proxies and attacker-controllable.
+    // The trusted hop, not the first: `198.51.100.66` is the value a caller
+    // typed into their own request, and an appending proxy leaves it to the
+    // LEFT of the address it observed. Keying on it would hand every request a
+    // fresh bucket.
     expect(mockConsumeRateLimit).toHaveBeenCalledWith(
       'org-create-ip:203.0.113.9',
       { limit: 10, windowMs: HOUR_MS },
@@ -326,5 +376,54 @@ describe('AGL-1907 · a refused signup is recorded, not just refused', () => {
     const response = await post()
     expect(response.status).toBe(429)
     expect(settled).toBe(false)
+  })
+})
+
+/**
+ * The free-WORKSPACE ceiling, refused from this route (AGL-2265).
+ *
+ * `createOrganization` raises the ceiling as a thrown `FreeWorkspaceCapError`
+ * rather than a return value, and the route turns it back into the ceiling's
+ * own 403 in its catch block — one line, sitting next to the generic 500,
+ * which is exactly where a guard goes quiet without anything going red.
+ *
+ * It had no coverage here at all: no spec for this route referenced the error
+ * or its `free_workspace_limit` code, and the arm never fired because nothing
+ * in the path threw. That is the fragile kind of passing — the first change
+ * that introduces a throw turns a specific 403 into a generic 500 and nothing
+ * notices. The same gap on `/api/hosts/create` was repaired first; this is
+ * its sibling.
+ */
+describe('AGL-2265 · the free workspace ceiling refuses from here', () => {
+  it('answers the ceiling’s own 403, not "Organization creation failed"', async () => {
+    mockCreateOrganization.mockRejectedValueOnce(
+      new MockFreeWorkspaceCapError(3, 3),
+    )
+
+    const response = await post()
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'free_workspace_limit',
+      limit: 3,
+      held: 3,
+    })
+  })
+
+  it('does NOT launder an unrelated fault into a ceiling refusal', async () => {
+    // The inverse fixture. Without it the assertion above is satisfied by a
+    // catch block that answers 403 to everything, which would report a
+    // working ceiling over a route that had stopped working at all.
+    mockCreateOrganization.mockRejectedValueOnce(new Error('firestore is down'))
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await post()
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Organization creation failed',
+    })
+    expect(logged).toHaveBeenCalled()
+    logged.mockRestore()
   })
 })

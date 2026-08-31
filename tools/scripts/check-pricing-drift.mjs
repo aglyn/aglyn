@@ -44,6 +44,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { driveDocPath } from './lib/drive-mount.mjs'
 import {
   parsePlanRecord,
   parseUnitRates,
@@ -66,10 +67,16 @@ const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
  * ⚑ Do not edit to make a failing check pass. A disagreement here means the
  * code moved a charged price; the fix is to decide which is right, not to
  * re-pin. A price change moves this pin and the Decision Log together.
+ *
+ * Agency moved once since the lock — 799 → 1299 monthly, 649 → 1049 annual,
+ * recorded in "2026-08-31 — Agency is $1,299/mo and $1,049 annual". It is
+ * pinned here because the decision is written down, not because the check was
+ * red: a pin moved to silence a failure records nothing and can catch nothing
+ * afterwards. Every other column is where Sept 1 put it.
  */
 const LOCKED = {
-  monthly: { free: 0, starter: 25, pro: 56, business: 139, scale: 249, advanced: 399, agency: 799 },
-  annualPerMonth: { free: 0, starter: 16, pro: 39, business: 99, scale: 179, advanced: 299, agency: 649 },
+  monthly: { free: 0, starter: 25, pro: 56, business: 139, scale: 249, advanced: 399, agency: 1299 },
+  annualPerMonth: { free: 0, starter: 16, pro: 39, business: 99, scale: 179, advanced: 299, agency: 1049 },
   ladder: {
     free: { digital: 0, physical: 0 },
     starter: { digital: 5, physical: 2 },
@@ -87,10 +94,13 @@ const LOCKED = {
   },
 }
 
-/** Where the source-of-truth doc is mounted, when Drive is available. */
-const SOURCE_OF_TRUTH_MD =
-  `${process.env.HOME}/Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/` +
-  `Platform Docs/Pricing & Packaging/00-Pricing-Source-of-Truth/Pricing-Source-of-Truth.md`
+/** Where the source-of-truth doc lives, when the shared drive is mounted. */
+const SOURCE_OF_TRUTH_MD = driveDocPath(
+  'Platform Docs',
+  'Pricing & Packaging',
+  '00-Pricing-Source-of-Truth',
+  'Pricing-Source-of-Truth.md',
+)
 
 
 /**
@@ -277,7 +287,9 @@ if (args.stripe) {
 // a machine where Drive had simply evicted the file.
 let sourceOfTruthMd = null
 try {
-  if (existsSync(SOURCE_OF_TRUTH_MD)) sourceOfTruthMd = readFileSync(SOURCE_OF_TRUTH_MD, 'utf8')
+  if (SOURCE_OF_TRUTH_MD && existsSync(SOURCE_OF_TRUTH_MD)) {
+    sourceOfTruthMd = readFileSync(SOURCE_OF_TRUTH_MD, 'utf8')
+  }
 } catch {
   sourceOfTruthMd = null
 }

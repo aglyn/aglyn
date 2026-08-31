@@ -28,6 +28,8 @@ import { after } from 'next/server'
 // and drops the work. The ledger records what actually COMMITTED, and the
 // classifier separates "moved nothing" from "correctly moved nothing".
 import {
+  isBlankAddress,
+  normalizeAddress,
   buildRoute,
   classifyDeliveryLag,
   classifyWebhookDelivery,
@@ -39,6 +41,7 @@ import {
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
+  logOrgActivity,
   sendGa4Purchase,
   sendGa4Refund,
   sendGa4SubscriptionCancelled,
@@ -47,6 +50,10 @@ import {
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+// The branch decision, kept in its own module so it can be exercised without
+// a signed payload, an idempotency claim and a Firestore double standing
+// between a test and the question it is asking (AGL-118).
+import { subscriptionActivityEntry } from './subscription-activity'
 import { revalidateOrgHosts } from '../../../../utils/server/tenant-revalidate'
 import {
   INTERNAL_TRAFFIC_PARAM,
@@ -609,6 +616,23 @@ async function handler(request: Request): Promise<Response> {
         // idempotent, so mirroring the same plan again is the common case and
         // must not fan a site-wide cache drop out across every host each time.
         if (mirrored && previousPlan !== String(plan)) {
+          /*
+           * NO SENDING DOMAIN IS CLAIMED ON AN UPGRADE.
+           *
+           * This transition used to claim a dedicated subdomain for every site
+           * in the org, on the reasoning that the spend should track revenue
+           * rather than signups. It does track revenue — and that is the
+           * problem, because revenue is what the platform is trying to grow
+           * while the provider's domain allowance is a bounded resource that
+           * grows only by purchase. The demand curve and the supply curve
+           * were tied to opposite things.
+           *
+           * A merchant asks for one from the sending domains card instead. The
+           * upgrade already gives them what an upgrade should: the pool keeps
+           * carrying their transactional mail, and `customSendingDomain` now
+           * lets them send as a name they already own, which costs our zone
+           * nothing and gives their recipients their brand rather than ours.
+           */
           // No `ledger.effect()` beside it, per AGL-1954's rule directly
           // above: this is a cache hint over HTTP, not a committed write, and
           // a hand-written claim would outlive the call it names. The org
@@ -734,6 +758,70 @@ async function handler(request: Request): Promise<Response> {
               ...(downgradeLanded ? { pendingDowngrade: null } : {}),
             },
           } as never)
+        }
+
+        /*==========================================
+         * THE SUBSCRIPTION LIFECYCLE, IN THE CUSTOMER'S OWN FEED (AGL-118).
+         *
+         * Until this, none of it was anywhere a customer could see: signing
+         * up, upgrading, downgrading and being cancelled by Stripe all
+         * mirrored onto the org doc and appeared in no log at all. An org
+         * whose plan silently became `free` had nothing to read that said
+         * when, or why, or whether a person did it.
+         *
+         * WHY THIS LINE. It is past both mirrors, so the entry describes a
+         * state that has landed — `updateExisting` has moved `plan` and
+         * `writeOrgBilling` has moved the commercial record. It is inside the
+         * org-resolved block, so a tenant shopper's product subscription
+         * (which carries no `metadata.orgId` naming one of OUR workspaces)
+         * can never write into a merchant's workspace feed. And it is gated
+         * on `mirrored`, because a workspace erased mid-handler has no feed
+         * left to file anything under.
+         *
+         * WHY MOST DELIVERIES WRITE NOTHING. `subscriptionActivityEntry`
+         * answers null unless the plan actually moved or the subscription
+         * ended. Stripe re-delivers `customer.subscription.updated` for every
+         * renewal, metered item attach and payment-method change, and a row
+         * on each would bury the four events a year that matter under a
+         * monthly drip saying nothing changed.
+         *
+         * Redelivery is covered upstream: this route claims each event id in
+         * `stripeEvents` before dispatch, so a retried delivery short-circuits
+         * and cannot write the entry twice.
+         *=========================================*/
+        if (mirrored) {
+          const entry = subscriptionActivityEntry({
+            canceled,
+            previousPlan,
+            plan: String(plan),
+            cancellationReason:
+              typeof object?.cancellation_details?.reason === 'string'
+                ? object.cancellation_details.reason
+                : null,
+            metadata: object?.metadata,
+          })
+          if (entry) {
+            await logOrgActivity(
+              String(orgId),
+              // NO EMAIL, on any of these. The webhook holds a uid at best
+              // and never an address, and resolving one would mean a lookup
+              // that answers with whoever holds that uid TODAY — a different
+              // claim from "this is the address that acted".
+              { uid: entry.actorUid, email: null },
+              entry.action,
+              {
+                type: 'subscription',
+                ...(object?.id ? { id: String(object.id) } : {}),
+                name: entry.plan,
+              },
+            )
+            // No `ledger.effect()` beside it, per the AGL-1954 rule this file
+            // states above: `logOrgActivity` swallows its own failures and
+            // resolves either way, so a hand-written claim here would go on
+            // asserting a write that had silently stopped landing. The
+            // delivery is already `acted` — this branch runs only when the
+            // org mirror committed through the observed handle.
+          }
         }
 
         // GA4 churn (AGL-1851): the funnel instruments every step INTO
@@ -896,6 +984,56 @@ async function handler(request: Request): Promise<Response> {
                   body: new URLSearchParams(identity).toString(),
                 },
               )
+            }
+            // …and the address in the other direction.
+            //
+            // There is ONE PLATFORM BILLING address for an org —
+            // `contact.address`, structured, deliberately consolidated so a
+            // third personal/contact/billing variant could not appear — and
+            // Stripe-side collection was never landing in it.
+            //
+            // ⚠️ That rule is about THIS address and the variants it was
+            // written against. It does not contemplate the other two the
+            // product has: the storefront TAX ORIGIN (`{country, state}`, in
+            // the Commerce Taxes card, governing tax on the merchant's own
+            // sales) and the seller PAYOUT identity (which lives only inside
+            // Stripe Express and has no representation here at all). Those are
+            // different addresses answering different questions, and reading
+            // this note as "an org may only ever have one address anywhere"
+            // would be the wrong lesson from it. A workspace that
+            // subscribed through the old Checkout gave Stripe an address and
+            // still saw an empty Billing address card, with no way to tell
+            // that the invoices carried one.
+            //
+            // Only ever FILLS A GAP: if the org already has an address, that
+            // one wins and nothing is written. The org doc is the editor's
+            // copy, and an event arriving later must not quietly revert what
+            // somebody typed.
+            if (isBlankAddress(orgSnapshot.get('contact')?.address)) {
+              const held = await fetch(
+                `https://api.stripe.com/v1/customers/${stripeCustomerId}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+                  },
+                },
+              ).then((response) => response.json())
+              const address = normalizeAddress({
+                line1: held?.address?.line1,
+                line2: held?.address?.line2,
+                city: held?.address?.city,
+                state: held?.address?.state,
+                postalCode: held?.address?.postal_code,
+                country: held?.address?.country,
+              })
+              if (address) {
+                await firebaseAdmin
+                  .app()
+                  .firestore()
+                  .collection('orgs')
+                  .doc(String(orgId))
+                  .set({ contact: { address } }, { merge: true })
+              }
             }
           } catch (error) {
             console.error(

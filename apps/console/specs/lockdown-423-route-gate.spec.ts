@@ -65,8 +65,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
     firestore: { FieldValue: { delete: () => 'FIELD_DELETE' } },
   },
+  // The site activity entry (AGL-118). A no-op IS the contract: the real one
+  // swallows its own failures and the route does not branch on it. Named
+  // explicitly because this factory is a closed world — an absent export is
+  // `undefined`, the route throws past every assertion below, and its own
+  // catch answers 500, which reads exactly like the route regressing.
+  logHostActivity: async () => undefined,
   getOrgForHost: (...args: unknown[]) => mockGetOrgForHost(...args),
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
+  // A deployment with no domain provider, which is what this file models: the
+  // registration calls report `skipped`, neither a success nor a failure, and
+  // the Firestore write stays the one observable mutation the gate protects.
+  attachProjectDomain: async (domain: string) => ({ outcome: 'skipped', domain }),
+  detachProjectDomain: async (domain: string) => ({ outcome: 'skipped', domain }),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),

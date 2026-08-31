@@ -117,7 +117,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'org.auditLog required' }, { status: 403 })
     }
     /**
-     * One member's activity across the WHOLE organization (AGL-1488).
+     * One member's activity across the WHOLE organization.
      *
      * The feed below answers "what happened in this org", from the org's own
      * activity collection. `actorId` asks a different question — "what has
@@ -145,7 +145,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json(page, { status: 200 })
     }
     /**
-     * The whole organization, sites included (AGL-1490).
+     * The whole organization, sites included.
      *
      * `scope=org-wide` because the default has a caller that depends on it:
      * the team page's "Changes to this member" card reads the ORG collection

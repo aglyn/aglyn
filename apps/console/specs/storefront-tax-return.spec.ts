@@ -47,7 +47,7 @@ import {
   type StorefrontTaxReturnRowInput,
 } from '../utils/server/tx-return'
 import {
-  storefrontTexasAglynLiableCents,
+  storefrontPlatformLiableCents,
   taxReturnAttention,
   taxReturnFacilitatedJurisdictionRows,
   taxReturnWebfileLines,
@@ -410,8 +410,17 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
         chargedBackCents: 0,
         rowsChargedBack: 0,
       },
+      internal: {
+        transactionCount: 0,
+        totalSalesCents: 0,
+        taxableSalesCents: 0,
+        taxCollectedCents: 0,
+        byJurisdiction: {},
+      },
       attention: {
         untaxedRows: 0,
+        internalRows: 0,
+        untaxedRowsBeforeObligation: 0,
         rowsMissingTaxableBase: 0,
         rowsMissingAddress: 0,
         nonUsdRows: 0,
@@ -434,12 +443,12 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
   it('a period with no storefront section reads exactly as it did before', () => {
     const verdict = taxReturnAttention(basePayload)
     expect(verdict.clean).toBe(true)
-    expect(storefrontTexasAglynLiableCents(basePayload)).toBe(0)
+    expect(storefrontPlatformLiableCents(basePayload)).toBe(0)
   })
 
   it('Aglyn-liable storefront tax BLOCKS the period and names the amount', () => {
     const payload = withStorefront([AGLYN_LIABLE_ROW])
-    expect(storefrontTexasAglynLiableCents(payload)).toBe(825)
+    expect(storefrontPlatformLiableCents(payload)).toBe(825)
     const verdict = taxReturnAttention(payload)
     expect(verdict.clean).toBe(false)
     const item = verdict.items.find(
@@ -450,7 +459,7 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
 
   it('a manual-mode storefront sale does NOT block, and is not Aglyn-liable', () => {
     const payload = withStorefront([MANUAL_ROW])
-    expect(storefrontTexasAglynLiableCents(payload)).toBe(0)
+    expect(storefrontPlatformLiableCents(payload)).toBe(0)
     expect(taxReturnAttention(payload).clean).toBe(true)
   })
 

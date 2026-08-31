@@ -189,10 +189,7 @@ export default function ConsolePluginsGate({
       // first-party set so their registrations land before the shell
       // renders. Failures inside are logged and skipped — a broken remote
       // bundle never blocks the console.
-      const idToken = await (user as { getIdToken?: () => Promise<string> })
-        ?.getIdToken?.()
-        .catch(() => undefined)
-      await loadOrgRealmPlugins(orgId, idToken)
+      await loadOrgRealmPlugins(orgId, user)
       if (active) setReadyForOrg(orgId)
     })()
     return () => {
