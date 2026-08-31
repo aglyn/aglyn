@@ -318,6 +318,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // and its transactional mail leaves on the shared pool, which needs no
       // DNS from anybody.
       customSendingDomain: false,
+      // The expensive shape, and the one Free must never reach by default: a
+      // provider slot, three records in the platform's own zone and a place
+      // in the re-verification sweep, spent per site on a tier that pays
+      // nothing. The pool carries this tier's mail at no per-site cost.
+      dedicatedSendingDomain: false,
       removeBranding: false,
       scheduledPublishing: false,
       marketplaceSelling: false,
@@ -430,6 +435,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // of mail the shared pool already delivers with no DNS work at all. The
       // capability arrives with the sends that need it.
       customSendingDomain: false,
+      // Same tier as the customer-owned shape and for the stronger reason:
+      // this one draws on a provider allowance that cannot be bought past a
+      // certain size, so it is rationed above the tier that carries no
+      // campaign sends at all.
+      dedicatedSendingDomain: false,
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: false,
@@ -526,6 +536,18 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // is issued is the expensive half and stays an optimization on top of
       // the pool.
       customSendingDomain: true,
+      // The floor for the platform subdomain too, and the tier this one is
+      // sized against: a merchant who may send campaigns is a merchant whose
+      // mail needs a name of its own, and Pro is where the revenue starts
+      // covering a provider slot and three zone records.
+      //
+      // A flag rather than a tier comparison, so a single org can be granted
+      // one through `entitlements.features` without being moved up a plan —
+      // the support case this capability meets most often, answered without
+      // repricing an account. What the grant does not do is provision: it
+      // admits a REQUEST, and the provider ceiling still decides whether the
+      // request is filled.
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: true,
@@ -599,6 +621,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       reusableComponents: true,
       customDomain: true,
       customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -675,6 +698,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       reusableComponents: true,
       customDomain: true,
       customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -750,6 +774,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       reusableComponents: true,
       customDomain: true,
       customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -839,6 +864,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       reusableComponents: true,
       customDomain: true,
       customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
@@ -926,6 +952,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       reusableComponents: true,
       customDomain: true,
       customSendingDomain: true,
+      dedicatedSendingDomain: true,
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,

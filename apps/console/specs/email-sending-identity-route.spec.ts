@@ -115,8 +115,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: mockState.plan } }),
   listSendingDomains: async () => mockState.domains,
   /*
-   * Whether the org's PLAN carries a dedicated subdomain, which is what
-   * decides whether the read offers one. Resolved from the real ladder against
+   * Whether the org carries a dedicated subdomain, which is what decides
+   * whether the read offers one. Resolved through the real entitlement against
    * `mockState.plan`, so the offer appears for the tiers that carry it and for
    * no others without a second list of plan names in this file.
    */
@@ -124,7 +124,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     const aglyn = jest.requireActual(
       '@aglyn/aglyn/app-utils/dedicated-sending-domain',
     )
-    return aglyn.planHoldsDedicatedSendingDomain(mockState.plan)
+    return aglyn.holdsDedicatedSendingDomain({ plan: mockState.plan })
   },
   /*
    * The claim, recorded rather than performed, and named through the REAL
@@ -140,7 +140,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     const aglyn = jest.requireActual(
       '@aglyn/aglyn/app-utils/dedicated-sending-domain',
     )
-    if (!aglyn.planHoldsDedicatedSendingDomain(mockState.plan)) {
+    if (!aglyn.holdsDedicatedSendingDomain({ plan: mockState.plan })) {
       return {
         domain: null,
         label: null,

@@ -99,6 +99,32 @@ export interface OrgFeatureFlags {
    * identity: the org's domain list, and the per-site selection.
    */
   customSendingDomain?: boolean
+  /**
+   * Hold a sending subdomain of the PLATFORM's own —
+   * `hello@{label}.mail.aglyn.app` — provisioned for one site inside Aglyn's
+   * mail apex.
+   *
+   * The EXPENSIVE half of the sending model, and the reason it is a separate
+   * flag from `customSendingDomain`. A domain the customer owns costs one
+   * provider domain object and nothing in our zone, because they publish the
+   * records. One of these costs a provider slot, THREE records in our own
+   * zone, and a permanent place in the re-verification sweep — per site,
+   * forever. The two capabilities are decided against different resources, so
+   * a shared flag would move a bounded one whenever the unbounded one is
+   * re-cut.
+   *
+   * The flag is the SECOND of two conditions and never the only one. Nothing
+   * provisions on entitlement alone: a merchant asks from the sending-identity
+   * route, this says whether the org carries what they asked for, and the
+   * provider ceiling still refuses beyond the account's allowance. A site
+   * refused at any of the three sends on the shared pool rather than not at
+   * all.
+   *
+   * Read through `checkEntitlement` at
+   * `libs/aglyn/src/lib/app-utils/dedicated-sending-domain.ts`, which is the
+   * only reader — the claim path in `host-sending-domain.ts` goes through it.
+   */
+  dedicatedSendingDomain?: boolean
   removeBranding?: boolean
   /** Schedule a version to publish at a date/time (tier above versioning). */
   scheduledPublishing?: boolean

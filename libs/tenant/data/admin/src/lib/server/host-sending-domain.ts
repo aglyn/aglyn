@@ -94,18 +94,25 @@ import {
   platformSendingLabel,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
-import { planHoldsDedicatedSendingDomain } from '@aglyn/aglyn/app-utils/dedicated-sending-domain'
+import { holdsDedicatedSendingDomain } from '@aglyn/aglyn/app-utils/dedicated-sending-domain'
 import firebaseAdmin from './firebase-admin'
 import { SENDING_DOMAINS_COLLECTION, readSendingDomainRecord } from './sending-domains'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
 /**
- * Whether this org's sites may hold a dedicated domain, from the stored plan.
+ * Whether this org's sites may hold a dedicated domain.
  *
  * One read, and only ever on a CLAIM path — never on a send. A site that does
  * not qualify has a sending identity regardless (the shared pool), so nothing
  * here is on the critical path of a message.
+ *
+ * The WHOLE org document goes to the gate rather than its `plan` field, and
+ * that is what makes a per-org grant real: the entitlement resolves the plan's
+ * default and then the org's own overrides, so an account staff have granted
+ * one may claim without being moved up a tier — and an account whose
+ * subscription has died may not, because `resolveEffectivePlan` reads a dead
+ * subscription down to `free`. A single field would have hidden both.
  *
  * Fails closed on a read error, and that is the safe direction: the cost of
  * answering `false` wrongly is a request the merchant makes again, while the
@@ -123,7 +130,7 @@ export async function orgHoldsDedicatedSendingDomain(
     .get()
     .catch(() => null)
   return snapshot?.exists
-    ? planHoldsDedicatedSendingDomain(snapshot.get('plan'))
+    ? holdsDedicatedSendingDomain(snapshot.data() as never)
     : false
 }
 

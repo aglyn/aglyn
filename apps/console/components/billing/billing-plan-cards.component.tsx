@@ -237,6 +237,21 @@ export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
   // sold on its own line.
   eventCalendar:
     'Sold as a paid add-on, not carried by any tier — priced separately.',
+  // True from Pro up, so a row would tick — and would promise something the
+  // platform cannot guarantee. A dedicated subdomain is capacity-managed:
+  // claimed only when a merchant asks, bounded by the provider's account-wide
+  // domain allowance, and best-effort by design, with the shared pool carrying
+  // the mail when a claim cannot be filled. A checklist tick reads as an
+  // inclusion, which is the one thing this is not.
+  //
+  // The sellable half of the sending model is on the card already —
+  // `customSendingDomain`, "Send email from your own domain" — and it is the
+  // shape that costs the platform no zone records, so it is the one that can
+  // be promised at any number of sites.
+  dedicatedSendingDomain:
+    'Capacity-managed and requested, not included — bounded by the provider ' +
+    'domain allowance, with the shared pool carrying the mail meanwhile. The ' +
+    'promised half of sending identity is the customer-owned domain row.',
 }
 
 /**
