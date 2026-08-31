@@ -219,6 +219,71 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/health' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Email link bypass',
+        why: 'RFC 8058 one-click unsubscribe is a mailbox-provider POST with no browser, so a challenge makes a legally required opt-out structurally impossible to complete',
+        // ADDED 2026-08-31 (AGL-2408). Every link in the footer of every
+        // campaign, and the `List-Unsubscribe` URL in its headers, points at
+        // this host and was answering 429 Vercel Security Checkpoint.
+        //
+        // WHY THIS IS NOT MERELY A BROKEN LINK. `campaign-send.ts` sets
+        // `List-Unsubscribe-Post: List-Unsubscribe=One-Click` alongside
+        // `List-Unsubscribe`, and Gmail and Yahoo honor that pair by POSTing
+        // to the URL from their own servers — no browser, no JavaScript, no
+        // cookie jar. A challenge is a JavaScript proof of work, so such a
+        // caller cannot pass it in principle rather than by misconfiguration.
+        // The consequence is not a degraded experience: the opt-out mechanism
+        // that CAN-SPAM and the GDPR require, and that both providers require
+        // of a bulk sender, cannot be completed by anyone.
+        //
+        // WHY PATH-ONLY IS CORRECT HERE, where the job runner above carries a
+        // header condition as well: a shared-secret condition is not merely
+        // inconvenient, it is unavailable. The callers are Gmail's servers and
+        // the recipient's own mail client, neither of which we configure and
+        // neither of which will ever send a header we invent. The
+        // authorization these routes actually rely on is already IN THE URL —
+        // `openSignedLink` in `libs/plugins/email/src/lib/server.ts` refuses
+        // any request whose `sig` is not an HMAC of the parameters under
+        // `EMAIL_UNSUBSCRIBE_SECRET`, so a caller who cannot forge the
+        // signature reaches a 403 and changes nothing. Bypassing the bot
+        // challenge removes a proof-of-work the real callers cannot perform;
+        // it does not remove the check that decides who may act.
+        //
+        // Writes still need a POST. All four handlers render a page on GET and
+        // act only on POST, so a link prescanner following any of them changes
+        // nothing — that property lives in the handlers and is not weakened by
+        // anything here.
+        //
+        // EXACT PATHS, NOT A `pre` PREFIX, and this is the part to preserve.
+        // `/api/email` is a SHARED namespace, not this plugin's private one:
+        // `email/events` (the Resend webhook), `email/list-import-*`,
+        // `email/list-members-add` and `email/suppression-*` all live under it
+        // too. Today they register on `consoleApi` and so are not served by
+        // this project at all — but they are one `plugins.config.json` edit
+        // away from being, and a prefix rule here would silently unchallenge
+        // whichever of them moved, on the day it moved. The four below are the
+        // complete set that `registerEmailApi` serves on the tenant, and each
+        // is a link we mail to a person.
+        //
+        // MEASURED on 2026-08-31, anonymous curl, deliberately invalid `sig`:
+        //   GET  /api/email/preferences  403 "Invalid preferences link"
+        //   POST /api/email/unsubscribe  403 "Invalid unsubscribe link"
+        //   GET  /                       429 (the page challenge still stands)
+        // A 403 from our own handler rather than a checkpoint page is the
+        // proof: the request reached the app, and the HMAC refused it there.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze([
+              '/api/email/unsubscribe',
+              '/api/email/preferences',
+              '/api/email/resubscribe',
+              '/api/email/confirm',
+            ]),
+          }),
+        ]),
+      }),
     ]),
   }),
   Object.freeze({
@@ -269,6 +334,16 @@ export const EXPECTED_POSTURE = Object.freeze([
               '/api/admin/reap-plugin-artifacts',
               '/api/admin/reverify-plugin-versions',
               '/api/admin/run-erasures',
+              // The marketing plugin's machine callers, live on the rule but
+              // undeclared here until 2026-08-31. Each enforces its own auth
+              // ahead of any work: `email/events` verifies the Svix HMAC of
+              // the Resend webhook against `RESEND_WEBHOOK_SECRET` and answers
+              // 401 without it, and both cron routes compare `x-cron-secret`
+              // against `CRON_SECRET`. Same standard as the eleven above — the
+              // bypass removes the bot challenge and nothing else.
+              '/api/email/events',
+              '/api/campaigns/process-scheduled',
+              '/api/lists/materialize',
             ]),
           }),
         ]),

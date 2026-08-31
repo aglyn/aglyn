@@ -1943,7 +1943,7 @@ export async function performCampaignSend(
         text: message.text,
         // RFC 8058 one-click (AGL-2408). `List-Unsubscribe` alone does NOT
         // satisfy Gmail's and Yahoo's bulk-sender rules — the pair does, and
-        // Gmail is where most of a merchant's list lives. A client honouring
+        // Gmail is where most of a merchant's list lives. A client honoring
         // the pair POSTs `List-Unsubscribe=One-Click` to the URL, which is
         // why the handler had to accept POST first: advertising one-click
         // against a GET-only handler would promise a verb nothing served.

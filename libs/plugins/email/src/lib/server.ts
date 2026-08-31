@@ -976,7 +976,7 @@ function cadenceFieldset(current: MarketingCadence): string {
     'How often' +
     '</div>' +
     `<div style="font-size:13px;line-height:1.45;color:${PAL.muted};margin-bottom:6px">` +
-    'This applies to everything above. Nothing is cancelled — messages just ' +
+    'This applies to everything above. Nothing is canceled — messages just ' +
     'wait until the next one is due.' +
     '</div>' +
     option('all', 'As they come') +
