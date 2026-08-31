@@ -611,9 +611,15 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   /** One wide-table record for a per-1k rate, in the frame's own decoration. */
   const rateRecord = (label, rates) => ({ cells: [label, ...rates] })
   const EMAIL_LABEL = 'Email sends over included band'
-  /** Starter→Agency then Enterprise, exactly as the code renders them. */
+  /**
+   * Starter→Agency then Enterprise, exactly as the code renders them.
+   *
+   * Starter's cell is a DASH and not a rate: campaign email begins at Pro, so
+   * Starter's band is 0 and `emailSendsOverage` can never compute an excess
+   * for it. A rate there would advertise a fee that cannot be charged.
+   */
   const EMAIL_CELLS = [
-    '+$2.5 / 1k',
+    '—',
     '+$2.25 / 1k',
     '+$2 / 1k',
     '+$1.9 / 1k',
@@ -713,7 +719,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const email = row('extraEmailSendsUsdPer1k')
     assert.ok(email, 'the email overage row is not published')
     assert.deepEqual(email.values, {
-      starter: '$2.5',
+      starter: '—',
       pro: '$2.25',
       business: '$2',
       scale: '$1.9',

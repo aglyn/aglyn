@@ -172,9 +172,12 @@ describe('the bands are real, and the plan is what selects them', () => {
         'workflowRuns',
         'actionRuns',
       ],
-      // API access is Business-and-above; Assist credits and action runs are
-      // Pro-and-above. Starter sells workflow runs but no actions.
-      starter: ['apiRequests', 'assistCredits', 'actionRuns'],
+      // API access is Business-and-above; campaign email, assist credits and
+      // action runs are Pro-and-above. Starter sells workflow runs but no
+      // actions, and its email band is 0 for the same reason Free's is —
+      // sending campaigns needs a per-site verified sending domain, so the
+      // allowance starts at the tier that carries that cost.
+      starter: ['apiRequests', 'emailSends', 'assistCredits', 'actionRuns'],
       pro: ['apiRequests'],
       business: [],
       scale: [],

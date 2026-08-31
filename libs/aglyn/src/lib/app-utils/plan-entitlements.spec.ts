@@ -267,7 +267,7 @@ describe('plan entitlements', () => {
         extraApiRequestsUsdPer1k: null,
         extraAssistCreditsUsdPer1k: null,
         extraContactsUsdPer1k: 1,
-        extraEmailSendsUsdPer1k: 2.5,
+        extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: true,
       },
       pro: {

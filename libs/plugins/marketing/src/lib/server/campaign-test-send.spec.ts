@@ -197,7 +197,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) =>
     emails.filter((email) => !suppressed.includes(email)),
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   /*
    * The REAL decision, over a fake record store — and it READS ITS ARGUMENT.
    *

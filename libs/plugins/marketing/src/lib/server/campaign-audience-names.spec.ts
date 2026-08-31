@@ -104,9 +104,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     emails: string[],
   ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
-  // Free's `emailSendsPerMonth` is 0 by design and would refuse the send
-  // before any of this is reached.
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  // Pro is the entry tier for campaign email. Free and Starter carry an
+  // `emailSendsPerMonth` of 0 and would refuse the send before any of this
+  // is reached.
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   // No site here selects a custom sending domain, so every send resolves to
   // the platform identity — the behavior these suites were written against.
   resolveHostSendingIdentity: async () =>

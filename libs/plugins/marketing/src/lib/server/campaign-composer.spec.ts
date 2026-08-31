@@ -171,7 +171,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     emails: string[],
   ) => emails,
   filterSendableForHost: async (_hostId: string, emails: string[]) => emails,
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   resolveHostSendingIdentity: async () =>
     jest.requireActual('@aglyn/shared-util-email').resolveSendingIdentity({
       selection: null,

@@ -108,7 +108,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         !mockState.store[`hosts/${hostId}/suppressions/${key}`]
       )
     }),
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'starter' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   // No site here selects a custom sending domain, so every send resolves to
   // the platform identity — the behavior these suites were written against.
   resolveHostSendingIdentity: async () =>
@@ -357,7 +357,7 @@ describe('a campaign recipient preview', () => {
   })
 
   it('surfaces the monthly cap before the email is written', async () => {
-    // Starter's emailSendsPerMonth is finite; a month already at the cap
+    // Pro's emailSendsPerMonth is finite; a month already at the cap
     // refuses, and the composer shows that message under the picker.
     seed(2)
     // `jest.requireMock`, not a deferred `require('@aglyn/tenant-data-admin')`.
