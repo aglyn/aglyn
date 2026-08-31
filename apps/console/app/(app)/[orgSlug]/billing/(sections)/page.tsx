@@ -131,10 +131,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // its reader can see that doc; merging it over the org doc keeps every
   // `org.subscription…` reference below working unchanged, and the org doc
   // still supplies `plan`, `entitlements` and `seatAddons`.
-  const { data: orgBilling } = useConfirmedDoc<Partial<AglynOrgBilling>>(
-    firestore,
-    orgId ? ['orgs', orgId, ORG_BILLING_SUBCOLLECTION, ORG_BILLING_DOC_ID] : null,
-  )
+  const { data: orgBilling, ready: orgBillingReady } =
+    useConfirmedDoc<Partial<AglynOrgBilling>>(
+      firestore,
+      orgId
+        ? ['orgs', orgId, ORG_BILLING_SUBCOLLECTION, ORG_BILLING_DOC_ID]
+        : null,
+    )
   // NOT a plain spread (AGL-1991). `useConfirmedDoc` stamps the document id
   // into its payload, so `orgBilling.$id` is the literal `'stripe'`; spreading
   // it second made the merged `org.$id` `'stripe'` and every child deriving an
@@ -321,6 +324,35 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // direction the page sends a subscribed org to checkout and the route lets
   // it through, which is the duplicate subscription AGL-1697 closed.
   const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
+  /**
+   * A PAID PLAN WITH NOTHING BEHIND IT — the state the grid had no word for.
+   *
+   * A staff override (`/api/admin/org-override` writes `plan` directly), a
+   * comped workspace, or a seeded one all look like this: `plan` says Starter
+   * and there is no live subscription. Every self-serve route DOWN from such a
+   * plan is refused server-side — `plan` is Admin-SDK-only in the Firestore
+   * rules for every client including staff (AGL-1795), and
+   * `/api/billing/subscription` answers 409 `No billing account yet`, 409 `No
+   * active subscription`, or 400 `cancel_required` depending on which wall the
+   * request reaches first — so the card cannot offer one. What it can do is
+   * say so, which it could not while this state had no name.
+   *
+   * ⚠️ HELD ON THE SUBSCRIPTION READ, NOT JUST THE ORG READ. `subscription`
+   * lives in `orgs/{orgId}/billing/stripe` (AGL-1028) and is merged over the
+   * org doc a few lines above; the page holds its render on `orgReady`, which
+   * says nothing about THAT document. Before it lands `org.subscription` is
+   * undefined and every paying org on the platform looks staff-set — the
+   * `loading_default_answers_a_question` shape, on a claim about the customer's
+   * own billing. `useConfirmedDoc` reports `ready` for a document that does not
+   * exist as readily as for one that does, which is exactly the case here: a
+   * genuinely staff-set org has no billing doc at all.
+   *
+   * ⚠️ `past_due` IS live (`isLiveSubscriptionStatus`, AGL-1715), so a dunning
+   * org is never this and keeps the cancel funnel. This must not become a
+   * route around an unpaid balance.
+   */
+  const planWithoutSubscription =
+    orgReady && orgBillingReady && plan !== 'free' && !subscriptionActive
   /**
    * Report a subscribe conversion whose checkout completed in a tab that is
    * gone (AGL-1152).
@@ -1470,6 +1502,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   // org does not have.
                   org={org}
                   subscriptionActive={subscriptionActive}
+                  planWithoutSubscription={planWithoutSubscription}
                   highlight={planIntent?.plan}
                   onSelect={(tier) =>
                     permissions.editBilling

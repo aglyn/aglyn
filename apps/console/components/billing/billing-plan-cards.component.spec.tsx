@@ -30,13 +30,14 @@
  * retention funnel wants to offer as a save. So every test here checks both
  * halves — collapsed by default, and reachable in one click.
  *
- * ⚠️ THAT ONE CLICK IS `Compare all N plans`, AND IT HAS TO DELIVER N. The
- * default did not change and is still pinned below; what changed is that the
- * control naming a total now lands the reader on that total instead of on the
- * six cards left after the collapse. A button that says eight and shows six is
- * an omission however honestly the remaining disclosure is labelled — which is
- * how an owner reading a real screenshot of this grid, disclosure and all,
- * came away reporting the Free tier missing.
+ * ⚠️ THE COUNT AND THE FOLD ARE ONE STATEMENT. `Compare all N plans` opens a
+ * grid that draws N-1 cards, and the disclosure below names the one it is
+ * holding — so the arithmetic closes and nothing is unaccounted for. It did
+ * not always: the button counted `PLAN_ORDER` alone, said seven, and the grid
+ * drew seven cards with Free in neither number, which is how a reader looking
+ * at this page with the disclosure plainly in it came away reporting the Free
+ * tier missing. Every case below that touches the count asserts the SUM,
+ * never one half of it.
  */
 
 import {
@@ -123,14 +124,12 @@ function disclosure(): HTMLElement | null {
 }
 
 /**
- * Fold the lower tiers away — what a reader who wants only the upgrade path
- * presses once the grid has handed them everything.
+ * Reveal the folded lower tiers — the second deliberate act a downgrade costs.
  *
- * This is the state `Compare all` used to drop the reader into. It is still
- * reachable, still counted, and still one click from being undone; it is just
- * no longer where a request to compare ALL the plans lands.
+ * Named rather than inlined because it is the friction itself, not setup: the
+ * grid arrives with them folded and the control below says how many it holds.
  */
-function foldLowerTiers() {
+function revealLowerTiers() {
   fireEvent.click(disclosure() as HTMLElement)
 }
 
@@ -259,14 +258,13 @@ describe('the page opens on the decision, not the catalogue', () => {
     expect(cardShown('Business')).toBe(true)
     expect(cardShown('Scale')).toBe(true)
     expect(cardShown('Agency')).toBe(true)
-    // EVERY tier, in that one click — the cheaper end included. Hiding a
-    // downsell outright is a dark pattern and loses it; making a reader find
-    // a second control to finish a comparison they already asked for is the
-    // same omission with a label on it.
+    // The cheaper plans are one further click away, and the disclosure says
+    // so IN NUMBERS — hiding a downsell outright is a dark pattern, and a
+    // fold that does not say what it holds is that dark pattern with a label.
+    expect(disclosure()?.textContent).toMatch(/Show 2 lower plans/)
+    revealLowerTiers()
     expect(cardShown('Free')).toBe(true)
     expect(cardShown('Starter')).toBe(true)
-    // And the fold is still offered, now as a way to put them away again.
-    expect(disclosure()?.textContent).toMatch(/Hide lower plans/)
   })
 
   it('the way to every other plan is a real control, not a hint', () => {
@@ -659,8 +657,8 @@ describe('the Enterprise card in the comparison grid', () => {
 
 describe('lower tiers are collapsed by default (AGL-1864)', () => {
   it('the page opens with neither Free nor Starter on screen', () => {
-    // The DEFAULT, asserted where it lives: the focused view, before any
-    // control has been pressed. Nothing below the current plan is drawn.
+    // The default, asserted where the reader meets it: the focused view,
+    // before any control has been pressed.
     renderCards({ plan: 'pro' })
     expect(cardShown('Free')).toBe(false)
     expect(cardShown('Starter')).toBe(false)
@@ -669,24 +667,21 @@ describe('lower tiers are collapsed by default (AGL-1864)', () => {
     expect(cardShown('Scale')).toBe(true)
   })
 
-  it('and the collapsed state survives in the grid, one click from undone', () => {
-    // `Compare all` hands over every plan, so the collapse has to be reached
-    // by choosing it — which is the whole point of a control that says
-    // "Hide lower plans". Reaching it this way is also what proves the two
-    // states are still real and still distinguishable.
+  it('an org on Pro sees neither Free nor Starter until it asks', () => {
+    // And the grid it opens is the same answer: `Compare all` is a request to
+    // COMPARE, which the fold does not refuse — it names what it is holding
+    // one line below.
     renderGrid({ plan: 'pro' })
-    foldLowerTiers()
     expect(cardShown('Free')).toBe(false)
     expect(cardShown('Starter')).toBe(false)
     expect(cardShown('Business')).toBe(true)
+    expect(cardShown('Scale')).toBe(true)
   })
 
   it('the disclosure counts what it is hiding, and one click reveals them', () => {
     renderGrid({ plan: 'pro' })
-    expect(disclosure()?.textContent).toMatch(/Hide lower plans/)
-    foldLowerTiers()
-    // Free and Starter — the two below Pro.
     const toggle = disclosure()
+    // Free and Starter — the two below Pro.
     expect(toggle?.textContent).toMatch(/Show 2 lower plans/)
     fireEvent.click(toggle as HTMLElement)
     expect(cardShown('Free')).toBe(true)
@@ -699,45 +694,44 @@ describe('lower tiers are collapsed by default (AGL-1864)', () => {
     // lower cards stopped existing rather than stopped showing, the component
     // has crossed it.
     const { onSelect } = renderGrid({ plan: 'pro' })
+    revealLowerTiers()
     const downgrades = screen.getAllByRole('button', { name: 'Downgrade' })
     expect(downgrades.length).toBeGreaterThan(0)
     fireEvent.click(downgrades[0])
     expect(onSelect).toHaveBeenCalled()
   })
 
-  it('the disclosure explains the asymmetry only while the tiers are on screen', () => {
+  it('the disclosure explains the asymmetry only once the tiers are on screen', () => {
     renderGrid({ plan: 'pro' })
     // The tip carries an href to the docs, so it is a LINK, not a button.
     const tip = /Help: Moving to a lower plan takes effect later/i
-    // On screen, the customer is looking at a downgrade — and end-of-cycle is
+    // Collapsed there is nothing yet to explain.
+    expect(screen.queryByRole('link', { name: tip })).toBeNull()
+    revealLowerTiers()
+    // Expanded, the customer is looking at a downgrade — and end-of-cycle is
     // the one thing no card can say in its own corner (AGL-1862).
     expect(screen.getByRole('link', { name: tip })).toBeTruthy()
-    foldLowerTiers()
-    // Folded away, this is a disclosure control and there is nothing left to
-    // explain.
-    expect(screen.queryByRole('link', { name: tip })).toBeNull()
   })
 })
 
 /**
- * `Compare all N plans` MUST DELIVER N (the owner's report, twice: "the
+ * THE COUNT AND THE FOLD HAVE TO ADD UP (the owner's report, twice: "the
  * billing tiers are missing the free tier").
  *
- * The two states were independent, so the control that names a total opened a
- * grid still carrying the AGL-1864 collapse: it promised eight plans and drew
- * six, with Free and Starter behind a second control further down the page
- * that nothing on the way in had mentioned. The report came from a screenshot
- * WITH that disclosure visible, which is the finding — a reader who has asked
- * to compare everything does not read a fold as an invitation.
+ * `Compare all N plans` promised the count of `PLAN_ORDER` — seven — while the
+ * grid drew seven CARDS: the six self-serve tiers at or above the reader's
+ * own, plus Enterprise, which lives outside that array. The arithmetic came
+ * out even, so a reader counted the cards, got the promised number, and had no
+ * reason to look for an eighth. Free was in neither figure and nothing on the
+ * page named it.
  *
- * ⚠️ This is a visibility change and NOT a friction change. What must not
- * follow from it is any softening of AGL-1859 §2: the confirm still runs, the
- * Free card still routes a subscriber through cancel, and a downgrade control
- * is still quieter than an upgrade one. Those are pinned here and, driven end
- * to end, in `billing-downgrade-confirm.spec.tsx`.
+ * The fold itself is not the defect and stays: reaching a downgrade costs a
+ * second explicit act (AGL-1859 §2). What makes it a DISCLOSURE rather than an
+ * omission is that the total is true and the control names the remainder — so
+ * these cases assert the SUM, never one half of it.
  */
-describe('Compare all N plans lands on all N (AGL-1864)', () => {
-  it('draws exactly the number of cards the button promised', () => {
+describe('every plan the grid promises is accounted for (AGL-1864)', () => {
+  it('drawn cards plus folded plans equal the number the button named', () => {
     renderCards({ plan: 'pro' })
     const compare = screen.getByRole('button', { name: /Compare all \d+ plans/ })
     const promised = Number(
@@ -747,14 +741,26 @@ describe('Compare all N plans lands on all N (AGL-1864)', () => {
     // from outside `PLAN_ORDER` (commit d4ec1aead).
     expect(promised).toBe(8)
     fireEvent.click(compare)
-    // The arithmetic a reader does by counting. Nothing is left over and
-    // nothing is owed to a second control.
-    expect(cardCount()).toBe(promised)
+    const folded = Number(
+      /Show (\d+) lower plans?/.exec(disclosure()?.textContent ?? '')?.[1] ?? 0,
+    )
+    // Neither half may be zero, or the sum below would hold for a page that
+    // simply drew everything or named everything.
+    expect(folded).toBeGreaterThan(0)
+    expect(cardCount()).toBeGreaterThan(0)
+    expect(cardCount() + folded).toBe(promised)
   })
 
-  it('and the cheapest plan is one of them', () => {
-    // Named rather than counted, because "Free is missing" is the report.
+  it('and the fold delivers exactly the plans it counted', () => {
+    // Without this the sum above is an accounting of a number in a label. The
+    // cheapest plan is NAMED because "Free is missing" is the report.
     renderGrid({ plan: 'pro' })
+    const drawn = cardCount()
+    const folded = Number(
+      /Show (\d+) lower plans?/.exec(disclosure()?.textContent ?? '')?.[1] ?? 0,
+    )
+    revealLowerTiers()
+    expect(cardCount()).toBe(drawn + folded)
     expect(cardShown('Free')).toBe(true)
     expect(cardShown('Starter')).toBe(true)
     expect(cardShown('Enterprise')).toBe(true)
@@ -763,15 +769,15 @@ describe('Compare all N plans lands on all N (AGL-1864)', () => {
   /**
    * ⚠️ THE CONTROL THAT KEEPS THIS FROM BECOMING THE OPPOSITE DARK PATTERN.
    *
-   * "Visible" and "equally weighted" are different properties, and only the
-   * first was asked for. A grid that showed Free with a contained primary
+   * "Reachable" and "equally weighted" are different properties, and only the
+   * first was ever asked for. A grid that showed Free with a contained primary
    * button beside the recommended upgrade would satisfy every assertion above
    * while presenting a downgrade as a peer of an upgrade — which AGL-1859 §2
    * is explicitly against.
    */
   it('CONTROL: the revealed tiers are de-emphasized, not promoted', () => {
     renderGrid({ plan: 'pro' })
-    const downgrade = actionOn('Free')
+    revealLowerTiers()
     const upgrade = actionOn('Business')
     // The loud controls are the steps UP, and every loud control on the grid
     // is one of them. Counted rather than sampled: this is what would fail if
@@ -790,7 +796,6 @@ describe('Compare all N plans lands on all N (AGL-1864)', () => {
       expect(action.className).toMatch(/Inherit/)
       expect(action.className).not.toMatch(/MuiButton-textPrimary/)
     }
-    expect(downgrade.className).not.toMatch(/MuiButton-outlined/)
     // And nothing below the current plan is badged as a recommendation.
     expect(within(cardFor('Free')).queryByText('Recommended')).toBeNull()
     expect(within(cardFor('Starter')).queryByText('Recommended')).toBeNull()
@@ -802,6 +807,7 @@ describe('Compare all N plans lands on all N (AGL-1864)', () => {
     // is not an exception in the permissive direction: for a prospect it is
     // an offer with nothing to click.
     renderGrid({ plan: 'pro' })
+    revealLowerTiers()
     expect(within(cardFor('Starter')).getByRole('button').textContent).toBe(
       'Downgrade',
     )
@@ -825,15 +831,13 @@ describe('the upgrade path leads (AGL-1864)', () => {
   it('upgrades say Upgrade and downgrades say Downgrade — never the same control', () => {
     renderGrid({ plan: 'pro' })
     expect(screen.getAllByRole('button', { name: 'Upgrade' }).length).toBeGreaterThan(0)
-    // Both directions are on screen and the words never blur: the one thing a
-    // card must never do is call a move down by the name of a move up.
+    // Nothing offers a downgrade until the disclosure is opened: a downgrade
+    // is never a one-click peer of Upgrade on this card grid.
+    expect(screen.queryByRole('button', { name: 'Downgrade' })).toBeNull()
+    // And once it is opened the words still never blur — the one thing a card
+    // must never do is call a move down by the name of a move up.
+    revealLowerTiers()
     expect(screen.getAllByRole('button', { name: 'Downgrade' }).length).toBeGreaterThan(0)
-    // Nothing offers a downgrade before the grid is asked for. The FOCUSED
-    // view carries no rung below the current plan at all (AGL-1859 §2), so the
-    // page a customer lands on still leads with the upgrade path alone.
-    cleanup()
-    renderCards({ plan: 'pro' })
-    expect(screen.queryByRole('button', { name: /Downgrade/ })).toBeNull()
   })
 
   it('the TOP self-serve tier recommends nothing — there is nothing above it', () => {
@@ -925,8 +929,13 @@ describe('a stated intent overrides the default (AGL-1117 under AGL-1864)', () =
  * available and the grid offered no route to it.
  */
 describe('the Free card is honest to a subscriber (AGL-2156)', () => {
+  function expandLowerTiers() {
+    revealLowerTiers()
+  }
+
   it('a paying org gets a WORKING route, and it says it is a cancel', () => {
     const { onSelect } = renderGrid({ plan: 'pro', subscriptionActive: true })
+    expandLowerTiers()
     const button = screen.getByRole('button', { name: 'Cancel & move to Free' })
     // jest-dom is not set up in this project — assert the property directly.
     expect((button as HTMLButtonElement).disabled).toBe(false)
@@ -937,6 +946,7 @@ describe('the Free card is honest to a subscriber (AGL-2156)', () => {
 
   it('states what happens and when, beside the control', () => {
     renderGrid({ plan: 'pro', subscriptionActive: true })
+    expandLowerTiers()
     expect(
       screen.getByText(/runs to the end of the period you have already paid for/i),
     ).toBeTruthy()
@@ -945,6 +955,7 @@ describe('the Free card is honest to a subscriber (AGL-2156)', () => {
 
   it('never shows a subscriber the prospect copy', () => {
     renderGrid({ plan: 'pro', subscriptionActive: true })
+    expandLowerTiers()
     expect(screen.queryByText('No credit card required')).toBeNull()
   })
 
@@ -954,8 +965,9 @@ describe('the Free card is honest to a subscriber (AGL-2156)', () => {
    * `free` entry, so a `pro → free` switch reaches a server that answers
    * "Unknown target plan".
    */
-  it('the Free card is a cancel even now that it arrives unasked', () => {
+  it('the Free card is a cancel, never a plan switch', () => {
     const { onSelect } = renderGrid({ plan: 'pro', subscriptionActive: true })
+    expandLowerTiers()
     const free = within(cardFor('Free'))
     expect(free.queryByRole('button', { name: 'Downgrade' })).toBeNull()
     fireEvent.click(free.getByRole('button', { name: 'Cancel & move to Free' }))
@@ -991,6 +1003,139 @@ describe('the Free card is honest to a subscriber (AGL-2156)', () => {
       screen.queryByRole('button', { name: 'Cancel & move to Free' }),
     ).toBeNull()
     expect(screen.getAllByText('Current plan').length).toBe(1)
+  })
+})
+
+/**
+ * A PAID PLAN WITH NOTHING BEHIND IT SAYS SO, AND ITS DEAD CONTROLS SAY WHY.
+ *
+ * A staff override (`/api/admin/org-override` writes `plan` directly), a
+ * comped workspace and a seeded one all land in the same state: `plan` reads
+ * Starter and there is no live subscription. Enterprise has had a card that
+ * explains itself since AGL-1118; a staff-set LOWER tier had none, so a
+ * Starter nobody bought was indistinguishable on screen from one somebody did
+ * — and the only evidence a reader got was a Free card whose button was dead
+ * and wearing the PROSPECT's "No credit card required".
+ *
+ * ## The server is why the control is dead, and it is not fixable here
+ *
+ * Every self-serve route down from such a plan is refused independently:
+ * `plan` is Admin-SDK-only in `cloud/firebase-firestore.rules` for every
+ * client including staff (AGL-1795); `/api/billing/subscription` answers 409
+ * `No billing account yet` without a `stripeCustomerId`, 409 `No active
+ * subscription` without one, and 400 `cancel_required` for `plan: 'free'`
+ * specifically; and the only writers of a lower `org.plan` are two staff-gated
+ * admin routes that require an audit reason code. So the card cannot be wired
+ * to anything — wiring it to a 409 would be worse than the dead button. What
+ * it can do is stop lying, which is what these cases pin.
+ *
+ * ⚠️ The copy states the OBSERVABLE fact — no subscription — and never the
+ * inferred reason. An `incomplete` checkout has the same shape and is nobody's
+ * override.
+ */
+describe('a plan the org did not buy explains itself', () => {
+  const NOTICE = /no subscription behind it/i
+
+  it('the view the page OPENS on carries the explanation', () => {
+    // The focused view holds no rung below the current plan, so it holds none
+    // of the dead controls — but it is where the reader starts, and they
+    // should not have to press Compare to find out why the page behaves the
+    // way it does.
+    renderCards({ plan: 'starter', planWithoutSubscription: true })
+    const said = screen.getByText(NOTICE)
+    // Names the plan it is about, and the route that can actually change it.
+    expect(said.textContent).toMatch(/Starter/)
+    expect(said.textContent).toMatch(/Reach out/i)
+    // On the card the sentence is about, not floating over the grid.
+    expect(said.closest('.MuiCard-root')?.textContent).toMatch(/Current plan/)
+  })
+
+  it('and the grid says it once, on the same card', () => {
+    renderGrid({ plan: 'starter', planWithoutSubscription: true })
+    expect(screen.getAllByText(NOTICE)).toHaveLength(1)
+    expect(
+      screen.getByText(NOTICE).closest('.MuiCard-root')?.textContent,
+    ).toMatch(/Your plan/)
+  })
+
+  it('the dead Free control stops wearing the prospect copy', () => {
+    renderGrid({ plan: 'starter', planWithoutSubscription: true })
+    revealLowerTiers()
+    const free = actionOn('Free')
+    // The bug, stated as an assertion: a customer on Starter was being told
+    // no credit card was required.
+    expect(screen.queryByText('No credit card required')).toBeNull()
+    expect(free.textContent).toBe('Contact us to change')
+    // Still disabled, because the server has no route to wire it to — and an
+    // enabled button that 409s is worse than an honest dead one.
+    expect((free as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('every route DOWN says the same thing, not only Free', () => {
+    // A comped Pro has Starter below it too, and `Downgrade` there reaches the
+    // same three server refusals. One sentence, every card.
+    renderGrid({ plan: 'pro', planWithoutSubscription: true })
+    revealLowerTiers()
+    for (const label of ['Free', 'Starter']) {
+      const action = actionOn(label)
+      expect(action.textContent).toBe('Contact us to change')
+      expect((action as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(screen.queryByRole('button', { name: 'Downgrade' })).toBeNull()
+  })
+
+  /**
+   * ⚠️ THE NEGATIVE CONTROL THIS NEEDS. Every assertion above also passes on
+   * a grid that disabled EVERYTHING — which would take away the one route
+   * this org really does have. An org with no subscription can still buy one,
+   * and `/api/billing/checkout` is the path that works for it.
+   */
+  it('NEGATIVE CONTROL: the way UP is untouched and still live', () => {
+    const { onSelect } = renderGrid({ plan: 'starter', planWithoutSubscription: true })
+    const upgrade = actionOn('Pro')
+    expect(upgrade.textContent).toBe('Upgrade')
+    expect((upgrade as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(upgrade)
+    expect(onSelect).toHaveBeenCalledWith('pro')
+  })
+
+  it('NEGATIVE CONTROL: a real subscriber keeps the cancel route', () => {
+    // The AGL-2156 route must not be replaced by the new copy for the org it
+    // was built for.
+    renderGrid({ plan: 'pro', subscriptionActive: true })
+    revealLowerTiers()
+    expect(screen.queryByText(NOTICE)).toBeNull()
+    expect(actionOn('Free').textContent).toBe('Cancel & move to Free')
+    expect(actionOn('Starter').textContent).toBe('Downgrade')
+  })
+
+  it('NEGATIVE CONTROL: a prospect is still offered the tier', () => {
+    renderGrid({ plan: undefined, planWithoutSubscription: true })
+    expect(screen.queryByText(NOTICE)).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'No credit card required' }),
+    ).toBeTruthy()
+  })
+
+  it('NEGATIVE CONTROL: an org on Free is told nothing — it has no plan to leave', () => {
+    // `currentIndex > 0` is the guard. Free has nothing below it, so there is
+    // no dead control to explain and no sentence to say.
+    renderGrid({ plan: 'free', planWithoutSubscription: true })
+    expect(screen.queryByText(NOTICE)).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: Enterprise keeps its own sentence and gains no second', () => {
+    // An enterprise org has no rung it counts as current, so `currentIndex`
+    // is -1 and this state cannot apply to it. Asserted in the FOCUSED view
+    // as well as the grid: there the Enterprise card IS the current rung, so
+    // a predicate that forgot the ladder position would print a second
+    // sentence saying the same thing in different words.
+    renderCards({ plan: 'pro', enterprise: true, planWithoutSubscription: true })
+    expect(screen.queryByText(NOTICE)).toBeNull()
+    cleanup()
+    renderGrid({ plan: 'pro', enterprise: true, planWithoutSubscription: true })
+    expect(screen.queryByText(NOTICE)).toBeNull()
+    expect(screen.getByText(/on an Enterprise agreement/)).toBeTruthy()
   })
 })
 
