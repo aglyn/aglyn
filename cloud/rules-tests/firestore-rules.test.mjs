@@ -3579,7 +3579,11 @@ describe('org-shared data (AGL-237)', () => {
   it('members read; editors write datasets/contacts; viewers stay read-only', async () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1')))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')))
-    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')))
+    // Datasets are content and the CRM is people, so the viewer's read stops
+    // at the collection above. Owner reads the same contact two lines down,
+    // which is what keeps this a statement about the role.
+    await assertFails(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')))
+    await assertSucceeds(getDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c1')))
     await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'datasets', 'ds1')))
     // Dataset/record CREATES are API-only (AGL-473) — the console route
     // enforces quotas server-side; even editors cannot create directly.
@@ -3828,18 +3832,23 @@ describe('audience membership is people data; the list document is not', () => {
       getDocs(enrollments(VIEWER)),
     )
 
-    // THE CONTROLS. Same account, same org, three reads that must survive.
+    // THE CONTROLS. Same account, same org, two reads that must survive.
     await mustAllow(
       'the same viewer reading the LIST document (the name a campaign row shows)',
       getDoc(listDoc(VIEWER)),
     )
     await mustAllow(
-      'the same viewer reading an org contact',
-      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')),
-    )
-    await mustAllow(
       'the same viewer reading an org dataset',
       getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1')),
+    )
+    // The CRM answers to the same permission this enrollment does, so the
+    // viewer is refused there too. Asserted here rather than dropped: the
+    // enrollment denial's argument is that a list's PEOPLE are not its name,
+    // and a contact sitting readable beside a refused enrollment would have
+    // undercut it.
+    await mustDeny(
+      'the same viewer reading an org contact',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')),
     )
   })
 
@@ -8637,6 +8646,239 @@ describe('contacts are per-site, and letting go of one is not a delete', () => {
       updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
         'facets.host-a': deleteField(),
       }),
+    )
+  })
+})
+
+/**
+ * READING THE CRM IS AN AUTHORITY, NOT A MEMBERSHIP.
+ *
+ * `contacts` and `contactSegments` asked `canReadScoped()` and nothing else,
+ * which is the question "is this member near these documents" — the same
+ * predicate `datasets` and `media` use, where being near them IS the whole
+ * question because a collaborator's pages bind those rows and place those
+ * assets. A contact is a person: a name, an address, an order history, notes
+ * and a consent record. An org VIEWER — the role whose entire definition is
+ * reading and changing nothing — read every one of them, and so did any
+ * member whose custom role revoked `data.manage`.
+ *
+ * `data.manage` is the key because it is the key the surfaces over this data
+ * already gate on: the Contacts console registers `permission: 'data.manage'`
+ * and the Emails console registers the same. Contact and segment writes are
+ * client-direct, so a browser that skips the console reaches Firestore and
+ * nothing else — which is what makes those gates defense in depth only once
+ * the rule underneath asks the same thing.
+ *
+ * ## The two halves, and why both are load-bearing
+ *
+ * SCOPE survives. A site collaborator holding `data.manage` still reads the
+ * contacts their own host captured, because that is a shipped capability an
+ * agency depends on and the hole being closed is on the ROLE axis. `EDITOR`
+ * below is that persona.
+ *
+ * ROLE now applies to the scoped half too. `AUTHOR` is the counter-case: the
+ * same site, the same tokens, an org role of `viewer`. A rule that added the
+ * capability only to the org-wide branch would still hand them their host's
+ * customer list.
+ */
+describe('the CRM answers to data.manage, on both halves of the scope', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  // Org-wide shapes the base fixtures do not carry. The permission maps are
+  // the four `memberResolves`/`memberStamps` read between them: the resolved
+  // projection a custom role produces, the raw per-member override it falls
+  // back to, no map at all, and a map that GRANTS to a role that does not
+  // hold the permission by default.
+  const ORG_ADMIN = 'uid-crm-admin'
+  const ORG_EDITOR = 'uid-crm-editor'
+  const ROLE_REVOKED_EDITOR = 'uid-crm-editor-role-revoked'
+  const OVERRIDE_REVOKED_EDITOR = 'uid-crm-editor-override-revoked'
+  const BARE_EDITOR = 'uid-crm-editor-bare'
+  const GRANTED_VIEWER = 'uid-crm-viewer-granted'
+
+  const contact = (uid, id) => doc(authed(uid), 'orgs', ORG, 'contacts', id)
+  const segment = (uid) => doc(authed(uid), 'orgs', ORG, 'contactSegments', 'seg-vip')
+  /** The console's own query shape: filtered on the reader's tokens. */
+  const scopedList = (uid, tokens) =>
+    query(
+      collection(authed(uid), 'orgs', ORG, 'contacts'),
+      where('visibleTo', 'array-contains-any', tokens),
+    )
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_ADMIN), {
+        role: 'admin', allHosts: true, scopeTokens: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', ORG_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+      })
+      // A custom role's revocation, as `syncOrgAuthProjections` stamps it:
+      // the resolver's own output, all three layers already applied.
+      await setDoc(doc(db, 'orgs', ORG, 'members', ROLE_REVOKED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        roleId: 'role-read-only-data',
+        resolvedPermissions: { 'data.manage': false, 'plugins.install': true },
+      })
+      // The same revocation on a member the projection never reached — the
+      // per-member layer `memberResolves` falls back to.
+      await setDoc(doc(db, 'orgs', ORG, 'members', OVERRIDE_REVOKED_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+        permissions: { 'data.manage': false },
+      })
+      // NO permission map of any kind — every member written before the
+      // field existed. If this one is refused the deploy is a mass lockout.
+      await setDoc(doc(db, 'orgs', ORG, 'members', BARE_EDITOR), {
+        role: 'editor', allHosts: true, scopeTokens: ['org'],
+      })
+      // The resolver WIDENS as well as narrows, and the Contacts console
+      // admits this member on the resolved map. A rule that stopped at the
+      // role list would hand them a page that never loads.
+      await setDoc(doc(db, 'orgs', ORG, 'members', GRANTED_VIEWER), {
+        role: 'viewer', allHosts: true, scopeTokens: ['org'],
+        roleId: 'role-crm-only',
+        resolvedPermissions: { 'data.manage': true },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'shared-org'), {
+        email: 'everyone@acme.test', visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'mine'), {
+        email: 'mine@acme.test', visibleTo: [MINE],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'theirs'), {
+        email: 'theirs@acme.test', visibleTo: [THEIRS],
+      })
+      // Segments are stamped org-wide at creation, so scope alone admits
+      // every member here and the verdict below is about the permission.
+      await setDoc(doc(db, 'orgs', ORG, 'contactSegments', 'seg-vip'), {
+        name: 'VIPs', tags: ['vip'], visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-crm'), {
+        name: 'Products', visibleTo: ['org'],
+      })
+    })
+  })
+
+  it('refuses an org-wide VIEWER the contact, the segment and the list', async () => {
+    await mustDeny(
+      'an org-wide viewer reading an org-wide contact',
+      getDoc(contact(VIEWER, 'shared-org')),
+    )
+    await mustDeny(
+      'an org-wide viewer reading a saved segment',
+      getDoc(segment(VIEWER)),
+    )
+    // The shape the console actually opens. A rule that denied only the
+    // document read would leave the table streaming.
+    await mustDeny(
+      'an org-wide viewer listing contacts on the scoped query',
+      getDocs(scopedList(VIEWER, ['org'])),
+    )
+  })
+
+  it('refuses a member whose data.manage was revoked, by either layer', async () => {
+    for (const [label, uid] of [
+      ['a custom role revocation, resolved onto the member', ROLE_REVOKED_EDITOR],
+      ['a per-member override on an unprojected member', OVERRIDE_REVOKED_EDITOR],
+    ]) {
+      await mustDeny(`${label} — reading a contact`, getDoc(contact(uid, 'shared-org')))
+      await mustDeny(`${label} — reading a segment`, getDoc(segment(uid)))
+    }
+  })
+
+  /**
+   * The scoped half is not exempt. AUTHOR carries the SAME tokens as EDITOR
+   * and differs only in the org role, so a denial here is about the role and
+   * a rule that guarded the org-wide branch alone would fail this and only
+   * this.
+   */
+  it('refuses a scoped collaborator whose ORG role is viewer', async () => {
+    await mustDeny(
+      'a site author reading a contact inside their own host scope',
+      getDoc(contact(AUTHOR, 'mine')),
+    )
+    await mustDeny(
+      'a site author listing their own host\'s contacts',
+      getDocs(scopedList(AUTHOR, ['org', MINE])),
+    )
+  })
+
+  /**
+   * THE OTHER DIRECTION. Every denial above passes against a rules file that
+   * refuses the collection to everybody, which would delete Contacts from the
+   * product. These are the doors that must still open.
+   */
+  it('still admits every principal the product needs', async () => {
+    for (const [label, uid] of [
+      ['the owner', OWNER],
+      ['an org-wide admin', ORG_ADMIN],
+      ['an org-wide editor', ORG_EDITOR],
+      ['an editor carrying no permission map at all', BARE_EDITOR],
+      ['a viewer a custom role granted data.manage', GRANTED_VIEWER],
+    ]) {
+      await mustAllow(`${label} reading an org-wide contact`, getDoc(contact(uid, 'shared-org')))
+      await mustAllow(`${label} reading a saved segment`, getDoc(segment(uid)))
+      await mustAllow(
+        `${label} listing contacts on the scoped query`,
+        getDocs(scopedList(uid, ['org'])),
+      )
+    }
+  })
+
+  /**
+   * The site collaborator, whose access this change had to leave intact: the
+   * scope still decides WHICH contacts, and the permission only decides
+   * whether they may ask.
+   */
+  it('keeps the scoped collaborator on exactly their own host\'s contacts', async () => {
+    await mustAllow(
+      'a scoped editor reading a contact their host captured',
+      getDoc(contact(EDITOR, 'mine')),
+    )
+    await mustAllow(
+      'a scoped editor listing on their own tokens',
+      getDocs(scopedList(EDITOR, ['org', MINE])),
+    )
+    await mustDeny(
+      'a scoped editor reading another host\'s contact',
+      getDoc(contact(EDITOR, 'theirs')),
+    )
+    await mustDeny(
+      'a scoped editor listing the collection unfiltered',
+      getDocs(collection(authed(EDITOR), 'orgs', ORG, 'contacts')),
+    )
+  })
+
+  /**
+   * POSITIVE CONTROL FOR THE HARNESS ITSELF. If the emulator were serving a
+   * stale ruleset, or these accounts could not reach the org at all, or
+   * `mustAllow` had stopped asserting, the denials above would pass for
+   * reasons that have nothing to do with the CRM. Every one of these is a
+   * read by a REFUSED principal that must still succeed.
+   */
+  it('CONTROL: the refused readers still reach the org they belong to', async () => {
+    await mustAllow(
+      'the org-wide viewer reading their own membership document',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'members', VIEWER)),
+    )
+    await mustAllow(
+      'the org-wide viewer reading an org DATASET — content, not people',
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds-crm')),
+    )
+    await mustAllow(
+      'the revoked editor reading the same dataset',
+      getDoc(doc(authed(ROLE_REVOKED_EDITOR), 'orgs', ORG, 'datasets', 'ds-crm')),
+    )
+    await mustAllow(
+      'the site author reading the host they were invited to',
+      getDoc(doc(authed(AUTHOR), 'hosts', HOST)),
+    )
+    // And the negative control on the same axis: an outsider reaches none of
+    // it, so "allowed" above is not the ruleset admitting the world.
+    await mustDeny(
+      'an outsider reading an org contact',
+      getDoc(contact(OUTSIDER, 'shared-org')),
     )
   })
 })
