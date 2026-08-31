@@ -18,6 +18,7 @@
 import {
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP as MARKUP_FROM_LIB,
+  resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   billsEmailSendOverage,
@@ -42,20 +43,36 @@ const free = { plan: 'free' } as any
 
 describe('meteredIncludedAllowance', () => {
   it('expands per-site bands org-wide and converts bandwidth to page views', () => {
+    /*
+     * The bands come from the entitlement rather than being retyped here.
+     * What this case is about is the EXPANSION and the CONVERSION — per-site
+     * figures multiplied by the site limit, bandwidth left org-wide and
+     * turned into page views. A band retyped as a literal pins the wrong
+     * thing: it strands the moment a band is resized, and it says nothing
+     * about the arithmetic. The band values themselves are pinned in
+     * `plan-entitlements.spec.ts`, which is where a resize should be noticed.
+     */
+    const starterBands = resolveOrgEntitlements(starter)
+    const proBands = resolveOrgEntitlements(pro)
     const included = meteredIncludedAllowance(starter)
     expect(included.metered).toBe(true)
-    expect(included.storageGb).toBeCloseTo(2048 / 1024)
+    expect(included.storageGb).toBeCloseTo(starterBands.storagePerHostMb / 1024)
     expect(included.pageViews).toBeCloseTo(
-      (50 * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
+      (starterBands.bandwidthGb * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
     )
-    expect(included.formSubmissions).toBe(200)
+    expect(included.formSubmissions).toBe(starterBands.formSubmissionsPerMonth)
     // Pro allows 3 sites, so its org-wide bands are three times the per-site
     // figures — bandwidth excepted, which is already an org-level number.
     const multi = meteredIncludedAllowance(pro)
-    expect(multi.storageGb).toBeCloseTo((3 * 10240) / 1024)
-    expect(multi.formSubmissions).toBe(3 * 1000)
+    expect(proBands.hostLimit).toBe(3)
+    expect(multi.storageGb).toBeCloseTo(
+      (proBands.hostLimit * proBands.storagePerHostMb) / 1024,
+    )
+    expect(multi.formSubmissions).toBe(
+      proBands.hostLimit * proBands.formSubmissionsPerMonth,
+    )
     expect(multi.pageViews).toBeCloseTo(
-      (250 * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
+      (proBands.bandwidthGb * GB) / ESTIMATED_PAGE_TRANSFER_BYTES,
     )
   })
 
