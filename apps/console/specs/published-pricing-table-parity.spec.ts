@@ -209,7 +209,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
 
     it('Bandwidth / mo — the four upper bands and Free came down', () => {
       const PUBLISHED: Row = [5, 50, 250, 1000, 2500, 5000, 20000]
-      const CODE: Row = [2, 50, 250, 500, 900, 1500, 4000]
+      const CODE: Row = [2, 50, 250, 400, 700, 1000, 3000]
       expect(quotaColumn('bandwidthGb')).toEqual(CODE)
       // Starter and Pro did not move. FREE did, and it is the one band on
       // that tier that can never be metered — there is no subscription to
@@ -220,10 +220,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
           .filter(([, was, now]) => was !== now),
       ).toEqual([
         ['free', 5, 2],
-        ['business', 1000, 500],
-        ['scale', 2500, 900],
-        ['advanced', 5000, 1500],
-        ['agency', 20000, 4000],
+        ['business', 1000, 400],
+        ['scale', 2500, 700],
+        ['advanced', 5000, 1000],
+        ['agency', 20000, 3000],
       ])
     })
 
@@ -409,16 +409,40 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(PLAN_PRICING.agency.meteredInfraPassThrough).toBe(true)
     })
 
-    it('Contacts included — 100 · 1k · 10k · 100k · 500k · 1M · Unlimited', () => {
-      expect(quotaColumn('contactsPerHost')).toEqual([
-        100,
-        1000,
-        10000,
-        100000,
-        500000,
-        1000000,
-        UNLIMITED,
-      ] satisfies Row)
+    /**
+     * ⚠️ THE CODE IS AHEAD OF THE PAGE, and Agency's cell changes KIND.
+     *
+     * Contacts are priced at `perContactMonth` of $0.0002, so the included
+     * audience alone cost $20 at Business, $100 at Scale and $200 at Advanced
+     * — 14%, 40% and 50% of the subscription — from the one term nobody
+     * counted, because an audience is not infrastructure. On Agency it was
+     * `UNLIMITED`, which made the tier's cost model unbounded on a second
+     * axis after form submissions were closed.
+     *
+     * Bounding Agency's band required moving `extraContactsUsdPer1k` off
+     * `null` in the same change, and the two are pinned together in the
+     * `prices` block below. That rate is what makes the bound METER rather
+     * than wall: without it `checkContactQuota` refuses past the band and
+     * `upsert-contact.ts` drops the CRM record.
+     */
+    it('Contacts included — the four upper bands came down', () => {
+      const PUBLISHED: Row = [100, 1000, 10000, 100000, 500000, 1000000, UNLIMITED]
+      const CODE: Row = [100, 1000, 10000, 50000, 100000, 150000, 500000]
+      expect(quotaColumn('contactsPerHost')).toEqual(CODE)
+      expect(CODE.slice(0, 3)).toEqual(PUBLISHED.slice(0, 3))
+      // Every self-serve cell is now finite, which is the property the cost
+      // model needs and the one the published table cannot express.
+      for (const value of CODE) expect(Number.isFinite(value)).toBe(true)
+      expect(PUBLISHED[6]).toBe(UNLIMITED)
+      expect(
+        PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
+          .filter(([, was, now]) => was !== now),
+      ).toEqual([
+        ['business', 100000, 50000],
+        ['scale', 500000, 100000],
+        ['advanced', 1000000, 150000],
+        ['agency', UNLIMITED, 500000],
+      ])
     })
 
     /**
@@ -656,7 +680,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
 
     it('annual, per month — the same one column, at the same discount', () => {
       const PUBLISHED: Row = [0, 16, 39, 99, 179, 299, 649]
-      const CODE: Row = [0, 16, 39, 99, 179, 299, 1055]
+      const CODE: Row = [0, 16, 39, 99, 179, 299, 1049]
       expect(
         PUBLISHED_COLUMNS.map(
           (plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd,
@@ -665,11 +689,15 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(
         PUBLISHED_COLUMNS.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
           .filter(([, was, now]) => was !== now),
-      ).toEqual([['agency', 649, 1055]])
-      // The discount held its ratio. Moving the monthly alone would have
-      // widened Agency's annual discount to 50% on the one tier being
-      // repriced for margin — a bigger leak than the rise closes.
-      expect(1 - 1055 / 1299).toBeCloseTo(1 - 649 / 799, 2)
+      ).toEqual([['agency', 649, 1049]])
+      // $1,049/mo is $12,588 a year, which is what the live Stripe yearly
+      // price charges — the constant every surface quotes has to be the one
+      // Stripe bills, and Stripe prices are immutable. It lands within a
+      // dollar of holding the previous 18.8% discount across the rise, which
+      // is what stops the annual interval becoming the cheap way past a
+      // repricing.
+      expect(1049 * 12).toBe(12_588)
+      expect(1 - 1049 / 1299).toBeCloseTo(1 - 649 / 799, 2)
     })
 
     it('Enterprise publishes no list price — the card reads "Custom"', () => {
@@ -781,9 +809,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is 0
      * at every usage level.
      */
-    it('Contacts per 1,000 over band — the Advanced step is floored', () => {
+    it('Contacts per 1,000 over band — floored, and Agency gains one', () => {
       const PUBLISHED = [1, 0.75, 0.5, 0.4, 0.25, null]
-      const CODE = [1, 0.75, 0.5, 0.4, 0.4, null]
+      const CODE = [1, 0.75, 0.5, 0.4, 0.4, 0.4]
       expect(PAID.map((p) => PLAN_PRICING[p].extraContactsUsdPer1k)).toEqual(
         CODE,
       )
@@ -792,10 +820,27 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(
         PAID.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
           .filter(([, was, now]) => was !== now),
-      ).toEqual([['advanced', 0.25, 0.4]])
-      // Agency's em dash did not move.
-      expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBeNull()
-      expect(PLAN_ENTITLEMENTS.agency.contactsPerHost).toBe(UNLIMITED)
+      ).toEqual([
+        ['advanced', 0.25, 0.4],
+        ['agency', null, 0.4],
+      ])
+      /*
+       * Agency's em dash BECOMES a rate, and that is the second half of
+       * bounding its band rather than a separate decision.
+       *
+       * This row has now been wrong in both directions. It shipped $0.20
+       * against an `UNLIMITED` band — a fee that could not be charged, since
+       * `Math.max(0, used - Infinity)` is 0 at every usage level (AGL-2439) —
+       * and was corrected to `null`. A finite band with a null rate is the
+       * mirror image: usage past a bound that is silently free, so the bound
+       * achieves nothing. The pair is only ever correct together.
+       */
+      expect(Number.isFinite(PLAN_ENTITLEMENTS.agency.contactsPerHost)).toBe(true)
+      expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBe(0.4)
+      // The uncapped-band-carries-no-rate rule still holds where a band
+      // really is uncapped, which is now Enterprise alone.
+      expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(UNLIMITED)
+      expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
     })
   })
 

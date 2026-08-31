@@ -29,15 +29,21 @@
  *     business  -73%      scale  -161%      advanced  -236%
  *     agency    unbounded, and unbounded in a way nothing reported
  *
- * ## It PINS, it does not repair
+ *   and now
+ *     business  +16.3%    scale  +12.3%     advanced  +10.0%
+ *     agency    +13.6%, bounded on every axis
  *
- * Three tiers are still negative at 100% and this file says so exactly,
- * rather than choosing a threshold they happen to clear. An entitlement is
- * what a price bought, so closing the last of the gap is a pricing decision
- * with a published table behind it — the same posture
- * `email-ceiling-dimensioning.spec.ts` takes toward the ceiling it cannot
- * repair from inside a test. Every figure is asserted as a NUMBER, so the
- * next move in either direction has to come here and say what it did.
+ * ## A floor AND a pin
+ *
+ * The rule is non-negative at 100%, and every tier now holds it. But a
+ * threshold alone would let a margin fall from 61% to 1% and stay green, so
+ * every figure is ALSO asserted as a number: the next move in either
+ * direction has to come here and say what it did.
+ *
+ * Closing the last of the gap took two levers, not one. Bandwidth is the
+ * dominant term on every tier, and `contactsPerHost` is the term nobody
+ * counted because it is not infrastructure — $200/month of measured cost on
+ * Advanced against a $399 subscription, and unbounded on Agency.
  *
  * ## The shape of the defect this catches, which is the reason for the
  * ## `UNLIMITED` rule below
@@ -86,6 +92,7 @@ import {
   UNLIMITED,
   bandwidthCapShouldEngage,
   checkBandwidthAbuseCeiling,
+  checkContactQuota,
 } from '@aglyn/aglyn'
 import type { OrgPlan } from '@aglyn/aglyn'
 
@@ -229,110 +236,92 @@ describe('the model is reading real bands and real rates', () => {
 // ---------------------------------------------------------------------------
 // The rule, and the part of it that does not hold yet.
 // ---------------------------------------------------------------------------
-describe('the tier margins, pinned as numbers', () => {
+describe('no self-serve tier loses money at full utilization', () => {
   const pct = (plan: OrgPlan, u: number) =>
     Number((tierMargin(plan, u) * 100).toFixed(1))
 
   /**
-   * Every bounded tier, at four utilizations. A PIN rather than a threshold:
-   * these figures are the whole argument for the band resize, and any change
-   * to a band, a price or a cost rate moves one of them.
+   * THE RULE. Not a threshold anyone chose to be comfortable — the survival
+   * condition. Every band here is INCLUDED rather than metered, so a customer
+   * spending all of it is exercising the plan exactly as sold and there is no
+   * overage to bill and no gate to refuse them.
+   *
+   * It held for none of the four upper tiers before this work, and one of
+   * them could not be evaluated at all.
+   */
+  it('every paid tier holds a NON-NEGATIVE margin at 100% of every band', () => {
+    const offenders = tiersUnderFloor(PAID, 1, 0)
+    // Named with the arithmetic, so a failure says which tier and by how much
+    // rather than that one exists.
+    expect(
+      Object.fromEntries(
+        offenders.map((plan) => [
+          plan,
+          `$${PLAN_PRICING[plan as OrgPlan].basePriceMonthlyUsd} price vs ` +
+            `$${tierCostUsd(plan as OrgPlan, 1).toFixed(2)} cost`,
+        ]),
+      ),
+    ).toEqual({})
+  })
+
+  /**
+   * Every tier, at four utilizations, as NUMBERS.
+   *
+   * A pin as well as a floor: these figures are the whole argument for the
+   * band resize, and any change to a band, a price or a cost rate moves one
+   * of them. The floor above says the ladder survives; this says by how much,
+   * so a change that halves a margin while staying positive still has to come
+   * here and say so.
    */
   it('are exactly these, at 3 / 25 / 50 / 100% of every band', () => {
     expect(
       Object.fromEntries(
-        BOUNDED.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u))]),
+        PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u))]),
       ),
     ).toEqual({
       starter: [92, 90.4, 80.7, 61.5],
       pro: [89.3, 76.8, 53.6, 7.1],
-      business: [85.6, 74.1, 48.3, -3.4],
-      scale: [88, 66.5, 33.1, -33.9],
-      advanced: [87.5, 61.4, 22.7, -54.5],
+      business: [85.6, 79.1, 58.2, 16.3],
+      scale: [88, 78.1, 56.1, 12.3],
+      advanced: [87.5, 77.5, 55, 10],
+      agency: [84.6, 78.4, 56.8, 13.6],
     })
   })
 
-  it('clear 40% at the realistic 25% band', () => {
-    // The business condition, and the one every bounded tier now meets.
-    expect(tiersUnderFloor(BOUNDED, 0.25, 0.4)).toEqual([])
+  it('clears 40% at the realistic 25% band, on every tier', () => {
+    expect(tiersUnderFloor(PAID, 0.25, 0.4)).toEqual([])
   })
 
-  it('clear zero at 50%, which the pre-change bands did not', () => {
-    expect(tiersUnderFloor(BOUNDED, 0.5, 0)).toEqual([])
-  })
-
-  /**
-   * ⚠️ FULL UTILIZATION IS NOT YET SAFE, AND THAT IS PINNED RATHER THAN
-   * REPAIRED (2026-08-30).
-   *
-   * Three tiers still go negative when every band is spent at once, and one
-   * term is why: `contactsPerHost` prices at $0.0002 a contact-month, so the
-   * included audience alone costs $20 at Business, $100 at Scale and $200 at
-   * Advanced — 14%, 40% and 50% of the subscription, from a band nobody
-   * counted because it is not infrastructure.
-   *
-   * It is NOT repaired here. The contacts band is an audience, and an
-   * audience band is what an upgrade path is built on; moving it is a
-   * six-place pricing decision with a published table behind it, exactly the
-   * kind `email-ceiling-dimensioning.spec.ts` refuses to make from inside a
-   * test. So the failing relation is pinned instead — the set of tiers that
-   * go negative at 100% is asserted EXACTLY, which makes this red the moment
-   * the set changes in either direction: a new tier joining it, or the
-   * decision being taken and a tier leaving.
-   *
-   * The direction of travel is already large. At the pre-change bands the
-   * same three read -58%, -121% and -186%; they now read -3.4%, -33.9% and
-   * -54.5%, and Business is within $5 of break-even at a utilization nobody
-   * reaches.
-   */
-  const NEGATIVE_AT_FULL_UTILIZATION = ['advanced', 'business', 'scale']
-
-  it('pins which tiers still go negative at 100%, exactly', () => {
-    expect(tiersUnderFloor(BOUNDED, 1, 0)).toEqual(NEGATIVE_AT_FULL_UTILIZATION)
-  })
-
-  it('measures how much of each gap the contacts band is', () => {
-    // "Contacts is why" as arithmetic rather than as a claim, and stated per
-    // tier because the answer differs: removing that one term clears Business
-    // and Scale outright, and closes most but not all of Advanced's gap. That
-    // distinction is the thing whoever takes the decision needs — Advanced
-    // needs the contacts band AND something else.
-    const clearedWithoutContacts = (NEGATIVE_AT_FULL_UTILIZATION as OrgPlan[])
-      .filter((plan) => {
-        const terms = bandCostTerms(plan)
-        const without =
-          Object.values(terms).reduce((a, b) => a + b, 0) - terms.contacts
-        return PLAN_PRICING[plan].basePriceMonthlyUsd - without > 0
-      })
-      .sort()
-    expect(clearedWithoutContacts).toEqual(['business', 'scale'])
-    // On all three it is a large share of the price, not a rounding
-    // difference — 14%, 40% and 50% respectively.
-    for (const plan of NEGATIVE_AT_FULL_UTILIZATION as OrgPlan[]) {
-      const share =
-        bandCostTerms(plan).contacts / PLAN_PRICING[plan].basePriceMonthlyUsd
-      expect(`${plan}: ${share > 0.1}`).toBe(`${plan}: true`)
-    }
-  })
-
-  it('Starter and Pro clear zero even at full utilization', () => {
-    // The two tiers that did not move at all. Without them the pin above
-    // would be satisfied by a ladder where everything loses money.
-    expect(pct('starter', 1)).toBeGreaterThan(0)
-    expect(pct('pro', 1)).toBeGreaterThan(0)
+  it('CONTROL: the floor is not so low that nothing could fail it', () => {
+    // A floor of 0 is only meaningful if the model can produce a negative.
+    // Advanced at twice its bands is the demonstration.
+    expect(tierMargin('advanced', 2)).toBeLessThan(0)
+    expect(tiersUnderFloor(PAID, 2, 0)).not.toEqual([])
   })
 
   /**
-   * MUTATION. Restore the pre-change bands and prices and the model must be
-   * far worse — this is what says the green above came from the numbers and
+   * MUTATION. Restore the pre-change figures one axis at a time and the rule
+   * must break — this is what says the green above came from the numbers and
    * not from the arithmetic being broken in the permissive direction.
    */
-  it('MUTATION: the pre-change bands were negative from 25% upward', () => {
+  it('MUTATION: the pre-change bands and prices did NOT clear the floor', () => {
     const before = {
-      business: { bandwidthGb: 1000, storagePerHostMb: 51200, formSubmissionsPerMonth: 10000, price: 139 },
-      scale: { bandwidthGb: 2500, storagePerHostMb: 76800, formSubmissionsPerMonth: 50000, price: 249 },
-      advanced: { bandwidthGb: 5000, storagePerHostMb: 102400, formSubmissionsPerMonth: 100000, price: 399 },
-      agency: { bandwidthGb: 20000, storagePerHostMb: 204800, formSubmissionsPerMonth: UNLIMITED, price: 799 },
+      business: {
+        bandwidthGb: 1000, storagePerHostMb: 51200, formSubmissionsPerMonth: 10000,
+        contactsPerHost: 100000, price: 139,
+      },
+      scale: {
+        bandwidthGb: 2500, storagePerHostMb: 76800, formSubmissionsPerMonth: 50000,
+        contactsPerHost: 500000, price: 249,
+      },
+      advanced: {
+        bandwidthGb: 5000, storagePerHostMb: 102400, formSubmissionsPerMonth: 100000,
+        contactsPerHost: 1000000, price: 399,
+      },
+      agency: {
+        bandwidthGb: 20000, storagePerHostMb: 204800, formSubmissionsPerMonth: UNLIMITED,
+        contactsPerHost: UNLIMITED, price: 799,
+      },
     }
     const rates = ORG_COGS_UNIT_RATES_USD
     const costAt = (plan: keyof typeof before) => {
@@ -345,57 +334,48 @@ describe('the tier margins, pinned as numbers', () => {
         hosts * was.formSubmissionsPerMonth * rates.perFormSubmission +
         (entitlements.dataStorageMbPerOrg / 1024) * rates.dataStoragePerGbMonth +
         entitlements.apiRequestsPerMonth * rates.perApiRequest +
-        entitlements.contactsPerHost * rates.perContactMonth +
+        was.contactsPerHost * rates.perContactMonth +
         entitlements.emailSendsPerMonth * rates.perEmailSend
       )
     }
     for (const plan of ['business', 'scale', 'advanced'] as const) {
-      const wasFull = (before[plan].price - costAt(plan)) / before[plan].price
-      const nowFull = tierMargin(plan, 1)
-      // Deeply negative at full utilization before, and much less so now —
-      // the improvement is the assertion, because the sign has not flipped
-      // yet on these three and pretending otherwise would be the failure
-      // this whole file is about.
-      expect(`${plan} was under -50%: ${wasFull < -0.5}`).toBe(
-        `${plan} was under -50%: true`,
-      )
-      expect(`${plan} improved: ${nowFull > wasFull}`).toBe(
-        `${plan} improved: true`,
-      )
-      // And at the utilization a real customer reaches, the sign HAS flipped.
-      const wasHalf = (before[plan].price - costAt(plan) * 0.5) / before[plan].price
-      expect(`${plan} improved at 50%: ${tierMargin(plan, 0.5) > wasHalf}`).toBe(
-        `${plan} improved at 50%: true`,
+      const was = (before[plan].price - costAt(plan)) / before[plan].price
+      expect(`${plan} was negative: ${was < 0}`).toBe(`${plan} was negative: true`)
+      expect(`${plan} is not: ${tierMargin(plan, 1) >= 0}`).toBe(
+        `${plan} is not: true`,
       )
     }
-    // Scale and Advanced were negative at HALF utilization before, and are
-    // positive there now. Business was the one already just above water.
-    for (const plan of ['scale', 'advanced'] as const) {
-      const wasHalf = (before[plan].price - costAt(plan) * 0.5) / before[plan].price
-      expect(`${plan} was negative at 50%: ${wasHalf < 0}`).toBe(
-        `${plan} was negative at 50%: true`,
-      )
-      expect(`${plan} is positive at 50%: ${tierMargin(plan, 0.5) > 0}`).toBe(
-        `${plan} is positive at 50%: true`,
-      )
-    }
-    // Agency's whole model was unbounded, not merely negative — the case the
-    // rule below exists for.
+    // Agency could not be evaluated at all — the case the `UNLIMITED` rule
+    // below exists for, and the one a model that scores an absent band as
+    // zero reports as the cheapest tier on the ladder.
     expect(Number.isFinite(costAt('agency'))).toBe(false)
+    expect(Number.isFinite(tierCostUsd('agency', 1))).toBe(true)
   })
 
-  it('Agency clears zero at full utilization on every BOUNDED term', () => {
-    // What the resize and the price rise bought, measured on the part of the
-    // model that can be measured. $1,197 of bounded cost against $1,299.
-    const terms = bandCostTerms('agency')
-    const bounded = Object.values(terms)
-      .filter((cost) => Number.isFinite(cost))
-      .reduce((a, b) => a + b, 0)
-    expect(bounded).toBeCloseTo(1197.05, 2)
+  it('MUTATION: restoring ONE band on ONE tier is enough to break it', () => {
+    // The single-axis version, because a mutation that changes four things at
+    // once can pass for the wrong reason. Advanced's contacts band alone —
+    // 1,000,000 at $0.0002 is $200 against a $399 subscription.
+    const restored =
+      Object.values(bandCostTerms('advanced')).reduce((a, b) => a + b, 0) -
+      bandCostTerms('advanced').contacts +
+      1_000_000 * ORG_COGS_UNIT_RATES_USD.perContactMonth
+    expect(
+      (PLAN_PRICING.advanced.basePriceMonthlyUsd - restored) /
+        PLAN_PRICING.advanced.basePriceMonthlyUsd,
+    ).toBeLessThan(0)
+    // …and with the shipped band it is positive. Both directions on one axis.
+    expect(tierMargin('advanced', 1)).toBeGreaterThan(0)
+  })
+
+  it('Agency clears zero on its own, after the resize and the price rise', () => {
+    const cost = tierCostUsd('agency', 1)
+    expect(cost).toBeCloseTo(1122.29, 2)
     expect(PLAN_PRICING.agency.basePriceMonthlyUsd).toBe(1299)
-    expect(1299 - bounded).toBeGreaterThan(0)
-    // At the old $799 the same bounded cost was a $398 loss per month.
-    expect(799 - bounded).toBeLessThan(0)
+    expect(1299 - cost).toBeGreaterThan(0)
+    // At the old $799 the same cost was a $323 loss per month — and that is
+    // the bounded part only; the real figure was unbounded.
+    expect(799 - cost).toBeLessThan(0)
   })
 })
 
@@ -413,28 +393,27 @@ describe('an unbounded band FAILS the model rather than scoring zero', () => {
   })
 
   /**
-   * ⚠️ THE ONE REMAINING EXCEPTION, NAMED AND DATED (2026-08-30).
+   * NO SELF-SERVE TIER HAS AN UNCAPPED COST TERM ANY MORE.
    *
-   * `agency.contactsPerHost` is `UNLIMITED`, so Agency's cost model is still
-   * unbounded on one axis — at `perContactMonth` of $0.0002 an Agency org
-   * with five million contacts costs $1,000/month in contacts alone.
+   * Agency's `contactsPerHost` was the last one, and bounding it required
+   * moving `extraContactsUsdPer1k` off `null` in the same change: the paired
+   * rule is that a finite band with no rate is usage past a bound that is
+   * silently free, so the bound achieves nothing. The two are asserted
+   * together below because they are only correct together.
    *
-   * It is NOT bounded here, and that is a decision rather than an oversight.
-   * Bounding it makes `extraContactsUsdPer1k` mandatory by the paired rule
-   * (`plan-entitlements.spec.ts`: a finite band with no rate is silently
-   * free), and Agency's rate is deliberately `null` BECAUSE the band is
-   * uncapped (AGL-2439) — so the two move together or not at all, and that
-   * pair is a published claim on `/pricing` in both directions.
-   *
-   * The exception is written down, asserted to be the ONLY one, and asserted
-   * to be about contacts specifically. It cannot grow silently, and it cannot
-   * be widened to cover the next unbounded band somebody adds.
+   * ⚠️ ENTERPRISE IS OUT OF SCOPE HERE, AND DELIBERATELY SO. Its
+   * `contactsPerHost` is still `UNLIMITED`, and bounding it would not meter —
+   * it would WALL. `checkContactQuota` returns `allowed: true` past a band
+   * only when the plan carries a rate, and every Enterprise rate is the "not
+   * for sale" sentinel; `upsert-contact.ts` then DROPS the CRM record on a
+   * refusal and increments `contactsDropped`. So a bounded Enterprise band
+   * would silently discard a customer's signups on a negotiated contract.
+   * That is a capacity limit refusing a person's data, which is the one shape
+   * this codebase never enforces at use.
    */
-  const UNBOUNDED_BY_DECISION: Record<string, string[]> = {
-    agency: ['contacts'],
-  }
+  const UNBOUNDED_BY_DECISION: Record<string, string[]> = {}
 
-  it('has exactly one uncapped cost term left, and it is the recorded one', () => {
+  it('has no uncapped cost term left on any self-serve tier', () => {
     const found = Object.fromEntries(
       PAID.map((plan) => [plan, unboundedTerms(plan)]).filter(
         ([, terms]) => (terms as string[]).length > 0,
@@ -443,12 +422,43 @@ describe('an unbounded band FAILS the model rather than scoring zero', () => {
     expect(found).toEqual(UNBOUNDED_BY_DECISION)
   })
 
-  it('records a reason for it, and the reason is about the pairing', () => {
-    // A rate on an uncapped band advertises a fee that cannot be charged;
-    // `Math.max(0, used - Infinity)` is 0 at every usage level. Both halves
-    // are asserted so the exception cannot be closed on one side alone.
-    expect(PLAN_ENTITLEMENTS.agency.contactsPerHost).toBe(UNLIMITED)
-    expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBeNull()
+  it('bounding the last one brought its rate with it', () => {
+    // Both halves. A finite band with a null rate is silently free past the
+    // bound; a rate on an uncapped band advertises a fee that cannot be
+    // charged, because `Math.max(0, used - Infinity)` is 0 at every level.
+    expect(Number.isFinite(PLAN_ENTITLEMENTS.agency.contactsPerHost)).toBe(true)
+    expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBe(0.4)
+    // …and it METERS rather than walls, which is what makes bounding it safe.
+    // A rate is exactly what flips `allowed` past the band.
+    const past = checkContactQuota(
+      { plan: 'agency', subscription: { status: 'active' } } as never,
+      PLAN_ENTITLEMENTS.agency.contactsPerHost + 1_000,
+    )
+    expect(past.allowed).toBe(true)
+    expect(past.overageContacts).toBe(1_000)
+    expect(past.overageMonthlyUsd).toBe(0.4)
+  })
+
+  it('ENTERPRISE is still uncapped, and bounding it would WALL not meter', () => {
+    // The reason the exception list is empty rather than carrying enterprise:
+    // enterprise is not a self-serve tier and is not scanned above. Asserted
+    // here so the reasoning is live rather than a comment — if somebody gives
+    // enterprise a contacts rate, this goes red and the decision gets made
+    // deliberately.
+    expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(UNLIMITED)
+    expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
+    // With a null rate the gate is `used < included`, so a FINITE enterprise
+    // band would refuse. Demonstrated on a synthetic org with a bounded
+    // override, which is exactly what bounding the plan row would produce.
+    const bounded = checkContactQuota(
+      {
+        plan: 'enterprise',
+        entitlements: { contactsPerHost: 1_000 },
+      } as never,
+      1_001,
+    )
+    expect(bounded.allowed).toBe(false)
+    expect(bounded.overageRateUsd).toBeNull()
   })
 
   it('BOTH WAYS: every OTHER band on every paid tier is finite', () => {
