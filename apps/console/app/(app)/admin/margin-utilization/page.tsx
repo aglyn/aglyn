@@ -261,7 +261,10 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Margin', href: buildRoute(Route.ADMIN_MARGIN_UTILIZATION) },
       ]}
-      help="staffConsole"
+      // The topic AND the heading. A bare topic key opens the same docs
+      // destination as the staff overview page, which makes two help icons
+      // interchangeable and lands the reader at the top of a long page.
+      help={{ topic: 'staffConsole', anchor: '#billing-insight' }}
       header={{
         children: 'Margin & utilization',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -465,7 +468,16 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                   </Stack>
                 </CardDisplay>
 
-                <CardDisplay header="Margin" contentGutterX contentGutterY>
+                <CardDisplay
+                  header="Margin"
+                  help={docsHelp('staffConsole', {
+                    anchor: '#billing-insight',
+                    excerpt:
+                      'Net revenue less infrastructure COGS, on the same arithmetic the discount guardrail underwrites against. A contribution margin, not a profit.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
                   <Stack spacing={2}>
                     <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
                       <Chip
@@ -504,6 +516,11 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
 
                 <CardDisplay
                   header="By organization, worst margin first"
+                  help={docsHelp('staffConsole', {
+                    anchor: '#organizations-admin',
+                    excerpt:
+                      'One row per organization scanned, ordered so the thinnest margin surfaces first. Select a row to open that organization.',
+                  })}
                   contentGutterX
                   contentGutterY
                 >
