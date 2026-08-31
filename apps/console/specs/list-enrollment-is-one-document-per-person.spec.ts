@@ -175,14 +175,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   dataStorageRefusal: async () => null,
   upsertHostContact: async () => undefined,
   /*
-   * The newsletter route asks which campaign sent this visitor before it
-   * enrolls them. These requests carry no touch, so the honest answer is
-   * none — and it has to be ANSWERED rather than omitted: the handler runs
-   * inside a try/catch, so a missing export would surface here as an
-   * enrollment that silently never happened.
-   */
-  resolveCampaignTouch: async () => null,
-  /*
    * The double opt-in seam, answering OFF.
    *
    * This file is about one thing — that both enrollment routes write one
