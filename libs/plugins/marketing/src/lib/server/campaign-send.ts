@@ -68,7 +68,10 @@ import {
   buildUnsubscribeUrl,
   unsubscribeSignature as sharedUnsubscribeSignature,
 } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
-import { recordMarketingSends } from '@aglyn/tenant-data-admin/server/email-marketing-gate'
+import {
+  filterCadenceSendable,
+  recordMarketingSends,
+} from '@aglyn/tenant-data-admin/server/email-marketing-gate'
 /*
  * The LEAF module again, and for the third reason listed above `document-id`:
  * the specs that reach this file mock the `@aglyn/tenant-data-admin` barrel,
@@ -628,8 +631,23 @@ export interface CampaignSendResult {
   grandfathered?: number
   /** Dry run only: how many of `audienceSize` the consent rule refused. */
   consentWithheld?: number
-  /** Dry run only: how many of `recipients` are suppressed. */
+  /**
+   * Dry run only: how many of `recipients` are suppressed or off-topic.
+   *
+   * Not netted with {@link cadenceHeld}: leaving this site and asking it for
+   * less mail are different statements, and only one of them is a list a
+   * merchant has to rebuild.
+   */
   suppressed?: number
+  /**
+   * Dry run only: how many of `recipients` asked this site for mail less
+   * often than this send would arrive.
+   *
+   * They stay on every audience they were on and are mailed by the next
+   * campaign that falls outside their interval — the filter refuses a SEND,
+   * never a person.
+   */
+  cadenceHeld?: number
   /** Dry run only: which sending identity this campaign would leave on. */
   identity?: string
   /**
@@ -1445,12 +1463,37 @@ export async function performCampaignSend(
    * person on either suppression list is not, and asking about their topic
    * preferences would be a read taken on a question already answered.
    */
-  const sendable = await filterTopicSendable(
+  const onTopic = await filterTopicSendable(
     hostId,
     topicId,
     notSuppressed,
     firestore,
   )
+  /*
+   * THE FOURTH FILTER: how often the recipient asked to hear from this site.
+   *
+   * The one pace control a campaign is bound by, and the reason it is bound
+   * is the reason the other two do not bind it. A ceiling and a sunset are
+   * conclusions the platform draws about a person; this is a request the
+   * person made, on a page this product built for them to make it. A
+   * campaign that overrode it would make the preference center a form that
+   * records a choice nobody honors — the same failure as ignoring an
+   * unsubscribe, one notch quieter.
+   *
+   * HERE rather than at the per-message gate, and that placement is the whole
+   * point. `sendEmail`'s marketing gate is not on this path: a campaign
+   * carries no `marketing` context, because it mints its own unsubscribe URL
+   * upstream and needs it as a merge value long before the message exists.
+   * Enforcing a pace one message at a time would also refuse people AFTER the
+   * merchant read a number that counted them, which is the thing every filter
+   * on this path exists not to do. Subtracted where the other three are
+   * subtracted, the count on screen is true before Send is pressed.
+   *
+   * Fails OPEN on an unreadable counter — see `filterCadenceSendable`. A
+   * pace is not a stop, and the two suppression lists above have already
+   * removed everybody who asked us to stop entirely.
+   */
+  const sendable = await filterCadenceSendable(hostId, onTopic, { firestore })
   /*
    * NOBODY IN THIS BATCH, BUT SOMEBODY AFTER IT.
    *
@@ -1465,8 +1508,17 @@ export async function performCampaignSend(
    */
   if (!sendable.length && consentSplit.mailable.length <= recipients.length) {
     if (options.continuation) return finishContinuation()
+    /*
+     * Which of the four filters emptied the batch, because the answer changes
+     * what the merchant should do. An audience that unsubscribed is one they
+     * have to rebuild; an audience holding for its own cadence is one that
+     * becomes mailable on its own, and telling them it "unsubscribed" would
+     * send them looking for a problem that is not there.
+     */
     throw new CampaignSendError(
-      'Every recipient has unsubscribed or been suppressed',
+      onTopic.length
+        ? 'Every recipient has asked this site for mail less often than this'
+        : 'Every recipient has unsubscribed or been suppressed',
       400,
     )
   }
@@ -1600,7 +1652,15 @@ export async function performCampaignSend(
       ...(audienceTruncated ? { audienceTruncated: true } : {}),
       ...(options.followUp ? { followUp: true, alreadyReached } : {}),
       sendable: sendable.length,
-      suppressed: recipients.length - sendable.length,
+      /*
+       * Measured to `onTopic` rather than to `sendable`, so the cadence
+       * filter below does not silently enlarge a number labelled
+       * "unsubscribed or suppressed". Somebody who asked for monthly mail did
+       * not unsubscribe, and reporting them under a heading that says they
+       * did is the netting this readout has refused everywhere else.
+       */
+      suppressed: recipients.length - onTopic.length,
+      cadenceHeld: onTopic.length - sendable.length,
       /*
        * What this send will NOT reach on its first pass, so the composer can
        * say "3,000 people, 500 in the first batch, the rest over the next few
@@ -1847,6 +1907,53 @@ export async function performCampaignSend(
    * so a ceiling that did not count it would describe nothing. Collected here
    * and written once below rather than per recipient, because this loop is
    * already one awaited HTTP POST per person.
+   *
+   * ## The ENGAGEMENT SUNSET is exempt too, and for a stronger reason
+   *
+   * `marketingSunsetVerdict` refuses a site that has been mailing somebody
+   * past the sunset window with nothing in it to say they are still
+   * listening. Nothing on this path consults it, deliberately, and the
+   * reasoning is the frequency argument plus two things that only apply here.
+   *
+   * The obvious objection is that a ceiling guards a merchant's volume while
+   * a sunset guards a shared sending domain's reputation, so the platform's
+   * interest should outrank a merchant's reviewed act. That distinction does
+   * not survive contact with the two controls: `marketingFrequencyCap` is
+   * itself "a deliverability control on a shared sending domain" that "cannot
+   * be something one plan buys its way past". Both serve the platform. The
+   * exemption was never about whose interest a control serves — it is about
+   * whether an invisible subtraction may change a number a person already
+   * read and approved.
+   *
+   * What separates the two is what a refusal is made of, and it separates
+   * them in the direction of exempting the sunset MORE readily:
+   *
+   *  1. **A sunset refuses on an inference, not on a stated fact.**
+   *     Suppression carries "stop", the cadence filter above carries "less
+   *     often" — both said by the recipient. A ceiling counts messages that
+   *     demonstrably arrived. A sunset concludes from silence that somebody
+   *     has gone, which is the one refusal on this path that can be wrong
+   *     about a person who is still reading.
+   *  2. **Its refusal is terminal where a ceiling's is retryable.** An
+   *     automated sweep defers a capped message and sends it later; a
+   *     sunsetted address is refused every time until they engage with mail
+   *     they are no longer being sent. Applied to campaigns that is the
+   *     largest silent subtraction in the system, made on the weakest
+   *     evidence.
+   *
+   * And it would break the one campaign written for exactly these people. A
+   * win-back is a reviewed marketing act whose audience is, by definition,
+   * everybody a sunset would refuse — so binding campaigns to it would make
+   * the message that exists to end a disengagement the message that cannot be
+   * sent. No automated path has that case: nobody writes a cart reminder
+   * aimed at people who stopped reading.
+   *
+   * The reputation this leaves unguarded on the campaign path is guarded by
+   * the four filters that DO run before this loop — both suppression lists,
+   * the topic opt-outs and the recipient's own cadence — plus the sender
+   * ramp and the hourly governor. The sunset governs the automated paths,
+   * which fire with no human present. `MarketingSendContext.capped` carries
+   * the same decision for the paths that reach the gate.
    */
   const reached: string[] = []
   /**
@@ -2345,7 +2452,8 @@ export async function performCampaignSend(
               consentWithheld: additive(consentSplit.withheld),
             }
           : {}),
-        suppressed: additive(recipients.length - sendable.length),
+        suppressed: additive(recipients.length - onTopic.length),
+        cadenceHeld: additive(onTopic.length - sendable.length),
         /*
          * That this send's links were trackable at all.
          *

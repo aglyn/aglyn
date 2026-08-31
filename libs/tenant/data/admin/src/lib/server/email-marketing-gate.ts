@@ -457,19 +457,19 @@ export async function recordMarketingSends(
  * `email-suppression.ts` beside those three, because it reads the counter
  * document this module owns and that module is this module's dependency.
  *
- * {@link marketingSendVerdict} enforces the same rule per message and is what
- * actually holds the mail. THIS is for the count: the argument for exempting
- * a campaign from the platform ceiling is that a control which silently
- * removed people from a reviewed one-shot send would make the number on
- * screen a lie, and the way to keep a request the recipient actually made
- * from having that problem is to subtract it where every other refusal is
- * already subtracted.
+ * {@link marketingSendVerdict} enforces the same rule per message, for the
+ * senders that reach the gate. THIS is the campaign path's copy, and it is
+ * the enforcement there rather than only a count: a campaign carries no
+ * `marketing` context — it mints its own unsubscribe URL upstream — so the
+ * gate is not on its path at all, and a rule asked only there would not be
+ * asked of the sender that produces most of a person's mail.
  *
- * ⚠️ **Nothing calls this yet.** The composer's pre-send split does not
- * subtract it, so a campaign against a recipient who asked for less is
- * refused per message by the gate and still counted in the number the
- * merchant read. The refusal is correct and the count is not; wiring it is
- * composer work on a surface this module does not own.
+ * Answering it as a FILTER rather than per message is also the only placement
+ * that keeps the composer honest. The argument for exempting a campaign from
+ * the platform ceiling is that a control which silently removed people from a
+ * reviewed one-shot send would make the number on screen a lie; subtracting
+ * a request the recipient actually made, where every other refusal is already
+ * subtracted, is what keeps this one from having that problem.
  *
  * Keyed and read with one `getAll`, matching its three neighbors: one round
  * trip bounded by the size of the send, and no composite index to go missing.
@@ -605,8 +605,10 @@ export async function marketingSendVerdict(
    * that defers this row retries it once per cadence interval — a day, a week
    * or a month — not once per beat, which is what that argument is about.
    *
-   * `filterCadenceSendable` is the campaign count's half of this, and nothing
-   * calls it yet; see its docblock.
+   * A campaign is bound by the rule but not by THIS enforcement of it: it
+   * carries no `marketing` context, so nothing on its path reaches this
+   * function. {@link filterCadenceSendable} is where it is asked there, and
+   * asked as a filter so the recipient count reflects it before Send.
    */
   const cadence = marketingCadenceVerdict(
     state.cadence,
