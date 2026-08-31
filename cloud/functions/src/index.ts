@@ -234,11 +234,15 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
    * refuses it outside the console app, mention included.)
    *
    * Frequent rather than daily for the same reason `finish-domain-attachments`
-   * is: a site claims its sending domain the moment it is created, and until
-   * the claim is provisioned and verified `resolveSendingIdentity` refuses
-   * every send that site attempts. The refusal text tells the merchant their
-   * domain is "usually ready within a few minutes", and a fifteen-minute
-   * sweep is what makes that sentence true.
+   * is: a site's claim buys nothing until the vendor work behind it finishes,
+   * and this sweep is the only thing that does it.
+   *
+   * What waits is the site's REPUTATION rather than its mail. An unverified
+   * platform subdomain falls through to the shared pool, so receipts and
+   * password resets keep going the whole time; what does not go is marketing,
+   * which may not leave on the pool at all. So the cost of a slow beat is a
+   * paying merchant who cannot run a campaign yet, and fifteen minutes is what
+   * keeps that measured in minutes rather than in a day.
    */
   '/api/admin/provision-sending-domains',
 ]

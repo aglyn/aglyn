@@ -336,10 +336,11 @@ export function CampaignComposer(props: CampaignComposerProps) {
    * WHICH OF THIS SITE'S IDENTITIES THIS EMAIL LEAVES ON.
    *
    * Two values and no more — empty for the site's standing selection, and
-   * `platform` for the shared Aglyn domain. It is deliberately not a domain
-   * name: which custom domain a site may use is an org-admin decision stored
-   * on the host, and a composer that could name one would be a way for a site
-   * editor to send as a domain their site was never given.
+   * `platform` for the domain the platform issued the site, which is what
+   * clearing the selection resolves to. It is deliberately not a domain name:
+   * which custom domain a site may use is an org-admin decision stored on the
+   * host, and a composer that could name one would be a way for a site editor
+   * to send as a domain their site was never given.
    */
   const [sendingIdentity, setSendingIdentity] = useState(
     initial?.sendingIdentity ?? '',
