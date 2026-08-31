@@ -114,6 +114,7 @@ import {
   EMAIL_MAX_AUDIENCE_PER_SEND,
   EMAIL_MAX_RECIPIENTS_PER_SEND,
   campaignBatchPlan,
+  createProviderRequestPacer,
   HOST_SENDERS_COLLECTION,
   isEmailConfigured,
   rateLimitedRetryAtMs,
@@ -2047,14 +2048,37 @@ export async function performCampaignSend(
    * rest. That is not a new loss: before batching, a failed recipient was
    * never retried either, because there was no second pass. What it buys is
    * that one unreachable address cannot stall the two thousand behind it.
+   *
+   * The one failure that is NOT settled here is a refusal about the rate —
+   * the hourly governor's, or the provider's 429. Those are answers about
+   * when, not about whom, and settling a recipient on one would drop somebody
+   * the provider never even looked at while the campaign closed as complete.
+   * They break the loop into `deferred` instead; see the branch below.
    */
   const sendableSet = new Set(sendable)
   const settledOut: string[] = recipients.filter(
     (email) => !sendableSet.has(email),
   )
   let sent = 0
-  /** Recipients the hourly governor refused mid-batch, if any. */
+  /** Recipients a rate refusal left untouched mid-batch, if any. */
   let deferred = 0
+  /**
+   * THE PACE INSIDE ONE BATCH.
+   *
+   * The hourly governor above decides HOW MANY messages this workspace may
+   * put on the domain in an hour; it says nothing about how closely together
+   * they arrive, and the provider only counts the second. A batch of five
+   * hundred is the one place in this codebase that issues provider requests
+   * in a tight loop, so it is the one place that has to hold the request
+   * rate — everything else here sends one message and returns.
+   *
+   * Spreading rather than concurrency: a sequential `await` already caps this
+   * loop at one request in flight, and the defect is that its rate is
+   * whatever the round trip happens to be. See
+   * {@link createProviderRequestPacer} for why waiting out the REMAINDER of
+   * the interval costs a real send nothing.
+   */
+  const paceProviderRequest = createProviderRequestPacer()
   try {
     for (let index = 0; index < sendable.length; index += 1) {
       const email = sendable[index]
@@ -2131,6 +2155,7 @@ export async function performCampaignSend(
         hostId,
         unsubscribeUrl,
       })
+      await paceProviderRequest()
       const result = await sendEmail({
         to: email,
         subject: message.subject,
@@ -2192,8 +2217,14 @@ export async function performCampaignSend(
         continue
       }
       /*
-       * The hourly governor refused this message, so it will refuse every
-       * message after it in this window — the counter only goes up. Stop.
+       * A REFUSAL ABOUT THE RATE STOPS THE BATCH, whichever control produced
+       * it.
+       *
+       * The hourly governor refuses because a counter that only goes up has
+       * reached its ceiling, so every message after this one in the window
+       * gets the same answer. The provider refuses with a 429 because
+       * requests arrived too close together, and the next one is closer
+       * still. Neither says anything about the recipient in hand.
        *
        * Not a throw: some of this batch has already been delivered, and a throw
        * here would lose the delivered count, skip the meters and (on the
@@ -2202,7 +2233,7 @@ export async function performCampaignSend(
        * actually went, and the merchant sees a number that is short.
        *
        * Any OTHER failure — a rejection, a network error — is per-recipient and
-       * the loop continues, exactly as before.
+       * the loop continues.
        */
       if (rateLimitedRetryAtMs(result) !== null) {
         /*

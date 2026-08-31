@@ -326,8 +326,19 @@ let previousSecret: string | undefined
 beforeAll(() => {
   previousSecret = process.env['EMAIL_UNSUBSCRIBE_SECRET']
   process.env['EMAIL_UNSUBSCRIBE_SECRET'] = 'test-secret'
+  /*
+   * NO PROVIDER, SO NO PACE.
+   *
+   * `sendEmail` is stubbed here, so nothing in this file reaches a rate limit
+   * — and the batch would still spread six hundred messages across the
+   * minute the provider's request rate implies. The interval is what
+   * `campaign-send-pace.spec` exists to prove; the cases below are about
+   * which people a window resolves.
+   */
+  process.env['EMAIL_PROVIDER_REQUESTS_PER_SECOND'] = '0'
 })
 afterAll(() => {
+  delete process.env['EMAIL_PROVIDER_REQUESTS_PER_SECOND']
   if (previousSecret === undefined) {
     delete process.env['EMAIL_UNSUBSCRIBE_SECRET']
   } else {
