@@ -29,6 +29,20 @@
       ]
     },
     {
+      "collectionGroup": "sendingDomains",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "campaigns",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
