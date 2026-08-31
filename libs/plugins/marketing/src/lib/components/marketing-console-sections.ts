@@ -20,6 +20,7 @@ import type { ConsoleNavSection } from '@aglyn/aglyn'
 export type MarketingConsoleSectionId =
   | 'overview'
   | 'campaigns'
+  | 'conversions'
   | 'overlays'
   | 'experiments'
 
@@ -53,6 +54,16 @@ export const MARKETING_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
    * Each email's page links here for the campaign it belongs to.
    */
   { id: 'campaigns', label: 'Campaigns' },
+  /*
+   * What the campaigns CAUSED, from the conversions' end. A campaign's own
+   * report answers this for that campaign; a section is what answers it for
+   * the site, and it is the only place two things can be said that a campaign
+   * report structurally cannot: the conversions credited to a tagged web link
+   * rather than to a campaign document, and the ones credited to nothing at
+   * all. A surface listing only the credited ones renders "we credited nine
+   * of these" as "nine of these happened".
+   */
+  { id: 'conversions', label: 'Conversions' },
   { id: 'overlays', label: 'Overlays' },
   { id: 'experiments', label: 'A/B testing' },
 ]

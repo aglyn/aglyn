@@ -48,3 +48,11 @@ export * from './email-record'
  * rolls its sends into one set of figures.
  */
 export * from './campaign-container'
+
+/**
+ * What a campaign CAUSED: the four identify moments, kept apart because one
+ * visitor action writes several of them. Separate from the revenue module
+ * because it reads a different document and answers what happened to people
+ * who were anonymous until the moment being counted.
+ */
+export * from './campaign-conversions'

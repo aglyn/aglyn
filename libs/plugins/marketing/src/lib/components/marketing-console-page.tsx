@@ -23,6 +23,7 @@ import type { ReactNode } from 'react'
 import AnnouncementBarCard from './announcement-bar-card.component'
 import CampaignDetailCard from './campaign-detail-card'
 import CampaignsCard from './campaigns-card'
+import CampaignConversionsCard from './campaign-conversions-card'
 import HostExperimentsCard from './host-experiments-card.component'
 import HostMarketingSummaryCard from './host-marketing-summary-card.component'
 import HostOverlaysCard from './host-overlays-card.component'
@@ -79,6 +80,20 @@ function sectionBody(
         />
       ) : (
         <CampaignsCard hostId={hostId} basePath={basePath} />
+      )
+    case 'conversions':
+      /*
+       * `/marketing/conversions/{campaignId}` narrows the list to one
+       * campaign's credited conversions — the drill-down from that campaign's
+       * report. A segment rather than a query string, so the section owns its
+       * own subtree exactly as `campaigns` does and the URL is linkable.
+       */
+      return (
+        <CampaignConversionsCard
+          hostId={hostId}
+          basePath={basePath}
+          campaignId={detail[0]}
+        />
       )
     case 'overlays':
       return (

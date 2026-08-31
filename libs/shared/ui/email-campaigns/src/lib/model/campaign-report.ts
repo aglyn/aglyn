@@ -195,6 +195,15 @@ export interface CampaignCaveat {
     | 'revenue-denominator-unrecorded'
     | 'revenue-multi-currency'
     | 'revenue-mid-flight'
+    /* Raised by `campaign-conversions.ts`, through this shape for the same
+     * reason: one way of saying "a number is being withheld, or must not be
+     * read the obvious way, and here is why". The first two are the reasons
+     * the four conversion kinds stand apart instead of totalling; the last
+     * two qualify the uncredited figure rather than withholding it. */
+    | 'conversions-kinds-overlap'
+    | 'conversions-web-not-rolled-up'
+    | 'conversions-unattributed-is-a-ceiling'
+    | 'conversions-total-crosses-hosts'
   message: string
 }
 

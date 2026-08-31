@@ -37,6 +37,13 @@ import {
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+/*
+ * The component path and NOT the marketing barrel: that barrel is the entry
+ * point the tenant's loader imports to activate the plugin's SITE half, so a
+ * console card named there ships to every published page. The Inbox reaches
+ * the same module the same way.
+ */
+import { default as ConversionAttribution } from '@aglyn/plugins-marketing/components/conversion-attribution.component'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   CONTACT_LIST_FILTER_FIELDS,
@@ -1028,6 +1035,25 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                 />
               ))}
             </Stack>
+            {/*
+              WHERE THIS CONTACT CAME FROM.
+
+              `sources` above says which mechanism created them — a form, a
+              checkout, an import — and this says which campaign led to it,
+              which is a different question and the one the marketing side is
+              asking. One keyed read: the attribution is `contact:{id}` under
+              the HOST, even though the contact itself is org-scoped, because
+              a campaign belongs to one site while a contact is shared across
+              the org.
+
+              Paid on opening a contact rather than per row, and a contact
+              credited to nobody says so rather than showing an empty campaign.
+             */}
+            <ConversionAttribution
+              hostId={hostId}
+              kind="contact"
+              refId={String(selected.$id)}
+            />
             <TextField
               size="small"
               label="Tags"

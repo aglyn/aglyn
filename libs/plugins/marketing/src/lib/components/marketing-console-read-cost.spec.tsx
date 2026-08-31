@@ -43,6 +43,7 @@
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MARKETING_CONSOLE_SECTIONS } from './marketing-console-sections'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.
@@ -438,12 +439,12 @@ describe('marketing console read cost (AGL-2501)', () => {
    * summed into one document, so the report pays for one listen and not for
    * one order.
    *=========================================*/
-  it('the campaign report reads four documents, and no collection', async () => {
+  it('the campaign report reads five documents, and no collection', async () => {
     await renderConsole('campaigns', ['camp_1'])
     summarize('campaign report', mockListens)
 
     /*
-     * FOUR, and the first of them is what keeps this URL working at all.
+     * FIVE, and the first of them is what keeps this URL working at all.
      *
      * `/marketing/campaigns/{id}` names either a campaign CONTAINER or a
      * single SEND — a message that belongs to no container carries only its
@@ -456,15 +457,59 @@ describe('marketing console read cost (AGL-2501)', () => {
      * report is a fixed number of SINGLE-DOCUMENT reads whatever the size of
      * the audience, and the campaign view's own collection queries do not open
      * on a send URL — they are gated on the container having been found.
+     *
+     * The conversions rollup is the revenue argument once more. Counting what
+     * a campaign caused at read time would mean querying the host's
+     * attribution records on every render of this screen; the join is done
+     * once at the conversion and summed into one document, so the report pays
+     * for one listen and not for one conversion.
      */
     expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(4)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(5)
     expect(mockListens.map((listen) => listen.path)).toEqual([
       'hosts/site1/emailCampaigns/camp_1',
       'hosts/site1/campaigns/camp_1',
       'hosts/site1/campaigns/camp_1/reports/links',
       'hosts/site1/campaigns/camp_1/reports/revenue',
+      'hosts/site1/campaigns/camp_1/reports/conversions',
     ])
+  })
+
+  /*==========================================
+   * THE CONVERSIONS SECTION.
+   *
+   * The surface most at risk of becoming a scan: "show me what the campaigns
+   * caused" reads naturally as "read every attribution record and group
+   * them", which is one document per conversion on every visit and grows with
+   * the site's success.
+   *
+   * What it costs instead is two PAGED windows — one per channel, because the
+   * two are never merged into one list — each bounded by the shared page size
+   * with one probe row past it. The uncredited figure is a server aggregate,
+   * billed per thousand index entries rather than per document, and the
+   * landing-page join is behind a button. So the section's standing cost is
+   * fixed by the page size and not by the history.
+   *=========================================*/
+  it('the conversions section pages both channels and scans neither', async () => {
+    await renderConsole('conversions')
+    summarize('conversions section', mockListens)
+
+    const attributionListens = mockListens.filter((listen) =>
+      listen.path.endsWith('/campaignAttributions'),
+    )
+    // TWO windows: the email channel and the web channel, separately.
+    expect(attributionListens).toHaveLength(2)
+    // Each is the shared page size plus the probe row that turns "there is
+    // more" into a fact — never a ceiling in the hundreds.
+    attributionListens.forEach((listen) => {
+      expect(listen.limit).toBe(TABLE_PAGE_SIZE_DEFAULT + 1)
+    })
+    // And it reads nothing else — not the campaigns it links to, not the
+    // submissions the landing-page join would need.
+    const paths = mockListens.map((listen) => listen.path)
+    expect(paths).not.toContain('hosts/site1/campaigns')
+    expect(paths).not.toContain('hosts/site1/emailCampaigns')
+    expect(paths).not.toContain('hosts/site1/formSubmissions')
   })
 
   it('the report does not mount the composer or the history', async () => {
@@ -477,6 +522,10 @@ describe('marketing console read cost (AGL-2501)', () => {
     const paths = mockListens.map((listen) => listen.path)
     expect(paths).not.toContain('hosts/site1/campaigns')
     expect(paths).not.toContain('hosts/site1/emailCampaigns')
+    // The rollup says how many; the RECORDS behind it are a paged read on
+    // another section, reached by a link. Listening for them here would put a
+    // collection query back on the page this ceiling protects.
+    expect(paths).not.toContain('hosts/site1/campaignAttributions')
     expect(paths.some((path) => path.endsWith('/lists'))).toBe(false)
     expect(paths.some((path) => path.includes('emailDeliveries'))).toBe(false)
     expect(paths.some((path) => path.endsWith('/screens'))).toBe(false)
