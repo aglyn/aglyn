@@ -79,10 +79,13 @@ describe('the credit is a unit of COST, which is the whole design', () => {
     const perBuild = assistCreditsFromUsd(A_SCREEN_BUILD_USD)
     const questions = Math.floor(band / perQuestion)
     const builds = Math.floor(band / perBuild)
-    // The customer-visible consequence: hundreds of questions, or tens of
-    // builds, out of ONE band. A count-based allowance cannot express this.
-    expect(questions).toBeGreaterThan(300)
-    expect(builds).toBeLessThan(60)
+    // The customer-visible consequence, as NUMBERS: the same band is hundreds
+    // of questions or a handful of builds. A count-based allowance cannot
+    // express this, and a threshold would let the ratio collapse unnoticed.
+    expect(`${questions} questions, ${builds} builds`).toBe(
+      '211 questions, 11 builds',
+    )
+    expect(questions).toBeGreaterThan(builds * 10)
     expect(builds).toBeGreaterThan(0)
   })
 
@@ -104,17 +107,33 @@ describe('the credit is a unit of COST, which is the whole design', () => {
 })
 
 describe('the bands', () => {
-  it('sits inside ~20% of the tier price at FULL consumption', () => {
+  /**
+   * ⚠️ THE SHARE OF PRICE IS A SANITY BOUND, NOT THE SIZING RULE.
+   *
+   * A band was once sized as ~13% of the tier price, on the assumption that
+   * ~20% of price was available for assist. It is not: the same subscription
+   * is also carrying media storage, bandwidth, form submissions, dataset
+   * storage, API requests, contacts and email, and those seven together leave
+   * between 10.0% and 16.3% of price on the paid ladder. A share of price
+   * cannot see that, so it cannot say whether a band is affordable.
+   *
+   * `tier-margin-floor.spec.ts` is the authority — it multiplies every band
+   * against the platform's own cost rates and holds each tier non-negative at
+   * 100% of all eight. What is asserted here is only the shape that follows:
+   * a band that is a LARGE share of price is definitionally unaffordable,
+   * because no tier has that much room left over.
+   */
+  it('stays a small share of the tier price at FULL consumption', () => {
     for (const plan of PAID_TIERS) {
       const budgetUsd = resolveAssistBudgetUsd({ plan })
       if (budgetUsd === null) throw new Error(`${plan} must carry a band`)
       const price = PLAN_PRICING[plan].basePriceMonthlyUsd
       expect(price).toBeGreaterThan(0)
-      // The constraint, read against the LIVE price table rather than against
-      // figures copied into this file — a repricing must be able to break it.
-      expect(budgetUsd / price).toBeLessThanOrEqual(0.2)
+      // Read against the LIVE price table rather than against figures copied
+      // into this file — a repricing must be able to break it.
+      expect(budgetUsd / price).toBeLessThanOrEqual(0.055)
       // And it is a real band, not a rounding artefact of the constraint.
-      expect(budgetUsd / price).toBeGreaterThan(0.1)
+      expect(budgetUsd / price).toBeGreaterThan(0.03)
     }
   })
 
@@ -154,6 +173,24 @@ describe('Enterprise resolves to a finite number, never Infinity', () => {
       JSON.stringify(PLAN_ENTITLEMENTS.enterprise),
     ) as { assistCreditsPerMonth: number }
     expect(resolved.assistCreditsPerMonth).toBe(band)
+  })
+
+  it('is anchored to the TOP OF THE LADDER, not to a price it does not have', () => {
+    // Enterprise carries no list price, so the band cannot be sized against
+    // what a tier's other cost terms leave out of one. It takes the step the
+    // ladder already takes instead — 1.5x Agency — and that relation is
+    // asserted rather than described, so moving Agency's band without moving
+    // this one goes red instead of quietly flattening the top of the ladder.
+    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(
+      PLAN_ENTITLEMENTS.agency.assistCreditsPerMonth * 1.5,
+    )
+    // And it stays a smaller share of the cheapest deal that is sold as
+    // Enterprise than Agency's own band is of $1,299 — a top rung that cost
+    // proportionally more than the one below it would be the wrong shape.
+    const agencyPrice = PLAN_PRICING.agency.basePriceMonthlyUsd
+    expect(
+      assistUsdFromCredits(ENTERPRISE_ASSIST_CREDITS_PER_MONTH) / agencyPrice,
+    ).toBeLessThan(0.07)
   })
 
   it('takes a CONTRACTED per-org value over the fallback', () => {
@@ -203,9 +240,9 @@ describe('ANTI-VACUITY: a zero band is "no band", never a budget of zero', () =>
   it('THE OTHER WAY: a real band is not swallowed by the same rule', () => {
     // Without this, the test above passes for a build that resolves EVERY
     // band to null and therefore never enforces anything.
-    expect(resolveAssistCreditBudget({ plan: 'pro' })).toBe(7_500)
-    expect(resolveAssistBudgetUsd({ plan: 'pro' })).toBe(7.5)
-    expect(resolveAssistCreditBudget({ plan: 'agency' })).toBe(170_000)
+    expect(resolveAssistCreditBudget({ plan: 'pro' })).toBe(2_750)
+    expect(resolveAssistBudgetUsd({ plan: 'pro' })).toBe(2.75)
+    expect(resolveAssistCreditBudget({ plan: 'agency' })).toBe(58_000)
   })
 
   it('a dead subscription drops to free, and so loses the band', () => {

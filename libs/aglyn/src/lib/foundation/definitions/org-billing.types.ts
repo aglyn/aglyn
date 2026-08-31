@@ -412,6 +412,23 @@ export interface OrgEntitlements {
    * everything a customer sees counts credits, because the dollar figure
    * behind them is our provider bill and not a price.
    *
+   * ## HOW THE BAND IS SIZED, and why it is not a share of the price
+   *
+   * A credit is a dollar of provider spend at `ASSIST_CREDIT_COST_USD`, so
+   * the band IS a liability figure: the plan's whole assist give is
+   * `assistCreditsPerMonth / 1000` dollars, and `reserveAssistMessage`
+   * refuses past it, so nothing can exceed it. Sizing it as a share of the
+   * subscription price says nothing about whether the tier can afford it,
+   * because the price is also carrying storage, bandwidth, form submissions,
+   * dataset storage, API requests, contacts and email.
+   *
+   * So each band is sized against what those SEVEN other terms leave. Every
+   * paid band takes between a quarter and a third of that remainder, which
+   * keeps the tier's worst case positive and keeps the ladder's shape: the
+   * margin each tier holds at 100% of every band stays in proportion to what
+   * it held before assist was sold at all. `tier-margin-floor.spec.ts` is the
+   * model, and it pins both the rule and the resulting figures.
+   *
    * 0 on Free and Starter, which carry no `aiAssist` and no band.
    */
   assistCreditsPerMonth?: number
