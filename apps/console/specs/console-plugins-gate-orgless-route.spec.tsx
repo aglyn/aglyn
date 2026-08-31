@@ -122,7 +122,8 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
     await settle()
     expect(mockEnsure).not.toHaveBeenCalled()
     expect(mockLoadOrgRealmPlugins).not.toHaveBeenCalled()
-    // No ID token is minted for a workspace the user has not opened either.
+    // Nothing reaches the realm loader for a workspace the user has not
+    // opened, so nothing it would authorize is minted either.
     expect(mockGetIdToken).not.toHaveBeenCalled()
     // And nothing is held back: the picker itself must render, not sit
     // behind a boot splash waiting for a load that will never start.
@@ -163,9 +164,12 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
       expect.arrayContaining(['commerce']),
       ['console'],
     )
+    // The ACCOUNT, not a token the gate awaited first: the loader
+    // authorizes its own request under a deadline, so a token endpoint that
+    // never answers cannot hold the whole console shell behind the splash.
     expect(mockLoadOrgRealmPlugins).toHaveBeenCalledWith(
       'org-fallback',
-      'id-token',
+      expect.objectContaining({ getIdToken: mockGetIdToken }),
     )
   })
 
@@ -175,9 +179,12 @@ describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
     renderGate()
 
     await waitFor(() => expect(mockEnsure).toHaveBeenCalled())
+    // The ACCOUNT, not a token the gate awaited first: the loader
+    // authorizes its own request under a deadline, so a token endpoint that
+    // never answers cannot hold the whole console shell behind the splash.
     expect(mockLoadOrgRealmPlugins).toHaveBeenCalledWith(
       'org-fallback',
-      'id-token',
+      expect.objectContaining({ getIdToken: mockGetIdToken }),
     )
   })
 })

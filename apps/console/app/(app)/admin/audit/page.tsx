@@ -45,6 +45,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -81,13 +82,11 @@ function ArchiveCard() {
   const [busy, setBusy] = useState(false)
 
   const call = async (params: Record<string, string>) => {
-    const idToken = await (
-      user as { getIdToken?: () => Promise<string> }
-    )?.getIdToken?.()
     const search = new URLSearchParams(params).toString()
-    const response = await fetch(`/api/admin/audit-archive/browse?${search}`, {
-      headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-    })
+    const response = await authorizedFetch(
+      user,
+      `/api/admin/audit-archive/browse?${search}`,
+    )
     const body = await response.json().catch(() => null)
     if (!response.ok) throw new Error(body?.error ?? 'Archive lookup failed')
     return body

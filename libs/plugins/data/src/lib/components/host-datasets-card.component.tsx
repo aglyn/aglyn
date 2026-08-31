@@ -83,6 +83,7 @@ import {
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
 import { DatasetRecordDialog } from './dataset-record-dialog.component'
 
@@ -172,13 +173,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   // legacy host scope (no org resolved) keeps the old client writes.
   const callDatasetApi = useCallback(
     async (payload: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/datasets', {
+      const response = await authorizedFetch(user, '/api/orgs/datasets', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, ...payload }),
       })
       const result = await response.json().catch(() => ({}))
@@ -590,13 +587,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     // `recursiveDelete`, so the delete goes through the erase route
     // (AGL-945). Single-record deletes below stay client-direct.
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/resources/erase', {
+      const response = await authorizedFetch(user, '/api/resources/erase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: dataScope[0],
           scopeId: dataScope[1],
@@ -1016,12 +1009,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       if (!selected?.$id || !orgId || exporting) return
       setExporting(format)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/orgs/datasets/export?orgId=${encodeURIComponent(orgId)}` +
             `&datasetId=${encodeURIComponent(selected.$id)}` +
             `&format=${format}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}))

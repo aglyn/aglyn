@@ -28,6 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 
@@ -97,11 +98,7 @@ export default function StaffChurnReportCard() {
     let cancelled = false
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch('/api/admin/churn-report', {
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
+        const response = await authorizedFetch(user, '/api/admin/churn-report')
         const payload = await response.json().catch(() => ({}))
         if (cancelled) return
         if (!response.ok) {

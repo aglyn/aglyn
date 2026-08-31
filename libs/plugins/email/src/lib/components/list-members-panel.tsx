@@ -89,6 +89,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface ListMembersPanelProps {
   hostId: string
@@ -285,14 +286,9 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
 
   const post = useCallback(
     async (route: string, body: Record<string, unknown>) => {
-      const idToken = await (user as { getIdToken?: () => Promise<string> })
-        ?.getIdToken?.()
-      const response = await fetch(`/api/email/${route}`, {
+      const response = await authorizedFetch(user, `/api/email/${route}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, listId, ...body }),
       })
       const payload = await response.json().catch(() => ({}))

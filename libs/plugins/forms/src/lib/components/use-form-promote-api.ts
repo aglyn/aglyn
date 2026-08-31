@@ -18,6 +18,7 @@
 
 import type { FormContractViolation } from '@aglyn/aglyn'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useCallback } from 'react'
 
 /**
@@ -71,13 +72,9 @@ export function useFormPromoteApi(): PromoteForm {
   const { data: user } = useUser()
   return useCallback<PromoteForm>(
     async ({ hostId, formId, versionId }) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/hosts/forms/promote', {
+      const response = await authorizedFetch(user, '/api/hosts/forms/promote', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, formId, versionId }),
       })
       const payload = await response.json().catch(() => ({}))

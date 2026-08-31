@@ -22,6 +22,7 @@ import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useRef } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   type InstallPlanStep,
   listingArtifactType,
@@ -177,15 +178,11 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
     ) => {
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         const artifactType = listingArtifactType(listing)
         const endpoint = endpointForArtifact(artifactType)
-        const response = await fetch(`/api/${endpoint}`, {
+        const response = await authorizedFetch(user, `/api/${endpoint}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             listingId: listing.$id,
             hostId,
@@ -329,7 +326,6 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
       if (!steps.length) return
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         const artifactType = listingArtifactType(listing)
         const endpoint = endpointForArtifact(artifactType)
         let installed = 0
@@ -359,12 +355,9 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
           // Org steps still need a host to resolve the org server-side, so
           // fall back to the acting host; host steps target their own site.
           const targetHostId = step.scope === 'host' ? step.hostId : hostId
-          const response = await fetch(`/api/${endpoint}`, {
+          const response = await authorizedFetch(user, `/api/${endpoint}`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               listingId: listing.$id,
               hostId: targetHostId,
@@ -454,54 +447,56 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
     async (listing: any) => {
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         const listingId = String(listing.$id)
         const attemptKey =
           purchaseAttempts.current.get(listingId) ??
           `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
         purchaseAttempts.current.set(listingId, attemptKey)
-        const response = await fetch('/api/marketplace/checkout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            // Stable across a retry of THIS attempt (AGL-1697), so a
-            // double-click or a re-submit after a timeout cannot open a second
-            // Stripe session on a live account.
-            'Idempotency-Key': attemptKey,
-          },
-          // The browser's GA client id rides along so the SERVER-side
-          // `purchase` the Stripe webhook sends can be attributed to the
-          // session — and therefore the campaign — that produced it
-          // (AGL-1638). The webhook has always read this off the session
-          // metadata; until now nothing captured it, so every marketplace
-          // sale landed on a synthetic, sessionless GA user and plugin
-          // revenue had no acquisition channel at all.
-          //
-          // Resolves to null within 500ms when gtag is absent (consent
-          // refused, ad blocker, analytics unconfigured), so it can never
-          // delay or block a purchase — same contract as the console's
-          // subscription checkout.
-          body: JSON.stringify({
-            listingId: listing.$id,
-            hostId,
-            // WHICH WORKSPACE IS BUYING (AGL-2331). A purchase licenses an
-            // organization, so the acting org is named rather than inferred:
-            // at org scope the surface acts through an arbitrary FIRST site,
-            // and letting the server derive the licence holder from that site
-            // would make which client workspace got the licence depend on the
-            // order sites happen to come back in.
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/checkout',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // Stable across a retry of THIS attempt (AGL-1697), so a
+              // double-click or a re-submit after a timeout cannot open a
+              // second Stripe session on a live account.
+              'Idempotency-Key': attemptKey,
+            },
+            // The browser's GA client id rides along so the SERVER-side
+            // `purchase` the Stripe webhook sends can be attributed to the
+            // session — and therefore the campaign — that produced it
+            // (AGL-1638). The webhook has always read this off the session
+            // metadata; until now nothing captured it, so every marketplace
+            // sale landed on a synthetic, sessionless GA user and plugin
+            // revenue had no acquisition channel at all.
             //
-            // Advisory, not authority — the server resolves it through the
-            // caller's own membership and refuses an org they are not in. An
-            // older cached bundle that sends none still works: the server
-            // falls back to resolving the org from `hostId` the same way.
-            ...(orgId ? { orgId } : {}),
-            gaClientId: await readGaClientId(
-              process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-            ),
-          }),
-        })
+            // Resolves to null within 500ms when gtag is absent (consent
+            // refused, ad blocker, analytics unconfigured), so it can never
+            // delay or block a purchase — same contract as the console's
+            // subscription checkout.
+            body: JSON.stringify({
+              listingId: listing.$id,
+              hostId,
+              // WHICH WORKSPACE IS BUYING (AGL-2331). A purchase licenses an
+              // organization, so the acting org is named rather than inferred:
+              // at org scope the surface acts through an arbitrary FIRST site,
+              // and letting the server derive the licence holder from that site
+              // would make which client workspace got the licence depend on the
+              // order sites happen to come back in.
+              //
+              // Advisory, not authority — the server resolves it through the
+              // caller's own membership and refuses an org they are not in. An
+              // older cached bundle that sends none still works: the server
+              // falls back to resolving the org from `hostId` the same way.
+              ...(orgId ? { orgId } : {}),
+              gaClientId: await readGaClientId(
+                process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+              ),
+            }),
+          },
+        )
         const payload = await response.json()
         // The PAID install door refuses under a lock too (AGL-1545): both
         // `checkout` and `marketplace-installs` gate it. A buyer must not
@@ -559,20 +554,20 @@ export function useMarketplaceActions(hostId: string, orgId?: string | null) {
     ) => {
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/install-plugin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/install-plugin',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              listingId: listing.$id,
+              hostId: targetHostId ?? hostId,
+              action: 'uninstall',
+              ...(scope ? { scope } : {}),
+            }),
           },
-          body: JSON.stringify({
-            listingId: listing.$id,
-            hostId: targetHostId ?? hostId,
-            action: 'uninstall',
-            ...(scope ? { scope } : {}),
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           // Uninstall rides the install-plugin route, so an installs lock

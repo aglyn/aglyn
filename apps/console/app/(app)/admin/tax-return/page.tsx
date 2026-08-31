@@ -79,6 +79,7 @@ import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -153,10 +154,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     void (async () => {
       let configured: string | null = null
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/tax-filing', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(user, '/api/admin/tax-filing')
         const body = await response.json().catch(() => ({}))
         const value = body?.config?.firstTaxablePeriod
         if (response.ok && typeof value === 'string') configured = value
@@ -209,10 +207,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     setError(null)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/tax-return?period=${encodeURIComponent(period)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const body = await response.json().catch(() => ({}))
         if (!active) return

@@ -18,6 +18,7 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -131,17 +132,18 @@ export function CloseAccountCard({ user, hasPassword }: CloseAccountCardProps) {
         await reauthenticateWithPopup(user, reauthProvider(user))
       }
 
-      // `true` forces a refresh, so the token carries the `auth_time` that
-      // was just refreshed rather than the cached one from sign-in.
-      const idToken = await user.getIdToken(true)
-      const response = await fetch('/api/account/close', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
+      // `forceRefresh` so the token carries the `auth_time` that was just
+      // refreshed rather than the cached one from sign-in.
+      const response = await authorizedFetch(
+        user,
+        '/api/account/close',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm }),
         },
-        body: JSON.stringify({ confirm }),
-      })
+        { forceRefresh: true },
+      )
       const payload = (await response.json()) as {
         error?: string
         blockers?: CloseAccountBlocker[]

@@ -19,6 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useOrgScope } from './use-org-scope'
 
 /**
@@ -45,11 +46,9 @@ export function useOrgMemberOptions(enabled: boolean) {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/orgs/members?orgId=${encodeURIComponent(orgId)}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         )
         if (!response.ok) return
         const payload = await response.json()

@@ -65,6 +65,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SITE_LOGO_HINT } from '../../../../../constants/media-size-hints'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import CardColumns from '../../../../../components/card-columns.component'
 import StaffOnly from '../../../../../components/staff-only.component'
@@ -169,11 +170,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     setOrgError(false)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) throw new Error('no token')
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/org-detail?orgId=${encodeURIComponent(orgId)}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         )
         if (!active) return
         if (response.status === 404) {
@@ -233,8 +232,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!isStaff || !orgId) return undefined
     let active = true
     void (async () => {
-      const idToken = await (user as any)?.getIdToken?.()
-      if (!idToken) return
       // The route serves 200 per page and returns `nextCursor`; this read
       // took the first page and stopped (AGL-2083). `hostLimit` is
       // UNLIMITED on the top tier, so an org past 200 sites showed a
@@ -242,7 +239,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       const result = await fetchAllPages<any>({
         path: `/api/admin/hosts?orgId=${encodeURIComponent(orgId)}`,
         key: 'hosts',
-        headers: { Authorization: `Bearer ${idToken}` },
+        user,
         active: () => active,
       })
       if (!active) return
@@ -332,15 +329,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (portalBusy) return
     setPortalBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/billing/subscription',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, action: 'portal' }),
         },
-        body: JSON.stringify({ orgId, action: 'portal' }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.url) {
         enqueueSnackbar(
@@ -359,10 +356,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/org-billing?orgId=${encodeURIComponent(orgId)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const payload = await response.json()
         if (!active) return
@@ -417,10 +413,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     setUsageReady(false)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/org-usage?orgId=${encodeURIComponent(orgId)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) throw new Error(String(response.status))
         const payload = await response.json()
@@ -474,10 +469,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [managerBusy, setManagerBusy] = useState(false)
   const [managerError, setManagerError] = useState<string | null>(null)
   const loadManager = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/admin/org-success-manager?orgId=${encodeURIComponent(orgId)}`,
-      { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
     )
     if (!response.ok) return
     const payload = await response.json().catch(() => ({}))
@@ -496,19 +490,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     setManagerBusy(true)
     setManagerError(null)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-success-manager', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/org-success-manager',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId,
+            name: managerDraft.name.trim(),
+            email: managerDraft.email.trim(),
+          }),
         },
-        body: JSON.stringify({
-          orgId,
-          name: managerDraft.name.trim(),
-          email: managerDraft.email.trim(),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         setManagerError(payload?.error ?? 'Could not save')
@@ -535,10 +529,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const [noteDraft, setNoteDraft] = useState('')
   const [noteBusy, setNoteBusy] = useState(false)
   const loadNotes = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/admin/org-notes?orgId=${encodeURIComponent(orgId)}`,
-      { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
     )
     if (!response.ok) return
     const payload = await response.json().catch(() => ({}))
@@ -551,13 +544,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!noteDraft.trim() || noteBusy) return
     setNoteBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-notes', {
+      const response = await authorizedFetch(user, '/api/admin/org-notes', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, text: noteDraft.trim() }),
       })
       if (response.ok) {
@@ -652,13 +641,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (orgEditBusy) return
     setOrgEditBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      }
+      const headers = { 'Content-Type': 'application/json' }
       if (orgEdit.name.trim() && orgEdit.name.trim() !== org?.name) {
-        const renamed = await fetch('/api/orgs/settings', {
+        const renamed = await authorizedFetch(user, '/api/orgs/settings', {
           method: 'POST',
           headers,
           body: JSON.stringify({
@@ -669,7 +654,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         })
         if (!renamed.ok) throw new Error('Rename failed')
       }
-      const response = await fetch('/api/orgs/settings', {
+      const response = await authorizedFetch(user, '/api/orgs/settings', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -703,13 +688,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!transferTarget || orgEditBusy) return
     setOrgEditBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/settings', {
+      const response = await authorizedFetch(user, '/api/orgs/settings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
           action: 'transfer-ownership',
@@ -756,10 +737,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/coupons', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(user, '/api/admin/coupons')
         if (!response.ok) return
         const payload = await response.json().catch(() => ({}))
         if (active) setCoupons(payload.coupons ?? [])
@@ -806,13 +784,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (!selectedCoupon || discountBusy) return
     setDiscountBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-discount', {
+      const response = await authorizedFetch(user, '/api/admin/org-discount', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
           action: 'apply',
@@ -843,13 +817,9 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     if (discountBusy) return
     setDiscountBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/org-discount', {
+      const response = await authorizedFetch(user, '/api/admin/org-discount', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, action: 'remove' }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -977,22 +947,24 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/enterprise-billing', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': entAttemptKey.current,
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/admin/enterprise-billing',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': entAttemptKey.current,
+          },
+          body: JSON.stringify({
+            orgId,
+            amountMonthlyUsd: amount,
+            interval: entInterval,
+            plan: entPlan,
+            mode: entMode,
+          }),
         },
-        body: JSON.stringify({
-          orgId,
-          amountMonthlyUsd: amount,
-          interval: entInterval,
-          plan: entPlan,
-          mode: entMode,
-        }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         return void enqueueSnackbar(payload?.error ?? 'Provisioning failed', {

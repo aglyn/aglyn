@@ -36,6 +36,7 @@ import {
 import { doc, runTransaction, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface OrderDetailDialogProps {
   hostId: string
@@ -141,17 +142,17 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       if (!orderId) return false
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         let response: Response
         try {
-          response = await fetch('/api/commerce/fulfill-order', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          response = await authorizedFetch(
+            user,
+            '/api/commerce/fulfill-order',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hostId, orderId, to, ...extra }),
             },
-            body: JSON.stringify({ hostId, orderId, to, ...extra }),
-          })
+          )
         } catch (error) {
           console.error(error)
           enqueueSnackbar(
@@ -278,15 +279,11 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!confirmed) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
       let response: Response
       try {
-        response = await fetch('/api/commerce/cancel-order', {
+        response = await authorizedFetch(user, '/api/commerce/cancel-order', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, orderId }),
         })
       } catch (error) {
@@ -433,13 +430,11 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/commerce/refund', {
+      const response = await authorizedFetch(user, '/api/commerce/refund', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': attemptKey.current,
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
           hostId,

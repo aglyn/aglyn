@@ -50,6 +50,7 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   AlertTitle,
@@ -123,17 +124,19 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
     let active = true
     setLoading(true)
     void (async () => {
-      const idToken = await (user as any)?.getIdToken?.().catch(() => null)
       const probed = await Promise.all(
         HEALTH_PROBES.map(async (probe) => {
           try {
-            const response = await fetch(probe.path, {
-              cache: 'no-store',
-              headers:
-                probe.auth === 'staff' && idToken
-                  ? { Authorization: `Bearer ${idToken}` }
-                  : {},
-            })
+            // Only the staff probes are authorized, and those go out with
+            // credentials or not at all — a staff probe sent anonymously is
+            // answered with the refusal every unauthenticated caller gets,
+            // which this page would read as the service being unhealthy.
+            const response =
+              probe.auth === 'staff'
+                ? await authorizedFetch(user, probe.path, {
+                    cache: 'no-store',
+                  })
+                : await fetch(probe.path, { cache: 'no-store' })
             const body = await response.json().catch(() => null)
             const read =
               probe.id === 'email'
@@ -170,10 +173,9 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
     setCspError(null)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/csp-reports?days=${encodeURIComponent(String(cspDays))}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const body = await response.json().catch(() => null)
         if (!active) return

@@ -29,6 +29,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { documentId } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface BillingMeteredEstimateProps {
   hosts: any[]
@@ -181,12 +182,9 @@ export function BillingMeteredEstimateComponent(
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           '/api/billing/usage-config',
-          idToken
-            ? { headers: { Authorization: `Bearer ${idToken}` } }
-            : undefined,
         )
         if (!response.ok) throw new Error(`usage-config ${response.status}`)
         const payload = await response.json()

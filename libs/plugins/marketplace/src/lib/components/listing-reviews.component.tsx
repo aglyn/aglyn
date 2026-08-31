@@ -41,6 +41,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import ReportTarget from './report-target.component'
 
 /**
@@ -165,13 +166,9 @@ export function ListingReviews({
     if (busy || (!rating && !comment.trim())) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/reviews', {
+      const response = await authorizedFetch(user, '/api/marketplace/reviews', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ listingId, rating, comment: comment.trim() }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -202,13 +199,9 @@ export function ListingReviews({
     if (busy || !mine) return
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      await fetch('/api/marketplace/reviews', {
+      await authorizedFetch(user, '/api/marketplace/reviews', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ listingId }),
       })
       setRating(null)

@@ -21,6 +21,7 @@ import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type { ArtifactChange } from '../model'
 
 /** The server's answer to "what would this update do to my copy?" (AGL-1018). */
@@ -61,15 +62,15 @@ export function useArtifactUpdate(hostId: string) {
 
   const post = useCallback(
     async (listingId: string, body: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/update-artifact', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/update-artifact',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listingId, hostId, ...body }),
         },
-        body: JSON.stringify({ listingId, hostId, ...body }),
-      })
+      )
       return { response, payload: await response.json().catch(() => ({})) }
     },
     [user, hostId],

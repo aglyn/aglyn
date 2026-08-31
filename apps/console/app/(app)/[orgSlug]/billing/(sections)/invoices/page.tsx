@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import BillingOpenInvoicesCardComponent from '../../../../../../components/billing/billing-open-invoices-card.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
@@ -71,13 +72,9 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
    * the surface that manages them.
    */
   const openPortal = useCallback(async () => {
-    const idToken = await (user as any)?.getIdToken?.()
-    const response = await fetch('/api/billing/subscription', {
+    const response = await authorizedFetch(user, '/api/billing/subscription', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orgId, action: 'portal' }),
     })
     const payload = await response.json().catch(() => ({}))
@@ -115,11 +112,10 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
       if (!orgId || !user) return
       setInvoicesLoading(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/billing/invoices?orgId=${encodeURIComponent(orgId)}` +
             (cursor ? `&startingAfter=${encodeURIComponent(cursor)}` : ''),
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) return
         const payload = await response.json()

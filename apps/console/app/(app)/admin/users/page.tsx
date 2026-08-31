@@ -67,6 +67,7 @@ import {
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { displayWindow } from '../../../../utils/display-window'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   USER_LIST_FILTER_FIELDS,
   USER_LIST_FILTER_HEADERS,
@@ -190,7 +191,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
 
   const fetchUsersPage = useCallback(
     async (cursor: string | null, index: number) => {
-      const idToken = await (user as any)?.getIdToken?.()
       const params = new URLSearchParams()
       const { search: term, filter: item } = queryRef.current
       if (term) params.set('search', term)
@@ -203,9 +203,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       // resuming one would page through the unfiltered directory instead.
       if (cursor && !term && !item) params.set('nextPageToken', cursor)
       const query = params.toString()
-      const response = await fetch(
+      const response = await authorizedFetch(
+        user,
         `/api/admin/users${query ? `?${query}` : ''}`,
-        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
       )
       if (!response.ok) throw new Error(`Listing failed (${response.status})`)
       const payload = await response.json()
@@ -354,15 +354,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     async (record: AdminUser, role: string) => {
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/users/manage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/users/manage',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'setRole', uid: record.uid, role }),
           },
-          body: JSON.stringify({ action: 'setRole', uid: record.uid, role }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(payload?.error ?? 'Role change failed', {
@@ -400,15 +400,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       if (!confirmed) return
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/admin/users/manage', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/users/manage',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, uid: record.uid }),
           },
-          body: JSON.stringify({ action, uid: record.uid }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(payload?.error ?? 'Action failed', {

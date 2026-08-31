@@ -71,6 +71,7 @@ import {
   useFirestore,
   useSigninCheck,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
@@ -213,15 +214,15 @@ async function provisionSignUpOrg(
   const name = orgName.trim()
   if (!name) return null
   try {
-    const idToken = await credential.user.getIdToken()
-    const response = await fetch('/api/orgs/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`,
+    const response = await authorizedFetch(
+      credential.user,
+      '/api/orgs/create',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
       },
-      body: JSON.stringify({ name }),
-    })
+    )
     const payload = await response.json().catch(() => null)
     // A 409 means the slug was taken — the org was NOT created, so falling
     // through to the picker is right; inventing a suffix here would hand the

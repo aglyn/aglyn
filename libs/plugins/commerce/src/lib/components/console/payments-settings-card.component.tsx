@@ -27,6 +27,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -100,13 +101,9 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const handleConnect = useCallback(async () => {
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/commerce/connect', {
+      const response = await authorizedFetch(user, '/api/commerce/connect', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId }),
       })
       const payload = await response.json()

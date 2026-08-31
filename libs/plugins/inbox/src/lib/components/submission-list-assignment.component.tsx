@@ -49,6 +49,7 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Box,
@@ -107,14 +108,9 @@ export function SubmissionListAssignment(props: SubmissionListAssignmentProps) {
 
   const post = useCallback(
     async (route: string, body: Record<string, unknown>) => {
-      const idToken = await (user as { getIdToken?: () => Promise<string> })
-        ?.getIdToken?.()
-      const response = await fetch(`/api/inbox/${route}`, {
+      const response = await authorizedFetch(user, `/api/inbox/${route}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, submissionId: submission.$id, ...body }),
       })
       const payload = await response.json().catch(() => ({}))

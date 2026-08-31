@@ -20,6 +20,7 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -99,12 +100,10 @@ export default function IdempotencyClaimsCard() {
     let active = true
     void (async () => {
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/admin/idempotency-claims', {
-          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-        })
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/idempotency-claims',
+        )
         const body = await response.json().catch(() => null)
         if (!active) return
         if (!response.ok) {

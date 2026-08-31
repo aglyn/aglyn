@@ -25,6 +25,7 @@ import {
   useUser,
   useUserPhoto,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { updateProfile } from 'firebase/auth'
 import { deleteField, doc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -104,13 +105,9 @@ export function ProfileImageCard() {
       // roster fan-out that failed is a stale colleague view, which the next
       // save repairs. Rolling back a committed avatar to report it would be
       // worse than saying so.
-      const idToken = await user.getIdToken()
-      const response = await fetch('/api/account/photo', {
+      const response = await authorizedFetch(user, '/api/account/photo', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ photoUrl: cleaned }),
       })
       if (!response.ok) {

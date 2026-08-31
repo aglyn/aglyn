@@ -20,6 +20,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Stack } from '@mui/material'
 import { useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { usePendingInvites, type PendingInvite } from '../hooks/use-pending-invites'
 
@@ -39,13 +40,9 @@ export function OrgInvitesBanner() {
   const accept = async (invite: PendingInvite) => {
     setBusyId(invite.$id)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/invites', {
+      const response = await authorizedFetch(user, '/api/orgs/invites', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId: invite.orgId,
           action: 'accept',

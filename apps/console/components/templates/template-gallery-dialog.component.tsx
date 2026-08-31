@@ -75,6 +75,7 @@ import {
   ICON_VARIANT_FILTER,
   ICON_VARIANT_SEARCH,
 } from '@aglyn/shared-data-enums'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { STARTER_TEMPLATES } from '../../constants/starter-templates'
 import createPageFromTemplate, {
   withBundleRootScreen,
@@ -392,15 +393,15 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       setInstallingId(listing.$id)
       const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/install-template', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/install-template',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listingId: listing.$id, hostId }),
           },
-          body: JSON.stringify({ listingId: listing.$id, hostId }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           // An installs lock is not a broken listing (AGL-1532).
@@ -454,14 +455,9 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
    */
   const materializeStarter = useCallback(
     async (starterId: string) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      if (!idToken) return
-      await fetch('/api/hosts/seed-starter-templates', {
+      await authorizedFetch(user, '/api/hosts/seed-starter-templates', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId, starterId }),
       })
     },

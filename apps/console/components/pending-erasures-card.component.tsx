@@ -20,6 +20,7 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -99,12 +100,10 @@ export function PendingErasuresCard() {
 
   const call = useCallback(
     async (method: 'GET' | 'POST', body?: unknown) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/run-erasures', {
+      const response = await authorizedFetch(user, '/api/admin/run-erasures', {
         method,
         headers: {
           ...(body ? { 'Content-Type': 'application/json' } : {}),
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
       })

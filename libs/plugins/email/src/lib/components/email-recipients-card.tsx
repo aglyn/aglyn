@@ -20,6 +20,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Chip,
@@ -137,21 +138,21 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
     setFailure(null)
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/campaigns/recipients', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/campaigns/recipients',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              hostId,
+              ...(screenId ? { screenId } : {}),
+              ...(emailId ? { emailId } : {}),
+              filter,
+              cursor,
+            }),
           },
-          body: JSON.stringify({
-            hostId,
-            ...(screenId ? { screenId } : {}),
-            ...(emailId ? { emailId } : {}),
-            filter,
-            cursor,
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!active) return
         if (!response.ok) {

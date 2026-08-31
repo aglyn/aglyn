@@ -441,7 +441,7 @@ function Screens(props) {
           hostId,
           kind: 'screen',
           id,
-          idToken: await (user as any)?.getIdToken?.(),
+          user,
         }))()
       await confirm({
         title: 'Delete this screen?',

@@ -18,6 +18,7 @@
 
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useRef } from 'react'
 import { editorHintCookieDomain } from './editor-hint-cookie.component'
 
@@ -131,10 +132,8 @@ export default function EditHintBounce({
 
     void (async () => {
       try {
-        const idToken = await user.getIdToken()
-        const response = await fetch('/api/edit-hint/blob', {
+        const response = await authorizedFetch(user, '/api/edit-hint/blob', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}` },
         })
         if (!response.ok) return
         const payload = (await response.json()) as { blob?: string }

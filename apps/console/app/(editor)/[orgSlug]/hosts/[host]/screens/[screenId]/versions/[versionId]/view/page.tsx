@@ -471,7 +471,7 @@ function ScreenDetails() {
         hostId,
         kind: 'screen',
         id: screenId,
-        idToken: await (user as any)?.getIdToken?.(),
+        user,
       }))()
     const confirmed = await confirm({
       title: 'Delete this screen?',

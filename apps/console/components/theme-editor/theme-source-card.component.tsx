@@ -23,6 +23,7 @@ import type { HostTheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Button,
@@ -78,15 +79,15 @@ export function ThemeSourceCard(props: {
     async (action: 'revert' | 'reset') => {
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/install-theme', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/install-theme',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hostId, action }),
           },
-          body: JSON.stringify({ hostId, action }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           // Same `install-theme` route, same pause notice (AGL-1532).

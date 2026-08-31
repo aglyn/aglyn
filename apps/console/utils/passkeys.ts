@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
+
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { AuthAppErrorCodes, type AuthAppCode } from '@aglyn/shared-data-enums'
 import {
@@ -165,19 +170,28 @@ const SERVER_REFUSALS: Record<string, string> = {
   'verification-failed': 'That passkey could not be verified.',
 }
 
+/**
+ * One POST in a passkey ceremony.
+ *
+ * `user` absent is the SIGN-IN ceremony, which is anonymous by nature: there
+ * is no account yet to authorize it with. Every other step names one, and
+ * those go out with credentials or not at all — the token is minted here,
+ * at call time, so a ceremony that outlives a token's remaining lifetime
+ * still sends a live one on its next step.
+ */
 async function postJson(
   path: string,
   body: unknown,
-  idToken?: string,
+  user?: MaybeTokenSource,
 ): Promise<any> {
-  const response = await fetch(path, {
+  const init: RequestInit = {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body ?? {}),
-  })
+  }
+  const response = user
+    ? await authorizedFetch(user, path, init)
+    : await fetch(path, init)
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
     throw new PasskeyRequestError(
@@ -197,18 +211,16 @@ export async function registerPasskey(
   user: Pick<User, 'getIdToken'>,
   label?: string,
 ): Promise<{ credentialId: string; label: string }> {
-  const idToken = await user.getIdToken()
   const { challengeId, options } = await postJson(
     '/api/auth/passkeys/register/options',
     {},
-    idToken,
+    user,
   )
   const response = await startRegistration({ optionsJSON: options })
   return postJson(
     '/api/auth/passkeys/register/verify',
     { challengeId, response, label },
-    // Re-read: the ceremony can outlive a token's remaining lifetime.
-    await user.getIdToken(),
+    user,
   )
 }
 
@@ -250,9 +262,5 @@ export async function removePasskey(
   user: Pick<User, 'getIdToken'>,
   credentialId: string,
 ): Promise<{ removed: boolean; label: string | null }> {
-  return postJson(
-    '/api/auth/passkeys/remove',
-    { credentialId },
-    await user.getIdToken(),
-  )
+  return postJson('/api/auth/passkeys/remove', { credentialId }, user)
 }

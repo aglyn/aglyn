@@ -18,7 +18,10 @@
 
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useRef } from 'react'
-import { resolveIdToken, type TokenSource } from './authorized-token'
+import {
+  resolveIdToken,
+  type TokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
 
 /** What one call to the campaign API answered with. */
 export interface CampaignSendApiResult {

@@ -96,6 +96,7 @@ import {
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { checkOrgQuota } from '../../constants/entitlements'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
@@ -557,13 +558,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     async (
       mediaId: string,
     ): Promise<{ items: MediaUsageRef[]; coverage: MediaScanCoverage }> => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/media/references', {
+      const response = await authorizedFetch(user, '/api/media/references', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...scopeBody, mediaId }),
       })
       if (!response.ok) throw new Error(`Scan failed (${response.status})`)
@@ -1234,13 +1231,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       }
       // API-routed: renaming a folder renames a REAL Storage prefix, so
       // the server relocates every asset underneath (urls follow).
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/media/folders', {
+      const response = await authorizedFetch(user, '/api/media/folders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...scopeBody,
           action: 'rename',
@@ -1275,13 +1268,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const parentId = folder.parentId ?? null
       // API-routed (AGL-171 policy preserved): the server re-parents
       // children and assets AND moves their Storage objects up a level.
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/media/folders', {
+      const response = await authorizedFetch(user, '/api/media/folders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...scopeBody,
           action: 'delete',
@@ -1371,13 +1360,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/media/folders', {
+      const response = await authorizedFetch(user, '/api/media/folders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...scopeBody,
           action: 'set-private',
@@ -1502,13 +1487,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       try {
         while (pending.length) {
           // API-routed: moving between folders moves the REAL objects too.
-          const idToken = await (user as any)?.getIdToken?.()
-          const response = await fetch('/api/media/folders', {
+          const response = await authorizedFetch(user, '/api/media/folders', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ...scopeBody,
               action: 'move-assets',
@@ -1796,13 +1777,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         },
       )
       if (metaChanged) {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/media/folders', {
+        const response = await authorizedFetch(user, '/api/media/folders', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...scopeBody,
             action: 'custom-metadata',
@@ -1871,16 +1848,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     async (media: any, base64: string, contentType: string) => {
       if (!media) return
       const mediaId = media.$id ?? media.id
-      const idToken = await (user as any)?.getIdToken?.()
       const updatedAtMs =
         media?.updatedAt?.toMillis?.() ??
         (media?.updatedAt?.seconds ? media.updatedAt.seconds * 1000 : undefined)
-      const response = await fetch('/api/media/replace', {
+      const response = await authorizedFetch(user, '/api/media/replace', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...scopeBody,
           mediaId,
@@ -2032,15 +2005,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const restored: string[] = []
       const failures: string[] = []
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         for (const target of targets) {
           try {
-            const response = await fetch('/api/media/restore', {
+            const response = await authorizedFetch(user, '/api/media/restore', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ...scopeBody, mediaId: target.id }),
             })
             const payload = await response.json().catch(() => ({}))
@@ -2137,18 +2106,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
      */
     const restorable: { id: string; fileName: string }[] = []
     try {
-      const idToken = await (user as any)?.getIdToken?.()
       for (const mediaId of selected) {
         // One request per file, so a failure part-way leaves the earlier
         // ones deleted. Throwing here reported "an error has occurred" and
         // named neither half — carry on and report both.
         try {
-          const response = await fetch('/api/media/upload', {
+          const response = await authorizedFetch(user, '/api/media/upload', {
             method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...scopeBody, mediaId }),
           })
           if (!response.ok) throw new Error(`Delete failed (${response.status})`)
@@ -2316,13 +2281,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // will be touched — not a directory-only count that under-reports
       // every subfolder.
       void (async () => {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/media/folders', {
+        const response = await authorizedFetch(user, '/api/media/folders', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...scopeBody,
             action: 'set-scope',
@@ -2428,7 +2389,6 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const applyScopeToFolder = useCallback(
     async (folderId: string, next: string[], cascade: boolean, from: number) => {
-      const idToken = await (user as any)?.getIdToken?.()
       let cursor = from
       // Corrected by the first response; the folder doc itself is one write,
       // so one is the floor.
@@ -2438,12 +2398,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // holding hundreds of files, and so a failure resumes from the last
       // committed slice instead of starting over.
       for (;;) {
-        const response = await fetch('/api/media/folders', {
+        const response = await authorizedFetch(user, '/api/media/folders', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...scopeBody,
             action: 'set-scope',
@@ -2758,7 +2715,6 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           ? currentFolder
           : null
       try {
-        const idToken = await (user as any)?.getIdToken?.()
         // Large files go direct-to-storage via signed URLs (AGL-167/1317):
         // Vercel 413s any request body over 4.5MB at the platform layer, so
         // the base64-JSON route can only carry ~3.3MB of raw file. Anything
@@ -2772,12 +2728,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         // already established the type, and every allowed type has a ceiling
         // by construction of `UPLOAD_TYPES`.
         if (file.size > SIGNED_UPLOAD_THRESHOLD_BYTES) {
-          const mint = await fetch('/api/media/upload-url', {
+          const mint = await authorizedFetch(user, '/api/media/upload-url', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ...scopeBody,
               contentType,
@@ -2808,19 +2761,20 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             })
             return 0
           }
-          const finalize = await fetch('/api/media/upload-url', {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          const finalize = await authorizedFetch(
+            user,
+            '/api/media/upload-url',
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...scopeBody,
+                mediaId: minted.mediaId,
+                fileName: file.name,
+                folderId: uploadFolderId,
+              }),
             },
-            body: JSON.stringify({
-              ...scopeBody,
-              mediaId: minted.mediaId,
-              fileName: file.name,
-              folderId: uploadFolderId,
-            }),
-          })
+          )
           const finalized = await finalize.json().catch(() => ({}))
           if (!finalize.ok) {
             enqueueSnackbar(
@@ -2836,12 +2790,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           logActivity('Uploaded media', { type: 'media', name: file.name })
           return file.size
         }
-        const response = await fetch('/api/media/upload', {
+        const response = await authorizedFetch(user, '/api/media/upload', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...scopeBody,
             fileName: file.name,
@@ -2993,13 +2944,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const mediaId = media.$id as string
       if (!orgId || !mediaId) return
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/media/sign', {
+        const response = await authorizedFetch(user, '/api/media/sign', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orgId, mediaId }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -3074,13 +3021,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         if (media.private) {
           const mediaId = media.$id as string
           if (!orgId || !mediaId) return
-          const idToken = await (user as any)?.getIdToken?.()
-          const response = await fetch('/api/media/sign', {
+          const response = await authorizedFetch(user, '/api/media/sign', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ orgId, mediaId }),
           })
           const payload = await response.json().catch(() => ({}))
@@ -3162,13 +3105,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       })
       if (!confirmed) return false
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/media/upload', {
+        const response = await authorizedFetch(user, '/api/media/upload', {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...scopeBody, mediaId: media.$id }),
         })
         if (!response.ok) throw new Error(`Delete failed (${response.status})`)
@@ -4464,29 +4403,29 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             // Save-as-copy uploads a new asset via the upload path.
             setBusy(true)
             try {
-              const idToken = await (user as any)?.getIdToken?.()
               const copyName = (editor?.fileName || 'image').replace(
                 /(\.[^.]+)?$/,
                 ' (edited)$1',
               )
-              const response = await fetch('/api/media/upload', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+              const response = await authorizedFetch(
+                user,
+                '/api/media/upload',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    ...scopeBody,
+                    fileName: copyName,
+                    contentType: result.contentType,
+                    folderId:
+                      typeof currentFolder === 'string' &&
+                      currentFolder !== 'all'
+                        ? currentFolder
+                        : null,
+                    data: result.data,
+                  }),
                 },
-                body: JSON.stringify({
-                  ...scopeBody,
-                  fileName: copyName,
-                  contentType: result.contentType,
-                  folderId:
-                    typeof currentFolder === 'string' &&
-                    currentFolder !== 'all'
-                      ? currentFolder
-                      : null,
-                  data: result.data,
-                }),
-              })
+              )
               if (response.ok) {
                 enqueueSnackbar('Saved edited copy', {
                   variant: 'success',

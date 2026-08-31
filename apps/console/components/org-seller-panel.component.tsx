@@ -59,6 +59,7 @@ import { useRouter } from 'next/navigation'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
 import { docsHelp } from '../constants/docs-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -193,13 +194,9 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
   const handlePayouts = useCallback(async () => {
     setPayoutsBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/connect', {
+      const response = await authorizedFetch(user, '/api/marketplace/connect', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         // The acting org from the URL (AGL-861) — never let the server guess
         // which of the user's orgs is being set up for payouts.
         body: JSON.stringify({ orgId }),
@@ -317,29 +314,29 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       // publisherHandles, which a client write cannot do — two orgs racing
       // for one handle would both succeed and one would silently lose its
       // marketplace URL. The rules reject a client handle write outright.
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publisher-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/publisher-profile',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId,
+            handle,
+            displayName: displayName.trim(),
+            bio: bio.trim(),
+            // AGL-1009: validated server-side (https-only, fixed social
+            // hosts) — an empty string explicitly clears the stored field.
+            avatarUrl: avatarUrl.trim(),
+            website: website.trim(),
+            supportEmail: supportEmail.trim(),
+            supportUrl: supportUrl.trim(),
+            githubUrl: githubUrl.trim(),
+            xUrl: xUrl.trim(),
+            linkedinUrl: linkedinUrl.trim(),
+          }),
         },
-        body: JSON.stringify({
-          orgId,
-          handle,
-          displayName: displayName.trim(),
-          bio: bio.trim(),
-          // AGL-1009: validated server-side (https-only, fixed social
-          // hosts) — an empty string explicitly clears the stored field.
-          avatarUrl: avatarUrl.trim(),
-          website: website.trim(),
-          supportEmail: supportEmail.trim(),
-          supportUrl: supportUrl.trim(),
-          githubUrl: githubUrl.trim(),
-          xUrl: xUrl.trim(),
-          linkedinUrl: linkedinUrl.trim(),
-        }),
-      })
+      )
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         return enqueueSnackbar(payload?.error ?? 'Could not save the profile', {
@@ -395,22 +392,22 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       // Server-owned, like the handle: an acceptance the accepting party can
       // write itself is not evidence of anything, and the rules block the
       // field outright.
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/publisher-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/publisher-profile',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'accept-agreement',
+            orgId,
+            // Echoed back so the server can refuse an acceptance of anything
+            // other than the version in force — including one made against a
+            // page left open across a change.
+            version: PUBLISHER_AGREEMENT_VERSION,
+          }),
         },
-        body: JSON.stringify({
-          action: 'accept-agreement',
-          orgId,
-          // Echoed back so the server can refuse an acceptance of anything
-          // other than the version in force — including one made against a
-          // page left open across a change.
-          version: PUBLISHER_AGREEMENT_VERSION,
-        }),
-      })
+      )
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         return void enqueueSnackbar(
@@ -465,19 +462,19 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       const next = listing.visibility === 'private' ? 'public' : 'private'
       setVisibilityBusy(listing.$id)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/marketplace/publish-plugin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/publish-plugin',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'set-visibility',
+              listingId: listing.$id,
+              visibility: next,
+            }),
           },
-          body: JSON.stringify({
-            action: 'set-visibility',
-            listingId: listing.$id,
-            visibility: next,
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(

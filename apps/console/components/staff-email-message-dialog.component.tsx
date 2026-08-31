@@ -32,6 +32,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import type { StaffEmailDeliveryRow } from './staff-user-email-history-card.component'
 
 /** The message body, as `/api/admin/emails/message` returns it. */
@@ -213,10 +214,9 @@ export function StaffEmailMessageDialog({
       inFlightRef.current = {
         id: messageId,
         request: (async () => {
-          const idToken = await (userRef.current as any)?.getIdToken?.()
-          const response = await fetch(
+          const response = await authorizedFetch(
+            userRef.current,
             `/api/admin/emails/message?id=${encodeURIComponent(messageId)}`,
-            { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
           )
           return {
             ok: response.ok,

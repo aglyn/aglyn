@@ -38,6 +38,10 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  authorizedFetch,
+  type MaybeTokenSource,
+} from '@aglyn/shared-util-http/authorized-token'
 import { useReleaseFlag } from '../../hooks/use-release-flags'
 import fetchSeatCounts from '../../utils/fetch-seat-counts'
 import {
@@ -61,12 +65,12 @@ export interface BillingUsageProps {
  */
 async function fetchBillableScreens(
   hostId: string,
-  idToken: string | undefined,
+  user: MaybeTokenSource,
 ): Promise<number | null> {
   try {
-    const response = await fetch(
+    const response = await authorizedFetch(
+      user,
       `/api/hosts/usage?hostId=${encodeURIComponent(hostId)}`,
-      idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
     )
     if (!response.ok) return null
     const result = await response.json()
@@ -188,10 +192,7 @@ function HostUsageMeters(props: {
       // SDK cannot express that — live screens have no `deletedAt` field at
       // all, and Firestore cannot query for an absent field. Asking the API
       // keeps this meter and the quota gate on one implementation.
-      (user as any)
-        ?.getIdToken?.()
-        .then((token: string) => fetchBillableScreens(host.$id, token))
-        .catch(() => null) ?? Promise.resolve(null),
+      fetchBillableScreens(host.$id, user).catch(() => null),
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'layouts'),
       ).catch(() => null),
@@ -454,10 +455,9 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       })
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/billing/assist-credits?orgId=${encodeURIComponent(orgId)}`,
-          idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
         )
         if (!response.ok) return
         const result = await response.json()
@@ -570,11 +570,9 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/billing/email-ceiling?orgId=${encodeURIComponent(orgId)}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         )
         if (!response.ok) return
         const reading = parseOrgEmailSendCeiling(await response.json())
@@ -603,14 +601,12 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     let active = true
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
         const readings = await Promise.all(
           hostIds.map(async (hostId) => {
             try {
-              const response = await fetch(
+              const response = await authorizedFetch(
+                user,
                 `/api/billing/host-usage?hostId=${encodeURIComponent(hostId)}`,
-                { headers: { Authorization: `Bearer ${idToken}` } },
               )
               if (!response.ok) return null
               const payload = await response.json()

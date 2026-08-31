@@ -33,6 +33,7 @@ import type { HostTheme } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Alert,
   Box,
@@ -183,15 +184,15 @@ export function ThemeOverridesCard(props: {
   const clearAll = useCallback(async () => {
     setBusy(true)
     try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/marketplace/install-theme', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/marketplace/install-theme',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, action: 'clear-overrides' }),
         },
-        body: JSON.stringify({ hostId, action: 'clear-overrides' }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         // Clearing overrides rides `install-theme`, so an installs lock

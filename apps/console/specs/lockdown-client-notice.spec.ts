@@ -81,6 +81,23 @@ const LOCKABLE_FETCH = [
   '/api/${endpoint}',
 ]
 
+/**
+ * Whether a source reaches `path` through a fetch of either kind.
+ *
+ * Two forms, because a call that must carry credentials goes through
+ * `authorizedFetch(account, path, …)` — which takes the account first and
+ * wraps across lines when it does. Matching only the bare `fetch('path`
+ * spelling would empty this inventory the moment a surface was authorized
+ * properly, and an empty inventory is a guard that passes by finding
+ * nothing.
+ */
+function callsFetchOf(source: string, path: string): boolean {
+  const literal = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(
+    `(?:^|[^\\w$])(?:authorizedF|f)etch\\(\\s*(?:[\\w$.]+\\s*,\\s*)?[\`']${literal}`,
+  ).test(source)
+}
+
 function walk(absoluteDir: string): string[] {
   const found: string[] = []
   for (const entry of readdirSync(absoluteDir, { withFileTypes: true })) {
@@ -111,9 +128,7 @@ const CALL_SITES: CallSite[] = SEARCH_ROOTS.flatMap((root) =>
   .filter((entry) => !entry.file.startsWith('apps/console/app/api/'))
   .map((entry) => ({
     ...entry,
-    targets: LOCKABLE_FETCH.filter((path) =>
-      entry.source.includes(`fetch(\`${path}`) || entry.source.includes(`fetch('${path}`),
-    ),
+    targets: LOCKABLE_FETCH.filter((path) => callsFetchOf(entry.source, path)),
   }))
   .filter((entry) => entry.targets.length > 0)
   .sort((a, b) => a.file.localeCompare(b.file))

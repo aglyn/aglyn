@@ -335,7 +335,7 @@ function Layouts(props) {
           hostId,
           kind: 'layout',
           id,
-          idToken: await (user as any)?.getIdToken?.(),
+          user,
         }))()
       await confirm({
         title: 'Delete this layout?',

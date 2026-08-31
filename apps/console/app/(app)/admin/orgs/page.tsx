@@ -56,6 +56,7 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { TABLE_ROW_HEIGHT } from '../../../../constants/shared'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
@@ -135,8 +136,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
 
   const fetchOrgsPage = useCallback(
     async (cursor: string | null, _pageIndex: number, pageSize: number) => {
-      const idToken = await (user as { getIdToken?: () => Promise<string> })
-        ?.getIdToken?.()
       const url = new URL('/api/admin/orgs', window.location.origin)
       url.searchParams.set('pageSize', String(pageSize))
       if (search) url.searchParams.set('search', search)
@@ -146,9 +145,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         url.searchParams.set('filterValue', filter.value)
       }
       if (cursor) url.searchParams.set('after', cursor)
-      const response = await fetch(url.toString(), {
-        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-      })
+      const response = await authorizedFetch(user, url.toString())
       const payload = await response.json()
       if (!response.ok) throw new Error(payload?.error ?? 'Failed')
       return {
@@ -201,10 +198,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
     (orgId: string) => async () => {
       setUsageLoading(orgId)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/org-usage?orgId=${encodeURIComponent(orgId)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const payload = await response.json()
         if (!response.ok) throw new Error(payload?.error ?? 'Usage failed')

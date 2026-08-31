@@ -39,6 +39,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ceilingedWindow, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import useBranding from '../hooks/use-branding'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -319,15 +320,15 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
   // have to happen server-side.
   const passwordRequest = useCallback(
     async (payload: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/membership/admin-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/membership/admin-password',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, memberId, ...payload }),
         },
-        body: JSON.stringify({ hostId, memberId, ...payload }),
-      })
+      )
       const result = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(result?.error ?? 'Request failed')
       return result

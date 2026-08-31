@@ -64,6 +64,7 @@ import {
 } from '../constants/shared'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
@@ -199,13 +200,9 @@ export function OrgMembersCard() {
   // keeps the toast-on-error behaviour every other caller relies on.
   const rawRequest = useCallback(
     async (path: string, method: string, body?: Record<string, unknown>) => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch(path, {
+      const response = await authorizedFetch(user, path, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
       })
       const payload = await response.json().catch(() => ({}))

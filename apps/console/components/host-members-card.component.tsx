@@ -53,6 +53,7 @@ import {
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
@@ -315,13 +316,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
     async (method: string, body: Record<string, unknown>) => {
       setBusy(true)
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/hosts/members', {
+        const response = await authorizedFetch(user, '/api/hosts/members', {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, ...body }),
         })
         const payload = await response.json().catch(() => ({}))

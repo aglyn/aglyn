@@ -46,9 +46,21 @@ const NO_MEMBERS = {
   fromCache: false,
 }
 
+/** How the signed-in account answers `getIdToken()` for the test at hand. */
+let mockTokenBehavior: 'mints' | 'signed-out' = 'mints'
+const mockGetIdToken = jest.fn(async () => 'token-abc')
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
-  useUser: () => ({ data: { uid: 'uid-test' } }),
+  // An account that can mint a token. Without one every request this panel
+  // makes is refused before it is issued — which is the point: the panel
+  // reaches routes that answer 401 without a bearer token.
+  useUser: () => ({
+    data:
+      mockTokenBehavior === 'signed-out'
+        ? { uid: 'uid-test' }
+        : { uid: 'uid-test', getIdToken: mockGetIdToken },
+  }),
   usePagedCollection: () => NO_MEMBERS,
 }))
 
@@ -64,8 +76,14 @@ jest.mock('firebase/firestore', () => ({
   deleteDoc: jest.fn().mockResolvedValue(undefined),
 }))
 
+/** Everything the panel put in front of the organizer. */
+const mockNotices: string[] = []
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
-  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
+  useSnackbar: () => ({
+    enqueueSnackbar: (message: unknown) => {
+      mockNotices.push(String(message))
+    },
+  }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -83,17 +101,24 @@ let rulePreview: Record<string, unknown>
 let addAnswer: Record<string, unknown>
 /** Every request the panel made, as `[route, body]`. */
 let calls: Array<[string, any]>
+/** The `Authorization` header each of those requests carried, in order. */
+let auth: Array<string | undefined>
 
 const fetchMock = jest.fn(async (url: string, init: any) => {
   const route = String(url).replace('/api/email/', '')
   const body = JSON.parse(init.body)
   calls.push([route, body])
+  auth.push(init?.headers?.Authorization)
   const payload = route === 'list-rule-preview' ? rulePreview : addAnswer
   return { ok: true, json: async () => payload } as any
 })
 
 beforeEach(() => {
   calls = []
+  auth = []
+  mockTokenBehavior = 'mints'
+  mockNotices.length = 0
+  mockGetIdToken.mockClear()
   fetchMock.mockClear()
   ;(globalThis as any).fetch = fetchMock
   rulePreview = {
@@ -162,6 +187,36 @@ describe('a fixed list can be filled from a search', () => {
       listId: 'list-1',
       rule: RULE,
     })
+  })
+
+  it('issues nothing when the account cannot be authorized', async () => {
+    /*
+     * The half a positive control cannot cover. Assembled as
+     * `...(idToken ? { Authorization } : {})`, a signed-out organizer still
+     * searched — anonymously — and read the route's 401 as "nobody
+     * matched", which is the same sentence an empty audience produces.
+     */
+    mockTokenBehavior = 'signed-out'
+    await mount()
+    // Clicked directly rather than through `find()`, which waits for the
+    // request this case must never make.
+    fireEvent.click(screen.getByText('Find matching people'))
+    await waitFor(() => expect(mockNotices.length).toBeGreaterThan(0))
+    expect(calls).toHaveLength(0)
+    expect(mockNotices.join(' | ')).toMatch(/signed out/i)
+  })
+
+  it('every request carries the token this account minted', async () => {
+    /*
+     * These routes answer 401 without a bearer token. Assembled as
+     * `...(idToken ? { Authorization } : {})`, an organizer whose token
+     * could not be minted searched their own contacts anonymously and read
+     * the refusal as "nobody matched".
+     */
+    await mount()
+    await find()
+    expect(auth.length).toBeGreaterThan(0)
+    expect(auth.every((one) => one === 'Bearer token-abc')).toBe(true)
   })
 
   it('is not offered at all on a list without saved filters', async () => {

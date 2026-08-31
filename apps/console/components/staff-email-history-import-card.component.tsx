@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, LinearProgress, Stack, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 
 interface ImportResult {
@@ -71,19 +72,16 @@ export function StaffEmailHistoryImportCard() {
     let recorded = 0
     let cursor: string | null = null
     try {
-      const idToken = await (user as any)?.getIdToken?.()
       // A bounded number of round trips, not `while (true)`: a provider that
       // never stops returning a cursor must not turn this button into an
       // unbounded loop against somebody's API quota.
       for (let pass = 0; pass < 25; pass += 1) {
-        const response: Response = await fetch(
+        const response: Response = await authorizedFetch(
+          user,
           '/api/admin/emails/import-history',
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cursor }),
           },
         )

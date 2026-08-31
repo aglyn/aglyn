@@ -32,6 +32,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -107,12 +108,9 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
       setLoading(true)
       setError(null)
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch(
+        const response = await authorizedFetch(
+          user,
           `/api/admin/marketplace-reports?status=${encodeURIComponent(statusFilter)}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         const body = await response.json().catch(() => null)
         if (!active) return
@@ -137,21 +135,19 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
     async (report: MarketplaceReportRow, status: string) => {
       setBusyId(report.id)
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> }
-        )?.getIdToken?.()
-        const response = await fetch('/api/admin/marketplace-reports', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        const response = await authorizedFetch(
+          user,
+          '/api/admin/marketplace-reports',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: report.id,
+              status,
+              resolution: notes[report.id] ?? '',
+            }),
           },
-          body: JSON.stringify({
-            id: report.id,
-            status,
-            resolution: notes[report.id] ?? '',
-          }),
-        })
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           // The server's own sentence, not a generic failure: the one refusal

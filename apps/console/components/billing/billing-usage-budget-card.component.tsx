@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** The `get` payload of `/api/billing/usage-budget`. */
 interface UsageBudgetState {
@@ -123,15 +124,15 @@ export default function BillingUsageBudgetCardComponent({
     async (
       body: Record<string, unknown>,
     ): Promise<{ ok: boolean; payload?: any }> => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/billing/usage-budget', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      const response = await authorizedFetch(
+        user,
+        '/api/billing/usage-budget',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, ...body }),
         },
-        body: JSON.stringify({ orgId, ...body }),
-      })
+      )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         // The route's own sentence, verbatim — its 400 names the legal range

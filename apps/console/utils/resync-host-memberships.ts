@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+
 /**
  * Re-fan a host's `users/{uid}/hostMemberships` rows after a CLIENT write to
  * the host doc (AGL-844, AGL-1071).
@@ -42,13 +44,9 @@ export function resyncHostMemberships(
 ): void {
   void (async () => {
     try {
-      const idToken = await user?.getIdToken?.()
-      await fetch('/api/hosts/sync-memberships', {
+      await authorizedFetch(user, '/api/hosts/sync-memberships', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId }),
       })
     } catch {
