@@ -1771,11 +1771,12 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Eleven GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
- * the daily and weekly jobs, for which an hour of drift is nothing — and
- * three rows driven by Cloud Scheduler out of `cloud/functions/src/index.ts`:
- * `pluginJobsBeat` (every minute) and the two the `consoleFastCrons` job
- * carries every fifteen (AGL-1617).
+ * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) — the
+ * weekly jobs plus the month-boundary usage-email sweep, for which an hour of
+ * drift is nothing — and eleven rows driven by Cloud Scheduler out of
+ * `cloud/functions/src/index.ts`: `pluginJobsBeat` (every minute), the four
+ * the `consoleFastCrons` job carries every fifteen (AGL-1617), and one
+ * `consoleDailyCron` export per daily job.
  *
  * `scheduled-crons-wiring.spec.ts` holds BOTH runners against their source —
  * the workflow for the `github-actions` rows, the functions file for the
@@ -1853,6 +1854,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 90,
     drives:
       'Evaluates usage budgets and notifies. If it stops, an org sails past its budget with no warning and finds out on the invoice.',
+  },
+  {
+    id: 'reap-sending-domains',
+    label: 'Orphaned sending-domain reaper',
+    // An hour after `run-erasures`, which is what produces most of its work:
+    // an erasure records what it could not release rather than waiting on a
+    // vendor, and this is the only thing that settles that debt.
+    cron: '0 5 * * *',
+    runner: 'cloud-scheduler',
+    target: '/api/admin/reap-sending-domains',
+    graceMinutes: 90,
+    drives:
+      'Releases the provider domain object and the zone records of every sending domain whose site or workspace is gone. If it stops, each deleted site keeps one of a small number of plan-capped provider slots forever — until the ceiling is reached and NEW sites can no longer send at all — and leaves a live DKIM key in our zone under a label a future site can claim and inherit a stranger’s signature from.',
   },
   {
     id: 'usage-email',

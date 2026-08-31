@@ -72,6 +72,7 @@ import {
   platformZoneNamesFor,
   platformZoneRecords,
   sendingDomainRequiredRecords,
+  sendingDomainTeardownRefusal,
   tenantWebApex,
   type SendingDomainRecord,
 } from '@aglyn/shared-util-email'
@@ -407,9 +408,32 @@ export async function teardownSendingDomain(
   teardown: HostSendingDomainTeardown,
 ): Promise<TeardownResult> {
   const domain = String(teardown?.domain ?? '')
-  if (!domain || !isPlatformSendingDomain(domain)) {
-    return { outcome: 'skipped', detail: 'not-our-zone' }
+
+  /*==========================================
+   * ⛔ THE ONE NAME THIS FUNCTION MAY NEVER BE POINTED AT.
+   *
+   * `shared1.mail.aglyn.app` … `shared4` are live, verified, and carry the
+   * transactional mail of every site with no domain of its own. Releasing one
+   * stops a quarter of the platform's receipts and password resets, and stops
+   * them silently — a domain that is merely no longer verified raises nothing.
+   *
+   * The refusal is asked of the LABEL as well as the domain, and that is what
+   * closes the hole below it: `sendingDomainLabel` refuses to derive a label
+   * for a reserved name, so a pool member arrives here with an empty derived
+   * label — and the `|| teardown.label` fallback would then hand the zone
+   * deletion the caller's own spelling of `shared3` and remove the pool
+   * member's records.
+   *=========================================*/
+  const refusal = sendingDomainTeardownRefusal(domain, teardown?.label)
+  if (refusal === 'shared-pool') {
+    console.error(
+      '[provision-sending-domain] REFUSED to tear down shared pool member',
+      domain,
+      '— the pool belongs to the platform, not to any site.',
+    )
+    return { outcome: 'skipped', detail: 'shared-pool' }
   }
+  if (refusal) return { outcome: 'skipped', detail: 'not-our-zone' }
 
   const label = sendingDomainLabel(domain) || teardown.label
   if (!label) return { outcome: 'skipped', detail: 'no-label' }

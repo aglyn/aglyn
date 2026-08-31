@@ -56,16 +56,13 @@ const mockHostData = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
-   * The site's sending domain, read before the erase and released after it.
-   *
-   * Stubbed to "nothing provisioned" here: these specs are about the delete's
-   * authorization and ordering, and a site with no sending domain is the
-   * state that exercises the skip path. The teardown itself — that it names
-   * the Resend domain, the DKIM selector and the zone records before anything
-   * is dropped — is proved in `host-sending-domain.spec.ts`.
+   * The site's sending domain is `eraseHost`'s to release now, so these specs
+   * see it only as the driver passed alongside the host id. That ordering —
+   * read the label before the host document goes, free the provider slot,
+   * remove the zone records, drop our own record last — is proved in
+   * `erase-sending-domain.spec.ts` and `sending-domain-teardown.spec.ts`, on
+   * doubles that can refuse.
    */
-  readHostSendingTeardown: async () => null,
-  releaseHostSendingDomain: async () => undefined,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
@@ -167,7 +164,14 @@ describe("a deleted site's last event goes to the workspace (AGL-118)", () => {
     const response = await post()
 
     expect(response.status).toBe(200)
-    expect(mockEraseHost).toHaveBeenCalledWith('host-1')
+    // Named host, and the console-side sending-domain driver handed to it.
+    // The driver is what this route has that the library cannot: releasing
+    // the provider domain needs a full-access mail credential and removing
+    // the zone records needs a DNS token, neither of which may be reachable
+    // from a module the tenant runtime imports.
+    expect(mockEraseHost).toHaveBeenCalledWith('host-1', {
+      tearDownSendingDomain: expect.any(Function),
+    })
 
     expect(mockLogOrgActivity).toHaveBeenCalledTimes(1)
     const { orgId, actor, action, target } = entry()
@@ -253,7 +257,9 @@ describe("a deleted site's last event goes to the workspace (AGL-118)", () => {
 
     expect((await post()).status).toBe(200)
 
-    expect(mockEraseHost).toHaveBeenCalledWith('host-1')
+    expect(mockEraseHost).toHaveBeenCalledWith('host-1', {
+      tearDownSendingDomain: expect.any(Function),
+    })
     expect(mockLogOrgActivity).not.toHaveBeenCalled()
     expect(mockAuditAdd).toHaveBeenCalledTimes(1)
   })

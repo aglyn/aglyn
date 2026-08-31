@@ -25,8 +25,6 @@ import {
   lockdownRefusal,
   logOrgActivity,
   memberHasOrgPermission,
-  readHostSendingTeardown,
-  releaseHostSendingDomain,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
@@ -147,43 +145,27 @@ async function handler(request: Request): Promise<Response> {
       (hostSnapshot.get('displayName') as string | undefined) ?? hostId
 
     /*==========================================
-     * THE SENDING DOMAIN, READ BEFORE AND RELEASED AFTER.
+     * THE SENDING DOMAIN GOES WITH THE SITE, AND `eraseHost` OWNS THAT NOW.
      *
-     * Read first for the same reason the org id is: `eraseHost` destroys the
-     * host document, and the label, the domain, the provider's id for it and
-     * the DKIM selector all live on it or are reachable only through it. Read
-     * afterwards, there would be nothing left to say WHICH Resend domain and
-     * WHICH zone records belonged to the site that just went away.
+     * The read-before / release-after dance used to live here, which made
+     * this route the ONLY way a site could stop existing and have its Resend
+     * domain and its zone records released. Every other path — a workspace
+     * erasure, and the per-host erasures inside one — left a plan-capped
+     * provider slot spent forever and a live DKIM key in the zone under a
+     * label a future site could claim and inherit a stranger's signature
+     * from.
      *
-     * That is not a tidiness problem. A DKIM record left in the zone under a
-     * released label is a working signature waiting for whoever claims that
-     * label next — a site inheriting a stranger's key, able to be signed for
-     * by mail it has nothing to do with. And a Resend domain object left
-     * behind holds one of a small number of account slots forever.
+     * So the ordering moved into `eraseHost`, which is what both paths share,
+     * and this route's part is the one thing it has that a library cannot:
+     * the credentials. `teardownSendingDomain` reads a full-access mail key
+     * and a DNS token, neither of which the tenant runtime may hold, so it is
+     * passed IN rather than imported by the library.
      *
-     * The vendor work runs BEFORE our own record is dropped, so a failure
-     * anywhere leaves the claim in place and findable rather than orphaning
-     * two vendors' resources with nothing pointing at them.
+     * A vendor that refuses does not fail the delete. The customer asked for
+     * the site to go and it has gone; what is owed is recorded on the label
+     * claim and `/api/admin/reap-sending-domains` collects it.
      *=========================================*/
-    const sending = await readHostSendingTeardown(hostId).catch(() => null)
-
-    await eraseHost(hostId)
-
-    if (sending) {
-      const removed = await teardownSendingDomain(sending).catch(() => null)
-      if (removed?.outcome === 'removed') {
-        await releaseHostSendingDomain(sending).catch(() => undefined)
-      } else {
-        // Deliberately loud, and deliberately not fatal to the delete: the
-        // customer asked for the site to go and it has. What is left is an
-        // operator's cleanup, and it needs a line naming the domain.
-        console.error(
-          '[hosts/delete] sending domain not fully released for',
-          sending.domain,
-          '— the Resend domain and its zone records need removing by hand',
-        )
-      }
-    }
+    await eraseHost(hostId, { tearDownSendingDomain: teardownSendingDomain })
 
     /*==========================================
      * TO THE ORG'S FEED, NOT THE SITE'S.

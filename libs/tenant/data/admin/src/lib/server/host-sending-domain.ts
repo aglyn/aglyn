@@ -387,17 +387,25 @@ export async function releaseHostSendingDomain(
       .catch(() => undefined)
   }
 
-  await firestore()
-    .collection('hosts')
-    .doc(teardown.hostId)
-    .set(
-      {
-        sendingLabel: firebaseAdmin.firestore.FieldValue.delete(),
-        sendingDomain: firebaseAdmin.firestore.FieldValue.delete(),
-      },
-      { merge: true },
-    )
-    .catch(() => undefined)
+  /*
+   * Only onto a host that is still there. A merging `set` CREATES the document
+   * it is given, so clearing these two fields on a site that has already been
+   * erased writes an empty `hosts/{hostId}` back into existence — a fragment
+   * of a site the customer asked us to destroy, resurrected by its own
+   * cleanup, and one the routing sweep would then have to collect again.
+   */
+  const hostRef = firestore().collection('hosts').doc(teardown.hostId)
+  if ((await hostRef.get().catch(() => null))?.exists) {
+    await hostRef
+      .set(
+        {
+          sendingLabel: firebaseAdmin.firestore.FieldValue.delete(),
+          sendingDomain: firebaseAdmin.firestore.FieldValue.delete(),
+        },
+        { merge: true },
+      )
+      .catch(() => undefined)
+  }
 
   if (teardown.label) {
     /*

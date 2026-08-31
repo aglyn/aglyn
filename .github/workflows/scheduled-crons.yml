@@ -204,6 +204,11 @@ on:
           - /api/admin/finish-domain-attachments
           - /api/lists/materialize
           - /api/admin/provision-sending-domains
+          # Releases the provider domain and the zone records of every sending
+          # domain whose site is gone. A GET reports the plan; the scheduled
+          # POST acts. Safe to run by hand at any time — it is idempotent, and
+          # it refuses the shared pool by name.
+          - /api/admin/reap-sending-domains
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
