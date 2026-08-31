@@ -108,6 +108,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
+  // The console address the assigned-records section links its rows with.
+  useConsoleHostRoute: () => ({ orgSlug: 'acme', subdomain: 'store' }),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
   useFirestoreDoc: (build: () => { path?: string } | null) => ({
     data: listened.get(build()?.path ?? ''),

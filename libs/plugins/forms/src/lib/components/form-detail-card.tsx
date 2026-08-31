@@ -50,8 +50,10 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
+  useHostCampaigns,
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
+import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -147,6 +149,15 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const [name, setName] = useState<string | null>(null)
   const [lead, setLead] = useState<boolean | null>(null)
   const [consentField, setConsentField] = useState<string | null>(null)
+  /**
+   * The campaigns picked on screen, or null while the stored value stands.
+   *
+   * Null and `[]` are different: null means "not touched", `[]` means "take
+   * this form out of every campaign". Collapsing them would make clearing the
+   * last campaign a no-op, which is the half of set-and-clear that is easy to
+   * ship broken.
+   */
+  const [campaignIds, setCampaignIds] = useState<string[] | null>(null)
   const [opening, setOpening] = useState(false)
   const [promoting, setPromoting] = useState<string | null>(null)
   /**
@@ -169,6 +180,21 @@ export function FormDetailCard(props: FormDetailCardProps) {
 
   const effectiveLead = lead ?? form?.routing?.lead === true
   const effectiveConsent = consentField ?? String(form?.consentFieldName ?? '')
+  /*
+   * WHICH CAMPAIGNS THIS FORM IS PART OF.
+   *
+   * The site's campaigns are read while this page is open because the field
+   * is DISPLAYED here as well as edited here: the document stores ids, and a
+   * page that drew them until a button was pressed would be showing a
+   * merchant raw storage. Bounded at the ceiling the campaigns table itself
+   * draws, so it can offer nothing that list does not.
+   */
+  const siteCampaigns = useHostCampaigns(hostId, { enabled: Boolean(form) })
+  const storedCampaigns = useMemo(
+    () => Aglyn.readCampaignIds(form as Record<string, unknown>),
+    [form],
+  )
+  const effectiveCampaigns = campaignIds ?? storedCampaigns
 
   /**
    * What the published design would break, judged against the declaration as
@@ -207,11 +233,21 @@ export function FormDetailCard(props: FormDetailCardProps) {
         ...(consentField != null
           ? { consentFieldName: consentField.trim() }
           : {}),
+        // An empty selection is stored as an empty array rather than removing
+        // the field: one shape for "in no campaign", which is what keeps this
+        // writer and the campaign's own detach agreeing.
+        ...(campaignIds != null
+          ? {
+              [Aglyn.CAMPAIGN_MEMBERSHIP_FIELD]:
+                Aglyn.campaignMembershipValue(campaignIds),
+            }
+          : {}),
         updatedAt: Timestamp.now(),
       })
       setName(null)
       setLead(null)
       setConsentField(null)
+      setCampaignIds(null)
       enqueueSnackbar('Form saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -230,6 +266,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
     name,
     lead,
     consentField,
+    campaignIds,
     queueLoading,
     enqueueSnackbar,
   ])
@@ -366,7 +403,12 @@ export function FormDetailCard(props: FormDetailCardProps) {
     ],
   )
 
-  const dirty = name != null || lead != null || consentField != null
+  const dirty =
+    name != null ||
+    lead != null ||
+    consentField != null ||
+    (campaignIds != null &&
+      !Aglyn.campaignMembershipUnchanged(storedCampaigns, campaignIds))
   // Named before it is used on every row, so a role denial reads as a reason
   // rather than as a control that does nothing.
   const publishBlock = hostRoleLoaded
@@ -427,6 +469,26 @@ export function FormDetailCard(props: FormDetailCardProps) {
                 <Typography variant="caption" color="text.secondary">
                   {`ID ${formId} — every submission is filed under this, so it never changes`}
                 </Typography>
+                {/*
+                  A FORM IS PART OF A CAMPAIGN, and may be part of several.
+                  The same signup form is placed by one push and re-placed by
+                  the next, so this is a multi-select — a single value would
+                  make filing it under this quarter's campaign silently
+                  un-file it from last quarter's.
+
+                  It is an assignment and nothing else: it does not decide who
+                  a campaign mails, and it does not credit a submission to
+                  one. Attribution is recorded from the link a visitor
+                  followed, on its own evidence, and it goes on saying what it
+                  says whatever is picked here.
+                */}
+                <CampaignPicker
+                  options={siteCampaigns.options}
+                  value={effectiveCampaigns}
+                  onChange={setCampaignIds}
+                  helperText="The campaigns this form is part of. It does not change who a campaign mails."
+                  empty={siteCampaigns.ready && !siteCampaigns.options.length}
+                />
                 <Stack direction="row" spacing={1}>
                   <Button
                     variant="contained"

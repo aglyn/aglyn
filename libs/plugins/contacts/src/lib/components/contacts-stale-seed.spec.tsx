@@ -83,6 +83,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   ).listFilterConstraints,
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
+  // The site's campaigns, which fill the picker in the contact profile panel.
+  useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: listener.status,

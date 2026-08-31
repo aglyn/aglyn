@@ -231,6 +231,19 @@ export interface ContactFacet {
   tags?: string[]
   /** THIS holder's notes. */
   notes?: string
+  /**
+   * The campaigns THIS holder has filed the person under.
+   *
+   * A label on the CRM record, not an audience: who a campaign's mail reaches
+   * is decided by the campaign's lists and by each send's own picker, and
+   * nothing in the send path reads this. It answers "who did we put in the
+   * spring push", which is a question about the holder's own working set.
+   *
+   * Per-holder for the reason the notes are: two unrelated businesses sharing
+   * one row must not read each other's segmentation of a person they both
+   * know. See `campaign-membership.ts` for the field and the path.
+   */
+  campaignIds?: string[]
   /** Gross of fees and refunds — see `upsertHostContact`. */
   ltvCents?: number
   ordersCount?: number

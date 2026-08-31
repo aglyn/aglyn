@@ -45,18 +45,66 @@ function deleteSentinel() {
   return { __delete: true }
 }
 
+/** The `FieldValue.arrayRemove()` sentinel, resolved by the double below. */
+function arrayRemoveSentinel(...values: unknown[]) {
+  return { __arrayRemove: values }
+}
+
 const isPlainObject = (value: unknown): value is Record<string, any> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-/** `update()`, with the delete sentinel resolved rather than stored. */
+/**
+ * A DOTTED field path, read the way Firestore reads one.
+ *
+ * The contact membership lives at `facets.{groupId}.campaignIds`, so both the
+ * query filter and the write address a nested field by path. A double that
+ * only understood top-level keys would answer "no contact holds this
+ * campaign" for every contact that does — a detach that passes while doing
+ * nothing.
+ */
+function readPath(data: Record<string, any> | undefined, path: string) {
+  return path
+    .split('.')
+    .reduce<any>(
+      (node, key) => (isPlainObject(node) ? node[key] : undefined),
+      data,
+    )
+}
+
+/** The write half of {@link readPath}, minting the maps on the way down. */
+function writePath(
+  target: Record<string, any>,
+  path: string,
+  apply: (previous: unknown) => { remove: boolean; value?: unknown },
+): void {
+  const parts = path.split('.')
+  let node = target
+  for (const key of parts.slice(0, -1)) {
+    node[key] = isPlainObject(node[key]) ? { ...node[key] } : {}
+    node = node[key]
+  }
+  const leaf = parts[parts.length - 1] as string
+  const outcome = apply(node[leaf])
+  if (outcome.remove) delete node[leaf]
+  else node[leaf] = outcome.value
+}
+
+/** `update()`, with the two sentinels resolved rather than stored. */
 function applyUpdate(
   existing: Record<string, any>,
   patch: Record<string, any>,
 ): Record<string, any> {
   const next = { ...existing }
   for (const [key, value] of Object.entries(patch)) {
-    if (isPlainObject(value) && '__delete' in value) delete next[key]
-    else next[key] = value
+    writePath(next, key, (previous) => {
+      if (isPlainObject(value) && '__delete' in value) return { remove: true }
+      if (isPlainObject(value) && '__arrayRemove' in value) {
+        const taken = value['__arrayRemove'] as unknown[]
+        const before = Array.isArray(previous) ? previous : []
+        return { remove: false, value: before.filter((id) => !taken.includes(id)) }
+      }
+      return { remove: false, value }
+    })
   }
   return next
 }
@@ -68,7 +116,7 @@ function snapshotOf(path: string) {
     id: path.split('/').pop() as string,
     ref: docRef(path),
     data: () => data,
-    get: (field: string) => data?.[field],
+    get: (field: string) => readPath(data, field),
   }
 }
 
@@ -118,23 +166,37 @@ function childIds(path: string): string[] {
 function collectionRef(path: string): any {
   const filtered = (
     field: string | null,
+    op: string,
     value: unknown,
     cap: number,
   ): any => ({
-    limit: (max: number) => filtered(field, value, max),
-    where: (nextField: string, _op: string, nextValue: unknown) =>
-      filtered(nextField, nextValue, cap),
+    limit: (max: number) => filtered(field, op, value, max),
+    where: (nextField: string, nextOp: string, nextValue: unknown) =>
+      filtered(nextField, nextOp, nextValue, cap),
     get: async () => {
       const docs = childIds(path)
         .map((id) => snapshotOf(`${path}/${id}`))
-        .filter((doc) => (field ? doc.get(field) === value : true))
+        .filter((doc) => {
+          if (!field) return true
+          const stored = doc.get(field)
+          /*
+           * `array-contains` is the membership join, and it is not equality:
+           * a record in two campaigns must match a query for either. A double
+           * that compared the whole array would answer "nothing is in this
+           * campaign" for every record that is in two.
+           */
+          if (op === 'array-contains') {
+            return Array.isArray(stored) && stored.includes(value)
+          }
+          return stored === value
+        })
         .slice(0, cap)
       return { docs, empty: docs.length === 0, size: docs.length }
     },
   })
   return {
     doc: (id: string) => docRef(`${path}/${id}`),
-    ...filtered(null, undefined, Infinity),
+    ...filtered(null, '==', undefined, Infinity),
   }
 }
 
@@ -197,7 +259,12 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
       firestore: () => mockFirestore(),
       auth: () => ({ verifyIdToken: async () => ({ uid: mockUid }) }),
     }),
-    firestore: { FieldValue: { delete: deleteSentinel } },
+    firestore: {
+      FieldValue: {
+        delete: deleteSentinel,
+        arrayRemove: arrayRemoveSentinel,
+      },
+    },
   },
 }))
 
@@ -429,7 +496,9 @@ describe('deleting a campaign', () => {
     await docRef(`hosts/${HOST}/campaigns/send-1`).update({
       'stats.unsubscribes': 1,
     })
-    expect(stored('campaigns/send-1')?.['stats.unsubscribes']).toBe(1)
+    // A dotted key in an `update()` is a field PATH, so the count lands
+    // inside the `stats` map the report reads it from.
+    expect(stored('campaigns/send-1')?.['stats']?.['unsubscribes']).toBe(1)
   })
 
   it('does not touch a send belonging to a DIFFERENT campaign', async () => {
@@ -644,5 +713,181 @@ describe('discarding a draft', () => {
     })
 
     expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeTruthy()
+  })
+})
+
+/**
+ * THE REST OF THE CAMPAIGN — the forms, screens and contacts assigned to it.
+ *
+ * A campaign is more than its mail, and every one of those members names the
+ * campaign from its OWN document. That is what makes deleting the campaign a
+ * REDUCTION with something to gate: the container going away must take the
+ * edge with it, or the members are left holding an id nothing resolves — a
+ * form whose page draws a dead chip, and a campaign the console can no longer
+ * find its own members from.
+ *
+ * Every assertion below is therefore about the member SURVIVING with one
+ * campaign fewer. Nothing here may delete a record.
+ */
+describe('deleting a campaign takes it off everything assigned to it', () => {
+  const ORG = 'org-1'
+  const OTHER = 'autumn-2026'
+
+  /** A member of the campaign, in a host collection. */
+  function seedHostMember(
+    collectionName: string,
+    id: string,
+    campaigns: string[],
+  ) {
+    store.set(`hosts/${HOST}/${collectionName}/${id}`, {
+      displayName: `${collectionName} ${id}`,
+      campaignIds: campaigns,
+    })
+  }
+
+  /** A contact filed under the campaign, inside this site's own facet. */
+  function seedContact(id: string, campaigns: string[], group = HOST) {
+    store.set(`orgs/${ORG}/contacts/${id}`, {
+      email: `${id}@example.com`,
+      facets: { [group]: { tags: ['vip'], campaignIds: campaigns } },
+    })
+  }
+
+  const hostMember = (collectionName: string, id: string) =>
+    store.get(`hosts/${HOST}/${collectionName}/${id}`)
+  const contactRow = (id: string) => store.get(`orgs/${ORG}/contacts/${id}`)
+
+  beforeEach(() => {
+    // The org link the contact pass resolves through. Without it a site holds
+    // no org-shared contacts at all, which is the skip asserted at the end.
+    store.set(`hostIndex/${HOST}`, { orgId: ORG })
+    store.set(`orgs/${ORG}`, { name: 'Acme' })
+  })
+
+  it('clears the campaign off its forms and screens', async () => {
+    seedHostMember('forms', 'signup', [CAMPAIGN])
+    seedHostMember('screens', 'landing', [CAMPAIGN])
+
+    const result = await post({
+      hostId: HOST,
+      action: 'deleteCampaign',
+      campaignId: CAMPAIGN,
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.detachedMembers).toBe(2)
+    // The RECORDS survive. Deleting a campaign deletes a campaign.
+    expect(hostMember('forms', 'signup')).toBeTruthy()
+    expect(hostMember('screens', 'landing')).toBeTruthy()
+    expect(hostMember('forms', 'signup')?.['campaignIds']).toEqual([])
+    expect(hostMember('screens', 'landing')?.['campaignIds']).toEqual([])
+  })
+
+  it('leaves the OTHER campaigns a member is in', async () => {
+    /*
+     * The control that the removal is `arrayRemove` and not a field wipe. A
+     * landing page re-run for the autumn push is in two campaigns, and
+     * deleting the spring one must cost it exactly one.
+     */
+    seedHostMember('screens', 'landing', [CAMPAIGN, OTHER])
+
+    await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(hostMember('screens', 'landing')?.['campaignIds']).toEqual([OTHER])
+  })
+
+  it('never touches a record that was not in the campaign', async () => {
+    seedHostMember('forms', 'unrelated', [OTHER])
+
+    await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(hostMember('forms', 'unrelated')?.['campaignIds']).toEqual([OTHER])
+  })
+
+  it('clears it out of the contact facet the site actually holds', async () => {
+    seedContact('ada', [CAMPAIGN, OTHER])
+
+    const result = await post({
+      hostId: HOST,
+      action: 'deleteCampaign',
+      campaignId: CAMPAIGN,
+    })
+
+    expect(result.status).toBe(200)
+    // The person, their tags and their other campaign all survive.
+    expect(contactRow('ada')?.['email']).toBe('ada@example.com')
+    expect(contactRow('ada')?.['facets']?.[HOST]?.['tags']).toEqual(['vip'])
+    expect(contactRow('ada')?.['facets']?.[HOST]?.['campaignIds']).toEqual([
+      OTHER,
+    ])
+  })
+
+  it('leaves another holder’s filing of the same person alone', async () => {
+    /*
+     * One human touched by two sites is ONE row. The campaign belongs to this
+     * site, so the detach addresses this site's facet by path — a pass that
+     * walked the document instead would edit a business record it has no
+     * claim on, under a deletion nobody asked to be cross-site.
+     */
+    store.set(`orgs/${ORG}/contacts/shared`, {
+      email: 'shared@example.com',
+      facets: {
+        [HOST]: { campaignIds: [CAMPAIGN] },
+        'other-site': { campaignIds: [CAMPAIGN] },
+      },
+    })
+
+    await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(contactRow('shared')?.['facets']?.[HOST]?.['campaignIds']).toEqual([])
+    expect(
+      contactRow('shared')?.['facets']?.['other-site']?.['campaignIds'],
+    ).toEqual([CAMPAIGN])
+  })
+
+  it('removes the container only after the members are off it', async () => {
+    seedHostMember('forms', 'signup', [CAMPAIGN])
+    seedContact('ada', [CAMPAIGN])
+
+    await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeUndefined()
+    expect(hostMember('forms', 'signup')?.['campaignIds']).toEqual([])
+    expect(contactRow('ada')?.['facets']?.[HOST]?.['campaignIds']).toEqual([])
+  })
+
+  it('still deletes a campaign on a site with no org behind it', async () => {
+    /*
+     * Contacts live on the ORG, so a site whose `hostIndex` entry names none
+     * holds none of them — a skip rather than a failure. A pass that treated
+     * the two the same would make every campaign on such a site undeletable.
+     */
+    store.delete(`hostIndex/${HOST}`)
+    seedHostMember('forms', 'signup', [CAMPAIGN])
+
+    const result = await post({
+      hostId: HOST,
+      action: 'deleteCampaign',
+      campaignId: CAMPAIGN,
+    })
+
+    expect(result.status).toBe(200)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeUndefined()
+    expect(hostMember('forms', 'signup')?.['campaignIds']).toEqual([])
+  })
+
+  it('reports how many records it cleared', async () => {
+    seedHostMember('forms', 'a', [CAMPAIGN])
+    seedHostMember('forms', 'b', [CAMPAIGN])
+    seedHostMember('screens', 'c', [CAMPAIGN])
+    seedContact('ada', [CAMPAIGN])
+
+    const result = await post({
+      hostId: HOST,
+      action: 'deleteCampaign',
+      campaignId: CAMPAIGN,
+    })
+
+    expect(result.body.detachedMembers).toBe(4)
   })
 })

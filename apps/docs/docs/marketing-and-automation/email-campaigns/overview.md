@@ -64,6 +64,37 @@ the campaign's page adds their figures up.
 one and marked **Single send**. Their reports open at the same address they always did,
 and the unsubscribe links in mail already delivered are untouched.
 
+### What belongs to a campaign {#what-belongs-to-a-campaign}
+
+A push is rarely only its mail. A campaign can also hold the **landing pages**, the
+**forms** those pages place, and the **contacts** you have filed under it — so the
+campaign's page shows the whole coordinated push rather than a folder of emails.
+
+You set it from the record itself, never from the campaign:
+
+- **A screen** — open it from Screens and pick its campaigns on the **Campaigns** card.
+- **A form** — open it from Forms and pick its campaigns under **Details**.
+- **A contact** — open the contact from Contacts and pick its campaigns in the profile
+  panel.
+
+Each of them can be in **more than one campaign**, because the same landing page and the
+same signup form are usually re-run for the next push. Clearing every campaign takes the
+record out of all of them; nothing else about it changes.
+
+The campaign's own page then lists the screens and forms assigned to it, so you can see
+the association from either end.
+
+**This is grouping, not crediting.** Filing a page under a campaign does not decide who
+that campaign mails, and it does not credit a visit, a signup or a sale to it. Those
+figures come from the links a campaign's emails actually carried — see
+[Revenue from a campaign](#revenue-from-a-campaign) — and they read the same whatever is
+assigned here. A contact's campaigns are likewise a label on your CRM record: they never
+add anybody to a send.
+
+**Deleting a campaign** clears it off everything assigned to it. The screens, forms and
+contacts stay exactly where they are, minus that one campaign; nothing is deleted with
+the campaign except the campaign.
+
 ### Who the email comes from {#who-the-email-comes-from}
 
 These fields sit under the audience picker. The first picks from a list the site was set
